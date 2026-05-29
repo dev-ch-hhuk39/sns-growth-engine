@@ -1,0 +1,72 @@
+# =============================================================
+# sns-growth-engine v2 .gitignore
+# =============================================================
+
+# --- 環境変数・シークレット（絶対コミット禁止） ---
+.env
+.env.*
+!.env.template
+
+# --- Google Cloud / GCP 認証情報 ---
+service-account*.json
+credentials*.json
+token*.json
+sa.json
+gcp*.json
+*.b64
+
+# --- 秘密鍵・証明書 ---
+*.pem
+*.key
+*.p12
+*.p8
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+pip-wheel-metadata/
+*.whl
+
+# --- テスト・型チェック・キャッシュ ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- ログ ---
+*.log
+logs/
+
+# --- データ・メディア（ローカル一時ファイル） ---
+data/
+tmp/
+temp/
+downloads/
+media_cache/
+cloudinary_cache/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- エディタ ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- JSON（設定例ファイルは除外しない） ---
+*.json
+!package.json
+!tsconfig.json
+!x_pipeline_config.example.json

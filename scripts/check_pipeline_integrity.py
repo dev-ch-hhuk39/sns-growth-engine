@@ -1,0 +1,318 @@
+"""
+check_pipeline_integrity.py - パイプラインデータ整合性チェック
+
+実際の Google Sheets データを読み取り、drafts / social_derivatives /
+queue / logs / posted_results の整合性を検証する。
+
+使い方:
+  # 実Sheetsに対してチェック（--use-sheetsが必要）
+  python scripts/check_pipeline_integrity.py --account-id night_scout
+
+  # WARN があっても終了コード 0（デフォルト）
+  python scripts/check_pipeline_integrity.py --account-id night_scout
+
+  # WARN でも非ゼロで終了
+  python scripts/check_pipeline_integrity.py --account-id night_scout --fail-on-warn
+
+  # モックで構造確認のみ（実データ検証不可）
+  python scripts/check_pipeline_integrity.py --mock
+
+出力:
+  [PASS] 正常
+  [WARN] 問題の可能性あり（オプションで非ゼロ終了）
+  [FAIL] データ整合性エラー
+"""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+
+_V2_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(_V2_ROOT, "src"))
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(_V2_ROOT, ".env"))
+except ImportError:
+    pass
+
+from config_loader import get_config, get_config_partial
+from sheets_client import SheetsClient, MockSheetsClient, make_client
+
+
+VALID_DRAFT_STATUSES = {"DRAFT", "READY", "REVIEW", "POSTED", "REJECTED", "ARCHIVED"}
+VALID_DERIVATIVE_STATUSES = {"DRAFT", "READY", "WAITING_REVIEW", "APPROVED", "REJECTED"}
+VALID_QUEUE_STATUSES = {"READY", "WAITING_REVIEW", "PROCESSING", "DONE", "ERROR", "SKIPPED"}
+VALID_LOG_LEVELS = {"INFO", "WARN", "ERROR"}
+
+
+def check_drafts(sheets, account_id: str | None, results: list) -> int:
+    """drafts タブの整合性チェック。問題件数を返す。"""
+    issues = 0
+    try:
+        drafts = sheets.get_drafts(account_id=account_id)
+        results.append(f"  [PASS] drafts 取得OK: {len(drafts)}件")
+
+        score_missing = 0
+        status_invalid = 0
+        for d in drafts:
+            score_val = d.get("score", "")
+            if score_val == "" or score_val is None:
+                score_missing += 1
+            s = str(d.get("status", "")).upper()
+            if s and s not in VALID_DRAFT_STATUSES:
+                status_invalid += 1
+
+        if score_missing > 0:
+            results.append(f"  [WARN] drafts.score が空の行: {score_missing}件 (--setup 実行後に再チェックしてください)")
+            issues += 1
+        else:
+            results.append(f"  [PASS] drafts.score は全行に値あり")
+
+        if status_invalid > 0:
+            results.append(f"  [FAIL] drafts.status が不正な行: {status_invalid}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] drafts.status は全行正常")
+
+    except Exception as e:
+        results.append(f"  [FAIL] drafts 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_social_derivatives(sheets, account_id: str | None, results: list) -> int:
+    """social_derivatives タブの整合性チェック。"""
+    issues = 0
+    try:
+        ders = sheets.get_social_derivatives(account_id=account_id)
+        results.append(f"  [PASS] social_derivatives 取得OK: {len(ders)}件")
+
+        drafts = sheets.get_drafts(account_id=account_id)
+        draft_ids = {d.get("draft_id") for d in drafts}
+
+        dangling = 0
+        status_invalid = 0
+        text_empty = 0
+        for d in ders:
+            did = d.get("draft_id", "")
+            if did and did not in draft_ids:
+                dangling += 1
+            s = str(d.get("status", "")).upper()
+            if s and s not in VALID_DERIVATIVE_STATUSES:
+                status_invalid += 1
+            if not d.get("text", "").strip():
+                text_empty += 1
+
+        if dangling > 0:
+            results.append(f"  [WARN] 対応する draft_id がない social_derivatives: {dangling}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] social_derivatives の draft_id 参照整合性OK")
+
+        if status_invalid > 0:
+            results.append(f"  [FAIL] social_derivatives.status が不正な行: {status_invalid}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] social_derivatives.status は全行正常")
+
+        if text_empty > 0:
+            results.append(f"  [WARN] social_derivatives.text が空の行: {text_empty}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] social_derivatives.text は全行に値あり")
+
+    except Exception as e:
+        results.append(f"  [FAIL] social_derivatives 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_queue(sheets, account_id: str | None, results: list) -> int:
+    """queue タブの整合性チェック。"""
+    issues = 0
+    try:
+        ws = sheets._sh.worksheet("queue") if hasattr(sheets, "_sh") else None
+        if ws is None:
+            queue_items = sheets._queue if hasattr(sheets, "_queue") else []
+        else:
+            queue_items = ws.get_all_records()
+            if account_id:
+                queue_items = [r for r in queue_items if r.get("account_id") == account_id]
+
+        results.append(f"  [PASS] queue 取得OK: {len(queue_items)}件")
+
+        waiting_review = [q for q in queue_items if str(q.get("status", "")).upper() == "WAITING_REVIEW"]
+        ready = [q for q in queue_items if str(q.get("status", "")).upper() == "READY"]
+        status_invalid = sum(
+            1 for q in queue_items
+            if str(q.get("status", "")).upper() not in VALID_QUEUE_STATUSES
+        )
+
+        if waiting_review:
+            results.append(f"  [WARN] queue.status=WAITING_REVIEW が {len(waiting_review)}件あります (review_queue.py で確認してください)")
+            issues += 1
+        else:
+            results.append(f"  [PASS] queue に WAITING_REVIEW はありません")
+
+        if ready:
+            results.append(f"  [PASS] queue.status=READY: {len(ready)}件 (Phase 3 投稿待ち)")
+        else:
+            results.append(f"  [WARN] queue.status=READY が0件です (キューが空)")
+            issues += 1
+
+        if status_invalid > 0:
+            results.append(f"  [FAIL] queue.status が不正な行: {status_invalid}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] queue.status は全行正常")
+
+    except Exception as e:
+        results.append(f"  [FAIL] queue 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_logs(sheets, account_id: str | None, results: list) -> int:
+    """logs タブの整合性チェック。"""
+    issues = 0
+    try:
+        if hasattr(sheets, "_sh"):
+            ws = sheets._sh.worksheet("logs")
+            log_rows = ws.get_all_records()
+            if account_id:
+                log_rows = [r for r in log_rows if r.get("account_id") in (account_id, "")]
+        else:
+            log_rows = getattr(sheets, "_logs", [])
+
+        results.append(f"  [PASS] logs 取得OK: {len(log_rows)}件")
+
+        level_missing = sum(1 for r in log_rows if not r.get("level", "").strip())
+        error_count = sum(1 for r in log_rows if str(r.get("level", "")).upper() == "ERROR")
+
+        if level_missing > 0:
+            results.append(f"  [WARN] logs.level が空の行: {level_missing}件 (--setup 実行後に解消します)")
+            issues += 1
+        else:
+            results.append(f"  [PASS] logs.level は全行に値あり")
+
+        if error_count > 0:
+            results.append(f"  [WARN] logs に ERROR レベルのログ: {error_count}件 (内容を確認してください)")
+            issues += 1
+        else:
+            results.append(f"  [PASS] logs に ERROR レベルのログなし")
+
+    except Exception as e:
+        results.append(f"  [FAIL] logs 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_posted_results(sheets, account_id: str | None, results: list) -> int:
+    """posted_results タブが空であることを確認（Phase 2 段階では空が正常）。"""
+    issues = 0
+    try:
+        if hasattr(sheets, "_sh"):
+            ws = sheets._sh.worksheet("posted_results")
+            rows = ws.get_all_records()
+            if account_id:
+                rows = [r for r in rows if r.get("account_id") == account_id]
+        else:
+            rows = []
+
+        if rows:
+            results.append(f"  [WARN] posted_results に {len(rows)}件あります (Phase 3 実施前は0件が正常)")
+            issues += 1
+        else:
+            results.append(f"  [PASS] posted_results は空（Phase 2 正常状態）")
+
+    except Exception as e:
+        results.append(f"  [FAIL] posted_results 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
+    parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
+    parser.add_argument("--fail-on-warn", action="store_true", help="WARN でも非ゼロ終了コードで終了")
+    parser.add_argument("--mock", action="store_true", help="MockSheetsClient を使用（実データ検証不可）")
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("  check_pipeline_integrity.py - パイプライン整合性チェック")
+    print("=" * 60)
+
+    if args.mock:
+        print("[INFO] MockSheetsClient を使用します（実データ検証不可）")
+        sheets = MockSheetsClient(dry_run=True)
+    else:
+        try:
+            cfg = get_config()
+        except ValueError as e:
+            print(f"[ERROR] 認証情報が必要です: {e}")
+            print("  → .env に SNS_MASTER_SHEET_ID と SA_JSON_BASE64 / GCP_SA_JSON を設定してください")
+            print("  → モックで構造確認のみなら --mock を使ってください")
+            sys.exit(1)
+        sheets = SheetsClient(sheet_id=cfg["sheet_id"], sa_dict=cfg["sa_dict"], dry_run=True)
+
+    account_label = args.account_id or "全アカウント"
+    print(f"\n対象: {account_label}")
+    print("-" * 60)
+
+    all_results: list[str] = []
+    total_issues = 0
+    fail_count = 0
+
+    # 各チェック実行
+    checks = [
+        ("drafts", check_drafts),
+        ("social_derivatives", check_social_derivatives),
+        ("queue", check_queue),
+        ("logs", check_logs),
+        ("posted_results", check_posted_results),
+    ]
+
+    for tab_name, check_fn in checks:
+        print(f"\n[{tab_name}]")
+        section_results: list[str] = []
+        issues = check_fn(sheets, args.account_id, section_results)
+        for line in section_results:
+            print(line)
+            all_results.append(line)
+        total_issues += issues
+        fail_count += sum(1 for r in section_results if r.strip().startswith("[FAIL]"))
+
+    # サマリー
+    print("\n" + "=" * 60)
+    warn_count = sum(1 for r in all_results if r.strip().startswith("[WARN]"))
+    pass_count = sum(1 for r in all_results if r.strip().startswith("[PASS]"))
+
+    print(f"チェック結果サマリー:")
+    print(f"  [PASS]: {pass_count}件")
+    print(f"  [WARN]: {warn_count}件")
+    print(f"  [FAIL]: {fail_count}件")
+    print("=" * 60)
+
+    if fail_count > 0:
+        print("\n[RESULT] FAIL: データ整合性エラーがあります。上記ログを確認してください。")
+        sys.exit(1)
+    elif warn_count > 0 and args.fail_on_warn:
+        print("\n[RESULT] WARN: 問題の可能性がある項目があります（--fail-on-warn 指定）。")
+        sys.exit(1)
+    elif warn_count > 0:
+        print("\n[RESULT] WARN: 問題の可能性がある項目があります。内容を確認してください。")
+        sys.exit(0)
+    else:
+        print("\n[RESULT] PASS: 全チェック正常です。")
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

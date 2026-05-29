@@ -1,0 +1,862 @@
+"""
+sheets_client.py - SNS統合スプレッドシート v2 クライアント
+
+1スプレッドシートで2アカウント（night_scout / liver_manager）を管理する。
+12タブの定義・初期化・CRUDをすべてここに集約する。
+
+冪等設計:
+  - タブが存在しなければ作成、存在すれば触らない
+  - ヘッダーは不足列のみ右端に追加し、既存列を絶対に削除・並び替えしない
+  - accountsシードは account_id が存在しない行のみ追加する
+
+dry_run=True のとき書き込みメソッドはすべて print のみで早期リターンする。
+認証情報がない場合は make_client() 経由で MockSheetsClient を返す。
+"""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from typing import Any
+
+import gspread
+from google.oauth2.service_account import Credentials
+
+from seeds import ACCOUNT_SEEDS_V2, CATEGORY_SEEDS, PROMPT_TEMPLATE_SEEDS
+
+# ------------------------------------------------------------------ #
+# タブ定義（ヘッダー列の順序が正式仕様）
+# ------------------------------------------------------------------ #
+
+TAB_DEFINITIONS: dict[str, list[str]] = {
+    # アカウント設定。2行シード（night_scout / liver_manager）。
+    "accounts": [
+        "account_id", "account_name", "platform", "note_url",
+        "x_handle", "threads_handle", "bio_summary", "target_persona",
+        "tone", "main_genre",
+        "line_url", "cta_type", "cta_text",
+        "auto_publish", "min_publish_score", "brand_risk_threshold",
+        "post_time", "timezone",
+        "active", "notes",
+    ],
+    # 参考投稿。本文模倣でなく「勝ち要素」を抽出して再利用する。
+    "reference_posts": [
+        "id", "created_at", "account_id", "platform",
+        "post_url", "post_id", "title", "text", "media_urls",
+        "likes", "reposts", "impressions",
+        "source_type", "author", "published_at",
+        "hook_type", "extracted_hook", "extracted_pain",
+        "extracted_desire", "reusable_pattern", "imitation_risk",
+        "status", "notes",
+    ],
+    # カテゴリ重み定義。分量配分に使う。
+    "content_categories": [
+        "category_id", "account_id", "category_name",
+        "description", "weight", "examples", "tags", "active",
+    ],
+    # SNS投稿下書き。body_md を主カラムとし content は後方互換で残す。
+    "drafts": [
+        "draft_id", "created_at", "account_id",
+        "title", "body_md", "content",
+        "cta_text", "thumbnail_copy", "source_refs",
+        "status", "scheduled_at", "posted_at", "note_url",
+        "generation_model", "prompt_version",
+        "pv_score", "cv_score", "brand_risk_score", "score", "score_reason",
+        "ai_review", "rewrite_count", "post_mode",
+        "notes",
+    ],
+    # X / Threads 向け派生投稿。draft_id + platform で1行。
+    "social_derivatives": [
+        "derivative_id", "draft_id", "account_id",
+        "platform", "text", "hashtags",
+        "status", "reason", "created_at",
+    ],
+    # 投稿後の計測結果。PV以外に最終CV（LINE追加・応募等）を追跡。
+    "posted_results": [
+        "result_id", "draft_id", "account_id",
+        "posted_at", "note_url", "title",
+        "measurement_window",
+        "views", "likes", "comments", "follows",
+        "profile_clicks", "line_adds",
+        "applications", "site_registrations",
+        "screening_requests", "sales",
+        "manual_memo", "collected_at",
+    ],
+    # カテゴリ別パフォーマンス集計。AIが投稿比率を調整するために参照。
+    "category_scores": [
+        "category_id", "account_id", "category_name",
+        "post_count", "avg_views", "avg_likes",
+        "avg_cv", "buzz_score", "cv_score",
+        "total_score", "recommendation", "last_updated",
+    ],
+    # 投稿頻度・時間帯ルール。
+    "distribution_rules": [
+        "rule_id", "account_id", "rule_type",
+        "parameter", "value", "description", "active",
+    ],
+    # AI改善インサイト。有効な知見を蓄積してプロンプト改善に使う。
+    "learning_rules": [
+        "rule_id", "account_id", "insight_type",
+        "content", "source_draft_id",
+        "confidence", "applied_count", "created_at", "active",
+    ],
+    # プロンプトテンプレートのバージョン管理。prompt_version で drafts と紐づく。
+    "prompt_templates": [
+        "template_id", "account_id", "template_name",
+        "version", "purpose", "prompt_text",
+        "active", "created_at", "notes",
+    ],
+    # 投稿キュー。scheduled_at に基づいて自動投稿を実行する（Phase 3以降）。
+    "queue": [
+        "queue_id", "draft_id", "account_id",
+        "platform", "scheduled_at", "priority",
+        "status", "error", "created_at", "processed_at",
+    ],
+    # 操作ログ。エラー追跡・実行履歴に使う。
+    "logs": [
+        "log_id", "timestamp", "account_id",
+        "operation", "level", "status", "message", "details",
+    ],
+}
+
+SCOPES = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/drive",
+]
+
+
+# ------------------------------------------------------------------ #
+# SheetsClient
+# ------------------------------------------------------------------ #
+
+class SheetsClient:
+    def __init__(self, sheet_id: str, sa_dict: dict, dry_run: bool = False):
+        self.sheet_id = sheet_id
+        self.dry_run = dry_run
+        self._gc = _auth(sa_dict)
+        self._sh = self._gc.open_by_key(sheet_id)
+
+    # ---------------------------------------------------------------- #
+    # セットアップ
+    # ---------------------------------------------------------------- #
+
+    def setup_all(self) -> None:
+        """全12タブを冪等に初期化し、accounts に seeds.py のアカウントをシードする。"""
+        print("[setup] タブ初期化を開始します")
+        for tab_name, headers in TAB_DEFINITIONS.items():
+            self._ensure_tab(tab_name, headers)
+        self._seed_accounts()
+        print("[setup] 完了")
+
+    def _ensure_tab(self, name: str, headers: list[str]) -> gspread.Worksheet:
+        """タブがなければ作成し、ヘッダー不足列を右端に追記する（冪等）。"""
+        try:
+            ws = self._sh.worksheet(name)
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"  [create] タブ '{name}' を作成します")
+            if not self.dry_run:
+                ws = self._sh.add_worksheet(title=name, rows=1000, cols=len(headers) + 10)
+                ws.update([headers], "A1")
+            else:
+                print(f"  [dry-run] タブ '{name}' 作成をスキップ")
+            return ws if not self.dry_run else None  # type: ignore[return-value]
+
+        existing = ws.row_values(1)
+        missing = [h for h in headers if h not in existing]
+        if missing:
+            print(f"  [update] タブ '{name}' にカラムを追加: {missing}")
+            if not self.dry_run:
+                next_col = len(existing) + 1
+                col_letter = _col_letter(next_col)
+                ws.update(
+                    [[h] for h in missing],
+                    f"{col_letter}1",
+                    major_dimension="COLUMNS",
+                )
+        else:
+            print(f"  [ok] タブ '{name}' のヘッダーは最新です")
+        return ws
+
+    def _seed_accounts(self) -> None:
+        """accounts タブに night_scout/liver_manager が存在しなければ追加する（冪等）。"""
+        ws = self._sh.worksheet("accounts")
+        existing_rows = ws.get_all_records()
+        existing_ids = {r.get("account_id", "") for r in existing_rows}
+
+        to_add = [s for s in ACCOUNT_SEEDS_V2 if s["account_id"] not in existing_ids]
+        if not to_add:
+            print("  [ok] accounts シードはすでに存在します")
+            return
+
+        headers = ws.row_values(1)
+        for seed in to_add:
+            row = [seed.get(h, "") for h in headers]
+            print(f"  [seed] accounts に追加: {seed['account_id']}")
+            if not self.dry_run:
+                ws.append_row(row, value_input_option="USER_ENTERED")
+
+    def seed_tab(self, tab_name: str, rows: list[dict], id_column: str) -> int:
+        """指定タブに id_column が存在しない行だけ追加する（冪等）。追加件数を返す。"""
+        if self.dry_run:
+            print(f"  [dry-run] seed_tab({tab_name}): {len(rows)} 件を確認（書き込みスキップ）")
+            return 0
+        ws = self._sh.worksheet(tab_name)
+        existing_rows = ws.get_all_records()
+        existing_ids = {str(r.get(id_column, "")) for r in existing_rows}
+        headers = ws.row_values(1)
+        added = 0
+        for seed in rows:
+            sid = str(seed.get(id_column, ""))
+            if sid and sid not in existing_ids:
+                row = [str(seed.get(h, "")) for h in headers]
+                ws.append_row(row, value_input_option="USER_ENTERED")
+                print(f"  [seed] {tab_name}: {id_column}={sid!r} を追加")
+                added += 1
+        if added == 0:
+            print(f"  [ok] {tab_name} シードはすでに存在します")
+        return added
+
+    def list_tabs(self) -> list[str]:
+        """スプレッドシート上の全ワークシート名を返す。"""
+        return [ws.title for ws in self._sh.worksheets()]
+
+    # ---------------------------------------------------------------- #
+    # 参照系メソッド
+    # ---------------------------------------------------------------- #
+
+    def get_account(self, account_id: str) -> dict | None:
+        """accounts タブから account_id に一致する行を返す。"""
+        ws = self._sh.worksheet("accounts")
+        for row in ws.get_all_records():
+            if row.get("account_id") == account_id:
+                return dict(row)
+        return None
+
+    def get_active_accounts(self) -> list[dict]:
+        """accounts タブから active=TRUE の行をすべて返す。"""
+        ws = self._sh.worksheet("accounts")
+        return [
+            dict(r) for r in ws.get_all_records()
+            if str(r.get("active", "")).upper() == "TRUE"
+        ]
+
+    def get_active_categories(self, account_id: str) -> list[dict]:
+        """content_categories タブから active=TRUE かつ account_id に一致する行を返す。"""
+        ws = self._sh.worksheet("content_categories")
+        return [
+            dict(r) for r in ws.get_all_records()
+            if str(r.get("active", "")).upper() == "TRUE"
+            and r.get("account_id") == account_id
+        ]
+
+    def get_reference_posts(
+        self,
+        account_id: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """reference_posts タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("reference_posts")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def get_drafts(
+        self,
+        account_id: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """drafts タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("drafts")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def get_pending_drafts(self, account_id: str | None = None) -> list[dict]:
+        """drafts タブから status='draft' の行を返す。account_id でフィルタ可能。"""
+        return self.get_drafts(account_id=account_id, status="draft")
+
+    def get_social_derivatives(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """social_derivatives タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("social_derivatives")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_social_derivative(self, draft_id: str, platform: str) -> dict | None:
+        """指定 draft_id + platform の social_derivative を返す。なければ None。"""
+        ws = self._sh.worksheet("social_derivatives")
+        for row in ws.get_all_records():
+            if (row.get("draft_id") == draft_id
+                    and str(row.get("platform", "")).lower() == platform.lower()):
+                return dict(row)
+        return None
+
+    def find_queue_item(self, draft_id: str, platform: str) -> dict | None:
+        """指定 draft_id + platform の queue 行を返す。なければ None。"""
+        ws = self._sh.worksheet("queue")
+        for row in ws.get_all_records():
+            if (row.get("draft_id") == draft_id
+                    and str(row.get("platform", "")).lower() == platform.lower()):
+                return dict(row)
+        return None
+
+    def get_queue_items(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """queue タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("queue")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def get_queue_item(self, queue_id: str) -> dict | None:
+        """queue_id に一致する queue 行を返す。なければ None。"""
+        ws = self._sh.worksheet("queue")
+        for row in ws.get_all_records():
+            if row.get("queue_id") == queue_id:
+                return dict(row)
+        return None
+
+    def update_queue_item(self, queue_id: str, **fields: Any) -> None:
+        """queue タブの指定行を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_queue_item: queue_id={queue_id} fields={fields}")
+            return
+        ws = self._sh.worksheet("queue")
+        headers = ws.row_values(1)
+        col_qid = headers.index("queue_id") + 1
+        cell = ws.find(queue_id, in_column=col_qid)
+        if cell is None:
+            raise KeyError(f"queue_id={queue_id!r} が queue タブに見つかりません")
+        for field, value in fields.items():
+            if field in headers:
+                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+
+    def get_prompt_templates(
+        self,
+        account_id: str | None = None,
+        active_only: bool = True,
+    ) -> list[dict]:
+        """prompt_templates タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("prompt_templates")
+        rows = ws.get_all_records()
+        if active_only:
+            rows = [r for r in rows if str(r.get("active", "")).upper() == "TRUE"]
+        if account_id is not None:
+            rows = [r for r in rows if r.get("account_id") in (account_id, "")]
+        return [dict(r) for r in rows]
+
+    # ---------------------------------------------------------------- #
+    # 書き込み系メソッド
+    # ---------------------------------------------------------------- #
+
+    def save_draft(self, account_id: str, title: str, body_md: str, **kwargs: Any) -> str:
+        """下書きを drafts タブに追加する。draft_id を返す。"""
+        draft_id = kwargs.pop("draft_id", None) or f"d-{_short_uuid()}"
+        if self.dry_run:
+            print(f"[dry-run] save_draft: account_id={account_id} draft_id={draft_id} title={title!r}")
+            return draft_id
+
+        ws = self._sh.worksheet("drafts")
+        headers = ws.row_values(1)
+        data: dict[str, Any] = {
+            "draft_id": draft_id,
+            "created_at": _now(),
+            "account_id": account_id,
+            "title": title,
+            "body_md": body_md,
+            "status": kwargs.pop("status", "DRAFT"),
+            **kwargs,
+        }
+        row = [str(data.get(h, "")) for h in headers]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return draft_id
+
+    def update_draft(self, draft_id: str, **fields: Any) -> None:
+        """drafts タブの指定行を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_draft: draft_id={draft_id} fields={fields}")
+            return
+
+        ws = self._sh.worksheet("drafts")
+        headers = ws.row_values(1)
+        col_id = headers.index("draft_id") + 1
+        cell = ws.find(draft_id, in_column=col_id)
+        if cell is None:
+            raise KeyError(f"draft_id={draft_id!r} が drafts タブに見つかりません")
+        for field, value in fields.items():
+            if field in headers:
+                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+
+    def update_reference_post_status(self, post_id: str, status: str) -> None:
+        """reference_posts タブの id 列を検索してstatus を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_reference_post_status: id={post_id} status={status}")
+            return
+
+        ws = self._sh.worksheet("reference_posts")
+        headers = ws.row_values(1)
+        col_id = headers.index("id") + 1
+        col_status = headers.index("status") + 1
+        cell = ws.find(post_id, in_column=col_id)
+        if cell is None:
+            raise KeyError(f"reference_post id={post_id!r} が見つかりません")
+        ws.update_cell(cell.row, col_status, status)
+
+    def append_social_derivative(self, derivative: dict) -> str:
+        """social_derivatives タブに1行追加する。derivative_id を返す。"""
+        derivative_id = derivative.get("derivative_id") or f"sd-{_short_uuid()}"
+        if self.dry_run:
+            print(
+                f"[dry-run] append_social_derivative: "
+                f"draft_id={derivative.get('draft_id')} "
+                f"platform={derivative.get('platform')} "
+                f"status={derivative.get('status')}"
+            )
+            return derivative_id
+
+        ws = self._sh.worksheet("social_derivatives")
+        headers = ws.row_values(1)
+        data = {
+            "derivative_id": derivative_id,
+            "created_at": _now(),
+            **derivative,
+        }
+        row = [str(data.get(h, "")) for h in headers]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return derivative_id
+
+    def append_queue_item(self, item: dict) -> str:
+        """queue タブに1行追加する。queue_id を返す。"""
+        queue_id = item.get("queue_id") or f"q-{_short_uuid()}"
+        if self.dry_run:
+            print(
+                f"[dry-run] append_queue_item: "
+                f"draft_id={item.get('draft_id')} "
+                f"platform={item.get('platform')} "
+                f"status={item.get('status')} "
+                f"scheduled_at={item.get('scheduled_at')}"
+            )
+            return queue_id
+
+        ws = self._sh.worksheet("queue")
+        headers = ws.row_values(1)
+        data = {
+            "queue_id": queue_id,
+            "created_at": _now(),
+            **item,
+        }
+        row = [str(data.get(h, "")) for h in headers]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return queue_id
+
+    def mark_posted(self, draft_id: str, note_url: str, posted_at: str | None = None) -> None:
+        """drafts タブの該当行のステータスを posted に更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] mark_posted: draft_id={draft_id} note_url={note_url}")
+            return
+
+        ws = self._sh.worksheet("drafts")
+        headers = ws.row_values(1)
+        col_id = headers.index("draft_id") + 1
+        col_status = headers.index("status") + 1
+        col_posted_at = headers.index("posted_at") + 1 if "posted_at" in headers else None
+        col_note_url = headers.index("note_url") + 1 if "note_url" in headers else None
+
+        cell = ws.find(draft_id, in_column=col_id)
+        if cell is None:
+            raise KeyError(f"draft_id={draft_id!r} が drafts タブに見つかりません")
+
+        row = cell.row
+        ws.update_cell(row, col_status, "POSTED")
+        if col_posted_at:
+            ws.update_cell(row, col_posted_at, posted_at or _now())
+        if col_note_url:
+            ws.update_cell(row, col_note_url, note_url)
+
+    def save_result(self, draft_id: str, account_id: str,
+                    measurement_window: str = "24h", **kwargs: Any) -> str:
+        """計測結果を posted_results タブに追加する。result_id を返す。"""
+        result_id = f"r-{_short_uuid()}"
+        if self.dry_run:
+            print(f"[dry-run] save_result: draft_id={draft_id} account_id={account_id} window={measurement_window}")
+            return result_id
+
+        ws = self._sh.worksheet("posted_results")
+        headers = ws.row_values(1)
+        data: dict[str, Any] = {
+            "result_id": result_id,
+            "draft_id": draft_id,
+            "account_id": account_id,
+            "measurement_window": measurement_window,
+            "collected_at": _now(),
+            **kwargs,
+        }
+        row = [str(data.get(h, "")) for h in headers]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return result_id
+
+    def log(self, operation: str, status: str, message: str,
+            account_id: str = "", details: str = "", level: str = "") -> None:
+        """操作ログを logs タブに追記する。"""
+        if not level:
+            s = status.upper()
+            if s in ("ERROR", "FAIL", "FAILED"):
+                level = "ERROR"
+            elif s in ("WARN", "WARNING"):
+                level = "WARN"
+            else:
+                level = "INFO"
+
+        if self.dry_run:
+            print(f"[dry-run] log: [{level}/{status}] {operation} - {message}")
+            return
+
+        ws = self._sh.worksheet("logs")
+        headers = ws.row_values(1)
+        data: dict[str, Any] = {
+            "log_id": f"l-{_short_uuid()}",
+            "timestamp": _now(),
+            "account_id": account_id,
+            "operation": operation,
+            "level": level,
+            "status": status,
+            "message": message,
+            "details": details,
+        }
+        row = [str(data.get(h, "")) for h in headers]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+
+
+# ------------------------------------------------------------------ #
+# MockSheetsClient — 認証情報なしで動くモッククライアント
+# ------------------------------------------------------------------ #
+
+class MockSheetsClient:
+    """認証情報・ネットワーク接続なしで動くモッククライアント。
+
+    読み取りは seeds.py のデータを返す。書き込みはインメモリに保持しつつログ表示。
+    dry-run パイプライン確認・テスト・CI 向け。
+    """
+
+    def __init__(self, dry_run: bool = True):
+        self.dry_run = dry_run
+        self._drafts: list[dict] = []
+        self._derivatives: list[dict] = []
+        self._queue: list[dict] = []
+        self._logs: list[dict] = []
+        self._posted_results: list[dict] = []
+
+    # ---- 参照系 ----
+
+    def get_account(self, account_id: str) -> dict | None:
+        for s in ACCOUNT_SEEDS_V2:
+            if s["account_id"] == account_id:
+                return dict(s)
+        return None
+
+    def get_active_accounts(self) -> list[dict]:
+        return [
+            dict(s) for s in ACCOUNT_SEEDS_V2
+            if str(s.get("active", "")).upper() == "TRUE"
+        ]
+
+    def get_active_categories(self, account_id: str) -> list[dict]:
+        return [
+            dict(c) for c in CATEGORY_SEEDS
+            if c.get("account_id") == account_id
+            and str(c.get("active", "")).upper() == "TRUE"
+        ]
+
+    def get_reference_posts(
+        self,
+        account_id: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        return []
+
+    def get_drafts(
+        self,
+        account_id: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._drafts)
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return rows
+
+    def get_pending_drafts(self, account_id: str | None = None) -> list[dict]:
+        return self.get_drafts(account_id=account_id, status="DRAFT")
+
+    def get_social_derivatives(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._derivatives)
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return rows
+
+    def find_social_derivative(self, draft_id: str, platform: str) -> dict | None:
+        for r in self._derivatives:
+            if (r.get("draft_id") == draft_id
+                    and str(r.get("platform", "")).lower() == platform.lower()):
+                return dict(r)
+        return None
+
+    def find_queue_item(self, draft_id: str, platform: str) -> dict | None:
+        for r in self._queue:
+            if (r.get("draft_id") == draft_id
+                    and str(r.get("platform", "")).lower() == platform.lower()):
+                return dict(r)
+        return None
+
+    def get_queue_items(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._queue)
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def get_queue_item(self, queue_id: str) -> dict | None:
+        for r in self._queue:
+            if r.get("queue_id") == queue_id:
+                return dict(r)
+        return None
+
+    def update_queue_item(self, queue_id: str, **fields: Any) -> None:
+        print(f"[mock-sheets] update_queue_item: queue_id={queue_id} fields={fields}")
+        for r in self._queue:
+            if r.get("queue_id") == queue_id:
+                r.update(fields)
+                return
+
+    def get_prompt_templates(
+        self,
+        account_id: str | None = None,
+        active_only: bool = True,
+    ) -> list[dict]:
+        rows = list(PROMPT_TEMPLATE_SEEDS)
+        if active_only:
+            rows = [r for r in rows if str(r.get("active", "")).upper() == "TRUE"]
+        if account_id is not None:
+            rows = [r for r in rows if r.get("account_id") in (account_id, "")]
+        return rows
+
+    # ---- 書き込み系 ----
+
+    def save_draft(self, account_id: str, title: str, body_md: str, **kwargs: Any) -> str:
+        draft_id = kwargs.pop("draft_id", None) or f"d-{_short_uuid()}"
+        data = {
+            "draft_id": draft_id,
+            "created_at": _now(),
+            "account_id": account_id,
+            "title": title,
+            "body_md": body_md,
+            "status": kwargs.pop("status", "DRAFT"),
+            **kwargs,
+        }
+        self._drafts.append(data)
+        print(f"[mock-sheets] save_draft: account_id={account_id} draft_id={draft_id} title={title!r}")
+        return draft_id
+
+    def update_draft(self, draft_id: str, **fields: Any) -> None:
+        print(f"[mock-sheets] update_draft: draft_id={draft_id} fields={fields}")
+        for d in self._drafts:
+            if d.get("draft_id") == draft_id:
+                d.update(fields)
+                return
+
+    def update_reference_post_status(self, post_id: str, status: str) -> None:
+        print(f"[mock-sheets] update_reference_post_status: id={post_id} status={status}")
+
+    def append_social_derivative(self, derivative: dict) -> str:
+        derivative_id = derivative.get("derivative_id") or f"sd-{_short_uuid()}"
+        data = {"derivative_id": derivative_id, "created_at": _now(), **derivative}
+        self._derivatives.append(data)
+        print(
+            f"[mock-sheets] append_social_derivative: "
+            f"draft_id={derivative.get('draft_id')} "
+            f"platform={derivative.get('platform')} "
+            f"status={derivative.get('status')}"
+        )
+        return derivative_id
+
+    def append_queue_item(self, item: dict) -> str:
+        queue_id = item.get("queue_id") or f"q-{_short_uuid()}"
+        data = {"queue_id": queue_id, "created_at": _now(), **item}
+        self._queue.append(data)
+        print(
+            f"[mock-sheets] append_queue_item: "
+            f"draft_id={item.get('draft_id')} "
+            f"platform={item.get('platform')} "
+            f"status={item.get('status')} "
+            f"scheduled_at={item.get('scheduled_at')}"
+        )
+        return queue_id
+
+    def mark_posted(self, draft_id: str, note_url: str, posted_at: str | None = None) -> None:
+        print(f"[mock-sheets] mark_posted: draft_id={draft_id} note_url={note_url}")
+
+    def save_result(self, draft_id: str, account_id: str,
+                    measurement_window: str = "24h", **kwargs: Any) -> str:
+        result_id = f"r-{_short_uuid()}"
+        data: dict[str, Any] = {
+            "result_id": result_id,
+            "draft_id": draft_id,
+            "account_id": account_id,
+            "measurement_window": measurement_window,
+            "collected_at": _now(),
+            **kwargs,
+        }
+        self._posted_results.append(data)
+        print(f"[mock-sheets] save_result: draft_id={draft_id} account_id={account_id} result_id={result_id}")
+        return result_id
+
+    def log(self, operation: str, status: str, message: str,
+            account_id: str = "", details: str = "", level: str = "") -> None:
+        if not level:
+            s = status.upper()
+            if s in ("ERROR", "FAIL", "FAILED"):
+                level = "ERROR"
+            elif s in ("WARN", "WARNING"):
+                level = "WARN"
+            else:
+                level = "INFO"
+        entry = {
+            "timestamp": _now(),
+            "account_id": account_id,
+            "operation": operation,
+            "level": level,
+            "status": status,
+            "message": message,
+        }
+        self._logs.append(entry)
+        print(f"[mock-sheets] log: [{level}/{status}] {operation} - {message}")
+
+    def seed_tab(self, tab_name: str, rows: list[dict], id_column: str) -> int:
+        """MockSheetsClient では内容を表示するだけで書き込まない。"""
+        print(f"  [mock-sheets] seed_tab({tab_name}): {len(rows)} 件（モックのため書き込みなし）")
+        return 0
+
+    def list_tabs(self) -> list[str]:
+        """TAB_DEFINITIONS のキー一覧を返す（モック）。"""
+        return list(TAB_DEFINITIONS.keys())
+
+    def setup_all(self) -> None:
+        print("[mock-sheets] setup_all: モックのため実際のタブ初期化はスキップします")
+
+
+# ------------------------------------------------------------------ #
+# ファクトリ関数
+# ------------------------------------------------------------------ #
+
+def make_client(
+    cfg: dict,
+    dry_run: bool = False,
+    force_mock: bool = False,
+) -> "SheetsClient | MockSheetsClient":
+    """設定に応じて SheetsClient または MockSheetsClient を返す。
+
+    force_mock=True: 常に MockSheetsClient を返す（--mock-sheets フラグ対応）。
+    force_mock=False + 認証情報なし + dry_run=True: MockSheetsClient を返す。
+    force_mock=False + 認証情報あり: SheetsClient を返す。
+    """
+    if force_mock:
+        print("[INFO] force_mock=True のため MockSheetsClient を使用します")
+        return MockSheetsClient(dry_run=dry_run)
+    if not cfg.get("sa_dict") or not cfg.get("sheet_id"):
+        if dry_run:
+            print("[INFO] 認証情報またはシートIDが未設定のため MockSheetsClient を使用します")
+            return MockSheetsClient(dry_run=True)
+        raise ValueError(
+            "認証情報（SA_JSON_BASE64 または GCP_SA_JSON）と SNS_MASTER_SHEET_ID が必要です"
+        )
+    return SheetsClient(sheet_id=cfg["sheet_id"], sa_dict=cfg["sa_dict"], dry_run=dry_run)
+
+
+# ------------------------------------------------------------------ #
+# ユーティリティ
+# ------------------------------------------------------------------ #
+
+def _auth(sa_dict: dict) -> gspread.Client:
+    creds = Credentials.from_service_account_info(sa_dict, scopes=SCOPES)
+    return gspread.authorize(creds)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _short_uuid() -> str:
+    return str(uuid.uuid4())[:8]
+
+
+def _col_letter(n: int) -> str:
+    """1始まりの列番号をA1記法のアルファベットに変換する（例: 27 → AA）。"""
+    result = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        result = chr(65 + rem) + result
+    return result
