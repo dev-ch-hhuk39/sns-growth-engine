@@ -235,12 +235,15 @@ def test_stub_imports() -> None:
     except Exception as e:
         fail("reference_post_analyzer: detect_content_angle", str(e))
 
-    # cloudinary_client
+    # cloudinary_client（Phase 2.12 で本実装済み）
     try:
-        cc.download_media("https://example.com/image.jpg")
-        fail("cc.download_media → NotImplementedError", "例外なし")
-    except NotImplementedError:
-        ok("cloudinary_client: download_media → NotImplementedError")
+        from media import cloudinary_client as cc_module
+        assert hasattr(cc_module, "download_media"), "download_media が存在しない"
+        assert hasattr(cc_module, "upload_to_cloudinary"), "upload_to_cloudinary が存在しない"
+        assert hasattr(cc_module, "assess_imitation_risk"), "assess_imitation_risk が存在しない"
+        ok("cloudinary_client: Phase 2.12 の全関数が存在する（download_media / upload_to_cloudinary / assess_imitation_risk）")
+    except Exception as e:
+        fail("cloudinary_client: Phase 2.12 関数存在確認", str(e))
 
 
 # ------------------------------------------------------------------ #

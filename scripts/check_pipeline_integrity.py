@@ -240,6 +240,8 @@ def check_posted_results(sheets, account_id: str | None, results: list) -> int:
 
 VALID_MEDIA_TYPES = {"image", "video", "gif", "unknown"}
 VALID_REUSE_STATUSES = {"", "empty", "approved", "review", "rejected", "reference_only", "available", "used", "restricted"}
+VALID_STORAGE_PROVIDERS = {"", "cloudinary", "none", "dry_run"}
+VALID_RISK_LEVELS = {"", "low", "medium", "high", "unknown"}
 VALID_GENERATION_MODES = {"reference_based", "original_hypothesis"}
 
 
@@ -258,7 +260,12 @@ def _get_tab_rows(sheets, tab_name: str, account_id: str | None) -> list[dict]:
 
 
 def check_media_assets(sheets, account_id: str | None, results: list) -> int:
-    """media_assets タブの整合性チェック（Phase 2.8 追加タブ）。"""
+    """media_assets タブの整合性チェック（Phase 2.12 強化）。"""
+    import re as _re
+
+    def _is_url(val: str) -> bool:
+        return bool(_re.match(r"^https?://", val.strip()))
+
     issues = 0
     try:
         rows = _get_tab_rows(sheets, "media_assets", account_id)
@@ -269,49 +276,67 @@ def check_media_assets(sheets, account_id: str | None, results: list) -> int:
 
         results.append(f"  [PASS] media_assets 取得OK: {len(rows)}件")
 
-        required_cols = ["media_id", "account_id", "reference_post_id", "storage_url", "media_type"]
+        required_cols = ["media_id", "account_id", "reference_post_id", "original_media_url",
+                         "storage_provider", "storage_url", "media_type",
+                         "reuse_status", "media_reuse_risk", "used_count"]
         missing_cols = [c for c in required_cols if c not in (rows[0].keys() if rows else [])]
         if missing_cols:
             results.append(f"  [FAIL] media_assets に必須列がありません: {missing_cols}")
             return issues + 1
 
-        no_ref = 0
-        missing_storage = 0
+        no_media_id = 0
+        no_ref_post_id = 0
+        no_orig_url = 0
+        invalid_storage_provider = 0
+        storage_url_fmt_err = 0
         invalid_type = 0
         invalid_reuse = 0
+        invalid_risk = 0
+        used_count_err = 0
 
         for r in rows:
-            mid = str(r.get("media_id", "")).strip()
-            if mid and not r.get("reference_post_id") and not r.get("source_post_url"):
-                no_ref += 1
-            provider = str(r.get("storage_provider", "")).strip()
-            if provider and not r.get("storage_url"):
-                missing_storage += 1
+            if not str(r.get("media_id", "")).strip():
+                no_media_id += 1
+            if not str(r.get("reference_post_id", "")).strip():
+                no_ref_post_id += 1
+            if not str(r.get("original_media_url", "")).strip():
+                no_orig_url += 1
+            provider = str(r.get("storage_provider", "")).lower().strip()
+            if provider not in VALID_STORAGE_PROVIDERS:
+                invalid_storage_provider += 1
+            storage_url = str(r.get("storage_url", "")).strip()
+            if storage_url and not _is_url(storage_url):
+                storage_url_fmt_err += 1
             mtype = str(r.get("media_type", "")).lower().strip()
             if mtype and mtype not in VALID_MEDIA_TYPES:
                 invalid_type += 1
             reuse = str(r.get("reuse_status", "")).lower().strip()
             if reuse not in VALID_REUSE_STATUSES:
                 invalid_reuse += 1
+            risk = str(r.get("media_reuse_risk", "")).lower().strip()
+            if risk not in VALID_RISK_LEVELS:
+                invalid_risk += 1
+            used = str(r.get("used_count", "")).strip()
+            if used and not used.isdigit():
+                used_count_err += 1
 
-        if no_ref > 0:
-            results.append(f"  [WARN] media_assets: reference_post_id/source_post_url が空の行: {no_ref}件")
-            issues += 1
-        else:
-            results.append(f"  [PASS] media_assets: 参照整合性OK")
-        if missing_storage > 0:
-            results.append(f"  [WARN] media_assets: storage_provider ありで storage_url なし: {missing_storage}件")
-            issues += 1
-        if invalid_type > 0:
-            results.append(f"  [FAIL] media_assets: media_type が不正な行: {invalid_type}件")
-            issues += 1
-        else:
-            results.append(f"  [PASS] media_assets: media_type OK")
-        if invalid_reuse > 0:
-            results.append(f"  [WARN] media_assets: reuse_status が想定外の行: {invalid_reuse}件")
-            issues += 1
-        else:
-            results.append(f"  [PASS] media_assets: reuse_status OK")
+        def _check(count: int, level: str, msg: str) -> None:
+            nonlocal issues
+            if count > 0:
+                results.append(f"  [{level}] media_assets: {msg}: {count}件")
+                issues += 1
+            else:
+                results.append(f"  [PASS] media_assets: {msg.split('が')[0]}OK")
+
+        _check(no_media_id, "WARN", "media_id が空の行")
+        _check(no_ref_post_id, "WARN", "reference_post_id が空の行")
+        _check(no_orig_url, "WARN", "original_media_url が空の行")
+        _check(invalid_storage_provider, "WARN", "storage_provider が不正な行")
+        _check(storage_url_fmt_err, "WARN", "storage_url がURL形式でない行")
+        _check(invalid_type, "FAIL", "media_type が不正な行")
+        _check(invalid_reuse, "WARN", "reuse_status が想定外の行")
+        _check(invalid_risk, "WARN", "media_reuse_risk が想定外の行")
+        _check(used_count_err, "WARN", "used_count が数値でない行")
 
     except Exception as e:
         results.append(f"  [FAIL] media_assets 取得エラー: {e}")

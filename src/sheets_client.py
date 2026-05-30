@@ -349,6 +349,85 @@ class SheetsClient:
                 errors += 1
         return {"added": added, "skipped": skipped, "errors": errors}
 
+    # ---- media_assets ----
+
+    def get_media_assets(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """media_assets タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("media_assets")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_media_asset_by_reference_post_id(self, reference_post_id: str) -> dict | None:
+        """reference_post_id に一致する最初のアセット行を返す。なければ None。"""
+        ws = self._sh.worksheet("media_assets")
+        for row in ws.get_all_records():
+            if str(row.get("reference_post_id", "")) == str(reference_post_id):
+                return dict(row)
+        return None
+
+    def find_media_asset_by_original_media_url(self, original_media_url: str) -> dict | None:
+        """original_media_url に一致するアセット行を返す。なければ None。"""
+        ws = self._sh.worksheet("media_assets")
+        for row in ws.get_all_records():
+            if str(row.get("original_media_url", "")) == str(original_media_url):
+                return dict(row)
+        return None
+
+    def save_media_asset(self, asset: dict[str, Any]) -> bool:
+        """media_assets タブに1行を保存する（reference_post_id + original_media_url でアップサート）。
+
+        dry_run の場合は False を返す。
+        """
+        if self.dry_run:
+            print(
+                f"[dry-run] save_media_asset: "
+                f"reference_post_id={asset.get('reference_post_id', '?')!r} "
+                f"url={str(asset.get('original_media_url', ''))[:60]!r}"
+            )
+            return False
+        reference_post_id = str(asset.get("reference_post_id", ""))
+        original_media_url = str(asset.get("original_media_url", ""))
+        ws = self._sh.worksheet("media_assets")
+        headers = ws.row_values(1)
+        row_data = [str(asset.get(h, "")) for h in headers]
+        if reference_post_id and original_media_url:
+            all_rows = ws.get_all_records()
+            for i, row in enumerate(all_rows, start=2):
+                if (str(row.get("reference_post_id", "")) == reference_post_id
+                        and str(row.get("original_media_url", "")) == original_media_url):
+                    ws.update([row_data], f"A{i}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def save_media_assets(self, assets: list[dict[str, Any]]) -> dict[str, int]:
+        """media_assets タブに複数行を保存する。保存/スキップ/エラー件数を返す。"""
+        saved = skipped = errors = 0
+        for asset in assets:
+            try:
+                result = self.save_media_asset(asset)
+                if result:
+                    saved += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[ERROR] save_media_asset 失敗: {e}")
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
+
+    # ---- reference_post_scores ----
+
     def get_reference_post_scores(
         self,
         account_id: str | None = None,
@@ -805,6 +884,67 @@ class MockSheetsClient:
                 print(f"[mock-sheets] save_reference_post error: {e}")
                 errors += 1
         return {"added": added, "skipped": skipped, "errors": errors}
+
+    # ---- media_assets (mock) ----
+
+    def get_media_assets(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._media_assets) if hasattr(self, "_media_assets") else []
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_media_asset_by_reference_post_id(self, reference_post_id: str) -> dict | None:
+        for r in (self._media_assets if hasattr(self, "_media_assets") else []):
+            if str(r.get("reference_post_id", "")) == str(reference_post_id):
+                return dict(r)
+        return None
+
+    def find_media_asset_by_original_media_url(self, original_media_url: str) -> dict | None:
+        for r in (self._media_assets if hasattr(self, "_media_assets") else []):
+            if str(r.get("original_media_url", "")) == str(original_media_url):
+                return dict(r)
+        return None
+
+    def save_media_asset(self, asset: dict[str, Any]) -> bool:
+        if not hasattr(self, "_media_assets"):
+            self._media_assets: list[dict] = []
+        reference_post_id = str(asset.get("reference_post_id", ""))
+        original_media_url = str(asset.get("original_media_url", ""))
+        if reference_post_id and original_media_url:
+            for i, r in enumerate(self._media_assets):
+                if (str(r.get("reference_post_id", "")) == reference_post_id
+                        and str(r.get("original_media_url", "")) == original_media_url):
+                    self._media_assets[i] = dict(asset)
+                    print(f"[mock-sheets] save_media_asset update: ref={reference_post_id!r}")
+                    return True
+        self._media_assets.append(dict(asset))
+        print(f"[mock-sheets] save_media_asset: ref={reference_post_id!r} url={original_media_url[:60]!r}")
+        return True
+
+    def save_media_assets(self, assets: list[dict[str, Any]]) -> dict[str, int]:
+        saved = skipped = errors = 0
+        for asset in assets:
+            try:
+                result = self.save_media_asset(asset)
+                if result:
+                    saved += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[mock-sheets] save_media_asset error: {e}")
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
+
+    # ---- reference_post_scores (mock) ----
 
     def get_reference_post_scores(
         self,

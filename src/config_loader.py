@@ -12,6 +12,7 @@ config_loader.py - 環境変数の読み込みと検証
   PUBLISH_ENABLED=false      Phase 3-D まで false のまま（SNS投稿処理ガード）
   ALLOW_REAL_X_POST=false    Phase 3-D の X 手動投稿テスト時のみ true
   ALLOW_REAL_THREADS_POST=false Phase 3-E の Threads テスト時のみ true
+  ALLOW_CLOUDINARY_UPLOAD=false Phase 2.12 以降: 実アップロード有効化フラグ
   ALLOW_SHEETS_WRITE         廃止 → dry_run=False で制御
 
 SNS Publisher 環境変数:
@@ -20,6 +21,10 @@ SNS Publisher 環境変数:
   X API (misc):        X_BEARER_TOKEN, X_REDIRECT_URI
   Threads API:         THREADS_ACCESS_TOKEN, THREADS_USER_ID, THREADS_APP_ID, THREADS_APP_SECRET
                        THREADS_API_VERSION
+
+Cloudinary 環境変数:
+  CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+  ALLOW_CLOUDINARY_UPLOAD: false のまま変更しないこと（Phase 2.12 デフォルト）
 
 注意: APIキー・トークン等の値はログに出力しない。
 """
@@ -82,6 +87,21 @@ def get_publish_guards() -> dict:
         "publish_enabled": _is_true("PUBLISH_ENABLED"),
         "allow_real_x_post": _is_true("ALLOW_REAL_X_POST"),
         "allow_real_threads_post": _is_true("ALLOW_REAL_THREADS_POST"),
+    }
+
+
+def get_cloudinary_config() -> dict:
+    """Cloudinary 設定を返す。API secret は bool フラグのみ公開。
+
+    cloud_name と api_key は非機密（公開前提）だが、api_secret はログ禁止。
+    allow_upload が False のときは実アップロードを行わない。
+    """
+    return {
+        "cloud_name": os.environ.get("CLOUDINARY_CLOUD_NAME", "").strip(),
+        "api_key": os.environ.get("CLOUDINARY_API_KEY", "").strip(),
+        "api_secret": os.environ.get("CLOUDINARY_API_SECRET", "").strip() or None,
+        "api_secret_set": bool(os.environ.get("CLOUDINARY_API_SECRET", "").strip()),
+        "allow_upload": _is_true("ALLOW_CLOUDINARY_UPLOAD"),
     }
 
 

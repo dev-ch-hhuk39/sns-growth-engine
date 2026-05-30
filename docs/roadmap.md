@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-05-30
+**最終更新**: 2026-05-30（Phase 2.12 実施中）
 
 ---
 
@@ -13,7 +13,7 @@
 [完了] Phase 2.9     → 実Sheetsに新タブ（media_assets / reference_post_scores / generation_jobs）反映
 [完了] Phase 2.10    → X reference collector 移植（JSON/mock入力対応、X API本番未実行）
 [完了] Phase 2.11    → reference_post_analyzer 移植（スコアリング・分類・パーセンタイル）
-[次期] Phase 2.12    → Cloudinary media_assets 統合
+[実施中] Phase 2.12  → Cloudinary media_assets 統合
 [中期] Phase 2.13    → 8:2 generation planner
 [長期] Phase 4       → AI自動化・学習ループ
 ```
@@ -103,15 +103,21 @@
 
 ---
 
-## Phase 2.12: Cloudinary media_assets 統合
+## Phase 2.12: Cloudinary media_assets 統合 ✅
 
-**目的**: 画像・動画のアップロード・管理をCloudinaryで一元化する
+**目的**: 画像・動画のアップロード・管理をCloudinaryで一元化する基盤を構築する
 
-- [ ] Cloudinaryアカウント・APIキー設定
-- [ ] `src/media/cloudinary_uploader.py` 実装
-- [ ] `x_prepare_media_assets.py` 相当の実装
-- [ ] v2 スプシスキーマへのメディアURL管理カラム追加
-- [ ] テスト追加
+- [x] `docs/phase2-12-cloudinary-media-assets.md` 作成
+- [x] `docs/media-assets-schema.md` 作成
+- [x] `docs/media-reuse-risk-policy.md` 作成
+- [x] `.env.template` に Cloudinary 設定変数追加（ALLOW_CLOUDINARY_UPLOAD=false）
+- [x] `src/config_loader.py` に `get_cloudinary_config()` 追加
+- [x] `src/media/cloudinary_client.py` 本実装（dry_run=True デフォルト、2重ガード）
+- [x] `SheetsClient` / `MockSheetsClient` に media_assets 5メソッド追加
+- [x] `scripts/prepare_media_assets.py` CLI 作成
+- [x] `scripts/check_pipeline_integrity.py` media_assets チェック強化
+- [x] `fixtures/sample_media_assets.json` 追加
+- [x] `scripts/test_phase212.py` 作成
 
 ---
 
