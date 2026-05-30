@@ -67,10 +67,10 @@ def test_load_json() -> list[dict]:
         return []
 
     posts = load_json_input(_FIXTURES)
-    if len(posts) == 3:
-        ok(f"sample_x_posts.json: 3件読み込み")
+    if len(posts) >= 3:
+        ok(f"sample_x_posts.json: {len(posts)}件読み込み（3件以上）")
     else:
-        fail("sample_x_posts.json: 3件読み込み", f"実際: {len(posts)}件")
+        fail("sample_x_posts.json: 3件以上読み込み", f"実際: {len(posts)}件")
 
     return posts
 
@@ -87,10 +87,10 @@ def test_normalize(raw_posts: list[dict]) -> list[dict]:
         return []
 
     normalized = normalize_posts(raw_posts, account_id="night_scout", platform="x")
-    if len(normalized) == 3:
-        ok(f"normalize_posts: 3件正規化")
+    if len(normalized) == len(raw_posts):
+        ok(f"normalize_posts: {len(normalized)}件正規化")
     else:
-        fail("normalize_posts: 3件正規化", f"実際: {len(normalized)}件")
+        fail("normalize_posts: 全件正規化", f"expected={len(raw_posts)} got={len(normalized)}")
 
     # 必須フィールド確認
     required = ["post_id", "account_id", "platform", "post_url", "text", "likes", "impressions"]

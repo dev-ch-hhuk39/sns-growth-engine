@@ -57,5 +57,61 @@
     "source_type": "account_monitor",
     "matched_keywords": [],
     "hook_text": "ライバー1年目で月収50万を達成した話"
+  },
+  {
+    "post_id": "4444444444444444444",
+    "post_url": "https://x.com/demo_user_a/status/4444444444444444444",
+    "account_handle": "demo_user_a",
+    "account_name": "デモユーザーA",
+    "posted_at": "2026-05-25T20:00:00+09:00",
+    "text": "夜職で月収100万を超えた人が全員やっていたこと、知ってる？\n\n答えは意外と単純でした。",
+    "image_urls": [],
+    "video_urls": [],
+    "like_count": 2800,
+    "reply_count": 230,
+    "repost_count": 680,
+    "bookmark_count": 1100,
+    "impression_count": 210000,
+    "source_type": "keyword_search",
+    "matched_keywords": ["夜職", "月収"],
+    "hook_text": "夜職で月収100万を超えた人が全員やっていたこと、知ってる？"
+  },
+  {
+    "post_id": "5555555555555555555",
+    "post_url": "https://x.com/demo_user_b/status/5555555555555555555",
+    "account_handle": "demo_user_b",
+    "account_name": "デモユーザーB",
+    "posted_at": "2026-05-24T22:15:00+09:00",
+    "text": "正直に言います。\n\nホストが売れない一番の理由は、話術でも見た目でもなく「ヒアリング力」の欠如です。\n\nほとんどの人は自分の話をしたがる。でも売れるホストは相手が話したいことを引き出せる。",
+    "image_urls": [],
+    "video_urls": [],
+    "like_count": 950,
+    "reply_count": 88,
+    "repost_count": 260,
+    "bookmark_count": 440,
+    "impression_count": 75000,
+    "source_type": "account_monitor",
+    "matched_keywords": [],
+    "hook_text": "正直に言います。"
+  },
+  {
+    "post_id": "6666666666666666666",
+    "post_url": "https://x.com/demo_user_c/status/6666666666666666666",
+    "account_handle": "demo_user_c",
+    "account_name": "デモユーザーC",
+    "posted_at": "2026-05-23T19:30:00+09:00",
+    "text": "ライバーが配信を続けられない本当の理由\n\n体力？時間？違います。\n\n「誰にも見られない孤独感」に耐えられないからです。\n\nこれを解決するために自分がやった3つのこと。",
+    "image_urls": [
+      "https://pbs.twimg.com/media/demo_image_3.jpg"
+    ],
+    "video_urls": [],
+    "like_count": 620,
+    "reply_count": 74,
+    "repost_count": 150,
+    "bookmark_count": 280,
+    "impression_count": 52000,
+    "source_type": "keyword_search",
+    "matched_keywords": ["ライバー", "配信"],
+    "hook_text": "ライバーが配信を続けられない本当の理由"
   }
 ]

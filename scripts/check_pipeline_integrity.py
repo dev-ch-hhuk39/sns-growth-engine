@@ -320,14 +320,20 @@ def check_media_assets(sheets, account_id: str | None, results: list) -> int:
     return issues
 
 
+VALID_HOOK_STYLES = {"リスト型", "質問型", "暴露型", "体験談型", "断定型", "不明", ""}
+VALID_CONTENT_ANGLES = {"体験談", "ノウハウ", "暴露", "共感", "質問", "その他", ""}
+VALID_MEDIA_LABELS = {"動画あり", "画像あり", "メディアなし", ""}
+VALID_TEXT_LENGTH_BUCKETS = {"短文(0-60字)", "中短文(61-120字)", "中文(121-180字)", "長文(181字以上)", ""}
+
+
 def check_reference_post_scores(sheets, account_id: str | None, results: list) -> int:
-    """reference_post_scores タブの整合性チェック（Phase 2.8 追加タブ）。"""
+    """reference_post_scores タブの整合性チェック（Phase 2.11 強化）。"""
     issues = 0
     try:
         rows = _get_tab_rows(sheets, "reference_post_scores", account_id)
 
         if not rows:
-            results.append(f"  [PASS] reference_post_scores は空（初期状態として正常）")
+            results.append("  [PASS] reference_post_scores は空（初期状態として正常）")
             return 0
 
         results.append(f"  [PASS] reference_post_scores 取得OK: {len(rows)}件")
@@ -335,38 +341,111 @@ def check_reference_post_scores(sheets, account_id: str | None, results: list) -
         no_ref_id = 0
         invalid_perf = 0
         invalid_buzz = 0
+        invalid_percentile = 0
+        invalid_hook_style = 0
+        invalid_content_angle = 0
+        invalid_media_label = 0
+        invalid_text_bucket = 0
+        negative_scores = 0
 
         for r in rows:
             if not str(r.get("reference_post_id", "")).strip():
                 no_ref_id += 1
+
             perf = str(r.get("performance_score", "")).strip()
             if perf:
                 try:
-                    float(perf)
+                    v = float(perf)
+                    if v < 0:
+                        negative_scores += 1
                 except ValueError:
                     invalid_perf += 1
+
             buzz = str(r.get("buzz_score", "")).strip()
             if buzz:
                 try:
-                    float(buzz)
+                    v = float(buzz)
+                    if not (0.0 <= v <= 100.0):
+                        invalid_buzz += 1
                 except ValueError:
                     invalid_buzz += 1
+
+            for pct_col in ("account_percentile", "keyword_percentile"):
+                pct = str(r.get(pct_col, "")).strip()
+                if pct:
+                    try:
+                        v = float(pct)
+                        if not (0.0 <= v <= 1.0):
+                            invalid_percentile += 1
+                    except ValueError:
+                        invalid_percentile += 1
+
+            hs = str(r.get("hook_style", "")).strip()
+            if hs and hs not in VALID_HOOK_STYLES:
+                invalid_hook_style += 1
+
+            ca = str(r.get("content_angle", "")).strip()
+            if ca and ca not in VALID_CONTENT_ANGLES:
+                invalid_content_angle += 1
+
+            ml = str(r.get("media_label", "")).strip()
+            if ml and ml not in VALID_MEDIA_LABELS:
+                invalid_media_label += 1
+
+            tb = str(r.get("text_length_bucket", "")).strip()
+            if tb and tb not in VALID_TEXT_LENGTH_BUCKETS:
+                invalid_text_bucket += 1
 
         if no_ref_id > 0:
             results.append(f"  [WARN] reference_post_scores: reference_post_id が空の行: {no_ref_id}件")
             issues += 1
         else:
-            results.append(f"  [PASS] reference_post_scores: reference_post_id OK")
+            results.append("  [PASS] reference_post_scores: reference_post_id OK")
+
         if invalid_perf > 0:
             results.append(f"  [FAIL] reference_post_scores: performance_score が数値でない行: {invalid_perf}件")
             issues += 1
-        else:
-            results.append(f"  [PASS] reference_post_scores: performance_score OK")
-        if invalid_buzz > 0:
-            results.append(f"  [FAIL] reference_post_scores: buzz_score が数値でない行: {invalid_buzz}件")
+        elif negative_scores > 0:
+            results.append(f"  [WARN] reference_post_scores: performance_score が負の行: {negative_scores}件")
             issues += 1
         else:
-            results.append(f"  [PASS] reference_post_scores: buzz_score OK")
+            results.append("  [PASS] reference_post_scores: performance_score OK")
+
+        if invalid_buzz > 0:
+            results.append(f"  [FAIL] reference_post_scores: buzz_score が 0-100 範囲外の行: {invalid_buzz}件")
+            issues += 1
+        else:
+            results.append("  [PASS] reference_post_scores: buzz_score OK")
+
+        if invalid_percentile > 0:
+            results.append(f"  [FAIL] reference_post_scores: percentile が 0.0-1.0 範囲外の行: {invalid_percentile}件")
+            issues += 1
+        else:
+            results.append("  [PASS] reference_post_scores: percentile OK")
+
+        if invalid_hook_style > 0:
+            results.append(f"  [WARN] reference_post_scores: hook_style が未定義値の行: {invalid_hook_style}件")
+            issues += 1
+        else:
+            results.append("  [PASS] reference_post_scores: hook_style OK")
+
+        if invalid_content_angle > 0:
+            results.append(f"  [WARN] reference_post_scores: content_angle が未定義値の行: {invalid_content_angle}件")
+            issues += 1
+        else:
+            results.append("  [PASS] reference_post_scores: content_angle OK")
+
+        if invalid_media_label > 0:
+            results.append(f"  [WARN] reference_post_scores: media_label が未定義値の行: {invalid_media_label}件")
+            issues += 1
+        else:
+            results.append("  [PASS] reference_post_scores: media_label OK")
+
+        if invalid_text_bucket > 0:
+            results.append(f"  [WARN] reference_post_scores: text_length_bucket が未定義値の行: {invalid_text_bucket}件")
+            issues += 1
+        else:
+            results.append("  [PASS] reference_post_scores: text_length_bucket OK")
 
     except Exception as e:
         results.append(f"  [FAIL] reference_post_scores 取得エラー: {e}")

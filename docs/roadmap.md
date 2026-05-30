@@ -12,8 +12,9 @@
 [完了] Phase 2.8     → reference pipeline 設計・スタブ・スキーマ追加
 [完了] Phase 2.9     → 実Sheetsに新タブ（media_assets / reference_post_scores / generation_jobs）反映
 [完了] Phase 2.10    → X reference collector 移植（JSON/mock入力対応、X API本番未実行）
-[次期] Phase 2.11    → reference_post_analyzer 移植
-[中期] Phase 2.12    → Cloudinary media_assets 統合
+[完了] Phase 2.11    → reference_post_analyzer 移植（スコアリング・分類・パーセンタイル）
+[次期] Phase 2.12    → Cloudinary media_assets 統合
+[中期] Phase 2.13    → 8:2 generation planner
 [長期] Phase 4       → AI自動化・学習ループ
 ```
 
@@ -79,18 +80,26 @@
 
 ---
 
-## Phase 2.11: X analyzer 移植
+## Phase 2.11: reference_post_analyzer 移植 ✅
 
-**目的**: 分析・スコアリング・Geminiリライト提案をv2に移植する
+**目的**: 分析・スコアリング・パーセンタイル計算をv2に移植する
 
-- [ ] `x_analyze_posts.py` → v2 `src/analyzers/x_analyzer.py` として移植
-- [ ] パフォーマンス計算式の移植
-  - `performance_score = like + (repost×3) + (reply×2) + (bookmark×4) + (impression/100)`
-- [ ] content_angle / hook_style 分類の移植
-- [ ] バズ判定ロジックの移植
-- [ ] Geminiリライト提案（rewrite_light / rewrite_reframe）の移植
-- [ ] `x_sync_post_queue.py` → v2 queue 同期フローに統合
-- [ ] テスト追加
+- [x] `src/analyzers/reference_post_analyzer.py` 本実装
+  - `performance_score = likes + reposts×3 + reply_count×2 + bookmark_count×4 + impressions/100`
+  - `buzz_score = min(100.0, performance_score / 500 × 100)`
+- [x] content_angle / hook_style 分類の移植
+- [x] pure Python percentile_rank（pandas不使用）
+- [x] `analyze_reference_post()` / `analyze_reference_posts()` 実装
+  - バッチ処理で account_percentile / keyword_percentile を更新
+- [x] `why_it_grew()` / `replay_tip()` 実装
+- [x] `SheetsClient` / `MockSheetsClient` に reference_post_scores 4メソッド追加
+  - `get_reference_post_scores` / `find_reference_post_score_by_reference_post_id`
+  - `save_reference_post_score`（reference_post_id でアップサート）
+  - `save_reference_post_scores`
+- [x] `scripts/analyze_references.py` CLI 作成
+- [x] `check_pipeline_integrity.py` reference_post_scores チェック強化
+- [x] `fixtures/sample_x_posts.json` 3件 → 6件に拡張
+- [x] `test_phase211.py` 117 PASS
 
 ---
 

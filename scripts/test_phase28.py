@@ -222,18 +222,18 @@ def test_stub_imports() -> None:
     except NotImplementedError:
         ok("x_reference_collector: fetch_keyword_posts → NotImplementedError")
 
-    # reference_post_analyzer
+    # reference_post_analyzer (Phase 2.11 で本実装済み → NotImplementedError は出ない)
     try:
-        rpa.compute_performance_score(100, 10, 5, 2, 1000)
-        fail("rpa.compute_performance_score → NotImplementedError", "例外なし")
-    except NotImplementedError:
-        ok("reference_post_analyzer: compute_performance_score → NotImplementedError")
+        result = rpa.calculate_performance_score({"likes": 100, "reposts": 10, "reply_count": 5, "bookmark_count": 2, "impressions": 1000})
+        ok(f"reference_post_analyzer: calculate_performance_score → {result:.1f}")
+    except Exception as e:
+        fail("reference_post_analyzer: calculate_performance_score", str(e))
 
     try:
-        rpa.detect_content_angle("テスト")
-        fail("rpa.detect_content_angle → NotImplementedError", "例外なし")
-    except NotImplementedError:
-        ok("reference_post_analyzer: detect_content_angle → NotImplementedError")
+        angle = rpa.detect_content_angle("テスト")
+        ok(f"reference_post_analyzer: detect_content_angle → {angle!r}")
+    except Exception as e:
+        fail("reference_post_analyzer: detect_content_angle", str(e))
 
     # cloudinary_client
     try:

@@ -349,6 +349,77 @@ class SheetsClient:
                 errors += 1
         return {"added": added, "skipped": skipped, "errors": errors}
 
+    def get_reference_post_scores(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """reference_post_scores タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("reference_post_scores")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_reference_post_score_by_reference_post_id(
+        self, reference_post_id: str
+    ) -> dict | None:
+        """reference_post_id に一致するスコア行を返す。なければ None。"""
+        ws = self._sh.worksheet("reference_post_scores")
+        for row in ws.get_all_records():
+            if str(row.get("reference_post_id", "")) == str(reference_post_id):
+                return dict(row)
+        return None
+
+    def save_reference_post_score(self, score: dict[str, Any]) -> bool:
+        """reference_post_scores タブに1行を保存する（reference_post_id でアップサート）。
+
+        reference_post_id が既存の場合は行全体を更新、なければ追記する。
+        dry_run の場合は False を返す。
+        """
+        if self.dry_run:
+            print(
+                f"[dry-run] save_reference_post_score: "
+                f"reference_post_id={score.get('reference_post_id', '?')!r}"
+            )
+            return False
+        reference_post_id = str(score.get("reference_post_id", ""))
+        ws = self._sh.worksheet("reference_post_scores")
+        headers = ws.row_values(1)
+        row_data = [str(score.get(h, "")) for h in headers]
+        if reference_post_id:
+            existing = self.find_reference_post_score_by_reference_post_id(reference_post_id)
+            if existing:
+                col_id = headers.index("reference_post_id") + 1
+                cell = ws.find(reference_post_id, in_column=col_id)
+                if cell:
+                    ws.update([row_data], f"A{cell.row}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def save_reference_post_scores(
+        self, scores: list[dict[str, Any]]
+    ) -> dict[str, int]:
+        """reference_post_scores タブに複数行を保存する。保存/スキップ/エラー件数を返す。"""
+        saved = skipped = errors = 0
+        for score in scores:
+            try:
+                result = self.save_reference_post_score(score)
+                if result:
+                    saved += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[ERROR] save_reference_post_score 失敗: {e}")
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
+
     def get_drafts(
         self,
         account_id: str | None = None,
@@ -734,6 +805,61 @@ class MockSheetsClient:
                 print(f"[mock-sheets] save_reference_post error: {e}")
                 errors += 1
         return {"added": added, "skipped": skipped, "errors": errors}
+
+    def get_reference_post_scores(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._reference_post_scores) if hasattr(self, "_reference_post_scores") else []
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if limit:
+            rows = rows[:limit]
+        return rows
+
+    def find_reference_post_score_by_reference_post_id(
+        self, reference_post_id: str
+    ) -> dict | None:
+        for r in (self._reference_post_scores if hasattr(self, "_reference_post_scores") else []):
+            if str(r.get("reference_post_id", "")) == str(reference_post_id):
+                return dict(r)
+        return None
+
+    def save_reference_post_score(self, score: dict[str, Any]) -> bool:
+        if not hasattr(self, "_reference_post_scores"):
+            self._reference_post_scores: list[dict] = []
+        reference_post_id = str(score.get("reference_post_id", ""))
+        if reference_post_id:
+            existing = self.find_reference_post_score_by_reference_post_id(reference_post_id)
+            if existing:
+                for i, r in enumerate(self._reference_post_scores):
+                    if str(r.get("reference_post_id", "")) == reference_post_id:
+                        self._reference_post_scores[i] = dict(score)
+                        print(f"[mock-sheets] save_reference_post_score update: reference_post_id={reference_post_id!r}")
+                        return True
+        self._reference_post_scores.append(dict(score))
+        print(f"[mock-sheets] save_reference_post_score: reference_post_id={reference_post_id!r}")
+        return True
+
+    def save_reference_post_scores(
+        self, scores: list[dict[str, Any]]
+    ) -> dict[str, int]:
+        saved = skipped = errors = 0
+        for score in scores:
+            try:
+                result = self.save_reference_post_score(score)
+                if result:
+                    saved += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[mock-sheets] save_reference_post_score error: {e}")
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
 
     def get_drafts(
         self,
