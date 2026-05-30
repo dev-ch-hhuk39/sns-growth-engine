@@ -14,7 +14,10 @@
 [完了] Phase 2.10    → X reference collector 移植（JSON/mock入力対応、X API本番未実行）
 [完了] Phase 2.11    → reference_post_analyzer 移植（スコアリング・分類・パーセンタイル）
 [完了] Phase 2.12    → Cloudinary media_assets 統合
-[中期] Phase 2.13    → 8:2 generation planner
+[完了] Phase 2.13    → 8:2 generation planner
+[完了] Phase 2.14    → reference_based Gemini prompt（リライトループ）
+[完了] Phase 2.15    → AI approval scoring
+[完了] Phase 2.16    → 文字数制限強化（X 120/140字）
 [長期] Phase 4       → AI自動化・学習ループ
 ```
 
@@ -121,48 +124,74 @@
 
 ---
 
-## Phase 2.13: 8:2 generation planner
+## Phase 2.13: 8:2 generation planner ✅
 
 **目的**: 80% reference_based / 20% original_hypothesis の投稿比率を管理する
 
-- [ ] 投稿比率カウンタの設計
-- [ ] `src/planners/generation_planner.py` 実装
-- [ ] 週次・月次の比率モニタリング
-- [ ] テスト追加
+- [x] `src/generation/generation_planner.py` 実装
+  - `plan_daily_counts()` / `allocate_generation_modes()` / `select_reference_candidates()`
+  - `build_generation_job()` / `build_generation_job_records()` / `plan_generation_jobs()`
+  - `create_generation_jobs_for_account()` / `create_daily_generation_plan()`
+- [x] `SheetsClient` / `MockSheetsClient` に generation_jobs 5メソッド追加
+  - `save_generation_job` / `save_generation_jobs` / `get_generation_jobs`
+  - `find_generation_job_by_id` / `update_generation_job`
+- [x] TAB_DEFINITIONS generation_jobs に status / generated_draft_id / generated_at 追加
+- [x] `scripts/plan_generation_jobs.py` CLI 作成
+- [x] `fixtures/sample_generation_jobs.json` 追加（3件）
+- [x] `check_pipeline_integrity.py` generation_jobs バリデーション強化
+- [x] `test_phase213_216.py` 123 PASS
 
 ---
 
-## Phase 2.14: reference_based Gemini prompt
+## Phase 2.14: reference_based Gemini prompt ✅
 
 **目的**: 収集投稿をベースにしたリライト用Geminiプロンプトをv2に統合する
 
-- [ ] `prompts/rewrite_reference.md` 作成
-- [ ] reference_based 生成フローの実装
-- [ ] 既存 `x_analyze_posts.py` のリライトロジックとの統合
-- [ ] テスト追加
+- [x] `src/generation/reference_based_generator.py` 実装
+  - `build_reference_based_prompt()` / `build_original_hypothesis_prompt()`
+  - `parse_generation_response()` / `_call_with_rewrite()`（2回リトライループ）
+  - `generate_from_reference()` / `generate_original_hypothesis()`
+  - `normalize_generated_draft()` / `execute_generation_job()` / `execute_generation_jobs()`
+- [x] MOCK_LLM=true デフォルト（実Gemini API 未呼び出し）
+- [x] text_policy FAIL → WAITING_REVIEW 自動マッピング
+- [x] `scripts/generate_from_jobs.py` CLI 作成（--mock-llm / --dry-run デフォルト）
+- [x] `fixtures/sample_generated_posts.json` 追加（2件）
+- [x] `docs/phase2-14-reference-based-generator.md` 作成
+- [x] `docs/reference-based-prompt-design.md` 作成
+- [x] `test_phase213_216.py` 内 generation テスト PASS
 
 ---
 
-## Phase 2.15: AI approval scoring
+## Phase 2.15: AI approval scoring ✅
 
 **目的**: 投稿案に対してAIがスコアリングし人間レビューを支援する
 
-- [ ] `src/scorers/approval_scorer.py` 実装
-- [ ] スコア基準の定義（バズ可能性・ブランド整合性・文字数 等）
-- [ ] `approve_queue.py` への統合
-- [ ] テスト追加
+- [x] `src/generation/approval_scorer.py` 実装
+  - `calculate_buzz_potential_score()` / `calculate_conversion_potential_score()`
+  - `calculate_brand_risk_score()` / `calculate_imitation_risk()` / `calculate_media_reuse_risk()`
+  - `calculate_confidence_level()` / `should_auto_approve()` / `calculate_ai_publish_recommendation()`
+  - `score_generated_post()` / `_text_overlap_ratio()`
+- [x] TAB_DEFINITIONS drafts に buzz_potential_score / conversion_potential_score /
+      confidence_level / ai_publish_recommendation 等追加
+- [x] `docs/phase2-15-ai-approval-scoring.md` 作成
+- [x] `docs/ai-approval-policy.md` 作成
+- [x] `test_phase213_216.py` 内 approval scoring テスト PASS
 
 ---
 
-## Phase 2.16: 文字数制限強化
+## Phase 2.16: 文字数制限強化 ✅
 
 **目的**: 全プラットフォームの文字数制限をコード・プロンプト双方で徹底する
 
-- [ ] X: 120文字推奨 / 140文字ハード上限（v2 XPublisher は実装済み）
-- [ ] Threads: 500文字上限
-- [ ] Geminiプロンプトへの文字数制約追加（`collect.py` 相当）
-- [ ] `generate_drafts.py` での事後検証
-- [ ] テスト追加
+- [x] X: 120文字推奨 / 140文字ハード上限（soft/hard 2段階）
+- [x] Threads: 500文字推奨 / 800文字ハード上限
+- [x] Geminiプロンプト内に文字数制約を明示（reference_based / original_hypothesis 両プロンプト）
+- [x] `_call_with_rewrite()` でリライトループ（FAIL → 再生成、最大2回）
+- [x] `normalize_generated_draft()` で text_policy_status=FAIL → status=WAITING_REVIEW
+- [x] TAB_DEFINITIONS social_derivatives に char_count / text_policy_status 追加
+- [x] `docs/phase2-16-text-policy-enforcement.md` 作成
+- [x] `docs/8-2-generation-strategy.md` 作成
+- [x] `test_phase213_216.py` 内 text_policy 統合テスト PASS
 
 ---
 

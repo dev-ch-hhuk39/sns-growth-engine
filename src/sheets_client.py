@@ -70,12 +70,19 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "pv_score", "cv_score", "brand_risk_score", "score", "score_reason",
         "ai_review", "rewrite_count", "post_mode",
         "notes",
+        # Phase 2.13-2.15 追加
+        "generation_mode", "hypothesis", "media_strategy",
+        "imitation_risk", "media_reuse_risk",
+        "buzz_potential_score", "conversion_potential_score",
+        "confidence_level", "ai_publish_recommendation",
     ],
     # X / Threads 向け派生投稿。draft_id + platform で1行。
     "social_derivatives": [
         "derivative_id", "draft_id", "account_id",
         "platform", "text", "hashtags",
         "status", "reason", "created_at",
+        # Phase 2.16 追加
+        "char_count", "text_policy_status", "media_asset_id", "media_strategy",
     ],
     # 投稿後の計測結果。PV以外に最終CV（LINE追加・応募等）を追跡。
     "posted_results": [
@@ -117,6 +124,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "queue_id", "draft_id", "account_id",
         "platform", "scheduled_at", "priority",
         "status", "error", "created_at", "processed_at",
+        # Phase 2.13-2.15 追加
+        "generation_mode", "confidence_level", "ai_publish_recommendation",
+        "media_asset_id", "text_policy_status",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -159,6 +169,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "auto_approve_threshold",
         "x_max_chars", "threads_max_chars",
         "active", "notes",
+        # Phase 2.13 追加
+        "reference_post_id", "reference_post_score_id", "media_asset_id",
+        "status", "generated_draft_id", "generated_at",
     ],
 }
 
@@ -498,6 +511,99 @@ class SheetsClient:
                 print(f"[ERROR] save_reference_post_score 失敗: {e}")
                 errors += 1
         return {"saved": saved, "skipped": skipped, "errors": errors}
+
+    # ---------------------------------------------------------------- #
+    # generation_jobs
+    # ---------------------------------------------------------------- #
+
+    def save_generation_job(self, job: dict[str, Any]) -> bool:
+        """generation_jobs タブに1行を保存する（job_id でアップサート）。"""
+        if self.dry_run:
+            print(
+                f"[dry-run] save_generation_job: "
+                f"job_id={job.get('job_id', '?')!r} "
+                f"account_id={job.get('account_id', '?')!r} "
+                f"mode={job.get('generation_mode', '?')!r}"
+            )
+            return False
+        job_id = str(job.get("job_id", ""))
+        ws = self._sh.worksheet("generation_jobs")
+        headers = ws.row_values(1)
+        row_data = [str(job.get(h, "")) for h in headers]
+        if job_id:
+            col_id = headers.index("job_id") + 1 if "job_id" in headers else None
+            if col_id:
+                cell = ws.find(job_id, in_column=col_id)
+                if cell:
+                    ws.update([row_data], f"A{cell.row}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def save_generation_jobs(
+        self, jobs: list[dict[str, Any]]
+    ) -> dict[str, int]:
+        """generation_jobs タブに複数行を保存する。保存/スキップ/エラー件数を返す。"""
+        saved = skipped = errors = 0
+        for job in jobs:
+            try:
+                result = self.save_generation_job(job)
+                if result:
+                    saved += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[ERROR] save_generation_job 失敗: {e}")
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
+
+    def get_generation_jobs(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """generation_jobs タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("generation_jobs")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).lower() == status.lower()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_generation_job_by_id(self, job_id: str) -> dict | None:
+        """job_id に一致する generation_job 行を返す。なければ None。"""
+        ws = self._sh.worksheet("generation_jobs")
+        for row in ws.get_all_records():
+            if str(row.get("job_id", "")) == str(job_id):
+                return dict(row)
+        return None
+
+    def update_generation_job(self, job_id: str, **fields: Any) -> bool:
+        """generation_jobs タブの指定行を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_generation_job: job_id={job_id!r} fields={fields}")
+            return False
+        ws = self._sh.worksheet("generation_jobs")
+        headers = ws.row_values(1)
+        col_id = headers.index("job_id") + 1 if "job_id" in headers else None
+        if col_id is None:
+            return False
+        cell = ws.find(job_id, in_column=col_id)
+        if cell is None:
+            return False
+        row = cell.row
+        for field, value in fields.items():
+            if field in headers:
+                col = headers.index(field) + 1
+                ws.update_cell(row, col, str(value))
+        return True
 
     def get_drafts(
         self,
@@ -1000,6 +1106,80 @@ class MockSheetsClient:
                 print(f"[mock-sheets] save_reference_post_score error: {e}")
                 errors += 1
         return {"saved": saved, "skipped": skipped, "errors": errors}
+
+    # ---- generation_jobs ----
+
+    def save_generation_job(self, job: dict[str, Any]) -> bool:
+        if not hasattr(self, "_generation_jobs"):
+            self._generation_jobs: list[dict] = []
+        job_id = str(job.get("job_id", ""))
+        for i, existing in enumerate(self._generation_jobs):
+            if str(existing.get("job_id", "")) == job_id:
+                self._generation_jobs[i] = dict(job)
+                print(
+                    f"[mock-sheets] save_generation_job (update): "
+                    f"job_id={job_id!r} mode={job.get('generation_mode', '?')!r}"
+                )
+                return True
+        self._generation_jobs.append(dict(job))
+        print(
+            f"[mock-sheets] save_generation_job (insert): "
+            f"job_id={job_id!r} account_id={job.get('account_id', '?')!r} "
+            f"mode={job.get('generation_mode', '?')!r}"
+        )
+        return True
+
+    def save_generation_jobs(
+        self, jobs: list[dict[str, Any]]
+    ) -> dict[str, int]:
+        saved = skipped = errors = 0
+        for job in jobs:
+            try:
+                result = self.save_generation_job(job)
+                if result:
+                    saved += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[mock-sheets] save_generation_job error: {e}")
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
+
+    def get_generation_jobs(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._generation_jobs) if hasattr(self, "_generation_jobs") else []
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).lower() == status.lower()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_generation_job_by_id(self, job_id: str) -> dict | None:
+        if not hasattr(self, "_generation_jobs"):
+            return None
+        for r in self._generation_jobs:
+            if str(r.get("job_id", "")) == str(job_id):
+                return dict(r)
+        return None
+
+    def update_generation_job(self, job_id: str, **fields: Any) -> bool:
+        if not hasattr(self, "_generation_jobs"):
+            return False
+        print(f"[mock-sheets] update_generation_job: job_id={job_id!r} fields={fields}")
+        for r in self._generation_jobs:
+            if str(r.get("job_id", "")) == job_id:
+                r.update(fields)
+                return True
+        return False
 
     def get_drafts(
         self,

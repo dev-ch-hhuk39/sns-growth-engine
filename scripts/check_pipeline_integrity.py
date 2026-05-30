@@ -243,6 +243,11 @@ VALID_REUSE_STATUSES = {"", "empty", "approved", "review", "rejected", "referenc
 VALID_STORAGE_PROVIDERS = {"", "cloudinary", "none", "dry_run"}
 VALID_RISK_LEVELS = {"", "low", "medium", "high", "unknown"}
 VALID_GENERATION_MODES = {"reference_based", "original_hypothesis"}
+VALID_GENERATION_JOB_STATUSES = {"", "pending", "in_progress", "done", "failed"}
+VALID_CONFIDENCE_LEVELS = {"", "HIGH", "MEDIUM", "LOW"}
+VALID_AI_RECOMMENDATIONS = {"", "recommend", "review", "reject"}
+VALID_TEXT_POLICY_STATUSES = {"", "OK", "WARN", "FAIL"}
+VALID_MEDIA_STRATEGIES = {"", "none", "reference_image", "original_image"}
 
 
 def _get_tab_rows(sheets, tab_name: str, account_id: str | None) -> list[dict]:
@@ -480,7 +485,7 @@ def check_reference_post_scores(sheets, account_id: str | None, results: list) -
 
 
 def check_generation_jobs(sheets, account_id: str | None, results: list) -> int:
-    """generation_jobs タブの整合性チェック（Phase 2.8 追加タブ）。"""
+    """generation_jobs タブの整合性チェック（Phase 2.13 強化）。"""
     issues = 0
     try:
         rows = _get_tab_rows(sheets, "generation_jobs", account_id)
@@ -496,6 +501,7 @@ def check_generation_jobs(sheets, account_id: str | None, results: list) -> int:
         invalid_orig_ratio = 0
         warn_x_chars = 0
         warn_th_chars = 0
+        invalid_status = 0
 
         for r in rows:
             mode = str(r.get("generation_mode", "")).strip()
@@ -527,6 +533,9 @@ def check_generation_jobs(sheets, account_id: str | None, results: list) -> int:
                     warn_th_chars += 1
             except (TypeError, ValueError):
                 pass
+            job_status = str(r.get("status", "")).strip().lower()
+            if job_status and job_status not in VALID_GENERATION_JOB_STATUSES:
+                invalid_status += 1
 
         if invalid_mode > 0:
             results.append(f"  [FAIL] generation_jobs: generation_mode が不正な行: {invalid_mode}件")
@@ -543,12 +552,23 @@ def check_generation_jobs(sheets, account_id: str | None, results: list) -> int:
             issues += 1
         else:
             results.append(f"  [PASS] generation_jobs: original_hypothesis_ratio OK")
+        if invalid_status > 0:
+            results.append(f"  [WARN] generation_jobs: status が想定外の行: {invalid_status}件 (pending/in_progress/done/failed)")
+            issues += 1
+        else:
+            results.append(f"  [PASS] generation_jobs: status OK")
         if warn_x_chars > 0:
             results.append(f"  [WARN] generation_jobs: x_max_chars が140超の行: {warn_x_chars}件")
             issues += 1
         if warn_th_chars > 0:
             results.append(f"  [WARN] generation_jobs: threads_max_chars が800超の行: {warn_th_chars}件")
             issues += 1
+
+        # Phase 2.15 追加フィールドサマリー
+        done_count = sum(1 for r in rows if str(r.get("status", "")).lower() == "done")
+        pending_count = sum(1 for r in rows if str(r.get("status", "")).lower() == "pending")
+        if done_count or pending_count:
+            results.append(f"  [PASS] generation_jobs: done={done_count}件 pending={pending_count}件")
 
     except Exception as e:
         results.append(f"  [FAIL] generation_jobs 取得エラー: {e}")
