@@ -47,6 +47,13 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "hook_type", "extracted_hook", "extracted_pain",
         "extracted_desire", "reusable_pattern", "imitation_risk",
         "status", "notes",
+        # Phase 2.10 追加: X reference collector 移植に必要な列
+        "original_text",    # 元投稿の生テキスト（text は要約・整形後）
+        "account_handle",   # @ハンドル名（author は表示名）
+        "reply_count",      # 返信数
+        "bookmark_count",   # 保存数（Xブックマーク）
+        "collected_at",     # 収集日時（ISO8601）
+        "keywords",         # 収集元キーワード（|区切り）
     ],
     # カテゴリ重み定義。分量配分に使う。
     "content_categories": [
@@ -301,6 +308,46 @@ class SheetsClient:
         if limit:
             rows = rows[:limit]
         return [dict(r) for r in rows]
+
+    def find_reference_post_by_post_id(self, post_id: str) -> dict | None:
+        """post_id に一致する reference_posts 行を返す。なければ None。"""
+        ws = self._sh.worksheet("reference_posts")
+        for row in ws.get_all_records():
+            if str(row.get("post_id", "")) == str(post_id):
+                return dict(row)
+        return None
+
+    def save_reference_post(self, post: dict[str, Any]) -> bool:
+        """reference_posts タブに1行を保存する。post_id が重複する場合はスキップして False を返す。"""
+        if self.dry_run:
+            print(f"[dry-run] save_reference_post: post_id={post.get('post_id', '?')!r}")
+            return False
+        post_id = str(post.get("post_id", ""))
+        if post_id and self.find_reference_post_by_post_id(post_id) is not None:
+            print(f"[skip] reference_posts: post_id={post_id!r} は既存のためスキップ")
+            return False
+        ws = self._sh.worksheet("reference_posts")
+        headers = ws.row_values(1)
+        row = [str(post.get(h, "")) for h in headers]
+        ws.append_row(row, value_input_option="USER_ENTERED")
+        return True
+
+    def save_reference_posts(
+        self, posts: list[dict[str, Any]], *, skip_duplicates: bool = True
+    ) -> dict[str, int]:
+        """reference_posts タブに複数行を保存する。追加/スキップ/エラー件数を返す。"""
+        added = skipped = errors = 0
+        for post in posts:
+            try:
+                result = self.save_reference_post(post)
+                if result:
+                    added += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[ERROR] save_reference_post 失敗 (post_id={post.get('post_id', '?')}): {e}")
+                errors += 1
+        return {"added": added, "skipped": skipped, "errors": errors}
 
     def get_drafts(
         self,
@@ -646,7 +693,47 @@ class MockSheetsClient:
         status: str | None = None,
         limit: int | None = None,
     ) -> list[dict]:
-        return []
+        rows = list(self._reference_posts) if hasattr(self, "_reference_posts") else []
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if status:
+            rows = [r for r in rows if str(r.get("status", "")).upper() == status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return rows
+
+    def find_reference_post_by_post_id(self, post_id: str) -> dict | None:
+        for r in (self._reference_posts if hasattr(self, "_reference_posts") else []):
+            if str(r.get("post_id", "")) == str(post_id):
+                return dict(r)
+        return None
+
+    def save_reference_post(self, post: dict[str, Any]) -> bool:
+        if not hasattr(self, "_reference_posts"):
+            self._reference_posts: list[dict] = []
+        post_id = str(post.get("post_id", ""))
+        if post_id and self.find_reference_post_by_post_id(post_id) is not None:
+            print(f"[mock-sheets] save_reference_post skip: post_id={post_id!r} 重複")
+            return False
+        self._reference_posts.append(dict(post))
+        print(f"[mock-sheets] save_reference_post: post_id={post_id!r}")
+        return True
+
+    def save_reference_posts(
+        self, posts: list[dict[str, Any]], *, skip_duplicates: bool = True
+    ) -> dict[str, int]:
+        added = skipped = errors = 0
+        for post in posts:
+            try:
+                result = self.save_reference_post(post)
+                if result:
+                    added += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                print(f"[mock-sheets] save_reference_post error: {e}")
+                errors += 1
+        return {"added": added, "skipped": skipped, "errors": errors}
 
     def get_drafts(
         self,

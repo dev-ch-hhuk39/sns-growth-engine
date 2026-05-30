@@ -16,9 +16,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from sheets_client import TAB_DEFINITIONS
 from text_policy import check_text_policy, get_platform_limits
 from generation.generation_planner import build_generation_job, plan_daily_counts
-import collectors.x_reference_collector as xrc
-import analyzers.reference_post_analyzer as rpa
-import media.cloudinary_client as cc
+from collectors import x_reference_collector as xrc
+from analyzers import reference_post_analyzer as rpa
+from media import cloudinary_client as cc
 
 _PASS = 0
 _FAIL = 0
@@ -209,18 +209,18 @@ def test_generation_planner() -> None:
 def test_stub_imports() -> None:
     print("\n[Test 5] スタブ import 確認")
 
-    # x_reference_collector
+    # x_reference_collector（Phase 2.10 スタブ）
     try:
-        xrc.collect_account_posts("user", "token")
-        fail("xrc.collect_account_posts → NotImplementedError", "例外なし")
+        xrc.fetch_account_posts("user", "token")
+        fail("xrc.fetch_account_posts → NotImplementedError", "例外なし")
     except NotImplementedError:
-        ok("x_reference_collector: collect_account_posts → NotImplementedError")
+        ok("x_reference_collector: fetch_account_posts → NotImplementedError")
 
     try:
-        xrc.collect_keyword_posts("kw", "token")
-        fail("xrc.collect_keyword_posts → NotImplementedError", "例外なし")
+        xrc.fetch_keyword_posts("kw", "token")
+        fail("xrc.fetch_keyword_posts → NotImplementedError", "例外なし")
     except NotImplementedError:
-        ok("x_reference_collector: collect_keyword_posts → NotImplementedError")
+        ok("x_reference_collector: fetch_keyword_posts → NotImplementedError")
 
     # reference_post_analyzer
     try:

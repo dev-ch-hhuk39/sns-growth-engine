@@ -238,6 +238,221 @@ def check_posted_results(sheets, account_id: str | None, results: list) -> int:
     return issues
 
 
+VALID_MEDIA_TYPES = {"image", "video", "gif", "unknown"}
+VALID_REUSE_STATUSES = {"", "empty", "approved", "review", "rejected", "reference_only", "available", "used", "restricted"}
+VALID_GENERATION_MODES = {"reference_based", "original_hypothesis"}
+
+
+def _get_tab_rows(sheets, tab_name: str, account_id: str | None) -> list[dict]:
+    """タブの全行を取得する。タブが存在しない場合は空リストを返す。"""
+    if hasattr(sheets, "_sh"):
+        try:
+            ws = sheets._sh.worksheet(tab_name)
+            rows = ws.get_all_records()
+            if account_id:
+                rows = [r for r in rows if r.get("account_id") == account_id]
+            return rows
+        except Exception:
+            return []
+    return []
+
+
+def check_media_assets(sheets, account_id: str | None, results: list) -> int:
+    """media_assets タブの整合性チェック（Phase 2.8 追加タブ）。"""
+    issues = 0
+    try:
+        rows = _get_tab_rows(sheets, "media_assets", account_id)
+
+        if not rows:
+            results.append(f"  [PASS] media_assets は空（初期状態として正常）")
+            return 0
+
+        results.append(f"  [PASS] media_assets 取得OK: {len(rows)}件")
+
+        required_cols = ["media_id", "account_id", "reference_post_id", "storage_url", "media_type"]
+        missing_cols = [c for c in required_cols if c not in (rows[0].keys() if rows else [])]
+        if missing_cols:
+            results.append(f"  [FAIL] media_assets に必須列がありません: {missing_cols}")
+            return issues + 1
+
+        no_ref = 0
+        missing_storage = 0
+        invalid_type = 0
+        invalid_reuse = 0
+
+        for r in rows:
+            mid = str(r.get("media_id", "")).strip()
+            if mid and not r.get("reference_post_id") and not r.get("source_post_url"):
+                no_ref += 1
+            provider = str(r.get("storage_provider", "")).strip()
+            if provider and not r.get("storage_url"):
+                missing_storage += 1
+            mtype = str(r.get("media_type", "")).lower().strip()
+            if mtype and mtype not in VALID_MEDIA_TYPES:
+                invalid_type += 1
+            reuse = str(r.get("reuse_status", "")).lower().strip()
+            if reuse not in VALID_REUSE_STATUSES:
+                invalid_reuse += 1
+
+        if no_ref > 0:
+            results.append(f"  [WARN] media_assets: reference_post_id/source_post_url が空の行: {no_ref}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] media_assets: 参照整合性OK")
+        if missing_storage > 0:
+            results.append(f"  [WARN] media_assets: storage_provider ありで storage_url なし: {missing_storage}件")
+            issues += 1
+        if invalid_type > 0:
+            results.append(f"  [FAIL] media_assets: media_type が不正な行: {invalid_type}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] media_assets: media_type OK")
+        if invalid_reuse > 0:
+            results.append(f"  [WARN] media_assets: reuse_status が想定外の行: {invalid_reuse}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] media_assets: reuse_status OK")
+
+    except Exception as e:
+        results.append(f"  [FAIL] media_assets 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_reference_post_scores(sheets, account_id: str | None, results: list) -> int:
+    """reference_post_scores タブの整合性チェック（Phase 2.8 追加タブ）。"""
+    issues = 0
+    try:
+        rows = _get_tab_rows(sheets, "reference_post_scores", account_id)
+
+        if not rows:
+            results.append(f"  [PASS] reference_post_scores は空（初期状態として正常）")
+            return 0
+
+        results.append(f"  [PASS] reference_post_scores 取得OK: {len(rows)}件")
+
+        no_ref_id = 0
+        invalid_perf = 0
+        invalid_buzz = 0
+
+        for r in rows:
+            if not str(r.get("reference_post_id", "")).strip():
+                no_ref_id += 1
+            perf = str(r.get("performance_score", "")).strip()
+            if perf:
+                try:
+                    float(perf)
+                except ValueError:
+                    invalid_perf += 1
+            buzz = str(r.get("buzz_score", "")).strip()
+            if buzz:
+                try:
+                    float(buzz)
+                except ValueError:
+                    invalid_buzz += 1
+
+        if no_ref_id > 0:
+            results.append(f"  [WARN] reference_post_scores: reference_post_id が空の行: {no_ref_id}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] reference_post_scores: reference_post_id OK")
+        if invalid_perf > 0:
+            results.append(f"  [FAIL] reference_post_scores: performance_score が数値でない行: {invalid_perf}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] reference_post_scores: performance_score OK")
+        if invalid_buzz > 0:
+            results.append(f"  [FAIL] reference_post_scores: buzz_score が数値でない行: {invalid_buzz}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] reference_post_scores: buzz_score OK")
+
+    except Exception as e:
+        results.append(f"  [FAIL] reference_post_scores 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_generation_jobs(sheets, account_id: str | None, results: list) -> int:
+    """generation_jobs タブの整合性チェック（Phase 2.8 追加タブ）。"""
+    issues = 0
+    try:
+        rows = _get_tab_rows(sheets, "generation_jobs", account_id)
+
+        if not rows:
+            results.append(f"  [PASS] generation_jobs は空（初期状態として正常）")
+            return 0
+
+        results.append(f"  [PASS] generation_jobs 取得OK: {len(rows)}件")
+
+        invalid_mode = 0
+        invalid_ref_ratio = 0
+        invalid_orig_ratio = 0
+        warn_x_chars = 0
+        warn_th_chars = 0
+
+        for r in rows:
+            mode = str(r.get("generation_mode", "")).strip()
+            if mode and mode not in VALID_GENERATION_MODES:
+                invalid_mode += 1
+            try:
+                ref_ratio = float(r.get("reference_based_ratio", 0))
+                if not (0.0 <= ref_ratio <= 1.0):
+                    invalid_ref_ratio += 1
+            except (TypeError, ValueError):
+                if str(r.get("reference_based_ratio", "")).strip():
+                    invalid_ref_ratio += 1
+            try:
+                orig_ratio = float(r.get("original_hypothesis_ratio", 0))
+                if not (0.0 <= orig_ratio <= 1.0):
+                    invalid_orig_ratio += 1
+            except (TypeError, ValueError):
+                if str(r.get("original_hypothesis_ratio", "")).strip():
+                    invalid_orig_ratio += 1
+            try:
+                x_max = int(r.get("x_max_chars", 140))
+                if x_max > 140:
+                    warn_x_chars += 1
+            except (TypeError, ValueError):
+                pass
+            try:
+                th_max = int(r.get("threads_max_chars", 800))
+                if th_max > 800:
+                    warn_th_chars += 1
+            except (TypeError, ValueError):
+                pass
+
+        if invalid_mode > 0:
+            results.append(f"  [FAIL] generation_jobs: generation_mode が不正な行: {invalid_mode}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] generation_jobs: generation_mode OK")
+        if invalid_ref_ratio > 0:
+            results.append(f"  [FAIL] generation_jobs: reference_based_ratio が0〜1範囲外: {invalid_ref_ratio}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] generation_jobs: reference_based_ratio OK")
+        if invalid_orig_ratio > 0:
+            results.append(f"  [FAIL] generation_jobs: original_hypothesis_ratio が0〜1範囲外: {invalid_orig_ratio}件")
+            issues += 1
+        else:
+            results.append(f"  [PASS] generation_jobs: original_hypothesis_ratio OK")
+        if warn_x_chars > 0:
+            results.append(f"  [WARN] generation_jobs: x_max_chars が140超の行: {warn_x_chars}件")
+            issues += 1
+        if warn_th_chars > 0:
+            results.append(f"  [WARN] generation_jobs: threads_max_chars が800超の行: {warn_th_chars}件")
+            issues += 1
+
+    except Exception as e:
+        results.append(f"  [FAIL] generation_jobs 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
     parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
@@ -277,6 +492,10 @@ def main() -> None:
         ("queue", check_queue),
         ("logs", check_logs),
         ("posted_results", check_posted_results),
+        # Phase 2.8 追加タブ
+        ("media_assets", check_media_assets),
+        ("reference_post_scores", check_reference_post_scores),
+        ("generation_jobs", check_generation_jobs),
     ]
 
     for tab_name, check_fn in checks:

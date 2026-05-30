@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-05-29
+**最終更新**: 2026-05-30
 
 ---
 
@@ -8,10 +8,13 @@
 
 ```
 [完了] Phase 1〜3-D  → 投稿実行エンジン（安全ガード付き）
-[現在] Phase 0       → Git/GitHub保全
-[次期] Phase 2.x     → 収集・分析パイプライン移植
-[中期] Phase 3-D〜F  → 本番投稿テスト
-[長期] Phase 4       → AI自動化・Cloudinary・学習
+[完了] Phase 0       → Git/GitHub保全
+[完了] Phase 2.8     → reference pipeline 設計・スタブ・スキーマ追加
+[完了] Phase 2.9     → 実Sheetsに新タブ（media_assets / reference_post_scores / generation_jobs）反映
+[完了] Phase 2.10    → X reference collector 移植（JSON/mock入力対応、X API本番未実行）
+[次期] Phase 2.11    → reference_post_analyzer 移植
+[中期] Phase 2.12    → Cloudinary media_assets 統合
+[長期] Phase 4       → AI自動化・学習ループ
 ```
 
 ---
@@ -32,40 +35,47 @@
 
 ---
 
-## Phase 2.8: 既存Xパイプライン棚卸しdocs化
+## Phase 2.8: 既存Xパイプライン棚卸しdocs化 ✅
 
 **目的**: `feature/x-analysis-pipeline` の設計・仕様をv2 docsに記録する
 
-- [ ] `x_collect_posts.py` の設計仕様書作成
-- [ ] `x_analyze_posts.py` の分析ロジック仕様書作成
-- [ ] `x_sync_post_queue.py` の同期フロー仕様書作成
-- [ ] スプシスキーマ（既存6タブ vs v2 12タブ）比較表作成
-- [ ] 統合方針の決定と記録
+- [x] 監査レポート作成（`docs/phase2-8-existing-x-pipeline-audit.md`）
+- [x] スキーマ対応表作成（`docs/schema-mapping-existing-x-to-v2.md`）
+- [x] 統合計画作成（`docs/v2-x-pipeline-integration-plan.md`）
+- [x] TAB_DEFINITIONS に media_assets / reference_post_scores / generation_jobs 追加
+- [x] src/collectors / analyzers / media / generation スタブ作成
+- [x] text_policy.py 実装（X: 120/140字、Threads: 600/800字）
+- [x] generation_planner.py 最小実装
+- [x] test_phase28.py 51 PASS
 
 ---
 
-## Phase 2.9: v2 schema 拡張
+## Phase 2.9: 実Sheets スキーマ有効化 ✅
 
-**目的**: v2のスプシスキーマを既存資産と整合させる
+**目的**: v2のスプシスキーマを実Sheetsに反映する
 
-- [ ] スプシスキーマ統合方針の決定
-  - 案A: v2 12タブ維持（新規タブを追加）
-  - 案B: 既存6タブをv2に取り込む
-- [ ] `TAB_DEFINITIONS` 更新
-- [ ] `sheets_client.py` スキーマ拡張
-- [ ] マイグレーション戦略（既存Sheetsデータの互換性）
+- [x] `setup_and_verify.py --setup --verify` 実行
+- [x] media_assets タブ作成
+- [x] reference_post_scores タブ作成
+- [x] generation_jobs タブ作成
+- [x] reference_posts に6列追加（Phase 2.10用）
+- [x] 既存タブのデータ破壊なし確認
 
 ---
 
-## Phase 2.10: X reference collector 移植
+## Phase 2.10: X reference collector 移植 ✅
 
-**目的**: X投稿収集パイプラインをv2に移植する
+**目的**: X投稿収集パイプラインをv2に移植する（X API本番未実行）
 
-- [ ] `x_collect_posts.py` → v2 `src/collectors/x_collector.py` として移植
-- [ ] `x_pipeline_config.json` → v2 config に統合
-- [ ] 監視アカウント・キーワード設定の移行
-- [ ] v2 SheetsClient を使用するよう修正
-- [ ] テスト追加
+- [x] `src/collectors/x_reference_collector.py` 本格実装（normalize_post）
+- [x] JSON / mock 入力対応
+- [x] X API クライアントスタブ（--use-x-api フラグで有効化設計）
+- [x] `scripts/collect_references.py` CLI作成
+- [x] `fixtures/sample_x_posts.json` 作成（3件: テキスト/画像/動画）
+- [x] `SheetsClient.save_reference_post()` / `save_reference_posts()` 追加
+- [x] `MockSheetsClient` に同じメソッド追加
+- [x] check_pipeline_integrity.py に新タブチェック追加
+- [x] test_phase29_210.py 67 PASS
 
 ---
 

@@ -1,0 +1,61 @@
+[
+  {
+    "post_id": "1111111111111111111",
+    "post_url": "https://x.com/demo_user_a/status/1111111111111111111",
+    "account_handle": "demo_user_a",
+    "account_name": "デモユーザーA",
+    "posted_at": "2026-05-28T10:00:00+09:00",
+    "text": "夜職で働く前に知っておきたい5つのこと\n\n①収入は変動する\n②シフトは自由度が高い\n③体力より精神力\n④人間関係が最重要\n⑤辞める勇気も大事\n\nこれだけ意識すると長く続けられます。",
+    "image_urls": [],
+    "video_urls": [],
+    "like_count": 450,
+    "reply_count": 32,
+    "repost_count": 87,
+    "bookmark_count": 210,
+    "impression_count": 42000,
+    "source_type": "account_monitor",
+    "matched_keywords": [],
+    "hook_text": "夜職で働く前に知っておきたい5つのこと"
+  },
+  {
+    "post_id": "2222222222222222222",
+    "post_url": "https://x.com/demo_user_b/status/2222222222222222222",
+    "account_handle": "demo_user_b",
+    "account_name": "デモユーザーB",
+    "posted_at": "2026-05-27T21:30:00+09:00",
+    "text": "ホストクラブで売上トップになった方法を公開します\n\n答えは「聞き上手」でした\n\n話すより聞く、自分より相手\nこれだけで指名が3倍になった話。",
+    "image_urls": [
+      "https://pbs.twimg.com/media/demo_image_1.jpg",
+      "https://pbs.twimg.com/media/demo_image_2.jpg"
+    ],
+    "video_urls": [],
+    "like_count": 1200,
+    "reply_count": 95,
+    "repost_count": 340,
+    "bookmark_count": 580,
+    "impression_count": 98000,
+    "source_type": "keyword_search",
+    "matched_keywords": ["ホスト", "売上"],
+    "hook_text": "ホストクラブで売上トップになった方法を公開します"
+  },
+  {
+    "post_id": "3333333333333333333",
+    "post_url": "https://x.com/demo_user_c/status/3333333333333333333",
+    "account_handle": "demo_user_c",
+    "account_name": "デモユーザーC",
+    "posted_at": "2026-05-26T18:45:00+09:00",
+    "text": "ライバー1年目で月収50万を達成した話\n\n最初の3ヶ月は全然ダメだった\nでもこの配信スタイルを変えたら一気に伸びた\n\n動画で詳しく説明しています",
+    "image_urls": [],
+    "video_urls": [
+      "https://video.twimg.com/amplify_video/demo_video_1.mp4"
+    ],
+    "like_count": 780,
+    "reply_count": 61,
+    "repost_count": 190,
+    "bookmark_count": 320,
+    "impression_count": 65000,
+    "source_type": "account_monitor",
+    "matched_keywords": [],
+    "hook_text": "ライバー1年目で月収50万を達成した話"
+  }
+]
