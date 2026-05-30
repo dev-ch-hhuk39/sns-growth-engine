@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-05-30（Phase 2.12 実施中）
+**最終更新**: 2026-05-31
 
 ---
 
@@ -13,7 +13,7 @@
 [完了] Phase 2.9     → 実Sheetsに新タブ（media_assets / reference_post_scores / generation_jobs）反映
 [完了] Phase 2.10    → X reference collector 移植（JSON/mock入力対応、X API本番未実行）
 [完了] Phase 2.11    → reference_post_analyzer 移植（スコアリング・分類・パーセンタイル）
-[実施中] Phase 2.12  → Cloudinary media_assets 統合
+[完了] Phase 2.12    → Cloudinary media_assets 統合
 [中期] Phase 2.13    → 8:2 generation planner
 [長期] Phase 4       → AI自動化・学習ループ
 ```
