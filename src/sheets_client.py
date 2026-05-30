@@ -116,6 +116,43 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "log_id", "timestamp", "account_id",
         "operation", "level", "status", "message", "details",
     ],
+    # ------------------------------------------------------------------ #
+    # Phase 2.8 追加タブ（reference pipeline / 8:2 strategy）
+    # ------------------------------------------------------------------ #
+    # メディア資産管理。Cloudinaryに保存した画像・動画を一元管理する。
+    "media_assets": [
+        "media_id", "account_id", "reference_post_id",
+        "source_platform", "source_post_url",
+        "original_media_url", "storage_provider", "storage_url",
+        "cloudinary_public_id",
+        "media_type", "mime_type",
+        "width", "height", "duration",
+        "reuse_status", "media_reuse_risk", "imitation_risk",
+        "downloaded_at", "uploaded_at",
+        "used_count", "notes",
+    ],
+    # 参考投稿のパフォーマンス分析結果。スコアリング・分類を保存する。
+    "reference_post_scores": [
+        "score_id", "reference_post_id", "account_id",
+        "performance_score", "buzz_score",
+        "like_score", "reply_score", "repost_score",
+        "bookmark_score", "impression_score",
+        "account_percentile", "keyword_percentile",
+        "why_it_grew", "replay_tip",
+        "hook_style", "content_angle",
+        "media_label", "text_length_bucket",
+        "analyzed_at",
+    ],
+    # 8:2投稿生成計画。アカウント・プラットフォームごとの生成ルールを管理する。
+    "generation_jobs": [
+        "job_id", "account_id", "platform",
+        "generation_mode", "reference_based_ratio", "original_hypothesis_ratio",
+        "daily_target_count", "min_reference_score",
+        "media_allowed", "max_reference_reuse_per_source",
+        "auto_approve_threshold",
+        "x_max_chars", "threads_max_chars",
+        "active", "notes",
+    ],
 }
 
 SCOPES = [

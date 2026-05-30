@@ -1,0 +1,35 @@
+{
+  "_comment": "このファイルはサンプルです。実値を入れた reference_sources.json を作成し .gitignore に追加してください",
+  "collection": {
+    "interval_hours": 6,
+    "max_results_per_query": 100,
+    "buzz_thresholds": {
+      "like_min": 100,
+      "impression_min": 10000,
+      "account_top_percentile": 0.2,
+      "keyword_top_percentile": 0.2
+    }
+  },
+  "accounts": [
+    {
+      "account_id": "night_scout",
+      "x_handles": [
+        "example_account_1",
+        "example_account_2"
+      ],
+      "keywords": [
+        "キーワード例1",
+        "キーワード例2"
+      ]
+    },
+    {
+      "account_id": "liver_manager",
+      "x_handles": [
+        "example_account_3"
+      ],
+      "keywords": [
+        "キーワード例3"
+      ]
+    }
+  ]
+}

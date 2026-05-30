@@ -70,3 +70,5 @@ cloudinary_cache/
 !package.json
 !tsconfig.json
 !x_pipeline_config.example.json
+!config/reference_sources.example.json
+!fixtures/*.json
