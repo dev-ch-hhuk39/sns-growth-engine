@@ -38,12 +38,14 @@ except ImportError:
     pass
 
 from config_loader import get_config, get_config_partial
+from generation.approval_scorer import detect_forbidden_keywords
+from seeds import ACCOUNT_FORBIDDEN_KEYWORDS
 from sheets_client import SheetsClient, MockSheetsClient, make_client
 
 
 VALID_DRAFT_STATUSES = {"DRAFT", "READY", "REVIEW", "POSTED", "REJECTED", "ARCHIVED"}
 VALID_DERIVATIVE_STATUSES = {"DRAFT", "READY", "WAITING_REVIEW", "APPROVED", "REJECTED"}
-VALID_QUEUE_STATUSES = {"READY", "WAITING_REVIEW", "PROCESSING", "DONE", "ERROR", "SKIPPED"}
+VALID_QUEUE_STATUSES = {"READY", "WAITING_REVIEW", "PROCESSING", "DONE", "ERROR", "SKIPPED", "REJECTED"}
 VALID_LOG_LEVELS = {"INFO", "WARN", "ERROR"}
 
 
@@ -577,6 +579,53 @@ def check_generation_jobs(sheets, account_id: str | None, results: list) -> int:
     return issues
 
 
+def check_content_theme_in_queue(sheets, account_id: str | None, results: list) -> int:
+    """READY キューに禁止キーワードが含まれないかチェック（Phase 2.17）。[WARN]のみ。"""
+    issues = 0
+    try:
+        ws = sheets._sh.worksheet("queue") if hasattr(sheets, "_sh") else None
+        if ws is None:
+            queue_items = sheets._queue if hasattr(sheets, "_queue") else []
+        else:
+            queue_items = ws.get_all_records()
+            if account_id:
+                queue_items = [r for r in queue_items if r.get("account_id") == account_id]
+
+        ready_items = [q for q in queue_items if str(q.get("status", "")).upper() == "READY"]
+
+        theme_violations = 0
+        for q in ready_items:
+            q_account_id = str(q.get("account_id", ""))
+            forbidden = ACCOUNT_FORBIDDEN_KEYWORDS.get(q_account_id, [])
+            if not forbidden:
+                continue
+            draft_id = q.get("draft_id", "")
+            if not draft_id:
+                continue
+            platform = str(q.get("platform", "x")).lower()
+            derivative = sheets.find_social_derivative(draft_id, platform) if hasattr(sheets, "find_social_derivative") else None
+            deriv_text = str(derivative.get("text", "")) if derivative else ""
+            if deriv_text:
+                hits = detect_forbidden_keywords(deriv_text, forbidden)
+                if hits:
+                    theme_violations += 1
+                    results.append(
+                        f"  [WARN] content_theme_guard: queue_id={q.get('queue_id', '?')} "
+                        f"READY に禁止キーワードあり: {hits}"
+                    )
+
+        if theme_violations == 0:
+            results.append(f"  [PASS] content_theme_guard: READY キューに禁止キーワードなし")
+        else:
+            issues += theme_violations
+
+    except Exception as e:
+        results.append(f"  [WARN] content_theme_guard チェックエラー: {e}")
+        issues += 1
+
+    return issues
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
     parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
@@ -620,6 +669,8 @@ def main() -> None:
         ("media_assets", check_media_assets),
         ("reference_post_scores", check_reference_post_scores),
         ("generation_jobs", check_generation_jobs),
+        # Phase 2.17 コンテンツテーマガード
+        ("content_theme_guard", check_content_theme_in_queue),
     ]
 
     for tab_name, check_fn in checks:

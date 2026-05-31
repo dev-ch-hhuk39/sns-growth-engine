@@ -44,6 +44,8 @@ except ImportError:
     pass
 
 from config_loader import get_config, get_config_partial
+from generation.approval_scorer import detect_forbidden_keywords
+from seeds import ACCOUNT_FORBIDDEN_KEYWORDS
 from sheets_client import SheetsClient, MockSheetsClient, make_client
 from publishers.dry_run import DryRunPublisher, X_CHAR_WARN, X_CHAR_LIMIT
 
@@ -242,6 +244,22 @@ def cmd_approve(sheets, queue_id: str, new_status: str, reason: str, dry_run: bo
     print(f"  reason  : {reason}")
     if dry_run:
         print(f"  [DRY-RUN] Sheets への書き込みはスキップします")
+
+    # Phase 2.17: READY への変更前にテーマガード実行
+    if new_status == "READY":
+        draft_id = q.get("draft_id", "")
+        derivative = sheets.find_social_derivative(draft_id, platform.lower()) if draft_id else None
+        if derivative:
+            deriv_text = str(derivative.get("text", ""))
+        else:
+            deriv_text = ""
+        forbidden = ACCOUNT_FORBIDDEN_KEYWORDS.get(account_id, [])
+        if forbidden and deriv_text:
+            hits = detect_forbidden_keywords(deriv_text, forbidden)
+            if hits:
+                print(f"\n[REJECTED] content_theme_guard: forbidden_keywords detected: {hits}")
+                print(f"  → READY への変更を拒否します。--reject で明示的に却下してください。")
+                return 1
 
     if dry_run:
         _log_approval(sheets, queue_id, account_id, platform,

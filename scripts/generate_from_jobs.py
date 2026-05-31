@@ -48,7 +48,9 @@ except ImportError:
     pass
 
 from config_loader import get_config_partial
+from generation.approval_scorer import detect_forbidden_keywords
 from generation.reference_based_generator import execute_generation_jobs
+from seeds import ACCOUNT_FORBIDDEN_KEYWORDS
 from sheets_client import make_client
 
 
@@ -140,18 +142,38 @@ def main() -> None:
         dry_run=dry_run,
     )
 
+    # --- ポスト生成テーマチェック（Phase 2.17） ---
+    account_id = args.account_id
+    forbidden = ACCOUNT_FORBIDDEN_KEYWORDS.get(account_id, [])
+    if forbidden:
+        for r in results:
+            if r.get("status") == "FAILED":
+                continue
+            draft_content = r.get("content", "") or r.get("body_md", "")
+            if not draft_content:
+                continue
+            hits = detect_forbidden_keywords(draft_content, forbidden)
+            if hits:
+                r["status"] = "WAITING_REVIEW"
+                r["theme_rejection_reason"] = f"content_theme_guard: forbidden_keywords={hits}"
+                print(
+                    f"[WARN] content_theme_guard: job={r['job_id'][:8]}... "
+                    f"→ WAITING_REVIEW (hits={hits})"
+                )
+
     # --- 結果表示 ---
-    done = sum(1 for r in results if r["status"] != "FAILED")
+    done = sum(1 for r in results if r["status"] not in ("FAILED", "WAITING_REVIEW"))
     failed = sum(1 for r in results if r["status"] == "FAILED")
     waiting = sum(1 for r in results if r["status"] == "WAITING_REVIEW")
 
     print(f"\n[INFO] 生成完了: {done}件成功 / {failed}件失敗 / {waiting}件WAITING_REVIEW")
     for r in results:
+        theme_note = f" [{r['theme_rejection_reason']}]" if r.get("theme_rejection_reason") else ""
         print(
             f"  job={r['job_id'][:8]}... "
             f"mode={r['generation_mode']:<25} "
             f"status={r['status']:<15} "
-            f"policy={r['text_policy_status']}"
+            f"policy={r['text_policy_status']}{theme_note}"
         )
 
 

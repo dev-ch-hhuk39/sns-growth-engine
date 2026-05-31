@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from llm_client import call_gemini_json
+from seeds import ACCOUNT_FORBIDDEN_KEYWORDS
 from text_policy import check_text_policy
 
 JST = timezone(timedelta(hours=9))
@@ -42,6 +43,15 @@ _MOCK_GENERATION_RESPONSE = {
 # プロンプト構築
 # ------------------------------------------------------------------ #
 
+def _get_account_ng_block(account_id: str) -> str:
+    """アカウント固有の禁止キーワードブロックを生成する。"""
+    kws = ACCOUNT_FORBIDDEN_KEYWORDS.get(account_id, [])
+    if not kws:
+        return ""
+    lines = "\n".join(f"- {kw}" for kw in kws)
+    return f"\n## アカウント固有禁止事項（{account_id}）\n以下のキーワード・テーマを投稿本文・CTAに含めないこと:\n{lines}"
+
+
 def build_reference_based_prompt(
     job: dict,
     score: dict,
@@ -58,11 +68,14 @@ def build_reference_based_prompt(
     else:
         char_constraint = f"{soft}文字以内（推奨）、{hard}文字を超えないこと"
 
+    account_id = account.get("account_id", "")
+    ng_block = _get_account_ng_block(account_id)
+
     return f"""あなたはSNSコンテンツライターです。
 以下の「参考投稿分析」を読み、その勝ち要素を活かした新しい投稿文を書いてください。
 
 ## アカウント情報
-- アカウントID: {account.get("account_id", "")}
+- アカウントID: {account_id}
 - プラットフォーム: {platform}
 - ターゲットペルソナ: {account.get("target_persona", "")}
 - トーン: {account.get("tone", "")}
@@ -80,7 +93,7 @@ def build_reference_based_prompt(
 
 ## 禁止事項
 - 参考投稿のテキストを直接コピー・引用しないこと
-- 元投稿のアカウント名・固有名詞をそのまま使わないこと
+- 元投稿のアカウント名・固有名詞をそのまま使わないこと{ng_block}
 
 ## 出力形式（JSONのみ）
 {{"content":"投稿本文","title":"タイトル（任意）","cta_text":"CTA（省略可）","media_strategy":"none","generation_notes":"生成メモ"}}"""
@@ -102,11 +115,14 @@ def build_original_hypothesis_prompt(
     else:
         char_constraint = f"{soft}文字以内（推奨）、{hard}文字を超えないこと"
 
+    account_id = account.get("account_id", "")
+    ng_block = _get_account_ng_block(account_id)
+
     return f"""あなたはSNSコンテンツライターです。
 以下の「アカウント情報」をもとに、オリジナルの投稿文を書いてください。
 
 ## アカウント情報
-- アカウントID: {account.get("account_id", "")}
+- アカウントID: {account_id}
 - プラットフォーム: {platform}
 - ターゲットペルソナ: {account.get("target_persona", "")}
 - トーン: {account.get("tone", "")}
@@ -116,7 +132,7 @@ def build_original_hypothesis_prompt(
 {hypothesis_hint or "（自由に設定してください）"}
 
 ## 文字数制約
-{char_constraint}
+{char_constraint}{ng_block}
 
 ## 出力形式（JSONのみ）
 {{"content":"投稿本文","title":"タイトル（任意）","cta_text":"CTA（省略可）","hypothesis":"採用した仮説","media_strategy":"none","generation_notes":"生成メモ"}}"""

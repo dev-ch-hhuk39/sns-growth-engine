@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from seeds import ACCOUNT_FORBIDDEN_KEYWORDS, ACCOUNT_FORBIDDEN_THEMES
 from text_policy import check_text_policy
 
 _BUZZ_SCORE_WEIGHTS = {
@@ -185,6 +186,97 @@ def calculate_ai_publish_recommendation(
 
 
 # ------------------------------------------------------------------ #
+# コンテンツテーマガード（Phase 2.17）
+# ------------------------------------------------------------------ #
+
+def detect_forbidden_keywords(text: str, forbidden_keywords: list[str]) -> list[str]:
+    """本文中の禁止キーワードを検出する。ヒットしたキーワードリストを返す。"""
+    if not text or not forbidden_keywords:
+        return []
+    return [kw for kw in forbidden_keywords if kw in text]
+
+
+def calculate_target_fit_score(draft: dict, account_config: dict) -> float:
+    """ターゲット適合スコアを計算する（0.0〜1.0）。forbidden_hits数に応じて減点。"""
+    account_id = str(account_config.get("account_id", ""))
+    forbidden = ACCOUNT_FORBIDDEN_KEYWORDS.get(account_id, [])
+    text = str(draft.get("body_md") or draft.get("content") or "")
+    cta = str(draft.get("cta_text") or "")
+    combined = text + " " + cta
+
+    hits = detect_forbidden_keywords(combined, forbidden)
+    if not hits:
+        return 1.0
+    penalty = min(1.0, len(hits) * 0.3)
+    return max(0.0, 1.0 - penalty)
+
+
+def check_content_theme(draft: dict, account_config: dict) -> dict[str, Any]:
+    """アカウントのターゲットテーマチェック。
+
+    Returns:
+        {
+            "theme_ok": bool,
+            "forbidden_hits": list[str],
+            "target_fit_score": float,
+            "theme_rejection_reason": str,
+        }
+    """
+    account_id = str(account_config.get("account_id", ""))
+    forbidden = ACCOUNT_FORBIDDEN_KEYWORDS.get(account_id, [])
+
+    text = str(draft.get("body_md") or draft.get("content") or "")
+    cta = str(draft.get("cta_text") or "")
+    combined = text + " " + cta
+
+    hits = detect_forbidden_keywords(combined, forbidden)
+    target_fit = calculate_target_fit_score(draft, account_config)
+    theme_ok = len(hits) == 0
+
+    reason = ""
+    if hits:
+        reason = f"禁止キーワードを検出: {hits}"
+
+    return {
+        "theme_ok": theme_ok,
+        "forbidden_hits": hits,
+        "target_fit_score": round(target_fit, 4),
+        "theme_rejection_reason": reason,
+    }
+
+
+def apply_content_theme_guard(
+    score_result: dict,
+    draft: dict,
+    account_config: dict,
+) -> dict:
+    """content_theme_check の結果を score_result に適用する。
+
+    forbidden_hits > 0 の場合:
+      - ai_publish_recommendation = "reject"
+      - confidence_level = "LOW"
+      - brand_risk_score を上昇させる
+      - ai_review に target_mismatch 理由を追記
+    """
+    theme = check_content_theme(draft, account_config)
+    score_result["target_fit_score"] = theme["target_fit_score"]
+    score_result["theme_rejection_reason"] = theme["theme_rejection_reason"]
+
+    if not theme["theme_ok"]:
+        score_result["ai_publish_recommendation"] = "reject"
+        score_result["confidence_level"] = "LOW"
+        score_result["brand_risk_score"] = min(
+            1.0,
+            float(score_result.get("brand_risk_score") or 0.0) + 0.4,
+        )
+        existing_review = str(score_result.get("ai_review") or "")
+        guard_note = f"[content_theme_guard] target_mismatch: {theme['theme_rejection_reason']}"
+        score_result["ai_review"] = (existing_review + " / " + guard_note).strip(" /")
+
+    return score_result
+
+
+# ------------------------------------------------------------------ #
 # メインスコアリング
 # ------------------------------------------------------------------ #
 
@@ -195,6 +287,7 @@ def score_generated_post(
     media_asset: dict | None = None,
     auto_approve_threshold: float = 80.0,
     platform: str | None = None,
+    account_config: dict | None = None,
 ) -> dict[str, Any]:
     """生成投稿に対して総合スコアリングを行う。
 
@@ -205,6 +298,7 @@ def score_generated_post(
         media_asset: media_assets レコード（任意）
         auto_approve_threshold: 自動承認スコア閾値
         platform: プラットフォーム（"x" / "threads"）
+        account_config: アカウント設定dict（コンテンツテーマガード用）
 
     Returns:
         スコア結果dict（drafts タブ更新用フィールドを含む）
@@ -231,7 +325,7 @@ def score_generated_post(
     if text_policy_status == "FAIL":
         final_status = "WAITING_REVIEW"
 
-    return {
+    result = {
         "buzz_potential_score": round(buzz, 2),
         "conversion_potential_score": round(conversion, 2),
         "brand_risk_score": round(brand_risk, 4),
@@ -242,6 +336,14 @@ def score_generated_post(
         "ai_publish_recommendation": recommendation,
         "suggested_status": final_status,
     }
+
+    # Phase 2.17: コンテンツテーマガード
+    if account_config:
+        result = apply_content_theme_guard(result, draft, account_config)
+        if result.get("ai_publish_recommendation") == "reject":
+            result["suggested_status"] = "WAITING_REVIEW"
+
+    return result
 
 
 # ------------------------------------------------------------------ #

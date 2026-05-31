@@ -18,6 +18,7 @@
 [完了] Phase 2.14    → reference_based Gemini prompt（リライトループ）
 [完了] Phase 2.15    → AI approval scoring
 [完了] Phase 2.16    → 文字数制限強化（X 120/140字）
+[完了] Phase 2.17    → アカウント別コンテンツテーマガード（禁止キーワード検出・READY拒否）
 [長期] Phase 4       → AI自動化・学習ループ
 ```
 
@@ -192,6 +193,24 @@
 - [x] `docs/phase2-16-text-policy-enforcement.md` 作成
 - [x] `docs/8-2-generation-strategy.md` 作成
 - [x] `test_phase213_216.py` 内 text_policy 統合テスト PASS
+
+---
+
+## Phase 2.17: アカウント別コンテンツテーマガード ✅
+
+**目的**: ターゲット外コンテンツ（代理店・B2B向け）の生成・キュー登録を防止する
+
+- [x] Sheetsデータ修正（代理店向け投稿をREJECTED、ns_08/lm_08 inactive化）
+- [x] `src/seeds.py` — `ACCOUNT_FORBIDDEN_KEYWORDS` / `ACCOUNT_FORBIDDEN_THEMES` 追加、ns_08/lm_08 inactive、プロンプトNG追記
+- [x] `src/generation/reference_based_generator.py` — `_get_account_ng_block()` でプロンプトにNG注入
+- [x] `src/generation/approval_scorer.py` — `detect_forbidden_keywords` / `check_content_theme` / `calculate_target_fit_score` / `apply_content_theme_guard` 追加
+- [x] `scripts/generate_from_jobs.py` — 生成後テーマチェック（ヒット→WAITING_REVIEW）
+- [x] `scripts/approve_queue.py` — READY昇格前ゲート（ヒット→拒否）
+- [x] `scripts/check_pipeline_integrity.py` — REJECTED追加 + `check_content_theme_in_queue` [WARN]
+- [x] `docs/phase2-17-content-theme-guard.md` 作成
+- [x] `docs/account-targeting-policy.md` 作成
+- [x] `docs/ai-approval-policy.md` 更新
+- [x] `scripts/test_phase217.py` 作成
 
 ---
 

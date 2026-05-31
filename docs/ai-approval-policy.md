@@ -84,3 +84,17 @@ Phase 2.15 で `drafts` タブに以下の列を追加:
 - `media_strategy`
 - `imitation_risk`
 - `media_reuse_risk`
+
+---
+
+## Phase 2.17: コンテンツテーマガード
+
+`score_generated_post()` に `account_config` 引数を追加。  
+`apply_content_theme_guard()` が呼ばれ、禁止キーワード検出時は:
+
+- `ai_publish_recommendation` → `"reject"`
+- `confidence_level` → `"LOW"`
+- `brand_risk_score` → +0.4（最大1.0）
+- `suggested_status` → `"WAITING_REVIEW"`
+
+詳細: `docs/phase2-17-content-theme-guard.md`
