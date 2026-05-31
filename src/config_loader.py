@@ -26,6 +26,12 @@ Cloudinary 環境変数:
   CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
   ALLOW_CLOUDINARY_UPLOAD: false のまま変更しないこと（Phase 2.12 デフォルト）
 
+Cloudflare Workers AI 環境変数（Phase 2.20追加）:
+  CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN
+  ALLOW_TRANSCRIPTION_API: false のまま変更しないこと（Phase 2.20 デフォルト）
+  TRANSCRIPTION_PROVIDER: cloudflare_whisper（デフォルト）
+  DAILY_TRANSCRIPTION_MINUTES_LIMIT: 120（分）
+
 注意: APIキー・トークン等の値はログに出力しない。
 """
 import os
@@ -102,6 +108,24 @@ def get_cloudinary_config() -> dict:
         "api_secret": os.environ.get("CLOUDINARY_API_SECRET", "").strip() or None,
         "api_secret_set": bool(os.environ.get("CLOUDINARY_API_SECRET", "").strip()),
         "allow_upload": _is_true("ALLOW_CLOUDINARY_UPLOAD"),
+    }
+
+
+def get_transcription_config() -> dict:
+    """Cloudflare Workers AI 文字起こし設定を返す。API トークンは bool フラグのみ公開。
+
+    allow_transcription_api が False のときは実API呼び出しを行わない。
+    """
+    return {
+        "account_id": os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip(),
+        "account_id_set": bool(os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()),
+        "api_token_set": bool(os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()),
+        "api_token": os.environ.get("CLOUDFLARE_API_TOKEN", "").strip() or None,
+        "allow_transcription_api": _is_true("ALLOW_TRANSCRIPTION_API"),
+        "provider": os.environ.get("TRANSCRIPTION_PROVIDER", "cloudflare_whisper").strip(),
+        "daily_limit_minutes": int(
+            os.environ.get("DAILY_TRANSCRIPTION_MINUTES_LIMIT", "120").strip() or "120"
+        ),
     }
 
 

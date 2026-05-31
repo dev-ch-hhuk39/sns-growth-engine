@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-05-31
+**最終更新**: 2026-05-31 (Phase 2.18〜2.20追加)
 
 ---
 
@@ -19,6 +19,9 @@
 [完了] Phase 2.15    → AI approval scoring
 [完了] Phase 2.16    → 文字数制限強化（X 120/140字）
 [完了] Phase 2.17    → アカウント別コンテンツテーマガード（禁止キーワード検出・READY拒否）
+[完了] Phase 2.18    → 動画 reference スキーマ拡張（4新タブ + reference_posts 列追加）
+[完了] Phase 2.19    → 動画収集アダプター基盤（YouTube/TikTok コレクター・mock対応）
+[完了] Phase 2.20    → Cloudflare Whisper 文字起こし基盤（日次120分制限・安全ガード）
 [長期] Phase 4       → AI自動化・学習ループ
 ```
 
@@ -211,6 +214,53 @@
 - [x] `docs/account-targeting-policy.md` 作成
 - [x] `docs/ai-approval-policy.md` 更新
 - [x] `scripts/test_phase217.py` 作成
+
+---
+
+## Phase 2.18: 動画 reference スキーマ拡張 ✅
+
+**目的**: YouTube/TikTok 動画を参考投稿として取り込む基盤スキーマを構築する
+
+- [x] `reference_sources` タブ追加（source_id / account_id / platform / handle / priority / active 等）
+- [x] `video_transcripts` タブ追加（transcript_id / reference_post_id / transcription_status / segments_json 等）
+- [x] `video_clip_candidates` タブ追加（clip_id / start_time / end_time / hook / rights_status 等）
+- [x] `transcription_runs` タブ追加（run_id / date / used_minutes / remaining_minutes 等）
+- [x] `reference_posts` に 14 列追加（content_type / video_id / creator_handle / duration_seconds / transcription_status 等）
+- [x] SheetsClient に 4 タブ × 4〜5 メソッド追加
+- [x] MockSheetsClient に同メソッド追加
+- [x] `docs/phase2-18-video-reference-schema.md` 作成
+
+---
+
+## Phase 2.19: 動画収集アダプター基盤 ✅
+
+**目的**: YouTube/TikTok 動画メタデータを mock/JSON で収集・正規化する基盤を構築する
+
+- [x] `src/collectors/video_source_manager.py` 実装（ソース登録・取得・mark_collected）
+- [x] `src/collectors/youtube_video_collector.py` 実装（normalize_youtube_video / collect_from_mock / collect_from_json_file）
+- [x] `src/collectors/tiktok_video_collector.py` 実装（normalize_tiktok_video / collect_from_mock / collect_from_json_file）
+- [x] `fixtures/sample_video_references.json` 作成（YouTube 3件 / TikTok 2件）
+- [x] `docs/phase2-19-video-source-collectors.md` 作成
+
+---
+
+## Phase 2.20: Cloudflare Whisper 文字起こし基盤 ✅
+
+**目的**: Cloudflare Workers AI Whisper を使った文字起こし基盤（日次120分制限・安全ガード付き）
+
+- [x] `.env.template` に CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / ALLOW_TRANSCRIPTION_API=false 追加
+- [x] `src/config_loader.py` に `get_transcription_config()` 追加
+- [x] `src/transcription/__init__.py` 作成
+- [x] `src/transcription/cloudflare_whisper_client.py` 実装（2重安全ガード・dry_run・mock対応）
+- [x] `src/transcription/transcription_limiter.py` 実装（初期化from Sheets・インメモリ累積・flush）
+- [x] `src/transcription/transcript_parser.py` 実装（parse_segments / extract_clip_window / build_clip_candidate）
+- [x] `scripts/transcribe_videos.py` CLI 作成（dry_run デフォルト・--allow-real-transcription フラグ）
+- [x] `fixtures/sample_cloudflare_whisper_response.json` 作成
+- [x] `fixtures/sample_transcript_segments.json` 作成
+- [x] `docs/phase2-20-cloudflare-whisper-transcription.md` 作成
+- [x] `docs/video-reference-pipeline.md` 作成
+- [x] `docs/transcription-cost-control.md` 作成
+- [x] `scripts/test_phase218_220.py` 作成
 
 ---
 

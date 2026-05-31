@@ -54,6 +54,20 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "bookmark_count",   # 保存数（Xブックマーク）
         "collected_at",     # 収集日時（ISO8601）
         "keywords",         # 収集元キーワード（|区切り）
+        # Phase 2.18 追加: video reference pipeline 用列
+        "content_type",           # video / text / image
+        "video_id",               # プラットフォーム固有の動画ID
+        "video_url",              # 動画URL
+        "creator_handle",         # 投稿者ハンドル（YouTubeチャンネル等）
+        "channel_id",             # YouTubeチャンネルID / TikTokユーザーID
+        "channel_name",           # チャンネル名・表示名
+        "description",            # 動画説明文
+        "duration_seconds",       # 動画長（秒）
+        "thumbnail_url",          # サムネイルURL
+        "comment_count",          # コメント数
+        "raw_payload_json",       # API生レスポンス（JSON文字列）
+        "transcription_status",   # pending / processing / done / failed / skipped
+        "clip_generation_status", # pending / done / failed / skipped
     ],
     # カテゴリ重み定義。分量配分に使う。
     "content_categories": [
@@ -159,6 +173,46 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "hook_style", "content_angle",
         "media_label", "text_length_bucket",
         "analyzed_at",
+    ],
+    # ------------------------------------------------------------------ #
+    # Phase 2.18 追加タブ（video reference pipeline / transcription）
+    # ------------------------------------------------------------------ #
+    # 動画収集元管理。YouTube/TikTokの指定チャンネル・アカウントを管理する。
+    "reference_sources": [
+        "source_id", "account_id", "platform", "source_url",
+        "handle", "priority", "active",
+        "collection_frequency", "last_collected_at",
+        "notes",
+    ],
+    # 動画文字起こし結果。Cloudflare Whisper の出力を保存する。
+    "video_transcripts": [
+        "transcript_id", "account_id", "reference_post_id",
+        "source_platform", "video_url",
+        "transcription_provider", "transcription_status",
+        "duration_seconds", "transcript_text", "segments_json",
+        "language", "processed_minutes",
+        "error", "created_at", "updated_at",
+    ],
+    # 動画クリップ候補。文字起こしから抽出した切り抜き候補を管理する。
+    "video_clip_candidates": [
+        "clip_id", "account_id", "reference_post_id", "transcript_id",
+        "source_platform", "source_video_url",
+        "start_time", "end_time", "duration_seconds",
+        "clip_title", "hook", "why_it_works",
+        "target_persona", "x_post_angle", "threads_post_angle",
+        "transcript_excerpt",
+        "clip_status",
+        "media_asset_id", "storage_url",
+        "reuse_status", "media_reuse_risk", "imitation_risk",
+        "rights_status", "permission_status",
+        "created_at", "notes",
+    ],
+    # 文字起こし日次実行記録。120分/日の上限管理に使う。
+    "transcription_runs": [
+        "run_id", "date", "provider",
+        "daily_limit_minutes", "used_minutes", "remaining_minutes",
+        "processed_count", "skipped_daily_limit_count", "failed_count",
+        "status", "created_at", "notes",
     ],
     # 8:2投稿生成計画。アカウント・プラットフォームごとの生成ルールを管理する。
     "generation_jobs": [
@@ -511,6 +565,272 @@ class SheetsClient:
                 print(f"[ERROR] save_reference_post_score 失敗: {e}")
                 errors += 1
         return {"saved": saved, "skipped": skipped, "errors": errors}
+
+    # ---------------------------------------------------------------- #
+    # reference_sources
+    # ---------------------------------------------------------------- #
+
+    def get_reference_sources(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        active_only: bool = False,
+    ) -> list[dict]:
+        """reference_sources タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("reference_sources")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if active_only:
+            rows = [r for r in rows if str(r.get("active", "")).upper() == "TRUE"]
+        return [dict(r) for r in rows]
+
+    def find_reference_source_by_source_id(self, source_id: str) -> dict | None:
+        """source_id に一致する reference_source 行を返す。なければ None。"""
+        ws = self._sh.worksheet("reference_sources")
+        for row in ws.get_all_records():
+            if str(row.get("source_id", "")) == str(source_id):
+                return dict(row)
+        return None
+
+    def save_reference_source(self, source: dict[str, Any]) -> bool:
+        """reference_sources タブに1行を保存する（source_id でアップサート）。"""
+        if self.dry_run:
+            print(f"[dry-run] save_reference_source: source_id={source.get('source_id', '?')!r}")
+            return False
+        source_id = str(source.get("source_id", ""))
+        ws = self._sh.worksheet("reference_sources")
+        headers = ws.row_values(1)
+        row_data = [str(source.get(h, "")) for h in headers]
+        if source_id:
+            existing = self.find_reference_source_by_source_id(source_id)
+            if existing:
+                col_id = headers.index("source_id") + 1
+                cell = ws.find(source_id, in_column=col_id)
+                if cell:
+                    ws.update([row_data], f"A{cell.row}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def update_reference_source(self, source_id: str, **fields: Any) -> bool:
+        """reference_sources タブの指定行を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_reference_source: source_id={source_id!r} fields={fields}")
+            return False
+        ws = self._sh.worksheet("reference_sources")
+        headers = ws.row_values(1)
+        col_id = headers.index("source_id") + 1 if "source_id" in headers else None
+        if col_id is None:
+            return False
+        cell = ws.find(source_id, in_column=col_id)
+        if cell is None:
+            return False
+        for field, value in fields.items():
+            if field in headers:
+                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+        return True
+
+    # ---------------------------------------------------------------- #
+    # video_transcripts
+    # ---------------------------------------------------------------- #
+
+    def get_video_transcripts(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        transcription_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """video_transcripts タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("video_transcripts")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if transcription_status:
+            rows = [r for r in rows if str(r.get("transcription_status", "")).lower() == transcription_status.lower()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_video_transcript_by_reference_post_id(self, reference_post_id: str) -> dict | None:
+        """reference_post_id に一致する video_transcript を返す。なければ None。"""
+        ws = self._sh.worksheet("video_transcripts")
+        for row in ws.get_all_records():
+            if str(row.get("reference_post_id", "")) == str(reference_post_id):
+                return dict(row)
+        return None
+
+    def find_video_transcript_by_id(self, transcript_id: str) -> dict | None:
+        """transcript_id に一致する video_transcript を返す。なければ None。"""
+        ws = self._sh.worksheet("video_transcripts")
+        for row in ws.get_all_records():
+            if str(row.get("transcript_id", "")) == str(transcript_id):
+                return dict(row)
+        return None
+
+    def save_video_transcript(self, transcript: dict[str, Any]) -> bool:
+        """video_transcripts タブに1行を保存する（transcript_id でアップサート）。"""
+        if self.dry_run:
+            print(f"[dry-run] save_video_transcript: transcript_id={transcript.get('transcript_id', '?')!r}")
+            return False
+        transcript_id = str(transcript.get("transcript_id", ""))
+        ws = self._sh.worksheet("video_transcripts")
+        headers = ws.row_values(1)
+        row_data = [str(transcript.get(h, "")) for h in headers]
+        if transcript_id:
+            existing = self.find_video_transcript_by_id(transcript_id)
+            if existing:
+                col_id = headers.index("transcript_id") + 1
+                cell = ws.find(transcript_id, in_column=col_id)
+                if cell:
+                    ws.update([row_data], f"A{cell.row}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def update_video_transcript(self, transcript_id: str, **fields: Any) -> bool:
+        """video_transcripts タブの指定行を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_video_transcript: transcript_id={transcript_id!r} fields={fields}")
+            return False
+        ws = self._sh.worksheet("video_transcripts")
+        headers = ws.row_values(1)
+        col_id = headers.index("transcript_id") + 1 if "transcript_id" in headers else None
+        if col_id is None:
+            return False
+        cell = ws.find(transcript_id, in_column=col_id)
+        if cell is None:
+            return False
+        for field, value in fields.items():
+            if field in headers:
+                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+        return True
+
+    # ---------------------------------------------------------------- #
+    # video_clip_candidates
+    # ---------------------------------------------------------------- #
+
+    def get_video_clip_candidates(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        transcript_id: str | None = None,
+        clip_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """video_clip_candidates タブから条件に一致する行を返す。"""
+        ws = self._sh.worksheet("video_clip_candidates")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if transcript_id:
+            rows = [r for r in rows if str(r.get("transcript_id", "")) == str(transcript_id)]
+        if clip_status:
+            rows = [r for r in rows if str(r.get("clip_status", "")).lower() == clip_status.lower()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_video_clip_candidate_by_clip_id(self, clip_id: str) -> dict | None:
+        """clip_id に一致する video_clip_candidate を返す。なければ None。"""
+        ws = self._sh.worksheet("video_clip_candidates")
+        for row in ws.get_all_records():
+            if str(row.get("clip_id", "")) == str(clip_id):
+                return dict(row)
+        return None
+
+    def save_video_clip_candidate(self, clip: dict[str, Any]) -> bool:
+        """video_clip_candidates タブに1行を保存する（clip_id でアップサート）。"""
+        if self.dry_run:
+            print(f"[dry-run] save_video_clip_candidate: clip_id={clip.get('clip_id', '?')!r}")
+            return False
+        clip_id = str(clip.get("clip_id", ""))
+        ws = self._sh.worksheet("video_clip_candidates")
+        headers = ws.row_values(1)
+        row_data = [str(clip.get(h, "")) for h in headers]
+        if clip_id:
+            existing = self.find_video_clip_candidate_by_clip_id(clip_id)
+            if existing:
+                col_id = headers.index("clip_id") + 1
+                cell = ws.find(clip_id, in_column=col_id)
+                if cell:
+                    ws.update([row_data], f"A{cell.row}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def update_video_clip_candidate(self, clip_id: str, **fields: Any) -> bool:
+        """video_clip_candidates タブの指定行を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_video_clip_candidate: clip_id={clip_id!r} fields={fields}")
+            return False
+        ws = self._sh.worksheet("video_clip_candidates")
+        headers = ws.row_values(1)
+        col_id = headers.index("clip_id") + 1 if "clip_id" in headers else None
+        if col_id is None:
+            return False
+        cell = ws.find(clip_id, in_column=col_id)
+        if cell is None:
+            return False
+        for field, value in fields.items():
+            if field in headers:
+                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+        return True
+
+    # ---------------------------------------------------------------- #
+    # transcription_runs
+    # ---------------------------------------------------------------- #
+
+    def get_transcription_run_by_date(self, date: str, provider: str = "cloudflare_whisper") -> dict | None:
+        """指定日付・プロバイダーの transcription_run を返す。なければ None。"""
+        ws = self._sh.worksheet("transcription_runs")
+        for row in ws.get_all_records():
+            if str(row.get("date", "")) == date and str(row.get("provider", "")) == provider:
+                return dict(row)
+        return None
+
+    def save_transcription_run(self, run: dict[str, Any]) -> bool:
+        """transcription_runs タブに1行を保存する（run_id でアップサート）。"""
+        if self.dry_run:
+            print(f"[dry-run] save_transcription_run: run_id={run.get('run_id', '?')!r} date={run.get('date', '?')!r}")
+            return False
+        run_id = str(run.get("run_id", ""))
+        ws = self._sh.worksheet("transcription_runs")
+        headers = ws.row_values(1)
+        row_data = [str(run.get(h, "")) for h in headers]
+        if run_id:
+            all_rows = ws.get_all_records()
+            for i, existing in enumerate(all_rows, start=2):
+                if str(existing.get("run_id", "")) == run_id:
+                    ws.update([row_data], f"A{i}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def update_transcription_run(self, run_id: str, **fields: Any) -> bool:
+        """transcription_runs タブの指定行を更新する。"""
+        if self.dry_run:
+            print(f"[dry-run] update_transcription_run: run_id={run_id!r} fields={fields}")
+            return False
+        ws = self._sh.worksheet("transcription_runs")
+        headers = ws.row_values(1)
+        col_id = headers.index("run_id") + 1 if "run_id" in headers else None
+        if col_id is None:
+            return False
+        cell = ws.find(run_id, in_column=col_id)
+        if cell is None:
+            return False
+        for field, value in fields.items():
+            if field in headers:
+                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+        return True
 
     # ---------------------------------------------------------------- #
     # generation_jobs
@@ -1364,6 +1684,190 @@ class MockSheetsClient:
         }
         self._logs.append(entry)
         print(f"[mock-sheets] log: [{level}/{status}] {operation} - {message}")
+
+    # ---- reference_sources (mock) ----
+
+    def get_reference_sources(
+        self,
+        account_id: str | None = None,
+        platform: str | None = None,
+        active_only: bool = False,
+    ) -> list[dict]:
+        rows = list(self._reference_sources) if hasattr(self, "_reference_sources") else []
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if platform:
+            rows = [r for r in rows if str(r.get("platform", "")).lower() == platform.lower()]
+        if active_only:
+            rows = [r for r in rows if str(r.get("active", "")).upper() == "TRUE"]
+        return [dict(r) for r in rows]
+
+    def find_reference_source_by_source_id(self, source_id: str) -> dict | None:
+        for r in (self._reference_sources if hasattr(self, "_reference_sources") else []):
+            if str(r.get("source_id", "")) == str(source_id):
+                return dict(r)
+        return None
+
+    def save_reference_source(self, source: dict[str, Any]) -> bool:
+        if not hasattr(self, "_reference_sources"):
+            self._reference_sources: list[dict] = []
+        source_id = str(source.get("source_id", ""))
+        for i, r in enumerate(self._reference_sources):
+            if str(r.get("source_id", "")) == source_id:
+                self._reference_sources[i] = dict(source)
+                print(f"[mock-sheets] save_reference_source update: source_id={source_id!r}")
+                return True
+        self._reference_sources.append(dict(source))
+        print(f"[mock-sheets] save_reference_source: source_id={source_id!r}")
+        return True
+
+    def update_reference_source(self, source_id: str, **fields: Any) -> bool:
+        if not hasattr(self, "_reference_sources"):
+            return False
+        print(f"[mock-sheets] update_reference_source: source_id={source_id!r} fields={fields}")
+        for r in self._reference_sources:
+            if str(r.get("source_id", "")) == source_id:
+                r.update(fields)
+                return True
+        return False
+
+    # ---- video_transcripts (mock) ----
+
+    def get_video_transcripts(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        transcription_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._video_transcripts) if hasattr(self, "_video_transcripts") else []
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if transcription_status:
+            rows = [r for r in rows if str(r.get("transcription_status", "")).lower() == transcription_status.lower()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_video_transcript_by_reference_post_id(self, reference_post_id: str) -> dict | None:
+        for r in (self._video_transcripts if hasattr(self, "_video_transcripts") else []):
+            if str(r.get("reference_post_id", "")) == str(reference_post_id):
+                return dict(r)
+        return None
+
+    def find_video_transcript_by_id(self, transcript_id: str) -> dict | None:
+        for r in (self._video_transcripts if hasattr(self, "_video_transcripts") else []):
+            if str(r.get("transcript_id", "")) == str(transcript_id):
+                return dict(r)
+        return None
+
+    def save_video_transcript(self, transcript: dict[str, Any]) -> bool:
+        if not hasattr(self, "_video_transcripts"):
+            self._video_transcripts: list[dict] = []
+        transcript_id = str(transcript.get("transcript_id", ""))
+        for i, r in enumerate(self._video_transcripts):
+            if str(r.get("transcript_id", "")) == transcript_id:
+                self._video_transcripts[i] = dict(transcript)
+                print(f"[mock-sheets] save_video_transcript update: transcript_id={transcript_id!r}")
+                return True
+        self._video_transcripts.append(dict(transcript))
+        print(f"[mock-sheets] save_video_transcript: transcript_id={transcript_id!r}")
+        return True
+
+    def update_video_transcript(self, transcript_id: str, **fields: Any) -> bool:
+        if not hasattr(self, "_video_transcripts"):
+            return False
+        print(f"[mock-sheets] update_video_transcript: transcript_id={transcript_id!r} fields={fields}")
+        for r in self._video_transcripts:
+            if str(r.get("transcript_id", "")) == transcript_id:
+                r.update(fields)
+                return True
+        return False
+
+    # ---- video_clip_candidates (mock) ----
+
+    def get_video_clip_candidates(
+        self,
+        account_id: str | None = None,
+        reference_post_id: str | None = None,
+        transcript_id: str | None = None,
+        clip_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._video_clip_candidates) if hasattr(self, "_video_clip_candidates") else []
+        if account_id:
+            rows = [r for r in rows if r.get("account_id") == account_id]
+        if reference_post_id:
+            rows = [r for r in rows if str(r.get("reference_post_id", "")) == str(reference_post_id)]
+        if transcript_id:
+            rows = [r for r in rows if str(r.get("transcript_id", "")) == str(transcript_id)]
+        if clip_status:
+            rows = [r for r in rows if str(r.get("clip_status", "")).lower() == clip_status.lower()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_video_clip_candidate_by_clip_id(self, clip_id: str) -> dict | None:
+        for r in (self._video_clip_candidates if hasattr(self, "_video_clip_candidates") else []):
+            if str(r.get("clip_id", "")) == str(clip_id):
+                return dict(r)
+        return None
+
+    def save_video_clip_candidate(self, clip: dict[str, Any]) -> bool:
+        if not hasattr(self, "_video_clip_candidates"):
+            self._video_clip_candidates: list[dict] = []
+        clip_id = str(clip.get("clip_id", ""))
+        for i, r in enumerate(self._video_clip_candidates):
+            if str(r.get("clip_id", "")) == clip_id:
+                self._video_clip_candidates[i] = dict(clip)
+                print(f"[mock-sheets] save_video_clip_candidate update: clip_id={clip_id!r}")
+                return True
+        self._video_clip_candidates.append(dict(clip))
+        print(f"[mock-sheets] save_video_clip_candidate: clip_id={clip_id!r}")
+        return True
+
+    def update_video_clip_candidate(self, clip_id: str, **fields: Any) -> bool:
+        if not hasattr(self, "_video_clip_candidates"):
+            return False
+        print(f"[mock-sheets] update_video_clip_candidate: clip_id={clip_id!r} fields={fields}")
+        for r in self._video_clip_candidates:
+            if str(r.get("clip_id", "")) == clip_id:
+                r.update(fields)
+                return True
+        return False
+
+    # ---- transcription_runs (mock) ----
+
+    def get_transcription_run_by_date(self, date: str, provider: str = "cloudflare_whisper") -> dict | None:
+        for r in (self._transcription_runs if hasattr(self, "_transcription_runs") else []):
+            if str(r.get("date", "")) == date and str(r.get("provider", "")) == provider:
+                return dict(r)
+        return None
+
+    def save_transcription_run(self, run: dict[str, Any]) -> bool:
+        if not hasattr(self, "_transcription_runs"):
+            self._transcription_runs: list[dict] = []
+        run_id = str(run.get("run_id", ""))
+        for i, r in enumerate(self._transcription_runs):
+            if str(r.get("run_id", "")) == run_id:
+                self._transcription_runs[i] = dict(run)
+                print(f"[mock-sheets] save_transcription_run update: run_id={run_id!r}")
+                return True
+        self._transcription_runs.append(dict(run))
+        print(f"[mock-sheets] save_transcription_run: run_id={run_id!r} date={run.get('date', '?')!r}")
+        return True
+
+    def update_transcription_run(self, run_id: str, **fields: Any) -> bool:
+        if not hasattr(self, "_transcription_runs"):
+            return False
+        print(f"[mock-sheets] update_transcription_run: run_id={run_id!r} fields={fields}")
+        for r in self._transcription_runs:
+            if str(r.get("run_id", "")) == run_id:
+                r.update(fields)
+                return True
+        return False
 
     def seed_tab(self, tab_name: str, rows: list[dict], id_column: str) -> int:
         """MockSheetsClient では内容を表示するだけで書き込まない。"""
