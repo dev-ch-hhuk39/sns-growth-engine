@@ -89,6 +89,11 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "imitation_risk", "media_reuse_risk",
         "buzz_potential_score", "conversion_potential_score",
         "confidence_level", "ai_publish_recommendation",
+        # Phase 2.21-2.24 追加
+        "media_asset_id",     # 使用メディア資産 ID
+        "video_clip_id",      # クリップ候補 clip_id
+        "source_video_url",   # 元動画 URL
+        "source_time_range",  # 元動画の使用区間（例: 00:01:30-00:02:15）
     ],
     # X / Threads 向け派生投稿。draft_id + platform で1行。
     "social_derivatives": [
@@ -97,6 +102,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "status", "reason", "created_at",
         # Phase 2.16 追加
         "char_count", "text_policy_status", "media_asset_id", "media_strategy",
+        # Phase 2.21-2.24 追加
+        "video_clip_id",      # クリップ候補 clip_id
+        "source_time_range",  # 元動画の使用区間
     ],
     # 投稿後の計測結果。PV以外に最終CV（LINE追加・応募等）を追跡。
     "posted_results": [
@@ -141,6 +149,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Phase 2.13-2.15 追加
         "generation_mode", "confidence_level", "ai_publish_recommendation",
         "media_asset_id", "text_policy_status",
+        # Phase 2.21-2.24 追加
+        "video_clip_id",      # クリップ候補 clip_id
+        "rights_status",      # unknown / allowed / not_allowed
+        "permission_status",  # unknown / granted / denied / not_required
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -161,6 +173,13 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "reuse_status", "media_reuse_risk", "imitation_risk",
         "downloaded_at", "uploaded_at",
         "used_count", "notes",
+        # Phase 2.21-2.24 追加
+        "video_clip_id",      # クリップ候補 clip_id との紐付け
+        "local_path",         # ローカル切り抜き済みファイルパス
+        "rights_status",      # unknown / allowed / not_allowed
+        "permission_status",  # unknown / granted / denied / not_required
+        "aspect_ratio",       # 16:9 / 9:16 / 1:1 等
+        "duration_seconds",   # 動画長（秒）
     ],
     # 参考投稿のパフォーマンス分析結果。スコアリング・分類を保存する。
     "reference_post_scores": [
@@ -206,6 +225,14 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "reuse_status", "media_reuse_risk", "imitation_risk",
         "rights_status", "permission_status",
         "created_at", "notes",
+        # Phase 2.21-2.24 追加
+        "confidence_score",           # Gemini による候補信頼スコア（0〜1）
+        "cut_status",                 # pending / cutting / done / failed
+        "local_clip_path",            # ローカル切り抜き済みファイルパス
+        "clip_media_asset_id",        # 切り抜き後の media_assets.media_id
+        "text_generation_status",     # pending / done / failed
+        "generated_draft_id",         # 生成された draft_id
+        "generated_at",               # 投稿文生成日時
     ],
     # 文字起こし日次実行記録。120分/日の上限管理に使う。
     "transcription_runs": [
@@ -277,6 +304,14 @@ class SheetsClient:
             print(f"  [update] タブ '{name}' にカラムを追加: {missing}")
             if not self.dry_run:
                 next_col = len(existing) + 1
+                required_cols = len(existing) + len(missing)
+                # グリッド上限を超える場合はワークシートをリサイズする
+                ws_meta = ws
+                current_cols = ws.col_count
+                if required_cols > current_cols:
+                    new_cols = max(required_cols + 10, current_cols + 20)
+                    print(f"  [resize] タブ '{name}' 列数を {current_cols} → {new_cols} に拡張")
+                    ws.resize(rows=ws.row_count, cols=new_cols)
                 col_letter = _col_letter(next_col)
                 ws.update(
                     [[h] for h in missing],

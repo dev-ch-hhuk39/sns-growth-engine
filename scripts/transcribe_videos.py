@@ -4,13 +4,20 @@ transcribe_videos.py - 動画文字起こし実行スクリプト
 安全ガード:
   - ALLOW_TRANSCRIPTION_API=false（デフォルト）: 実API呼び出し禁止
   - --allow-real-transcription フラグを追加しても ALLOW_TRANSCRIPTION_API=true 必須
-  - dry_run=True（デフォルト）: Sheets 書き込みなし
+  - --use-sheets なし: MockSheetsClient で動作
+  - --test-write なし: Sheets 書き込みを行わない
 
 使用方法:
-  python3 scripts/transcribe_videos.py --account-id night_scout --dry-run
-  python3 scripts/transcribe_videos.py --account-id night_scout --mock-sheets
+  # モック動作（デフォルト）
+  python3 scripts/transcribe_videos.py --account-id night_scout
+  # MockSheetsClient + 書き込みあり
+  python3 scripts/transcribe_videos.py --account-id night_scout --test-write
+  # 実Sheets 接続 + 書き込みなし（読み取り確認）
+  python3 scripts/transcribe_videos.py --account-id night_scout --use-sheets
+  # 実Sheets 接続 + 書き込みあり
+  python3 scripts/transcribe_videos.py --account-id night_scout --use-sheets --test-write
   # 実API（ALLOW_TRANSCRIPTION_API=true 設定後のみ）:
-  # python3 scripts/transcribe_videos.py --account-id night_scout --allow-real-transcription
+  # python3 scripts/transcribe_videos.py --account-id night_scout --use-sheets --test-write --allow-real-transcription
 """
 from __future__ import annotations
 
@@ -41,12 +48,18 @@ def _short_uuid() -> str:
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="動画文字起こし実行")
     p.add_argument("--account-id", required=True, help="アカウントID（night_scout / liver_manager）")
-    p.add_argument("--dry-run", action="store_true", default=True,
-                   help="Sheets 書き込みを行わない（デフォルト: True）")
+    # 新CLIフラグ標準（--use-sheets / --test-write）
+    p.add_argument("--use-sheets", action="store_true",
+                   help="実Google Sheets に接続する（なし: MockSheetsClient）")
+    p.add_argument("--test-write", action="store_true",
+                   help="Sheets 書き込みを有効にする（なし: 読み取り専用）")
+    # 後方互換フラグ（非推奨）
+    p.add_argument("--dry-run", action="store_true", default=False,
+                   help="[非推奨] --test-write なしと同等。後方互換のため残存")
     p.add_argument("--no-dry-run", dest="dry_run", action="store_false",
-                   help="Sheets 書き込みを有効にする")
+                   help="[非推奨] 後方互換のため残存")
     p.add_argument("--mock-sheets", action="store_true",
-                   help="MockSheetsClient を使用する")
+                   help="[非推奨] MockSheetsClient 強制（--use-sheets なしと同等）")
     p.add_argument("--allow-real-transcription", action="store_true",
                    help="実Cloudflare API を呼び出す（ALLOW_TRANSCRIPTION_API=true も必要）")
     p.add_argument("--limit", type=int, default=10,
@@ -61,13 +74,18 @@ def main() -> int:
     cfg = get_config_partial()
     transcription_cfg = get_transcription_config()
 
-    dry_run = args.dry_run
+    # 新CLIフラグ標準に合わせてdry_runを決定
+    # --test-write があれば書き込み有効、なければdry_run
+    # 後方互換: --no-dry-run も dry_run=False として扱う
+    dry_run = not args.test_write and not (hasattr(args, "dry_run") and not args.dry_run)
+    force_mock = not args.use_sheets or args.mock_sheets
+
     allow_real = args.allow_real_transcription and transcription_cfg.get("allow_transcription_api", False)
 
     if args.allow_real_transcription and not transcription_cfg.get("allow_transcription_api", False):
         print("[WARN] --allow-real-transcription が指定されましたが ALLOW_TRANSCRIPTION_API=false のため dry_run で動作します")
 
-    client = make_client(cfg, dry_run=dry_run, force_mock=args.mock_sheets)
+    client = make_client(cfg, dry_run=dry_run, force_mock=force_mock)
     whisper = CloudflareWhisperClient.from_config(transcription_cfg, dry_run=not allow_real)
     limiter = TranscriptionLimiter(
         client,

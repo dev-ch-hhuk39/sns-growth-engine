@@ -626,6 +626,174 @@ def check_content_theme_in_queue(sheets, account_id: str | None, results: list) 
     return issues
 
 
+VALID_CLIP_STATUSES = {"", "candidate", "approved", "rejected", "archived"}
+VALID_CUT_STATUSES = {"", "pending", "cutting", "done", "failed"}
+VALID_TEXT_GEN_STATUSES = {"", "pending", "done", "failed"}
+VALID_RIGHTS_STATUSES = {"", "unknown", "allowed", "not_allowed"}
+VALID_PERMISSION_STATUSES = {"", "unknown", "granted", "denied", "not_required"}
+VALID_TRANSCRIPTION_STATUSES = {"", "pending", "processing", "done", "failed", "skipped"}
+
+
+def check_video_clip_candidates(sheets, account_id: str | None, results: list) -> int:
+    """video_clip_candidates タブの整合性チェック（Phase 2.21-2.24）。[WARN] のみ。"""
+    issues = 0
+    try:
+        rows = _get_tab_rows(sheets, "video_clip_candidates", account_id)
+
+        if not rows:
+            results.append("  [PASS] video_clip_candidates は空（初期状態として正常）")
+            return 0
+
+        results.append(f"  [PASS] video_clip_candidates 取得OK: {len(rows)}件")
+
+        no_clip_id = 0
+        no_transcript_id = 0
+        invalid_clip_status = 0
+        invalid_cut_status = 0
+        invalid_text_gen_status = 0
+        invalid_rights = 0
+        invalid_permission = 0
+        invalid_risk = 0
+        high_risk_in_ready = 0
+        rights_blocked_in_ready = 0
+
+        for r in rows:
+            if not str(r.get("clip_id", "")).strip():
+                no_clip_id += 1
+            if not str(r.get("transcript_id", "")).strip():
+                no_transcript_id += 1
+
+            cs = str(r.get("clip_status", "")).strip().lower()
+            if cs and cs not in VALID_CLIP_STATUSES:
+                invalid_clip_status += 1
+
+            cut = str(r.get("cut_status", "")).strip().lower()
+            if cut and cut not in VALID_CUT_STATUSES:
+                invalid_cut_status += 1
+
+            tgs = str(r.get("text_generation_status", "")).strip().lower()
+            if tgs and tgs not in VALID_TEXT_GEN_STATUSES:
+                invalid_text_gen_status += 1
+
+            rights = str(r.get("rights_status", "")).strip().lower()
+            if rights and rights not in VALID_RIGHTS_STATUSES:
+                invalid_rights += 1
+
+            perm = str(r.get("permission_status", "")).strip().lower()
+            if perm and perm not in VALID_PERMISSION_STATUSES:
+                invalid_permission += 1
+
+            risk = str(r.get("media_reuse_risk", "")).strip().lower()
+            if risk and risk not in VALID_RISK_LEVELS:
+                invalid_risk += 1
+
+            # 権利ゲートチェック: clip_status=approved かつ rights_status=not_allowed は異常
+            if cs == "approved":
+                if rights in ("unknown", "not_allowed"):
+                    rights_blocked_in_ready += 1
+                if risk == "high":
+                    high_risk_in_ready += 1
+
+        def _cw(count: int, msg: str) -> None:
+            nonlocal issues
+            if count > 0:
+                results.append(f"  [WARN] video_clip_candidates: {msg}: {count}件")
+                issues += 1
+            else:
+                results.append(f"  [PASS] video_clip_candidates: {msg.split('が')[0].split('に')[0]}OK")
+
+        _cw(no_clip_id, "clip_id が空の行")
+        _cw(no_transcript_id, "transcript_id が空の行")
+        _cw(invalid_clip_status, "clip_status が想定外の行")
+        _cw(invalid_cut_status, "cut_status が想定外の行")
+        _cw(invalid_text_gen_status, "text_generation_status が想定外の行")
+        _cw(invalid_rights, "rights_status が想定外の行")
+        _cw(invalid_permission, "permission_status が想定外の行")
+        _cw(invalid_risk, "media_reuse_risk が想定外の行")
+
+        if rights_blocked_in_ready > 0:
+            results.append(
+                f"  [WARN] video_clip_candidates: clip_status=approved かつ "
+                f"rights_status=unknown/not_allowed の行: {rights_blocked_in_ready}件 "
+                f"（人間レビューが必要です）"
+            )
+            issues += 1
+        if high_risk_in_ready > 0:
+            results.append(
+                f"  [WARN] video_clip_candidates: clip_status=approved かつ "
+                f"media_reuse_risk=high の行: {high_risk_in_ready}件 "
+                f"（メディア再利用リスクが高いです）"
+            )
+            issues += 1
+
+        # サマリー
+        pending_text = sum(1 for r in rows if str(r.get("text_generation_status", "")).lower() == "pending")
+        done_text = sum(1 for r in rows if str(r.get("text_generation_status", "")).lower() == "done")
+        results.append(
+            f"  [PASS] video_clip_candidates サマリー: "
+            f"total={len(rows)} text_gen_pending={pending_text} text_gen_done={done_text}"
+        )
+
+    except Exception as e:
+        results.append(f"  [FAIL] video_clip_candidates 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_video_transcripts(sheets, account_id: str | None, results: list) -> int:
+    """video_transcripts タブの整合性チェック（Phase 2.18-2.20）。[WARN] のみ。"""
+    issues = 0
+    try:
+        rows = _get_tab_rows(sheets, "video_transcripts", account_id)
+
+        if not rows:
+            results.append("  [PASS] video_transcripts は空（初期状態として正常）")
+            return 0
+
+        results.append(f"  [PASS] video_transcripts 取得OK: {len(rows)}件")
+
+        no_transcript_id = 0
+        no_ref_post_id = 0
+        invalid_status = 0
+        failed_count = 0
+
+        for r in rows:
+            if not str(r.get("transcript_id", "")).strip():
+                no_transcript_id += 1
+            if not str(r.get("reference_post_id", "")).strip():
+                no_ref_post_id += 1
+            status = str(r.get("transcription_status", "")).strip().lower()
+            if status and status not in VALID_TRANSCRIPTION_STATUSES:
+                invalid_status += 1
+            if status == "failed":
+                failed_count += 1
+
+        def _cw(count: int, msg: str) -> None:
+            nonlocal issues
+            if count > 0:
+                results.append(f"  [WARN] video_transcripts: {msg}: {count}件")
+                issues += 1
+
+        _cw(no_transcript_id, "transcript_id が空の行")
+        _cw(no_ref_post_id, "reference_post_id が空の行")
+        _cw(invalid_status, "transcription_status が想定外の行")
+        if failed_count > 0:
+            results.append(f"  [WARN] video_transcripts: transcription_status=failed の行: {failed_count}件（再実行が必要）")
+            issues += 1
+        else:
+            results.append("  [PASS] video_transcripts: failed なし")
+
+        done = sum(1 for r in rows if str(r.get("transcription_status", "")).lower() == "done")
+        results.append(f"  [PASS] video_transcripts サマリー: total={len(rows)} done={done} failed={failed_count}")
+
+    except Exception as e:
+        results.append(f"  [FAIL] video_transcripts 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
     parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
@@ -671,6 +839,9 @@ def main() -> None:
         ("generation_jobs", check_generation_jobs),
         # Phase 2.17 コンテンツテーマガード
         ("content_theme_guard", check_content_theme_in_queue),
+        # Phase 2.18-2.24 動画パイプライン
+        ("video_transcripts", check_video_transcripts),
+        ("video_clip_candidates", check_video_clip_candidates),
     ]
 
     for tab_name, check_fn in checks:

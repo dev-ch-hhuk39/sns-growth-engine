@@ -53,6 +53,7 @@ temp/
 downloads/
 media_cache/
 cloudinary_cache/
+clips/
 
 # --- macOS ---
 .DS_Store
@@ -71,4 +72,5 @@ cloudinary_cache/
 !tsconfig.json
 !x_pipeline_config.example.json
 !config/reference_sources.example.json
+!tests/fixtures/*.json
 !fixtures/*.json

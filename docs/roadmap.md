@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-05-31 (Phase 2.18〜2.20追加)
+**最終更新**: 2026-06-04 (Phase 2.21〜2.24追加)
 
 ---
 
@@ -22,6 +22,10 @@
 [完了] Phase 2.18    → 動画 reference スキーマ拡張（4新タブ + reference_posts 列追加）
 [完了] Phase 2.19    → 動画収集アダプター基盤（YouTube/TikTok コレクター・mock対応）
 [完了] Phase 2.20    → Cloudflare Whisper 文字起こし基盤（日次120分制限・安全ガード）
+[完了] Phase 2.21    → clip_candidate_analyzer（Gemini でクリップ候補抽出・mock対応）
+[完了] Phase 2.22    → ffmpeg clip cutter 基盤（dry-run デフォルト・安全ガード）
+[完了] Phase 2.23    → media_assets / drafts / social_derivatives / queue スキーマ拡張
+[完了] Phase 2.24    → clip-based 投稿文生成（権利ゲート・WAITING_REVIEW キュー）
 [長期] Phase 4       → AI自動化・学習ループ
 ```
 
@@ -261,6 +265,68 @@
 - [x] `docs/video-reference-pipeline.md` 作成
 - [x] `docs/transcription-cost-control.md` 作成
 - [x] `scripts/test_phase218_220.py` 作成
+
+---
+
+## Phase 2.21: clip_candidate_analyzer ✅
+
+**目的**: 動画文字起こしから SNS 転用クリップ候補を Gemini で自動抽出する
+
+- [x] `src/video/__init__.py` 作成
+- [x] `src/video/clip_candidate_analyzer.py` 実装
+  - `analyze_transcript()` / `analyze_transcripts_batch()`
+  - `_normalize_candidate()` / `save_clip_candidates()`
+  - mock_llm=True デフォルト（実Gemini API 未呼び出し）
+- [x] `scripts/analyze_video_clips.py` CLI 作成（--use-sheets / --test-write / --mock-llm）
+- [x] `tests/fixtures/sample_video_transcript.json` 作成（10分動画・9セグメント）
+- [x] `tests/fixtures/sample_video_clip_candidates.json` 作成（6件・権利リスクのバリエーション付き）
+
+---
+
+## Phase 2.22: ffmpeg clip cutter 基盤 ✅
+
+**目的**: ffmpeg によるクリップ切り抜き基盤を構築する（dry-run デフォルト）
+
+- [x] `src/video/clip_cutter.py` 実装
+  - `cut_clip()` / `cut_clips_batch()` / `update_cut_status()`
+  - `_parse_time_to_seconds()` / `_build_output_path()`
+  - 実切り抜きは `--cut --confirm-cut` 両方必要
+  - ffmpeg 未インストール時は try/except でエラー返却
+- [x] `scripts/cut_video_clips.py` CLI 作成
+- [x] `.gitignore` に `clips/` 追加
+
+---
+
+## Phase 2.23: スキーマ拡張（media_assets / drafts / social_derivatives / queue） ✅
+
+**目的**: クリップパイプラインに必要な列を既存タブに追加する
+
+- [x] `media_assets`: video_clip_id / local_path / rights_status / permission_status / aspect_ratio / duration_seconds
+- [x] `drafts`: media_asset_id / video_clip_id / source_video_url / source_time_range
+- [x] `social_derivatives`: video_clip_id / source_time_range
+- [x] `queue`: video_clip_id / rights_status / permission_status
+- [x] `video_clip_candidates`: confidence_score / cut_status / local_clip_path / clip_media_asset_id / text_generation_status / generated_draft_id / generated_at
+- [x] `_ensure_tab()` にワークシート自動リサイズ処理追加（グリッド上限超過対応）
+- [x] `check_pipeline_integrity.py` に `check_video_clip_candidates()` / `check_video_transcripts()` 追加
+
+---
+
+## Phase 2.24: clip-based 投稿文生成 ✅
+
+**目的**: クリップ候補から X/Threads 投稿文を生成して WAITING_REVIEW キューに追加する
+
+- [x] `src/generation/video_clip_generator.py` 実装
+  - `_is_rights_blocked()`: rights_status=unknown/not_allowed または media_reuse_risk=high → ブロック
+  - `generate_from_clip()` / `save_clip_generation_result()` / `generate_from_clips_batch()`
+  - 全投稿は WAITING_REVIEW（READY 昇格は人間レビュー後のみ）
+  - draft → social_derivatives → queue の順で保存
+  - テキストポリシーチェック（X: 120/140, Threads: 600/800）
+- [x] `scripts/generate_from_video_clips.py` CLI 作成
+- [x] `tests/fixtures/sample_video_clip_generation_response.json` 作成
+- [x] `scripts/transcribe_videos.py` CLI フラグ新標準対応（--use-sheets / --test-write）
+- [x] `docs/video-clip-rights-policy.md` 作成
+- [x] `docs/video-clip-generation-usage.md` 作成
+- [x] `scripts/test_phase221_224.py` 作成（61 PASS / 0 FAIL）
 
 ---
 
