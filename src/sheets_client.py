@@ -153,6 +153,11 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "video_clip_id",      # クリップ候補 clip_id
         "rights_status",      # unknown / allowed / not_allowed
         "permission_status",  # unknown / granted / denied / not_required
+        # Phase 2.28 追加
+        "rights_review_required",  # true / false（unknown rights は人間レビュー必要）
+        "media_reuse_risk",        # low / medium / high（queue 追加時にコピー）
+        "source_video_url",        # 元動画 URL（queue 追加時にコピー）
+        "source_time_range",       # 使用区間（queue 追加時にコピー）
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -233,6 +238,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "text_generation_status",     # pending / done / failed
         "generated_draft_id",         # 生成された draft_id
         "generated_at",               # 投稿文生成日時
+        # Phase 2.28 追加
+        "rights_review_required",     # true / false（human review required）
     ],
     # 文字起こし日次実行記録。120分/日の上限管理に使う。
     "transcription_runs": [

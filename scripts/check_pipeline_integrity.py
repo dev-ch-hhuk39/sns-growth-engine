@@ -794,6 +794,113 @@ def check_video_transcripts(sheets, account_id: str | None, results: list) -> in
     return issues
 
 
+def _get_queue_rows(sheets, account_id: str | None) -> list[dict]:
+    """queue タブの行を取得する（SheetsClient / MockSheetsClient 両対応）。"""
+    if hasattr(sheets, "_sh"):
+        return _get_tab_rows(sheets, "queue", account_id)
+    # MockSheetsClient: _queue 属性から直接取得
+    rows = getattr(sheets, "_queue", [])
+    if account_id:
+        rows = [r for r in rows if r.get("account_id") == account_id]
+    return [dict(r) for r in rows]
+
+
+def check_queue_rights_gate(sheets, account_id: str | None, results: list) -> int:
+    """Phase 2.28: queue の権利ゲート違反チェック。
+
+    - rights_review_required=true かつ status=READY は違反（READY 昇格が漏れた）
+    - rights_status=not_allowed かつ queue に存在するのは違反
+    - media_reuse_risk=high かつ queue に存在するのは違反
+    """
+    issues = 0
+    try:
+        rows = _get_queue_rows(sheets, account_id)
+        if not rows:
+            results.append("  [PASS] queue (rights_gate): 空（正常）")
+            return 0
+
+        rights_review_in_ready = 0
+        not_allowed_in_queue = 0
+        high_risk_in_queue = 0
+        unknown_in_ready = 0
+
+        for r in rows:
+            status = str(r.get("status", "")).upper()
+            rr = str(r.get("rights_review_required", "false")).lower()
+            rs = str(r.get("rights_status", "")).lower()
+            risk = str(r.get("media_reuse_risk", "")).lower()
+
+            if rr == "true" and status == "READY":
+                rights_review_in_ready += 1
+            if rs == "unknown" and status == "READY":
+                unknown_in_ready += 1
+            if rs == "not_allowed":
+                not_allowed_in_queue += 1
+            if risk == "high":
+                high_risk_in_queue += 1
+
+        def _cw(count: int, msg: str) -> None:
+            nonlocal issues
+            if count > 0:
+                results.append(f"  [WARN] queue (rights_gate): {msg}: {count}件")
+                issues += 1
+
+        _cw(rights_review_in_ready, "rights_review_required=true かつ status=READY（approve_queue.py の漏れ）")
+        _cw(unknown_in_ready, "rights_status=unknown かつ status=READY（権利未確認）")
+        _cw(not_allowed_in_queue, "rights_status=not_allowed が queue に存在（権利ゲート漏れ）")
+        _cw(high_risk_in_queue, "media_reuse_risk=high が queue に存在（権利ゲート漏れ）")
+
+        if issues == 0:
+            results.append(f"  [PASS] queue (rights_gate): 権利ゲート違反なし")
+
+    except Exception as e:
+        results.append(f"  [FAIL] queue (rights_gate) チェックエラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_queue_text_policy(sheets, account_id: str | None, results: list) -> int:
+    """Phase 2.28: queue の X/Threads 文字数チェック。"""
+    issues = 0
+    try:
+        rows = _get_queue_rows(sheets, account_id)
+        if not rows:
+            results.append("  [PASS] queue (text_policy): 空（正常）")
+            return 0
+
+        x_over_hard = 0
+        x_over_soft = 0
+        threads_over_hard = 0
+
+        for r in rows:
+            platform = str(r.get("platform", "")).lower()
+            text_policy = str(r.get("text_policy_status", "")).upper()
+            if text_policy == "FAIL":
+                if platform == "x":
+                    x_over_hard += 1
+                elif platform == "threads":
+                    threads_over_hard += 1
+
+        def _cw(count: int, msg: str) -> None:
+            nonlocal issues
+            if count > 0:
+                results.append(f"  [WARN] queue (text_policy): {msg}: {count}件")
+                issues += 1
+
+        _cw(x_over_hard, "X text_policy_status=FAIL（140字超過）")
+        _cw(threads_over_hard, "Threads text_policy_status=FAIL（800字超過）")
+
+        if issues == 0:
+            results.append(f"  [PASS] queue (text_policy): 文字数ポリシー違反なし")
+
+    except Exception as e:
+        results.append(f"  [FAIL] queue (text_policy) チェックエラー: {e}")
+        issues += 1
+
+    return issues
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
     parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
@@ -842,6 +949,9 @@ def main() -> None:
         # Phase 2.18-2.24 動画パイプライン
         ("video_transcripts", check_video_transcripts),
         ("video_clip_candidates", check_video_clip_candidates),
+        # Phase 2.28 権利ゲート・文字数チェック
+        ("queue_rights_gate", check_queue_rights_gate),
+        ("queue_text_policy", check_queue_text_policy),
     ]
 
     for tab_name, check_fn in checks:

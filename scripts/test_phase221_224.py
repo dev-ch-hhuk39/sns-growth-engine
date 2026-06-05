@@ -341,6 +341,17 @@ def t_schema_queue_phase224_cols():
         assert col in cols, f"queue に {col!r} がない"
 
 
+def t_schema_queue_phase228_cols():
+    cols = TAB_DEFINITIONS["queue"]
+    for col in ["rights_review_required", "media_reuse_risk", "source_video_url", "source_time_range"]:
+        assert col in cols, f"queue に Phase 2.28 列 {col!r} がない"
+
+
+def t_schema_video_clip_candidates_phase228_cols():
+    cols = TAB_DEFINITIONS["video_clip_candidates"]
+    assert "rights_review_required" in cols, "video_clip_candidates に rights_review_required がない"
+
+
 def t_schema_no_duplicate_cols():
     for tab, cols in TAB_DEFINITIONS.items():
         seen = set()
@@ -354,6 +365,8 @@ _test("media_assets Phase 2.21 列", t_schema_media_assets_phase221_cols)
 _test("drafts Phase 2.24 列", t_schema_drafts_phase224_cols)
 _test("social_derivatives Phase 2.24 列", t_schema_social_derivatives_phase224_cols)
 _test("queue Phase 2.24 列", t_schema_queue_phase224_cols)
+_test("queue Phase 2.28 列", t_schema_queue_phase228_cols)
+_test("video_clip_candidates Phase 2.28 列", t_schema_video_clip_candidates_phase228_cols)
 _test("TAB_DEFINITIONS 重複列なし", t_schema_no_duplicate_cols)
 
 
@@ -365,8 +378,9 @@ print("\n=== Phase 2.24: video_clip_generator ===")
 
 
 def t_rights_blocked_unknown():
+    # Phase 2.28: unknown は queue 追加可能（ブロックしない）
     c = _make_candidate(rights_status="unknown")
-    assert _is_rights_blocked(c) is True
+    assert _is_rights_blocked(c) is False
 
 
 def t_rights_blocked_not_allowed():
@@ -415,13 +429,27 @@ def t_save_clip_gen_dry_run():
     assert isinstance(result["rights_blocked"], bool)
 
 
-def t_save_clip_gen_rights_blocked_no_queue():
+def t_save_clip_gen_unknown_rights_has_queue_with_review_flag():
+    # Phase 2.28: unknown は queue に追加される（rights_review_required=true 付き）
     client = MockSheetsClient()
     c = _make_candidate(rights_status="unknown")
     gen = {"x_text": "テストX", "threads_text": "テストThreads", "title": "テスト", "hypothesis": "", "media_strategy": "none"}
     result = save_clip_generation_result(client, c, gen, account_id="night_scout", dry_run=False)
+    assert result["rights_blocked"] is False, "Phase 2.28: unknown はブロックしない"
+    assert result["rights_review_required"] is True, "rights_review_required=True"
+    assert len(result["queue_ids"]) == 2, "x + threads = 2件のqueue"
+    for q in client._queue:
+        assert q.get("rights_review_required") == "true"
+
+
+def t_save_clip_gen_not_allowed_no_queue():
+    # not_allowed は完全ブロック
+    client = MockSheetsClient()
+    c = _make_candidate(rights_status="not_allowed")
+    gen = {"x_text": "テストX", "threads_text": "テストThreads", "title": "テスト", "hypothesis": "", "media_strategy": "none"}
+    result = save_clip_generation_result(client, c, gen, account_id="night_scout", dry_run=False)
     assert result["rights_blocked"] is True
-    assert result["queue_ids"] == [], "権利ブロック時はqueueなし"
+    assert result["queue_ids"] == [], "not_allowed は queue なし"
     assert len(client._queue) == 0
 
 
@@ -454,28 +482,43 @@ def t_save_clip_gen_updates_text_gen_status():
     assert stored.get("generated_draft_id") == result["draft_id"]
 
 
-def t_generate_from_clips_batch_all_rights_blocked():
+def t_generate_from_clips_batch_unknown_rights_in_queue():
+    # Phase 2.28: unknown はブロックしない → 全件 queue に追加
     client = MockSheetsClient()
     candidates = [_make_candidate(rights_status="unknown") for _ in range(3)]
     acc = _make_account()
     stats = generate_from_clips_batch(candidates, client, acc, mock_llm=True, dry_run=False)
     assert stats["total"] == 3
     assert stats["generated"] == 3
+    assert stats["rights_blocked"] == 0, "Phase 2.28: unknown はブロックしない"
+    assert len(client._queue) == 6, "3件 × X+Threads = 6件のqueue"
+    for q in client._queue:
+        assert q.get("rights_review_required") == "true"
+
+
+def t_generate_from_clips_batch_not_allowed_blocked():
+    # not_allowed は完全ブロック
+    client = MockSheetsClient()
+    candidates = [_make_candidate(rights_status="not_allowed") for _ in range(3)]
+    acc = _make_account()
+    stats = generate_from_clips_batch(candidates, client, acc, mock_llm=True, dry_run=False)
+    assert stats["total"] == 3
     assert stats["rights_blocked"] == 3
     assert len(client._queue) == 0
 
 
 def t_generate_from_clips_batch_mixed_rights():
+    # Phase 2.28: unknown はブロックしない
     client = MockSheetsClient()
     candidates = [
         _make_candidate(rights_status="allowed", permission_status="granted", media_reuse_risk="low"),
         _make_candidate(rights_status="unknown"),
-        _make_candidate(rights_status="allowed", permission_status="granted", media_reuse_risk="low"),
+        _make_candidate(rights_status="not_allowed"),  # これだけブロック
     ]
     acc = _make_account()
     stats = generate_from_clips_batch(candidates, client, acc, mock_llm=True, dry_run=False)
-    assert stats["rights_blocked"] == 1, "1件だけ権利ブロック"
-    assert len(client._queue) == 4, "2件 × X+Threads = 4件のqueue"
+    assert stats["rights_blocked"] == 1, "not_allowed の1件だけブロック"
+    assert len(client._queue) == 4, "allowed×1 + unknown×1 = 2件 × X+Threads = 4件"
 
 
 def t_generate_from_clips_batch_no_error():
@@ -486,20 +529,22 @@ def t_generate_from_clips_batch_no_error():
     assert stats["errors"] == 0
 
 
-_test("rights_blocked: unknown", t_rights_blocked_unknown)
-_test("rights_blocked: not_allowed", t_rights_blocked_not_allowed)
+_test("rights_blocked: unknown → False (Phase 2.28)", t_rights_blocked_unknown)
+_test("rights_blocked: not_allowed → True", t_rights_blocked_not_allowed)
 _test("rights_blocked: allowed+granted → False", t_rights_blocked_allowed)
 _test("rights_blocked: high_risk → True", t_rights_blocked_high_risk)
 _test("rights_blocked: medium_risk → False", t_rights_blocked_medium_risk)
 _test("generate_from_clip mock dict返却", t_generate_from_clip_mock_returns_dict)
 _test("generate_from_clip x_text 非空", t_generate_from_clip_x_text_nonempty)
 _test("save_clip_gen dry_run", t_save_clip_gen_dry_run)
-_test("save_clip_gen rights_blocked → queue なし", t_save_clip_gen_rights_blocked_no_queue)
+_test("save_clip_gen unknown → queue 2件 + rights_review_required", t_save_clip_gen_unknown_rights_has_queue_with_review_flag)
+_test("save_clip_gen not_allowed → queue なし", t_save_clip_gen_not_allowed_no_queue)
 _test("save_clip_gen allowed → queue 2件", t_save_clip_gen_allowed_has_queue)
 _test("save_clip_gen queue status=WAITING_REVIEW", t_save_clip_gen_queue_status_waiting_review)
 _test("save_clip_gen text_generation_status=done 更新", t_save_clip_gen_updates_text_gen_status)
-_test("batch 全件rights_blocked → queue 0件", t_generate_from_clips_batch_all_rights_blocked)
-_test("batch mixed_rights → 正しいqueue数", t_generate_from_clips_batch_mixed_rights)
+_test("batch unknown全件 → queue 6件 rights_review_required", t_generate_from_clips_batch_unknown_rights_in_queue)
+_test("batch not_allowed全件 → queue 0件", t_generate_from_clips_batch_not_allowed_blocked)
+_test("batch mixed_rights → not_allwed のみブロック", t_generate_from_clips_batch_mixed_rights)
 _test("batch エラー0件", t_generate_from_clips_batch_no_error)
 
 

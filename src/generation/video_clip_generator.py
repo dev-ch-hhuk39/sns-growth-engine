@@ -1,13 +1,16 @@
 """
-video_clip_generator.py - クリップ候補からX/Threads投稿文を生成する（Phase 2.24）
+video_clip_generator.py - クリップ候補からX/Threads投稿文を生成する（Phase 2.24/2.28）
 
 設計:
   - video_clip_candidates タブのクリップ候補を入力とする
   - Gemini でX/Threads向け投稿文を生成する
   - mock_llm=True の場合は固定サンプルを返す（実API呼び出しなし）
-  - 権利ゲート: rights_status=unknown/not_allowed は READY に昇格しない
-  - media_reuse_risk=high も READY に昇格しない
+  - 権利ゲート（Phase 2.28改訂）:
+      rights_status=not_allowed → queue に追加しない（完全ブロック）
+      media_reuse_risk=high     → queue に追加しない（完全ブロック）
+      rights_status=unknown     → WAITING_REVIEW で queue に追加（rights_review_required=true）
   - 全投稿は WAITING_REVIEW 状態でキューに追加する（READY は人間レビュー後のみ）
+  - rights_review_required=true のアイテムは approve_queue.py が READY 昇格をブロック
   - 生成後: draft → social_derivatives → queue (WAITING_REVIEW) の順で保存
   - テキストポリシーチェック実施（X: soft=120/hard=140, Threads: soft=600/hard=800）
 """
@@ -79,14 +82,29 @@ _MOCK_GENERATION = {
 # --------------------------------------------------------------------------- #
 
 def _is_rights_blocked(candidate: dict[str, Any]) -> bool:
-    """rights_status=unknown/not_allowed または media_reuse_risk=high は READY 昇格禁止。"""
+    """queue 追加を完全ブロックする条件（Phase 2.28）。
+
+    ブロック条件:
+      - rights_status == "not_allowed"
+      - media_reuse_risk == "high"
+
+    ※ rights_status == "unknown" はブロックしない。
+       代わりに rights_review_required=true を付与して WAITING_REVIEW で queue に追加し、
+       approve_queue.py が READY 昇格をブロックする。
+    """
     rights = str(candidate.get("rights_status", "unknown")).lower()
     risk = str(candidate.get("media_reuse_risk", "low")).lower()
-    if rights in ("unknown", "not_allowed"):
+    if rights == "not_allowed":
         return True
     if risk == "high":
         return True
     return False
+
+
+def _needs_rights_review(candidate: dict[str, Any]) -> bool:
+    """rights_status=unknown の場合、人間レビューが必要。"""
+    rights = str(candidate.get("rights_status", "unknown")).lower()
+    return rights == "unknown"
 
 
 # --------------------------------------------------------------------------- #
@@ -168,6 +186,8 @@ def save_clip_generation_result(
     draft_status = "WAITING_REVIEW"
     draft_id = f"d-{_short_uuid()}"
 
+    rights_review_required = _needs_rights_review(candidate)
+
     draft_data = {
         "draft_id": draft_id,
         "account_id": account_id,
@@ -175,7 +195,7 @@ def save_clip_generation_result(
         "body_md": threads_text,
         "content": x_text,
         "status": draft_status,
-        "generation_mode": "video_clip",
+        "generation_mode": "video_clip_reference",
         "hypothesis": generation.get("hypothesis", ""),
         "media_strategy": generation.get("media_strategy", "none"),
         "video_clip_id": clip_id,
@@ -183,7 +203,10 @@ def save_clip_generation_result(
         "source_time_range": f"{candidate.get('start_time', '')}~{candidate.get('end_time', '')}",
         "confidence_level": "MEDIUM",
         "ai_publish_recommendation": "review",
-        "notes": f"clip_id={clip_id} rights_blocked={rights_blocked}",
+        "notes": (
+            f"clip_id={clip_id} rights_blocked={rights_blocked} "
+            f"rights_review_required={rights_review_required}"
+        ),
     }
 
     if dry_run:
@@ -235,28 +258,41 @@ def save_clip_generation_result(
                 "platform": platform,
                 "priority": "3",
                 "status": "WAITING_REVIEW",
-                "generation_mode": "video_clip",
+                "generation_mode": "video_clip_reference",
                 "confidence_level": "MEDIUM",
                 "ai_publish_recommendation": "review",
                 "text_policy_status": policy,
                 "video_clip_id": clip_id,
                 "rights_status": str(candidate.get("rights_status", "unknown")),
                 "permission_status": str(candidate.get("permission_status", "unknown")),
+                "rights_review_required": "true" if rights_review_required else "false",
+                "media_reuse_risk": str(candidate.get("media_reuse_risk", "low")),
+                "source_video_url": str(candidate.get("source_video_url", "")),
+                "source_time_range": draft_data["source_time_range"],
             }
             if dry_run:
+                rr_tag = " [rights_review_required]" if rights_review_required else ""
                 print(
                     f"[dry-run] append_queue_item: "
-                    f"platform={platform!r} status=WAITING_REVIEW"
+                    f"platform={platform!r} status=WAITING_REVIEW{rr_tag}"
                 )
             else:
                 client.append_queue_item(q_data)
             queue_ids.append(q_id)
+
+        if rights_review_required:
+            print(
+                f"[rights-review] clip_id={clip_id!r} "
+                f"rights_status={candidate.get('rights_status', '?')!r} "
+                f"→ queue 追加済み（rights_review_required=true）"
+                f" approve_queue.py で READY 昇格前に権利確認が必要"
+            )
     else:
         print(
             f"[rights-gate] clip_id={clip_id!r} "
             f"rights_status={candidate.get('rights_status', '?')!r} "
             f"media_reuse_risk={candidate.get('media_reuse_risk', '?')!r} "
-            f"→ queue 追加スキップ（人間レビュー必要）"
+            f"→ queue 追加スキップ（not_allowed / high_risk）"
         )
 
     if not dry_run:
@@ -265,9 +301,15 @@ def save_clip_generation_result(
             text_generation_status="done",
             generated_draft_id=draft_id,
             generated_at=_now(),
+            rights_review_required="true" if rights_review_required else "false",
         )
 
-    return {"draft_id": draft_id, "queue_ids": queue_ids, "rights_blocked": rights_blocked}
+    return {
+        "draft_id": draft_id,
+        "queue_ids": queue_ids,
+        "rights_blocked": rights_blocked,
+        "rights_review_required": rights_review_required,
+    }
 
 
 # --------------------------------------------------------------------------- #

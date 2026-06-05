@@ -1,0 +1,34 @@
+{
+  "dry_run": true,
+  "results": [
+    {
+      "reference_post_id": "ref-yt-001",
+      "success": true,
+      "local_audio_path": "downloads/audio/night_scout/dQw4w9WgXcQ.wav",
+      "error": "",
+      "duration_seconds": 0.0,
+      "format": {
+        "codec": "pcm_s16le",
+        "sample_rate": 16000,
+        "channels": 1
+      }
+    },
+    {
+      "reference_post_id": "ref-yt-002",
+      "success": true,
+      "local_audio_path": "downloads/audio/night_scout/abc123xyz45.wav",
+      "error": "",
+      "duration_seconds": 0.0,
+      "format": {
+        "codec": "pcm_s16le",
+        "sample_rate": 16000,
+        "channels": 1
+      }
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "success": 2,
+    "failed": 0
+  }
+}

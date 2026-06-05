@@ -245,6 +245,17 @@ def cmd_approve(sheets, queue_id: str, new_status: str, reason: str, dry_run: bo
     if dry_run:
         print(f"  [DRY-RUN] Sheets への書き込みはスキップします")
 
+    # Phase 2.28: rights_review_required=true は READY 昇格ブロック
+    if new_status == "READY":
+        rights_review_required = str(q.get("rights_review_required", "false")).lower()
+        current_rights = str(q.get("rights_status", "")).lower()
+        if rights_review_required == "true" or current_rights == "unknown":
+            print(f"\n[REJECTED] rights_review_guard: rights_status={current_rights!r}")
+            print(f"  → video_clip_candidates タブで rights_status を allowed に更新してから")
+            print(f"    再度 generate_from_video_clips.py を実行してください。")
+            print(f"  → 権利確認が不要な場合は permission_status=not_required を設定してください。")
+            return 1
+
     # Phase 2.17: READY への変更前にテーマガード実行
     if new_status == "READY":
         draft_id = q.get("draft_id", "")

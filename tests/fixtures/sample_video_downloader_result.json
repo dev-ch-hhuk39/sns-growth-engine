@@ -1,0 +1,34 @@
+{
+  "dry_run": true,
+  "results": [
+    {
+      "reference_post_id": "ref-yt-001",
+      "success": true,
+      "local_path": "downloads/videos/night_scout/dQw4w9WgXcQ.mp4",
+      "video_id": "dQw4w9WgXcQ",
+      "error": "",
+      "file_size_bytes": 0
+    },
+    {
+      "reference_post_id": "ref-yt-002",
+      "success": true,
+      "local_path": "downloads/videos/night_scout/abc123xyz45.mp4",
+      "video_id": "abc123xyz45",
+      "error": "",
+      "file_size_bytes": 0
+    },
+    {
+      "reference_post_id": "ref-yt-003",
+      "success": false,
+      "local_path": "",
+      "video_id": "",
+      "error": "TikTok は未対応です",
+      "file_size_bytes": 0
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "success": 2,
+    "failed": 1
+  }
+}

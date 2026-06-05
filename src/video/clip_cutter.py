@@ -64,6 +64,7 @@ def cut_clip(
     output_dir: str = "clips",
     dry_run: bool = True,
     confirm_cut: bool = False,
+    reencode: bool = False,
 ) -> ClipCutResult:
     """1件のクリップ候補を ffmpeg で切り抜く。
 
@@ -73,6 +74,7 @@ def cut_clip(
         output_dir: 出力先ディレクトリ（デフォルト: clips/）
         dry_run: True の場合は ffmpeg を実行せず結果を返す
         confirm_cut: True かつ dry_run=False の場合のみ実際に切り抜く
+        reencode: True の場合 libx264/aac で再エンコード（デフォルト: -c copy）
 
     Returns:
         ClipCutResult
@@ -108,13 +110,17 @@ def cut_clip(
         print(f"[clip-cutter] [ERROR] {msg}")
         return ClipCutResult(clip_id=clip_id, success=False, error=msg)
 
+    if reencode:
+        codec_flags = ["-c:v", "libx264", "-c:a", "aac"]
+    else:
+        codec_flags = ["-c", "copy"]
+
     cmd = [
         "ffmpeg", "-y",
         "-ss", start_time,
         "-to", end_time,
         "-i", source_video_path,
-        "-c:v", "libx264",
-        "-c:a", "aac",
+        *codec_flags,
         "-avoid_negative_ts", "1",
         output_path,
     ]
@@ -163,6 +169,7 @@ def cut_clips_batch(
     output_dir: str = "clips",
     dry_run: bool = True,
     confirm_cut: bool = False,
+    reencode: bool = False,
 ) -> list[ClipCutResult]:
     """複数のクリップ候補を一括切り抜きする。
 
@@ -172,6 +179,7 @@ def cut_clips_batch(
         output_dir: 出力先ディレクトリ
         dry_run: True の場合は ffmpeg を実行しない
         confirm_cut: True かつ dry_run=False の場合のみ実際に切り抜く
+        reencode: True の場合 libx264/aac で再エンコード（デフォルト: -c copy）
 
     Returns:
         ClipCutResult のリスト
@@ -186,6 +194,7 @@ def cut_clips_batch(
             output_dir=output_dir,
             dry_run=dry_run,
             confirm_cut=confirm_cut,
+            reencode=reencode,
         )
         results.append(result)
     return results

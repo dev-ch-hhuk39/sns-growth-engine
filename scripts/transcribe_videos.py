@@ -60,7 +60,8 @@ def _parse_args() -> argparse.Namespace:
                    help="[非推奨] 後方互換のため残存")
     p.add_argument("--mock-sheets", action="store_true",
                    help="[非推奨] MockSheetsClient 強制（--use-sheets なしと同等）")
-    p.add_argument("--allow-real-transcription", action="store_true",
+    p.add_argument("--allow-real-transcription", "--confirm-api", action="store_true",
+                   dest="allow_real_transcription",
                    help="実Cloudflare API を呼び出す（ALLOW_TRANSCRIPTION_API=true も必要）")
     p.add_argument("--limit", type=int, default=10,
                    help="処理する動画の最大件数（デフォルト: 10）")

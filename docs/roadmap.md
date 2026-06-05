@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-06-04 (Phase 2.21〜2.24追加)
+**最終更新**: 2026-06-06 (Phase 2.25〜2.28追加)
 
 ---
 
@@ -26,6 +26,10 @@
 [完了] Phase 2.22    → ffmpeg clip cutter 基盤（dry-run デフォルト・安全ガード）
 [完了] Phase 2.23    → media_assets / drafts / social_derivatives / queue スキーマ拡張
 [完了] Phase 2.24    → clip-based 投稿文生成（権利ゲート・WAITING_REVIEW キュー）
+[完了] Phase 2.25    → 動画パイプライン統合実行 CLI (run_video_pipeline.py)
+[完了] Phase 2.26    → 動画ダウンロード・音声抽出基盤 (yt-dlp / ffmpeg)
+[完了] Phase 2.27    → Cloudflare 文字起こし認証情報・スモークテスト CLI
+[完了] Phase 2.28    → 権利レビューワークフロー改訂（unknown→WAITING_REVIEW）
 [長期] Phase 4       → AI自動化・学習ループ
 ```
 
@@ -327,6 +331,69 @@
 - [x] `docs/video-clip-rights-policy.md` 作成
 - [x] `docs/video-clip-generation-usage.md` 作成
 - [x] `scripts/test_phase221_224.py` 作成（61 PASS / 0 FAIL）
+
+---
+
+## Phase 2.25: 動画パイプライン統合実行 CLI ✅
+
+**目的**: 動画パイプライン全ステップを1コマンドで実行できる統合 CLI を構築する
+
+- [x] `scripts/run_video_pipeline.py` 作成
+  - 7ステップ: sources → collect → transcribe → analyze → cut → generate → integrity
+  - `--steps` でステップ選択可能
+  - デフォルト dry-run、`--use-sheets --test-write` で実 Sheets 書き込み
+  - Step 5（cut）は常に dry-run（安全ガード）
+- [x] `docs/video-pipeline-runner-usage.md` 作成
+
+---
+
+## Phase 2.26: 動画ダウンロード・音声抽出基盤 ✅
+
+**目的**: yt-dlp による動画ダウンロードと ffmpeg による音声抽出の基盤を構築する
+
+- [x] `src/video/video_downloader.py` 実装
+  - `download_video()` / `download_videos_batch()`
+  - 実ダウンロードは `--download --confirm-download` 両方必要
+  - TikTok は WARN でスキップ
+- [x] `src/video/audio_extractor.py` 実装
+  - `extract_audio()` / `extract_audio_batch()`
+  - 16kHz mono WAV 出力（Cloudflare Whisper 推奨フォーマット）
+  - 実抽出は `--extract-audio --confirm-extract` 両方必要
+- [x] `scripts/download_video_assets.py` CLI 作成
+- [x] `docs/video-download-usage.md` 作成
+
+---
+
+## Phase 2.27: Cloudflare 文字起こし認証情報・スモークテスト CLI ✅
+
+**目的**: Cloudflare API 疎通確認のための安全なテスト CLI を構築する
+
+- [x] `scripts/test_cloudflare_transcription_credentials.py` 作成（env check のみ）
+- [x] `scripts/test_cloudflare_transcription_smoke.py` 作成
+  - `--use-api --confirm-api` + `ALLOW_TRANSCRIPTION_API=true` が全部必要
+  - 30秒タイムアウト
+- [x] `docs/cloudflare-transcription-setup.md` 作成
+- [x] `docs/cloudflare-transcription-smoke-test.md` 作成
+
+---
+
+## Phase 2.28: 権利レビューワークフロー改訂 ✅
+
+**目的**: `rights_status=unknown` のクリップを可視化し、人間レビューを促進する
+
+- [x] `_is_rights_blocked()` 変更: `unknown` はブロックしない（`not_allowed` / `high` のみブロック）
+- [x] `_needs_rights_review()` 追加: `unknown` → `rights_review_required=true` を付与
+- [x] queue に `rights_review_required` / `media_reuse_risk` / `source_video_url` / `source_time_range` 列追加
+- [x] `video_clip_candidates` に `rights_review_required` 列追加
+- [x] `approve_queue.py`: `rights_review_required=true` のアイテムの READY 昇格をブロック
+- [x] `review_queue.py`: `[RIGHTS WARNING]` 表示
+- [x] `generation_mode`: `"video_clip"` → `"video_clip_reference"` に統一
+- [x] `clip_cutter.py`: デフォルト `-c copy`、`--reencode` で libx264/aac
+- [x] `transcribe_videos.py`: `--confirm-api` エイリアス追加
+- [x] `test_phase221_224.py`: Phase 2.28 動作変更に合わせて更新（65 PASS）
+- [x] `docs/rights-review-workflow.md` 作成
+- [x] `docs/video-clip-rights-policy.md` 更新
+- [x] `scripts/test_phase225_228.py` 作成
 
 ---
 

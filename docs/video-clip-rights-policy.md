@@ -28,18 +28,31 @@
 
 ---
 
-## 権利ゲートルール
+## 権利ゲートルール（Phase 2.28 改訂）
+
+### 完全ブロック条件
 
 以下の条件のいずれかに該当する場合、クリップは **queue に追加されない**（draft は WAITING_REVIEW として保存）。
 
 ```
-rights_status IN ("unknown", "not_allowed")
+rights_status == "not_allowed"
 OR media_reuse_risk == "high"
 ```
 
-### なぜ `unknown` もブロックするか
+### 条件付き通過（Phase 2.28 変更）
 
-`unknown` = 人間レビューが未実施の状態。自動投稿すると著作権侵害になる可能性があるため、**デフォルトでブロック**する設計。
+```
+rights_status == "unknown"
+→ WAITING_REVIEW で queue に追加
+  rights_review_required=true を付与
+  approve_queue.py が READY 昇格をブロック
+```
+
+### Phase 2.28 変更の理由
+
+- **Before（Phase 2.24）**: `unknown` は完全ブロック → draft/queue が見えない
+- **After（Phase 2.28）**: `unknown` は WAITING_REVIEW で visible → 人間が確認しやすい
+- **安全性は維持**: `approve_queue.py` が `rights_review_required=true` のアイテムの READY 昇格をブロック
 
 ---
 
@@ -72,17 +85,24 @@ OR media_reuse_risk == "high"
 
 ## 実装上の保証
 
-`src/generation/video_clip_generator.py` の `_is_rights_blocked()` 関数がこれを強制する。
+`src/generation/video_clip_generator.py` の `_is_rights_blocked()` / `_needs_rights_review()` 関数がこれを強制する。
 
 ```python
 def _is_rights_blocked(candidate: dict) -> bool:
+    """queue 追加を完全ブロックする条件（Phase 2.28）。"""
     rights = str(candidate.get("rights_status", "unknown")).lower()
     risk = str(candidate.get("media_reuse_risk", "low")).lower()
-    if rights in ("unknown", "not_allowed"):
+    if rights == "not_allowed":
         return True
     if risk == "high":
         return True
     return False
+
+
+def _needs_rights_review(candidate: dict) -> bool:
+    """rights_status=unknown の場合、人間レビューが必要。"""
+    rights = str(candidate.get("rights_status", "unknown")).lower()
+    return rights == "unknown"
 ```
 
-この関数は `save_clip_generation_result()` 内で呼ばれ、True の場合は queue への追加をスキップする。
+`approve_queue.py` は `rights_review_required=true` のアイテムの READY 昇格をブロックする。

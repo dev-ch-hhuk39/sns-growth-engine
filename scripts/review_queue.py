@@ -153,6 +153,25 @@ def display_queue_item(sheets, q: dict, draft: dict, derivative: dict) -> tuple[
     fail_count = 0
     warn_count = 0
 
+    # Phase 2.28: rights_review_required 警告
+    rights_review_required = str(q.get("rights_review_required", "false")).lower()
+    rights_status_q = str(q.get("rights_status", "")).lower()
+    if rights_review_required == "true" or rights_status_q == "unknown":
+        print(f"\n  [RIGHTS WARNING] rights_review_required=true")
+        print(f"    rights_status : {rights_status_q or '(未設定)'}")
+        media_reuse_risk_q = q.get("media_reuse_risk", "")
+        source_video_url_q = q.get("source_video_url", "")
+        source_time_range_q = q.get("source_time_range", "")
+        if media_reuse_risk_q:
+            print(f"    media_reuse_risk : {media_reuse_risk_q}")
+        if source_video_url_q:
+            print(f"    source_video_url : {_truncate(source_video_url_q, 80)}")
+        if source_time_range_q:
+            print(f"    source_time_range: {source_time_range_q}")
+        print(f"    → video_clip_candidates タブで rights_status を allowed に更新後、")
+        print(f"      approve_queue.py で --approve を実行できます")
+        warn_count += 1
+
     # draft 情報
     if draft:
         title = draft.get("title", "")
