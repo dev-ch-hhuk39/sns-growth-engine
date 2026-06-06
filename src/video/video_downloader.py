@@ -1,12 +1,15 @@
 """
-video_downloader.py - yt-dlp を使った動画ダウンロード基盤（Phase 2.26）
+video_downloader.py - yt-dlp を使った動画ダウンロード基盤（Phase 2.26 / 2.29）
 
 設計:
   - デフォルト: dry_run=True（yt-dlp は実行しない）
   - 実ダウンロードは --download --confirm-download フラグが両方必要
   - yt-dlp が import できない場合はエラーを返す（import 時にはチェックしない）
   - 出力先: downloads/videos/<account_id>/<video_id>.mp4（デフォルト）
-  - YouTubeのURLパターンに限定（TikTok未対応はWARNを出す）
+  - Phase 2.26: YouTube のみ対応（TikTok は dry-run WARN → 失敗）
+  - Phase 2.29: TikTok dry-run planning 対応
+      dry_run=True  → TikTok も success=True で planning 結果を返す
+      dry_run=False → TikTok は実ダウンロード未対応で失敗
 
 禁止事項（コード実施保証）:
   - --download --confirm-download なしでの実ダウンロード禁止
@@ -44,6 +47,18 @@ def _extract_video_id(url: str) -> str:
     return ""
 
 
+def _extract_tiktok_video_id(url: str) -> str:
+    """TikTok URL から video_id を抽出する（dry-run planning 用）。"""
+    import re
+    m = re.search(r"tiktok\.com/@[^/]+/video/(\d+)", url)
+    if m:
+        return f"tt_{m.group(1)}"
+    m = re.search(r"vm\.tiktok\.com/([A-Za-z0-9]+)", url)
+    if m:
+        return f"tt_{m.group(1)}"
+    return ""
+
+
 def _build_output_path(output_dir: str, account_id: str, video_id: str) -> str:
     account_dir = os.path.join(output_dir, account_id)
     os.makedirs(account_dir, exist_ok=True)
@@ -78,8 +93,23 @@ def download_video(
         return DownloadResult(ref_id, success=False, error="video_url が空です")
 
     if platform == "tiktok":
-        print(f"[video-downloader] [WARN] TikTok は未対応です: {ref_id!r}")
-        return DownloadResult(ref_id, success=False, error="TikTok は未対応です")
+        # Phase 2.29: dry-run mode は planning として success=True を返す
+        tiktok_id = _extract_tiktok_video_id(video_url)
+        if dry_run or not confirm_download:
+            output_path = _build_output_path(output_dir, account_id, tiktok_id or ref_id)
+            print(
+                f"[video-downloader] [plan] TikTok ref_id={ref_id!r} "
+                f"url={video_url[:60]!r} → {output_path} (手動DL要)"
+            )
+            return DownloadResult(
+                ref_id,
+                success=True,
+                local_path=output_path,
+                video_id=tiktok_id,
+                error="TikTok: dry-run planning (手動ダウンロードが必要)",
+            )
+        print(f"[video-downloader] [ERROR] TikTok 実ダウンロードは未対応: {ref_id!r}")
+        return DownloadResult(ref_id, success=False, error="TikTok 実ダウンロードは未対応です")
 
     video_id = _extract_video_id(video_url)
     output_path = _build_output_path(output_dir, account_id, video_id or ref_id)

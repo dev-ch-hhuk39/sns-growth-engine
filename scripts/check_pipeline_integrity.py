@@ -244,7 +244,7 @@ VALID_MEDIA_TYPES = {"image", "video", "gif", "unknown"}
 VALID_REUSE_STATUSES = {"", "empty", "approved", "review", "rejected", "reference_only", "available", "used", "restricted"}
 VALID_STORAGE_PROVIDERS = {"", "cloudinary", "none", "dry_run"}
 VALID_RISK_LEVELS = {"", "low", "medium", "high", "unknown"}
-VALID_GENERATION_MODES = {"reference_based", "original_hypothesis"}
+VALID_GENERATION_MODES = {"reference_based", "original_hypothesis", "video_clip_reference"}
 VALID_GENERATION_JOB_STATUSES = {"", "pending", "in_progress", "done", "failed"}
 VALID_CONFIDENCE_LEVELS = {"", "HIGH", "MEDIUM", "LOW"}
 VALID_AI_RECOMMENDATIONS = {"", "recommend", "review", "reject"}
@@ -901,6 +901,98 @@ def check_queue_text_policy(sheets, account_id: str | None, results: list) -> in
     return issues
 
 
+VALID_LEARNING_RULE_INSIGHT_TYPES = {
+    "hook_improvement", "text_length_control", "rights_management",
+    "engagement_boost", "cta_optimization", "content_strategy",
+    "prompt_refinement", "other",
+}
+VALID_SUGGESTION_STATUSES = {"WAITING_REVIEW", "APPROVED", "REJECTED"}
+
+
+def check_learning_rules_integrity(sheets, account_id: str | None, results: list) -> int:
+    """Phase 4.0: learning_rules タブの整合性チェック。"""
+    issues = 0
+    try:
+        rows = _get_tab_rows(sheets, "learning_rules", account_id)
+        if not hasattr(sheets, "_sh"):
+            rows = getattr(sheets, "_learning_rules", [])
+            if account_id:
+                rows = [r for r in rows if r.get("account_id") == account_id]
+
+        if not rows:
+            results.append("  [PASS] learning_rules は空（初期状態として正常）")
+            return 0
+
+        results.append(f"  [PASS] learning_rules 取得OK: {len(rows)}件")
+        active_count = sum(1 for r in rows if str(r.get("active", "false")).lower() == "true")
+        invalid_type = sum(
+            1 for r in rows
+            if str(r.get("insight_type", "")).strip().lower()
+            not in VALID_LEARNING_RULE_INSIGHT_TYPES
+            and str(r.get("insight_type", "")).strip()
+        )
+
+        results.append(f"  [PASS] learning_rules: active={active_count}件 / 全{len(rows)}件")
+        if invalid_type > 0:
+            results.append(f"  [WARN] learning_rules: insight_type が未定義の行: {invalid_type}件")
+            issues += 1
+        else:
+            results.append("  [PASS] learning_rules: insight_type OK")
+
+    except Exception as e:
+        results.append(f"  [FAIL] learning_rules 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
+def check_improvement_suggestions_integrity(sheets, account_id: str | None, results: list) -> int:
+    """Phase 4.0: prompt_improvement_suggestions タブの整合性チェック。"""
+    issues = 0
+    try:
+        rows = _get_tab_rows(sheets, "prompt_improvement_suggestions", account_id)
+        if not hasattr(sheets, "_sh"):
+            rows = getattr(sheets, "_prompt_improvement_suggestions", [])
+            if account_id:
+                rows = [r for r in rows if r.get("account_id") == account_id]
+
+        if not rows:
+            results.append("  [PASS] prompt_improvement_suggestions は空（初期状態として正常）")
+            return 0
+
+        results.append(f"  [PASS] prompt_improvement_suggestions 取得OK: {len(rows)}件")
+
+        invalid_status = sum(
+            1 for r in rows
+            if str(r.get("status", "")).upper().strip() not in VALID_SUGGESTION_STATUSES
+            and str(r.get("status", "")).strip()
+        )
+        waiting_count = sum(1 for r in rows if str(r.get("status", "")).upper() == "WAITING_REVIEW")
+
+        if invalid_status > 0:
+            results.append(
+                f"  [FAIL] prompt_improvement_suggestions: status が不正な行: {invalid_status}件"
+            )
+            issues += 1
+        else:
+            results.append("  [PASS] prompt_improvement_suggestions: status OK")
+
+        if waiting_count > 0:
+            results.append(
+                f"  [WARN] prompt_improvement_suggestions: WAITING_REVIEW が {waiting_count}件 "
+                f"(review_improvement_suggestions.py で確認してください)"
+            )
+            issues += 1
+        else:
+            results.append("  [PASS] prompt_improvement_suggestions: 未承認提案なし")
+
+    except Exception as e:
+        results.append(f"  [FAIL] prompt_improvement_suggestions 取得エラー: {e}")
+        issues += 1
+
+    return issues
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
     parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
@@ -952,6 +1044,9 @@ def main() -> None:
         # Phase 2.28 権利ゲート・文字数チェック
         ("queue_rights_gate", check_queue_rights_gate),
         ("queue_text_policy", check_queue_text_policy),
+        # Phase 4.0 Learning integrity
+        ("learning_rules", check_learning_rules_integrity),
+        ("prompt_improvement_suggestions", check_improvement_suggestions_integrity),
     ]
 
     for tab_name, check_fn in checks:

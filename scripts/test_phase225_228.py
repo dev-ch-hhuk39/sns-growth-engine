@@ -266,9 +266,18 @@ def t_download_video_empty_url_fails():
     assert result.error != ""
 
 
-def t_download_video_tiktok_fails():
+def t_download_video_tiktok_dry_run_planning():
+    # Phase 2.29: TikTok は dry_run=True で planning として success=True を返す
     post = _make_reference_post(platform="tiktok", video_url="https://tiktok.com/@user/video/123")
     result = download_video(post, dry_run=True)
+    assert result.success is True, "dry-run TikTok は planning として成功扱い"
+    assert "TikTok" in result.error
+
+
+def t_download_video_tiktok_real_fails():
+    # TikTok の実ダウンロードは未対応
+    post = _make_reference_post(platform="tiktok", video_url="https://tiktok.com/@user/video/123")
+    result = download_video(post, dry_run=False, confirm_download=True)
     assert result.success is False
     assert "TikTok" in result.error
 
@@ -287,7 +296,8 @@ _test("_extract_video_id: unknown → ''", t_extract_video_id_unknown)
 _test("download_video: dry_run=True 成功", t_download_video_dry_run_success)
 _test("download_video: confirm_download=False は dry 扱い", t_download_video_no_confirm_is_dry)
 _test("download_video: empty URL → 失敗", t_download_video_empty_url_fails)
-_test("download_video: TikTok → 失敗", t_download_video_tiktok_fails)
+_test("download_video: TikTok dry-run → planning 成功（Phase 2.29）", t_download_video_tiktok_dry_run_planning)
+_test("download_video: TikTok 実ダウンロード → 失敗", t_download_video_tiktok_real_fails)
 _test("download_videos_batch: dry_run 3件", t_download_videos_batch_dry_run)
 
 

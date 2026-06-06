@@ -1,0 +1,36 @@
+[
+  {
+    "suggestion_id": "sug-abc12345",
+    "account_id": "night_scout",
+    "created_at": "2026-06-06T10:00:00+00:00",
+    "source": "performance_analyzer",
+    "suggestion_type": "prompt_change",
+    "target_template": "tmpl-001",
+    "current_behavior": "queue の text_policy_status=FAIL 率: 15.0%",
+    "suggested_change": "X投稿は120字以内の制約を強化",
+    "reason": "text_policy_fail_rate=15.0% 超過",
+    "expected_impact": "違反率 50% 削減",
+    "priority": "high",
+    "status": "WAITING_REVIEW",
+    "reviewed_by": "",
+    "reviewed_at": "",
+    "notes": ""
+  },
+  {
+    "suggestion_id": "sug-ghi11111",
+    "account_id": "night_scout",
+    "created_at": "2026-05-28T08:00:00+00:00",
+    "source": "hermes",
+    "suggestion_type": "strategy_change",
+    "target_template": "",
+    "current_behavior": "動画クリップ参照コンテンツの割合が低い",
+    "suggested_change": "video_clip_reference 生成の優先度を上げる",
+    "reason": "エンゲージメント率が reference_based より video_clip_reference が高い",
+    "expected_impact": "エンゲージメント率 15% 改善",
+    "priority": "medium",
+    "status": "APPROVED",
+    "reviewed_by": "human",
+    "reviewed_at": "2026-06-01T09:00:00+00:00",
+    "notes": "承認済み"
+  }
+]

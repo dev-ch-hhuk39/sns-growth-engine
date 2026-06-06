@@ -1,0 +1,38 @@
+{
+  "suggestions": [
+    {
+      "suggestion_id": "sug-abc12345",
+      "account_id": "night_scout",
+      "created_at": "2026-06-06T10:00:00+00:00",
+      "source": "performance_analyzer",
+      "suggestion_type": "prompt_change",
+      "target_template": "tmpl-001",
+      "current_behavior": "queue の text_policy_status=FAIL 率: 15.0%",
+      "suggested_change": "生成プロンプトに「X投稿は120字以内」の制約を明示してください。",
+      "reason": "text_policy_fail_rate=15.0% が閾値 10% を超過",
+      "expected_impact": "テキストポリシー違反率 50% 削減を目標",
+      "priority": "high",
+      "status": "WAITING_REVIEW",
+      "reviewed_by": "",
+      "reviewed_at": "",
+      "notes": ""
+    },
+    {
+      "suggestion_id": "sug-def67890",
+      "account_id": "night_scout",
+      "created_at": "2026-06-06T10:01:00+00:00",
+      "source": "hermes",
+      "suggestion_type": "rule_addition",
+      "target_template": "",
+      "current_behavior": "夜職系コンテンツのフック文が弱い傾向が見られる",
+      "suggested_change": "フック文テンプレートに「月収○○万円」「未経験OK」などのキャッチを追加することを検討してください。",
+      "reason": "直近5件のエンゲージメント率が 1.5% 未満（目標 2.0%）",
+      "expected_impact": "エンゲージメント率 20% 改善を目標",
+      "priority": "medium",
+      "status": "WAITING_REVIEW",
+      "reviewed_by": "",
+      "reviewed_at": "",
+      "notes": "Hermes weekly analysis 2026-W23 より"
+    }
+  ]
+}

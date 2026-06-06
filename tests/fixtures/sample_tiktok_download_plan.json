@@ -1,0 +1,28 @@
+{
+  "dry_run": true,
+  "platform": "tiktok",
+  "results": [
+    {
+      "reference_post_id": "ref-tt-001",
+      "success": true,
+      "local_path": "downloads/videos/night_scout/tt_7123456789012345678.mp4",
+      "video_id": "tt_7123456789012345678",
+      "error": "TikTok: dry-run planning (手動ダウンロードが必要)",
+      "file_size_bytes": 0
+    },
+    {
+      "reference_post_id": "ref-tt-002",
+      "success": true,
+      "local_path": "downloads/videos/night_scout/tt_9876543210987654321.mp4",
+      "video_id": "tt_9876543210987654321",
+      "error": "TikTok: dry-run planning (手動ダウンロードが必要)",
+      "file_size_bytes": 0
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "success": 2,
+    "failed": 0,
+    "note": "TikTok は dry-run planning のみ対応。実ダウンロードは手動で実施してください。"
+  }
+}

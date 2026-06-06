@@ -72,7 +72,7 @@ Cloudflare Whisper API の推奨フォーマット。
 |---|---|
 | ダウンロード実行 | `--download --confirm-download` の両フラグ必要 |
 | 音声抽出実行 | `--extract-audio --confirm-extract` の両フラグ必要 |
-| TikTok 禁止 | コード実装でスキップ（WARN を出力） |
+| TikTok（Phase 2.29）| dry-run 時は planning 成功（success=True）、実ダウンロードは未対応 |
 | 大量取得禁止 | `--limit` で件数制限（デフォルト: 5件） |
 | Sheets 書き込み | `--test-write` が必要 |
 

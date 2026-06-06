@@ -440,7 +440,68 @@
 
 ---
 
-## Phase 4: AI自動化・学習ループ
+## Phase 2.29-2.30: 動画ダウンロード強化
+
+**実装済み（2026-06-06）**
+
+### Phase 2.29: TikTok dry-run planning
+- [x] `_extract_tiktok_video_id()` 追加
+- [x] TikTok dry-run → success=True（planning 結果を返す）
+- [x] TikTok 実ダウンロード → 依然 success=False（未対応）
+- [x] fixture: `sample_tiktok_download_plan.json`
+- [x] テスト: `test_phase229_230.py`
+
+### Phase 2.30: 実動画テスト前提条件チェック
+- [x] `scripts/preflight_video_real_test.py`
+- [x] yt-dlp / ffmpeg / 環境変数 / ディレクトリ権限チェック
+- [x] 実API呼び出しなし
+
+---
+
+## Phase HR-1: Headroom 本導入
+
+**設計・ドキュメント完了（2026-06-06）**
+
+- [x] `docs/headroom-production-setup.md`（インストール手順・禁止事項）
+- [x] `scripts/test_headroom_installation.py`（安全ガード確認）
+- [ ] `pipx install "headroom-ai[proxy]"` 実行（手動）
+- [ ] `~/.local/bin/claude-hr` / `~/.local/bin/codex-hr` 作成（手動）
+
+---
+
+## Phase HERMES-0: Hermes Agent 導入設計
+
+**設計のみ完了（2026-06-06）。実インストールは HERMES-1 以降。**
+
+- [x] `docs/hermes-agent-integration-plan.md`
+- [x] `docs/self-improvement-architecture.md`
+- [x] ファイルベース I/O 設計（exports/hermes/ / imports/hermes/）
+- [ ] Phase HERMES-1: ファイルベース分析スクリプト実装
+
+---
+
+## Phase 4.0-4.1: Learning / Self-Improvement Foundation
+
+**実装済み（2026-06-06）**
+
+### Phase 4.0: Learning foundation
+- [x] `src/learning/__init__.py`
+- [x] `src/learning/performance_analyzer.py` (PerformanceAnalyzer)
+- [x] `src/learning/improvement_suggester.py` (ImprovementSuggester)
+- [x] `scripts/export_learning_context.py`
+- [x] `scripts/import_improvement_suggestions.py`
+- [x] `scripts/review_improvement_suggestions.py`
+- [x] `prompt_improvement_suggestions` タブ追加（TAB_DEFINITIONS）
+- [x] fixtures: sample_improvement_context / suggestions / hermes_report
+
+### Phase 4.1: Learning safety
+- [x] `scripts/approve_learning_rule.py` (--confirm-approve 必須)
+- [x] `scripts/check_learning_integrity.py`
+- [x] `check_pipeline_integrity.py` 拡張（learning_rules / suggestions）
+
+---
+
+## Phase 4 （今後の計画）: AI自動化・学習ループ
 
 **目的**: 人間レビューを最小化し、投稿結果から継続改善する
 

@@ -261,6 +261,26 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "reference_post_id", "reference_post_score_id", "media_asset_id",
         "status", "generated_draft_id", "generated_at",
     ],
+    # ------------------------------------------------------------------ #
+    # Phase 4.0 追加タブ（Learning / Self-Improvement foundation）
+    # ------------------------------------------------------------------ #
+    # プロンプト改善提案。Hermes Agent / PerformanceAnalyzer の出力を保存する。
+    # 全提案は status=WAITING_REVIEW で保存され、人間の承認が必要（active=true 自動昇格禁止）。
+    "prompt_improvement_suggestions": [
+        "suggestion_id", "account_id", "created_at",
+        "source",              # hermes / manual / performance_analyzer
+        "suggestion_type",     # prompt_change / rule_addition / strategy_change
+        "target_template",     # prompt_templates.template_id（省略可）
+        "current_behavior",    # 現在の挙動の説明
+        "suggested_change",    # 提案する変更内容
+        "reason",              # 変更理由・根拠データ
+        "expected_impact",     # 期待効果（例: X文字超過率 -20%）
+        "priority",            # high / medium / low
+        "status",              # WAITING_REVIEW / APPROVED / REJECTED
+        "reviewed_by",         # human / auto（自動承認は禁止）
+        "reviewed_at",         # レビュー日時
+        "notes",
+    ],
 }
 
 SCOPES = [

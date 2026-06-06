@@ -1,0 +1,53 @@
+{
+  "exported_at": "2026-06-06T10:00:00+00:00",
+  "account_id": "night_scout",
+  "purpose": "Hermes Agent analysis - DO NOT commit to git",
+  "posted_results_summary": {
+    "count": 5,
+    "recent": [
+      {
+        "result_id": "res-001",
+        "draft_id": "draft-001",
+        "account_id": "night_scout",
+        "posted_at": "2026-05-30T09:00:00+00:00",
+        "views": 1200,
+        "likes": 45,
+        "comments": 8,
+        "follows": 3
+      }
+    ]
+  },
+  "queue_summary": {
+    "total": 4,
+    "READY": 2,
+    "WAITING_REVIEW": 1,
+    "DONE": 1,
+    "ERROR": 0
+  },
+  "recent_generation_jobs": [
+    {
+      "job_id": "job-001",
+      "account_id": "night_scout",
+      "platform": "x",
+      "generation_mode": "video_clip_reference",
+      "status": "done",
+      "generated_at": "2026-06-05T08:00:00+00:00"
+    }
+  ],
+  "active_learning_rules": [],
+  "active_prompt_templates": [
+    {
+      "template_id": "tmpl-001",
+      "account_id": "night_scout",
+      "template_name": "video_clip_x_post",
+      "version": "1.0",
+      "active": "true"
+    }
+  ],
+  "waiting_improvement_suggestions": [],
+  "video_clip_summary": {
+    "total": 3,
+    "approved": 2,
+    "candidate": 1
+  }
+}
