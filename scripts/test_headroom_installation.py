@@ -111,55 +111,50 @@ _test("headroom-production-setup.md ドキュメント存在", t_headroom_proxy_
 print("\n=== Phase HR-1: Headroom インストール状態（WARN 許容） ===")
 
 
-def t_headroom_or_pipx_available():
-    """headroom または pipx が利用可能かチェック（WARN のみ）。"""
+_HEADROOM_VENV_BIN = os.path.expanduser("~/.venvs/headroom/bin/headroom")
+_HEADROOM_VENV_EXISTS = os.path.isfile(_HEADROOM_VENV_BIN)
+
+
+def t_headroom_available():
+    """headroom が利用可能かチェック（venv / pipx / PATH いずれか）。"""
     pipx_path = shutil.which("pipx")
     has_pipx = pipx_path is not None
-
-    # headroom module の確認
-    try:
-        import headroom  # type: ignore[import]
-        has_headroom_module = True
-    except ImportError:
-        has_headroom_module = False
-
-    # headroom CLI の確認
-    headroom_cli = shutil.which("headroom")
-    claude_hr_cli = shutil.which("claude-hr")
-    codex_hr_cli = shutil.which("codex-hr")
+    headroom_in_path = shutil.which("headroom") is not None
 
     status = {
+        "venv (~/.venvs/headroom)": _HEADROOM_VENV_EXISTS,
+        "headroom in PATH": headroom_in_path,
         "pipx": has_pipx,
-        "headroom_module": has_headroom_module,
-        "headroom_cli": headroom_cli is not None,
-        "claude_hr": claude_hr_cli is not None,
-        "codex_hr": codex_hr_cli is not None,
     }
 
-    # 少なくとも pipx があれば OK
-    assert has_pipx or has_headroom_module, \
-        f"pipx も headroom も見つかりません。インストール手順: docs/headroom-production-setup.md\n{status}"
+    assert _HEADROOM_VENV_EXISTS or headroom_in_path or has_pipx, \
+        f"headroom が見つかりません。docs/headroom-production-setup.md を参照してください\n{status}"
 
 
-def t_wrapper_scripts_path_defined():
-    """claude-hr / codex-hr ラッパーの想定パスが定義されていることを確認。"""
-    expected_paths = [
-        os.path.expanduser("~/.local/bin/claude-hr"),
-        os.path.expanduser("~/.local/bin/codex-hr"),
-    ]
-    # 存在確認（WARN 対象）
-    found = [p for p in expected_paths if os.path.isfile(p)]
-    not_found = [p for p in expected_paths if not os.path.isfile(p)]
-
-    if not_found:
-        raise AssertionError(
-            f"ラッパースクリプトが未作成: {not_found}\n"
-            f"→ docs/headroom-production-setup.md の手順に従って作成してください"
-        )
+def t_headroom_venv_version():
+    """~/.venvs/headroom の headroom バージョン確認（WARN 許容）。"""
+    assert _HEADROOM_VENV_EXISTS, \
+        f"~/.venvs/headroom/bin/headroom が見つかりません: {_HEADROOM_VENV_BIN}"
+    import subprocess
+    result = subprocess.run(
+        [_HEADROOM_VENV_BIN, "--version"],
+        capture_output=True, text=True, timeout=10,
+    )
+    assert result.returncode == 0, f"headroom --version が失敗: {result.stderr}"
+    assert "headroom" in result.stdout.lower(), f"version 出力が不正: {result.stdout!r}"
 
 
-_warn_test("pipx または headroom module が利用可能（WARN 許容）", t_headroom_or_pipx_available)
-_warn_test("claude-hr / codex-hr ラッパー存在確認（WARN 許容）", t_wrapper_scripts_path_defined)
+def t_claude_hr_wrapper_exists():
+    """~/.local/bin/claude-hr が存在することを確認。"""
+    claude_hr = os.path.expanduser("~/.local/bin/claude-hr")
+    assert os.path.isfile(claude_hr), \
+        f"claude-hr が未作成: {claude_hr}\n→ docs/headroom-production-setup.md の手順に従って作成してください"
+    assert os.access(claude_hr, os.X_OK), f"claude-hr に実行権限がありません: {claude_hr}"
+
+
+_test("headroom が venv / PATH / pipx のいずれかで利用可能", t_headroom_available)
+_warn_test("~/.venvs/headroom バージョン確認（WARN 許容）", t_headroom_venv_version)
+_test("~/.local/bin/claude-hr が存在・実行可能", t_claude_hr_wrapper_exists)
 
 
 # ============================================================

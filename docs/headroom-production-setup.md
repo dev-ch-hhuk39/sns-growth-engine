@@ -20,7 +20,21 @@ Headroom は LLM API 呼び出しのトークン最適化プロキシです。
 
 ## インストール手順
 
-### 方法 A: pipx（推奨）
+### 実際の導入方法（2026-06-07 実施済み）
+
+pipx が環境に存在しないため、`~/.venvs/headroom` 独立 venv で導入。
+
+```bash
+python3 -m venv ~/.venvs/headroom
+~/.venvs/headroom/bin/python -m pip install -U pip
+~/.venvs/headroom/bin/python -m pip install "headroom-ai[proxy]"
+
+# 確認
+~/.venvs/headroom/bin/headroom --version
+# → headroom, version 0.23.0
+```
+
+### 方法 A: pipx（pipx が使える場合）
 
 ```bash
 # pipx 未インストールの場合
@@ -32,16 +46,6 @@ pipx install "headroom-ai[proxy]"
 
 # インストール確認
 pipx list | grep headroom
-```
-
-### 方法 B: 隔離 venv
-
-```bash
-python3 -m venv ~/.venvs/headroom
-~/.venvs/headroom/bin/pip install "headroom-ai[proxy]"
-
-# 確認
-~/.venvs/headroom/bin/headroom --version
 ```
 
 ---
