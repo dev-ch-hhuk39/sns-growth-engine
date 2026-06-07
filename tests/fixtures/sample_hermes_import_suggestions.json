@@ -1,0 +1,52 @@
+{
+  "import_type": "hermes_improvement_suggestions",
+  "account_id": "night_scout",
+  "source_file": "imports/hermes/improvement_suggestions.json",
+  "imported_at": "2026-06-07T00:00:00+00:00",
+  "suggestions": [
+    {
+      "suggestion_id": "sug-hermes-001",
+      "account_id": "night_scout",
+      "suggestion_type": "POSTING_TIMING",
+      "text": "深夜22〜24時の投稿頻度を週3回に増やすと、インプレッションが向上する可能性がある",
+      "evidence": "週次レポート: 深夜帯投稿のPVスコアが日中比+35%",
+      "risk_level": "low",
+      "status": "WAITING_REVIEW",
+      "forbidden_conflict": false,
+      "created_at": "2026-06-07T00:00:00+00:00"
+    },
+    {
+      "suggestion_id": "sug-hermes-002",
+      "account_id": "night_scout",
+      "suggestion_type": "CONTENT_STRATEGY",
+      "text": "動画クリップ参照投稿を増やし、テキストのみ投稿を減らす",
+      "evidence": "週次レポート: video_clip_referenceのCVスコアが参照投稿比+80%",
+      "risk_level": "medium",
+      "status": "WAITING_REVIEW",
+      "forbidden_conflict": false,
+      "created_at": "2026-06-07T00:00:00+00:00"
+    },
+    {
+      "suggestion_id": "sug-hermes-003",
+      "account_id": "night_scout",
+      "suggestion_type": "PROHIBITED_PATTERN",
+      "text": "代理店パートナー募集の訴求を強化する",
+      "evidence": "テスト: 禁止パターン検出用サンプル",
+      "risk_level": "high",
+      "status": "WAITING_REVIEW",
+      "forbidden_conflict": true,
+      "forbidden_conflict_detail": "禁止テーマ '代理店' に合致",
+      "created_at": "2026-06-07T00:00:00+00:00"
+    }
+  ],
+  "import_summary": {
+    "total": 3,
+    "forbidden_conflicts": 1,
+    "high_risk": 1,
+    "all_status_waiting_review": true
+  },
+  "meta": {
+    "auto_apply": false,
+    "note": "WAITING_REVIEWで取り込み。承認は review_improvement_suggestions.py で行うこと。"
+  }
+}

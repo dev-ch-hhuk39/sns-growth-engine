@@ -501,12 +501,49 @@
 
 ---
 
-## Phase 4 （今後の計画）: AI自動化・学習ループ
+## Phase 4 Learning 改善ループ（実装済み）
+
+### Phase 4.0-4.1（完了）: Learning 基盤
+- [x] `improvement_suggester.py`（WAITING_REVIEW で提案生成）
+- [x] `approve_learning_rule.py`（--confirm-approve 必須）
+- [x] `check_learning_integrity.py`
+
+### Phase 4.2（完了）: レビュー/承認フロー強化
+- [x] `review_improvement_suggestions.py` filter対応（status/risk/type）
+- [x] forbidden_themes 矛盾検出
+- [x] 有効ステータス整理
+
+### Phase 4.3（完了）: Hermes向け export/import 実運用
+- [x] `export_learning_context.py` 4ファイル出力
+- [x] `import_improvement_suggestions.py` --from-hermes 対応
+
+### Phase 4.4（完了）: 週次改善レポート生成
+- [x] `generate_weekly_growth_report.py`（Markdown + JSON）
+- [x] `src/learning/weekly_report_builder.py`
+
+### Phase 4.5（完了）: learning_rule 反映安全化
+- [x] `activate_learning_rule.py`（--confirm-activate 必須）
+- [x] forbidden パターン矛盾ブロック + activation ログ
+
+---
+
+## Phase 2.31/2.32（完了）: 実API テスト直前準備
+- [x] `test_cloudinary_credentials.py`
+- [x] `test_cloudinary_upload_smoke.py`（3重ガード）
+
+## Phase 3-E（完了）: X本番投稿前最終preflight
+- [x] `preflight_x_real_post.py`
+- [x] `docs/x-real-post-final-checklist.md`
+
+---
+
+## Phase 5（今後の計画）: AI自動化・学習ループ高度化
 
 **目的**: 人間レビューを最小化し、投稿結果から継続改善する
 
-- [ ] AI自動承認スコアリング（Phase 2.15の発展）
+- [ ] AI自動承認スコアリング高度化
 - [ ] 投稿結果の自動収集・フィードバックループ
 - [ ] パフォーマンス予測モデルの構築
 - [ ] 自動投稿スケジューリング（GitHub Actions CI/CD）
 - [ ] ダッシュボード・パフォーマンス可視化
+- [ ] Hermes HERMES-2: Headroom経由 LLM分析統合

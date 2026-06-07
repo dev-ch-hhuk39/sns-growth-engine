@@ -1,12 +1,20 @@
 """
-import_improvement_suggestions.py - 改善提案インポート（Phase 4.0）
+import_improvement_suggestions.py - 改善提案インポート（Phase 4.3）
 
 Hermes Agent / 外部ファイルからの改善提案を Sheets にインポートする。
 全提案は status=WAITING_REVIEW で保存される（active=true 自動設定は禁止）。
 
+対応ファイルパス:
+  imports/hermes/improvement_suggestions.json
+  imports/hermes/suggestions_*.json
+  その他任意のJSONファイル
+
 使い方:
   # 内容確認のみ（Sheets書き込みなし）
   python scripts/import_improvement_suggestions.py --input FILE.json
+
+  # Hermes標準パスから自動検出
+  python scripts/import_improvement_suggestions.py --from-hermes
 
   # Sheets に test-write
   python scripts/import_improvement_suggestions.py --input FILE.json --use-sheets --test-write
@@ -18,6 +26,7 @@ Hermes Agent / 外部ファイルからの改善提案を Sheets にインポー
   - active=true の自動設定（approve_learning_rule.py 経由のみ）
   - status=APPROVED の自動設定
   - SNS本番投稿
+  - Sheets直接編集（インポートのみ）
 """
 from __future__ import annotations
 
@@ -37,8 +46,18 @@ try:
 except ImportError:
     pass
 
+import glob
+
 from config_loader import get_config
 from sheets_client import MockSheetsClient, SheetsClient
+
+try:
+    from seeds import ACCOUNT_FORBIDDEN_KEYWORDS, ACCOUNT_FORBIDDEN_THEMES
+except ImportError:
+    ACCOUNT_FORBIDDEN_KEYWORDS = {}
+    ACCOUNT_FORBIDDEN_THEMES = {}
+
+HERMES_IMPORT_DIR = os.path.join(_V2_ROOT, "imports", "hermes")
 
 
 def _now() -> str:
@@ -57,6 +76,27 @@ REQUIRED_FIELDS = [
 VALID_SOURCES = {"hermes", "manual", "performance_analyzer"}
 VALID_TYPES = {"prompt_change", "rule_addition", "strategy_change"}
 VALID_PRIORITIES = {"high", "medium", "low"}
+VALID_RISK_LEVELS = {"high", "medium", "low", "unknown"}
+
+
+def _check_forbidden_conflict(raw: dict, account_id: str | None) -> tuple[bool, str]:
+    """提案が forbidden と矛盾するか確認（REJECT候補検出用）。"""
+    if not account_id:
+        return False, ""
+    keywords = ACCOUNT_FORBIDDEN_KEYWORDS.get(account_id, [])
+    themes = ACCOUNT_FORBIDDEN_THEMES.get(account_id, [])
+    text = " ".join([
+        str(raw.get("suggested_change", "")),
+        str(raw.get("current_behavior", "")),
+        str(raw.get("reason", "")),
+    ])
+    for kw in keywords:
+        if kw in text:
+            return True, f"forbidden_keyword: {kw!r}"
+    for theme in themes:
+        if theme in text:
+            return True, f"forbidden_theme: {theme!r}"
+    return False, ""
 
 
 def validate_suggestion(raw: dict) -> tuple[bool, str]:
@@ -104,9 +144,28 @@ def import_suggestions(
             results["errors"].append({"index": i, "error": err_msg, "raw": raw})
             continue
 
+        effective_account = raw.get("account_id") or account_id
+
+        # risk_level の正規化（未設定は unknown）
+        risk_level = str(raw.get("risk_level", "unknown")).lower()
+        if risk_level not in VALID_RISK_LEVELS:
+            risk_level = "unknown"
+
+        # forbidden 矛盾チェック
+        conflict, conflict_detail = _check_forbidden_conflict(raw, effective_account)
+        if conflict:
+            print(
+                f"  [WARN] #{i+1}: forbidden 矛盾 → REJECT候補として保存 / {conflict_detail}"
+            )
+            risk_level = "high"
+
+        # risk_level=high の場合は追加 WARN
+        if risk_level == "high":
+            print(f"  [WARN] #{i+1}: risk_level=high のため要注意（REJECT推奨）")
+
         row = {
             "suggestion_id": raw.get("suggestion_id") or f"sug-{_short_uuid()}",
-            "account_id": raw.get("account_id") or account_id or "unknown",
+            "account_id": effective_account or "unknown",
             "created_at": raw.get("created_at") or _now(),
             "source": str(raw["source"]).lower(),
             "suggestion_type": str(raw["suggestion_type"]).lower(),
@@ -116,6 +175,7 @@ def import_suggestions(
             "reason": str(raw["reason"]),
             "expected_impact": str(raw["expected_impact"]),
             "priority": str(raw["priority"]).lower(),
+            "risk_level": risk_level,
             "status": "WAITING_REVIEW",
             "reviewed_by": "",
             "reviewed_at": "",
@@ -149,9 +209,26 @@ def import_suggestions(
     return results
 
 
+def discover_hermes_files() -> list[str]:
+    """imports/hermes/ 以下の提案ファイルを自動検出する。"""
+    patterns = [
+        os.path.join(HERMES_IMPORT_DIR, "improvement_suggestions.json"),
+        os.path.join(HERMES_IMPORT_DIR, "suggestions_*.json"),
+    ]
+    found: list[str] = []
+    for pattern in patterns:
+        found.extend(sorted(glob.glob(pattern)))
+    return found
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="改善提案インポート")
-    parser.add_argument("--input", required=True, help="入力 JSON ファイルパス")
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument("--input", help="入力 JSON ファイルパス")
+    input_group.add_argument(
+        "--from-hermes", action="store_true",
+        help=f"imports/hermes/ から自動検出（{HERMES_IMPORT_DIR}）",
+    )
     parser.add_argument("--account-id", help="インポート対象アカウントID")
     parser.add_argument("--use-sheets", action="store_true", help="実 Sheets に接続")
     parser.add_argument("--test-write", action="store_true", help="test-write モード（Sheets書き込みなし）")
@@ -159,25 +236,45 @@ def main() -> None:
     args = parser.parse_args()
 
     print("=" * 60)
-    print("  import_improvement_suggestions.py - 改善提案インポート")
+    print("  import_improvement_suggestions.py - 改善提案インポート（Phase 4.3）")
     print("=" * 60)
 
-    input_path = os.path.abspath(args.input)
-    if not os.path.isfile(input_path):
-        print(f"[ERROR] 入力ファイルが見つかりません: {input_path}")
-        sys.exit(1)
-
-    with open(input_path, encoding="utf-8") as f:
-        data = json.load(f)
-
-    # suggestions キーがある場合はそこから取得
-    if isinstance(data, dict):
-        suggestions_raw = data.get("suggestions", data.get("items", [data]))
-    elif isinstance(data, list):
-        suggestions_raw = data
+    # 入力ファイルの決定
+    if args.from_hermes:
+        files = discover_hermes_files()
+        if not files:
+            print(f"[ERROR] imports/hermes/ に提案ファイルが見つかりません: {HERMES_IMPORT_DIR}")
+            print("  → ファイルを配置してから再実行してください")
+            sys.exit(1)
+        print(f"[INFO] Hermes import ディレクトリから {len(files)}ファイルを検出")
+        for f in files:
+            print(f"  - {f}")
+        # 複数ファイルをマージ
+        suggestions_raw = []
+        for file_path in files:
+            with open(file_path, encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict):
+                items = data.get("suggestions", data.get("items", [data]))
+            elif isinstance(data, list):
+                items = data
+            else:
+                items = []
+            suggestions_raw.extend(items)
     else:
-        print("[ERROR] JSON形式が不正です（list または {suggestions: [...]} が必要）")
-        sys.exit(1)
+        input_path = os.path.abspath(args.input)
+        if not os.path.isfile(input_path):
+            print(f"[ERROR] 入力ファイルが見つかりません: {input_path}")
+            sys.exit(1)
+        with open(input_path, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            suggestions_raw = data.get("suggestions", data.get("items", [data]))
+        elif isinstance(data, list):
+            suggestions_raw = data
+        else:
+            print("[ERROR] JSON形式が不正です（list または {suggestions: [...]} が必要）")
+            sys.exit(1)
 
     print(f"[INFO] 提案件数: {len(suggestions_raw)}件")
     print(f"[INFO] アカウント: {args.account_id or '（提案内のaccount_idを使用）'}")

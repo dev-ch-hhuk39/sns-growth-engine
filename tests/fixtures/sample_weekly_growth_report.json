@@ -1,0 +1,93 @@
+{
+  "report_type": "weekly_growth_report",
+  "account_id": "night_scout",
+  "generated_at": "2026-06-07T00:00:00+00:00",
+  "period": {
+    "start": "2026-05-31T00:00:00+00:00",
+    "end": "2026-06-07T00:00:00+00:00",
+    "label": "直近7日間"
+  },
+  "summary": {
+    "recent_post_count": 5,
+    "total_post_count": 20,
+    "platform_breakdown": {
+      "x": 3,
+      "threads": 2
+    },
+    "type_breakdown": {
+      "reference_based": {
+        "label": "参照投稿ベース",
+        "recent_count": 3,
+        "total_count": 12,
+        "avg_impressions": 450.0,
+        "avg_cv_score": 12.5
+      },
+      "original_hypothesis": {
+        "label": "オリジナル仮説",
+        "recent_count": 1,
+        "total_count": 5,
+        "avg_impressions": 200.0,
+        "avg_cv_score": 6.0
+      },
+      "video_clip_reference": {
+        "label": "動画クリップ参照",
+        "recent_count": 1,
+        "total_count": 3,
+        "avg_impressions": 800.0,
+        "avg_cv_score": 25.0
+      }
+    }
+  },
+  "performance": {
+    "pv_metrics": {
+      "label": "PV系指標（impressions / views）",
+      "top_posts": [
+        {
+          "post_id": "post-001",
+          "platform": "x",
+          "generation_type": "video_clip_reference",
+          "posted_at": "2026-06-05T12:00:00+00:00",
+          "pv_score": 800.0,
+          "cv_score": 25.0
+        }
+      ],
+      "top_count": 1
+    },
+    "cv_metrics": {
+      "label": "CV系指標（engagement_rate / likes / follow_delta）",
+      "low_posts": [
+        {
+          "post_id": "post-003",
+          "platform": "threads",
+          "generation_type": "original_hypothesis",
+          "posted_at": "2026-06-03T10:00:00+00:00",
+          "pv_score": 50.0,
+          "cv_score": 1.0
+        }
+      ],
+      "low_count": 1
+    }
+  },
+  "learning_status": {
+    "active_rules_count": 2,
+    "waiting_suggestions_count": 3
+  },
+  "next_hypotheses": [
+    {
+      "type": "type_focus",
+      "hypothesis": "高PV投稿の多いタイプは 'video_clip_reference'。このタイプを増やすことで効果が期待できる。",
+      "evidence_count": 1,
+      "auto_apply": false
+    },
+    {
+      "type": "suggestion_review",
+      "hypothesis": "優先度高の未承認提案が1件ある。review_improvement_suggestions.py でレビューを。",
+      "suggestion_ids": ["sug-sample01"],
+      "auto_apply": false
+    }
+  ],
+  "meta": {
+    "auto_apply": false,
+    "note": "このレポートの内容を自動反映しない。承認フローを経ること。"
+  }
+}

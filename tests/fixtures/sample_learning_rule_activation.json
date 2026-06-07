@@ -1,0 +1,85 @@
+{
+  "fixture_type": "learning_rule_activation",
+  "account_id": "night_scout",
+  "test_scenarios": [
+    {
+      "scenario": "正常系: approved提案からルール生成（dry-run）",
+      "input": {
+        "suggestion_id": "sug-001",
+        "suggestion_data": {
+          "account_id": "night_scout",
+          "suggestion_type": "POSTING_TIMING",
+          "text": "深夜22〜24時の投稿を増やす",
+          "status": "APPROVED",
+          "risk_level": "low"
+        },
+        "dry_run": true
+      },
+      "expected": {
+        "rule_created": true,
+        "active": false,
+        "dry_run": true,
+        "forbidden_conflict": false
+      }
+    },
+    {
+      "scenario": "正常系: ルール有効化（--confirm-activate必須）",
+      "input": {
+        "rule_id": "rule-sample-001",
+        "rule_data": {
+          "account_id": "night_scout",
+          "rule_type": "TIMING",
+          "rule_text": "深夜22〜24時の投稿を増やす",
+          "active": false
+        },
+        "confirm_activate": true,
+        "dry_run": false
+      },
+      "expected": {
+        "activated": true,
+        "active": true,
+        "log_written": true
+      }
+    },
+    {
+      "scenario": "異常系: 禁止パターン含むルール（代理店）はブロック",
+      "input": {
+        "suggestion_id": "sug-forbidden-001",
+        "suggestion_data": {
+          "account_id": "night_scout",
+          "suggestion_type": "CONTENT_STRATEGY",
+          "text": "代理店パートナー募集の訴求を強化する",
+          "status": "APPROVED",
+          "risk_level": "high"
+        },
+        "dry_run": false
+      },
+      "expected": {
+        "rule_created": false,
+        "blocked_reason": "FORBIDDEN_PATTERN",
+        "matched_pattern": "代理店"
+      }
+    },
+    {
+      "scenario": "異常系: --confirm-activate なしでは active=true にならない",
+      "input": {
+        "rule_id": "rule-sample-002",
+        "confirm_activate": false,
+        "dry_run": false
+      },
+      "expected": {
+        "activated": false,
+        "error": "CONFIRM_REQUIRED"
+      }
+    }
+  ],
+  "prohibited_patterns": {
+    "night_scout": ["代理店", "パートナー募集", "代理店パートナー", "スカウト代理店", "組織的に稼ぐ", "情報商材"],
+    "liver_manager": ["代理店", "情報商材", "誰でも稼げる", "副業で稼ぐ", "ネットワーク", "MLM"]
+  },
+  "meta": {
+    "auto_apply": false,
+    "active_auto_set": false,
+    "note": "active=trueは人間が--confirm-activateを明示した場合のみ。"
+  }
+}

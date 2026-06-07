@@ -1,0 +1,46 @@
+{
+  "export_type": "hermes_export_context",
+  "account_id": "night_scout",
+  "exported_at": "2026-06-07T00:00:00+00:00",
+  "files_exported": [
+    "exports/hermes/weekly_growth_report_night_scout_20260607.md",
+    "exports/hermes/performance_summary_night_scout_20260607.json",
+    "exports/hermes/account_memory_snapshot_night_scout_20260607.json",
+    "exports/hermes/improvement_context_night_scout_20260607.json"
+  ],
+  "performance_summary": {
+    "account_id": "night_scout",
+    "period_days": 7,
+    "posted_count": 5,
+    "avg_pv_score": 420.0,
+    "avg_cv_score": 14.2,
+    "top_generation_type": "video_clip_reference",
+    "active_learning_rules": 2,
+    "waiting_suggestions": 3
+  },
+  "account_memory_snapshot": {
+    "account_id": "night_scout",
+    "snapshot_at": "2026-06-07T00:00:00+00:00",
+    "active_rules": [
+      {
+        "rule_id": "rule-001",
+        "rule_type": "TONE",
+        "rule_text": "深夜帯は短文テキストのみで投稿する",
+        "active": true,
+        "created_at": "2026-05-01T00:00:00+00:00"
+      }
+    ],
+    "forbidden_themes": ["代理店", "スカウト"],
+    "platform_configs": {
+      "x": {
+        "posting_enabled": true,
+        "allow_real_post": false
+      }
+    }
+  },
+  "meta": {
+    "hermes_version": "not_installed",
+    "export_note": "Hermes Agent未インストール。ファイル経由でのI/Oのみ。",
+    "auto_apply": false
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "fixture_type": "x_real_post_preflight",
+  "account_id": "night_scout",
+  "preflight_at": "2026-06-07T00:00:00+00:00",
+  "checks": {
+    "credentials": {
+      "status": "OK",
+      "vars_present": ["X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"],
+      "values_shown": false,
+      "note": "認証情報の値はチェックしない。存在確認のみ。"
+    },
+    "safety_flags": {
+      "status": "BLOCKED",
+      "PUBLISH_ENABLED": "false",
+      "ALLOW_REAL_X_POST": "false",
+      "note": "ALLOW_REAL_X_POST=true かつ PUBLISH_ENABLED=true でないと本番投稿不可。"
+    },
+    "tweepy": {
+      "status": "OK",
+      "available": true
+    },
+    "ready_queue": {
+      "status": "OK",
+      "ready_count": 2,
+      "items": [
+        {
+          "queue_id": "q-sample-001",
+          "account_id": "night_scout",
+          "platform": "x",
+          "status": "READY",
+          "text_preview": "深夜に観るのが最高の映像...",
+          "text_length": 45,
+          "char_limit": 120,
+          "char_ok": true,
+          "rights_review_required": "false",
+          "media_reuse_risk": "false"
+        },
+        {
+          "queue_id": "q-sample-002",
+          "account_id": "night_scout",
+          "platform": "x",
+          "status": "READY",
+          "text_preview": "今夜のおすすめ...",
+          "text_length": 18,
+          "char_limit": 120,
+          "char_ok": true,
+          "rights_review_required": "false",
+          "media_reuse_risk": "false"
+        }
+      ]
+    },
+    "post_safety": {
+      "blocked_rights": 0,
+      "blocked_risk": 0,
+      "char_over": 0,
+      "all_clear": true
+    },
+    "media_assets": {
+      "status": "OK",
+      "cloudinary_uploaded_count": 2
+    }
+  },
+  "overall_result": "BLOCKED_BY_SAFETY_FLAGS",
+  "proceed_conditions": [
+    "PUBLISH_ENABLED=true に変更（人間が明示的に設定）",
+    "ALLOW_REAL_X_POST=true に変更（人間が明示的に設定）",
+    "全チェックが OK になること"
+  ],
+  "meta": {
+    "real_post_executed": false,
+    "note": "今回は実投稿しない。preflight確認のみ。"
+  }
+}

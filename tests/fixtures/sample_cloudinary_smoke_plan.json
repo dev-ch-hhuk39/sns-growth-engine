@@ -1,0 +1,55 @@
+{
+  "fixture_type": "cloudinary_smoke_plan",
+  "plan_created_at": "2026-06-07T00:00:00+00:00",
+  "checks": {
+    "credentials": {
+      "status": "OK",
+      "vars_present": ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"],
+      "values_shown": false,
+      "note": "認証情報の値はチェックしない。存在確認のみ。"
+    },
+    "safety_guard": {
+      "status": "BLOCKED",
+      "ALLOW_CLOUDINARY_UPLOAD": "false",
+      "flag_upload": false,
+      "flag_confirm_upload": false,
+      "note": "3層ガード: ALLOW_CLOUDINARY_UPLOAD=true + --upload + --confirm-upload がすべて必要"
+    },
+    "file_check": {
+      "sample_file": "tests/fixtures/sample_image_placeholder.png",
+      "max_size_bytes": 524288,
+      "allowed_extensions": [".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov"],
+      "status": "FILE_NOT_REQUIRED_FOR_SMOKE_PLAN"
+    }
+  },
+  "smoke_test_scenarios": [
+    {
+      "scenario": "credentials確認のみ（実アップロードなし）",
+      "command": "python scripts/test_cloudinary_credentials.py",
+      "expected_exit_code": 0,
+      "real_upload": false
+    },
+    {
+      "scenario": "安全ガード確認（ALLOW_CLOUDINARY_UPLOAD=false）",
+      "command": "python scripts/test_cloudinary_upload_smoke.py --file tests/fixtures/sample_image.jpg",
+      "expected_exit_code": 1,
+      "expected_error": "SAFETY_GUARD_BLOCKED",
+      "real_upload": false
+    },
+    {
+      "scenario": "実アップロード（今回は実行しない）",
+      "command": "ALLOW_CLOUDINARY_UPLOAD=true python scripts/test_cloudinary_upload_smoke.py --file <file> --upload --confirm-upload",
+      "real_upload": true,
+      "note": "今回は実アップロードしない。環境変数・フラグの確認のみ。"
+    }
+  ],
+  "post_upload_cleanup": {
+    "required": true,
+    "method": "Cloudinaryダッシュボードから手動削除 or cloudinary.api.delete_resources()",
+    "note": "実アップロード後は必ずCloudinaryから削除すること"
+  },
+  "meta": {
+    "real_upload_executed": false,
+    "note": "今回は実アップロードしない。smoke plan確認のみ。"
+  }
+}

@@ -103,10 +103,30 @@ prompt / code の自動書き換え                    → システム安全性
 
 ## Phase HERMES-1 以降の計画
 
-Phase HERMES-0（現在）: 設計・ドキュメントのみ  
-Phase HERMES-1: ファイルベース分析スクリプトの実装  
+Phase HERMES-0（完了）: 設計・ドキュメントのみ  
+Phase HERMES-1（完了）: ファイルベース分析スクリプトの実装（Phase 4.3）  
 Phase HERMES-2: Headroom 経由での LLM 分析統合  
 Phase HERMES-3: 週次レポート自動生成（要人間レビュー）
+
+---
+
+## Phase HERMES-1 実装済みスクリプト
+
+| スクリプト | 役割 |
+|---|---|
+| `export_learning_context.py` | 4ファイル出力（Hermes入力用） |
+| `generate_weekly_growth_report.py` | 週次レポート生成 |
+| `import_improvement_suggestions.py` | Hermes提案インポート |
+| `review_improvement_suggestions.py` | 提案レビュー（filter対応） |
+| `activate_learning_rule.py` | 提案→ルール変換（安全化） |
+
+## Hermes File I/O フロー
+
+```
+exports/hermes/ ──→ Hermes分析 ──→ imports/hermes/ ──→ import_improvement_suggestions.py
+```
+
+詳細: `docs/phase4-3-hermes-file-io.md`
 
 ---
 
@@ -115,3 +135,6 @@ Phase HERMES-3: 週次レポート自動生成（要人間レビュー）
 - 自己改善アーキテクチャ全体: `docs/self-improvement-architecture.md`
 - Learning foundation: `docs/phase4-learning-improvement-foundation.md`
 - Headroom setup: `docs/headroom-production-setup.md`
+- Hermes file I/O: `docs/phase4-3-hermes-file-io.md`
+- 週次レポート: `docs/phase4-4-weekly-growth-report.md`
+- ルール有効化: `docs/phase4-5-learning-rule-activation.md`

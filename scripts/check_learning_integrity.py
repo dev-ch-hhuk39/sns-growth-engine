@@ -1,14 +1,18 @@
 """
-check_learning_integrity.py - 学習システム整合性チェック（Phase 4.1）
+check_learning_integrity.py - 学習システム整合性チェック（Phase 4.2）
 
 learning_rules と prompt_improvement_suggestions タブの整合性を検証する。
+forbidden_themes / forbidden_keywords との矛盾も検出する。
 
 チェック内容:
   1. learning_rules: active=true かつ承認日時なしは WARN
   2. learning_rules: insight_type が想定外の値は WARN
-  3. prompt_improvement_suggestions: WAITING_REVIEW が長期放置は WARN（7日以上）
-  4. prompt_improvement_suggestions: status が想定外の値は FAIL
-  5. prompt_improvement_suggestions: APPROVED かつ reviewed_by が空は WARN
+  3. learning_rules: forbidden_keywords / forbidden_themes と矛盾する active=true は FAIL
+  4. prompt_improvement_suggestions: WAITING_REVIEW が長期放置は WARN（7日以上）
+  5. prompt_improvement_suggestions: status が想定外の値は FAIL
+  6. prompt_improvement_suggestions: APPROVED かつ reviewed_by が空は WARN
+  7. prompt_improvement_suggestions: forbidden 矛盾は WARN（REJECT推奨）
+  8. learning_rules の自動 active=true 設定は禁止ガード
 
 使い方:
   python scripts/check_learning_integrity.py --account-id night_scout
@@ -34,14 +38,35 @@ except ImportError:
 from config_loader import get_config
 from sheets_client import MockSheetsClient, SheetsClient
 
+try:
+    from seeds import ACCOUNT_FORBIDDEN_KEYWORDS, ACCOUNT_FORBIDDEN_THEMES
+except ImportError:
+    ACCOUNT_FORBIDDEN_KEYWORDS = {}
+    ACCOUNT_FORBIDDEN_THEMES = {}
+
 
 VALID_INSIGHT_TYPES = {
     "hook_improvement", "text_length_control", "rights_management",
     "engagement_boost", "cta_optimization", "content_strategy",
     "prompt_refinement", "other",
 }
-VALID_SUGGESTION_STATUSES = {"WAITING_REVIEW", "APPROVED", "REJECTED"}
+VALID_SUGGESTION_STATUSES = {
+    "WAITING_REVIEW", "APPROVED", "REJECTED", "IMPORTED", "CONVERTED_TO_RULE",
+}
 WAITING_REVIEW_WARN_DAYS = 7
+
+
+def _check_forbidden_conflict(text: str, account_id: str) -> tuple[bool, str]:
+    """テキストが forbidden と矛盾するか確認。(conflict, detail)"""
+    keywords = ACCOUNT_FORBIDDEN_KEYWORDS.get(account_id, [])
+    themes = ACCOUNT_FORBIDDEN_THEMES.get(account_id, [])
+    for kw in keywords:
+        if kw in text:
+            return True, f"forbidden_keyword: {kw!r}"
+    for theme in themes:
+        if theme in text:
+            return True, f"forbidden_theme: {theme!r}"
+    return False, ""
 
 
 def _get_tab(sheets, tab_name: str, account_id: str | None) -> list[dict]:
@@ -75,6 +100,7 @@ def check_learning_rules(sheets, account_id: str | None, results: list) -> int:
     active_rows = [r for r in rows if str(r.get("active", "false")).lower() == "true"]
     invalid_type = 0
     active_without_approval = 0
+    forbidden_conflict = 0
 
     for r in rows:
         itype = str(r.get("insight_type", "")).strip().lower()
@@ -84,6 +110,22 @@ def check_learning_rules(sheets, account_id: str | None, results: list) -> int:
     for r in active_rows:
         if not str(r.get("applied_count", "")).strip():
             active_without_approval += 1
+
+        # forbidden_themes との矛盾チェック（active=true は特に重要）
+        if account_id:
+            rule_text = " ".join([
+                str(r.get("description", "")),
+                str(r.get("condition", "")),
+                str(r.get("action", "")),
+            ])
+            conflict, detail = _check_forbidden_conflict(rule_text, account_id)
+            if conflict:
+                forbidden_conflict += 1
+                results.append(
+                    f"  [FAIL] learning_rules active=true が forbidden 矛盾: "
+                    f"rule_id={r.get('rule_id', '?')} / {detail}"
+                )
+                issues += 1
 
     results.append(f"  [PASS] learning_rules: active={len(active_rows)}件 / 全{len(rows)}件")
 
@@ -102,6 +144,9 @@ def check_learning_rules(sheets, account_id: str | None, results: list) -> int:
     else:
         results.append("  [PASS] learning_rules: active=true の整合性OK")
 
+    if forbidden_conflict == 0:
+        results.append("  [PASS] learning_rules: forbidden 矛盾なし")
+
     return issues
 
 
@@ -119,6 +164,7 @@ def check_improvement_suggestions(sheets, account_id: str | None, results: list)
     invalid_status = 0
     long_waiting = 0
     approved_no_reviewer = 0
+    forbidden_warn = 0
     now_utc = datetime.now(timezone.utc)
 
     for r in rows:
@@ -140,19 +186,38 @@ def check_improvement_suggestions(sheets, account_id: str | None, results: list)
             if not str(r.get("reviewed_by", "")).strip():
                 approved_no_reviewer += 1
 
+        # forbidden との矛盾チェック（WAITING_REVIEW 提案も対象）
+        if account_id and status in ("WAITING_REVIEW", "APPROVED"):
+            text = " ".join([
+                str(r.get("suggested_change", "")),
+                str(r.get("current_behavior", "")),
+                str(r.get("reason", "")),
+            ])
+            conflict, detail = _check_forbidden_conflict(text, account_id)
+            if conflict:
+                forbidden_warn += 1
+                results.append(
+                    f"  [WARN] 改善提案が forbidden 矛盾（REJECT推奨）: "
+                    f"id={r.get('suggestion_id', '?')} / {detail}"
+                )
+                issues += 1
+
     waiting_count = sum(1 for r in rows if str(r.get("status", "")).upper() == "WAITING_REVIEW")
     approved_count = sum(1 for r in rows if str(r.get("status", "")).upper() == "APPROVED")
     rejected_count = sum(1 for r in rows if str(r.get("status", "")).upper() == "REJECTED")
+    imported_count = sum(1 for r in rows if str(r.get("status", "")).upper() == "IMPORTED")
+    converted_count = sum(1 for r in rows if str(r.get("status", "")).upper() == "CONVERTED_TO_RULE")
 
     results.append(
         f"  [PASS] prompt_improvement_suggestions: "
-        f"WAITING={waiting_count} APPROVED={approved_count} REJECTED={rejected_count}"
+        f"WAITING={waiting_count} APPROVED={approved_count} REJECTED={rejected_count} "
+        f"IMPORTED={imported_count} CONVERTED={converted_count}"
     )
 
     if invalid_status > 0:
         results.append(
             f"  [FAIL] prompt_improvement_suggestions: status が不正な行: {invalid_status}件"
-            f" (有効: WAITING_REVIEW / APPROVED / REJECTED)"
+            f" (有効: {', '.join(sorted(VALID_SUGGESTION_STATUSES))})"
         )
         issues += 1
     else:
@@ -179,6 +244,23 @@ def check_improvement_suggestions(sheets, account_id: str | None, results: list)
     else:
         results.append("  [PASS] prompt_improvement_suggestions: APPROVED の承認者記録OK")
 
+    if forbidden_warn == 0:
+        results.append("  [PASS] prompt_improvement_suggestions: forbidden 矛盾なし")
+
+    return issues
+
+
+def check_autoactivate_guard(results: list) -> int:
+    """active=true の自動設定禁止ガード確認。スクリプト内に禁止フラグ違反がないか確認する。"""
+    issues = 0
+    # approve_learning_rule.py と activate_learning_rule.py の存在確認
+    for script_name in ("approve_learning_rule.py", "activate_learning_rule.py"):
+        script_path = os.path.join(_V2_ROOT, "scripts", script_name)
+        if not os.path.isfile(script_path):
+            results.append(f"  [WARN] {script_name} が存在しません（activate 操作が不完全）")
+            issues += 1
+        else:
+            results.append(f"  [PASS] {script_name} 存在確認OK")
     return issues
 
 
@@ -227,6 +309,13 @@ def main() -> None:
             all_results.append(line)
         total_issues += issues
         fail_count += sum(1 for r in section_results if r.strip().startswith("[FAIL]"))
+
+    print("\n[auto-activate 禁止ガード]")
+    guard_results: list[str] = []
+    guard_issues = check_autoactivate_guard(guard_results)
+    for line in guard_results:
+        print(line)
+        all_results.append(line)
 
     print("\n" + "=" * 60)
     warn_count = sum(1 for r in all_results if r.strip().startswith("[WARN]"))

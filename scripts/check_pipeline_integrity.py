@@ -906,7 +906,9 @@ VALID_LEARNING_RULE_INSIGHT_TYPES = {
     "engagement_boost", "cta_optimization", "content_strategy",
     "prompt_refinement", "other",
 }
-VALID_SUGGESTION_STATUSES = {"WAITING_REVIEW", "APPROVED", "REJECTED"}
+VALID_SUGGESTION_STATUSES = {
+    "WAITING_REVIEW", "APPROVED", "REJECTED", "IMPORTED", "CONVERTED_TO_RULE",
+}
 
 
 def check_learning_rules_integrity(sheets, account_id: str | None, results: list) -> int:
@@ -942,6 +944,77 @@ def check_learning_rules_integrity(sheets, account_id: str | None, results: list
     except Exception as e:
         results.append(f"  [FAIL] learning_rules 取得エラー: {e}")
         issues += 1
+
+    return issues
+
+
+def check_headroom_environment(results: list) -> int:
+    """Headroom環境の確認チェック。codex関連は対象外。"""
+    import shutil
+    import subprocess
+
+    issues = 0
+
+    # claude-hr の存在確認
+    claude_hr_path = os.path.expanduser("~/.local/bin/claude-hr")
+    if os.path.isfile(claude_hr_path) and os.access(claude_hr_path, os.X_OK):
+        results.append("  [PASS] claude-hr 存在・実行可能")
+    else:
+        results.append(f"  [WARN] claude-hr が存在しないか実行不可: {claude_hr_path}")
+        results.append("         docs/headroom-production-setup.md の手順に従って作成してください")
+        issues += 1
+
+    # headroom venv の確認
+    headroom_bin = os.path.expanduser("~/.venvs/headroom/bin/headroom")
+    if os.path.isfile(headroom_bin):
+        try:
+            result = subprocess.run(
+                [headroom_bin, "--version"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                ver = result.stdout.strip()
+                results.append(f"  [PASS] headroom venv: {ver}")
+            else:
+                results.append("  [WARN] headroom venv が応答しません")
+                issues += 1
+        except Exception:
+            results.append("  [WARN] headroom venv バージョン確認失敗")
+            issues += 1
+    else:
+        # PATH 上の headroom を確認
+        hr_path = shutil.which("headroom")
+        if hr_path:
+            results.append(f"  [PASS] headroom PATH 利用可能: {hr_path}")
+        else:
+            results.append("  [WARN] headroom が見つかりません（venv/PATH）")
+            issues += 1
+
+    # requirements.txt への汚染チェック
+    req_path = os.path.join(_V2_ROOT, "requirements.txt")
+    if os.path.isfile(req_path):
+        with open(req_path, encoding="utf-8") as f:
+            req_content = f.read().lower()
+        if "headroom" in req_content:
+            results.append("  [FAIL] requirements.txt に headroom 依存が混入しています（禁止）")
+            issues += 1
+        elif "headroom-ai[all]" in req_content:
+            results.append("  [FAIL] requirements.txt に headroom-ai[all] が混入しています（禁止）")
+            issues += 1
+        else:
+            results.append("  [PASS] requirements.txt への headroom 汚染なし")
+
+    # Hermes 実インストールがないことを確認（意図的）
+    try:
+        import importlib.util
+        hermes_spec = importlib.util.find_spec("hermes_agent")
+        if hermes_spec:
+            results.append("  [WARN] hermes_agent がインストールされています（まだインストール予定外）")
+            issues += 1
+        else:
+            results.append("  [PASS] hermes_agent 未インストール（正常）")
+    except Exception:
+        results.append("  [PASS] hermes_agent 未インストール（正常）")
 
     return issues
 
@@ -1058,6 +1131,16 @@ def main() -> None:
             all_results.append(line)
         total_issues += issues
         fail_count += sum(1 for r in section_results if r.strip().startswith("[FAIL]"))
+
+    # Headroom 環境チェック
+    print("\n[headroom_environment]")
+    headroom_results: list[str] = []
+    hr_issues = check_headroom_environment(headroom_results)
+    for line in headroom_results:
+        print(line)
+        all_results.append(line)
+    total_issues += hr_issues
+    fail_count += sum(1 for r in headroom_results if r.strip().startswith("[FAIL]"))
 
     # サマリー
     print("\n" + "=" * 60)

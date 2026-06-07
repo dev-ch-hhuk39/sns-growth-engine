@@ -158,6 +158,25 @@ _test("~/.local/bin/claude-hr が存在・実行可能", t_claude_hr_wrapper_exi
 
 
 # ============================================================
+# Phase HR-1: Hermes Agent 未インストール確認
+# ============================================================
+
+print("\n=== Phase HR-1: Hermes Agent 未インストール確認 ===")
+
+
+def t_hermes_agent_not_installed():
+    """hermes_agent が未インストールであること（意図的・まだインストール不要）。"""
+    import importlib.util
+    hermes_spec = importlib.util.find_spec("hermes_agent")
+    assert hermes_spec is None, \
+        "hermes_agent がインストールされています。まだインストール予定外です。\n" \
+        "→ docs/hermes-agent-integration-plan.md を確認してください"
+
+
+_warn_test("hermes_agent 未インストール（まだインストール予定外）", t_hermes_agent_not_installed)
+
+
+# ============================================================
 # Phase HR-1: docs ファイル確認
 # ============================================================
 
