@@ -13,16 +13,39 @@ context-mode は Claude Code のプラグインとして動作する作業継続
 
 ---
 
-## 2. 実際の導入方法（Claude Code Plugin）
+## 2. 実際の導入方法（2026-06-11 実施済み）
 
-### 前提条件
+### 方法: MCP サーバーとしてプロジェクト登録（採用方法）
 
-- Claude Code v1.0.33 以上
-- インターネット接続（plugin marketplace アクセス）
+bash からプロジェクトレベルで登録:
 
-### インストール手順
+```bash
+cd "/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2"
+claude mcp add context-mode --scope project -- npx -y context-mode
+```
 
-Claude Code セッション内で以下を実行:
+実行後、`.mcp.json` に以下が追記される:
+
+```json
+{
+  "mcpServers": {
+    "codegraph": { ... },
+    "context-mode": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "context-mode"]
+    }
+  }
+}
+```
+
+**`--scope project`**: v2 プロジェクトにのみ登録（グローバル設定を汚染しない）  
+**`--scope local`**: ユーザーローカル（~/.claude.json）への登録  
+Cursor・Codex・他エージェントには追加しない。
+
+### 参考: Claude Code Plugin 経由（UI から実行する場合）
+
+Claude Code セッション内で以下を実行する方法もある:
 
 ```
 /plugin marketplace add mksglu/context-mode
@@ -30,22 +53,7 @@ Claude Code セッション内で以下を実行:
 /reload-plugins
 ```
 
-### 動作確認
-
-```
-/context-mode:ctx-doctor
-/context-mode:ctx-stats
-```
-
-### MCP-only install（代替方法）
-
-Claude Code の `/plugin` が使えない環境では MCP 経由でインストール可能:
-
-```bash
-claude mcp add context-mode -- npx -y context-mode
-```
-
-この場合も **Claude Code にのみ** 追加する。Cursor・Codex・他エージェントには追加しない。
+ただし、MCP サーバー方式（上記）でも全機能が利用可能（standalone MCP mode）。
 
 ---
 
@@ -57,37 +65,53 @@ claude mcp add context-mode -- npx -y context-mode
 
 ---
 
-## 4. ctx-doctor 結果の確認
+## 4. ctx-doctor 結果（2026-06-11 実施済み）
 
-```
-/context-mode:ctx-doctor
-```
-
-正常時の期待出力:
-```
-✓ SQLite FTS5 extension available
-✓ Storage directory writable
-✓ Context mode active
-✓ No stale locks detected
+```bash
+npx -y context-mode doctor
 ```
 
-異常時: `/context-mode:ctx-doctor` の出力に従ってトラブルシュート。
+または Claude Code セッション内: `/context-mode:ctx-doctor`
+
+**実際の結果（2026-06-11）:**
+
+```
+Platform: Claude Code (high confidence)
+Storage session: PASS
+Storage content: PASS
+Storage stats:   PASS
+Server test:     PASS
+PreToolUse hook: PASS
+SessionStart hook: PASS
+Hook scripts (5/5): PASS
+Plugin cache integrity: PASS
+FTS5 / SQLite:   PASS
+npm (MCP):       PASS — v1.0.162
+Plugin enabled:  WARN — standalone MCP mode（/plugin install 未使用だが全機能利用可能）
+```
+
+ストレージパス: `/Users/hayatoa/claude-data/context-mode/`（v2 プロジェクト外・commit 対象外）
+
+ステータスライン: `context-mode  ●  saves ~98% of context window`
 
 ---
 
 ## 5. ctx-stats 確認方法
 
-```
+```bash
+# CLI から確認
+npx -y context-mode statusline
+
+# Claude Code セッション内
 /context-mode:ctx-stats
 ```
 
-出力例:
+CLI 出力例:
 ```
-Sessions: 12
-Commands recorded: 341
-Storage used: 2.3 MB
-Oldest entry: 2026-05-01
+context-mode  ●  saves ~98% of context window
 ```
+
+Claude Code セッション内では詳細なセッション数・保存容量が表示される。
 
 ---
 
