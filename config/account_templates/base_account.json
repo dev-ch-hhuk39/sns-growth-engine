@@ -1,0 +1,62 @@
+{
+  "_template_version": "1.0",
+  "_description": "アカウント設定テンプレート。config/accounts/{account_id}.json として複製して使用する。",
+  "account_id": "REPLACE_ME",
+  "display_name": "REPLACE_ME",
+  "status": "draft_only",
+  "platforms": ["x", "threads"],
+  "persona": "（アカウントのペルソナ説明）",
+  "target_audience": "（ターゲット読者・視聴者の説明）",
+  "primary_goal": "LINE相談獲得",
+  "secondary_goals": ["フォロワー獲得", "認知拡大"],
+  "tone": "（トーン・文体説明）",
+  "first_person": "私",
+  "content_categories": [],
+  "forbidden_themes": [],
+  "forbidden_keywords": [],
+  "platform_policy": {
+    "x": {
+      "char_limit_soft": 120,
+      "char_limit_hard": 140,
+      "cta_required": true,
+      "hashtag_count_max": 3
+    },
+    "threads": {
+      "char_limit_soft": 500,
+      "char_limit_hard": 800,
+      "cta_required": false,
+      "hashtag_count_max": 5
+    }
+  },
+  "cta_policy": {
+    "cta_type": "LINE",
+    "cta_text": "相談はLINEで↓",
+    "line_url": ""
+  },
+  "reference_source_policy": {
+    "allowed_platforms": ["tiktok", "youtube_shorts"],
+    "min_follower_count": 5000,
+    "max_age_days": 90
+  },
+  "video_policy": {
+    "enabled": false,
+    "clip_length_seconds": 60,
+    "transcription_required": true
+  },
+  "thread_series_policy": {
+    "enabled": true,
+    "max_posts_per_series": 10,
+    "default_post_count": 4,
+    "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
+  },
+  "learning_policy": {
+    "min_results_for_learning": 10,
+    "auto_activate_rules": false
+  },
+  "safety_policy": {
+    "requires_human_review_before_post": true,
+    "allow_real_post": false,
+    "min_publish_score": 65,
+    "brand_risk_threshold": 25
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "_description": "thread_series サンプルフィクスチャ（night_scout / X専用）",
+  "series_id": "ts_night_scout_x_sample02",
+  "account_id": "night_scout",
+  "platform": "x",
+  "generation_mode": "mock",
+  "status": "WAITING_REVIEW",
+  "root_hook": "スカウトマンが正直に話す。夜職女性がLINEに流れる投稿の作り方。",
+  "series_theme": "SNS集客で稼ぐ夜職戦略",
+  "target_audience": "キャバ嬢・夜職女性",
+  "post_count": 3,
+  "posts": [
+    {
+      "post_index": 0,
+      "post_role": "hook",
+      "text": "スカウトマンが正直に話す。夜職女性がLINEに流れる投稿の作り方。",
+      "char_count": 31,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "x"
+    },
+    {
+      "post_index": 1,
+      "post_role": "reason",
+      "text": "X投稿→プロフ→LINE、この3ステップが全てだ。\n逆に言えば、投稿が面白くなければ何もかも始まらない。",
+      "char_count": 48,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "x"
+    },
+    {
+      "post_index": 2,
+      "post_role": "cta",
+      "text": "投稿の相談もLINEで受けてる。\n相談はLINEで↓",
+      "char_count": 22,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "x"
+    }
+  ],
+  "created_at": "2026-06-11T20:00:00+09:00",
+  "risk_level": "low",
+  "rights_review_required": false,
+  "mock": true,
+  "generation_notes": ""
+}

@@ -1,0 +1,30 @@
+{
+  "_description": "account_config 拡張設計のサンプルフィクスチャ",
+  "account_id": "sample_account",
+  "display_name": "サンプルアカウント",
+  "status": "draft_only",
+  "platforms": ["x", "threads"],
+  "persona": "サンプルペルソナ",
+  "target_audience": "サンプルターゲット",
+  "primary_goal": "LINE相談獲得",
+  "secondary_goals": ["フォロワー獲得"],
+  "tone": "丁寧・親しみやすい",
+  "first_person": "私",
+  "content_categories": ["カテゴリA", "カテゴリB"],
+  "forbidden_themes": ["禁止テーマA"],
+  "forbidden_keywords": ["禁止ワードA"],
+  "platform_policy": {
+    "x": {"char_limit_soft": 120, "char_limit_hard": 140},
+    "threads": {"char_limit_soft": 500, "char_limit_hard": 800}
+  },
+  "cta_policy": {"cta_type": "LINE", "cta_text": "相談はLINEで↓", "line_url": ""},
+  "thread_series_policy": {
+    "enabled": true,
+    "max_posts_per_series": 8,
+    "default_post_count": 4
+  },
+  "safety_policy": {
+    "requires_human_review_before_post": true,
+    "allow_real_post": false
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "_description": "beauty_account の設定サンプルフィクスチャ（draft_only）",
+  "account_id": "beauty_account",
+  "display_name": "美容アドバイザー",
+  "status": "draft_only",
+  "platforms": ["x", "threads"],
+  "persona": "美容アドバイザー。スキンケア・コスメ知識を発信。",
+  "target_audience": "美容に興味のある女性・スキンケアに悩む20〜40代",
+  "primary_goal": "LINE相談獲得",
+  "secondary_goals": ["フォロワー獲得", "美容知識の普及"],
+  "tone": "丁寧で親しみやすい・専門知識あり・読者目線",
+  "first_person": "私",
+  "content_categories": ["スキンケアあるある", "美容知識・成分解説"],
+  "forbidden_themes": ["医療行為の代替推奨", "誇張・虚偽の美容効果"],
+  "forbidden_keywords": ["絶対に治る", "100%効果あり", "MLM"],
+  "platform_policy": {
+    "x": {"char_limit_soft": 120, "char_limit_hard": 140},
+    "threads": {"char_limit_soft": 500, "char_limit_hard": 800}
+  },
+  "cta_policy": {
+    "cta_type": "LINE",
+    "cta_text": "美容相談はLINEで↓",
+    "line_url": ""
+  },
+  "thread_series_policy": {
+    "enabled": true,
+    "max_posts_per_series": 8,
+    "default_post_count": 5
+  },
+  "safety_policy": {
+    "requires_human_review_before_post": true,
+    "allow_real_post": false,
+    "draft_only_enforcement": "STRICT"
+  }
+}

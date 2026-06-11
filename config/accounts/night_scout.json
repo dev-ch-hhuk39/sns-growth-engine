@@ -1,0 +1,87 @@
+{
+  "account_id": "night_scout",
+  "display_name": "夜職スカウト",
+  "status": "active",
+  "platforms": ["x", "threads"],
+  "persona": "夜職スカウトマン。キャバ嬢・夜職女性の相談受付中。10年以上の現場経験あり。",
+  "target_audience": "キャバ嬢・夜職女性・夜職志望者・転職検討中の女性",
+  "primary_goal": "LINE相談獲得",
+  "secondary_goals": ["フォロワー獲得", "認知拡大", "ブランド構築"],
+  "tone": "論理的・経験豊富・強め表現OK・夜職女性の味方",
+  "first_person": "俺",
+  "content_categories": [
+    "夜職あるある",
+    "キャバ嬢のリアル",
+    "スカウトマンの視点",
+    "夜職転職・副業",
+    "夜職メンタル",
+    "夜職ビジネス視点",
+    "夜職お金の話",
+    "夜職卒業・その後"
+  ],
+  "forbidden_themes": [
+    "代理店募集",
+    "紹介者募集",
+    "スカウト業界のビジネス解説",
+    "情報商材型の稼ぎ方訴求"
+  ],
+  "forbidden_keywords": [
+    "代理店",
+    "パートナー募集",
+    "代理店パートナー",
+    "紹介業",
+    "スカウト代理店",
+    "組織的に稼ぐ",
+    "組織的なロジック",
+    "高収益",
+    "稼ぎ方を教えます",
+    "ノウハウを共有",
+    "ビジネス構造",
+    "収益モデル"
+  ],
+  "platform_policy": {
+    "x": {
+      "char_limit_soft": 120,
+      "char_limit_hard": 140,
+      "cta_required": true,
+      "hashtag_count_max": 3
+    },
+    "threads": {
+      "char_limit_soft": 500,
+      "char_limit_hard": 800,
+      "cta_required": false,
+      "hashtag_count_max": 5
+    }
+  },
+  "cta_policy": {
+    "cta_type": "LINE",
+    "cta_text": "相談はLINEで↓",
+    "line_url": ""
+  },
+  "reference_source_policy": {
+    "allowed_platforms": ["tiktok", "youtube_shorts"],
+    "min_follower_count": 5000,
+    "max_age_days": 90
+  },
+  "video_policy": {
+    "enabled": false,
+    "clip_length_seconds": 60,
+    "transcription_required": true
+  },
+  "thread_series_policy": {
+    "enabled": true,
+    "max_posts_per_series": 8,
+    "default_post_count": 4,
+    "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
+  },
+  "learning_policy": {
+    "min_results_for_learning": 10,
+    "auto_activate_rules": false
+  },
+  "safety_policy": {
+    "requires_human_review_before_post": true,
+    "allow_real_post": false,
+    "min_publish_score": 65,
+    "brand_risk_threshold": 25
+  }
+}

@@ -55,6 +55,28 @@ ACCOUNT_SEEDS_V2 = [
         "active": "TRUE",
         "notes": "Phase 2シード。line_url・x_handle・threads_handleはシート上で更新してください。",
     },
+    {
+        "account_id": "beauty_account",
+        "account_name": "美容アドバイザー",
+        "platform": "x,threads",
+        "note_url": "",
+        "x_handle": "",
+        "threads_handle": "",
+        "bio_summary": "美容アドバイザー。スキンケア・コスメ知識を発信。",
+        "target_persona": "美容に興味のある女性・スキンケアに悩む20〜40代",
+        "tone": "丁寧で親しみやすい・専門知識あり・読者目線",
+        "main_genre": "美容・スキンケア",
+        "line_url": "",
+        "cta_type": "LINE",
+        "cta_text": "美容相談はLINEで↓",
+        "auto_publish": "FALSE",
+        "min_publish_score": "70",
+        "brand_risk_threshold": "20",
+        "post_time": "20:00",
+        "timezone": "Asia/Tokyo",
+        "active": "FALSE",
+        "notes": "Phase 6.1シード。status=draft_only。実投稿禁止。READY化・POSTED化禁止。",
+    },
 ]
 
 # ------------------------------------------------------------------ #
@@ -500,6 +522,10 @@ ACCOUNT_FORBIDDEN_KEYWORDS: dict[str, list[str]] = {
     "liver_manager": [
         "代理店", "パートナー募集", "情報商材",
     ],
+    "beauty_account": [
+        "絶対に治る", "100%効果あり", "病院いらず", "薬と同じ効果",
+        "代理店", "会員募集", "MLM", "ねずみ講", "痩せ薬", "飲むだけで痩せる",
+    ],
 }
 
 ACCOUNT_FORBIDDEN_THEMES: dict[str, list[str]] = {
@@ -508,6 +534,10 @@ ACCOUNT_FORBIDDEN_THEMES: dict[str, list[str]] = {
     ],
     "liver_manager": [
         "代理店募集", "情報商材的な副業訴求",
+    ],
+    "beauty_account": [
+        "医療行為の代替推奨", "特定商品の断定的効果訴求",
+        "MLM・マルチ商法的勧誘", "過度なダイエット・過激な痩身訴求", "誇張・虚偽の美容効果",
     ],
 }
 

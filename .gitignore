@@ -76,6 +76,8 @@ clips/
 !fixtures/*.json
 !.mcp.json
 !.claude/settings.json
+!config/accounts/*.json
+!config/account_templates/*.json
 
 # --- CodeGraph（index/cache はcommit禁止） ---
 .codegraph/

@@ -1,0 +1,88 @@
+{
+  "account_id": "beauty_account",
+  "display_name": "美容アドバイザー",
+  "status": "draft_only",
+  "_status_note": "draft_only: 設計検証中。実投稿禁止。human review必須。READY化・POSTED化禁止。",
+  "platforms": ["x", "threads"],
+  "persona": "美容アドバイザー。スキンケア・コスメ・美容知識を発信。プロ視点のリアルな美容情報を届ける。",
+  "target_audience": "美容に興味のある女性・スキンケアに悩む20〜40代・コスメ購入検討層",
+  "primary_goal": "LINE相談獲得",
+  "secondary_goals": ["フォロワー獲得", "認知拡大", "美容知識の普及"],
+  "tone": "丁寧で親しみやすい・専門知識あり・押しつけがましくない・読者目線",
+  "first_person": "私",
+  "content_categories": [
+    "スキンケアあるある",
+    "美容知識・成分解説",
+    "コスメレビュー視点",
+    "美容ルーティン",
+    "美容の誤解を解く",
+    "季節の美容対策",
+    "プチプラ美容",
+    "美容と健康の関係"
+  ],
+  "forbidden_themes": [
+    "医療行為の代替推奨",
+    "特定商品の断定的効果訴求",
+    "MLM・マルチ商法的勧誘",
+    "過度なダイエット・過激な痩身訴求",
+    "誇張・虚偽の美容効果"
+  ],
+  "forbidden_keywords": [
+    "絶対に治る",
+    "100%効果あり",
+    "病院いらず",
+    "薬と同じ効果",
+    "代理店",
+    "会員募集",
+    "MLM",
+    "ねずみ講",
+    "痩せ薬",
+    "飲むだけで痩せる"
+  ],
+  "platform_policy": {
+    "x": {
+      "char_limit_soft": 120,
+      "char_limit_hard": 140,
+      "cta_required": true,
+      "hashtag_count_max": 3
+    },
+    "threads": {
+      "char_limit_soft": 500,
+      "char_limit_hard": 800,
+      "cta_required": false,
+      "hashtag_count_max": 5
+    }
+  },
+  "cta_policy": {
+    "cta_type": "LINE",
+    "cta_text": "美容相談はLINEで↓",
+    "line_url": ""
+  },
+  "reference_source_policy": {
+    "allowed_platforms": ["tiktok", "youtube_shorts", "instagram"],
+    "min_follower_count": 10000,
+    "max_age_days": 60
+  },
+  "video_policy": {
+    "enabled": false,
+    "clip_length_seconds": 60,
+    "transcription_required": true
+  },
+  "thread_series_policy": {
+    "enabled": true,
+    "max_posts_per_series": 8,
+    "default_post_count": 5,
+    "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
+  },
+  "learning_policy": {
+    "min_results_for_learning": 15,
+    "auto_activate_rules": false
+  },
+  "safety_policy": {
+    "requires_human_review_before_post": true,
+    "allow_real_post": false,
+    "min_publish_score": 70,
+    "brand_risk_threshold": 20,
+    "draft_only_enforcement": "STRICT"
+  }
+}
