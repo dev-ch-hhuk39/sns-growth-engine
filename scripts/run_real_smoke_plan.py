@@ -214,6 +214,18 @@ def check_cloudinary(account_id: str | None) -> StepResult:
 def check_x(account_id: str | None) -> StepResult:
     r = StepResult(service="X")
 
+    # draft_only アカウントのブロック
+    if account_id:
+        try:
+            from accounts.account_config import load_account_config
+            cfg = load_account_config(account_id)
+            if cfg.is_draft_only():
+                r.add("FAIL", "account_status", f"{account_id} は draft_only アカウントです。X実投稿 preflight は実行できません。")
+                r.verdict = "BLOCKED"
+                return r
+        except FileNotFoundError:
+            pass
+
     x_api_key = _env_str("X_API_KEY")
     x_api_secret = _env_str("X_API_SECRET")
     x_access_token = _env_str("X_ACCESS_TOKEN")

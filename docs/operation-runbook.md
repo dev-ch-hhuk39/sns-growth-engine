@@ -132,6 +132,36 @@ python scripts/test_cloudinary_credentials.py
 
 → `docs/emergency-rollback.md` 参照
 
+## 10. thread_series 生成（Phase 6.2）
+
+```bash
+# dry-run 生成（night_scout）
+python scripts/generate_thread_series.py \
+  --account-id night_scout --platform x \
+  --theme "夜職で月50万稼ぐ方法" --mock-llm
+
+# beauty_account（draft_only 確認・WAITING_REVIEW のみ）
+python scripts/generate_thread_series.py \
+  --account-id beauty_account --platform threads --post-count 5 --mock-llm
+
+# レビュー
+python scripts/review_thread_series.py --account-id beauty_account
+
+# パイプライン integrity チェック（account_config 安全確認込み）
+python scripts/check_pipeline_integrity.py --mock
+```
+
+## 11. account_config 管理（Phase 6.0）
+
+```bash
+# 新規アカウント追加
+cp config/account_templates/base_account.json config/accounts/new_account.json
+# → 編集後、test_account_config_loader.py で確認
+
+# beauty_account は draft_only のまま運用
+# READY 化・実投稿は禁止。ユーザー明示承認が必要。
+```
+
 ## 重要チェックリスト
 
 毎回作業前に確認:
@@ -139,3 +169,4 @@ python scripts/test_cloudinary_credentials.py
 - [ ] `PUBLISH_ENABLED=false` であること
 - [ ] `ALLOW_REAL_X_POST=false` であること
 - [ ] git status がクリーンであること
+- [ ] beauty_account は status=draft_only のまま（READY 化禁止）

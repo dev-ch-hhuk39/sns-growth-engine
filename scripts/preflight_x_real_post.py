@@ -241,6 +241,19 @@ def main() -> None:
             print("[WARN] Sheets認証情報未設定 → MockSheetsClient にフォールバック")
             sheets = MockSheetsClient(dry_run=True)
 
+    # draft_only アカウントのブロック
+    if args.account_id:
+        try:
+            from accounts.account_config import load_account_config
+            cfg = load_account_config(args.account_id)
+            if cfg.is_draft_only():
+                print(f"\n[BLOCKED] {args.account_id} は draft_only アカウントです。")
+                print("  draft_only アカウントへの実投稿 preflight は実行できません。")
+                print("  status を active に変更するには明示的なユーザー承認が必要です。")
+                sys.exit(1)
+        except FileNotFoundError:
+            pass
+
     # 各チェック実行
     cred_ok = check_x_credentials()
     check_safety_flags()

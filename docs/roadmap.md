@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-06-06 (Phase 2.25〜2.28追加)
+**最終更新**: 2026-06-11 (Phase 6.0〜6.4 account_config + beauty_account + thread_series 追加)
 
 ---
 
@@ -30,7 +30,16 @@
 [完了] Phase 2.26    → 動画ダウンロード・音声抽出基盤 (yt-dlp / ffmpeg)
 [完了] Phase 2.27    → Cloudflare 文字起こし認証情報・スモークテスト CLI
 [完了] Phase 2.28    → 権利レビューワークフロー改訂（unknown→WAITING_REVIEW）
-[長期] Phase 4       → AI自動化・学習ループ
+[完了] Phase 4.0     → 学習・改善ループ基盤（post_results → learning_rules → prompt改善）
+[完了] Phase 5.0     → Real Smoke Test 基盤（run_real_smoke_plan / preflight / GitHub Actions）
+[完了] Phase ENV     → context-mode v1.0.162 + CodeGraph v0.9.9 MCP登録・設定完了
+[完了] Phase 6.0     → account_config 駆動アカウント拡張基盤（JSON設定・seeds.py マージ）
+[完了] Phase 6.1     → beauty_account 正式追加（status=draft_only・禁止KW/テーマ設定）
+[完了] Phase 6.2     → thread_series 生成機能（アカウント別・WAITING_REVIEW 強制）
+[完了] Phase 6.3     → account-aware generation 接続（draft_only ブロック・スクリプト更新）
+[予定] Phase 6.1b    → beauty_account コンテンツ設計確定（10件以上サンプル生成・レビュー）
+[予定] Phase 6.1c    → beauty_account active 化前最終確認（ユーザー承認後）
+[長期] Phase 7       → 複数アカウント同時運用・Sheets マルチアカウント対応
 ```
 
 ---

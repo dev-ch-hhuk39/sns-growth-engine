@@ -188,3 +188,40 @@ python scripts/generate_learning_from_results.py \
   --account-id night_scout \
   --dry-run
 ```
+
+---
+
+## Step 9: account_config 安全確認（Phase 6.0）
+
+```bash
+# pipeline integrity に account_config チェックが含まれる
+python scripts/check_pipeline_integrity.py --mock
+
+# beauty_account は draft_only ブロックを確認
+python scripts/preflight_x_real_post.py --account-id beauty_account --mock
+# → [BLOCKED] beauty_account は draft_only アカウントです。 が表示されること
+```
+
+## Step 10: thread_series 動作確認（Phase 6.2）
+
+```bash
+# night_scout dry-run
+python scripts/generate_thread_series.py \
+  --account-id night_scout --platform x \
+  --theme "夜職で稼ぐ方法" --mock-llm
+
+# beauty_account（draft_only アカウント）
+python scripts/generate_thread_series.py \
+  --account-id beauty_account --platform threads \
+  --post-count 5 --mock-llm --test-write
+
+# beauty_account レビュー
+python scripts/review_thread_series.py --account-id beauty_account
+# → [WARN] draft_only アカウント が表示されること（FAILではない）
+```
+
+**beauty_account 禁止事項（厳守）:**
+- READY 化禁止
+- 実投稿禁止（preflight は BLOCKED で終了する）
+- queue.status = POSTED 禁止
+

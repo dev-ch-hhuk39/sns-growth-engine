@@ -1130,6 +1130,71 @@ def check_phase5_safety(results: list) -> int:
     return issues
 
 
+def check_account_config_safety(sheets, account_id: str | None, results: list) -> int:
+    """account_config の draft_only / inactive アカウントの安全確認。"""
+    issues = 0
+    try:
+        from accounts.account_config import get_all_account_ids, load_account_config
+        all_ids = get_all_account_ids()
+        if not all_ids:
+            results.append("  [WARN] config/accounts/ にアカウント設定がありません")
+            return 0
+
+        for aid in all_ids:
+            if account_id and aid != account_id:
+                continue
+            try:
+                cfg = load_account_config(aid)
+            except Exception as e:
+                results.append(f"  [FAIL] {aid} のアカウント設定ロードエラー: {e}")
+                issues += 1
+                continue
+
+            if cfg.is_draft_only():
+                results.append(f"  [PASS] {aid}: draft_only 確認済み（READY化・実投稿禁止）")
+                if cfg.safety_policy.get("allow_real_post") is not False:
+                    results.append(f"  [FAIL] {aid}: allow_real_post が false でありません")
+                    issues += 1
+                else:
+                    results.append(f"  [PASS] {aid}: allow_real_post=false 確認")
+            elif cfg.is_active():
+                results.append(f"  [PASS] {aid}: active アカウント")
+            else:
+                results.append(f"  [INFO] {aid}: status={cfg.status}")
+
+        # draft_only アカウントの queue に READY/POSTED がないかチェック
+        try:
+            if hasattr(sheets, "_sh"):
+                ws = sheets._sh.worksheet("queue")
+                queue_rows = ws.get_all_records()
+            else:
+                queue_rows = list(getattr(sheets, "_queue", []))
+
+            from accounts.account_config import load_account_config, invalidate_cache
+            invalidate_cache()
+            for row in queue_rows:
+                row_account = row.get("account_id", "")
+                row_status = str(row.get("status", "")).upper()
+                if row_status in ("READY", "POSTED", "PROCESSING"):
+                    try:
+                        cfg = load_account_config(row_account)
+                        if cfg.is_draft_only():
+                            results.append(
+                                f"  [FAIL] draft_only アカウント ({row_account}) の queue に"
+                                f" {row_status} ステータスの投稿があります"
+                            )
+                            issues += 1
+                    except FileNotFoundError:
+                        pass
+        except Exception:
+            pass
+
+    except ImportError:
+        results.append("  [WARN] accounts.account_config が利用できません（src/accounts/ を確認してください）")
+
+    return issues
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
     parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
@@ -1205,6 +1270,16 @@ def main() -> None:
         all_results.append(line)
     total_issues += hr_issues
     fail_count += sum(1 for r in headroom_results if r.strip().startswith("[FAIL]"))
+
+    # Phase 6.0 account_config 安全チェック
+    print("\n[account_config_safety]")
+    ac_results: list[str] = []
+    ac_issues = check_account_config_safety(sheets, args.account_id, ac_results)
+    for line in ac_results:
+        print(line)
+        all_results.append(line)
+    total_issues += ac_issues
+    fail_count += sum(1 for r in ac_results if r.strip().startswith("[FAIL]"))
 
     # Phase 5.0 安全チェック
     print("\n[phase5_safety]")
