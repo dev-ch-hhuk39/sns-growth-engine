@@ -1,0 +1,4 @@
+result_id,account_id,platform,posted_at,text,generation_mode,impressions,likes,reposts,replies,profile_clicks,line_clicks,url_clicks,queue_id,is_test_data
+pr_csv_001,night_scout,x,2025-06-04T09:00:00Z,CSV fixture投稿1（テスト）,video_clip_reference,1100,44,11,2,4,1,6,q_csv_001,true
+pr_csv_002,night_scout,x,2025-06-05T10:00:00Z,CSV fixture投稿2（テスト）,reference_based,900,27,7,2,3,1,4,q_csv_002,true
+pr_csv_003,night_scout,x,2025-06-06T11:00:00Z,CSV fixture投稿3（テスト）,direct,600,12,3,1,1,0,2,q_csv_003,true

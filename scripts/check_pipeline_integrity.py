@@ -1066,6 +1066,70 @@ def check_improvement_suggestions_integrity(sheets, account_id: str | None, resu
     return issues
 
 
+def check_phase5_safety(results: list) -> int:
+    """Phase 5.0: GitHub Actions workflow 安全チェック・パス安全チェック。"""
+    issues = 0
+
+    # 現行作業ディレクトリ確認
+    if "v2" in _V2_ROOT:
+        results.append(f"  [PASS] 現行作業ディレクトリ確認: {_V2_ROOT}")
+    else:
+        results.append(f"  [WARN] 現行作業ディレクトリが v2 でない可能性: {_V2_ROOT}")
+        issues += 1
+
+    # zip退避済み旧フォルダへの参照がないことを確認
+    forbidden_dirs = [
+        os.path.join(os.path.dirname(_V2_ROOT), "使ってない_過去"),
+        os.path.expanduser("~/Documents/claudecodeプロジェクトディレクトリ/SNS自動投稿システム"),
+    ]
+    for fd in forbidden_dirs:
+        if fd in _V2_ROOT:
+            results.append(f"  [FAIL] 禁止ディレクトリが作業パスに含まれています: {fd}")
+            issues += 1
+    if issues == 0 or all(fd not in _V2_ROOT for fd in forbidden_dirs):
+        results.append("  [PASS] 旧zip退避フォルダへの参照なし")
+
+    # GitHub Actions workflow チェック
+    workflow_path = os.path.join(_V2_ROOT, ".github", "workflows", "v2-dry-run-check.yml")
+    if not os.path.isfile(workflow_path):
+        results.append("  [WARN] .github/workflows/v2-dry-run-check.yml が見つかりません（Phase 5.5 未実装）")
+        issues += 1
+    else:
+        with open(workflow_path, encoding="utf-8") as f:
+            wf_content = f.read()
+
+        # 禁止フラグが workflow に含まれていないことを確認
+        forbidden_workflow_flags = [
+            ('PUBLISH_ENABLED: "true"', "PUBLISH_ENABLED=true"),
+            ('ALLOW_REAL_X_POST: "true"', "ALLOW_REAL_X_POST=true"),
+            ('ALLOW_TRANSCRIPTION_API: "true"', "ALLOW_TRANSCRIPTION_API=true"),
+            ('ALLOW_CLOUDINARY_UPLOAD: "true"', "ALLOW_CLOUDINARY_UPLOAD=true"),
+        ]
+        wf_issues = 0
+        for pattern, label in forbidden_workflow_flags:
+            if pattern in wf_content:
+                results.append(f"  [FAIL] workflow に禁止フラグ: {label}")
+                wf_issues += 1
+                issues += 1
+
+        # schedule が workflow に含まれていないことを確認
+        if "schedule:" in wf_content:
+            results.append("  [WARN] workflow に schedule が設定されています（dry-run専用では不要）")
+            issues += 1
+
+        if wf_issues == 0:
+            results.append("  [PASS] GitHub Actions workflow: 安全フラグ確認OK")
+
+        # workflow_dispatch のみを確認
+        if "workflow_dispatch" in wf_content:
+            results.append("  [PASS] GitHub Actions workflow: workflow_dispatch のみ")
+        else:
+            results.append("  [WARN] GitHub Actions workflow: workflow_dispatch が見当たりません")
+            issues += 1
+
+    return issues
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="パイプラインデータ整合性チェック")
     parser.add_argument("--account-id", help="チェック対象アカウントID（省略時は全アカウント）")
@@ -1141,6 +1205,16 @@ def main() -> None:
         all_results.append(line)
     total_issues += hr_issues
     fail_count += sum(1 for r in headroom_results if r.strip().startswith("[FAIL]"))
+
+    # Phase 5.0 安全チェック
+    print("\n[phase5_safety]")
+    p5_results: list[str] = []
+    p5_issues = check_phase5_safety(p5_results)
+    for line in p5_results:
+        print(line)
+        all_results.append(line)
+    total_issues += p5_issues
+    fail_count += sum(1 for r in p5_results if r.strip().startswith("[FAIL]"))
 
     # サマリー
     print("\n" + "=" * 60)

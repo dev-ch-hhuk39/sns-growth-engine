@@ -1,0 +1,43 @@
+{
+  "note": "run_real_smoke_plan.py の出力サンプル。全dry-run。実API/実upload/実投稿なし。",
+  "generated_at": "2025-06-09T00:00:00Z",
+  "dry_run": true,
+  "steps": [
+    {
+      "service": "Cloudflare",
+      "verdict": "READY_FOR_MANUAL_SMOKE",
+      "checks": [
+        {"level": "PASS", "label": "CLOUDFLARE_ACCOUNT_ID", "msg": "設定済み (cf_****)"},
+        {"level": "PASS", "label": "CLOUDFLARE_API_TOKEN", "msg": "設定済み (cf_****)"},
+        {"level": "PASS", "label": "ALLOW_TRANSCRIPTION_API", "msg": "false（実API無効）"},
+        {"level": "PASS", "label": "DAILY_TRANSCRIPTION_MINUTES_LIMIT", "msg": "120分/日（上限OK）"},
+        {"level": "WARN", "label": "smoke用音声ファイル", "msg": "30秒以内の音声ファイルが必要"}
+      ]
+    },
+    {
+      "service": "Cloudinary",
+      "verdict": "READY_FOR_MANUAL_SMOKE",
+      "checks": [
+        {"level": "PASS", "label": "CLOUDINARY_CLOUD_NAME", "msg": "設定済み (clo****)"},
+        {"level": "PASS", "label": "CLOUDINARY_API_KEY", "msg": "設定済み (clo****)"},
+        {"level": "PASS", "label": "CLOUDINARY_API_SECRET", "msg": "設定済み (clo****)"},
+        {"level": "PASS", "label": "ALLOW_CLOUDINARY_UPLOAD", "msg": "false（実アップロード無効）"},
+        {"level": "WARN", "label": "smoke用小ファイル", "msg": "小さい画像/動画ファイルが必要"}
+      ]
+    },
+    {
+      "service": "X",
+      "verdict": "BLOCKED",
+      "checks": [
+        {"level": "PASS", "label": "X_API_KEY", "msg": "設定済み（値は非表示）"},
+        {"level": "PASS", "label": "X_API_SECRET", "msg": "設定済み（値は非表示）"},
+        {"level": "PASS", "label": "X_ACCESS_TOKEN", "msg": "設定済み（値は非表示）"},
+        {"level": "PASS", "label": "X_ACCESS_TOKEN_SECRET", "msg": "設定済み（値は非表示）"},
+        {"level": "PASS", "label": "PUBLISH_ENABLED", "msg": "false（本番投稿無効）"},
+        {"level": "PASS", "label": "ALLOW_REAL_X_POST", "msg": "false（X実投稿無効）"},
+        {"level": "WARN", "label": "安全なREADY候補", "msg": "条件を満たすREADY queue候補なし"},
+        {"level": "INFO", "label": "posted_results", "msg": "このスクリプトは変更しません（実行禁止）"}
+      ]
+    }
+  ]
+}

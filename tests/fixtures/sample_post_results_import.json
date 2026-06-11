@@ -1,0 +1,57 @@
+{
+  "note": "テスト用fixture。本番投稿結果ではありません。is_test_data=true。",
+  "source": "manual_import_fixture",
+  "results": [
+    {
+      "result_id": "pr_test_001",
+      "account_id": "night_scout",
+      "platform": "x",
+      "posted_at": "2025-06-01T09:00:00Z",
+      "text": "テスト投稿1: 夜景スポット紹介（fixture）",
+      "generation_mode": "video_clip_reference",
+      "impressions": 1200,
+      "likes": 48,
+      "reposts": 12,
+      "replies": 3,
+      "profile_clicks": 5,
+      "line_clicks": 2,
+      "url_clicks": 8,
+      "queue_id": "q_test_001",
+      "is_test_data": "true"
+    },
+    {
+      "result_id": "pr_test_002",
+      "account_id": "night_scout",
+      "platform": "x",
+      "posted_at": "2025-06-02T10:30:00Z",
+      "text": "テスト投稿2: おすすめ夜景スポット（fixture）",
+      "generation_mode": "reference_based",
+      "impressions": 800,
+      "likes": 20,
+      "reposts": 5,
+      "replies": 1,
+      "profile_clicks": 2,
+      "line_clicks": 0,
+      "url_clicks": 3,
+      "queue_id": "q_test_002",
+      "is_test_data": "true"
+    },
+    {
+      "result_id": "pr_test_003",
+      "account_id": "night_scout",
+      "platform": "x",
+      "posted_at": "2025-06-03T11:00:00Z",
+      "text": "テスト投稿3: 映えスポット大公開（fixture）",
+      "generation_mode": "video_clip_reference",
+      "impressions": 2500,
+      "likes": 150,
+      "reposts": 40,
+      "replies": 10,
+      "profile_clicks": 20,
+      "line_clicks": 8,
+      "url_clicks": 25,
+      "queue_id": "q_test_003",
+      "is_test_data": "true"
+    }
+  ]
+}

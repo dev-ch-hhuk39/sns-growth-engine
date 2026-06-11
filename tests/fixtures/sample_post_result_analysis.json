@@ -1,0 +1,72 @@
+{
+  "note": "analyze_post_results.py の出力サンプル。テスト用。",
+  "account_id": "night_scout",
+  "platform": null,
+  "posted_count": 3,
+  "metrics": {
+    "total": {
+      "impressions": 4500,
+      "likes": 218,
+      "reposts": 57,
+      "replies": 14,
+      "profile_clicks": 27,
+      "line_clicks": 10,
+      "url_clicks": 36
+    },
+    "average": {
+      "impressions": 1500.0,
+      "likes": 72.67,
+      "reposts": 19.0,
+      "replies": 4.67,
+      "profile_clicks": 9.0,
+      "line_clicks": 3.33,
+      "url_clicks": 12.0
+    },
+    "engagement_rate": 0.0484,
+    "count": 3
+  },
+  "top_posts": [
+    {
+      "result_id": "pr_test_003",
+      "account_id": "night_scout",
+      "platform": "x",
+      "impressions": 2500,
+      "likes": 150,
+      "reposts": 40,
+      "generation_mode": "video_clip_reference"
+    }
+  ],
+  "bottom_posts": [
+    {
+      "result_id": "pr_test_002",
+      "account_id": "night_scout",
+      "platform": "x",
+      "impressions": 800,
+      "likes": 20,
+      "reposts": 5,
+      "generation_mode": "reference_based"
+    }
+  ],
+  "by_generation_mode": {
+    "video_clip_reference": {
+      "total": {"impressions": 3700, "likes": 198},
+      "average": {"impressions": 1850.0, "likes": 99.0},
+      "engagement_rate": 0.0535,
+      "count": 2
+    },
+    "reference_based": {
+      "total": {"impressions": 800, "likes": 20},
+      "average": {"impressions": 800.0, "likes": 20.0},
+      "engagement_rate": 0.025,
+      "count": 1
+    }
+  },
+  "pv_metrics": {
+    "total": {"impressions": 4500, "reposts": 57},
+    "average": {"impressions": 1500.0, "reposts": 19.0}
+  },
+  "cv_metrics": {
+    "total": {"likes": 218, "replies": 14, "profile_clicks": 27, "line_clicks": 10, "url_clicks": 36},
+    "average": {"likes": 72.67, "replies": 4.67, "profile_clicks": 9.0, "line_clicks": 3.33, "url_clicks": 12.0}
+  }
+}

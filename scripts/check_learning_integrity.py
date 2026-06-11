@@ -261,6 +261,27 @@ def check_autoactivate_guard(results: list) -> int:
             issues += 1
         else:
             results.append(f"  [PASS] {script_name} 存在確認OK")
+
+    # Phase 5.4: generate_learning_from_results.py が active=false を維持しているか確認
+    gen_script = os.path.join(_V2_ROOT, "scripts", "generate_learning_from_results.py")
+    if os.path.isfile(gen_script):
+        src = open(gen_script, encoding="utf-8").read()
+        if '"active": "true"' in src or "'active': 'true'" in src or '"active": True' in src:
+            results.append("  [FAIL] generate_learning_from_results.py で active=true を設定しています（禁止）")
+            issues += 1
+        else:
+            results.append("  [PASS] generate_learning_from_results.py: active=false 維持確認OK")
+
+    # Phase 5.5: GitHub Actions workflow が active=true を設定しないことを確認
+    workflow_path = os.path.join(_V2_ROOT, ".github", "workflows", "v2-dry-run-check.yml")
+    if os.path.isfile(workflow_path):
+        wf = open(workflow_path, encoding="utf-8").read()
+        if "active=true" in wf or 'active: "true"' in wf:
+            results.append("  [FAIL] GitHub Actions workflow で active=true の設定が検出されました（禁止）")
+            issues += 1
+        else:
+            results.append("  [PASS] GitHub Actions workflow: active=true 設定なし")
+
     return issues
 
 

@@ -1,0 +1,32 @@
+{
+  "note": "generate_learning_from_results.py の出力サンプル。全件WAITING_REVIEW。active=false。",
+  "account_id": "night_scout",
+  "generated_at": "2025-06-09T00:00:00Z",
+  "source": "post_result_analyzer",
+  "suggestions": [
+    {
+      "suggestion_id": "sug_test_001",
+      "account_id": "night_scout",
+      "status": "WAITING_REVIEW",
+      "active": "false",
+      "suggestion_type": "engagement_boost",
+      "insight_type": "engagement_boost",
+      "content": "video_clip_referenceモードのエンゲージメント率が高い。このモードの比率を増やすことを検討。",
+      "source": "post_result_analyzer",
+      "generated_at": "2025-06-09T00:00:00Z",
+      "forbidden_conflict": null
+    },
+    {
+      "suggestion_id": "sug_test_002",
+      "account_id": "night_scout",
+      "status": "WAITING_REVIEW",
+      "active": "false",
+      "suggestion_type": "content_strategy",
+      "insight_type": "content_strategy",
+      "content": "reference_basedモードはエンゲージメント率が低い。プロンプトの改善を検討。",
+      "source": "post_result_analyzer",
+      "generated_at": "2025-06-09T00:00:00Z",
+      "forbidden_conflict": null
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "note": "preflight_x_real_post.py のメディア付き投稿チェック出力サンプル。実投稿なし。",
+  "checked_at": "2025-06-09T00:00:00Z",
+  "account_id": "night_scout",
+  "result": "NOT_READY",
+  "checks": [
+    {"level": "PASS", "label": "X_API_KEY", "msg": "設定済み（値は非表示）"},
+    {"level": "PASS", "label": "X_API_SECRET", "msg": "設定済み（値は非表示）"},
+    {"level": "PASS", "label": "X_ACCESS_TOKEN", "msg": "設定済み（値は非表示）"},
+    {"level": "PASS", "label": "X_ACCESS_TOKEN_SECRET", "msg": "設定済み（値は非表示）"},
+    {"level": "PASS", "label": "PUBLISH_ENABLED", "msg": "false（本番投稿無効）"},
+    {"level": "PASS", "label": "ALLOW_REAL_X_POST", "msg": "false（X実投稿無効）"},
+    {"level": "INFO", "label": "READY queue", "msg": "0件"},
+    {"level": "WARN", "label": "READY queue", "msg": "投稿候補がありません"},
+    {"level": "INFO", "label": "media_assets", "msg": "全0件 / Cloudinaryアップロード済み: 0件"},
+    {"level": "PASS", "label": "media_assets", "msg": "全件アップロード済み（または対象なし）"}
+  ],
+  "media_post_requirements": {
+    "media_asset_id": "必須",
+    "storage_url": "必須（Cloudinary URL）",
+    "media_type": "必須（image/video）",
+    "cloudinary_uploaded": true,
+    "rights_review_required": false,
+    "media_reuse_risk": "not_high"
+  },
+  "blocked_reason": "READY queue候補なし（実テストには queue.status=READY の投稿が必要）"
+}
