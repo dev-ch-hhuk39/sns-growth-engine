@@ -74,3 +74,13 @@ clips/
 !config/reference_sources.example.json
 !tests/fixtures/*.json
 !fixtures/*.json
+!.mcp.json
+!.claude/settings.json
+
+# --- CodeGraph（index/cache はcommit禁止） ---
+.codegraph/
+
+# --- context-mode（SQLite/cache/index はcommit禁止） ---
+.context-mode/
+context-mode.db
+context-mode-*.db

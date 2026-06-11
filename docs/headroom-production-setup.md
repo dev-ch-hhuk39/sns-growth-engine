@@ -128,7 +128,24 @@ python scripts/check_pipeline_integrity.py --mock
 
 ---
 
+## 現状の位置付け（Phase ENV-2 以降）
+
+Phase ENV-2 にて、開発環境の役割が以下のように整理されました。
+
+| 項目 | 変更前 | 変更後 |
+|------|--------|--------|
+| 優先度 | 通常運用ツール | **補助・追加検証枠** |
+| 必須運用 | 検討中 | しない |
+| 推奨起動 | `claude-hr` | `claude`（通常）/ `claude-hr`（補助） |
+
+**Headroom は削除しません。** 将来の API コスト削減・長時間セッション対応として保持。
+
+詳細な役割整理: `docs/development-environment-strategy.md`
+
+---
+
 ## 更新履歴
 
 - Phase HR-1: 初期セットアップ
 - Phase 4.2: check_pipeline_integrity.py への Headroom チェック追加（codex対象外）
+- Phase ENV-2: 補助・追加検証枠に位置付け変更（削除はしない）
