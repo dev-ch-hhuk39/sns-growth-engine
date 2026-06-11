@@ -13,9 +13,8 @@
       "command": "npx",
       "args": [
         "-y",
-        "context-mode"
-      ],
-      "env": {}
+        "context-mode@1.0.162"
+      ]
     }
   }
 }
