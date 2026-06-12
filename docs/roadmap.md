@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-06-11 (Phase 6.0〜6.4 account_config + beauty_account + thread_series 追加)
+**最終更新**: 2026-06-12 (Phase 6.4 multi-account hardening: night_scout=僕・liver_manager/beauty_account config強化・Threads preflight基盤・learning loop thread_series対応)
 
 ---
 
@@ -37,6 +37,7 @@
 [完了] Phase 6.1     → beauty_account 正式追加（status=draft_only・禁止KW/テーマ設定）
 [完了] Phase 6.2     → thread_series 生成機能（アカウント別・WAITING_REVIEW 強制）
 [完了] Phase 6.3     → account-aware generation 接続（draft_only ブロック・スクリプト更新）
+[完了] Phase 6.4     → multi-account hardening（night_scout first_person=僕・liver_manager/beauty_account config強化・Threads preflight・learning loop thread_series対応・safety guard全入口強化）
 [予定] Phase 6.1b    → beauty_account コンテンツ設計確定（10件以上サンプル生成・レビュー）
 [予定] Phase 6.1c    → beauty_account active 化前最終確認（ユーザー承認後）
 [長期] Phase 7       → 複数アカウント同時運用・Sheets マルチアカウント対応

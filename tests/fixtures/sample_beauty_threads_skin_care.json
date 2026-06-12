@@ -1,0 +1,64 @@
+{
+  "_description": "thread_series サンプル: beauty_account / threads / 美容医療の前にやるべき肌管理（draft_only）",
+  "series_id": "ts_beauty_account_threads_sample02",
+  "account_id": "beauty_account",
+  "platform": "threads",
+  "generation_mode": "mock",
+  "status": "WAITING_REVIEW",
+  "root_hook": "美容医療を考えている人が、その前にやるべき肌管理がある。",
+  "series_theme": "美容医療の前にやるべき肌管理",
+  "target_audience": "美容医療に興味のある女性・スキンケアに悩む20〜40代",
+  "post_count": 5,
+  "posts": [
+    {
+      "post_index": 0,
+      "post_role": "hook",
+      "text": "美容医療を考えている人が、その前にやるべき肌管理がある。",
+      "char_count": 28,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    },
+    {
+      "post_index": 1,
+      "post_role": "context",
+      "text": "美容医療は「肌の土台が整った状態」で行うと効果が出やすいとされています。\n\n逆に言うと、土台が乱れたままだと施術後のトラブルにつながるケースもあります。",
+      "char_count": 77,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    },
+    {
+      "post_index": 2,
+      "post_role": "reason",
+      "text": "まず見直してほしいのは「保湿」「紫外線対策」「刺激を避ける」の3点。\n\nこれだけで肌のバリア機能が整い、施術を受けるための土台ができます。",
+      "char_count": 71,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    },
+    {
+      "post_index": 3,
+      "post_role": "example",
+      "text": "たとえば保湿だけでも、毎日続けることで肌の水分量が変わってくることがあります。\n\n美容医療の前後どちらでも、基本的な肌管理は大切です。",
+      "char_count": 68,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    },
+    {
+      "post_index": 4,
+      "post_role": "cta",
+      "text": "肌の状態や今気になっている美容医療について相談しませんか。\n美容相談はLINEで↓",
+      "char_count": 38,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    }
+  ],
+  "created_at": "2026-06-12T10:00:00+09:00",
+  "risk_level": "low",
+  "rights_review_required": false,
+  "mock": true,
+  "generation_notes": "draft_only アカウント: beauty_account。READY化・投稿禁止。"
+}

@@ -46,7 +46,7 @@ _MOCK_RESPONSES: dict[str, dict[str, Any]] = {
         "rights_review_required": False,
         "posts": [
             {"role": "hook", "text": "夜職で月50万稼ぐ女性と月15万止まりの女性の差、知ってる？"},
-            {"role": "context", "text": "俺が10年スカウトをやってきて見た共通点がある。\n月収に差がつく理由は「努力の量」じゃない。"},
+            {"role": "context", "text": "僕が10年スカウトをやってきて見た共通点がある。\n月収に差がつく理由は「努力の量」じゃない。"},
             {"role": "reason", "text": "差がつく本当の理由は「仕組みを作れているか」どうかだ。\n指名を増やす動きと、常連を作る動きは全然違う。"},
             {"role": "example", "text": "月50万稼いでる子は必ずSNSを使っている。\n投稿→共感→LINE→相談→来店、この流れができている。"},
             {"role": "cta", "text": "今の自分の状況を聞かせて。\n相談はLINEで↓"},
@@ -268,12 +268,16 @@ class ThreadSeriesGenerator:
         for i, p in enumerate(raw_posts[:post_count]):
             text = p.get("text", "")
             role = p.get("role", THREAD_POST_ROLES[i] if i < len(THREAD_POST_ROLES) else "context")
+            safety = ""
+            if platform == "x" and len(text) > char_limit:
+                safety = "X_CHAR_OVER"
             posts.append(ThreadPost(
                 post_index=i,
                 post_role=role,
                 text=text,
                 char_count=len(text),
                 status="WAITING_REVIEW",
+                safety_flags=safety,
                 platform=platform,
             ))
 

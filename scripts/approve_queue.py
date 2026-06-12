@@ -245,6 +245,19 @@ def cmd_approve(sheets, queue_id: str, new_status: str, reason: str, dry_run: bo
     if dry_run:
         print(f"  [DRY-RUN] Sheets への書き込みはスキップします")
 
+    # draft_only アカウントは READY 昇格禁止
+    if new_status == "READY":
+        try:
+            from accounts.account_config import load_account_config
+            acct_cfg = load_account_config(account_id)
+            if acct_cfg.is_draft_only():
+                print(f"\n[BLOCKED] {account_id} は draft_only アカウントです。")
+                print("  draft_only アカウントの queue を READY に変更することはできません。")
+                print("  status を active に変更するには明示的なユーザー承認が必要です。")
+                return 1
+        except FileNotFoundError:
+            pass
+
     # Phase 2.28: rights_review_required=true は READY 昇格ブロック
     if new_status == "READY":
         rights_review_required = str(q.get("rights_review_required", "false")).lower()

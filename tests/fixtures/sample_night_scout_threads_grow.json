@@ -1,0 +1,55 @@
+{
+  "_description": "thread_series サンプル: night_scout / threads / キャバで伸びる子が最初に変えること",
+  "series_id": "ts_night_scout_threads_sample01",
+  "account_id": "night_scout",
+  "platform": "threads",
+  "generation_mode": "mock",
+  "status": "WAITING_REVIEW",
+  "root_hook": "キャバで伸びる子が最初に変えることは、意外なほどシンプルだった。",
+  "series_theme": "キャバで伸びる子が最初に変えること",
+  "target_audience": "キャバ嬢・夜職女性",
+  "post_count": 4,
+  "posts": [
+    {
+      "post_index": 0,
+      "post_role": "hook",
+      "text": "キャバで伸びる子が最初に変えることは、意外なほどシンプルだった。",
+      "char_count": 32,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    },
+    {
+      "post_index": 1,
+      "post_role": "context",
+      "text": "僕がスカウトをやっていて、伸びる子と伸びない子を何百人と見てきた。\n\n最初の差は「お店選び」でも「容姿」でもなかった。",
+      "char_count": 59,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    },
+    {
+      "post_index": 2,
+      "post_role": "reason",
+      "text": "伸びる子が最初に変えるのは「自分の見せ方」。\n\nSNSの使い方、プロフィールの書き方、写真の雰囲気。\nここを整えるだけで、指名の入り方が変わってくる。",
+      "char_count": 76,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    },
+    {
+      "post_index": 3,
+      "post_role": "cta",
+      "text": "どこを変えれば自分が伸びるか、一緒に考えてみよう。\n相談はLINEで↓",
+      "char_count": 32,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "threads"
+    }
+  ],
+  "created_at": "2026-06-12T10:00:00+09:00",
+  "risk_level": "low",
+  "rights_review_required": false,
+  "mock": true,
+  "generation_notes": ""
+}

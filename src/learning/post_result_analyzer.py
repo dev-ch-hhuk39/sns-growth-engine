@@ -184,3 +184,59 @@ class PostResultAnalyzer:
             if theme and theme in text:
                 return True, f"forbidden_theme: {theme!r}"
         return False, ""
+
+    def analyze_thread_series(
+        self,
+        results: list[dict[str, Any]],
+        series_id: str,
+    ) -> dict[str, Any]:
+        """特定 series_id の投稿結果を分析する。"""
+        series_posts = [r for r in results if r.get("series_id") == series_id]
+        if not series_posts:
+            return {"series_id": series_id, "post_count": 0, "posts": [], "hook_metrics": {}}
+
+        sorted_posts = sorted(series_posts, key=lambda r: self._safe_int(r.get("post_index", 0)))
+        hook = next((r for r in sorted_posts if self._safe_int(r.get("post_index", -1)) == 0), None)
+
+        return {
+            "series_id": series_id,
+            "post_count": len(sorted_posts),
+            "posts": sorted_posts,
+            "hook_metrics": self._aggregate_metrics([hook]) if hook else {},
+            "overall_metrics": self._aggregate_metrics(sorted_posts),
+            "dropoff": self._analyze_dropoff(sorted_posts),
+        }
+
+    def analyze_hook_effectiveness(
+        self,
+        results: list[dict[str, Any]],
+        *,
+        account_id: str | None = None,
+    ) -> dict[str, Any]:
+        """hook投稿（post_index=0）と後続投稿のエンゲージメント比較。"""
+        filtered = self._filter(results, account_id=account_id, platform=None)
+        hooks = [r for r in filtered if self._safe_int(r.get("post_index", -1)) == 0]
+        non_hooks = [r for r in filtered if self._safe_int(r.get("post_index", -1)) > 0]
+
+        return {
+            "account_id": account_id,
+            "hook_count": len(hooks),
+            "non_hook_count": len(non_hooks),
+            "hook_metrics": self._aggregate_metrics(hooks) if hooks else {},
+            "non_hook_metrics": self._aggregate_metrics(non_hooks) if non_hooks else {},
+        }
+
+    def _analyze_dropoff(self, sorted_posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """投稿インデックスごとのエンゲージメント推移を返す。"""
+        dropoff = []
+        for post in sorted_posts:
+            idx = self._safe_int(post.get("post_index", 0))
+            eng = self._engagement_score(post)
+            dropoff.append({
+                "post_index": idx,
+                "post_role": post.get("post_role", ""),
+                "engagement_score": round(eng, 4),
+                "likes": self._safe_int(post.get("likes", 0)),
+                "impressions": self._safe_int(post.get("impressions", 0)),
+            })
+        return dropoff

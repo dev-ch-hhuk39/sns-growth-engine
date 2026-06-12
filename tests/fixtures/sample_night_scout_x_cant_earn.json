@@ -1,0 +1,55 @@
+{
+  "_description": "thread_series サンプル: night_scout / x / キャバで稼げない子の共通点",
+  "series_id": "ts_night_scout_x_sample02",
+  "account_id": "night_scout",
+  "platform": "x",
+  "generation_mode": "mock",
+  "status": "WAITING_REVIEW",
+  "root_hook": "キャバで稼げない子には、必ず共通点がある。",
+  "series_theme": "キャバで稼げない子の共通点",
+  "target_audience": "キャバ嬢・夜職女性",
+  "post_count": 4,
+  "posts": [
+    {
+      "post_index": 0,
+      "post_role": "hook",
+      "text": "キャバで稼げない子には、必ず共通点がある。",
+      "char_count": 20,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "x"
+    },
+    {
+      "post_index": 1,
+      "post_role": "context",
+      "text": "僕がスカウトを10年やってきて気づいたこと。\n月収に差がつく理由は「容姿」でも「努力量」でもない。",
+      "char_count": 47,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "x"
+    },
+    {
+      "post_index": 2,
+      "post_role": "reason",
+      "text": "稼げない子の共通点は「自分を売れていない」こと。\n指名を取ろうとして、覚えてもらう動きをしていない。",
+      "char_count": 51,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "x"
+    },
+    {
+      "post_index": 3,
+      "post_role": "cta",
+      "text": "自分がどこで詰まってるか、一緒に整理しよう。\n相談はLINEで↓",
+      "char_count": 30,
+      "status": "WAITING_REVIEW",
+      "safety_flags": "",
+      "platform": "x"
+    }
+  ],
+  "created_at": "2026-06-12T10:00:00+09:00",
+  "risk_level": "low",
+  "rights_review_required": false,
+  "mock": true,
+  "generation_notes": ""
+}

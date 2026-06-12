@@ -3,11 +3,11 @@
   "display_name": "ライバーマネージャー",
   "status": "active",
   "platforms": ["x", "threads"],
-  "persona": "ライバーマネージャー。TikTokライブで稼ぎたい人の相談受付中。育成実績多数。",
-  "target_audience": "TikTokライブ未経験者・既存ライバー・配信で稼ぎたい人",
+  "persona": "TikTok Liveマネージャー。配信初心者・伸び悩みライバー・移籍検討者の相談受付中。育成実績多数。",
+  "target_audience": "配信初心者・伸び悩みライバー・移籍検討中のライバー・TikTok Live未経験者",
   "primary_goal": "LINE相談獲得",
   "secondary_goals": ["ライバー獲得", "フォロワー獲得", "認知拡大"],
-  "tone": "ロジックと熱量・育成力・現場感・事務所営業っぽくしない",
+  "tone": "ロジックと熱量・育成力・現場感・事務所営業感を出さない・マネージャー/育成者ポジション",
   "first_person": "私",
   "content_categories": [
     "ライバーあるある",
@@ -21,12 +21,26 @@
   ],
   "forbidden_themes": [
     "代理店募集",
-    "情報商材的な副業訴求"
+    "パートナー募集",
+    "情報商材的な副業訴求",
+    "誰でも簡単に稼げる副業訴求",
+    "マルチ・MLM誘導",
+    "怪しい副業・スキャム系"
   ],
   "forbidden_keywords": [
     "代理店",
     "パートナー募集",
-    "情報商材"
+    "情報商材",
+    "誰でも稼げる",
+    "簡単に稼げる",
+    "初心者でも月収",
+    "楽して稼ぐ",
+    "スキル不要",
+    "怪しい副業",
+    "MLM",
+    "ねずみ講",
+    "仕組み収入",
+    "不労所得"
   ],
   "platform_policy": {
     "x": {
@@ -39,7 +53,8 @@
       "char_limit_soft": 500,
       "char_limit_hard": 800,
       "cta_required": false,
-      "hashtag_count_max": 5
+      "hashtag_count_max": 5,
+      "format_note": "自然な口調で深掘り可能"
     }
   },
   "cta_policy": {

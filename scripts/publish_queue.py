@@ -393,6 +393,24 @@ def _run_real_post_mode(args) -> None:
         print(f"  account  : {account_id}")
         print(f"  draft_id : {draft_id}")
 
+        # draft_only アカウントは実投稿禁止
+        try:
+            from accounts.account_config import load_account_config
+            acct_cfg = load_account_config(account_id)
+            if acct_cfg.is_draft_only():
+                print(f"  [BLOCKED] {account_id} は draft_only アカウントです。実投稿はできません。")
+                fail_count += 1
+                sheets.log(
+                    operation="publish_queue",
+                    status="BLOCKED",
+                    message=f"draft_only account blocked: {account_id} queue_id={queue_id}",
+                    account_id=account_id,
+                    level="ERROR",
+                )
+                continue
+        except FileNotFoundError:
+            pass
+
         # 重複投稿防止: queue.status が POSTED でないことを再確認
         if str(q.get("status", "")).upper() == "POSTED":
             print(f"  [SKIP] 既に POSTED 済みです。スキップします。")

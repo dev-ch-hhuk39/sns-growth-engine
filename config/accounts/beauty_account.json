@@ -2,7 +2,7 @@
   "account_id": "beauty_account",
   "display_name": "美容アドバイザー",
   "status": "draft_only",
-  "_status_note": "draft_only: 設計検証中。実投稿禁止。human review必須。READY化・POSTED化禁止。",
+  "_status_note": "draft_only: 設計検証中。実投稿禁止。human review必須。READY化・POSTED化禁止。active化にはユーザー明示承認が必要。",
   "platforms": ["x", "threads"],
   "persona": "美容アドバイザー。スキンケア・コスメ・美容知識を発信。プロ視点のリアルな美容情報を届ける。",
   "target_audience": "美容に興味のある女性・スキンケアに悩む20〜40代・コスメ購入検討層",
@@ -18,14 +18,24 @@
     "美容の誤解を解く",
     "季節の美容対策",
     "プチプラ美容",
-    "美容と健康の関係"
+    "美容と健康の関係",
+    "垢抜けノウハウ",
+    "夜職・インフルエンサー向け美容投資",
+    "美容医療比較・基礎知識",
+    "肌管理・小顔・髪・体型の実践知"
   ],
   "forbidden_themes": [
     "医療行為の代替推奨",
     "特定商品の断定的効果訴求",
     "MLM・マルチ商法的勧誘",
     "過度なダイエット・過激な痩身訴求",
-    "誇張・虚偽の美容効果"
+    "誇張・虚偽の美容効果",
+    "before/after断定",
+    "未確認施術効果断定",
+    "未成年向け美容医療誘導",
+    "医薬品代替主張",
+    "特定施術・クリニック価格の断定的表現",
+    "過度なコンプレックス煽り"
   ],
   "forbidden_keywords": [
     "絶対に治る",
@@ -37,7 +47,17 @@
     "MLM",
     "ねずみ講",
     "痩せ薬",
-    "飲むだけで痩せる"
+    "飲むだけで痩せる",
+    "絶対に効く",
+    "治療と同じ",
+    "医師も認める",
+    "before/after保証",
+    "効果を保証",
+    "副作用なし",
+    "誰でも変われる",
+    "確実に変わる",
+    "必ず綺麗になれる",
+    "100%安全"
   ],
   "platform_policy": {
     "x": {
@@ -72,6 +92,12 @@
     "enabled": true,
     "max_posts_per_series": 8,
     "default_post_count": 5,
+    "preferred_themes": [
+      "垢抜けノウハウ",
+      "スキンケア基礎",
+      "美容医療の基礎比較",
+      "肌管理実践"
+    ],
     "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
   },
   "learning_policy": {
@@ -83,6 +109,7 @@
     "allow_real_post": false,
     "min_publish_score": 70,
     "brand_risk_threshold": 20,
-    "draft_only_enforcement": "STRICT"
+    "draft_only_enforcement": "STRICT",
+    "medical_ad_risk_check": true
   }
 }

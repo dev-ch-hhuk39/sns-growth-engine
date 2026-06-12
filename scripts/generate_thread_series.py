@@ -122,8 +122,13 @@ def main() -> None:
         if args.use_sheets:
             print("  [INFO] 実Sheets書き込みモード（test-write）")
             try:
+                from config_loader import get_config, get_config_partial
                 from sheets_client import SheetsClient, make_client
-                sheets = make_client(dry_run=False)
+                try:
+                    cfg = get_config()
+                except ValueError:
+                    cfg = get_config_partial()
+                sheets = make_client(cfg, dry_run=False)
                 _do_sheets_write(sheets, series)
             except Exception as e:
                 print(f"  [WARN] Sheets接続エラー（MockSheetsClientで代替）: {e}")
