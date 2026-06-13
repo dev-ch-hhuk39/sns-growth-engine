@@ -281,6 +281,80 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "reviewed_at",         # レビュー日時
         "notes",
     ],
+    # ------------------------------------------------------------------ #
+    # Phase 6 追加タブ（thread_series）
+    # ------------------------------------------------------------------ #
+    "thread_series": [
+        "series_id", "account_id", "platform", "theme",
+        "hook", "status", "post_count",
+        "created_at", "updated_at", "notes",
+    ],
+    "thread_series_posts": [
+        "post_id", "series_id", "account_id", "platform",
+        "post_order", "text", "media_asset_id",
+        "char_count", "status",
+        "created_at", "notes",
+    ],
+    # ------------------------------------------------------------------ #
+    # Phase 8 追加タブ（content_mix / source_registry / preflight / pdca）
+    # ------------------------------------------------------------------ #
+    # content_mix_plannerの計画記録
+    "content_mix_plans": [
+        "plan_id", "account_id", "platform",
+        "content_type", "status",
+        "seed", "force_mode",
+        "planned_at", "notes",
+    ],
+    # source account registry（設定管理）
+    "source_accounts": [
+        "source_id", "source_name", "source_platform",
+        "source_handle", "source_url",
+        "target_account_ids",
+        "collection_method",
+        "active", "blocked", "priority",
+        "min_engagement_rate", "min_views", "top_n",
+        "rights_policy", "reuse_policy", "media_policy",
+        "notes", "created_at", "updated_at",
+    ],
+    # source account別の収集した投稿記録
+    "source_account_posts": [
+        "post_id", "source_id", "account_id",
+        "source_platform", "source_handle",
+        "post_text", "media_urls",
+        "likes", "reposts", "replies", "views", "bookmarks",
+        "engagement_rate", "buzz",
+        "rights_policy", "reuse_policy",
+        "status", "collected_at",
+    ],
+    # source collection計画記録
+    "source_collection_plans": [
+        "plan_id", "account_id", "source_id",
+        "platform", "content_type", "top_n",
+        "status", "created_at", "notes",
+    ],
+    # media ingestion実行記録
+    "media_ingestion_runs": [
+        "run_id", "account_id", "source_id",
+        "media_asset_id", "source_url", "media_type",
+        "rights_status", "reuse_risk", "media_policy",
+        "upload_status", "plan_status",
+        "created_at", "notes",
+    ],
+    # end-to-end preflight実行記録
+    "end_to_end_preflight_runs": [
+        "run_id", "account_id", "platform", "post_type",
+        "queue_id", "series_id", "media_asset_id",
+        "overall_status", "pass_count", "fail_count",
+        "warn_count", "blocked_count",
+        "created_at", "notes",
+    ],
+    # PDCA実行記録
+    "pdca_runs": [
+        "run_id", "account_id", "platform", "days",
+        "total_results", "suggestion_count", "next_jobs_count",
+        "best_content_type", "best_er",
+        "created_at", "notes",
+    ],
 }
 
 SCOPES = [

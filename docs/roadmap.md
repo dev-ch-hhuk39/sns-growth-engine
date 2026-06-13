@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-06-13 (Phase 7: content_mix_planner・source_account_collector・media_ingestion_pipeline・end_to_end_publish_preflight・pdca_orchestrator 実装完了)
+**最終更新**: 2026-06-13 (Phase 8: operational readiness hardening + Source Registry 実装完了)
 
 ---
 
@@ -38,9 +38,20 @@
 [完了] Phase 6.2     → thread_series 生成機能（アカウント別・WAITING_REVIEW 強制）
 [完了] Phase 6.3     → account-aware generation 接続（draft_only ブロック・スクリプト更新）
 [完了] Phase 6.4     → multi-account hardening（night_scout first_person=僕・liver_manager/beauty_account config強化・Threads preflight・learning loop thread_series対応・safety guard全入口強化）
-[予定] Phase 6.1b    → beauty_account コンテンツ設計確定（10件以上サンプル生成・レビュー）
-[予定] Phase 6.1c    → beauty_account active 化前最終確認（ユーザー承認後）
-[長期] Phase 7       → 複数アカウント同時運用・Sheets マルチアカウント対応
+[完了] Phase 7       → content_mix_planner・source_account_collector・media_ingestion_pipeline・end_to_end_publish_preflight・pdca_orchestrator（5オーケストレーター）
+[完了] Phase 8       → operational readiness hardening + Source Account / Video Source Registry
+                         - source_registry (X/Threads/TikTok/YouTube/Shorts source管理)
+                         - content_mix_planner → generation_jobs候補出力
+                         - source_account_collector → source_registry連携
+                         - media_ingestion_pipeline → source_id/source_url対応
+                         - end_to_end_preflight → source rights確認
+                         - pdca_orchestrator → source別分析・次回plan
+                         - Sheets schema Phase 8タブ追加
+                         - preflight_real_llm_generation
+                         - check_beauty_activation_readiness
+[予定] Phase 9       → 実LLM生成テスト (MOCK_LLM=false, 1件ずつ)
+[予定] Phase 10      → beauty_account コンテンツ設計確定（条件充足後・ユーザー承認）
+[予定] Phase 11      → night_scout / liver_manager 本番スモークテスト（active account only）
 ```
 
 ---

@@ -225,3 +225,29 @@ python scripts/review_thread_series.py --account-id beauty_account
 - 実投稿禁止（preflight は BLOCKED で終了する）
 - queue.status = POSTED 禁止
 
+
+---
+
+## Phase 8 追加: Source Registry スモークテスト
+
+```bash
+# source registry確認
+python3 scripts/manage_source_accounts.py --list --dry-run
+python3 scripts/manage_source_accounts.py --account-id night_scout --active-only --validate --dry-run
+
+# source collection plan
+python3 scripts/plan_source_collection.py --account-id night_scout --source-platform x --content-type text_post --top-n 5 --dry-run --mock
+
+# end-to-end preflight with source rights
+python3 scripts/preflight_end_to_end_publish.py --account-id night_scout --platform x --post-type single_post --mock
+python3 scripts/preflight_end_to_end_publish.py --account-id beauty_account --platform x --post-type thread_series --mock
+
+# PDCA with source analysis
+python3 scripts/run_pdca_cycle.py --account-id night_scout --platform x --days 7 --dry-run --mock --generate-next-plan
+
+# 実LLM生成前preflight
+python3 scripts/preflight_real_llm_generation.py --account-id night_scout --platform x --mock
+
+# beauty_account活性化条件確認
+python3 scripts/check_beauty_activation_readiness.py --mock
+```

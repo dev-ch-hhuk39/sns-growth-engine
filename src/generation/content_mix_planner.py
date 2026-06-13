@@ -178,3 +178,144 @@ def plan_content_mix(
         "generated_jobs_count": len(items),
         "planned_at": _now_jst(),
     }
+
+
+def build_generation_jobs_candidates(
+    mix_plan: dict[str, Any],
+    source_ids: list[str] | None = None,
+    video_candidates_available: bool = False,
+) -> dict[str, Any]:
+    """content_mix_planからgeneration_jobs候補を作成する。
+
+    content_type別にjobを分類する:
+      - single_post / original_hypothesis → 通常投稿job
+      - reference_based → 参考投稿ベースjob (source_ids必要)
+      - thread_series → thread_series job
+      - video_clip_reference → 動画候補がない場合NOT_READY/WARN
+
+    Args:
+        mix_plan: plan_content_mix()の出力
+        source_ids: 参考に使うsource_idリスト（reference_based用）
+        video_candidates_available: 動画候補が存在するか
+
+    Returns:
+        generation_jobs_candidates辞書
+    """
+    account_id = mix_plan.get("account_id", "")
+    platform = mix_plan.get("platform", "x")
+    safety_status = mix_plan.get("safety_status", "OK")
+    is_draft_only = safety_status == "DRAFT_ONLY"
+
+    jobs: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    for item in mix_plan.get("items", []):
+        ct = item.get("content_type", "single_post")
+        item_id = item.get("plan_item_id", "")
+
+        if ct in ("single_post", "original_hypothesis"):
+            job_status = "WAITING_REVIEW" if is_draft_only else "PLANNED"
+            jobs.append({
+                "job_id": f"gj_{item_id}",
+                "account_id": account_id,
+                "platform": platform,
+                "content_type": ct,
+                "job_type": "standard_post",
+                "status": job_status,
+                "source_id": None,
+                "plan_item_id": item_id,
+            })
+
+        elif ct == "reference_based":
+            if source_ids:
+                job_status = "WAITING_REVIEW" if is_draft_only else "PLANNED"
+                jobs.append({
+                    "job_id": f"gj_{item_id}",
+                    "account_id": account_id,
+                    "platform": platform,
+                    "content_type": ct,
+                    "job_type": "reference_post",
+                    "status": job_status,
+                    "source_ids": source_ids,
+                    "plan_item_id": item_id,
+                })
+            else:
+                jobs.append({
+                    "job_id": f"gj_{item_id}",
+                    "account_id": account_id,
+                    "platform": platform,
+                    "content_type": ct,
+                    "job_type": "reference_post",
+                    "status": "NOT_READY",
+                    "reason": "source_ids未指定",
+                    "plan_item_id": item_id,
+                })
+                warnings.append(f"{item_id}: reference_based だが source_ids が未指定")
+
+        elif ct == "thread_series":
+            job_status = "WAITING_REVIEW" if is_draft_only else "PLANNED"
+            jobs.append({
+                "job_id": f"gj_{item_id}",
+                "account_id": account_id,
+                "platform": platform,
+                "content_type": ct,
+                "job_type": "thread_series",
+                "status": job_status,
+                "source_id": None,
+                "plan_item_id": item_id,
+            })
+
+        elif ct == "video_clip_reference":
+            if video_candidates_available:
+                job_status = "WAITING_REVIEW" if is_draft_only else "PLANNED"
+                jobs.append({
+                    "job_id": f"gj_{item_id}",
+                    "account_id": account_id,
+                    "platform": platform,
+                    "content_type": ct,
+                    "job_type": "video_clip_post",
+                    "status": job_status,
+                    "source_id": None,
+                    "plan_item_id": item_id,
+                })
+            else:
+                jobs.append({
+                    "job_id": f"gj_{item_id}",
+                    "account_id": account_id,
+                    "platform": platform,
+                    "content_type": ct,
+                    "job_type": "video_clip_post",
+                    "status": "NOT_READY",
+                    "reason": "動画候補なし",
+                    "plan_item_id": item_id,
+                })
+                warnings.append(f"{item_id}: video_clip_reference だが動画候補なし → NOT_READY")
+
+        else:
+            job_status = "WAITING_REVIEW" if is_draft_only else "PLANNED"
+            jobs.append({
+                "job_id": f"gj_{item_id}",
+                "account_id": account_id,
+                "platform": platform,
+                "content_type": ct,
+                "job_type": "unknown",
+                "status": job_status,
+                "plan_item_id": item_id,
+            })
+
+    planned = sum(1 for j in jobs if j["status"] == "PLANNED")
+    waiting = sum(1 for j in jobs if j["status"] == "WAITING_REVIEW")
+    not_ready = sum(1 for j in jobs if j["status"] == "NOT_READY")
+
+    return {
+        "plan_id": mix_plan.get("plan_id"),
+        "account_id": account_id,
+        "platform": platform,
+        "total_jobs": len(jobs),
+        "planned": planned,
+        "waiting_review": waiting,
+        "not_ready": not_ready,
+        "jobs": jobs,
+        "warnings": warnings,
+        "created_at": _now_jst(),
+    }

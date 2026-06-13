@@ -210,3 +210,73 @@ def collect_from_csv(
         top_n=top_n,
         reuse_policy=reuse_policy,
     )
+
+
+def collect_from_source_registry(
+    source: dict,
+    raw_data: list[dict] | dict,
+    account_id: str,
+    top_n_override: int | None = None,
+) -> dict[str, Any]:
+    """source registryのエントリに基づいてreference_postsを生成する。
+
+    source registryのrights_policy/reuse_policy/blocked状態を自動適用する。
+    blocked/scrape_disallowed sourceは収集不可。
+
+    Args:
+        source: source_registry.pyのsourceエントリ
+        raw_data: 手動投入JSON/CSVデータ
+        account_id: 対象アカウントID
+        top_n_override: top_n上書き（Noneの場合sourceのtop_nを使用）
+
+    Returns:
+        collect_from_json()の出力 + source_registry情報
+    """
+    if source.get("blocked"):
+        return {
+            "account_id": account_id,
+            "source_id": source.get("source_id"),
+            "error": "blocked source — 収集不可",
+            "status": "BLOCKED",
+        }
+    if source.get("collection_method") == "scrape_disallowed":
+        return {
+            "account_id": account_id,
+            "source_id": source.get("source_id"),
+            "error": "scrape_disallowed — scraping禁止",
+            "status": "BLOCKED",
+        }
+    if not source.get("active", False):
+        return {
+            "account_id": account_id,
+            "source_id": source.get("source_id"),
+            "error": "inactive source — 収集対象外",
+            "status": "INACTIVE",
+        }
+
+    rights = source.get("rights_policy", "unknown")
+    reuse = source.get("reuse_policy", "reference_only")
+    top_n = top_n_override if top_n_override is not None else source.get("top_n", 10)
+    min_er = float(source.get("min_engagement_rate") or 0.0)
+    handle = source.get("source_handle", "")
+    platform = source.get("source_platform", "x")
+
+    result = collect_from_json(
+        raw_data,
+        account_id=account_id,
+        source_platform=platform,
+        source_handle=handle,
+        min_engagement_rate=min_er,
+        top_n=top_n,
+        reuse_policy=reuse,
+    )
+    result["source_id"] = source.get("source_id")
+    result["source_name"] = source.get("source_name", "")
+    result["rights_policy"] = rights
+    result["review_required"] = rights == "unknown"
+
+    if rights == "unknown":
+        for p in result.get("reference_posts", []):
+            p["status"] = "WAITING_REVIEW"
+
+    return result

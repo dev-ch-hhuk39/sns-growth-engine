@@ -170,3 +170,36 @@ cp config/account_templates/base_account.json config/accounts/new_account.json
 - [ ] `ALLOW_REAL_X_POST=false` であること
 - [ ] git status がクリーンであること
 - [ ] beauty_account は status=draft_only のまま（READY 化禁止）
+
+
+---
+
+## Phase 8 追加: Source Registry 運用
+
+### source account確認
+```bash
+python3 scripts/manage_source_accounts.py --list --dry-run
+python3 scripts/manage_source_accounts.py --account-id night_scout --active-only --validate --dry-run
+```
+
+### source collection plan確認
+```bash
+python3 scripts/plan_source_collection.py --account-id night_scout --source-platform x --top-n 5 --dry-run --mock
+```
+
+### source rights確認ルール
+- rights_policy=unknown → WAITING_REVIEW（手動確認必須）
+- media_policy=do_not_download → download禁止
+- media_policy=plan_only → planのみ、upload不可
+- source priority変更 → 改善提案のみ、自動変更禁止
+
+### beauty_account活性化確認
+```bash
+python3 scripts/check_beauty_activation_readiness.py --mock
+```
+現時点では常にBLOCKED/NOT_READY。
+
+### 実LLM生成前確認
+```bash
+python3 scripts/preflight_real_llm_generation.py --account-id night_scout --platform x --mock
+```

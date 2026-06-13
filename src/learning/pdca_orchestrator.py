@@ -280,3 +280,86 @@ class PDCAOrchestrator:
             ],
             "created_at": _now_jst(),
         }
+
+    def analyze_by_source(
+        self,
+        results: list[dict[str, Any]],
+        account_id: str | None = None,
+    ) -> dict[str, Any]:
+        """source_id / source_account_id 別のPDCA成果分析を返す。
+
+        source priorityの自動変更は行わない。改善提案はWAITING_REVIEW。
+
+        Args:
+            results: posted_results相当のリスト
+            account_id: 絞り込みアカウントID
+
+        Returns:
+            source別成果サマリ・改善提案辞書
+        """
+        filtered = results
+        if account_id:
+            filtered = [r for r in results if r.get("account_id") == account_id]
+
+        source_ids: set[str] = set()
+        for r in filtered:
+            sid = r.get("source_id") or r.get("source_account_id") or ""
+            if sid:
+                source_ids.add(sid)
+
+        try:
+            from reference.source_registry import get_source_pdca_summary
+            summaries = {
+                sid: get_source_pdca_summary(sid, filtered)
+                for sid in source_ids
+            }
+        except Exception:
+            summaries = {}
+            for sid in source_ids:
+                relevant = [
+                    r for r in filtered
+                    if r.get("source_id") == sid or r.get("source_account_id") == sid
+                ]
+                n = len(relevant)
+                likes = [float(r.get("likes") or 0) for r in relevant]
+                avg_likes = sum(likes) / n if n else 0.0
+                summaries[sid] = {
+                    "source_id": sid,
+                    "count": n,
+                    "avg_likes": round(avg_likes, 2),
+                    "improvement_suggestion": None,
+                }
+
+        improvement_suggestions: list[dict] = []
+        for sid, summary in summaries.items():
+            sug = summary.get("improvement_suggestion")
+            if sug:
+                improvement_suggestions.append({
+                    **sug,
+                    "source_id": sid,
+                    "status": "WAITING_REVIEW",
+                    "auto_apply": False,
+                })
+
+        platform_stats: dict[str, Any] = {}
+        for r in filtered:
+            platform = str(r.get("platform") or "unknown")
+            sid = r.get("source_id") or r.get("source_account_id") or "no_source"
+            key = f"{platform}:{sid}"
+            platform_stats.setdefault(key, {"count": 0, "total_likes": 0})
+            platform_stats[key]["count"] += 1
+            platform_stats[key]["total_likes"] += int(r.get("likes") or 0)
+
+        return {
+            "account_id": account_id,
+            "total_results": len(filtered),
+            "source_summaries": summaries,
+            "platform_source_stats": platform_stats,
+            "improvement_suggestions": improvement_suggestions,
+            "safety_notes": [
+                "source priority自動変更禁止",
+                "improvement_suggestions は全て WAITING_REVIEW",
+                "自動収集・自動download・自動反映禁止",
+            ],
+            "created_at": _now_jst(),
+        }

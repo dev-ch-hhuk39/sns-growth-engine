@@ -195,6 +195,35 @@ def check_posted_results_duplicate(account_id: str, queue_id: str = "", series_i
     _add("PASS", "duplicate_check", "mock モードのため重複なしと仮定（実運用時は手動確認）")
 
 
+def check_source_rights(account_id: str) -> None:
+    """source rights/reuse/media policy確認。source registryを参照する。"""
+    print(f"\n[6] source rights確認: {account_id}")
+    try:
+        from reference.source_registry import load_registry, filter_sources, assess_source_rights
+        sources = load_registry()
+        active = filter_sources(sources, target_account_id=account_id, active_only=True)
+        if not active:
+            _add("PASS", "source_rights", f"active sourceなし — source rights確認不要")
+            return
+        blocking_issues = 0
+        for s in active:
+            assessment = assess_source_rights(s)
+            sid = s.get("source_id", "")
+            if s.get("blocked"):
+                _add("BLOCKED", "source_blocked", f"{sid}: blocked source が active に含まれています")
+                blocking_issues += 1
+            elif assessment.get("review_required"):
+                _add("WARN", "source_rights_review", f"{sid}: rights_policy=unknown → WAITING_REVIEW")
+            elif not assessment.get("can_collect"):
+                _add("WARN", "source_cannot_collect", f"{sid}: 収集不可 — {assessment.get('issues', [])}")
+            else:
+                _add("PASS", "source_rights", f"{sid}: rights OK")
+        if blocking_issues == 0:
+            _add("PASS", "source_rights_summary", f"active source {len(active)} 件 — blocking issueなし")
+    except Exception as e:
+        _add("WARN", "source_rights", f"source registry確認不可: {e}")
+
+
 # ------------------------------------------------------------------ #
 # メイン preflight
 # ------------------------------------------------------------------ #
@@ -254,6 +283,9 @@ def run_preflight(
 
     # [5] posted_results 重複確認
     check_posted_results_duplicate(account_id, queue_id, series_id)
+
+    # [6] source rights/reuse/media policy確認（source_idがある場合）
+    check_source_rights(account_id)
 
     overall = "READY"
     if FAIL_COUNT > 0:

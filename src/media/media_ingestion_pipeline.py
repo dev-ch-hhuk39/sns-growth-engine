@@ -217,3 +217,92 @@ def create_ingestion_plan(
         "asset_count": len(assets),
         "created_at": _now_jst(),
     }
+
+
+def create_ingestion_plan_from_source(
+    account_id: str,
+    source: dict,
+    source_url: str = "",
+    reference_post_id: str = "",
+    allow_cloudinary_upload: bool = False,
+    confirm_upload: bool = False,
+    allow_download: bool = False,
+    confirm_download: bool = False,
+) -> dict[str, Any]:
+    """source registryエントリからメディア取り込みプランを生成する。
+
+    source registryのmedia_policy/rights_policy/reuse_policyを自動適用する。
+    実download/uploadはデフォルト禁止。
+
+    Args:
+        account_id: 対象アカウントID
+        source: source_registry.pyのsourceエントリ
+        source_url: 対象メディアURL（sourceのsource_urlを上書き）
+        reference_post_id: 関連するreference_post_id
+        allow_cloudinary_upload: Cloudinaryアップロード許可
+        confirm_upload: アップロード確認
+        allow_download: ダウンロード許可
+        confirm_download: ダウンロード確認
+
+    Returns:
+        create_ingestion_plan()の出力 + source_registry情報
+    """
+    source_id = source.get("source_id", "")
+    media_policy = source.get("media_policy", "do_not_download")
+    rights_policy = source.get("rights_policy", "unknown")
+    reuse_policy = source.get("reuse_policy", "reference_only")
+
+    effective_url = source_url or source.get("source_url", "")
+
+    # media_policy=do_not_download は download強制禁止
+    if media_policy == "do_not_download":
+        return {
+            "account_id": account_id,
+            "source_id": source_id,
+            "plan_status": "BLOCKED",
+            "blocked_reasons": [f"media_policy=do_not_download: {source_id} のdownloadは禁止です"],
+            "assets": [],
+            "asset_count": 0,
+            "created_at": _now_jst(),
+        }
+
+    # media_policy=plan_only は plan作成のみ、upload不可
+    if media_policy == "plan_only":
+        allow_cloudinary_upload = False
+        confirm_upload = False
+
+    # reuse_policy=no_reuse はmedia利用不可
+    if reuse_policy == "no_reuse":
+        return {
+            "account_id": account_id,
+            "source_id": source_id,
+            "plan_status": "BLOCKED",
+            "blocked_reasons": [f"reuse_policy=no_reuse: {source_id} のmedia利用は禁止です"],
+            "assets": [],
+            "asset_count": 0,
+            "created_at": _now_jst(),
+        }
+
+    video_url = effective_url if _detect_media_type(effective_url) in ("video", "unknown") else ""
+    image_url = effective_url if _detect_media_type(effective_url) == "image" else ""
+
+    if not video_url and not image_url:
+        video_url = effective_url
+
+    result = create_ingestion_plan(
+        account_id=account_id,
+        video_url=video_url,
+        image_url=image_url,
+        reference_post_id=reference_post_id,
+        rights_status=rights_policy,
+        allow_cloudinary_upload=allow_cloudinary_upload,
+        confirm_upload=confirm_upload,
+        allow_download=allow_download,
+        confirm_download=confirm_download,
+    )
+    result["source_id"] = source_id
+    result["media_policy"] = media_policy
+    result["rights_policy"] = rights_policy
+    result["reuse_policy"] = reuse_policy
+
+    return result

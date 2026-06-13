@@ -52,3 +52,4 @@
 ## 更新履歴
 
 - Phase 6.1: 初期ロードマップ作成（2026-06-11）
+- Phase 8: 活性化条件CLIを追加（check_beauty_activation_readiness.py）。現時点で常にBLOCKED/NOT_READY。詳細は `docs/beauty-account-activation-checklist.md` 参照（2026-06-13）
