@@ -1,0 +1,41 @@
+{
+  "plan_id": "a1b2c3d4",
+  "account_id": "night_scout",
+  "platform": "x",
+  "count": 10,
+  "seed": 42,
+  "ratios_config": {
+    "single_post": 40,
+    "thread_series": 30,
+    "reference_based": 20,
+    "video_clip_reference": 10,
+    "original_hypothesis": 0
+  },
+  "selected_modes": [
+    "single_post",
+    "thread_series",
+    "reference_based",
+    "single_post",
+    "thread_series",
+    "single_post",
+    "video_clip_reference",
+    "reference_based",
+    "single_post",
+    "thread_series"
+  ],
+  "ratio_summary": {
+    "single_post": 4,
+    "thread_series": 3,
+    "reference_based": 2,
+    "video_clip_reference": 1
+  },
+  "items": [
+    {"plan_item_id": "cmp_a1b2c3d4_000", "plan_id": "a1b2c3d4", "account_id": "night_scout", "platform": "x", "content_type": "single_post", "status": "PLANNED", "planned_at": "2026-06-13T09:00:00+09:00"},
+    {"plan_item_id": "cmp_a1b2c3d4_001", "plan_id": "a1b2c3d4", "account_id": "night_scout", "platform": "x", "content_type": "thread_series", "status": "PLANNED", "planned_at": "2026-06-13T09:00:00+09:00"},
+    {"plan_item_id": "cmp_a1b2c3d4_002", "plan_id": "a1b2c3d4", "account_id": "night_scout", "platform": "x", "content_type": "reference_based", "status": "PLANNED", "planned_at": "2026-06-13T09:00:00+09:00"}
+  ],
+  "safety_status": "OK",
+  "safety_notes": [],
+  "generated_jobs_count": 10,
+  "planned_at": "2026-06-13T09:00:00+09:00"
+}

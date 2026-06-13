@@ -1,0 +1,67 @@
+[
+  {
+    "id": "x_001",
+    "text": "夜職で月50万稼ぐ女性と月15万止まりの女性の差、知ってる？",
+    "likes": 350,
+    "reposts": 80,
+    "replies": 25,
+    "views": 12000,
+    "bookmarks": 40,
+    "source_url": "https://x.com/example/status/001",
+    "collected_at": "2026-06-10T10:00:00Z",
+    "content_type": "text",
+    "rights_status": "unknown"
+  },
+  {
+    "id": "x_002",
+    "text": "スカウトマンが語る、本当に稼げるキャストの3つの共通点",
+    "likes": 520,
+    "reposts": 120,
+    "replies": 45,
+    "views": 18000,
+    "bookmarks": 75,
+    "source_url": "https://x.com/example/status/002",
+    "collected_at": "2026-06-11T10:00:00Z",
+    "content_type": "text",
+    "rights_status": "unknown"
+  },
+  {
+    "id": "x_003",
+    "text": "夜職の転職を考えている方へ。よくある3つの誤解",
+    "likes": 180,
+    "reposts": 35,
+    "replies": 12,
+    "views": 7000,
+    "bookmarks": 20,
+    "source_url": "https://x.com/example/status/003",
+    "collected_at": "2026-06-12T10:00:00Z",
+    "content_type": "text",
+    "rights_status": "unknown"
+  },
+  {
+    "id": "x_004",
+    "text": "LINE相談は無料です。いつでも気軽に送ってください",
+    "likes": 45,
+    "reposts": 8,
+    "replies": 30,
+    "views": 3000,
+    "bookmarks": 5,
+    "source_url": "https://x.com/example/status/004",
+    "collected_at": "2026-06-12T15:00:00Z",
+    "content_type": "cta",
+    "rights_status": "unknown"
+  },
+  {
+    "id": "x_005",
+    "text": "稼げるキャストになるための面接で聞くべき5つの質問",
+    "likes": 420,
+    "reposts": 95,
+    "replies": 38,
+    "views": 15000,
+    "bookmarks": 60,
+    "source_url": "https://x.com/example/status/005",
+    "collected_at": "2026-06-13T09:00:00Z",
+    "content_type": "text",
+    "rights_status": "unknown"
+  }
+]

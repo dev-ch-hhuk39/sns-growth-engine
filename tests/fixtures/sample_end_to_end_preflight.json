@@ -1,0 +1,19 @@
+{
+  "status": "WARN",
+  "account_id": "night_scout",
+  "platform": "x",
+  "post_type": "single_post",
+  "mock": true,
+  "pass": 4,
+  "fail": 0,
+  "warn": 2,
+  "blocked": 0,
+  "checks": [
+    {"level": "PASS", "label": "account_status", "msg": "night_scout は active です"},
+    {"level": "PASS", "label": "PUBLISH_ENABLED", "msg": "false（安全）"},
+    {"level": "PASS", "label": "ALLOW_REAL_X_POST", "msg": "false（安全）"},
+    {"level": "PASS", "label": "platform_support", "msg": "night_scout は x に対応"},
+    {"level": "WARN", "label": "queue_id", "msg": "queue_id が未指定です"},
+    {"level": "WARN", "label": "duplicate_check", "msg": "queue_id 未指定のためスキップ"}
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "pdca_run_id": "pdca_sample1",
+  "account_id": "night_scout",
+  "platform": "x",
+  "days": 7,
+  "analysis": {
+    "account_id": "night_scout",
+    "platform": "x",
+    "days": 7,
+    "total_results": 4,
+    "content_type_comparison": {
+      "single_post": {"count": 1, "avg_likes": 80.0, "avg_views": 2000.0, "avg_engagement_rate": 0.05},
+      "thread_series": {"count": 2, "avg_likes": 76.0, "avg_views": 1650.0, "avg_engagement_rate": 0.048},
+      "reference_based": {"count": 1, "avg_likes": 55.0, "avg_views": 1500.0, "avg_engagement_rate": 0.045}
+    },
+    "hook_analysis": {},
+    "dropoff": []
+  },
+  "improvement_suggestions": [
+    {
+      "suggestion_id": "sug_sample01",
+      "account_id": "night_scout",
+      "platform": "x",
+      "type": "content_mix_ratio",
+      "title": "single_post の比率を増やす",
+      "body": "single_post のエンゲージメント率が最も高い（0.0500）。content_mix の比率を見直すことを推奨。",
+      "status": "WAITING_REVIEW",
+      "active": false,
+      "created_at": "2026-06-13T09:00:00+09:00"
+    }
+  ],
+  "suggestion_count": 1,
+  "next_generation_jobs": [
+    {
+      "job_id": "pj_sample01",
+      "account_id": "night_scout",
+      "platform": "x",
+      "generation_mode": "single_post",
+      "status": "PLANNED",
+      "source": "pdca_orchestrator",
+      "created_at": "2026-06-13T09:00:00+09:00"
+    }
+  ],
+  "next_jobs_count": 1,
+  "safety_notes": [
+    "improvement_suggestions は全て WAITING_REVIEW（自動適用禁止）",
+    "learning_rules.active は false のまま",
+    "next_generation_jobs は PLANNED（自動実行禁止）"
+  ],
+  "created_at": "2026-06-13T09:00:00+09:00"
+}

@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-06-12 (Phase 6.4 multi-account hardening: night_scout=僕・liver_manager/beauty_account config強化・Threads preflight基盤・learning loop thread_series対応)
+**最終更新**: 2026-06-13 (Phase 7: content_mix_planner・source_account_collector・media_ingestion_pipeline・end_to_end_publish_preflight・pdca_orchestrator 実装完了)
 
 ---
 
@@ -547,7 +547,22 @@
 
 ---
 
-## Phase 5（今後の計画）: AI自動化・学習ループ高度化
+## Phase 7（完了）: コンテンツ自動化オーケストレーター
+
+**目的**: 投稿種別ミックス・参考収集・メディア取り込み・統合preflight・PDCAを一気に整備する
+
+- [x] `content_mix_planner`: 単発/ツリー/参考/動画を比率・ランダムで振り分け（`src/generation/content_mix_planner.py`）
+- [x] `source_account_collector`: 手動JSON/CSVから参考投稿を収集→reference_posts（`src/reference/source_account_collector.py`）
+- [x] `media_ingestion_pipeline`: URL/ローカルファイル→media_assets安全登録（`src/media/media_ingestion_pipeline.py`）
+- [x] `end_to_end_publish_preflight`: X/Threads単発・ツリー・動画の統合preflight（`scripts/preflight_end_to_end_publish.py`）
+- [x] `pdca_orchestrator`: posted_results→分析→improvement_suggestions→次回jobs候補（`src/learning/pdca_orchestrator.py`）
+- [x] 5つの新規テスト（FAIL=0）
+- [x] docs 5本追加
+- [x] fixtures 5件追加
+
+---
+
+## Phase 8（今後の計画）: AI自動化・学習ループ高度化
 
 **目的**: 人間レビューを最小化し、投稿結果から継続改善する
 
