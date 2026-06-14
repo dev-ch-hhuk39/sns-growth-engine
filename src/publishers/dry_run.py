@@ -11,7 +11,7 @@ publish_queue.py が Phase 3-A で使用するデフォルト Publisher。
 """
 from __future__ import annotations
 
-from publishers.base import BasePublisher, PublishResult
+from .base import BasePublisher, PublishResult
 
 X_CHAR_LIMIT = 140
 X_CHAR_WARN = 120

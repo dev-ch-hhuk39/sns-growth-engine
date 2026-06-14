@@ -46,6 +46,14 @@ COLLECTION_METHODS = [
     "manual_url",
     "api_future",
     "scrape_disallowed",
+    # Phase 9: Library/CLI-based fetchers
+    "yt_dlp",
+    "tiktok_to_ytdlp",
+    "agent_reach",
+    "last30days_skill",
+    "youtube_transcript",
+    "browser_export",
+    "api_disabled",
 ]
 
 JST = timezone(timedelta(hours=9))

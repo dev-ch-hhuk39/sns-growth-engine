@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import os
 
-from publishers.base import BasePublisher, PublishResult
-from publishers.dry_run import _check_threads
+from .base import BasePublisher, PublishResult
+from .dry_run import _check_threads
 
 
 class ThreadsPublisher(BasePublisher):

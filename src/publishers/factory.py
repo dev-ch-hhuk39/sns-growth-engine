@@ -20,8 +20,8 @@ Phase 3-E で切り替え予定（Threads）:
 """
 from __future__ import annotations
 
-from publishers.base import BasePublisher, PublishResult
-from publishers.dry_run import DryRunPublisher
+from .base import BasePublisher, PublishResult
+from .dry_run import DryRunPublisher
 
 SUPPORTED_PLATFORMS = {"x", "threads", "note"}
 
@@ -44,7 +44,7 @@ def get_publisher(platform: str, dry_run: bool = True) -> BasePublisher:
 
     # Phase 3-D: XPublisher が安全ガードを担う
     if plat == "x":
-        from publishers.x_publisher import XPublisher
+        from .x_publisher import XPublisher
         return XPublisher()
 
     # Phase 3-E でコメントを外す:

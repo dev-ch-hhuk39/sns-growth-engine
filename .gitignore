@@ -78,6 +78,7 @@ clips/
 !.claude/settings.json
 !config/accounts/*.json
 !config/account_templates/*.json
+!config/source_accounts/*.json
 
 # --- CodeGraph（index/cache はcommit禁止） ---
 .codegraph/

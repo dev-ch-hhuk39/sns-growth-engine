@@ -19,8 +19,8 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-from publishers.base import BasePublisher, PublishResult
-from publishers.dry_run import _check_x
+from .base import BasePublisher, PublishResult
+from .dry_run import _check_x
 
 X_CHAR_LIMIT = 140
 X_CHAR_WARN = 120
