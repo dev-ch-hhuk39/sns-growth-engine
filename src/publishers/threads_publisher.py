@@ -3,7 +3,7 @@ publishers/threads_publisher.py - Threads Publisher スタブ（Phase 3-C）
 
 現時点（Phase 3-C）では本番 POST を行わない安全スタブ。
 dry_run=True の場合は DryRunPublisher 相当の検証を実施する。
-dry_run=False かつ安全ガード通過後も、現時点では NotImplementedError で停止する。
+dry_run=False かつ安全ガード通過後も、現時点では SAFETY_STOP で停止する。
 
 本番投稿の有効化条件（Phase 3-E 以降）:
   1. PUBLISH_ENABLED=true
@@ -110,8 +110,13 @@ class ThreadsPublisher(BasePublisher):
             )
 
         # ---- Phase 3-E まで本番実装しない ----
-        raise NotImplementedError(
-            "ThreadsPublisher の本番投稿は Phase 3-E で実装します。"
-            " 現時点（Phase 3-C）では本番 POST を行いません。"
-            f" queue_id={queue_id} account={account_id}"
+        return PublishResult(
+            platform="threads",
+            success=False,
+            dry_run=False,
+            message=(
+                "SAFETY_STOP: ThreadsPublisher の本番投稿実装は未接続です。"
+                " 現時点では本番 POST を行いません。"
+                f" queue_id={queue_id} account={account_id}"
+            ),
         )

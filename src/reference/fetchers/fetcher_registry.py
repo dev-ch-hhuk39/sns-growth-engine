@@ -34,11 +34,15 @@ _REGISTRY: dict[str, BaseFetcher] = {
 
 _PLATFORM_DEFAULT: dict[str, str] = {
     "youtube": "yt_dlp",
+    "youtube_playlist": "yt_dlp",
+    "youtube_streams": "yt_dlp",
     "youtube_shorts": "yt_dlp",
     "tiktok": "tiktok_to_ytdlp",
     "x": "agent_reach",
     "threads": "browser_export",
     "instagram_reels": "browser_export",
+    "note": "manual_url",
+    "query": "last30days_skill",
 }
 
 

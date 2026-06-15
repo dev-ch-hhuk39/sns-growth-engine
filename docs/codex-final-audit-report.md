@@ -1,0 +1,70 @@
+# Codex Final Production Audit Report
+
+## Summary
+
+- Date: 2026-06-16
+- Branch: `feature/codex-final-production-audit`
+- Audit start HEAD: `1edf83abc93623be83abe05bd0a9e12e2ff14d00`
+- `origin/main` at start: `1edf83abc93623be83abe05bd0a9e12e2ff14d00`
+- Target repo: `dev-ch-hhuk39/sns-growth-engine`
+- Target directory: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
+
+## Findings Fixed
+
+| Area | Result |
+|---|---|
+| `production_sources.example.json` placeholders | Fixed. `REPLACE_WITH_REAL_*` count is 0. |
+| User-provided fixed source URLs | Fixed. 54 / 54 URLs are present. |
+| Query sources | Added 37 inactive query candidates. |
+| `default_sources.json` placeholders | Fixed. Old `example_*` URLs removed; all entries inactive/fetch disabled. |
+| Media asset modules | Added required Phase 13 files. |
+| Clip executor | Added `src/video/video_clip_executor.py`. |
+| Media CLIs | Added preflight/download/upload CLIs. |
+| Publisher CLI args | Added `--mock`, `--confirm-post`, default dry-run text. |
+| `review_source_candidates.py` args | Added default source file, `--account-id`, and `--dry-run`. |
+| `import_posted_results.py --mock --dry-run` | Added mock path. |
+| `run_real_smoke_plan.py` compatibility | Added `--platform` and `--dry-run` args. |
+| `load_sources()` missing alias | Added to source registry. |
+| PipelineStore required stages | Added explicit stage list, dry-run save plan, Sheets write plan, queue status guard. |
+| Threads real-post unimplemented exception | Converted to `SAFETY_STOP` `PublishResult`. |
+
+## Source Counts
+
+| Account | Fixed Sources | Query Sources | Total |
+|---|---:|---:|---:|
+| `night_scout` | 18 (`x` 9 + `youtube` 9) | 13 | 31 |
+| `liver_manager` | 13 (`youtube` 7 + `note` 6) | 11 | 24 |
+| `beauty_account` | 23 (`youtube` 10 + `tiktok` 7 + `x` 6) | 13 | 36 |
+| Total | 54 | 37 | 91 |
+
+## Safety Gates Confirmed
+
+- Real fetch without `--confirm-fetch`: `BLOCKED`
+- Download without `--confirm-download`: `BLOCKED`
+- Cut without `--confirm-cut`: `BLOCKED`
+- Upload without `--confirm-upload`: `BLOCKED`
+- Real post without `--confirm-post`: `BLOCKED`
+- `beauty_account`: remains `WAITING_REVIEW` / draft-only, no READY/POSTED path added
+- `learning_rules`: no `active=true` change
+- Source priority: no automatic priority mutation; PDCA suggestions are `WAITING_REVIEW` with `auto_apply=false`
+
+## Residual WARN
+
+- `run_real_smoke_plan.py` returns non-zero in this environment because real credentials/API readiness are not configured. It remains dry-run only and does not call APIs.
+- Abstract/interface `NotImplementedError` remains in `BasePublisher` and `BaseFetcher`.
+- Legacy docs/tests still mention old `NotImplementedError` behavior for historical phases.
+- X collector API stubs remain intentionally blocked and are outside this Phase 13 production source media path.
+
+## Test Results
+
+- Phase 9-13 regression and added tests: 39 / 39 PASS, 0 FAIL
+- Dry-run / BLOCKED command sweep: 35 / 35 PASS, 0 FAIL
+
+## No Real Operations
+
+- Real fetch: not executed
+- Real download: not executed
+- Real cut: not executed
+- Real upload: not executed
+- Real SNS post: not executed
+- Secrets/cookie values: not displayed

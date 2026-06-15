@@ -379,6 +379,8 @@ def main() -> None:
         help="確認するステップ（デフォルト: all）",
     )
     parser.add_argument("--account-id", help="対象アカウントID")
+    parser.add_argument("--platform", default="", help="互換引数（dry-run表示用。実投稿には使わない）")
+    parser.add_argument("--dry-run", action="store_true", default=True, help="互換引数。常にdry-run専用")
     parser.add_argument("--json", action="store_true", help="JSON形式で出力")
     args = parser.parse_args()
 

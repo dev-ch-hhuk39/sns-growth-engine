@@ -34,8 +34,10 @@ _BEAUTY_BLOCKED = frozenset(["beauty_account"])
 def main() -> int:
     parser = argparse.ArgumentParser(description="Threads 投稿 CLI (dry_run=True がデフォルト)")
     parser.add_argument("--account-id", required=True, help="投稿先アカウント ID")
-    parser.add_argument("--text", required=True, help="投稿テキスト")
+    parser.add_argument("--text", default="Phase13 dry-run publisher safety check", help="投稿テキスト")
     parser.add_argument("--image-url", default="", help="画像 URL (オプション)")
+    parser.add_argument("--mock", action="store_true", help="mock publisher plan")
+    parser.add_argument("--confirm-post", action="store_true", help="実投稿確認フラグ")
     parser.add_argument("--dry-run", action="store_true", default=True)
     parser.add_argument("--no-dry-run", action="store_true", help="dry_run を無効化 (実投稿)")
     args = parser.parse_args()
@@ -45,6 +47,11 @@ def main() -> int:
     # beauty_account は常に BLOCKED
     if args.account_id in _BEAUTY_BLOCKED:
         print(f"[BLOCKED] {args.account_id} への Threads 投稿は禁止されています")
+        return 1
+
+    if not dry_run and not args.confirm_post:
+        print("[BLOCKED] --no-dry-run には --confirm-post が必要です")
+        print("  実投稿は実行していません")
         return 1
 
     try:
@@ -58,6 +65,7 @@ def main() -> int:
     mode = "DRY_RUN" if dry_run else "REAL_POST"
     print(f"[{mode}] Threads 投稿:")
     print(f"  account_id: {args.account_id}")
+    print(f"  mock: {args.mock} confirm_post: {args.confirm_post}")
     print(f"  text: {args.text[:80]}{'...' if len(args.text) > 80 else ''}")
     if args.image_url:
         print(f"  image_url: {args.image_url}")

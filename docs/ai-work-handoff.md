@@ -1,162 +1,208 @@
 # AI Work Handoff
 
-Codex / 別セッション Claude Code との引き継ぎ用ドキュメントです。  
-**毎回の主要作業完了時に更新してください。**
-
----
+Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完了時は必ず更新してください。
 
 ## 最終更新
 
-**2026-06-16** — Phase 13 コア実装完了 (FAIL=0)
-
----
-
-## リポジトリ情報
-
-- **GitHub:** `dev-ch-hhuk39/sns-growth-engine`
-- **作業ディレクトリ:** `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
-- **最新コミット:** `7cb7d2fa` (feat: complete source-to-post automation foundation)
-
----
+- Date: 2026-06-16
+- 作業AI: Codex
+- 作業ブランチ: `feature/codex-final-production-audit`
+- 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
+- GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
+- 監査開始 HEAD: `1edf83abc93623be83abe05bd0a9e12e2ff14d00`
+- 監査開始 origin/main: `1edf83abc93623be83abe05bd0a9e12e2ff14d00`
 
 ## システム概要
 
-3アカウント（night_scout / liver_manager / beauty_account）向けの  
-SNS 自動投稿システム。フルパイプライン:
+3アカウント（`night_scout` / `liver_manager` / `beauty_account`）向けの SNS 自動投稿支援システムです。
 
 ```
-Source候補 → fetch → BuzzScore → ReferencePost → MediaPlan
-→ Generation → Preflight → PublishPlan → PDCA
+Source candidates
+-> fetch / article normalize / buzz score
+-> reference_posts
+-> media_assets / video understanding / clip plans
+-> generation_jobs / drafts / queue candidates
+-> media preflight / publisher plan
+-> posted_results candidates / PDCA suggestions
 ```
 
----
+この Phase 13 監査では、実 fetch / download / cut / upload / post は一切実行していません。
 
-## 現在のフェーズ状態
+## 今回の作業内容
 
-| フェーズ | 状態 | テスト |
-|---|---|---|
-| Phase 1〜8 | 完了 | FAIL=0 |
-| Phase 9 (Fetcher基盤) | 完了 | 20 PASS |
-| Phase 10 (Publishers/PDCA) | 完了 | 37 PASS |
-| Phase 11 (Orchestrator) | 完了 | 10 PASS |
-| Phase 12 (Docs/Config) | 完了 | FAIL=0 |
-| **Phase 13 (Production readiness)** | **作業中** | - |
+- Claude Code 実装の Phase 13 production readiness を最終監査。
+- `production_sources.example.json` の `REPLACE_WITH_REAL_*` を全削除し、ユーザー提供 URL 54件を登録。
+- query source 37件を追加。
+- `default_sources.json` の old example URL と active/fetch enabled を除去。
+- media asset storage / preflight / download / upload 導線を追加。
+- video clip executor 導線を追加。
+- PipelineStore を Phase 13 保存対象、dry-run、Sheets write plan、queue status safety に対応。
+- source-to-post orchestrator に media_assets / media_preflight / clip_candidate_plans を接続。
+- publisher / review / import / smoke plan CLIs を指定 dry-run コマンド互換に補強。
+- Phase 13 production path と media/query/article/publisher/PDCA のテストを追加。
 
----
+## 変更ファイル一覧
 
-## Phase 13 完了状況（2026-06-16）
+- `config/source_accounts/default_sources.json`
+- `config/source_accounts/production_sources.example.json`
+- `scripts/cut_video_clips.py`
+- `scripts/import_posted_results.py`
+- `scripts/publish_threads_post.py`
+- `scripts/publish_x_post.py`
+- `scripts/review_source_candidates.py`
+- `scripts/run_real_smoke_plan.py`
+- `src/orchestrators/source_to_post_orchestrator.py`
+- `src/publishers/threads_publisher.py`
+- `src/reference/fetchers/fetcher_registry.py`
+- `src/reference/source_registry.py`
+- `src/storage/pipeline_store.py`
+- `docs/ai-work-handoff.md`
+- `docs/phase13-16-test-matrix.md`
 
-### A. ドキュメント系
+## 追加ファイル一覧
 
-- [x] `docs/ai-work-handoff.md`
-- [ ] `docs/phase13-16-implementation-plan.md` — 未作成
-- [ ] `docs/phase13-16-test-matrix.md` — 未作成
-- [ ] `docs/production-readiness-audit.md` — 未作成
-- [ ] `docs/source-fetcher-installation.md` — 未作成
+- `docs/ai-dev-status.md`
+- `docs/codex-final-audit-report.md`
+- `docs/media-asset-storage.md`
+- `docs/video-clip-execution.md`
+- `scripts/download_media_assets.py`
+- `scripts/preflight_media_assets.py`
+- `scripts/upload_media_assets.py`
+- `scripts/test_phase13_article_source_support.py`
+- `scripts/test_phase13_fetcher_production_paths.py`
+- `scripts/test_phase13_generation_production.py`
+- `scripts/test_phase13_media_asset_storage.py`
+- `scripts/test_phase13_media_post_preflight.py`
+- `scripts/test_phase13_pdca_production_loop.py`
+- `scripts/test_phase13_production_sources_real_urls.py`
+- `scripts/test_phase13_publishers_production_safety.py`
+- `scripts/test_phase13_query_source_support.py`
+- `scripts/test_phase13_real_smoke_plan.py`
+- `scripts/test_phase13_source_concept_matching.py`
+- `scripts/test_phase13_source_fetcher_tool_doctor.py`
+- `scripts/test_phase13_source_lifecycle.py`
+- `scripts/test_phase13_source_registry_production.py`
+- `scripts/test_phase13_source_to_post_production_path.py`
+- `scripts/test_phase13_video_clip_execution.py`
+- `src/media/cloudinary_uploader.py`
+- `src/media/image_asset_pipeline.py`
+- `src/media/media_asset_store.py`
+- `src/media/media_downloader.py`
+- `src/media/video_asset_pipeline.py`
+- `src/video/video_clip_executor.py`
 
-### B. ToolDoctor ✅ 完了
+## Source 反映結果
 
-- [x] `src/reference/fetchers/tool_doctor.py`
-- [x] `scripts/check_source_fetcher_tools.py`
-- [x] `scripts/test_phase13_tool_doctor.py` — PASS: 28 / FAIL: 0
+- placeholder handle/url tokens: 残り 0
+- user-provided fixed URL: 54 / 54 反映済み
+- query source: 37件追加
+- `production_sources.example.json`: 91 sources / active 0 / fetch_enabled 0 / validation issues 0
+- `default_sources.json`: 8 safe default candidates / active 0 / fetch_enabled 0 / validation issues 0
 
-### C. ソース候補 JSON ✅ 完了
+| Account | Fixed Sources | Query Sources | Total |
+|---|---:|---:|---:|
+| `night_scout` | 18 | 13 | 31 |
+| `liver_manager` | 13 | 11 | 24 |
+| `beauty_account` | 23 | 13 | 36 |
 
-- [x] `config/source_accounts/production_sources.example.json`
-  - night_scout: 9 X + 9 YouTube = 18件 (全て candidate)
-  - liver_manager: 7 YouTube + 6 note = 13件 (全て candidate)
-  - beauty_account: 10 YouTube (candidate) + 7 TikTok (disabled) + 6 X (disabled) = 23件
-  - 合計 54件 / 全て active=false, fetch_enabled=false
-- [x] `scripts/test_phase13_production_sources.py` — PASS: 28 / FAIL: 0
+## Safety / Scale 方針
 
-### D-E. Source フィールド拡張 ✅ 完了
+- `beauty_account` は `WAITING_REVIEW` / draft-only 固定。READY/POSTED 化禁止。
+- `candidate_status=approved` 以外は download/cut/upload 不可。
+- `rights_policy=unknown` は `WAITING_REVIEW` で media 利用不可。
+- `media_policy=do_not_download` は download 禁止。
+- `media_policy=plan_only` は保存/投稿利用禁止。
+- `reuse_policy=no_reuse` は media 利用禁止。
+- `ALLOW_CLOUDINARY_UPLOAD=true` と `--confirm-upload` なしでは upload 禁止。
+- PipelineStore は JSON 保存と Sheets write plan を分離。Sheets API 429 は WARN 扱い。
+- 既存 Sheets タブ/列の削除は禁止。
+- PDCA は提案だけ。`auto_apply=false`、source priority 自動変更なし。
+- query source は `source_platform=query` とし、固定 source の X/Youtube/note 件数に混ざらない。
 
-- [x] source_category / use_cases / subject_policy / candidate_status 全件設定済み
+## テスト結果
 
-### F. ArticleFetcher ✅ 完了
+- Phase 9-13 regression + added tests: 39 files PASS / 0 FAIL
+- Dry-run / BLOCKED command sweep: 35 commands PASS / 0 FAIL
+- Phase 13 legacy core total: 148 PASS / 0 FAIL
 
-- [x] `src/reference/fetchers/article_fetcher.py`
-- [x] `src/reference/article_reference_normalizer.py`
-- [x] `scripts/test_phase13_article_fetcher.py` — PASS: 21 / FAIL: 0
-- [x] `scripts/test_phase13_article_normalizer.py` — PASS: 18 / FAIL: 0
+## Dry-run / BLOCKED 確認結果
 
-### G. Source lifecycle CLI ✅ 完了
+- `--fetch` without `--confirm-fetch`: BLOCKED
+- `--download` without `--confirm-download`: BLOCKED
+- `--cut` without `--confirm-cut`: BLOCKED
+- `--upload` without `--confirm-upload`: BLOCKED
+- real post without `--confirm-post`: BLOCKED
+- Source-to-post mock dry-run: PASS, publish step remains BLOCKED without confirm
+- Real smoke plan dry-run: ran readiness check only; environment NOT_READY is acceptable WARN
 
-- [x] `scripts/add_source_candidate.py`
-- [x] `scripts/update_source_status.py`
-- [x] `scripts/review_source_candidates.py`
-- [x] `scripts/test_phase13_source_lifecycle_cli.py` — PASS: 23 / FAIL: 0
+## 実行していないこと
 
-### H-I. PipelineStore ✅ 完了
+- 実 fetch: 未実行
+- 実 download: 未実行
+- 実 cut: 未実行
+- 実 upload: 未実行
+- 実投稿: 未実行
+- GitHub Actions: 未実行
+- Hermes Agent install: 未実行
+- secrets/cookie values: 表示なし
 
-- [x] `src/storage/pipeline_store.py`
-- [x] `scripts/save_pipeline_outputs.py`
-- [x] `scripts/test_phase13_pipeline_store.py` — PASS: 15 / FAIL: 0
+## 残 WARN
 
-### J-K. Publisher CLI ✅ 完了
+- `run_real_smoke_plan.py` は資格情報未設定環境では NOT_READY で非ゼロ終了する。dry-run readiness として許容。
+- `BasePublisher` / `BaseFetcher` の抽象メソッドに `NotImplementedError` が残る。設計上の抽象クラス。
+- legacy docs/tests に古い `NotImplementedError` 記述が残る。
+- X collector API stubs は意図的に実取得不可。今回の production source media path 外。
 
-- [x] `scripts/publish_threads_post.py`
-- [x] `scripts/publish_x_post.py`
+## 未完了事項
 
-### L. SmokePlan ✅ 完了
+- PR 作成とレビュー。
+- 実 source の承認運用設計。
+- Sheets 実 test-write は未実行。
+- 実 credentials readiness は未確認。
+- `beauty_account` の法務/薬機法/医療広告レビュー運用。
 
-- [x] `scripts/run_phase13_smoke_plan.py`
-- [x] `scripts/test_phase13_smoke_plan.py` — PASS: 15 / FAIL: 0
+## 次に Claude Code が触ってよいファイル
 
-### M. Phase 13 全テスト FAIL=0 ✅
+- `docs/codex-final-audit-report.md`
+- `docs/ai-dev-status.md`
+- `docs/phase13-16-test-matrix.md`
+- `src/media/*.py`
+- `src/video/video_clip_executor.py`
+- `scripts/test_phase13_*.py`
 
-- 7 test files / 合計 PASS: 148 / FAIL: 0
+## 次に Codex が触ってよいファイル
 
-### N. 残作業
+- `scripts/preflight_media_assets.py`
+- `scripts/download_media_assets.py`
+- `scripts/upload_media_assets.py`
+- `src/storage/pipeline_store.py`
+- `src/orchestrators/source_to_post_orchestrator.py`
+- `docs/media-asset-storage.md`
+- `docs/video-clip-execution.md`
 
-- [ ] `docs/phase13-16-implementation-plan.md`
-- [ ] `docs/phase13-16-test-matrix.md`
-- [ ] `docs/production-readiness-audit.md`
-- [ ] `docs/source-fetcher-installation.md`
-- [ ] commit/push `feat: finalize production media source pipeline`
+## 衝突しやすいファイル
 
----
+- `config/source_accounts/production_sources.example.json`
+- `config/source_accounts/default_sources.json`
+- `src/orchestrators/source_to_post_orchestrator.py`
+- `src/storage/pipeline_store.py`
+- `scripts/publish_threads_post.py`
+- `scripts/publish_x_post.py`
+- `docs/ai-work-handoff.md`
 
-## 重要な安全制約
+## 触らない方がいいファイル
 
-| 操作 | ゲート |
-|---|---|
-| 実 fetch | `confirm_fetch=True` 必須 |
-| 動画 DL | `confirm_download=True` 必須 |
-| ffmpeg カット | `confirm_cut=True` 必須 |
-| Cloudinary upload | `confirm_upload=True` + `ALLOW_CLOUDINARY_UPLOAD=true` 必須 |
-| 実投稿 | `confirm_post=True` + 環境フラグ必須 |
-| beauty_account | 常に draft_only。active/READY/POSTED 化禁止 |
+- `.env` and any credential/cookie files
+- `.claude/plans/` untracked local work
+- `output/`, `logs/`, generated local artifacts
+- GitHub Actions workflows unless explicitly requested
+- old repo outside `v2`
 
----
+## 次AIへの引き継ぎメモ
 
-## アーキテクチャポイント
-
-- `BaseFetcher.fetch()` → `FetchResult(status=OK/BLOCKED/NOT_INSTALLED/NOT_READY/WARN/ERROR)`
-- `RawSourceItem`: 40+ field dataclass (`src/reference/fetchers/base_fetcher.py`)
-- `SourceToPostOrchestrator.run()` → 8ステップ dict + safety dict
-- `PDCAOrchestrator.run(results, account_id, platform, days, ...)` — `posted_results` / `dry_run` は引数名ではない
-- `AccountConfig.is_active()` / `.is_draft_only()` — `.active` / `.draft_only` 属性は存在しない
-- `PublishResult(platform=..., dry_run=..., success=..., message=...)` — platform は必須
-- Publisher.publish シグネチャ: `publish(text, *, account: dict, derivative: dict, queue_item: dict, dry_run=True)`
-
----
-
-## 既知の NotImplementedError
-
-```
-src/publishers/threads_publisher.py:113  — 実 Threads 投稿（意図的 block）
-src/collectors/x_reference_collector.py:258,270 — X 収集実実装（Phase 13+ 対象）
-```
-
----
-
-## 次セッションへの引き継ぎ
-
-1. `docs/phase13-16-implementation-plan.md` を作成
-2. `config/source_accounts/production_sources.example.json` を作成（ソース候補全登録）
-3. `src/reference/fetchers/tool_doctor.py` + `scripts/check_source_fetcher_tools.py` を作成
-4. `src/reference/fetchers/article_fetcher.py` を作成（liver_manager の note ソース対応）
-5. `src/storage/pipeline_store.py` を作成
-6. 16 Phase 13 test scripts を作成し FAIL=0 まで修正
-7. commit/push `feat: finalize production media source pipeline`
+- 作業開始時は必ず `git fetch origin`, `git status -sb`, `git rev-parse HEAD`, `git rev-parse origin/main` を確認する。
+- `production_sources.example.json` は full source list、`default_sources.json` は safe subset。
+- `beauty_account` を active/READY/POSTED にしない。
+- 実 fetch/download/cut/upload/post を試す場合は、ユーザー確認と confirm flags と環境フラグを全部確認する。
+- media/clip は現状 plan/preflight 層。実処理の接続は承認済み source だけに限定する。
+- PR 前に `python3 scripts/test_phase13_production_sources_real_urls.py` と dry-run/BLOCKED sweep を再実行する。

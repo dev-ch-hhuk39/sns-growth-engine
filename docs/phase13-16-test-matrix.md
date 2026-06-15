@@ -11,8 +11,22 @@
 | test_phase13_production_sources.py | production_sources.example.json | 28 | ✅ PASS |
 | test_phase13_source_lifecycle_cli.py | add/update/review CLIs | 23 | ✅ PASS |
 | test_phase13_smoke_plan.py | SmokePlan / Publisher CLIs | 15 | ✅ PASS |
+| test_phase13_production_sources_real_urls.py | user-provided real URL reflection | 1 | ✅ PASS |
+| test_phase13_media_asset_storage.py | media_assets planning / PipelineStore dry-run | 3 | ✅ PASS |
+| test_phase13_video_clip_execution.py | clip confirm gate | 3 | ✅ PASS |
+| test_phase13_media_post_preflight.py | media post preflight | 3 | ✅ PASS |
+| test_phase13_query_source_support.py | trend query sources | 5 | ✅ PASS |
+| test_phase13_article_source_support.py | note/article source policy | 5 | ✅ PASS |
+| test_phase13_source_concept_matching.py | subject_policy / concept safety | 4 | ✅ PASS |
+| test_phase13_fetcher_production_paths.py | fetcher mock and confirm gate | 2 | ✅ PASS |
+| test_phase13_source_to_post_production_path.py | orchestrator production dry-run path | 4 | ✅ PASS |
+| test_phase13_generation_production.py | draft/review-only generation | 3 | ✅ PASS |
+| test_phase13_publishers_production_safety.py | publisher CLI safety gates | 4 | ✅ PASS |
+| test_phase13_pdca_production_loop.py | PDCA review-only suggestions | 3 | ✅ PASS |
 
-**合計: 148 PASS / 0 FAIL**
+**Phase 13 legacy core total: 148 PASS / 0 FAIL**  
+**Phase 9-13 regression + added tests: 39 files PASS / 0 FAIL**  
+**Dry-run / BLOCKED command sweep: 35 commands PASS / 0 FAIL**
 
 ### Phase 13 テストカバレッジ
 
@@ -47,6 +61,16 @@
 | publish_x_post 280文字制限 | smoke_plan |
 | publish_threads_post dry_run | smoke_plan |
 | beauty_account publisher BLOCKED | smoke_plan |
+| user-provided 54 URLs reflected | production_sources_real_urls |
+| `REPLACE_WITH_REAL_*` absent | production_sources_real_urls |
+| query source counts and fetch disabled | query_source_support |
+| note article extraction fields / copy block | article_source_support |
+| media asset creation from raw image/video URLs | media_asset_storage |
+| media preflight blocks unknown/plan_only media | media_post_preflight |
+| clip execution blocks missing confirm | video_clip_execution |
+| confirmなしfetch BLOCKED | fetcher_production_paths |
+| confirmなしpost BLOCKED | publishers_production_safety |
+| PDCA suggestions `auto_apply=false` | pdca_production_loop |
 
 ## Phase 9-11 (継続確認)
 
@@ -58,6 +82,27 @@
 | test_phase10_threads_publisher.py | 7 | ✅ PASS |
 | test_phase10_x_publisher.py | 5 | ✅ PASS |
 | test_phase11_source_to_post_orchestrator.py | 23 | ✅ PASS |
+
+## Dry-run / BLOCKED Sweep
+
+| Area | Result |
+|---|---|
+| ToolDoctor dry-run | ✅ PASS |
+| Source account validate/review dry-run | ✅ PASS |
+| Mock source fetch for X/YouTube/note/TikTok | ✅ PASS |
+| `--fetch` without `--confirm-fetch` | ✅ BLOCKED |
+| Media preflight/download dry-run | ✅ PASS |
+| `--download` without `--confirm-download` | ✅ BLOCKED |
+| Clip dry-run | ✅ PASS |
+| `--cut` without `--confirm-cut` | ✅ BLOCKED |
+| Upload dry-run | ✅ PASS |
+| `--upload` without `--confirm-upload` | ✅ BLOCKED |
+| Source-to-post pipeline mock dry-run | ✅ PASS / publish BLOCKED |
+| Publisher mock/confirm dry-run | ✅ PASS |
+| Real post without `--confirm-post` | ✅ BLOCKED |
+| Real smoke plan dry-run readiness | ✅ PASS with environment NOT_READY WARN |
+| Posted results mock import dry-run | ✅ PASS |
+| PDCA cycle mock dry-run | ✅ PASS |
 
 ## Phase 14-16 (未実装・テスト計画)
 
