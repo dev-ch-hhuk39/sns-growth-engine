@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-06-13 (Phase 8: operational readiness hardening + Source Registry 実装完了)
+**最終更新**: 2026-06-15 (Phase 12: Fetcher基盤 + Publishers + Orchestrator + テスト FAIL=0)
 
 ---
 
@@ -49,9 +49,29 @@
                          - Sheets schema Phase 8タブ追加
                          - preflight_real_llm_generation
                          - check_beauty_activation_readiness
-[予定] Phase 9       → 実LLM生成テスト (MOCK_LLM=false, 1件ずつ)
-[予定] Phase 10      → beauty_account コンテンツ設計確定（条件充足後・ユーザー承認）
-[予定] Phase 11      → night_scout / liver_manager 本番スモークテスト（active account only）
+[完了] Phase 9       → Fetcher基盤（BaseFetcher / FetcherRegistry / BuzzScorer / 7アダプター / RawSourceItem）
+                         - yt_dlp / tiktok_to_ytdlp / agent_reach / last30days_skill / youtube_transcript / browser_export / api_disabled
+                         - confirm_fetch / confirm_download ゲート
+                         - default_sources.json Phase 9 フィールド追加
+                         - テスト FAIL=0 (Phase 9: 20 PASS)
+[完了] Phase 10      → Generation + Publishers + Safety
+                         - OriginalHypothesisOrchestrator + PDCA full loop
+                         - XPublisher / ThreadsPublisher / PublisherFactory (dry_run デフォルト)
+                         - beauty_account draft_only ブロック確認
+                         - テスト FAIL=0 (Phase 10: 37 PASS)
+[完了] Phase 11      → SourceToPostOrchestrator 統合
+                         - 8ステップパイプライン (fetch→buzz→reference→media_plan→generation→preflight→publish_plan→pdca)
+                         - safety dict (no_real_post / no_real_download)
+                         - テスト FAIL=0 (Phase 11: 10 PASS)
+[完了] Phase 12      → Scripts + Docs + Config 整備
+                         - publishers 相対 import 修正
+                         - accounts __init__.py 修正
+                         - COLLECTION_METHODS 拡張
+                         - docs 5本追加
+[予定] Phase 13      → Production readiness: ToolDoctor + PipelineStore + ArticleFetcher + ソース候補登録
+[予定] Phase 14      → メディアアセット download/storage/Cloudinary パイプライン本番化
+[予定] Phase 15      → Publisher 本番パス (confirm + フラグ揃えた条件下のみ)
+[予定] Phase 16      → PDCA 本番連携 + 全テスト FAIL=0 最終確認
 ```
 
 ---

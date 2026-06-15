@@ -203,3 +203,44 @@ python3 scripts/check_beauty_activation_readiness.py --mock
 ```bash
 python3 scripts/preflight_real_llm_generation.py --account-id night_scout --platform x --mock
 ```
+
+---
+
+## Phase 9-12 追加 CLI（2026-06-15 更新）
+
+### Fetcher ツール確認
+```bash
+python3 scripts/check_source_fetcher_tools.py
+```
+yt-dlp / ffmpeg / youtube-transcript-api の導入状況を確認します。
+
+### ソース候補 dry-run fetch
+```bash
+python3 scripts/fetch_sources.py --source-id src_ns_yt_001 --dry-run
+python3 scripts/fetch_sources.py --source-id src_ns_yt_001 --confirm-fetch
+```
+
+### SourceToPostOrchestrator dry-run
+```bash
+python3 scripts/run_source_to_post.py --account-id night_scout --platform threads --dry-run
+```
+
+### パイプライン出力保存
+```bash
+python3 scripts/save_pipeline_outputs.py --run-id RUN_XXXX --dry-run
+```
+
+### ソース候補管理
+```bash
+python3 scripts/add_source_candidate.py --source-id src_ns_yt_001 --status candidate
+python3 scripts/review_source_candidates.py --account-id night_scout
+python3 scripts/update_source_status.py --source-id src_ns_yt_001 --status approved
+```
+
+### 安全確認チェックリスト（Phase 13 以降）
+- `confirm_fetch` なしで実 fetch しない
+- `confirm_download` なしで動画 DL しない
+- `confirm_cut` なしで ffmpeg カットしない
+- `confirm_upload` なしで Cloudinary upload しない
+- `confirm_post` なしで実投稿しない
+- `beauty_account` は常に draft_only（active 化禁止）
