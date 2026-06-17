@@ -80,8 +80,11 @@
 - Phase9-13 regression: 39 / 39 PASS
 - dry-run / BLOCKED checks: 22 / 22 PASS
 - Merge可否: merge-ready
-- Merge結果: pending at feature-branch docs update; final run report records merged main SHA
-- main反映後HEAD: pending at feature-branch docs update; final run report records the value
+- Merge結果: PR #1 squash merged
+- Production pipeline merge SHA: `759af859a4d70d9ec1105f8d70f1c4ea893f29db`
+- main反映後HEAD確認: `759af859a4d70d9ec1105f8d70f1c4ea893f29db`
+- main反映後 minimum tests: 4 / 4 PASS
+- main反映後 dry-run / BLOCKED: 5 / 5 PASS
 
 ## First Smoke Sequence
 
