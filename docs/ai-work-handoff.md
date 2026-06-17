@@ -51,6 +51,7 @@ Source candidates
 - `scripts/publish_x_post.py`
 - `scripts/review_source_candidates.py`
 - `scripts/run_real_smoke_plan.py`
+- `scripts/test_phase13_smoke_plan.py`
 - `src/orchestrators/source_to_post_orchestrator.py`
 - `src/publishers/threads_publisher.py`
 - `src/reference/fetchers/fetcher_registry.py`
@@ -134,6 +135,7 @@ Source candidates
 - real post without `--confirm-post`: BLOCKED
 - Source-to-post mock dry-run: PASS, publish step remains BLOCKED without confirm
 - Real smoke plan dry-run: ran readiness check only; environment NOT_READY is acceptable WARN
+- `run_real_smoke_plan.py --platform threads`: Threads preflight branch confirmed; no X preflight mix-in
 
 ## 実行していないこと
 
@@ -223,6 +225,19 @@ Source candidates
 - main反映後 dry-run / BLOCKED: 5 / 5 PASS
 - 実fetch/download/cut/upload/post: 未実行
 - secrets/cookie/token/API key: 表示なし
+
+## Follow-up Docs / Smoke Plan Update
+
+- Branch: `feature/final-rollout-status-docs`
+- PR URL: https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/2
+- PR #2 head before smoke fix: `182cb01eb02373e3c26c5f6886aaa36df7fad06c`
+- PR #2 merge attempt: BLOCKED by GitHub connector approval credits (`out of credits`); main direct push was not attempted.
+- Follow-up fix: `run_real_smoke_plan.py --platform threads` now runs Threads preflight instead of X preflight.
+- Added test coverage in `scripts/test_phase13_smoke_plan.py`.
+- Follow-up test results:
+  - `python3 scripts/run_real_smoke_plan.py --account-id liver_manager --platform threads --dry-run`: NOT_READY expected in credential-free env; Threads preflight confirmed; no real API/upload/post.
+  - `python3 scripts/test_phase13_smoke_plan.py`: 18 / 18 PASS
+  - `python3 scripts/test_phase13_publishers_production_safety.py`: 4 / 4 PASS
 
 ## 初回スモーク手順
 

@@ -23,7 +23,7 @@
 | Publisher CLI args | Added `--mock`, `--confirm-post`, default dry-run text. |
 | `review_source_candidates.py` args | Added default source file, `--account-id`, and `--dry-run`. |
 | `import_posted_results.py --mock --dry-run` | Added mock path. |
-| `run_real_smoke_plan.py` compatibility | Added `--platform` and `--dry-run` args. |
+| `run_real_smoke_plan.py` compatibility | Added `--platform` and `--dry-run` args; `--platform threads` now runs Threads preflight. |
 | `load_sources()` missing alias | Added to source registry. |
 | PipelineStore required stages | Added explicit stage list, dry-run save plan, Sheets write plan, queue status guard. |
 | Threads real-post unimplemented exception | Converted to `SAFETY_STOP` `PublishResult`. |
@@ -51,6 +51,7 @@
 ## Residual WARN
 
 - `run_real_smoke_plan.py` returns non-zero in this environment because real credentials/API readiness are not configured. It remains dry-run only and does not call APIs.
+- `run_real_smoke_plan.py --platform threads` now uses Threads readiness checks instead of the X readiness check.
 - Abstract/interface `NotImplementedError` remains in `BasePublisher` and `BaseFetcher`.
 - Legacy docs/tests still mention old `NotImplementedError` behavior for historical phases.
 - X collector API stubs remain intentionally blocked and are outside this Phase 13 production source media path.
@@ -85,6 +86,16 @@
 - main反映後HEAD確認: `759af859a4d70d9ec1105f8d70f1c4ea893f29db`
 - main反映後 minimum tests: 4 / 4 PASS
 - main反映後 dry-run / BLOCKED: 5 / 5 PASS
+
+## Follow-up PR #2
+
+- Branch: `feature/final-rollout-status-docs`
+- PR URL: https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/2
+- Merge attempt: BLOCKED by GitHub connector approval credits (`out of credits`); no direct push to main attempted.
+- Follow-up fix: Threads platform real smoke readiness now checks Threads credentials/safety flags.
+- Tests after follow-up fix:
+  - `scripts/test_phase13_smoke_plan.py`: 18 / 18 PASS
+  - `scripts/test_phase13_publishers_production_safety.py`: 4 / 4 PASS
 
 ## First Smoke Sequence
 
