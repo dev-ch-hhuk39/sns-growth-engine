@@ -160,9 +160,9 @@ class SourceToPostOrchestrator:
                 "publish_blocked": not confirm_post,
             },
             "safety": {
-                "real_fetch": confirm_fetch,
-                "real_download": confirm_download,
-                "real_post": confirm_post,
+                "real_fetch": confirm_fetch and not dry_run and not mock,
+                "real_download": confirm_download and not dry_run,
+                "real_post": confirm_post and not dry_run,
                 "beauty_account_blocked": is_beauty,
                 "no_real_download": True,
                 "no_real_post": True,
@@ -343,7 +343,42 @@ class SourceToPostOrchestrator:
         mock: bool,
     ) -> dict[str, Any]:
         references = reference_result.get("references", [])
-        download_candidates = [r for r in references if r.get("has_video")]
+        download_candidates = [r for r in references if r.get("has_video") or r.get("image_urls") or r.get("video_urls")]
+        raw_items = []
+        for ref in references:
+            video_urls = ref.get("video_urls", [])
+            if ref.get("has_video") and not video_urls and ref.get("source_url"):
+                video_urls = [ref.get("source_url")]
+            raw_items.append({
+                "raw_item_id": ref.get("ref_id", ""),
+                "source_id": ref.get("source_id", ""),
+                "target_account_id": ref.get("account_id", ""),
+                "image_urls": ref.get("image_urls", []),
+                "video_urls": video_urls,
+                "rights_status": "unknown" if ref.get("has_video") else "reference_only",
+                "reuse_policy": "reference_only",
+                "media_policy": "plan_only",
+            })
+
+        sources_by_id = {
+            item.get("source_id", ""): {
+                "source_id": item.get("source_id", ""),
+                "candidate_status": "candidate",
+                "rights_policy": item.get("rights_status", "unknown"),
+                "reuse_policy": item.get("reuse_policy", "reference_only"),
+                "media_policy": item.get("media_policy", "plan_only"),
+            }
+            for item in raw_items
+            if item.get("source_id")
+        }
+        try:
+            from ..media.media_asset_store import collect_media_assets_from_raw_items, preflight_media_assets
+
+            media_assets = collect_media_assets_from_raw_items(raw_items, sources_by_id)
+            media_preflight = preflight_media_assets(media_assets, sources_by_id, action="post")
+        except Exception as e:
+            media_assets = []
+            media_preflight = {"status": "ERROR", "message": str(e)}
 
         plan = {
             "status": "OK",
@@ -351,6 +386,18 @@ class SourceToPostOrchestrator:
             "action": "plan_only",
             "download_blocked": not confirm_download,
             "note": "実downloadには --confirm-download が必要です",
+            "media_assets": media_assets,
+            "media_preflight": media_preflight,
+            "video_understanding_runs": [],
+            "clip_candidate_plans": [
+                {
+                    "source_id": r.get("source_id", ""),
+                    "reference_post_id": r.get("ref_id", ""),
+                    "status": "WAITING_REVIEW",
+                    "auto_cut": False,
+                }
+                for r in download_candidates
+            ],
         }
 
         if download_candidates and not confirm_download:

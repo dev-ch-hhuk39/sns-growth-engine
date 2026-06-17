@@ -46,6 +46,8 @@ def _parse_args() -> argparse.Namespace:
                    help="アカウントID（night_scout / liver_manager）")
     p.add_argument("--use-sheets", action="store_true",
                    help="実Google Sheets に接続する（なし: MockSheetsClient）")
+    p.add_argument("--mock", action="store_true",
+                   help="モック/ローカルdry-runとして動作する")
     p.add_argument("--test-write", action="store_true",
                    help="Sheets 書き込みを有効にする（なし: 読み取り専用）")
     p.add_argument("--dry-run", action="store_true", default=True,
@@ -75,7 +77,9 @@ def main() -> int:
     ffmpeg_dry_run = not actually_cut
 
     if args.cut and not args.confirm_cut:
-        print("[WARN] --cut が指定されましたが --confirm-cut がないため dry-run で動作します")
+        print("[BLOCKED] --cut が指定されましたが --confirm-cut がないため切り抜きをブロックします")
+        print("  実cutは実行していません")
+        return 1
 
     client = make_client(cfg, dry_run=dry_run_sheets, force_mock=force_mock)
 

@@ -82,26 +82,38 @@ def normalize_result(raw: dict, account_id: str) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="Posted Results Importer")
-    parser.add_argument("--account-id", required=True)
-    parser.add_argument("--input", required=True, help="インポートファイル (JSON/CSV)")
+    parser.add_argument("--account-id", default="night_scout")
+    parser.add_argument("--input", default="", help="インポートファイル (JSON/CSV)")
     parser.add_argument("--output", help="正規化後のJSONを保存するパス")
+    parser.add_argument("--mock", action="store_true", help="mock posted_results を使う")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     print(f"[import_posted_results] account={args.account_id} input={args.input}")
 
-    if not os.path.isfile(args.input):
+    if args.mock and not args.input:
+        raw_results = [{
+            "post_id": "mock_post_001",
+            "platform": "x",
+            "posted_at": _now_jst(),
+            "text": "mock posted result",
+            "likes": 12,
+            "replies": 1,
+            "reposts": 2,
+            "impressions": 1000,
+        }]
+    elif not os.path.isfile(args.input):
         print(f"[ERROR] ファイルが見つかりません: {args.input}")
         sys.exit(1)
-
-    ext = os.path.splitext(args.input)[1].lower()
-    if ext == ".json":
-        raw_results = load_from_json(args.input)
-    elif ext == ".csv":
-        raw_results = load_from_csv(args.input)
     else:
-        print(f"[ERROR] 非対応形式: {ext}。.json または .csv を使用してください。")
-        sys.exit(1)
+        ext = os.path.splitext(args.input)[1].lower()
+        if ext == ".json":
+            raw_results = load_from_json(args.input)
+        elif ext == ".csv":
+            raw_results = load_from_csv(args.input)
+        else:
+            print(f"[ERROR] 非対応形式: {ext}。.json または .csv を使用してください。")
+            sys.exit(1)
 
     normalized = [normalize_result(r, args.account_id) for r in raw_results]
 

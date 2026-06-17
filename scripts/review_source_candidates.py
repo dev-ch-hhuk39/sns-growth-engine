@@ -38,12 +38,18 @@ def _format_row(s: dict) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="ソース候補一覧レビュー")
-    parser.add_argument("--source-file", required=True)
+    parser.add_argument(
+        "--source-file",
+        default=os.path.join(_ROOT, "config", "source_accounts", "production_sources.example.json"),
+    )
     parser.add_argument("--account", default="", help="target_account でフィルタ")
+    parser.add_argument("--account-id", default="", help="target_account で絞り込み（互換alias）")
     parser.add_argument("--platform", default="", help="platform でフィルタ")
     parser.add_argument("--status", default="", help="candidate_status でフィルタ")
     parser.add_argument("--show-all", action="store_true", help="disabled も含めて全件表示")
+    parser.add_argument("--dry-run", action="store_true", default=True)
     args = parser.parse_args()
+    account_filter = args.account or args.account_id
 
     if not os.path.isfile(args.source_file):
         print(f"[ERROR] ファイルが見つかりません: {args.source_file}")
@@ -52,8 +58,8 @@ def main() -> int:
     sources = _load_sources(args.source_file)
 
     filtered = sources
-    if args.account:
-        filtered = [s for s in filtered if args.account in s.get("target_account_ids", [])]
+    if account_filter:
+        filtered = [s for s in filtered if account_filter in s.get("target_account_ids", [])]
     if args.platform:
         filtered = [s for s in filtered if s.get("source_platform") == args.platform]
     if args.status:
@@ -63,7 +69,8 @@ def main() -> int:
 
     print(f"\n=== Source Candidates Review ===")
     print(f"  ファイル: {args.source_file}")
-    print(f"  フィルタ: account={args.account or '全て'} platform={args.platform or '全て'} status={args.status or '全て'}")
+    print(f"  フィルタ: account={account_filter or '全て'} platform={args.platform or '全て'} status={args.status or '全て'}")
+    print(f"  dry_run: {args.dry_run}")
     print(f"  表示件数: {len(filtered)} / 全体: {len(sources)}")
     print()
 

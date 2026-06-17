@@ -28,8 +28,12 @@ SUPPORTED_PLATFORMS = [
     "threads",
     "tiktok",
     "youtube",
+    "youtube_playlist",
+    "youtube_streams",
     "youtube_shorts",
     "instagram_reels",
+    "note",
+    "query",
 ]
 
 RIGHTS_POLICIES = ["reference_only", "owned", "licensed", "unknown"]
@@ -71,6 +75,11 @@ def load_registry(registry_path: str | None = None) -> list[dict[str, Any]]:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return data.get("sources", [])
+
+
+def load_sources(registry_path: str | None = None) -> list[dict[str, Any]]:
+    """Fetcher/CLI互換用のエイリアス。"""
+    return load_registry(registry_path)
 
 
 def filter_sources(

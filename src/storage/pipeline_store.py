@@ -11,6 +11,33 @@ from typing import Any
 
 _DEFAULT_OUTPUT_DIR = "output/pipeline_runs"
 
+PIPELINE_STAGES = [
+    "raw_source_items",
+    "source_fetch_runs",
+    "source_fetch_errors",
+    "reference_posts",
+    "reference_post_scores",
+    "media_assets",
+    "media_asset_runs",
+    "media_download_errors",
+    "video_understanding_runs",
+    "clip_candidate_plans",
+    "clip_execution_runs",
+    "generation_jobs",
+    "queue",
+    "queue_items",
+    "thread_series",
+    "thread_series_posts",
+    "publisher_runs",
+    "publish_errors",
+    "posted_results",
+    "pdca_runs",
+    "prompt_improvement_suggestions",
+    "source_collection_plans",
+]
+
+QUEUE_ALLOWED_STATUSES = {"DRAFT", "WAITING_REVIEW", "PLANNED"}
+
 
 class PipelineStore:
     """run_id ごとにパイプライン出力を JSON として保存する。
@@ -38,6 +65,9 @@ class PipelineStore:
         dry_run: bool = True,
     ) -> str:
         """ステージ出力を保存する。dry_run=True の場合はパスのみ返す。"""
+        if stage in ("queue", "queue_items"):
+            self._assert_queue_safe(data)
+
         path = self._run_dir(run_id) / f"{stage}.json"
 
         if dry_run:
@@ -47,6 +77,53 @@ class PipelineStore:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2, default=str)
         return str(path)
+
+    def save_many(
+        self,
+        run_id: str,
+        stage_payloads: dict[str, Any],
+        dry_run: bool = True,
+    ) -> dict[str, str]:
+        """複数ステージを保存する。dry_runでは保存予定パスのみ返す。"""
+        return {
+            stage: self.save(run_id, stage, payload, dry_run=dry_run)
+            for stage, payload in stage_payloads.items()
+        }
+
+    def build_sheets_write_plan(
+        self,
+        stage_payloads: dict[str, Any],
+        test_write: bool = False,
+    ) -> dict[str, Any]:
+        """Sheets保存候補を作る。既存タブ/列は変更しない前提の計画のみ。"""
+        return {
+            "status": "TEST_WRITE_READY" if test_write else "PLAN_ONLY",
+            "test_write": test_write,
+            "sheets_api_429_policy": "WARN",
+            "preserve_existing_tabs": True,
+            "preserve_existing_columns": True,
+            "delete_columns": False,
+            "targets": [
+                {
+                    "stage": stage,
+                    "rows": len(payload) if isinstance(payload, list) else (1 if payload else 0),
+                    "action": "append_or_update_candidates",
+                }
+                for stage, payload in stage_payloads.items()
+            ],
+        }
+
+    def _assert_queue_safe(self, data: Any) -> None:
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            status = item.get("status", "DRAFT")
+            account_id = item.get("account_id", "")
+            if account_id == "beauty_account" and status != "WAITING_REVIEW":
+                item["status"] = "WAITING_REVIEW"
+            elif status not in QUEUE_ALLOWED_STATUSES:
+                item["status"] = "WAITING_REVIEW"
 
     def save_summary(
         self,

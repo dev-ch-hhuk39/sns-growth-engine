@@ -1,253 +1,155 @@
 # Manual Smoke Test Sequence
 
-実テストを安全に1ステップずつ実行するための手順書。
-**必ず順番通りに実行すること。**
+最終版の初回スモーク手順です。初回運用では実投稿・実download・実cut・実uploadを行いません。
 
-## 前提確認
+## 固定順序
+
+1. tool doctor
+2. source registry validate
+3. source candidate review
+4. mock fetch dry-run
+5. source_to_post pipeline mock dry-run
+6. media preflight dry-run
+7. publisher dry-run
+8. posted_results import dry-run
+9. PDCA dry-run
+10. 人間承認後に confirm-fetch を1sourceだけ
+11. confirm-fetch後もdownload/cut/upload/postはしない
+12. download/cut/upload/postは別承認
+13. 初回1投稿はpublisher dry-runまで
+14. 実投稿はさらに別承認
+
+## 0. 作業ディレクトリ
 
 ```bash
-cd /Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2
-python scripts/run_real_smoke_plan.py --step all --account-id night_scout
+cd "/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2"
+git status -sb
 ```
 
-全ステップが `READY_FOR_MANUAL_SMOKE` 以上になっていること。
+`.env`, cookie, token, API key の値は表示しないでください。
 
----
-
-## Step 1: Cloudflare 30秒 Transcription テスト
-
-### 前提
-- `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` 設定済み
-- 30秒以内の音声ファイルが存在する
-
-### 手順
+## 1. Tool Doctor
 
 ```bash
-# 1-1. 認証情報確認（実API不要・常時安全）
-python scripts/test_cloudflare_transcription_credentials.py
-
-# 1-2. 音声ファイル準備（ffmpegで30秒音声作成）
-ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 30 tests/fixtures/smoke_audio_30s.mp3
-
-# 1-3. .env で ALLOW_TRANSCRIPTION_API=true に変更
-
-# 1-4. smoke test 実行（30秒以内の音声ファイルのみ）
-python scripts/test_cloudflare_transcription_smoke.py \
-  --audio-file tests/fixtures/smoke_audio_30s.mp3 \
-  --use-api \
-  --confirm-api
-
-# 1-5. 実行後すぐに false へ戻す（必須）
-python -c "
-import re, pathlib
-env = pathlib.Path('.env').read_text()
-env = re.sub(r'ALLOW_TRANSCRIPTION_API=true', 'ALLOW_TRANSCRIPTION_API=false', env)
-pathlib.Path('.env').write_text(env)
-print('ALLOW_TRANSCRIPTION_API=false に戻しました')
-"
-
-# 1-6. 戻し確認
-python scripts/test_cloudflare_transcription_credentials.py
+python3 scripts/check_source_fetcher_tools.py --dry-run
 ```
 
----
+`NOT_INSTALLED` は WARN 扱いでよいです。実fetchはしません。
 
-## Step 2: Cloudinary 小ファイル Upload テスト
-
-### 前提
-- Cloudinary 認証情報 3項目が設定済み
-- 小さいテスト用ファイルがある
-
-### 手順
+## 2. Source Registry Validate
 
 ```bash
-# 2-1. 認証情報確認
-python scripts/test_cloudinary_credentials.py
-
-# 2-2. テスト用ファイル準備（1x1px PNG）
-python -c "
-import base64, pathlib
-data = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
-pathlib.Path('tests/fixtures/smoke_test_1px.png').write_bytes(data)
-print('作成完了')
-"
-
-# 2-3. .env で ALLOW_CLOUDINARY_UPLOAD=true に変更
-
-# 2-4. smoke upload 実行（小ファイルのみ）
-python scripts/test_cloudinary_upload_smoke.py \
-  --file tests/fixtures/smoke_test_1px.png \
-  --upload \
-  --confirm-upload
-
-# 2-5. アップロードしたファイルを削除
-# Cloudinary Dashboard または API で削除
-
-# 2-6. false へ戻す（必須）
-python -c "
-import re, pathlib
-env = pathlib.Path('.env').read_text()
-env = re.sub(r'ALLOW_CLOUDINARY_UPLOAD=true', 'ALLOW_CLOUDINARY_UPLOAD=false', env)
-pathlib.Path('.env').write_text(env)
-print('ALLOW_CLOUDINARY_UPLOAD=false に戻しました')
-"
+python3 scripts/manage_source_accounts.py --validate --dry-run
 ```
 
----
+確認ポイント:
 
-## Step 3: Video Clip Dry-Run
+- production source は inactive / fetch disabled
+- `beauty_account` は WAITING_REVIEW / draft-only
+- source priority 自動変更なし
+
+## 3. Source Candidate Review
 
 ```bash
-# 実ダウンロード・実切り抜きはしない
-python scripts/preflight_video_real_test.py --account-id night_scout --mock
-python scripts/analyze_video_clips.py --account-id night_scout --dry-run
+python3 scripts/review_source_candidates.py --account-id night_scout --dry-run
+python3 scripts/review_source_candidates.py --account-id liver_manager --dry-run
+python3 scripts/review_source_candidates.py --account-id beauty_account --dry-run
 ```
 
----
-
-## Step 4: X テキストのみ 1件投稿
-
-### 前提
-- X API 認証情報 4項目が設定済み
-- queue に `status=READY` の候補が存在する
-- 投稿テキストが 120文字以内
-- `rights_review_required=false`
-
-### 手順
+## 4. Mock Fetch Dry-run
 
 ```bash
-# 4-1. preflight 確認
-python scripts/preflight_x_real_post.py --account-id night_scout
+python3 scripts/fetch_source_posts.py --account-id night_scout --platform x --mock --dry-run
+python3 scripts/fetch_source_posts.py --account-id night_scout --platform youtube --mock --dry-run
+python3 scripts/fetch_source_posts.py --account-id liver_manager --platform youtube --mock --dry-run
+python3 scripts/fetch_source_posts.py --account-id liver_manager --platform note --mock --dry-run
+python3 scripts/fetch_source_posts.py --account-id beauty_account --platform youtube --mock --dry-run
+python3 scripts/fetch_source_posts.py --account-id beauty_account --platform tiktok --mock --dry-run
+```
 
-# 4-2. キュー確認・queue_id メモ
-python scripts/review_queue.py --account-id night_scout --status READY
+## 5. Source-to-post Pipeline Mock Dry-run
 
-# 4-3. .env で PUBLISH_ENABLED=true, ALLOW_REAL_X_POST=true に変更
+```bash
+python3 scripts/run_source_to_post_pipeline.py --account-id night_scout --platform x --mock --dry-run
+python3 scripts/run_source_to_post_pipeline.py --account-id night_scout --platform threads --source-platform youtube --mock --dry-run
+python3 scripts/run_source_to_post_pipeline.py --account-id liver_manager --platform threads --source-platform youtube --mock --dry-run
+python3 scripts/run_source_to_post_pipeline.py --account-id liver_manager --platform threads --source-platform note --mock --dry-run
+python3 scripts/run_source_to_post_pipeline.py --account-id beauty_account --platform threads --source-platform youtube --mock --dry-run
+```
 
-# 4-4. 1件のみ投稿
-python scripts/publish_queue.py \
+publish step は confirmなしのため BLOCKED で正常です。
+
+## 6. Media Preflight Dry-run
+
+```bash
+python3 scripts/preflight_media_assets.py --account-id night_scout --mock --dry-run
+python3 scripts/download_media_assets.py --account-id night_scout --download --dry-run
+python3 scripts/cut_video_clips.py --account-id liver_manager --cut --dry-run
+python3 scripts/upload_media_assets.py --account-id night_scout --upload --dry-run
+```
+
+`download`, `cut`, `upload` は confirmなしなので必ず BLOCKED です。
+
+## 7. Publisher Dry-run
+
+```bash
+python3 scripts/publish_threads_post.py --account-id night_scout --confirm-post --dry-run
+python3 scripts/publish_x_post.py --account-id night_scout --confirm-post --dry-run
+```
+
+`--dry-run` が付いているため実投稿は行いません。
+
+## 8. Posted Results Import Dry-run
+
+```bash
+python3 scripts/import_posted_results.py --mock --dry-run
+```
+
+## 9. PDCA Dry-run
+
+```bash
+python3 scripts/run_pdca_cycle.py --account-id night_scout --platform x --days 7 --dry-run --mock --generate-next-plan
+```
+
+PDCA 提案は `WAITING_REVIEW` / `auto_apply=false` のままにします。
+
+## 10. Human-approved Confirm Fetch, One Source Only
+
+人間が明示承認した後だけ、1 source だけ confirm-fetch を試します。
+
+```bash
+python3 scripts/fetch_source_posts.py \
   --account-id night_scout \
-  --queue-id {queue_id} \
-  --confirm-real-post \
-  --max-real-posts 1
-
-# 4-5. 投稿後すぐに false へ戻す（必須）
-python -c "
-import re, pathlib
-env = pathlib.Path('.env').read_text()
-env = re.sub(r'PUBLISH_ENABLED=true', 'PUBLISH_ENABLED=false', env)
-env = re.sub(r'ALLOW_REAL_X_POST=true', 'ALLOW_REAL_X_POST=false', env)
-pathlib.Path('.env').write_text(env)
-print('安全フラグをfalseに戻しました')
-"
-```
-
----
-
-## Step 5: X メディア付き 1件投稿
-
-```bash
-# Step 4の手順に加えて --with-media を追加
-# 事前に Cloudinary へのアップロード完了が必要
-
-python scripts/publish_queue.py \
-  --account-id night_scout \
-  --queue-id {queue_id} \
-  --with-media \
-  --confirm-real-post \
-  --max-real-posts 1
-```
-
----
-
-## Step 6: 投稿後 false 戻し確認
-
-```bash
-python scripts/print_env_status.py
-# 全フラグが false であることを確認
-```
-
----
-
-## Step 7: posted_results 確認
-
-```bash
-python scripts/check_pipeline_integrity.py --account-id night_scout
-```
-
----
-
-## Step 8: Learning Export / 分析
-
-```bash
-# 投稿結果を分析
-python scripts/analyze_post_results.py --account-id night_scout
-
-# 改善提案生成（dry-run）
-python scripts/generate_learning_from_results.py \
-  --account-id night_scout \
+  --platform x \
+  --source-id <approved_source_id> \
+  --fetch \
+  --confirm-fetch \
   --dry-run
 ```
 
----
+この段階でも `download`, `cut`, `upload`, `post` は行いません。
 
-## Step 9: account_config 安全確認（Phase 6.0）
+## 11. Separate Approval Required
 
-```bash
-# pipeline integrity に account_config チェックが含まれる
-python scripts/check_pipeline_integrity.py --mock
+以下は初回スモークの範囲外です。必ず別承認に分けてください。
 
-# beauty_account は draft_only ブロックを確認
-python scripts/preflight_x_real_post.py --account-id beauty_account --mock
-# → [BLOCKED] beauty_account は draft_only アカウントです。 が表示されること
-```
+- 実download
+- 実cut
+- 実upload
+- 実投稿
+- `PUBLISH_ENABLED=true`
+- `ALLOW_REAL_X_POST=true`
+- `ALLOW_REAL_THREADS_POST=true`
+- `ALLOW_CLOUDINARY_UPLOAD=true`
 
-## Step 10: thread_series 動作確認（Phase 6.2）
+## PASS 判定
 
-```bash
-# night_scout dry-run
-python scripts/generate_thread_series.py \
-  --account-id night_scout --platform x \
-  --theme "夜職で稼ぐ方法" --mock-llm
-
-# beauty_account（draft_only アカウント）
-python scripts/generate_thread_series.py \
-  --account-id beauty_account --platform threads \
-  --post-count 5 --mock-llm --test-write
-
-# beauty_account レビュー
-python scripts/review_thread_series.py --account-id beauty_account
-# → [WARN] draft_only アカウント が表示されること（FAILではない）
-```
-
-**beauty_account 禁止事項（厳守）:**
-- READY 化禁止
-- 実投稿禁止（preflight は BLOCKED で終了する）
-- queue.status = POSTED 禁止
-
-
----
-
-## Phase 8 追加: Source Registry スモークテスト
-
-```bash
-# source registry確認
-python3 scripts/manage_source_accounts.py --list --dry-run
-python3 scripts/manage_source_accounts.py --account-id night_scout --active-only --validate --dry-run
-
-# source collection plan
-python3 scripts/plan_source_collection.py --account-id night_scout --source-platform x --content-type text_post --top-n 5 --dry-run --mock
-
-# end-to-end preflight with source rights
-python3 scripts/preflight_end_to_end_publish.py --account-id night_scout --platform x --post-type single_post --mock
-python3 scripts/preflight_end_to_end_publish.py --account-id beauty_account --platform x --post-type thread_series --mock
-
-# PDCA with source analysis
-python3 scripts/run_pdca_cycle.py --account-id night_scout --platform x --days 7 --dry-run --mock --generate-next-plan
-
-# 実LLM生成前preflight
-python3 scripts/preflight_real_llm_generation.py --account-id night_scout --platform x --mock
-
-# beauty_account活性化条件確認
-python3 scripts/check_beauty_activation_readiness.py --mock
-```
+- source URL 反映済み
+- mock fetch dry-run PASS
+- source_to_post mock dry-run PASS
+- media preflight dry-run PASS
+- confirmなし download/cut/upload/post BLOCKED
+- publisher dry-run PASS
+- posted_results import dry-run PASS
+- PDCA dry-run PASS
+- 実fetch/download/cut/upload/post 未実行
