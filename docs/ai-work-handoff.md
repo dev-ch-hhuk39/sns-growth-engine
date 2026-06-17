@@ -206,3 +206,60 @@ Source candidates
 - 実 fetch/download/cut/upload/post を試す場合は、ユーザー確認と confirm flags と環境フラグを全部確認する。
 - media/clip は現状 plan/preflight 層。実処理の接続は承認済み source だけに限定する。
 - PR 前に `python3 scripts/test_phase13_production_sources_real_urls.py` と dry-run/BLOCKED sweep を再実行する。
+
+## Final Rollout Update
+
+- Date: 2026-06-17
+- PR URL: https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/1
+- PR title: `Finalize production source/media pipeline`
+- Merge前確認: PASS
+- Merge前テスト: Phase13 minimum 11 / 11 PASS, Phase9-13 regression 39 / 39 PASS
+- Merge前 dry-run / BLOCKED: 22 / 22 PASS
+- Merge可否: merge-ready
+- Merge結果: pending at feature-branch docs update; final run report records the merged main SHA
+- main反映後HEAD: pending at feature-branch docs update; final run report records the value
+- 実fetch/download/cut/upload/post: 未実行
+- secrets/cookie/token/API key: 表示なし
+
+## 初回スモーク手順
+
+最終版は `docs/manual-smoke-test-sequence.md` と `docs/production-launch-checklist.md` を参照。
+
+固定順序:
+
+1. tool doctor
+2. source registry validate
+3. source candidate review
+4. mock fetch dry-run
+5. source_to_post pipeline mock dry-run
+6. media preflight dry-run
+7. publisher dry-run
+8. posted_results import dry-run
+9. PDCA dry-run
+10. 人間承認後に confirm-fetch を1sourceだけ
+11. confirm-fetch後もdownload/cut/upload/postはしない
+12. download/cut/upload/postは別承認
+13. 初回1投稿はpublisher dry-runまで
+14. 実投稿はさらに別承認
+
+## 次に人間がやること
+
+- PR #1 を確認し、main 反映後は `docs/manual-smoke-test-sequence.md` の順番で初回スモークを実施する。
+- 実fetchは1sourceだけを明示承認する。
+- 実download/cut/upload/post は別承認まで実行しない。
+
+## Codexが次に触ってよいファイル
+
+- `docs/manual-smoke-test-sequence.md`
+- `docs/production-launch-checklist.md`
+- `docs/ai-work-handoff.md`
+- `docs/codex-final-audit-report.md`
+- `docs/phase13-16-test-matrix.md`
+
+## 触らない方がいいファイル
+
+- `.env`
+- cookie/token/API key を含むファイル
+- `.claude/plans/`
+- old repo / old zip retreat folders
+- 実メディアファイル

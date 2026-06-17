@@ -68,3 +68,26 @@
 - Real upload: not executed
 - Real SNS post: not executed
 - Secrets/cookie values: not displayed
+
+## PR / Rollout Status
+
+- Date: 2026-06-17
+- PR URL: https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/1
+- PR title: `Finalize production source/media pipeline`
+- Merge前差分確認: PASS
+- Merge前安全監査: 17 / 17 PASS
+- Merge前 minimum tests: 11 / 11 PASS
+- Phase9-13 regression: 39 / 39 PASS
+- dry-run / BLOCKED checks: 22 / 22 PASS
+- Merge可否: merge-ready
+- Merge結果: pending at feature-branch docs update; final run report records merged main SHA
+- main反映後HEAD: pending at feature-branch docs update; final run report records the value
+
+## First Smoke Sequence
+
+The first smoke sequence is documented in:
+
+- `docs/manual-smoke-test-sequence.md`
+- `docs/production-launch-checklist.md`
+
+The sequence stops at dry-run publisher checks unless a separate human approval is given. A first real collection check may use `--fetch --confirm-fetch` for one approved source only. Download, cut, upload, and post remain out of scope for the first smoke.
