@@ -98,9 +98,13 @@ Each command must print `BLOCKED`.
 ## First Live Post Run (2026-06-18)
 
 - 実 fetch: `src_ns_yt_cand_009` (@kyaba_camera) から6件取得済み ✅
-- 投稿テキスト: 生成済み（123字、スカウト視点、夜職女性向け）✅
-- preflight: PASS ✅
-- publisher dry-run: DRY_RUN ✅
+- 投稿テキスト確定（99字）: ✅
+  ```
+  夜職で伸びる子に共通するのは、LINEの返し方が上手いこと。"また話したい"と思わせる会話ができる子は強い。学歴や見た目より、長く稼ぐには会話力が大事なんだよね。磨ける力だから、今からでも伸ばせる。
+  ```
+- media asset preflight: PASS ✅
+- X publisher dry-run: DRY_RUN ✅
+- Threads publisher dry-run: DRY_RUN ✅
 - PDCA dry-run: 完了（pdca_8bcc26d2）✅
 - 実投稿: **READY_WITH_MISSING_CREDENTIALS**（X/Threads 認証情報未設定）
 
@@ -111,7 +115,8 @@ Each command must print `BLOCKED`.
 ## Human Next Steps
 
 1. `.env` に X または Threads 認証情報を設定する
-2. `python3 scripts/publish_x_post.py --account-id night_scout --confirm-post --dry-run` で再確認
-3. `ALLOW_REAL_X_POST=true` を `.env` に追加（永続コミット禁止）
-4. 初回実投稿を実行（text-only、1件のみ）
-5. posted_results に登録し、PDCA を実データで再実行
+2. `ALLOW_REAL_X_POST=true` / `PUBLISH_ENABLED=true` を `.env` に追加（永続コミット禁止）
+3. 上記の確定テキストで `publish_x_post.py --no-dry-run` を実行（1件のみ）
+4. posted_results に post_id/post_url/posted_at を登録
+5. 24時間後にメトリクス確認、48時間後に PDCA 実行
+6. 詳細手順: `docs/first-live-post-report.md` 参照

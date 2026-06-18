@@ -285,18 +285,25 @@ Source candidates
 - 担当AI: Claude Code (Sonnet 4.6)
 - フェーズ: 初回実運用（認証情報未設定のため READY_WITH_MISSING_CREDENTIALS）
 
-### 実施内容
+### 実施内容（第1回: 519a48a）
 
 - `.gitignore` に `output/` を追加（パイプライン出力をGit管理外に）
 - `scripts/fetch_source_posts.py` に `--source-file` / `--bypass-active-check` フラグを追加
 - 実 fetch 実行: `src_ns_yt_cand_009` (@kyaba_camera YouTube) から6件取得
 - 取得データ: `output/pipeline_runs/fetch_ns_20260618.json`（Git管理外）
-- 投稿テキスト生成（123字、スカウト視点、夜職女性向け）
-- preflight dry-run: PASS (sources=31 assets=2)
-- publisher dry-run: DRY_RUN ✅
+- 投稿テキスト生成（確定版99字、スカウト視点、夜職女性向け）
+- preflight dry-run: PASS (sources=31, assets=2)
+- X publisher dry-run: DRY_RUN ✅ (99字)
+- Threads publisher dry-run: DRY_RUN ✅ (99字、1行WARN=問題なし)
 - posted_results import dry-run: DRY_RUN ✅
-- PDCA dry-run: pdca_8bcc26d2 (suggestions: WAITING_REVIEW, auto_apply=false)
+- PDCA dry-run: pdca_8bcc26d2 (suggestions=WAITING_REVIEW, auto_apply=false)
 - 安全フラグ全て NOT_SET 確認済み
+
+### 確定投稿テキスト（99字）
+
+```
+夜職で伸びる子に共通するのは、LINEの返し方が上手いこと。"また話したい"と思わせる会話ができる子は強い。学歴や見た目より、長く稼ぐには会話力が大事なんだよね。磨ける力だから、今からでも伸ばせる。
+```
 
 ### 実行していないこと
 
@@ -307,7 +314,7 @@ Source candidates
 
 ### 詳細
 
-- `docs/first-live-post-report.md`（今回新規作成）
+- `docs/first-live-post-report.md`（今回新規作成・更新）
 - `docs/pdca-live-loop-report.md`（今回新規作成）
 
 ## 次に人間がやること
