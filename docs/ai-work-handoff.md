@@ -280,19 +280,53 @@ Source candidates
 - secrets/cookie表示: なし
 - 詳細: `docs/pilot-deploy-report.md`
 
+## SNS実運用開始フェーズ (2026-06-18)
+
+- 担当AI: Claude Code (Sonnet 4.6)
+- フェーズ: 初回実運用（認証情報未設定のため READY_WITH_MISSING_CREDENTIALS）
+
+### 実施内容
+
+- `.gitignore` に `output/` を追加（パイプライン出力をGit管理外に）
+- `scripts/fetch_source_posts.py` に `--source-file` / `--bypass-active-check` フラグを追加
+- 実 fetch 実行: `src_ns_yt_cand_009` (@kyaba_camera YouTube) から6件取得
+- 取得データ: `output/pipeline_runs/fetch_ns_20260618.json`（Git管理外）
+- 投稿テキスト生成（123字、スカウト視点、夜職女性向け）
+- preflight dry-run: PASS (sources=31 assets=2)
+- publisher dry-run: DRY_RUN ✅
+- posted_results import dry-run: DRY_RUN ✅
+- PDCA dry-run: pdca_8bcc26d2 (suggestions: WAITING_REVIEW, auto_apply=false)
+- 安全フラグ全て NOT_SET 確認済み
+
+### 実行していないこと
+
+- 実投稿: 未実行（X/Threads 認証情報が .env に未設定）
+- 実download/cut/upload: 未実行
+- beauty_account active化: なし
+- secrets/cookie表示: なし
+
+### 詳細
+
+- `docs/first-live-post-report.md`（今回新規作成）
+- `docs/pdca-live-loop-report.md`（今回新規作成）
+
 ## 次に人間がやること
 
-1. `docs/manual-smoke-test-sequence.md` 手順10: 1sourceだけ confirm-fetch を人間承認して実行
-2. 実fetchで取得したデータを確認
-3. yt-dlp / youtube-transcript-api インストール（`docs/source-fetcher-installation.md` 参照）
-4. `.env` に実認証情報を設定（Threads/X API keys）
-5. 実download/cut/upload/post は別承認まで実行しない
+1. `.env` に X または Threads 認証情報を設定する
+   - X: `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`
+   - Threads: `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`
+2. `python3 scripts/publish_x_post.py --account-id night_scout --confirm-post --dry-run` で再確認
+3. `ALLOW_REAL_X_POST=true`（または `ALLOW_REAL_THREADS_POST=true`）を `.env` に追加（永続コミット禁止）
+4. 初回実投稿を実行（text-only、1件のみ）
+5. 投稿後 posted_results に登録
+6. 24時間後にエンゲージメントを確認し PDCA を実データで再実行
 
 ## 次にAIが触ってよいファイル
 
 - `docs/manual-smoke-test-sequence.md`
 - `docs/production-launch-checklist.md`
-- `docs/pilot-deploy-report.md`
+- `docs/first-live-post-report.md`
+- `docs/pdca-live-loop-report.md`
 - `docs/phase13-16-test-matrix.md`
 
 ## 触らない方がいいファイル

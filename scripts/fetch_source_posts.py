@@ -46,7 +46,13 @@ def main():
     parser.add_argument("--top-n", type=int, default=5, help="buzz top N")
     parser.add_argument("--import-path", help="手動インポートファイルパス")
     parser.add_argument("--output", help="結果を保存するJSONファイルパス")
+    parser.add_argument("--source-file", help="source registry JSON ファイルパス (デフォルト: default_sources.json)")
     parser.add_argument("--quiet", action="store_true", help="サマリーのみ出力")
+    parser.add_argument(
+        "--bypass-active-check",
+        action="store_true",
+        help="--source-id と --confirm-fetch を指定時のみ、active=false source を fetch 可能にする",
+    )
     args = parser.parse_args()
 
     # 安全チェック
@@ -65,7 +71,7 @@ def main():
     print(f"  mock={args.mock} dry_run={args.dry_run} confirm_fetch={confirm_fetch}")
 
     # source 一覧を読み込む
-    all_sources = load_sources()
+    all_sources = load_sources(args.source_file if args.source_file else None)
     target_sources = [s for s in all_sources if _matches(s, args)]
 
     if not target_sources:
@@ -154,8 +160,13 @@ def main():
 
 
 def _matches(source: dict, args: argparse.Namespace) -> bool:
+    bypass = getattr(args, "bypass_active_check", False)
+    explicit_source_id = bool(getattr(args, "source_id", None))
+    confirm_fetch = getattr(args, "fetch", False) and getattr(args, "confirm_fetch", False)
     if not source.get("active", True):
-        return False
+        # bypass は --source-id と --confirm-fetch が揃っている場合のみ許可
+        if not (bypass and explicit_source_id and confirm_fetch):
+            return False
     if source.get("blocked", False):
         return False
     if args.account_id not in source.get("target_account_ids", []):

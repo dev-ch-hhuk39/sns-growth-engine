@@ -95,10 +95,23 @@ Each command must print `BLOCKED`.
 - Legacy docs may reference older blocked real-post behavior.
 - PR #2 may remain unmerged until GitHub connector credits/approval are restored or a human merges it.
 
+## First Live Post Run (2026-06-18)
+
+- 実 fetch: `src_ns_yt_cand_009` (@kyaba_camera) から6件取得済み ✅
+- 投稿テキスト: 生成済み（123字、スカウト視点、夜職女性向け）✅
+- preflight: PASS ✅
+- publisher dry-run: DRY_RUN ✅
+- PDCA dry-run: 完了（pdca_8bcc26d2）✅
+- 実投稿: **READY_WITH_MISSING_CREDENTIALS**（X/Threads 認証情報未設定）
+
+不足認証情報:
+- `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`（X投稿の場合）
+- `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`（Threads投稿の場合）
+
 ## Human Next Steps
 
-1. Open the PR and review the diff.
-2. Confirm source candidates that may be used for real fetch.
-3. Run the manual smoke sequence in `docs/manual-smoke-test-sequence.md`.
-4. Approve at most one `confirm-fetch` source for the first real collection check.
-5. Keep download/cut/upload/post disabled until a separate approval round.
+1. `.env` に X または Threads 認証情報を設定する
+2. `python3 scripts/publish_x_post.py --account-id night_scout --confirm-post --dry-run` で再確認
+3. `ALLOW_REAL_X_POST=true` を `.env` に追加（永続コミット禁止）
+4. 初回実投稿を実行（text-only、1件のみ）
+5. posted_results に登録し、PDCA を実データで再実行

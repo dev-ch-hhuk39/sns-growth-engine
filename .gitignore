@@ -54,6 +54,7 @@ downloads/
 media_cache/
 cloudinary_cache/
 clips/
+output/
 
 # --- macOS ---
 .DS_Store
