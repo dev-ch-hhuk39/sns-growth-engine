@@ -48,8 +48,8 @@ def main() -> int:
             raw_items = json.load(f).get("raw_source_items", [])
     else:
         raw_items = _mock_items(args.account_id) if args.mock else []
-        if account_sources:
-            raw_items[0]["source_id"] = account_sources[0]["source_id"] if raw_items else account_sources[0]["source_id"]
+        if account_sources and raw_items:
+            raw_items[0]["source_id"] = account_sources[0]["source_id"]
 
     assets = collect_media_assets_from_raw_items(raw_items, source_map)
     result = preflight_media_assets(assets, source_map, action="post")

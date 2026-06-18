@@ -266,12 +266,33 @@ Source candidates
 - 実fetchは1sourceだけを明示承認する。
 - 実download/cut/upload/post は別承認まで実行しない。
 
-## Codexが次に触ってよいファイル
+## Pilot Deploy / Final Audit (2026-06-18)
+
+- 担当AI: Claude Code (Sonnet 4.6)
+- PR #2: squash merged to main
+- main HEAD: `19b0b77148a38717b996fb6df40066a9f6267df8`
+- セキュリティ修正: `pipeline_store.py` stage バリデーション追加 (commit `6bb694b`)
+- preflight バグ修正: `scripts/preflight_media_assets.py` IndexError修正
+- テスト: Phase10-13 全ファイル 0 FAIL
+- dry-run/BLOCKED sweep: 全13チェック PASS/BLOCKED
+- pilot smoke: night_scout/x, night_scout/threads, liver_manager/threads → [SMOKE PASS]
+- 実fetch/download/cut/upload/post: 未実行
+- secrets/cookie表示: なし
+- 詳細: `docs/pilot-deploy-report.md`
+
+## 次に人間がやること
+
+1. `docs/manual-smoke-test-sequence.md` 手順10: 1sourceだけ confirm-fetch を人間承認して実行
+2. 実fetchで取得したデータを確認
+3. yt-dlp / youtube-transcript-api インストール（`docs/source-fetcher-installation.md` 参照）
+4. `.env` に実認証情報を設定（Threads/X API keys）
+5. 実download/cut/upload/post は別承認まで実行しない
+
+## 次にAIが触ってよいファイル
 
 - `docs/manual-smoke-test-sequence.md`
 - `docs/production-launch-checklist.md`
-- `docs/ai-work-handoff.md`
-- `docs/codex-final-audit-report.md`
+- `docs/pilot-deploy-report.md`
 - `docs/phase13-16-test-matrix.md`
 
 ## 触らない方がいいファイル
