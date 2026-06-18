@@ -1,7 +1,7 @@
 """
 run_real_smoke_plan.py - Phase 5.0: Real Smoke Test Orchestrator
 
-Cloudflare / Cloudinary / X 投稿の実テストを
+Cloudflare / Cloudinary / X / Threads 投稿の実テストを
 順番・条件・安全ガード付きで確認する統合CLI。
 
 デフォルトは完全dry-run。
@@ -13,7 +13,9 @@ Cloudflare / Cloudinary / X 投稿の実テストを
   python scripts/run_real_smoke_plan.py --step cloudflare
   python scripts/run_real_smoke_plan.py --step cloudinary
   python scripts/run_real_smoke_plan.py --step x
+  python scripts/run_real_smoke_plan.py --step threads
   python scripts/run_real_smoke_plan.py --step all --account-id night_scout
+  python scripts/run_real_smoke_plan.py --step all --platform threads --account-id liver_manager
 
 出力判定:
   READY              - 認証情報あり、安全ガードOK、実行可能
@@ -312,6 +314,116 @@ def check_x(account_id: str | None) -> StepResult:
 
 
 # ------------------------------------------------------------------ #
+# Threads チェック
+# ------------------------------------------------------------------ #
+
+def check_threads(account_id: str | None) -> StepResult:
+    r = StepResult(service="Threads")
+
+    if account_id:
+        try:
+            from accounts.account_config import load_account_config
+            cfg = load_account_config(account_id)
+            if cfg.is_draft_only():
+                r.add("FAIL", "account_status", f"{account_id} は draft_only アカウントです。Threads実投稿 preflight は実行できません。")
+                r.verdict = "BLOCKED"
+                return r
+            if not cfg.allows_platform("threads"):
+                r.add("FAIL", "threads_platform", f"{account_id} は threads プラットフォームを未設定です")
+                r.verdict = "BLOCKED"
+                return r
+        except FileNotFoundError:
+            r.add("WARN", "account_config", f"{account_id} の設定ファイルが見つかりません")
+
+    required_creds = [
+        "THREADS_ACCESS_TOKEN",
+        "THREADS_USER_ID",
+    ]
+    optional_creds = [
+        "THREADS_APP_ID",
+        "THREADS_APP_SECRET",
+    ]
+
+    cred_ok = True
+    for var in required_creds:
+        if _env_str(var):
+            r.add("PASS", var, "設定済み（値は非表示）")
+        else:
+            r.add("FAIL", var, "未設定")
+            cred_ok = False
+
+    for var in optional_creds:
+        if _env_str(var):
+            r.add("PASS", var, "設定済み（値は非表示）")
+        else:
+            r.add("WARN", var, "未設定（実投稿前に確認推奨）")
+
+    publish_enabled = _env_bool("PUBLISH_ENABLED", "false")
+    allow_threads_post = _env_bool("ALLOW_REAL_THREADS_POST", "false")
+
+    if publish_enabled:
+        r.add("WARN", "PUBLISH_ENABLED", "true（本番投稿有効）")
+    else:
+        r.add("PASS", "PUBLISH_ENABLED", "false（本番投稿無効）")
+
+    if allow_threads_post:
+        r.add("WARN", "ALLOW_REAL_THREADS_POST", "true（Threads実投稿有効）")
+    else:
+        r.add("PASS", "ALLOW_REAL_THREADS_POST", "false（Threads実投稿無効）")
+
+    ready_candidates: list[dict] = []
+    try:
+        from sheets_client import MockSheetsClient, SheetsClient
+        from config_loader import get_config
+        try:
+            cfg = get_config()
+            sheets = SheetsClient(sheet_id=cfg["sheet_id"], sa_dict=cfg["sa_dict"], dry_run=True)
+        except (ValueError, Exception):
+            sheets = MockSheetsClient(dry_run=True)
+
+        raw_queue = getattr(sheets, "_queue", [])
+        for item in raw_queue:
+            if str(item.get("platform", "")).lower() != "threads":
+                continue
+            if str(item.get("status", "")).upper() != "READY":
+                continue
+            if account_id is not None and item.get("account_id") != account_id:
+                continue
+
+            text = str(item.get("text", item.get("body", "")))
+            rights = str(item.get("rights_review_required", "false")).lower()
+            risk = str(item.get("media_reuse_risk", "")).lower()
+
+            if rights == "true":
+                continue
+            if risk == "high":
+                continue
+            if len(text) > 500:
+                continue
+            ready_candidates.append(item)
+    except Exception:
+        pass
+
+    if ready_candidates:
+        r.add("PASS", "安全なThreads READY候補", f"{len(ready_candidates)}件")
+    else:
+        r.add("WARN", "安全なThreads READY候補", "条件を満たすREADY queue候補なし")
+
+    r.add("INFO", "posted_results", "このスクリプトは変更しません（実行禁止）")
+
+    if not cred_ok:
+        r.verdict = "NOT_READY"
+    elif publish_enabled or allow_threads_post:
+        r.verdict = "READY"
+    elif not ready_candidates:
+        r.verdict = "BLOCKED"
+    else:
+        r.verdict = "READY_FOR_MANUAL_SMOKE"
+
+    return r
+
+
+# ------------------------------------------------------------------ #
 # 結果出力
 # ------------------------------------------------------------------ #
 
@@ -374,7 +486,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--step",
-        choices=["cloudflare", "cloudinary", "x", "all"],
+        choices=["cloudflare", "cloudinary", "x", "threads", "all"],
         default="all",
         help="確認するステップ（デフォルト: all）",
     )
@@ -389,8 +501,9 @@ def main() -> None:
     print("  ※ デフォルト完全dry-run。実API/実upload/実投稿はしません。")
     print("=" * 65)
 
+    publisher_step = "threads" if args.platform.strip().lower() == "threads" else "x"
     steps_to_run = (
-        ["cloudflare", "cloudinary", "x"]
+        ["cloudflare", "cloudinary", publisher_step]
         if args.step == "all"
         else [args.step]
     )
@@ -400,6 +513,7 @@ def main() -> None:
         "cloudflare": check_cloudflare,
         "cloudinary": check_cloudinary,
         "x": check_x,
+        "threads": check_threads,
     }
 
     for step_name in steps_to_run:

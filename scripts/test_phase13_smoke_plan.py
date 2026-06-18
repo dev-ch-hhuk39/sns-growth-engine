@@ -89,6 +89,17 @@ def main():
     check("beauty_account Threads: exit_code=1", code7 == 1)
     check("BLOCKED in stdout", "BLOCKED" in out7)
 
+    print("\n[8] run_real_smoke_plan.py — --platform threads はThreads preflightを使う")
+    code8, out8, err8 = _run([
+        "scripts/run_real_smoke_plan.py",
+        "--account-id", "liver_manager",
+        "--platform", "threads",
+        "--dry-run",
+    ])
+    check("exit_code is readiness result", code8 in (0, 1), f"code={code8} err={err8[-200:]}")
+    check("THREADS check in stdout", "[THREADS] チェック開始" in out8)
+    check("X check not used for threads platform", "[X] チェック開始" not in out8)
+
     print("\n--- 結果 ---")
     passed = sum(1 for _, s, _ in results if s == "PASS")
     failed = sum(1 for _, s, _ in results if s == "FAIL")

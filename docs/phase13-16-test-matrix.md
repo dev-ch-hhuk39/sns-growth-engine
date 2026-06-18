@@ -10,7 +10,7 @@
 | test_phase13_article_normalizer.py | ArticleReferenceNormalizer | 18 | ✅ PASS |
 | test_phase13_production_sources.py | production_sources.example.json | 28 | ✅ PASS |
 | test_phase13_source_lifecycle_cli.py | add/update/review CLIs | 23 | ✅ PASS |
-| test_phase13_smoke_plan.py | SmokePlan / Publisher CLIs | 15 | ✅ PASS |
+| test_phase13_smoke_plan.py | SmokePlan / Publisher CLIs | 18 | ✅ PASS |
 | test_phase13_production_sources_real_urls.py | user-provided real URL reflection | 1 | ✅ PASS |
 | test_phase13_media_asset_storage.py | media_assets planning / PipelineStore dry-run | 3 | ✅ PASS |
 | test_phase13_video_clip_execution.py | clip confirm gate | 3 | ✅ PASS |
@@ -60,6 +60,7 @@
 | publish_x_post dry_run | smoke_plan |
 | publish_x_post 280文字制限 | smoke_plan |
 | publish_threads_post dry_run | smoke_plan |
+| run_real_smoke_plan `--platform threads` uses Threads preflight | smoke_plan |
 | beauty_account publisher BLOCKED | smoke_plan |
 | user-provided 54 URLs reflected | production_sources_real_urls |
 | `REPLACE_WITH_REAL_*` absent | production_sources_real_urls |
@@ -116,6 +117,16 @@
 | Secret/media artifact diff scan | ✅ no `.env`, token/cookie/secret, image/video artifacts in PR diff |
 | Real fetch/download/cut/upload/post | ✅ not executed |
 | First smoke docs | ✅ `docs/manual-smoke-test-sequence.md`, `docs/production-launch-checklist.md` |
+
+## Follow-up Recheck (2026-06-17)
+
+| Check | Result |
+|---|---|
+| Follow-up PR | ⚠️ https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/2 |
+| PR #2 merge attempt | ⚠️ blocked by connector approval credits; no direct main push attempted |
+| `run_real_smoke_plan.py --platform threads` | ✅ Threads preflight branch confirmed; credential-free env returns NOT_READY by design |
+| `test_phase13_smoke_plan.py` | ✅ 18 / 18 PASS |
+| `test_phase13_publishers_production_safety.py` | ✅ 4 / 4 PASS |
 
 ## Phase 14-16 (未実装・テスト計画)
 

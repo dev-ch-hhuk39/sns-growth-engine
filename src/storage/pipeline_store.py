@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+_SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9_\-]+$")
 
 
 _DEFAULT_OUTPUT_DIR = "output/pipeline_runs"
@@ -54,8 +57,23 @@ class PipelineStore:
     def __init__(self, output_dir: str = _DEFAULT_OUTPUT_DIR) -> None:
         self.output_dir = Path(output_dir)
 
+    @staticmethod
+    def _validate_component(value: str, label: str) -> None:
+        if not value or not _SAFE_COMPONENT.fullmatch(value):
+            raise ValueError(
+                f"Invalid {label} '{value}': must match [A-Za-z0-9_-]+ "
+                "(no path separators, '..', NUL, or empty string)"
+            )
+
     def _run_dir(self, run_id: str) -> Path:
-        return self.output_dir / run_id
+        self._validate_component(run_id, "run_id")
+        candidate = self.output_dir / run_id
+        # Resolve and confirm the result stays within output_dir
+        resolved_root = self.output_dir.resolve()
+        resolved_path = candidate.resolve()
+        if resolved_root not in resolved_path.parents and resolved_path != resolved_root:
+            raise ValueError(f"run_id '{run_id}' resolves outside output_dir")
+        return candidate
 
     def save(
         self,
@@ -65,6 +83,7 @@ class PipelineStore:
         dry_run: bool = True,
     ) -> str:
         """ステージ出力を保存する。dry_run=True の場合はパスのみ返す。"""
+        self._validate_component(stage, "stage")
         if stage in ("queue", "queue_items"):
             self._assert_queue_safe(data)
 
@@ -145,6 +164,7 @@ class PipelineStore:
 
     def load(self, run_id: str, stage: str) -> Any:
         """保存済みステージデータを読み込む。"""
+        self._validate_component(stage, "stage")
         path = self._run_dir(run_id) / f"{stage}.json"
         if not path.exists():
             return None
