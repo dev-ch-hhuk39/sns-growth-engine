@@ -120,3 +120,30 @@ Each command must print `BLOCKED`.
 4. posted_results に post_id/post_url/posted_at を登録
 5. 24時間後にメトリクス確認、48時間後に PDCA 実行
 6. 詳細手順: `docs/first-live-post-report.md` 参照
+
+## Consolidation Policy (2026-06-20)
+
+旧3リポジトリと新 sns-growth-engine の並行運用は禁止。  
+今後の運用は `dev-ch-hhuk39/sns-growth-engine` に一本化する。
+
+### 旧リポジトリ停止状況
+
+| リポジトリ | 対象 | 停止状況 |
+|---|---|---|
+| X_autopost_yoru | night_scout / X | [ ] 未停止 |
+| threads_auto_post_gs | night_scout / Threads | [ ] 未停止 |
+| threads-liver-coachhing | liver_manager / Threads | [ ] 未停止 |
+
+### 本番投稿開始の前提条件
+
+- [ ] 旧3リポジトリの GitHub Actions をすべて disable
+- [ ] 各アカウントのタイムラインで意図しない投稿が停止したこと確認（24時間）
+- [ ] `.env` に認証情報設定済み（THREADS_ACCESS_TOKEN は night_scout / liver_manager 別）
+- [ ] publish_x_post.py または publish_threads_post.py で dry-run PASS
+- [ ] real post は 1件ずつ・明示的承認のもとで実行
+
+### 関連ドキュメント
+
+- `docs/legacy-repo-migration-audit.md`: 旧 repo 詳細調査
+- `docs/legacy-repo-shutdown-plan.md`: 停止手順
+- `docs/credential-migration-plan.md`: 認証情報移行手順

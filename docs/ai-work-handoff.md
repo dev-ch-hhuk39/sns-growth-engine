@@ -342,4 +342,75 @@ Source candidates
 - cookie/token/API key を含むファイル
 - `.claude/plans/`
 - old repo / old zip retreat folders
+
+## 運用統合フェーズ (2026-06-20)
+
+- 担当AI: Claude Code (Sonnet 4.6)
+- フェーズ: 旧3リポジトリ → sns-growth-engine 一本化
+
+### 実施内容
+
+- `docs/legacy-repo-migration-audit.md`: 旧3repo の詳細調査結果を作成
+- `docs/legacy-repo-shutdown-plan.md`: 旧 repo 停止手順を作成
+- `docs/credential-migration-plan.md`: 認証情報移行計画を作成
+- `docs/production-launch-checklist.md`: 統合ポリシーセクションを追加
+- `src/sheets_client.py`: TAB_DISPLAY_NAMES（日本語タブ名）マッピング追加（Task F）
+- `scripts/migrate_sheet_tabs_to_japanese.py`: シートタブ移行 CLI 追加（Task F）
+- `scripts/refresh_threads_token.py`: Threads トークンリフレッシュスクリプト追加（Task G）
+- `src/publishers/threads_publisher.py`: Phase 3-E 実投稿実装（Task G）
+- `.env.template`: アカウント別 Threads 変数・トークン保存先を追加（Task H）
+- テスト追加（Task I）
+
+### 旧リポジトリ状況
+
+| リポジトリ | 投稿頻度 | 状況 |
+|---|---|---|
+| X_autopost_yoru | 6回/日 (night_scout/X) | **未停止** — 人間による GitHub Actions disable が必要 |
+| threads_auto_post_gs | 2回/日 (night_scout/Threads) | **未停止** — 同上 |
+| threads-liver-coachhing | 8回/日 (liver_manager/Threads) | **未停止** — 同上（最優先） |
+
+**新 repo での本番投稿前に、旧 repo の全 workflow を disable すること。**
+
+### 実行していないこと
+
+- 旧 repo の削除・archive（人間が判断・実施）
+- 旧 repo の GitHub Actions disable（人間が GitHub UI で実施）
+- secret 値の確認・コピー（実施しない）
+- 実投稿（認証情報設定後に人間が承認して実施）
+
+### 次に人間がやること（統合フェーズ）
+
+1. **旧 repo 停止（最優先）**
+   - `docs/legacy-repo-shutdown-plan.md` 参照
+   - threads-liver-coachhing → X_autopost_yoru → threads_auto_post_gs の順で disable
+2. **認証情報設定**
+   - `docs/credential-migration-plan.md` 参照
+   - `.env` に `THREADS_ACCESS_TOKEN_NIGHT_SCOUT` / `THREADS_USER_ID_NIGHT_SCOUT`
+   - `.env` に `THREADS_ACCESS_TOKEN_LIVER_MANAGER` / `THREADS_USER_ID_LIVER_MANAGER`
+   - `SNS_MASTER_SHEET_ID` を設定
+3. **Threads publisher Phase 3-E 動作確認**
+   - `scripts/refresh_threads_token.py --account-id night_scout --confirm-refresh --dry-run`
+   - `scripts/publish_threads_post.py --account-id night_scout --dry-run`
+4. **本番投稿（1件ずつ承認制）**
+   - X: `docs/first-live-post-report.md` の確定テキストで実行
+   - Threads: 同様に 1件ずつ
+
+## 次にAIが触ってよいファイル（統合フェーズ以降）
+
+- `docs/legacy-repo-migration-audit.md`
+- `docs/legacy-repo-shutdown-plan.md`
+- `docs/credential-migration-plan.md`
+- `docs/production-launch-checklist.md`
+- `src/sheets_client.py` (TAB_DISPLAY_NAMES 追加のみ)
+- `src/publishers/threads_publisher.py` (Phase 3-E 実装)
+- `scripts/refresh_threads_token.py` (新規追加)
+- `scripts/migrate_sheet_tabs_to_japanese.py` (新規追加)
+- `.env.template` (アカウント別変数追加)
+
+## 触らない方がいいファイル（統合フェーズ以降）
+
+- `.env`
+- 旧 repo の任意ファイル（docs/legacy-repo-migration-audit.md を参照のみ）
+- `config/source_accounts/production_sources.example.json`（active/fetch_enabled は false のまま）
+- `config/accounts/*.json`（beauty_account は draft_only のまま）
 - 実メディアファイル

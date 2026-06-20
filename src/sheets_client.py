@@ -357,6 +357,38 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     ],
 }
 
+TAB_DISPLAY_NAMES: dict[str, str] = {
+    "accounts":                     "01_アカウント設定",
+    "reference_posts":              "02_参考投稿",
+    "content_categories":           "03_コンテンツカテゴリ",
+    "drafts":                       "04_下書き",
+    "social_derivatives":           "05_SNS派生投稿",
+    "posted_results":               "06_投稿結果",
+    "category_scores":              "07_カテゴリスコア",
+    "distribution_rules":           "08_配信ルール",
+    "learning_rules":               "09_学習ルール",
+    "prompt_templates":             "10_プロンプトテンプレート",
+    "queue":                        "11_投稿キュー",
+    "logs":                         "12_操作ログ",
+    "media_assets":                 "13_メディア資産",
+    "reference_post_scores":        "14_参考投稿スコア",
+    "reference_sources":            "15_参考収集元",
+    "video_transcripts":            "16_動画文字起こし",
+    "video_clip_candidates":        "17_クリップ候補",
+    "transcription_runs":           "18_文字起こし実行記録",
+    "generation_jobs":              "19_生成ジョブ",
+    "prompt_improvement_suggestions": "20_改善提案",
+    "thread_series":                "21_スレッドシリーズ",
+    "thread_series_posts":          "22_スレッド投稿",
+    "content_mix_plans":            "23_コンテンツ計画",
+    "source_accounts":              "24_ソースアカウント",
+    "source_account_posts":         "25_ソース投稿",
+    "source_collection_plans":      "26_収集計画",
+    "media_ingestion_runs":         "27_メディア取込記録",
+    "end_to_end_preflight_runs":    "28_事前確認記録",
+    "pdca_runs":                    "29_PDCA記録",
+}
+
 SCOPES = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
@@ -386,32 +418,45 @@ class SheetsClient:
         self._seed_accounts()
         print("[setup] 完了")
 
+    def _ws(self, logical_name: str) -> gspread.Worksheet:
+        """論理名（英語キー）または表示名（日本語）でワークシートを取得する。
+
+        表示名が存在すれば優先し、なければ論理名でフォールバックする。
+        これにより英語→日本語タブ移行後も既存呼び出しが壊れない。
+        """
+        display_name = TAB_DISPLAY_NAMES.get(logical_name, logical_name)
+        try:
+            return self._sh.worksheet(display_name)
+        except gspread.exceptions.WorksheetNotFound:
+            if display_name != logical_name:
+                return self._sh.worksheet(logical_name)
+            raise
+
     def _ensure_tab(self, name: str, headers: list[str]) -> gspread.Worksheet:
         """タブがなければ作成し、ヘッダー不足列を右端に追記する（冪等）。"""
+        display_name = TAB_DISPLAY_NAMES.get(name, name)
         try:
-            ws = self._sh.worksheet(name)
+            ws = self._ws(name)
         except gspread.exceptions.WorksheetNotFound:
-            print(f"  [create] タブ '{name}' を作成します")
+            print(f"  [create] タブ '{display_name}' を作成します")
             if not self.dry_run:
-                ws = self._sh.add_worksheet(title=name, rows=1000, cols=len(headers) + 10)
+                ws = self._sh.add_worksheet(title=display_name, rows=1000, cols=len(headers) + 10)
                 ws.update([headers], "A1")
             else:
-                print(f"  [dry-run] タブ '{name}' 作成をスキップ")
+                print(f"  [dry-run] タブ '{display_name}' 作成をスキップ")
             return ws if not self.dry_run else None  # type: ignore[return-value]
 
         existing = ws.row_values(1)
         missing = [h for h in headers if h not in existing]
         if missing:
-            print(f"  [update] タブ '{name}' にカラムを追加: {missing}")
+            print(f"  [update] タブ '{display_name}' にカラムを追加: {missing}")
             if not self.dry_run:
                 next_col = len(existing) + 1
                 required_cols = len(existing) + len(missing)
-                # グリッド上限を超える場合はワークシートをリサイズする
-                ws_meta = ws
                 current_cols = ws.col_count
                 if required_cols > current_cols:
                     new_cols = max(required_cols + 10, current_cols + 20)
-                    print(f"  [resize] タブ '{name}' 列数を {current_cols} → {new_cols} に拡張")
+                    print(f"  [resize] タブ '{display_name}' 列数を {current_cols} → {new_cols} に拡張")
                     ws.resize(rows=ws.row_count, cols=new_cols)
                 col_letter = _col_letter(next_col)
                 ws.update(
@@ -420,12 +465,12 @@ class SheetsClient:
                     major_dimension="COLUMNS",
                 )
         else:
-            print(f"  [ok] タブ '{name}' のヘッダーは最新です")
+            print(f"  [ok] タブ '{display_name}' のヘッダーは最新です")
         return ws
 
     def _seed_accounts(self) -> None:
         """accounts タブに night_scout/liver_manager が存在しなければ追加する（冪等）。"""
-        ws = self._sh.worksheet("accounts")
+        ws = self._ws("accounts")
         existing_rows = ws.get_all_records()
         existing_ids = {r.get("account_id", "") for r in existing_rows}
 
@@ -446,7 +491,7 @@ class SheetsClient:
         if self.dry_run:
             print(f"  [dry-run] seed_tab({tab_name}): {len(rows)} 件を確認（書き込みスキップ）")
             return 0
-        ws = self._sh.worksheet(tab_name)
+        ws = self._ws(tab_name)
         existing_rows = ws.get_all_records()
         existing_ids = {str(r.get(id_column, "")) for r in existing_rows}
         headers = ws.row_values(1)
@@ -472,7 +517,7 @@ class SheetsClient:
 
     def get_account(self, account_id: str) -> dict | None:
         """accounts タブから account_id に一致する行を返す。"""
-        ws = self._sh.worksheet("accounts")
+        ws = self._ws("accounts")
         for row in ws.get_all_records():
             if row.get("account_id") == account_id:
                 return dict(row)
@@ -480,7 +525,7 @@ class SheetsClient:
 
     def get_active_accounts(self) -> list[dict]:
         """accounts タブから active=TRUE の行をすべて返す。"""
-        ws = self._sh.worksheet("accounts")
+        ws = self._ws("accounts")
         return [
             dict(r) for r in ws.get_all_records()
             if str(r.get("active", "")).upper() == "TRUE"
@@ -488,7 +533,7 @@ class SheetsClient:
 
     def get_active_categories(self, account_id: str) -> list[dict]:
         """content_categories タブから active=TRUE かつ account_id に一致する行を返す。"""
-        ws = self._sh.worksheet("content_categories")
+        ws = self._ws("content_categories")
         return [
             dict(r) for r in ws.get_all_records()
             if str(r.get("active", "")).upper() == "TRUE"
@@ -502,7 +547,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """reference_posts タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("reference_posts")
+        ws = self._ws("reference_posts")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -514,7 +559,7 @@ class SheetsClient:
 
     def find_reference_post_by_post_id(self, post_id: str) -> dict | None:
         """post_id に一致する reference_posts 行を返す。なければ None。"""
-        ws = self._sh.worksheet("reference_posts")
+        ws = self._ws("reference_posts")
         for row in ws.get_all_records():
             if str(row.get("post_id", "")) == str(post_id):
                 return dict(row)
@@ -529,7 +574,7 @@ class SheetsClient:
         if post_id and self.find_reference_post_by_post_id(post_id) is not None:
             print(f"[skip] reference_posts: post_id={post_id!r} は既存のためスキップ")
             return False
-        ws = self._sh.worksheet("reference_posts")
+        ws = self._ws("reference_posts")
         headers = ws.row_values(1)
         row = [str(post.get(h, "")) for h in headers]
         ws.append_row(row, value_input_option="USER_ENTERED")
@@ -561,7 +606,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """media_assets タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("media_assets")
+        ws = self._ws("media_assets")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -573,7 +618,7 @@ class SheetsClient:
 
     def find_media_asset_by_reference_post_id(self, reference_post_id: str) -> dict | None:
         """reference_post_id に一致する最初のアセット行を返す。なければ None。"""
-        ws = self._sh.worksheet("media_assets")
+        ws = self._ws("media_assets")
         for row in ws.get_all_records():
             if str(row.get("reference_post_id", "")) == str(reference_post_id):
                 return dict(row)
@@ -581,7 +626,7 @@ class SheetsClient:
 
     def find_media_asset_by_original_media_url(self, original_media_url: str) -> dict | None:
         """original_media_url に一致するアセット行を返す。なければ None。"""
-        ws = self._sh.worksheet("media_assets")
+        ws = self._ws("media_assets")
         for row in ws.get_all_records():
             if str(row.get("original_media_url", "")) == str(original_media_url):
                 return dict(row)
@@ -601,7 +646,7 @@ class SheetsClient:
             return False
         reference_post_id = str(asset.get("reference_post_id", ""))
         original_media_url = str(asset.get("original_media_url", ""))
-        ws = self._sh.worksheet("media_assets")
+        ws = self._ws("media_assets")
         headers = ws.row_values(1)
         row_data = [str(asset.get(h, "")) for h in headers]
         if reference_post_id and original_media_url:
@@ -638,7 +683,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """reference_post_scores タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("reference_post_scores")
+        ws = self._ws("reference_post_scores")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -652,7 +697,7 @@ class SheetsClient:
         self, reference_post_id: str
     ) -> dict | None:
         """reference_post_id に一致するスコア行を返す。なければ None。"""
-        ws = self._sh.worksheet("reference_post_scores")
+        ws = self._ws("reference_post_scores")
         for row in ws.get_all_records():
             if str(row.get("reference_post_id", "")) == str(reference_post_id):
                 return dict(row)
@@ -671,7 +716,7 @@ class SheetsClient:
             )
             return False
         reference_post_id = str(score.get("reference_post_id", ""))
-        ws = self._sh.worksheet("reference_post_scores")
+        ws = self._ws("reference_post_scores")
         headers = ws.row_values(1)
         row_data = [str(score.get(h, "")) for h in headers]
         if reference_post_id:
@@ -713,7 +758,7 @@ class SheetsClient:
         active_only: bool = False,
     ) -> list[dict]:
         """reference_sources タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("reference_sources")
+        ws = self._ws("reference_sources")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -725,7 +770,7 @@ class SheetsClient:
 
     def find_reference_source_by_source_id(self, source_id: str) -> dict | None:
         """source_id に一致する reference_source 行を返す。なければ None。"""
-        ws = self._sh.worksheet("reference_sources")
+        ws = self._ws("reference_sources")
         for row in ws.get_all_records():
             if str(row.get("source_id", "")) == str(source_id):
                 return dict(row)
@@ -737,7 +782,7 @@ class SheetsClient:
             print(f"[dry-run] save_reference_source: source_id={source.get('source_id', '?')!r}")
             return False
         source_id = str(source.get("source_id", ""))
-        ws = self._sh.worksheet("reference_sources")
+        ws = self._ws("reference_sources")
         headers = ws.row_values(1)
         row_data = [str(source.get(h, "")) for h in headers]
         if source_id:
@@ -756,7 +801,7 @@ class SheetsClient:
         if self.dry_run:
             print(f"[dry-run] update_reference_source: source_id={source_id!r} fields={fields}")
             return False
-        ws = self._sh.worksheet("reference_sources")
+        ws = self._ws("reference_sources")
         headers = ws.row_values(1)
         col_id = headers.index("source_id") + 1 if "source_id" in headers else None
         if col_id is None:
@@ -781,7 +826,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """video_transcripts タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("video_transcripts")
+        ws = self._ws("video_transcripts")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -795,7 +840,7 @@ class SheetsClient:
 
     def find_video_transcript_by_reference_post_id(self, reference_post_id: str) -> dict | None:
         """reference_post_id に一致する video_transcript を返す。なければ None。"""
-        ws = self._sh.worksheet("video_transcripts")
+        ws = self._ws("video_transcripts")
         for row in ws.get_all_records():
             if str(row.get("reference_post_id", "")) == str(reference_post_id):
                 return dict(row)
@@ -803,7 +848,7 @@ class SheetsClient:
 
     def find_video_transcript_by_id(self, transcript_id: str) -> dict | None:
         """transcript_id に一致する video_transcript を返す。なければ None。"""
-        ws = self._sh.worksheet("video_transcripts")
+        ws = self._ws("video_transcripts")
         for row in ws.get_all_records():
             if str(row.get("transcript_id", "")) == str(transcript_id):
                 return dict(row)
@@ -815,7 +860,7 @@ class SheetsClient:
             print(f"[dry-run] save_video_transcript: transcript_id={transcript.get('transcript_id', '?')!r}")
             return False
         transcript_id = str(transcript.get("transcript_id", ""))
-        ws = self._sh.worksheet("video_transcripts")
+        ws = self._ws("video_transcripts")
         headers = ws.row_values(1)
         row_data = [str(transcript.get(h, "")) for h in headers]
         if transcript_id:
@@ -834,7 +879,7 @@ class SheetsClient:
         if self.dry_run:
             print(f"[dry-run] update_video_transcript: transcript_id={transcript_id!r} fields={fields}")
             return False
-        ws = self._sh.worksheet("video_transcripts")
+        ws = self._ws("video_transcripts")
         headers = ws.row_values(1)
         col_id = headers.index("transcript_id") + 1 if "transcript_id" in headers else None
         if col_id is None:
@@ -860,7 +905,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """video_clip_candidates タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("video_clip_candidates")
+        ws = self._ws("video_clip_candidates")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -876,7 +921,7 @@ class SheetsClient:
 
     def find_video_clip_candidate_by_clip_id(self, clip_id: str) -> dict | None:
         """clip_id に一致する video_clip_candidate を返す。なければ None。"""
-        ws = self._sh.worksheet("video_clip_candidates")
+        ws = self._ws("video_clip_candidates")
         for row in ws.get_all_records():
             if str(row.get("clip_id", "")) == str(clip_id):
                 return dict(row)
@@ -888,7 +933,7 @@ class SheetsClient:
             print(f"[dry-run] save_video_clip_candidate: clip_id={clip.get('clip_id', '?')!r}")
             return False
         clip_id = str(clip.get("clip_id", ""))
-        ws = self._sh.worksheet("video_clip_candidates")
+        ws = self._ws("video_clip_candidates")
         headers = ws.row_values(1)
         row_data = [str(clip.get(h, "")) for h in headers]
         if clip_id:
@@ -907,7 +952,7 @@ class SheetsClient:
         if self.dry_run:
             print(f"[dry-run] update_video_clip_candidate: clip_id={clip_id!r} fields={fields}")
             return False
-        ws = self._sh.worksheet("video_clip_candidates")
+        ws = self._ws("video_clip_candidates")
         headers = ws.row_values(1)
         col_id = headers.index("clip_id") + 1 if "clip_id" in headers else None
         if col_id is None:
@@ -926,7 +971,7 @@ class SheetsClient:
 
     def get_transcription_run_by_date(self, date: str, provider: str = "cloudflare_whisper") -> dict | None:
         """指定日付・プロバイダーの transcription_run を返す。なければ None。"""
-        ws = self._sh.worksheet("transcription_runs")
+        ws = self._ws("transcription_runs")
         for row in ws.get_all_records():
             if str(row.get("date", "")) == date and str(row.get("provider", "")) == provider:
                 return dict(row)
@@ -938,7 +983,7 @@ class SheetsClient:
             print(f"[dry-run] save_transcription_run: run_id={run.get('run_id', '?')!r} date={run.get('date', '?')!r}")
             return False
         run_id = str(run.get("run_id", ""))
-        ws = self._sh.worksheet("transcription_runs")
+        ws = self._ws("transcription_runs")
         headers = ws.row_values(1)
         row_data = [str(run.get(h, "")) for h in headers]
         if run_id:
@@ -955,7 +1000,7 @@ class SheetsClient:
         if self.dry_run:
             print(f"[dry-run] update_transcription_run: run_id={run_id!r} fields={fields}")
             return False
-        ws = self._sh.worksheet("transcription_runs")
+        ws = self._ws("transcription_runs")
         headers = ws.row_values(1)
         col_id = headers.index("run_id") + 1 if "run_id" in headers else None
         if col_id is None:
@@ -983,7 +1028,7 @@ class SheetsClient:
             )
             return False
         job_id = str(job.get("job_id", ""))
-        ws = self._sh.worksheet("generation_jobs")
+        ws = self._ws("generation_jobs")
         headers = ws.row_values(1)
         row_data = [str(job.get(h, "")) for h in headers]
         if job_id:
@@ -1021,7 +1066,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """generation_jobs タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("generation_jobs")
+        ws = self._ws("generation_jobs")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -1035,7 +1080,7 @@ class SheetsClient:
 
     def find_generation_job_by_id(self, job_id: str) -> dict | None:
         """job_id に一致する generation_job 行を返す。なければ None。"""
-        ws = self._sh.worksheet("generation_jobs")
+        ws = self._ws("generation_jobs")
         for row in ws.get_all_records():
             if str(row.get("job_id", "")) == str(job_id):
                 return dict(row)
@@ -1046,7 +1091,7 @@ class SheetsClient:
         if self.dry_run:
             print(f"[dry-run] update_generation_job: job_id={job_id!r} fields={fields}")
             return False
-        ws = self._sh.worksheet("generation_jobs")
+        ws = self._ws("generation_jobs")
         headers = ws.row_values(1)
         col_id = headers.index("job_id") + 1 if "job_id" in headers else None
         if col_id is None:
@@ -1068,7 +1113,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """drafts タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("drafts")
+        ws = self._ws("drafts")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -1090,7 +1135,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """social_derivatives タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("social_derivatives")
+        ws = self._ws("social_derivatives")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -1104,7 +1149,7 @@ class SheetsClient:
 
     def find_social_derivative(self, draft_id: str, platform: str) -> dict | None:
         """指定 draft_id + platform の social_derivative を返す。なければ None。"""
-        ws = self._sh.worksheet("social_derivatives")
+        ws = self._ws("social_derivatives")
         for row in ws.get_all_records():
             if (row.get("draft_id") == draft_id
                     and str(row.get("platform", "")).lower() == platform.lower()):
@@ -1113,7 +1158,7 @@ class SheetsClient:
 
     def find_queue_item(self, draft_id: str, platform: str) -> dict | None:
         """指定 draft_id + platform の queue 行を返す。なければ None。"""
-        ws = self._sh.worksheet("queue")
+        ws = self._ws("queue")
         for row in ws.get_all_records():
             if (row.get("draft_id") == draft_id
                     and str(row.get("platform", "")).lower() == platform.lower()):
@@ -1128,7 +1173,7 @@ class SheetsClient:
         limit: int | None = None,
     ) -> list[dict]:
         """queue タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("queue")
+        ws = self._ws("queue")
         rows = ws.get_all_records()
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
@@ -1142,7 +1187,7 @@ class SheetsClient:
 
     def get_queue_item(self, queue_id: str) -> dict | None:
         """queue_id に一致する queue 行を返す。なければ None。"""
-        ws = self._sh.worksheet("queue")
+        ws = self._ws("queue")
         for row in ws.get_all_records():
             if row.get("queue_id") == queue_id:
                 return dict(row)
@@ -1153,7 +1198,7 @@ class SheetsClient:
         if self.dry_run:
             print(f"[dry-run] update_queue_item: queue_id={queue_id} fields={fields}")
             return
-        ws = self._sh.worksheet("queue")
+        ws = self._ws("queue")
         headers = ws.row_values(1)
         col_qid = headers.index("queue_id") + 1
         cell = ws.find(queue_id, in_column=col_qid)
@@ -1169,7 +1214,7 @@ class SheetsClient:
         active_only: bool = True,
     ) -> list[dict]:
         """prompt_templates タブから条件に一致する行を返す。"""
-        ws = self._sh.worksheet("prompt_templates")
+        ws = self._ws("prompt_templates")
         rows = ws.get_all_records()
         if active_only:
             rows = [r for r in rows if str(r.get("active", "")).upper() == "TRUE"]
@@ -1188,7 +1233,7 @@ class SheetsClient:
             print(f"[dry-run] save_draft: account_id={account_id} draft_id={draft_id} title={title!r}")
             return draft_id
 
-        ws = self._sh.worksheet("drafts")
+        ws = self._ws("drafts")
         headers = ws.row_values(1)
         data: dict[str, Any] = {
             "draft_id": draft_id,
@@ -1209,7 +1254,7 @@ class SheetsClient:
             print(f"[dry-run] update_draft: draft_id={draft_id} fields={fields}")
             return
 
-        ws = self._sh.worksheet("drafts")
+        ws = self._ws("drafts")
         headers = ws.row_values(1)
         col_id = headers.index("draft_id") + 1
         cell = ws.find(draft_id, in_column=col_id)
@@ -1225,7 +1270,7 @@ class SheetsClient:
             print(f"[dry-run] update_reference_post_status: id={post_id} status={status}")
             return
 
-        ws = self._sh.worksheet("reference_posts")
+        ws = self._ws("reference_posts")
         headers = ws.row_values(1)
         col_id = headers.index("id") + 1
         col_status = headers.index("status") + 1
@@ -1246,7 +1291,7 @@ class SheetsClient:
             )
             return derivative_id
 
-        ws = self._sh.worksheet("social_derivatives")
+        ws = self._ws("social_derivatives")
         headers = ws.row_values(1)
         data = {
             "derivative_id": derivative_id,
@@ -1270,7 +1315,7 @@ class SheetsClient:
             )
             return queue_id
 
-        ws = self._sh.worksheet("queue")
+        ws = self._ws("queue")
         headers = ws.row_values(1)
         data = {
             "queue_id": queue_id,
@@ -1287,7 +1332,7 @@ class SheetsClient:
             print(f"[dry-run] mark_posted: draft_id={draft_id} note_url={note_url}")
             return
 
-        ws = self._sh.worksheet("drafts")
+        ws = self._ws("drafts")
         headers = ws.row_values(1)
         col_id = headers.index("draft_id") + 1
         col_status = headers.index("status") + 1
@@ -1313,7 +1358,7 @@ class SheetsClient:
             print(f"[dry-run] save_result: draft_id={draft_id} account_id={account_id} window={measurement_window}")
             return result_id
 
-        ws = self._sh.worksheet("posted_results")
+        ws = self._ws("posted_results")
         headers = ws.row_values(1)
         data: dict[str, Any] = {
             "result_id": result_id,
@@ -1343,7 +1388,7 @@ class SheetsClient:
             print(f"[dry-run] log: [{level}/{status}] {operation} - {message}")
             return
 
-        ws = self._sh.worksheet("logs")
+        ws = self._ws("logs")
         headers = ws.row_values(1)
         data: dict[str, Any] = {
             "log_id": f"l-{_short_uuid()}",
