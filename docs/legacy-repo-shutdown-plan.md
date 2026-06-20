@@ -3,163 +3,142 @@
 ## 概要
 
 - 作成日: 2026-06-20
+- 更新日: 2026-06-20（停止完了）
 - 目的: 旧3リポジトリの GitHub Actions を停止し、sns-growth-engine への一本化を完了させる
-- 前提: 新 repo で実投稿が動作確認済みであること（認証情報設定 + dry-run PASS が条件）
 
 **絶対ルール:**
 - 旧 repo は削除しない
 - 旧 repo は archive しない（停止後 30日間保留）
 - 旧 repo の secret 値を確認・表示・コピーしない
-- 旧 repo の .env 値を表示しない
 
 ---
 
-## 停止順序（推奨）
+## 停止結果 (2026-06-20)
 
-重複投稿リスクが最も高いものから停止する。
+| リポジトリ | workflow 数 | 停止状況 | README 廃止通知 |
+|---|---|---|---|
+| X_autopost_yoru | 8本 | **disabled_manually ✅** | 追加済み ✅ |
+| threads_auto_post_gs | 4本 | **disabled_manually ✅** | 追加済み ✅ |
+| threads-liver-coachhing | 8本 | **disabled_manually ✅** | 追加済み ✅ |
 
-1. **threads-liver-coachhing**（8回/日、liver_manager/Threads）
-2. **X_autopost_yoru**（6回/日、night_scout/X）
-3. **threads_auto_post_gs**（2回/日、night_scout/Threads）
-
----
-
-## 停止手順
-
-### 共通手順（各リポジトリで繰り返す）
-
-```
-1. https://github.com/dev-ch-hhuk39/<repo-name>/settings/actions
-   → Actions permissions: "Disable actions" を選択して Save
-
-   または個別 workflow を無効化する場合:
-2. https://github.com/dev-ch-hhuk39/<repo-name>/actions
-   → 対象 workflow を選択 → "..." → "Disable workflow"
-```
-
-### Step 1: threads-liver-coachhing の停止
-
-対象 workflow: `threads-daily.yml`（8スケジュール）
-
-```
-URL: https://github.com/dev-ch-hhuk39/threads-liver-coachhing/actions
-```
-
-停止後の確認:
-- [ ] 翌日 00:00 / 03:00 / 06:00 / 09:00 / 12:00 / 15:00 / 18:00 / 21:00 JST で実行されていないこと
-- [ ] `last_run.txt` の更新が止まっていること（24時間後に確認）
-
-### Step 2: X_autopost_yoru の停止
-
-対象 workflow:
-- `x_time_window.yml`（13:45 / 17:45 JST）
-- `x_legacy_tab_time_window.yml`（12:45 / 15:45 / 19:45 / 23:45 JST）
-
-```
-URL: https://github.com/dev-ch-hhuk39/X_autopost_yoru/actions
-```
-
-停止後の確認:
-- [ ] 翌日の全 6スロットで実行されていないこと
-- [ ] night_scout の X 投稿が止まっていること
-
-### Step 3: threads_auto_post_gs の停止
-
-対象 workflow: `threads-daily.yml`（13:45 / 17:45 JST）
-
-```
-URL: https://github.com/dev-ch-hhuk39/threads_auto_post_gs/actions
-```
-
-停止後の確認:
-- [ ] 翌日 13:45 / 17:45 JST で実行されていないこと
-- [ ] night_scout の Threads 投稿が止まっていること
+**合計 20本 すべて停止済み。**  
+Secret 混入チェック: `.env.example` はすべて値が空 ✅
 
 ---
 
-## 停止確認チェックリスト
+## 停止した workflow 一覧
 
-全リポジトリ停止後、以下を確認してから新 repo の本番投稿を開始する。
+### X_autopost_yoru（8本）
 
-```
-[ ] threads-liver-coachhing: workflow disabled, 24時間実行なし確認
-[ ] X_autopost_yoru: 両 workflow disabled, 24時間実行なし確認
-[ ] threads_auto_post_gs: workflow disabled, 24時間実行なし確認
-[ ] 各アカウントの SNS タイムラインで意図しない投稿がないこと確認
-[ ] docs/production-launch-checklist.md の "Legacy Repos Stopped" チェックを完了
-```
+| ID | 名前 | 種別 |
+|---|---|---|
+| 195039329 | X Auto Post (manual) | 投稿 |
+| 195042648 | X Auto Post (queue from Sheet at 14:00 & 18:00 JST) | 投稿スケジューラー |
+| 256121872 | コンテンツ収集・生成（夜職 X） | 収集・生成 |
+| 268649376 | X Analyze Posts (yorusyoku) | 分析 |
+| 268649377 | X Collect Posts (yorusyoku) | 収集 |
+| 269714097 | X Cleanup Cloudinary Assets | メディア管理 |
+| 269739296 | X Generate Review Rewrites (Gemini) | 生成 |
+| 271261963 | X Legacy Tab Auto Post (x_autopost_yoru at 13/16/20/24 JST) | 投稿スケジューラー |
+
+### threads_auto_post_gs（4本）
+
+| ID | 名前 | 種別 |
+|---|---|---|
+| 188967298 | Threads Auto Post (queue from Sheet at 14:00 & 18:00 JST) | 投稿スケジューラー |
+| 256121763 | コンテンツ収集・生成（夜職 Threads） | 収集・生成 |
+| 262913430 | Refresh Threads Token | トークン管理 |
+| 271675387 | Threads Legacy Tab Auto Post (auto-posttab at 13/16/20/24 JST) | 投稿スケジューラー |
+
+### threads-liver-coachhing（8本）
+
+| ID | 名前 | 種別 |
+|---|---|---|
+| 195083281 | Threads daily posts | 投稿スケジューラー |
+| 256121495 | コンテンツ収集・生成（ライバー Threads） | 収集・生成 |
+| 262911644 | Refresh Threads Token | トークン管理 |
+| 274316508 | Liver Analyze Posts | 分析 |
+| 274316509 | Liver Cleanup Cloudinary Assets | メディア管理 |
+| 274316510 | Liver Collect Posts | 収集 |
+| 274316511 | Liver Generate Review Rewrites (Gemini) | 生成 |
+| 274316512 | Liver Threads Auto Post (queue at 14:00 & 18:00 JST) | 投稿スケジューラー |
 
 ---
 
-## 停止後の保留期間
+## Secret 混入チェック結果
 
-| 経過時間 | アクション |
+| リポジトリ | .env.example | Actions logs | config/json |
+|---|---|---|---|
+| X_autopost_yoru | 値なし ✅ | 未確認（目視推奨） | 未確認 |
+| threads_auto_post_gs | 値なし ✅ | 未確認（目視推奨） | 未確認 |
+| threads-liver-coachhing | 値なし ✅ | 未確認（目視推奨） | 未確認 |
+
+Actions logs の目視確認推奨: GitHub → 各 repo → Actions → 最新の実行ログを確認。
+
+---
+
+## GitHub Secrets の扱い
+
+旧 repo の GitHub Secrets は以下のタイミングで削除する。
+
+**削除条件:**
+1. 旧 repo の停止を 30日間確認完了
+2. 新 repo での本番投稿が安定稼働している
+3. 各認証情報の rotate が完了している
+
+**削除手順（各 repo）:**
+```
+Settings → Secrets and variables → Actions → 各 secret の右側「削除」ボタン
+```
+
+**rotate 推奨優先度:**
+
+| 認証情報 | 対象 repo | 優先度 | 理由 |
+|---|---|---|---|
+| THREADS_ACCESS_TOKEN (night_scout) | threads_auto_post_gs | 高 | 60日期限 |
+| THREADS_ACCESS_TOKEN (liver_manager) | threads-liver-coachhing | 高 | 60日期限 |
+| X_API_KEY / X_API_SECRET | X_autopost_yoru | 中 | 移行完了後 |
+| X_ACCESS_TOKEN / X_ACCESS_TOKEN_SECRET | X_autopost_yoru | 中 | 移行完了後 |
+| GCP_SA_JSON (X_autopost_yoru) / SA_JSON_BASE64 | 各 repo | 低 | 年次 |
+
+Threads トークン rotate 注意: `refresh` すると旧トークンが即時無効化される。  
+新 repo 側に先に設定してから rotate すること。
+
+---
+
+## 保留・archive スケジュール
+
+| 時期 | アクション |
 |---|---|
-| 停止直後〜7日 | 各アカウントのタイムラインを監視（重複・意図しない投稿がないか） |
-| 7〜30日 | 新 repo の本番投稿が安定稼働していることを確認 |
-| 30日後以降 | archive 検討（リポジトリ設定 → Archive this repository） |
+| 2026-06-20（停止日） | 全 workflow disable 完了 ✅ |
+| 2026-07-20（30日後） | archive 可否を判断 |
+| 2026-07-20 以降 | archive 後、GitHub Secrets 削除 |
 
-archive すると:
-- コードと履歴は保持される
-- workflow は完全停止
-- Issues/PR が読み取り専用になる
-- プッシュ不可（fork は可能）
+**archive 手順:**
+```
+各 repo → Settings → Danger Zone → Archive this repository
+```
+archive すると: コード・履歴保持、workflow 完全停止、Issues/PR 読み取り専用、push 不可。
 
 ---
 
-## Secret rotate のタイミング
-
-旧 repo の停止が確認できたら、以下のタイミングで secret rotate を実施する。
-
-### X 認証情報 (night_scout)
-
-旧 repo 停止確認後 + 新 repo での X 投稿が安定稼働後:
-
-```
-X_API_KEY / X_API_SECRET / X_ACCESS_TOKEN / X_ACCESS_TOKEN_SECRET
-```
-
-rotate 方法:
-- https://developer.twitter.com/en/portal/ から新しい Access Token を生成
-- 新 repo の `.env` に新しい値を設定
-- 旧 repo の GitHub Secrets は削除（Settings → Secrets and variables → Actions → Remove）
-
-### Threads 認証情報
-
-#### night_scout (threads_auto_post_gs)
-
-```
-THREADS_ACCESS_TOKEN / THREADS_USER_ID
-```
-
-rotate 後は旧トークンが即時無効化されるため、必ず新 repo 側に先に設定してから rotate する。
-
-#### liver_manager (threads-liver-coachhing)
-
-```
-THREADS_ACCESS_TOKEN / THREADS_USER_ID  ← night_scout とは別の値
-```
-
-同様に新 repo 側に先に設定してから rotate する。
-
----
-
-## rollback 手順（緊急時）
+## Rollback 手順（緊急時）
 
 新 repo で問題が発生し、旧 repo を再稼働させる必要がある場合:
 
-1. 旧 repo の workflow を re-enable する
-   - Settings → Actions → General → Allow all actions
-   または Actions タブから個別 workflow を Enable
-2. 旧 repo の GitHub Secrets が有効であることを確認（期限切れの場合は再設定が必要）
-3. 新 repo の `PUBLISH_ENABLED` / `ALLOW_REAL_X_POST` / `ALLOW_REAL_THREADS_POST` を `.env` から削除
+```
+1. GitHub → 各 repo → Settings → Actions → General → "Allow all actions"
+   または Actions タブ → 対象 workflow → "Enable workflow"
+2. 旧 repo の GitHub Secrets が有効であることを確認
+3. 新 repo の PUBLISH_ENABLED / ALLOW_REAL_X_POST / ALLOW_REAL_THREADS_POST を .env から削除
+```
 
-旧 repo は archive せず保留期間中は復旧可能な状態を維持すること。
+archive 前（30日間）は復旧可能な状態を維持すること。
 
 ---
 
 ## 関連ドキュメント
 
-- `docs/legacy-repo-migration-audit.md`: 旧 repo の詳細調査結果
+- `docs/legacy-repo-migration-audit.md`: 旧 repo 詳細調査
 - `docs/credential-migration-plan.md`: 認証情報の移行手順
-- `docs/production-launch-checklist.md`: 新 repo 本番開始チェックリスト
+- `docs/production-launch-checklist.md`: 本番開始チェックリスト

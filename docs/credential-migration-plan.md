@@ -3,198 +3,194 @@
 ## 概要
 
 - 作成日: 2026-06-20
-- 目的: 旧3リポジトリから sns-growth-engine への認証情報の移行方針を定める
-- 対象: X (Twitter) API 認証情報 / Threads API 認証情報 / GCP サービスアカウント
+- 目的: 旧3リポジトリから sns-growth-engine への認証情報の移行方針
 
 **セキュリティ絶対ルール:**
-- 認証情報の値はこのドキュメントに記載しない
+- 認証情報の値はこのドキュメントに記載しない（env 名のみ）
 - `.env` ファイルはコミットしない
-- GitHub Secrets の値は人間が直接確認する（AIに表示しない）
+- GitHub Secrets の値は人間が直接確認する（AI に表示しない）
 - rotate 前に必ず新 repo 側への設定を完了させる
 
 ---
 
 ## 旧 repo → 新 repo の env 名マッピング
 
-### X (Twitter) 認証情報
+### X (night_scout)
 
-| 旧 repo (X_autopost_yoru) | 新 repo (.env.template) | 備考 |
+| 旧 repo (X_autopost_yoru) | 新 repo | 必須 | 設定先 | rotate 推奨 |
+|---|---|---|---|---|
+| `X_API_KEY` | `X_API_KEY` | 必須 | local .env | 移行完了後 |
+| `X_API_SECRET` | `X_API_SECRET` | 必須 | local .env | 移行完了後 |
+| `X_ACCESS_TOKEN` | `X_ACCESS_TOKEN` | 必須 | local .env | 移行完了後 |
+| `X_ACCESS_TOKEN_SECRET` | `X_ACCESS_TOKEN_SECRET` | 必須 | local .env | 移行完了後 |
+
+安全フラグ（本番投稿時のみ .env に設定。永続 commit 禁止）:
+```
+PUBLISH_ENABLED=false      # デフォルト false
+ALLOW_REAL_X_POST=false    # デフォルト false
+```
+
+### Threads (night_scout)
+
+| 旧 repo (threads_auto_post_gs) | 新 repo | 必須 | 設定先 | rotate 推奨 |
+|---|---|---|---|---|
+| `THREADS_ACCESS_TOKEN` | `THREADS_ACCESS_TOKEN_NIGHT_SCOUT` | 必須 | local .env | 高（60日期限） |
+| `THREADS_USER_ID` | `THREADS_USER_ID_NIGHT_SCOUT` | 必須 | local .env | 移行完了後 |
+| — | `THREADS_APP_ID` | 任意 | local .env | — |
+| — | `THREADS_APP_SECRET` | 任意 | local .env | — |
+| — | `THREADS_API_VERSION` | 任意 | local .env | — |
+
+安全フラグ:
+```
+ALLOW_REAL_THREADS_POST=false    # デフォルト false
+```
+
+### Threads (liver_manager)
+
+| 旧 repo (threads-liver-coachhing) | 新 repo | 必須 | 設定先 | rotate 推奨 |
+|---|---|---|---|---|
+| `THREADS_ACCESS_TOKEN` | `THREADS_ACCESS_TOKEN_LIVER_MANAGER` | 必須 | local .env | 高（60日期限） |
+| `THREADS_USER_ID` | `THREADS_USER_ID_LIVER_MANAGER` | 必須 | local .env | 移行完了後 |
+
+> **注意:** night_scout と liver_manager の `THREADS_ACCESS_TOKEN` は別の値。  
+> 旧 repo では同名変数 `THREADS_ACCESS_TOKEN` を別々の repo に設定していた。  
+> 新 repo ではアカウント名サフィックスで分離する。
+
+### Google Sheets
+
+| 旧 repo | 旧 env 名 | 新 repo env 名 | 必須 | 備考 |
+|---|---|---|---|---|
+| 各 repo の SHEET_ID/SHEET_URL | `SHEET_ID` / `SHEET_URL` | `SNS_MASTER_SHEET_ID` | 必須 | 新規作成推奨 |
+| threads_auto_post_gs / threads-liver | `SA_JSON_BASE64` | `SA_JSON_BASE64` | どちらか必須 | base64 形式 |
+| X_autopost_yoru | `GCP_SA_JSON` | `GCP_SA_JSON` | どちらか必須 | JSON 文字列形式 |
+
+> `SA_JSON_BASE64` か `GCP_SA_JSON` のどちらかが設定されていれば動作する。
+
+### Gemini
+
+| 旧 env 名 | 新 repo env 名 | 必須 |
 |---|---|---|
-| `X_API_KEY` | `X_API_KEY` | 同名 |
-| `X_API_SECRET` | `X_API_SECRET` | 同名 |
-| `X_ACCESS_TOKEN` | `X_ACCESS_TOKEN` | 同名 |
-| `X_ACCESS_TOKEN_SECRET` | `X_ACCESS_TOKEN_SECRET` | 同名 |
+| `GEMINI_API_KEY` | `GEMINI_API_KEY` | 必須 |
+| — | `GEMINI_MODEL` | 任意 |
+| — | `GEMINI_MODEL_CANDIDATES` | 任意 |
 
-**対象アカウント: night_scout**
+### Cloudinary（初期 OFF）
 
-新 repo での使用箇所: `scripts/publish_x_post.py` → `src/publishers/x_publisher.py`
-
-### Threads 認証情報 (night_scout)
-
-| 旧 repo (threads_auto_post_gs) | 新 repo (.env.template) | 備考 |
+| env 名 | 必須 | 安全フラグ |
 |---|---|---|
-| `THREADS_ACCESS_TOKEN` | `THREADS_ACCESS_TOKEN_NIGHT_SCOUT` | アカウント別に分離 |
-| `THREADS_USER_ID` | `THREADS_USER_ID_NIGHT_SCOUT` | アカウント別に分離 |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary 有効化時 | `ALLOW_CLOUDINARY_UPLOAD=false` |
+| `CLOUDINARY_API_KEY` | Cloudinary 有効化時 | — |
+| `CLOUDINARY_API_SECRET` | Cloudinary 有効化時 | — |
 
-### Threads 認証情報 (liver_manager)
+### Cloudflare Workers AI / transcription（初期 OFF）
 
-| 旧 repo (threads-liver-coachhing) | 新 repo (.env.template) | 備考 |
+| env 名 | 必須 | 安全フラグ |
 |---|---|---|
-| `THREADS_ACCESS_TOKEN` | `THREADS_ACCESS_TOKEN_LIVER_MANAGER` | アカウント別に分離 |
-| `THREADS_USER_ID` | `THREADS_USER_ID_LIVER_MANAGER` | アカウント別に分離 |
-
-> **Note:** 旧 repo では各 repo に 1アカウント分の `THREADS_ACCESS_TOKEN` だけが存在する。  
-> 新 repo は複数アカウントを管理するため、`_NIGHT_SCOUT` / `_LIVER_MANAGER` サフィックスで分離する。
-
-### GCP サービスアカウント
-
-| 旧 repo | env 名 | 形式 | 新 repo での推奨 |
-|---|---|---|---|
-| X_autopost_yoru | `GCP_SA_JSON` | JSON文字列 | `GCP_SA_JSON` (同形式) |
-| threads_auto_post_gs | `SA_JSON_BASE64` | base64エンコード | `SA_JSON_BASE64` (同形式) |
-| threads-liver-coachhing | `SA_JSON_BASE64` | base64エンコード | `SA_JSON_BASE64` (同形式) |
-
-> **Note:** 新 repo の `.env.template` には `SA_JSON_BASE64` と `GCP_SA_JSON` の両方が記載済み。  
-> どちらか一方（または両方）を設定すれば動作する。読み込み順は `SA_JSON_BASE64` → `GCP_SA_JSON`。
-
-### その他
-
-| 旧 repo env 名 | 新 repo での扱い | 備考 |
-|---|---|---|
-| `SHEET_ID` / `SHEET_URL` | `SNS_MASTER_SHEET_ID` | 一元化（Task E で設計） |
-| `SHEET_TAB` | 不要 | 新 repo は TAB_DEFINITIONS で自動管理 |
-| `GEMINI_API_KEY` | `GEMINI_API_KEY` | 同名 |
-| `DISCORD_WEBHOOK_URL` | `DISCORD_WEBHOOK_URL` | 同名 |
-| `DEDUP_TAB` | 不要 | 新 repo は dedup を sheets schema で管理 |
+| `CLOUDFLARE_ACCOUNT_ID` | transcription 有効化時 | `ALLOW_TRANSCRIPTION_API=false` |
+| `CLOUDFLARE_API_TOKEN` | transcription 有効化時 | — |
+| `DAILY_TRANSCRIPTION_MINUTES_LIMIT` | 任意 | デフォルト: 120分 |
+| `TRANSCRIPTION_PROVIDER` | 任意 | デフォルト: `cloudflare_whisper` |
 
 ---
 
-## Threads トークンリフレッシュ保存先
+## Threads トークン保存設計
 
-旧 repo: GitHub Actions の `GITHUB_OUTPUT` に書き出し（次のワークフローステップで使用）  
-新 repo: ローカルの JSON ファイルに保存（`.gitignore` 対象）
+旧 repo: GitHub Secrets 経由で GITHUB_OUTPUT に書き出し  
+新 repo: `data/threads_tokens/{account_id}.json` にローカル保存（`.gitignore` 対象）
 
-推奨ファイルパス:
-```
-data/threads_tokens/night_scout.json
-data/threads_tokens/liver_manager.json
-```
-
-形式:
+保存形式:
 ```json
 {
-  "access_token": "<value>",
+  "access_token": "...",
   "refreshed_at": "2026-06-20T00:00:00+09:00",
-  "expires_at": "2026-08-19T00:00:00+09:00"
+  "expires_at": "2026-08-19T00:00:00+09:00",
+  "account_id": "night_scout"
 }
 ```
 
-> `data/` ディレクトリは `.gitignore` で除外済み。
+token 読み込み優先順位（`threads_publisher.py`）:
+1. `data/threads_tokens/{account_id}.json`
+2. `THREADS_ACCESS_TOKEN_{ACCOUNT_ID_UPPER}` 環境変数
+3. `THREADS_ACCESS_TOKEN` 環境変数（後方互換）
 
-env 変数との連携:
-- 新 repo の `publish_threads_post.py` はまず `data/threads_tokens/{account_id}.json` を参照
-- ファイルがなければ `THREADS_ACCESS_TOKEN_{ACCOUNT_ID}` 環境変数を参照
-- どちらもなければ `THREADS_ACCESS_TOKEN` を参照（単一アカウント後方互換）
-
----
-
-## .env.template への追加項目
-
-以下の変数を `.env.template` に追加する（Task H 実装）:
-
+リフレッシュスクリプト:
 ```bash
-# ============================================================
-# Threads API 認証情報（アカウント別）
-# 複数アカウントを管理する場合はアカウント別の変数を使用する。
-# 単一アカウントの場合は THREADS_ACCESS_TOKEN / THREADS_USER_ID のみでも動作する。
-# ============================================================
-THREADS_ACCESS_TOKEN_NIGHT_SCOUT=
-THREADS_USER_ID_NIGHT_SCOUT=
-THREADS_ACCESS_TOKEN_LIVER_MANAGER=
-THREADS_USER_ID_LIVER_MANAGER=
-
-# ============================================================
-# Threads トークンリフレッシュ設定
-# THREADS_TOKEN_STORE_DIR: トークンJSONの保存先ディレクトリ（デフォルト: data/threads_tokens）
-# ============================================================
-THREADS_TOKEN_STORE_DIR=data/threads_tokens
+python3 scripts/refresh_threads_token.py --account-id night_scout --dry-run
+python3 scripts/refresh_threads_token.py --account-id night_scout --confirm-refresh
+python3 scripts/refresh_threads_token.py --account-id liver_manager --confirm-refresh
 ```
 
 ---
 
 ## 移行手順（人間が実施）
 
-### Phase 1: 新 repo .env に認証情報を設定
+### Step 1: 新 repo .env に認証情報を設定
 
 ```bash
-# 1. テンプレートをコピー
 cp .env.template .env
-
-# 2. エディタで以下の値を設定:
-#    - X_API_KEY / X_API_SECRET / X_ACCESS_TOKEN / X_ACCESS_TOKEN_SECRET (night_scout)
-#    - THREADS_ACCESS_TOKEN_NIGHT_SCOUT / THREADS_USER_ID_NIGHT_SCOUT
-#    - THREADS_ACCESS_TOKEN_LIVER_MANAGER / THREADS_USER_ID_LIVER_MANAGER
-#    - SA_JSON_BASE64 または GCP_SA_JSON
-#    - SNS_MASTER_SHEET_ID
-#    - GEMINI_API_KEY
+# エディタで値を設定:
+#   X_API_KEY / X_API_SECRET / X_ACCESS_TOKEN / X_ACCESS_TOKEN_SECRET
+#   THREADS_ACCESS_TOKEN_NIGHT_SCOUT / THREADS_USER_ID_NIGHT_SCOUT
+#   THREADS_ACCESS_TOKEN_LIVER_MANAGER / THREADS_USER_ID_LIVER_MANAGER
+#   SA_JSON_BASE64 または GCP_SA_JSON
+#   SNS_MASTER_SHEET_ID
+#   GEMINI_API_KEY
 ```
 
-### Phase 2: dry-run で動作確認
+### Step 2: readiness チェック
+
+```bash
+python3 scripts/check_credentials_readiness.py
+```
+
+### Step 3: dry-run で動作確認
 
 ```bash
 # X publisher dry-run
-python3 scripts/publish_x_post.py \
-  --account-id night_scout \
-  --text "テスト" --confirm-post --dry-run
+python3 scripts/publish_x_post.py --account-id night_scout --text "テスト" --confirm-post --dry-run
 
-# Threads publisher dry-run (Phase 3-E 実装後)
-python3 scripts/publish_threads_post.py \
-  --account-id night_scout \
-  --text "テスト" --confirm-post --dry-run
-
-python3 scripts/publish_threads_post.py \
-  --account-id liver_manager \
-  --text "テスト" --confirm-post --dry-run
+# Threads publisher dry-run
+python3 scripts/publish_threads_post.py --account-id night_scout --text "テスト" --confirm-post --dry-run
+python3 scripts/publish_threads_post.py --account-id liver_manager --text "テスト" --confirm-post --dry-run
 ```
 
-### Phase 3: 旧 repo の GitHub Actions を停止
-
-`docs/legacy-repo-shutdown-plan.md` の手順に従う。
-
-### Phase 4: 本番投稿テスト（1件のみ）
+### Step 4: Threads token refresh（初回設定）
 
 ```bash
-# .env に PUBLISH_ENABLED=true を一時的に追加（コミットしない）
-PUBLISH_ENABLED=true ALLOW_REAL_X_POST=true \
-python3 scripts/publish_x_post.py \
-  --account-id night_scout \
-  --text "<確定テキスト>" \
-  --confirm-post --no-dry-run
+# 旧 repo の THREADS_ACCESS_TOKEN 値を新 repo の .env に設定後
+python3 scripts/refresh_threads_token.py --account-id night_scout --confirm-refresh
+python3 scripts/refresh_threads_token.py --account-id liver_manager --confirm-refresh
 ```
 
-### Phase 5: secret rotate（任意、30日後以降）
+### Step 5: 本番投稿（1件ずつ承認制）
 
-旧 repo の GitHub Secrets を削除し、新しいトークンを発行して新 repo の `.env` に設定する。
+旧 repo 停止確認後（`docs/legacy-repo-shutdown-plan.md` 参照）:
+```bash
+# .env に PUBLISH_ENABLED=true ALLOW_REAL_X_POST=true を一時追加
+python3 scripts/publish_x_post.py --account-id night_scout --text "..." --confirm-post --no-dry-run
+```
+
+### Step 6: rotate（30日後以降）
+
+- Threads: `scripts/refresh_threads_token.py` で新トークン取得 → 旧 repo Secrets 削除
+- X: Twitter Developer Portal で新 Access Token 生成 → 旧 repo Secrets 削除
 
 ---
 
-## トークン有効期限の管理
+## トークン有効期限管理
 
-| 認証情報 | 有効期限 | 期限切れ前アクション |
+| 認証情報 | 有効期限 | 期限前アクション |
 |---|---|---|
-| `X_ACCESS_TOKEN` | 無期限（revoke されるまで） | 定期ローテーション推奨 |
-| `THREADS_ACCESS_TOKEN` (各アカウント) | 60日 | 45日後に `scripts/refresh_threads_token.py` を実行 |
-| GCP サービスアカウント | 無期限（revoke されるまで） | 年次ローテーション推奨 |
-
-Threads トークンリフレッシュのリマインダー設定推奨:
-- 取得日から45日後にリフレッシュ実行
-- `scripts/refresh_threads_token.py --account-id night_scout --confirm-refresh`
-- `scripts/refresh_threads_token.py --account-id liver_manager --confirm-refresh`
+| X_ACCESS_TOKEN | 無期限（revoke まで） | 年次 rotate 推奨 |
+| THREADS_ACCESS_TOKEN (night_scout) | 60日 | 45日後にリフレッシュ |
+| THREADS_ACCESS_TOKEN (liver_manager) | 60日 | 45日後にリフレッシュ |
+| GCP Service Account | 無期限（revoke まで） | 年次 rotate 推奨 |
 
 ---
 
 ## 関連ドキュメント
 
-- `docs/legacy-repo-migration-audit.md`: 旧 repo の詳細調査
+- `docs/legacy-repo-migration-audit.md`: 旧 repo 詳細調査
 - `docs/legacy-repo-shutdown-plan.md`: 旧 repo 停止手順
+- `docs/setup-new-sns-master-sheet.md`: 新規シート作成手順
 - `docs/production-launch-checklist.md`: 本番開始チェックリスト

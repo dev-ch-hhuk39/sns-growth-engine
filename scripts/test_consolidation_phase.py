@@ -62,16 +62,16 @@ from sheets_client import MockSheetsClient
 mock = MockSheetsClient()
 # mock._ws はデフォルト実装では直接呼べないが、TAB_DISPLAY_NAMES の参照は確認できる
 check(
-    "TAB_DISPLAY_NAMES['accounts'] == '01_アカウント設定'",
-    TAB_DISPLAY_NAMES.get("accounts") == "01_アカウント設定",
+    "TAB_DISPLAY_NAMES['accounts'] == 'アカウント管理'",
+    TAB_DISPLAY_NAMES.get("accounts") == "アカウント管理",
 )
 check(
-    "TAB_DISPLAY_NAMES['pdca_runs'] == '29_PDCA記録'",
-    TAB_DISPLAY_NAMES.get("pdca_runs") == "29_PDCA記録",
+    "TAB_DISPLAY_NAMES['pdca_runs'] == 'PDCA実行履歴'",
+    TAB_DISPLAY_NAMES.get("pdca_runs") == "PDCA実行履歴",
 )
 check(
-    "TAB_DISPLAY_NAMES['queue'] == '11_投稿キュー'",
-    TAB_DISPLAY_NAMES.get("queue") == "11_投稿キュー",
+    "TAB_DISPLAY_NAMES['queue'] == '投稿キュー'",
+    TAB_DISPLAY_NAMES.get("queue") == "投稿キュー",
 )
 
 

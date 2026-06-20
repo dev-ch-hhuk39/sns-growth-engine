@@ -15,12 +15,12 @@
 
 | リポジトリ名 | 対象アカウント | プラットフォーム | 投稿頻度 | 最終push |
 |---|---|---|---|---|
-| X_autopost_yoru | night_scout | X (Twitter) | 6回/日 | 2026-06-19 (keepalive) |
-| threads_auto_post_gs | night_scout | Threads | 2回/日 | 2026-06-19 (keepalive) |
-| threads-liver-coachhing | liver_manager | Threads | 8回/日 | 2026-06-19 (keepalive) |
+| X_autopost_yoru | night_scout | X (Twitter) | 6回/日 | 2026-06-20 **DISABLED** |
+| threads_auto_post_gs | night_scout | Threads | 2回/日 | 2026-06-20 **DISABLED** |
+| threads-liver-coachhing | liver_manager | Threads | 8回/日 | 2026-06-20 **DISABLED** |
 
-**合計: 約16回/日が現在も自動投稿中**  
-新旧並行稼働は重複投稿リスクがあるため、**旧repo停止が新repo本番投稿の前提条件**。
+**停止対応 (2026-06-20): 全20ワークフローを disabled_manually に設定済み ✅**  
+廃止 README も各リポジトリに追加済み。
 
 ---
 
