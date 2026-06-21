@@ -65,7 +65,7 @@ def generate_social_derivatives(
                     print(f"  [skip] 重複 draft_id={draft_id} platform={platform}")
                     continue
 
-                tmpl = get_derivative_template(sheets, platform)
+                tmpl = get_derivative_template(sheets, platform, account_id=acct_id)
                 if not tmpl:
                     print(f"  [skip] platform={platform} テンプレートなし")
                     continue

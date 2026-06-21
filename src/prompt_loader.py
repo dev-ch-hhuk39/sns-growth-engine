@@ -79,8 +79,19 @@ def get_draft_generation_template(
 def get_derivative_template(
     sheets: "SheetsClient | MockSheetsClient | None",
     platform: str,
+    account_id: str | None = None,
 ) -> dict | None:
-    """platform に対応する social_derivative テンプレートを返す。"""
+    """platform に対応する social_derivative テンプレートを返す。
+
+    account_id が指定された場合は account 固有テンプレート（例:
+    social_derivative_x_night_scout_v1）を優先する。なければ共通テンプレートにフォールバック。
+    """
+    if account_id:
+        account_specific_name = f"social_derivative_{platform.lower()}_{account_id}_v1"
+        tmpl = get_prompt_template(sheets, account_specific_name, account_id=account_id)
+        if tmpl:
+            return tmpl
+
     template_name_map = {
         "x": "social_derivative_x_v1",
         "threads": "social_derivative_threads_v1",

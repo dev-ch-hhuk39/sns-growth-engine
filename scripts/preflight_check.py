@@ -329,6 +329,31 @@ def check_prompt_templates() -> CheckResult:
         return CheckResult("prompt_templates", "FAIL", f"エラー: {str(e)[:100]}")
 
 
+def check_tone_patterns() -> CheckResult:
+    """seeds.py に ACCOUNT_NG_TONE_PATTERNS が定義されているか確認する。"""
+    try:
+        from seeds import ACCOUNT_NG_TONE_PATTERNS
+        ns_count = len(ACCOUNT_NG_TONE_PATTERNS.get("night_scout", []))
+        lm_count = len(ACCOUNT_NG_TONE_PATTERNS.get("liver_manager", []))
+        if ns_count == 0 and lm_count == 0:
+            return CheckResult("NGトーンパターン定義", "WARN",
+                               "ACCOUNT_NG_TONE_PATTERNS が空です → seeds.py を確認してください")
+        return CheckResult("NGトーンパターン定義", "PASS",
+                           f"night_scout:{ns_count}件 liver_manager:{lm_count}件")
+    except ImportError as e:
+        return CheckResult("NGトーンパターン定義", "FAIL", f"インポートエラー: {e}")
+
+
+def check_tone_checker_module() -> CheckResult:
+    """tone_checker.py が import できるか確認する。"""
+    try:
+        from tone_checker import check_ng_tone  # noqa: F401
+        return CheckResult("tone_checker モジュール", "PASS",
+                           "tone_checker.check_ng_tone import OK")
+    except ImportError as e:
+        return CheckResult("tone_checker モジュール", "FAIL", f"import エラー: {e}")
+
+
 def check_pipeline_dry_run() -> CheckResult:
     """run_pipeline の dry-run が実行可能か確認する（インポートのみ）。"""
     try:
@@ -492,6 +517,13 @@ def main() -> None:
     # --- グループ5: パイプライン確認 ---
     print("\n[グループ5] パイプライン・既存プロジェクト")
     for fn in [check_pipeline_dry_run, check_existing_projects]:
+        r = fn()
+        results.append(r)
+        print(_fmt(r))
+
+    # --- グループ6: トンマナ確認 ---
+    print("\n[グループ6] トンマナ・NGトーン確認")
+    for fn in [check_tone_patterns, check_tone_checker_module]:
         r = fn()
         results.append(r)
         print(_fmt(r))

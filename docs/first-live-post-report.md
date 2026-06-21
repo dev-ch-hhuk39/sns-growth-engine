@@ -193,3 +193,52 @@ python3 scripts/run_pdca_cycle.py \
 - download/cut/upload: 未実行
 - beauty_account active化: なし
 - secrets表示: なし
+
+---
+
+## トンマナ修正対応（2026-06-22 追記）
+
+### 問題発覚
+
+初回生成試行で以下の3案が生成された（いずれもNG）:
+
+1. 「今日も一日お疲れ様！…ずっと応援しているよ。」→ **薄い応援・励まし系**
+2. 「今日はどんなメイクで行こうか…新しいリップやアイシャドウ…」→ **美容系**
+3. 「ストレスや疲れが溜まってないかな…心と体を休める時間…」→ **ふわっとしたメンタル系**
+
+### ユーザーフィードバック
+
+> 現状、night_scout の投稿が「応援系」「美容系」「薄い励まし」に寄っています。これはNGです。
+
+### 根本原因
+
+プロンプト（`_DRAFT_GEN_NIGHT_SCOUT`）に「応援系/美容系/ポエム系を避ける」という明示的禁止事項がなかった。
+
+### 修正内容
+
+| 修正ファイル | 修正内容 |
+|---|---|
+| `src/seeds.py` | night_scout/liver_manager の tone/notes を詳細化 |
+| `src/seeds.py` | `_DRAFT_GEN_NIGHT_SCOUT` に NGトーンリスト・投稿スタイルガイド・良い例を追加 |
+| `src/seeds.py` | `_DRAFT_GEN_LIVER_MANAGER` に同様の追加 |
+| `src/seeds.py` | `_SOCIAL_DERIVATIVE_X_NIGHT_SCOUT` (pt_06) 新規追加 |
+| `src/seeds.py` | `ACCOUNT_NG_TONE_PATTERNS` 新規追加（night_scout:21件、liver_manager:12件） |
+| `src/tone_checker.py` | 新規作成（`check_ng_tone()` 関数） |
+| `src/prompt_loader.py` | `get_derivative_template()` を account_id 対応に更新 |
+| `src/social_derivative_generator.py` | account_id を derivative テンプレート選択に渡す |
+| `scripts/preflight_check.py` | グループ6「トンマナ確認」追加 |
+| `scripts/test_account_tone_guide.py` | 新規作成（14項目テスト） |
+| `docs/account-tone-guides.md` | 新規作成（アカウント別トンマナ定義） |
+
+### night_scout 正しいトーン定義
+
+**NG**: 薄い応援・美容・ポエム・汎用自己啓発  
+**OK**: 現場ノウハウ・キャバあるある・稼げる子の特徴分析・店選びのポイント  
+**X ルール**: ハッシュタグなし・絵文字なし・120字以内
+
+**良い例**:
+> キャバで長く稼げる子って、見た目だけじゃなくて「また話したい」と思わせる返しが上手い。LINEも接客も、相手を気持ちよくさせる一言を積み重ねられる子は強いんだよね。
+
+### 次のステップ
+
+トンマナ修正後のプロンプトで night_scout X投稿を3案再生成し、最適1案で X dry-run を実施する。
