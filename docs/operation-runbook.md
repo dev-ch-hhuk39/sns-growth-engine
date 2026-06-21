@@ -31,6 +31,26 @@ python scripts/generate_drafts.py --account-id night_scout --dry-run
 python scripts/review_queue.py --account-id night_scout --status WAITING_REVIEW
 ```
 
+## 1-b. Threads トークン管理（月次）
+
+Threads アクセストークンは 60日で失効。以下の手順で月次確認・refresh する。
+
+```bash
+# トークン状態確認（値は表示されない）
+python3 scripts/refresh_threads_token.py --account-id night_scout --status
+python3 scripts/refresh_threads_token.py --account-id liver_manager --status
+
+# dry-run で refresh 確認（API 未呼び出し）
+python3 scripts/refresh_threads_token.py --account-id night_scout --dry-run
+
+# 実 refresh（残り45日以内になったら実行）
+python3 scripts/refresh_threads_token.py --account-id night_scout --confirm-refresh
+python3 scripts/refresh_threads_token.py --account-id liver_manager --confirm-refresh
+```
+
+自動化: `.github/workflows/refresh-threads-tokens.yml` が毎週日曜 11:00 JST に実行。  
+詳細: `docs/threads-token-refresh-automation.md`
+
 ## 2. Reference収集
 
 ```bash

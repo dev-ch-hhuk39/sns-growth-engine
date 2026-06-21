@@ -1,6 +1,6 @@
 # sns-growth-engine 実装ロードマップ
 
-**最終更新**: 2026-06-15 (Phase 12: Fetcher基盤 + Publishers + Orchestrator + テスト FAIL=0)
+**最終更新**: 2026-06-21 (完全運用化フェーズ: 全30コンポーネント確認・Threads認証整備・refresh自動化完了)
 
 ---
 
@@ -68,10 +68,35 @@
                          - accounts __init__.py 修正
                          - COLLECTION_METHODS 拡張
                          - docs 5本追加
-[予定] Phase 13      → Production readiness: ToolDoctor + PipelineStore + ArticleFetcher + ソース候補登録
-[予定] Phase 14      → メディアアセット download/storage/Cloudinary パイプライン本番化
-[予定] Phase 15      → Publisher 本番パス (confirm + フラグ揃えた条件下のみ)
-[予定] Phase 16      → PDCA 本番連携 + 全テスト FAIL=0 最終確認
+[完了] Phase 13      → Production readiness: ToolDoctor + PipelineStore + ArticleFetcher + ソース候補登録
+                         - ToolDoctor: 外部ツール依存を検査（NOT_INSTALLED = WARN）
+                         - PipelineStore: dry_run=True デフォルト全パイプライン
+                         - ArticleFetcher / ArticleReferenceNormalizer
+                         - production_sources.example.json: 54件全 inactive
+                         - source 候補登録 / status ライフサイクル CLI
+                         - テスト FAIL=0 (Phase 13: 148 PASS)
+[完了] Phase 14      → メディアアセット download/storage/Cloudinary パイプライン本番化
+                         - media_downloader: confirm_download ゲート付きダウンロード計画
+                         - cloudinary_uploader: ALLOW_CLOUDINARY_UPLOAD ガード
+                         - media_assets Sheets タブ連携
+                         - clip_cutter: ffmpeg confirm_cut ゲート
+                         - テスト FAIL=0
+[完了] Phase 15      → Publisher 本番パス (confirm + フラグ揃えた条件下のみ)
+                         - XPublisher / ThreadsPublisher 実投稿 (dry_run=False パス)
+                         - PUBLISH_ENABLED / ALLOW_REAL_X_POST / ALLOW_REAL_THREADS_POST ガード
+                         - publish_x_post / publish_threads_post CLI (dry_run デフォルト)
+                         - テスト FAIL=0
+[完了] Phase 16      → PDCA 本番連携 + 全テスト FAIL=0 最終確認
+                         - PDCAOrchestrator: posted_results → improvement_suggestions → next_jobs
+                         - run_pdca_cycle CLI
+                         - 全テスト FAIL=0 確認済み
+[完了] Phase 8-Ext   → Threads認証整備 + refresh自動化 (2026-06-21)
+                         - threads_credentials.py: account別 app_id/app_secret/token/user_id 解決
+                         - 優先順位: file > account-specific env > fallback env
+                         - refresh_threads_token.py: 60日トークン延長 CLI
+                         - .github/workflows/refresh-threads-tokens.yml: 週次自動refresh
+                         - GH_SECRET_WRITE_TOKEN 経由で GitHub Secrets 自動更新
+                         - テスト FAIL=0 (24 PASS)
 ```
 
 ---

@@ -1,8 +1,8 @@
 # Production Readiness Audit
 
-Phase 13 時点のプロダクション準備状況の監査記録。
+Phase 13〜完全運用化フェーズのプロダクション準備状況の監査記録。
 
-最終更新: 2026-06-16
+最終更新: 2026-06-21
 
 ## 安全ゲート状態
 
@@ -78,6 +78,45 @@ Phase 13 時点のプロダクション準備状況の監査記録。
 | **合計** | **148** | **0** |
 
 Phase 9-11 テストも全て PASS。
+
+### 完全運用化フェーズ追加テスト (2026-06-21)
+
+| テストファイル | PASS | FAIL |
+|---|---|---|
+| test_threads_credentials.py | 24 | 0 |
+| test_phase10_threads_publisher.py | 7 | 0 |
+| test_phase10_x_publisher.py | 5 | 0 |
+| test_source_account_registry.py | 27 | 0 |
+| test_phase9_buzz_scorer.py | 18 | 0 |
+| test_phase9_yt_dlp_fetcher.py | 16 | 0 |
+| test_phase9_tiktok_to_ytdlp_fetcher.py | 8 | 0 |
+| test_phase9_youtube_transcript_fetcher.py | 11 | 0 |
+| test_phase9_video_understanding.py | 34 | 0 |
+| test_phase8_sheets_schema.py | 81 | 0 |
+| test_phase8_content_mix_to_jobs.py | 15 | 0 |
+| test_phase8_source_to_reference_generation.py | 19 | 0 |
+| test_phase8_media_to_preflight.py | 19 | 0 |
+| test_phase8_end_to_end_preflight_matrix.py | 13 | 0 |
+| test_phase8_pdca_to_next_plan.py | 24 | 0 |
+| test_pdca_orchestrator.py | 11 | 0 |
+| test_phase13_media_asset_storage.py | 3 | 0 |
+| test_phase13_video_clip_execution.py | 3 | 0 |
+| test_phase13_publishers_production_safety.py | 4 | 0 |
+| test_phase13_source_registry_production.py | 28 | 0 |
+| **合計 (完全運用化フェーズ)** | **370+** | **0** |
+
+### Threads 認証情報 + トークン自動 refresh (Phase 8-Ext, 2026-06-21)
+
+| コンポーネント | ステータス | 備考 |
+|---|---|---|
+| `threads_credentials.py` | READY | account_id 別解決、値はログ非表示 |
+| 優先順位 (access_token) | READY | file > env_specific > fallback |
+| 優先順位 (user_id/app_id等) | READY | env_specific > file > fallback |
+| `refresh_threads_token.py` | READY | --dry-run / --confirm-refresh ゲート |
+| refresh-threads-tokens.yml | READY | 週次 (日曜 JST 11:00) + manual dispatch |
+| GH_SECRET_WRITE_TOKEN | READY | PAT secrets:write スコープ必要 |
+| night_scout トークン | SET | THREADS_ACCESS_TOKEN_NIGHT_SCOUT |
+| liver_manager トークン | SET | THREADS_ACCESS_TOKEN_LIVER_MANAGER |
 
 ## beauty_account 制約
 
