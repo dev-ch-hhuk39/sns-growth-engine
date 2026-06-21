@@ -193,7 +193,8 @@ def get_config() -> dict:
 def _load_sa_dict() -> dict | None:
     """SA_JSON_BASE64 または GCP_SA_JSON からサービスアカウントdictを返す。"""
     b64 = os.environ.get("SA_JSON_BASE64", "").strip()
-    if b64:
+    # 非ASCII文字（プレースホルダー等）は無効とみなして GCP_SA_JSON にフォールバック
+    if b64 and all(ord(c) < 128 for c in b64):
         try:
             decoded = base64.b64decode(b64).decode("utf-8")
             return json.loads(decoded)
@@ -204,7 +205,12 @@ def _load_sa_dict() -> dict | None:
     if raw:
         try:
             return json.loads(raw)
-        except Exception as e:
-            raise ValueError(f"GCP_SA_JSON のパースに失敗しました: {e}") from e
+        except json.JSONDecodeError:
+            # 変数名が GCP_SA_JSON でも base64 エンコード値の場合がある
+            try:
+                decoded = base64.b64decode(raw).decode("utf-8")
+                return json.loads(decoded)
+            except Exception as e2:
+                raise ValueError(f"GCP_SA_JSON のパース/デコードに失敗しました: {e2}") from e2
 
     return None

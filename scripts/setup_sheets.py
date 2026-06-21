@@ -36,11 +36,18 @@ def _build_gspread_client():
     sa_b64 = os.environ.get("SA_JSON_BASE64", "").strip()
     sa_json = os.environ.get("GCP_SA_JSON", "").strip()
 
-    if sa_b64:
+    # SA_JSON_BASE64 が非ASCII（プレースホルダー等）の場合は GCP_SA_JSON にフォールバック
+    sa_b64_valid = sa_b64 and all(ord(c) < 128 for c in sa_b64)
+    if sa_b64_valid:
         sa_bytes = base64.b64decode(sa_b64)
         sa_dict = json.loads(sa_bytes)
     elif sa_json:
-        sa_dict = json.loads(sa_json)
+        # まず直接 JSON parse。失敗したら base64 decode を試みる（変数名が GCP_SA_JSON でも base64 の場合がある）
+        try:
+            sa_dict = json.loads(sa_json)
+        except json.JSONDecodeError:
+            sa_bytes = base64.b64decode(sa_json)
+            sa_dict = json.loads(sa_bytes)
     else:
         raise RuntimeError("SA_JSON_BASE64 または GCP_SA_JSON が未設定です")
 
