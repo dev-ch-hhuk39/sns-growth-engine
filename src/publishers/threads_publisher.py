@@ -17,55 +17,23 @@ Threads Graph API v1.0 を使った実投稿実装。
 """
 from __future__ import annotations
 
-import json
 import os
 import time
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import timedelta, timezone
 from typing import Any
 
 from .base import BasePublisher, PublishResult
 from .dry_run import _check_threads
+from .threads_credentials import resolve_credentials
 
 THREADS_API_BASE = "https://graph.threads.net/v1.0"
-_DEFAULT_TOKEN_DIR = Path(os.environ.get("THREADS_TOKEN_STORE_DIR", "data/threads_tokens"))
 JST = timezone(timedelta(hours=9))
 
 
 def _get_credentials(account_id: str) -> tuple[str, str]:
-    """(access_token, user_id) を取得する。値はログに出さない。
-
-    優先順位:
-    1. data/threads_tokens/{account_id}.json の access_token
-    2. THREADS_ACCESS_TOKEN_{ACCOUNT_ID_UPPER} 環境変数
-    3. THREADS_ACCESS_TOKEN 環境変数（後方互換）
-
-    user_id:
-    1. THREADS_USER_ID_{ACCOUNT_ID_UPPER} 環境変数
-    2. THREADS_USER_ID 環境変数
-    """
-    token_path = _DEFAULT_TOKEN_DIR / f"{account_id}.json"
-    access_token = ""
-    if token_path.exists():
-        try:
-            with open(token_path) as f:
-                stored = json.load(f)
-            access_token = stored.get("access_token", "")
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    if not access_token:
-        key = f"THREADS_ACCESS_TOKEN_{account_id.upper()}"
-        access_token = os.environ.get(key, "").strip()
-    if not access_token:
-        access_token = os.environ.get("THREADS_ACCESS_TOKEN", "").strip()
-
-    user_id_key = f"THREADS_USER_ID_{account_id.upper()}"
-    user_id = os.environ.get(user_id_key, "").strip()
-    if not user_id:
-        user_id = os.environ.get("THREADS_USER_ID", "").strip()
-
-    return access_token, user_id
+    """(access_token, user_id) を取得する。値はログに出さない。"""
+    creds = resolve_credentials(account_id)
+    return creds["access_token"], creds["user_id"]
 
 
 def _create_container(

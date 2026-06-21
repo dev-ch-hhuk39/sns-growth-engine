@@ -69,46 +69,45 @@ def main() -> None:
 
     # ---- Threads night_scout ----
     if not args.account_id or args.account_id == "night_scout":
-        # アカウント別変数またはフォールバックのどちらかが設定されていればOK
         threads_ns_token = _is_set("THREADS_ACCESS_TOKEN_NIGHT_SCOUT") or _is_set("THREADS_ACCESS_TOKEN")
         threads_ns_uid = _is_set("THREADS_USER_ID_NIGHT_SCOUT") or _is_set("THREADS_USER_ID")
+        threads_ns_app_id = _is_set("THREADS_APP_ID_NIGHT_SCOUT") or _is_set("THREADS_APP_ID")
+        threads_ns_app_secret = _is_set("THREADS_APP_SECRET_NIGHT_SCOUT") or _is_set("THREADS_APP_SECRET")
         lines = ["\n[Threads (night_scout)]"]
-        for label, ok_val in [
-            ("THREADS_ACCESS_TOKEN_NIGHT_SCOUT (or THREADS_ACCESS_TOKEN)", threads_ns_token),
-            ("THREADS_USER_ID_NIGHT_SCOUT (or THREADS_USER_ID)", threads_ns_uid),
-            ("THREADS_APP_ID", False),
-            ("THREADS_APP_SECRET", False),
+        for label, ok_val, required in [
+            ("THREADS_ACCESS_TOKEN_NIGHT_SCOUT (or THREADS_ACCESS_TOKEN)", threads_ns_token, True),
+            ("THREADS_USER_ID_NIGHT_SCOUT (or THREADS_USER_ID)", threads_ns_uid, True),
+            ("THREADS_APP_ID_NIGHT_SCOUT (or THREADS_APP_ID)", threads_ns_app_id, False),
+            ("THREADS_APP_SECRET_NIGHT_SCOUT (or THREADS_APP_SECRET)", threads_ns_app_secret, False),
         ]:
-            if "(or" in label:
-                mark = CHECK_MARK if ok_val else CROSS_MARK
-                status = "SET    " if ok_val else "MISSING"
-                lines.append(f"  {mark} {status}  {label}")
-                if ok_val:
-                    total_ok += 1
-                else:
-                    total_miss += 1
-            else:
-                line, ok = _status(label.split("(")[0].strip(), required=False)
-                lines.append(line)
-                if ok:
-                    total_ok += 1
+            mark = CHECK_MARK if ok_val else CROSS_MARK
+            status = "SET    " if ok_val else ("MISSING" if required else "MISSING(opt)")
+            lines.append(f"  {mark} {status}  {label}")
+            if ok_val:
+                total_ok += 1
+            elif required:
+                total_miss += 1
         all_lines.extend(lines)
 
     # ---- Threads liver_manager ----
     if not args.account_id or args.account_id == "liver_manager":
         threads_lm_token = _is_set("THREADS_ACCESS_TOKEN_LIVER_MANAGER")
         threads_lm_uid = _is_set("THREADS_USER_ID_LIVER_MANAGER")
+        threads_lm_app_id = _is_set("THREADS_APP_ID_LIVER_MANAGER") or _is_set("THREADS_APP_ID")
+        threads_lm_app_secret = _is_set("THREADS_APP_SECRET_LIVER_MANAGER") or _is_set("THREADS_APP_SECRET")
         lines = ["\n[Threads (liver_manager)]"]
-        for label, ok_val in [
-            ("THREADS_ACCESS_TOKEN_LIVER_MANAGER", threads_lm_token),
-            ("THREADS_USER_ID_LIVER_MANAGER", threads_lm_uid),
+        for label, ok_val, required in [
+            ("THREADS_ACCESS_TOKEN_LIVER_MANAGER", threads_lm_token, True),
+            ("THREADS_USER_ID_LIVER_MANAGER", threads_lm_uid, True),
+            ("THREADS_APP_ID_LIVER_MANAGER (or THREADS_APP_ID)", threads_lm_app_id, False),
+            ("THREADS_APP_SECRET_LIVER_MANAGER (or THREADS_APP_SECRET)", threads_lm_app_secret, False),
         ]:
             mark = CHECK_MARK if ok_val else CROSS_MARK
-            status = "SET    " if ok_val else "MISSING"
+            status = "SET    " if ok_val else ("MISSING" if required else "MISSING(opt)")
             lines.append(f"  {mark} {status}  {label}")
             if ok_val:
                 total_ok += 1
-            else:
+            elif required:
                 total_miss += 1
         all_lines.extend(lines)
 
@@ -156,6 +155,15 @@ def main() -> None:
     all_lines.extend(lines)
     total_ok += ok
     # transcription も optional
+
+    # ---- GitHub Actions / 自動通知 ----
+    lines, ok, miss = check_section("GitHub Actions / 自動通知 (任意)", [
+        ("GH_SECRET_WRITE_TOKEN", False),
+        ("DISCORD_WEBHOOK_URL", False),
+    ])
+    all_lines.extend(lines)
+    total_ok += ok
+    # optional なので miss にカウントしない
 
     # ---- Safety flags ----
     lines = ["\n[Safety flags (全て未設定 or false が正常)]"]

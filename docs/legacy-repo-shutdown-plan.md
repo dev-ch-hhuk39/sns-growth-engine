@@ -3,7 +3,7 @@
 ## 概要
 
 - 作成日: 2026-06-20
-- 更新日: 2026-06-20（停止完了）
+- 更新日: 2026-06-21（Threads token refresh 移行完了）
 - 目的: 旧3リポジトリの GitHub Actions を停止し、sns-growth-engine への一本化を完了させる
 
 **絶対ルール:**
@@ -23,6 +23,11 @@
 
 **合計 20本 すべて停止済み。**  
 Secret 混入チェック: `.env.example` はすべて値が空 ✅
+
+**2026-06-21 更新:**  
+- Threads token refresh ワークフローを新 repo (`.github/workflows/refresh-threads-tokens.yml`) に移行完了
+- 旧 `threads_auto_post_gs` / `threads-liver-coachhing` の Refresh Threads Token ワークフローは代替済み
+- `src/publishers/threads_credentials.py` で認証情報をアカウント別に一元管理
 
 ---
 

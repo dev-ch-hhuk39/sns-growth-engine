@@ -1,0 +1,168 @@
+name: Refresh Threads Tokens
+
+on:
+  workflow_dispatch:
+    inputs:
+      account:
+        description: "Account to refresh (all / night_scout / liver_manager)"
+        required: false
+        default: "all"
+        type: choice
+        options:
+          - all
+          - night_scout
+          - liver_manager
+      dry_run:
+        description: "Dry run — no actual refresh, no secret update"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+  schedule:
+    # 毎週日曜 2:00 UTC (11:00 JST) — 60日期限の 45日前リフレッシュ目安
+    - cron: "0 2 * * 0"
+
+concurrency:
+  group: refresh-threads-tokens
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
+      THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
+      THREADS_APP_ID_NIGHT_SCOUT: ${{ secrets.THREADS_APP_ID_NIGHT_SCOUT }}
+      THREADS_APP_SECRET_NIGHT_SCOUT: ${{ secrets.THREADS_APP_SECRET_NIGHT_SCOUT }}
+      THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
+      THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
+      THREADS_APP_ID_LIVER_MANAGER: ${{ secrets.THREADS_APP_ID_LIVER_MANAGER }}
+      THREADS_APP_SECRET_LIVER_MANAGER: ${{ secrets.THREADS_APP_SECRET_LIVER_MANAGER }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests python-dotenv
+
+      # ---- パラメータ決定 ----
+      # scheduled run は account=all, dry_run=false を既定値とする
+      - name: Resolve parameters
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "ACCOUNT=all"   >> "$GITHUB_ENV"
+            echo "DRY_RUN=false" >> "$GITHUB_ENV"
+          else
+            echo "ACCOUNT=${{ github.event.inputs.account }}" >> "$GITHUB_ENV"
+            echo "DRY_RUN=${{ github.event.inputs.dry_run }}" >> "$GITHUB_ENV"
+          fi
+
+      # ---- GH_SECRET_WRITE_TOKEN の確認 ----
+      - name: Verify GH_SECRET_WRITE_TOKEN
+        env:
+          _GH_TOKEN_SET: ${{ secrets.GH_SECRET_WRITE_TOKEN != '' }}
+        run: |
+          if [ "$_GH_TOKEN_SET" != "true" ]; then
+            echo "READY_WITH_MISSING_GH_SECRET_WRITE_TOKEN: GH_SECRET_WRITE_TOKEN が GitHub Secrets に設定されていません。"
+            echo "  Settings → Secrets and variables → Actions → GH_SECRET_WRITE_TOKEN を追加してください。"
+            echo "  必要なスコープ: secrets:write"
+            exit 1
+          fi
+          echo "GH_SECRET_WRITE_TOKEN: SET"
+
+      # ============================================================
+      # night_scout
+      # ============================================================
+      - name: "[night_scout] Refresh token"
+        if: env.ACCOUNT == 'all' || env.ACCOUNT == 'night_scout'
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 scripts/refresh_threads_token.py --account-id night_scout --dry-run
+          else
+            python3 scripts/refresh_threads_token.py --account-id night_scout --confirm-refresh
+          fi
+
+      - name: "[night_scout] Update GitHub Secret"
+        if: (env.ACCOUNT == 'all' || env.ACCOUNT == 'night_scout') && env.DRY_RUN == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TOKEN_FILE="data/threads_tokens/night_scout.json"
+          if [ ! -f "$TOKEN_FILE" ]; then
+            echo "ERROR: $TOKEN_FILE が見つかりません。リフレッシュが成功しなかった可能性があります。"
+            exit 1
+          fi
+          # トークン値はパイプ経由で渡す — echo やログへの出力なし
+          jq -r '.access_token' "$TOKEN_FILE" \
+            | gh secret set THREADS_ACCESS_TOKEN_NIGHT_SCOUT --repo "$GH_REPO"
+          echo "GitHub Secret THREADS_ACCESS_TOKEN_NIGHT_SCOUT: 更新完了"
+
+      # ============================================================
+      # liver_manager
+      # ============================================================
+      - name: "[liver_manager] Refresh token"
+        if: env.ACCOUNT == 'all' || env.ACCOUNT == 'liver_manager'
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 scripts/refresh_threads_token.py --account-id liver_manager --dry-run
+          else
+            python3 scripts/refresh_threads_token.py --account-id liver_manager --confirm-refresh
+          fi
+
+      - name: "[liver_manager] Update GitHub Secret"
+        if: (env.ACCOUNT == 'all' || env.ACCOUNT == 'liver_manager') && env.DRY_RUN == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TOKEN_FILE="data/threads_tokens/liver_manager.json"
+          if [ ! -f "$TOKEN_FILE" ]; then
+            echo "ERROR: $TOKEN_FILE が見つかりません。リフレッシュが成功しなかった可能性があります。"
+            exit 1
+          fi
+          jq -r '.access_token' "$TOKEN_FILE" \
+            | gh secret set THREADS_ACCESS_TOKEN_LIVER_MANAGER --repo "$GH_REPO"
+          echo "GitHub Secret THREADS_ACCESS_TOKEN_LIVER_MANAGER: 更新完了"
+
+      # ============================================================
+      # 通知
+      # ============================================================
+      - name: "Notify Discord (success)"
+        if: success() && !cancelled()
+        env:
+          _WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          _REPO: ${{ github.repository }}
+        run: |
+          if [ -z "$_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK_URL 未設定 — 通知スキップ"
+            exit 0
+          fi
+          MSG="✅ Threads token refresh 完了 (account=${ACCOUNT} dry_run=${DRY_RUN} repo=${_REPO})"
+          # jq で JSON エスケープしてから送信
+          jq -n --arg content "$MSG" '{"content": $content}' \
+            | curl -sf -X POST "$_WEBHOOK" -H "Content-Type: application/json" -d @- || true
+
+      - name: "Notify Discord (failure)"
+        if: failure()
+        env:
+          _WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK_URL 未設定 — 通知スキップ"
+            exit 0
+          fi
+          MSG="❌ Threads token refresh 失敗 (account=${ACCOUNT} dry_run=${DRY_RUN}) — GitHub Actions ログを確認してください"
+          jq -n --arg content "$MSG" '{"content": $content}' \
+            | curl -sf -X POST "$_WEBHOOK" -H "Content-Type: application/json" -d @- || true

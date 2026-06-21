@@ -27,11 +27,14 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+from publishers.threads_credentials import resolve_credentials
 
 THREADS_REFRESH_URL = "https://graph.threads.net/refresh_access_token"
 _DEFAULT_TOKEN_DIR = Path(os.environ.get("THREADS_TOKEN_STORE_DIR", "data/threads_tokens"))
@@ -61,16 +64,8 @@ def _save_token(account_id: str, data: dict) -> None:
 
 
 def _get_current_token(account_id: str) -> str | None:
-    """現在のトークンを取得する（ファイル→env の順）。値は返すが表示しない。"""
-    stored = _load_token(account_id)
-    if stored and stored.get("access_token"):
-        return stored["access_token"]
-    # env から取得
-    key = f"THREADS_ACCESS_TOKEN_{account_id.upper()}"
-    token = os.environ.get(key, "").strip()
-    if token:
-        return token
-    token = os.environ.get("THREADS_ACCESS_TOKEN", "").strip()
+    """現在のトークンを取得する（resolver 経由）。値は返すが表示しない。"""
+    token = resolve_credentials(account_id).get("access_token", "")
     return token or None
 
 
