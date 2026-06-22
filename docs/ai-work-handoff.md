@@ -4,12 +4,65 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-06-22
+- Date: 2026-06-22 (第2回)
 - 作業AI: Claude Code (Sonnet 4.6)
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 作業開始 HEAD: `1c82246` (tone guides)
-- 前回更新: 2026-06-16 (Codex / `feature/codex-final-production-audit`)
+- 作業開始 HEAD: `0502bad`
+- 前回更新: 2026-06-22 (第1回 / tone guides + X pilot)
+
+## 最新作業内容 (2026-06-22 第2回)
+
+### X API ブロッカー分離
+
+- `src/publishers/x_publisher.py`: `_is_billing_error()` + `_save_to_manual_queue()` 追加
+  - 402 を `POST_FAILED_EXTERNAL_BILLING_BLOCKER` として認証エラーと区別
+  - 失敗投稿文を `data/manual_post_queue.json` に退避
+- `data/manual_post_queue.json`: 2026-06-22 の X 失敗投稿文を `retry_ready` で保存
+- `docs/x-api-billing-blocker.md`: 復旧手順・エラーコード定義を記載
+
+### Threads 実投稿確認
+
+- dry-run: **PASS** (85字、account=night_scout)
+- 実投稿: **BLOCKED_MISSING_CREDENTIALS** — THREADS_ACCESS_TOKEN / THREADS_USER_ID が .env 未設定
+
+### Source registry 棚卸し
+
+- 全 8件の状態を確認・整理（READY_FOR_REFERENCE_FETCH / WAITING_RIGHTS_REVIEW / BLOCKED_BEAUTY_ACCOUNT）
+- `docs/source-intake-template.md`: 新規ソース登録手順・状態定義表を作成
+- `scripts/test_source_intake_schema.py`: 7項目テスト（全PASS）
+
+### Media policy guard 確認
+
+- `check_source_media_policy()` / Cloudinary upload guard の動作を確認
+- `scripts/test_media_policy_guard.py`: 8項目テスト（全PASS）
+
+### GitHub Actions workflows 追加（本番ON はまだしない）
+
+- `.github/workflows/content-daily-dry-run.yml`: 毎日 JST 10:00 dry-run サニティチェック
+- `.github/workflows/content-pilot-publish.yml`: 手動トリガー専用 / X 402 自動停止 / beauty_account ガード
+- `.github/workflows/source-fetch-dry-run.yml`: 毎週月曜 JST 11:00 source policy チェック
+- 全 workflow: `${{ inputs.* }}` を env 経由に限定（コマンドインジェクション対策）
+- `scripts/test_content_workflows_safety.py`: 7項目テスト（全PASS）
+
+### テスト結果（今回追加分）
+
+| テスト | PASS | FAIL |
+|---|---|---|
+| test_source_intake_schema.py | 7 | 0 |
+| test_media_policy_guard.py | 8 | 0 |
+| test_content_workflows_safety.py | 7 | 0 |
+| test_account_tone_guide.py（既存） | 41 | 0 |
+
+## 現在のブロッカー / ペンディング事項
+
+| 課題 | 内容 | 必要な対応 |
+|---|---|---|
+| X API 402 | APIクレジット不足。認証は成功済み | X Developer Portal で Basic Plan 以上を契約 |
+| Threads 実投稿 | THREADS_ACCESS_TOKEN / THREADS_USER_ID が .env 未設定 | .env に認証情報を追加 |
+| src_ns_query_001 | night_scout query source の URL 未登録 | 対象アカウント URL を入力後 default_sources.json を更新 |
+| content_categories 空 | WARN (機能影響なし) | setup_and_verify.py --setup で解消可能 |
+| beauty_account | 実投稿・active化禁止 | 永続的な制約 |
 
 ## 最新作業内容 (2026-06-22)
 

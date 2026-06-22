@@ -1,0 +1,71 @@
+name: Source Fetch Dry-Run
+
+# source registry の取得パイプライン dry-run。
+# 実ダウンロード・実切り抜き・実アップロードは一切行わない。
+# plan_only / do_not_download ガードが正常動作することを確認する。
+on:
+  schedule:
+    - cron: "0 2 * * 1"  # UTC 02:00 月曜 = JST 11:00 月曜
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: "チェック対象アカウントID"
+        required: false
+        default: "night_scout"
+        type: choice
+        options:
+          - "night_scout"
+          - "liver_manager"
+
+# 安全制約: 実fetch/download/upload は常に false
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  DRY_RUN: "true"
+  MOCK_LLM: "true"
+  MOCK_SHEETS: "false"
+
+jobs:
+  source-fetch-dry-run:
+    name: Source Fetch Dry-Run (${{ github.event.inputs.account_id || 'night_scout' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id || 'night_scout' }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Source schema validation
+        run: |
+          python3 scripts/test_source_intake_schema.py
+
+      - name: Media policy guard check
+        run: |
+          python3 scripts/test_media_policy_guard.py
+
+      - name: Media asset preflight (dry-run / mock)
+        run: |
+          python3 scripts/preflight_media_assets.py \
+            --account-id "$ACCOUNT_ID" \
+            --mock --dry-run
+
+      - name: Source registry list
+        run: |
+          python3 scripts/manage_source_accounts.py \
+            --list \
+            --account-id "$ACCOUNT_ID"

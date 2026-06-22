@@ -200,6 +200,27 @@ class XPublisher(BasePublisher):
                 ),
             )
         except Exception as e:
+            if self._is_billing_error(e):
+                self._save_to_manual_queue(
+                    text=text,
+                    account_id=account_id,
+                    queue_id=queue_id,
+                )
+                return PublishResult(
+                    platform="x",
+                    success=False,
+                    dry_run=False,
+                    posted_url=None,
+                    external_post_id=None,
+                    message=(
+                        "POST_FAILED_EXTERNAL_BILLING_BLOCKER:"
+                        " X API 402 Payment Required — APIクレジット不足。"
+                        " これは認証エラーではありません。"
+                        " X Developer Portal で Basic Plan 以上を契約後に再実行してください。"
+                        " 投稿文は data/manual_post_queue.json に保存済み。"
+                        f" (queue_id={queue_id} account={account_id})"
+                    ),
+                )
             return PublishResult(
                 platform="x",
                 success=False,
@@ -211,6 +232,56 @@ class XPublisher(BasePublisher):
                     f" (queue_id={queue_id} account={account_id})"
                 ),
             )
+
+    def _is_billing_error(self, exc: Exception) -> bool:
+        """X API 402 Payment Required（課金ブロッカー）かどうか判定する。"""
+        try:
+            if hasattr(exc, "response") and hasattr(exc.response, "status_code"):
+                if exc.response.status_code == 402:
+                    return True
+        except Exception:
+            pass
+        return "402" in str(exc) or "Payment Required" in str(exc)
+
+    def _save_to_manual_queue(
+        self, text: str, account_id: str, queue_id: str
+    ) -> None:
+        """投稿失敗テキストを data/manual_post_queue.json に追記する。"""
+        import json
+        import pathlib
+
+        queue_path = pathlib.Path(__file__).resolve().parents[2] / "data" / "manual_post_queue.json"
+        queue_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if queue_path.exists():
+            try:
+                data = json.loads(queue_path.read_text(encoding="utf-8"))
+            except Exception:
+                data = {"queue": []}
+        else:
+            data = {"queue": []}
+
+        attempted_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        entry = {
+            "queue_id": queue_id,
+            "account_id": account_id,
+            "platform": "x",
+            "text": text,
+            "attempted_at": attempted_at,
+            "failure_reason": "POST_FAILED_EXTERNAL_BILLING_BLOCKER",
+            "status": "retry_ready",
+            "retry_command": (
+                f"PUBLISH_ENABLED=true ALLOW_REAL_X_POST=true "
+                f"python3 scripts/publish_x_post.py "
+                f"--account-id {account_id} "
+                f"--text '<text_from_this_entry>' "
+                f"--confirm-post --no-dry-run"
+            ),
+        }
+        data["queue"].append(entry)
+        queue_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
     def _build_posted_url(self, tweet_id: str) -> str:
         return f"https://twitter.com/i/web/status/{tweet_id}"

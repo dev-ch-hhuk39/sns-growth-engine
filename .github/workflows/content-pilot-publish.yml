@@ -1,0 +1,131 @@
+name: Content Pilot Publish
+
+# 手動トリガーのみ。スケジュール実行なし。
+# X投稿が 402 Payment Required の場合は自動停止し manual_post_queue に記録する。
+# beauty_account への投稿は常に BLOCKED。
+# PDCA suggestions は WAITING_REVIEW / next_jobs は PLANNED のまま。
+on:
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: "投稿先アカウントID（night_scout のみ。liver_manager/beauty_account は不可）"
+        required: true
+        default: "night_scout"
+        type: choice
+        options:
+          - "night_scout"
+      platform:
+        description: "投稿先プラットフォーム"
+        required: true
+        default: "threads"
+        type: choice
+        options:
+          - "threads"
+          - "x"
+      post_text:
+        description: "投稿テキスト（140字以内/X、500字以内/Threads）"
+        required: true
+      confirm_real_post:
+        description: "実投稿の最終確認（true にしないと dry-run のみ）"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+# 安全制約デフォルト: 全フラグ false。confirm_real_post=true 時のみ個別フラグ上書き。
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  DRY_RUN: "true"
+  MOCK_LLM: "false"
+  MOCK_SHEETS: "false"
+
+jobs:
+  pilot-publish:
+    name: Pilot Publish (${{ github.event.inputs.account_id }} / ${{ github.event.inputs.platform }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id }}
+      PLATFORM: ${{ github.event.inputs.platform }}
+      CONFIRM_REAL_POST: ${{ github.event.inputs.confirm_real_post }}
+      POST_TEXT: ${{ github.event.inputs.post_text }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      X_API_KEY: ${{ secrets.X_API_KEY }}
+      X_API_SECRET: ${{ secrets.X_API_SECRET }}
+      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
+      THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+      THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Guard: beauty_account は投稿禁止
+        run: |
+          if [ "$ACCOUNT_ID" = "beauty_account" ]; then
+            echo "[BLOCKED] beauty_account への投稿は禁止されています"
+            exit 1
+          fi
+
+      - name: Preflight check
+        run: |
+          python3 scripts/preflight_check.py \
+            --account-id "$ACCOUNT_ID" \
+            --dry-run
+
+      - name: Publisher dry-run
+        run: |
+          if [ "$PLATFORM" = "x" ]; then
+            python3 scripts/publish_x_post.py \
+              --account-id "$ACCOUNT_ID" \
+              --text "$POST_TEXT" \
+              --confirm-post --dry-run
+          else
+            python3 scripts/publish_threads_post.py \
+              --account-id "$ACCOUNT_ID" \
+              --text "$POST_TEXT" \
+              --confirm-post --dry-run
+          fi
+
+      - name: Real post (Threads only — X は 402 ブロッカーのため手動対応)
+        if: env.CONFIRM_REAL_POST == 'true' && env.PLATFORM == 'threads'
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+        run: |
+          python3 scripts/publish_threads_post.py \
+            --account-id "$ACCOUNT_ID" \
+            --text "$POST_TEXT" \
+            --confirm-post --no-dry-run
+
+      - name: X post note (402 ブロッカー対応)
+        if: env.CONFIRM_REAL_POST == 'true' && env.PLATFORM == 'x'
+        run: |
+          echo "[INFO] X投稿は 402 Payment Required ブロッカーのため GitHub Actions からは自動実行しません。"
+          echo "[INFO] X Developer Portal で Basic Plan 以上の契約後、docs/x-api-billing-blocker.md の手順で手動実行してください。"
+          echo "[INFO] 投稿文は data/manual_post_queue.json に保存済みです。"
+
+      - name: PDCA dry-run (WAITING_REVIEW / PLANNED)
+        run: |
+          python3 scripts/run_pdca_cycle.py \
+            --account-id "$ACCOUNT_ID" \
+            --platform "$PLATFORM" \
+            --days 7 \
+            --dry-run --mock \
+            --generate-next-plan

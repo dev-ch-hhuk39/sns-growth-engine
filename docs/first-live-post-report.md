@@ -256,6 +256,48 @@ tone_ok=True / NGパターン不検出 / 81字 ≤ 120字
 
 ---
 
+## Threads 実投稿確認 + X ブロッカー分離（2026-06-22 第2回 追記）
+
+### X ブロッカー正式分類
+
+前回の X 402 失敗を `POST_FAILED_EXTERNAL_BILLING_BLOCKER` として正式に分類。
+
+- `src/publishers/x_publisher.py` に 402 専用ハンドラ追加
+- 失敗投稿文を `data/manual_post_queue.json` (`status=retry_ready`) に保存
+- 復旧手順: `docs/x-api-billing-blocker.md` 参照
+
+### Threads 実投稿
+
+| ステップ | 結果 |
+|---|---|
+| dry-run (publish_threads_post.py) | **DRY_RUN PASS** (85字) |
+| 実投稿 | **BLOCKED_MISSING_CREDENTIALS** |
+| ブロック理由 | THREADS_ACCESS_TOKEN / THREADS_USER_ID が .env 未設定 |
+
+Threads 実投稿の次のステップ:
+```bash
+# 1. .env に認証情報を追加
+THREADS_ACCESS_TOKEN=<your_token>
+THREADS_USER_ID=<your_user_id>
+ALLOW_REAL_THREADS_POST=true
+PUBLISH_ENABLED=true
+
+# 2. dry-run 最終確認
+python3 scripts/publish_threads_post.py \
+  --account-id night_scout \
+  --text $'キャバで指名が取れる子って、見た目だけじゃなくて「また会いたい」と思わせる接客ができる子。\n\n相手を気持ちよくさせる聞き方と返しを積み重ねられる子は、長く稼げるんだよね。' \
+  --confirm-post --dry-run
+
+# 3. 実投稿
+PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true \
+python3 scripts/publish_threads_post.py \
+  --account-id night_scout \
+  --text $'キャバで指名が取れる子って、見た目だけじゃなくて「また会いたい」と思わせる接客ができる子。\n\n相手を気持ちよくさせる聞き方と返しを積み重ねられる子は、長く稼げるんだよね。' \
+  --confirm-post --no-dry-run
+```
+
+---
+
 ## トンマナ修正対応（2026-06-22 追記）
 
 ### 問題発覚

@@ -1,0 +1,76 @@
+name: Content Daily Dry-Run
+
+# 毎日の dry-run サニティチェック。
+# 実投稿・実ダウンロード・実アップロードは一切行わない。
+# preflight + LLM生成 + publisher dry-run のみ。
+on:
+  schedule:
+    - cron: "0 1 * * *"  # UTC 01:00 = JST 10:00
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: "チェック対象アカウントID"
+        required: false
+        default: "night_scout"
+
+# 安全制約: 全フラグを明示的にfalseで固定（schedule実行時も同様）
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  DRY_RUN: "true"
+  MOCK_LLM: "false"
+  MOCK_SHEETS: "false"
+
+jobs:
+  daily-dry-run:
+    name: Daily Dry-Run (${{ github.event.inputs.account_id || 'night_scout' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id || 'night_scout' }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Preflight check (dry-run)
+        run: |
+          python3 scripts/preflight_check.py \
+            --account-id "$ACCOUNT_ID" \
+            --dry-run
+
+      - name: Publisher dry-run (X)
+        run: |
+          python3 scripts/publish_x_post.py \
+            --account-id "$ACCOUNT_ID" \
+            --text "毎日 dry-run チェック" \
+            --confirm-post --dry-run
+
+      - name: Publisher dry-run (Threads)
+        run: |
+          python3 scripts/publish_threads_post.py \
+            --account-id "$ACCOUNT_ID" \
+            --text "毎日 dry-run チェック" \
+            --confirm-post --dry-run
+
+      - name: PDCA dry-run
+        run: |
+          python3 scripts/run_pdca_cycle.py \
+            --account-id "$ACCOUNT_ID" \
+            --platform x \
+            --days 7 \
+            --dry-run --mock \
+            --generate-next-plan
