@@ -27,6 +27,13 @@ import sys
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _ROOT)
+sys.path.insert(0, os.path.join(_ROOT, "src"))
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(_ROOT, ".env"))
+except ImportError:
+    pass
 
 _BEAUTY_BLOCKED = frozenset(["beauty_account"])
 

@@ -196,6 +196,66 @@ python3 scripts/run_pdca_cycle.py \
 
 ---
 
+## 初回本番パイロット実行（2026-06-22 追記）
+
+### 実行概要
+
+- 実行日: 2026-06-22
+- 作業AI: Claude Code (Sonnet 4.6)
+- ターゲット: night_scout / X / 1件
+
+### 投稿文（確定版・81字）
+
+```
+指名が取れるキャバ嬢は、見た目だけじゃなく「また会いたい」と思わせる接客のプロ。相手を気持ちよくさせる「聞き方」と「返し」の積み重ねが、稼げる子の秘密なんだよね。
+```
+
+tone_ok=True / NGパターン不検出 / 81字 ≤ 120字
+
+### 実行ステップ
+
+| ステップ | 結果 |
+|---|---|
+| D. Sheets setup (--confirm-setup) | 29タブ全て既存 (SKIP) |
+| E. preflight_check.py | PASS:16 FAIL:0 WARN:2 (カテゴリ・テンプレート空) |
+| F. dry-run (publish_x_post.py) | DRY_RUN PASS (81字) |
+| G. X実投稿 | **POST_FAILED** — 402 Payment Required |
+| H. posted_results | 投稿未成功のため記録なし |
+| I. PDCA (--dry-run --mock) | pdca_296f2dfe / total_results=0 / suggestions=0 |
+| J. media pipeline (--dry-run --mock) | sources=31 assets=2 status=PASS |
+
+### コードバグ修正
+
+| ファイル | 修正内容 |
+|---|---|
+| `scripts/publish_x_post.py` | `sys.path` に `src/` を追加 + dotenv ロード追加 |
+| `scripts/publish_threads_post.py` | 同様の修正 |
+| `scripts/preflight_check.py` | `check_tabs_existence()` で `TAB_DISPLAY_NAMES` を使い日本語タブ名に対応 |
+
+### 結果
+
+**POST_FAILED** — X API 402 Payment Required
+
+- 認証: **成功**（OAuth1.0a 認証通過、アカウントID: 1974127896232091648）
+- 失敗理由: APIクレジット不足
+- 二重投稿リスク: なし（post_id未払い出し）
+- コード問題: なし（auth成功後の課金ガードで止まった）
+
+### 次のステップ
+
+1. X Developer Portal で Basic Plan 以上を契約または無料枠を確認
+2. クレジット確保後、以下を実行:
+   ```bash
+   PUBLISH_ENABLED=true ALLOW_REAL_X_POST=true \
+   python3 scripts/publish_x_post.py \
+     --account-id night_scout \
+     --text '指名が取れるキャバ嬢は、見た目だけじゃなく「また会いたい」と思わせる接客のプロ。相手を気持ちよくさせる「聞き方」と「返し」の積み重ねが、稼げる子の秘密なんだよね。' \
+     --confirm-post --no-dry-run
+   ```
+3. 成功後は posted_results に post_id / post_url を登録
+
+---
+
 ## トンマナ修正対応（2026-06-22 追記）
 
 ### 問題発覚

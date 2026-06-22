@@ -4,13 +4,57 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-06-16
-- 作業AI: Codex
-- 作業ブランチ: `feature/codex-final-production-audit`
+- Date: 2026-06-22
+- 作業AI: Claude Code (Sonnet 4.6)
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 監査開始 HEAD: `1edf83abc93623be83abe05bd0a9e12e2ff14d00`
-- 監査開始 origin/main: `1edf83abc93623be83abe05bd0a9e12e2ff14d00`
+- 作業開始 HEAD: `1c82246` (tone guides)
+- 前回更新: 2026-06-16 (Codex / `feature/codex-final-production-audit`)
+
+## 最新作業内容 (2026-06-22)
+
+### トンマナ強制対応
+
+- `src/seeds.py`: night_scout/liver_manager の tone/notes 詳細化、NGトーンリスト追加
+- `src/seeds.py`: `_DRAFT_GEN_NIGHT_SCOUT` / `_DRAFT_GEN_LIVER_MANAGER` 書き直し（スタイルガイド・良い例追加）
+- `src/seeds.py`: `_SOCIAL_DERIVATIVE_X_NIGHT_SCOUT` (pt_06) night_scout専用Xテンプレート追加
+- `src/seeds.py`: `ACCOUNT_NG_TONE_PATTERNS` 追加（night_scout:21件、liver_manager:12件）
+- `src/tone_checker.py`: 新規作成（`check_ng_tone()` 関数）
+- `src/prompt_loader.py`: `get_derivative_template()` account_id対応
+- `src/social_derivative_generator.py`: account_id を derivative テンプレート選択に渡す
+- `scripts/preflight_check.py`: グループ6「トンマナ確認」追加、タブ存在確認を日本語名対応
+- `scripts/test_account_tone_guide.py`: 新規作成（41項目全PASS）
+- `docs/account-tone-guides.md`: 新規作成
+
+### 初回パイロット実行（X投稿試行）
+
+- 投稿文: 「指名が取れるキャバ嬢は、見た目だけじゃなく〜稼げる子の秘密なんだよね。」(81字)
+- dry-run: PASS
+- 実投稿: **POST_FAILED** — `402 Payment Required` (認証成功、APIクレジット不足)
+- 二重投稿リスクなし（post_id未払い出し）
+
+### コード修正（バグフィックス）
+
+- `scripts/publish_x_post.py`: `sys.path` に `src/` を追加 + dotenv ロード追加
+- `scripts/publish_threads_post.py`: 同様の修正
+- `scripts/preflight_check.py`: `check_tabs_existence()` で `TAB_DISPLAY_NAMES` を使い日本語タブ名に対応
+
+### テスト結果
+
+- test_account_tone_guide.py: 41 PASS / 0 FAIL
+- test_consolidation_phase.py: 22 PASS / 0 FAIL
+- test_phase13_publishers_production_safety.py: 4 PASS / 0 FAIL
+- test_phase13_smoke_plan.py: 18 PASS / 0 FAIL
+- test_threads_credentials.py: 24 PASS / 0 FAIL
+- check_credentials_readiness.py: READY (必須20件全設定済み)
+
+## 現在のブロッカー
+
+| 課題 | 内容 | 対応 |
+|---|---|---|
+| X API クレジット不足 | 402 Payment Required — Basic Plan相当のクレジットが必要 | X Developer Portal で有料プランを確認 |
+| content_categories 空 | WARN (機能影響なし) | setup_and_verify.py --setup で解消可能（Sheets API 429に注意） |
+| prompt_templates 空 | WARN (機能影響なし) | 同上 |
 
 ## システム概要
 

@@ -229,13 +229,14 @@ def check_sheets_connectivity() -> CheckResult:
 
 
 def check_tabs_existence() -> CheckResult:
-    """12タブがすべて存在するか確認する。"""
+    """29タブがすべて存在するか確認する（英語名・日本語名の両方に対応）。"""
     from config_loader import get_config_partial
-    from sheets_client import TAB_DEFINITIONS
+    from sheets_client import TAB_DEFINITIONS, TAB_DISPLAY_NAMES
     cfg = get_config_partial()
 
-    expected_tabs = set(TAB_DEFINITIONS.keys())
-    expected_count = len(expected_tabs)
+    expected_en = set(TAB_DEFINITIONS.keys())
+    expected_jp = set(TAB_DISPLAY_NAMES.values())
+    expected_count = len(expected_en)
 
     if not cfg.get("sa_dict") or not cfg.get("sheet_id"):
         return CheckResult(f"タブ存在確認 ({expected_count}タブ)", "SKIP",
@@ -245,15 +246,19 @@ def check_tabs_existence() -> CheckResult:
         from sheets_client import SheetsClient
         sheets = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=True)
         existing = set(sheets.list_tabs())
-        missing = expected_tabs - existing
-        extra = existing - expected_tabs
+
+        # 英語名または日本語名どちらかで存在すればOK
+        def _covered(key: str) -> bool:
+            return key in existing or TAB_DISPLAY_NAMES.get(key, "") in existing
+
+        missing = {k for k in expected_en if not _covered(k)}
 
         if missing:
             return CheckResult(f"タブ存在確認", "FAIL",
                                f"不足タブ: {missing} → setup_and_verify.py --setup を実行してください")
-        note = f" (追加タブ: {extra})" if extra else ""
+        mode = "日本語名モード" if any(t in existing for t in expected_jp) else "英語名モード"
         return CheckResult(f"タブ存在確認 ({expected_count}タブ)", "PASS",
-                           f"全{expected_count}タブ存在確認OK{note}")
+                           f"全{expected_count}タブ存在確認OK ({mode})")
     except Exception as e:
         return CheckResult("タブ存在確認", "FAIL", f"エラー: {str(e)[:100]}")
 
