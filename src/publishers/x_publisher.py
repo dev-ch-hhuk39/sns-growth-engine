@@ -8,6 +8,12 @@ publishers/x_publisher.py - X（旧 Twitter）Publisher（Phase 3-D）
      (X_API_KEY / X_API_SECRET / X_ACCESS_TOKEN / X_ACCESS_TOKEN_SECRET)
   4. publish_queue.py で --confirm-real-post が指定されていること
 
+投稿方式:
+  旧repo X_autopost_yoru と同一方式。
+  requests + requests_oauthlib.OAuth1 (HMAC-SHA1) で直接 POST /2/tweets。
+  tweepy.Client は 402 が出るため使用しない。
+  旧repo で 2026-06-19 まで動作確認済み。
+
 文字数制限:
   X_CHAR_LIMIT = 140  (超過は FAIL)
   X_CHAR_WARN  = 120  (超過は WARN / success=True)
@@ -24,10 +30,15 @@ from .dry_run import _check_x
 
 X_CHAR_LIMIT = 140
 X_CHAR_WARN = 120
+TWEET_URL = "https://api.twitter.com/2/tweets"
 
 
 class XPublisher(BasePublisher):
-    """X（旧 Twitter）投稿 Publisher（Phase 3-D: tweepy OAuth 1.0a 実装）。"""
+    """X（旧 Twitter）投稿 Publisher（Phase 3-D: requests_oauthlib.OAuth1 直接方式）。
+
+    旧repo X_autopost_yoru と同一の投稿方式 (2026-06-19 まで動作確認済み)。
+    tweepy.Client は 402 が出るため使用しない。
+    """
 
     platform: str = "x"
 
@@ -158,30 +169,50 @@ class XPublisher(BasePublisher):
         queue_id: str,
         derivative_id: str,
     ) -> PublishResult:
-        """tweepy OAuth 1.0a で X に投稿する。"""
+        """requests_oauthlib.OAuth1 (HMAC-SHA1) で直接 POST /2/tweets する。
+
+        旧repo X_autopost_yoru の auto_post.py と同一方式。
+        tweepy.Client は 402 が出るため使用しない。
+        """
         try:
-            import tweepy
+            import requests
+            from requests_oauthlib import OAuth1
         except ImportError:
             return PublishResult(
                 platform="x",
                 success=False,
                 dry_run=False,
                 message=(
-                    "FAIL: tweepy がインストールされていません。"
-                    " `pip install tweepy>=4.14.0` を実行してください。"
+                    "FAIL: requests または requests_oauthlib がインストールされていません。"
                     f" (queue_id={queue_id})"
                 ),
             )
 
         try:
-            client = tweepy.Client(
-                consumer_key=creds["api_key"],
-                consumer_secret=creds["api_secret"],
-                access_token=creds["access_token"],
-                access_token_secret=creds["access_token_secret"],
+            auth = OAuth1(
+                client_key=creds["api_key"],
+                client_secret=creds["api_secret"],
+                resource_owner_key=creds["access_token"],
+                resource_owner_secret=creds["access_token_secret"],
+                signature_method="HMAC-SHA1",
             )
-            response = client.create_tweet(text=text)
-            tweet_id = str(response.data["id"])
+            response = requests.post(
+                TWEET_URL,
+                auth=auth,
+                json={"text": text},
+                timeout=30,
+            )
+
+            if response.status_code >= 400:
+                return self._handle_post_error(
+                    status_code=response.status_code,
+                    response_text=response.text,
+                    text=text,
+                    account_id=account_id,
+                    queue_id=queue_id,
+                )
+
+            tweet_id = str(response.json()["data"]["id"])
             posted_url = self._build_posted_url(tweet_id)
             posted_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -198,29 +229,9 @@ class XPublisher(BasePublisher):
                     f" derivative_id={derivative_id}"
                     f" posted_at={posted_at}"
                 ),
+                raw_response=response.json(),
             )
         except Exception as e:
-            if self._is_billing_error(e):
-                self._save_to_manual_queue(
-                    text=text,
-                    account_id=account_id,
-                    queue_id=queue_id,
-                )
-                return PublishResult(
-                    platform="x",
-                    success=False,
-                    dry_run=False,
-                    posted_url=None,
-                    external_post_id=None,
-                    message=(
-                        "POST_FAILED_EXTERNAL_BILLING_BLOCKER:"
-                        " X API 402 Payment Required — APIクレジット不足。"
-                        " これは認証エラーではありません。"
-                        " X Developer Portal で Basic Plan 以上を契約後に再実行してください。"
-                        " 投稿文は data/manual_post_queue.json に保存済み。"
-                        f" (queue_id={queue_id} account={account_id})"
-                    ),
-                )
             return PublishResult(
                 platform="x",
                 success=False,
@@ -233,8 +244,58 @@ class XPublisher(BasePublisher):
                 ),
             )
 
+    def _handle_post_error(
+        self,
+        status_code: int,
+        response_text: str,
+        text: str,
+        account_id: str,
+        queue_id: str,
+    ) -> PublishResult:
+        """HTTP エラーコードを分類して PublishResult を返す。"""
+        if status_code == 401:
+            reason = "POST_FAILED_X_401_UNAUTHORIZED: 認証情報が無効です。X_API_KEY / X_ACCESS_TOKEN を確認してください。"
+        elif status_code == 403:
+            reason = "POST_FAILED_X_403_FORBIDDEN: 権限がありません。X アプリの Read/Write 設定を確認してください。"
+        elif status_code == 402:
+            self._save_to_manual_queue(text=text, account_id=account_id, queue_id=queue_id)
+            if "CreditsDepleted" in response_text:
+                reason = (
+                    "POST_FAILED_X_402_CREDITS_DEPLETED:"
+                    " X API Credits が残高ゼロです (CreditsDepleted)。"
+                    " X Developer Portal > Usage & Credits で残高確認。"
+                    " 旧repo の多数 API 呼び出しで消費した可能性。月次リセットを待つか追加購入。"
+                    " 投稿文は data/manual_post_queue.json に保存済み。"
+                )
+            else:
+                reason = (
+                    "POST_FAILED_X_402_NEEDS_INVESTIGATION:"
+                    " X API 402 Payment Required。"
+                    " likely_causes: credits_depleted / wrong_project_or_app / plan_mismatch。"
+                    " X Developer Portal で Credits 残高を確認してください。"
+                    " 投稿文は data/manual_post_queue.json に保存済み。"
+                )
+        elif status_code == 429:
+            reason = "POST_FAILED_X_429_RATE_LIMIT: レート制限。しばらく待ってから再実行してください。"
+        else:
+            reason = f"POST_FAILED_X_{status_code}: 予期しないエラー。"
+
+        return PublishResult(
+            platform="x",
+            success=False,
+            dry_run=False,
+            posted_url=None,
+            external_post_id=None,
+            message=(
+                f"{reason}"
+                f" HTTP={status_code}"
+                f" response={response_text[:200]}"
+                f" (queue_id={queue_id} account={account_id})"
+            ),
+        )
+
     def _is_billing_error(self, exc: Exception) -> bool:
-        """X API 402 Payment Required（課金ブロッカー）かどうか判定する。"""
+        """後方互換: exception から 402 判定（現在は _handle_post_error で処理）。"""
         try:
             if hasattr(exc, "response") and hasattr(exc.response, "status_code"):
                 if exc.response.status_code == 402:

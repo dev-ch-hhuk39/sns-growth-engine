@@ -1,22 +1,25 @@
-# X API Billing Blocker — POST_FAILED_EXTERNAL_BILLING_BLOCKER
+# X API Billing Blocker — CreditsDepleted (402)
 
 ## 概要
 
-- 発生日: 2026-06-22
-- エラー: `402 Payment Required`
-- 分類: `POST_FAILED_EXTERNAL_BILLING_BLOCKER`（外部課金ブロッカー）
+- 発生日: 2026-06-22 (初回) → 2026-06-24 (詳細調査)
+- エラー: `402 Payment Required` + `{"title":"CreditsDepleted","detail":"Your enrolled account [...] does not have any credits to fulfill this request."}`
+- 最新分類: `POST_FAILED_X_402_CREDITS_DEPLETED`（X API クレジット枯渇）
+- 旧分類: `POST_FAILED_EXTERNAL_BILLING_BLOCKER`（誤分類 — 2026-06-24に修正）
 
-## これは何か
+## 原因の特定
 
-X API の無料枠（Free tier）では投稿 API (`POST /2/tweets`) が使えません。  
-OAuth 1.0a 認証は成功しており、**コードや認証情報の問題ではありません**。
+`tweepy.Client.create_tweet()` 起因の問題ではなく、**X API Credits（月次クレジット）の枯渇**が真の原因。  
+旧repo（X_autopost_yoru）は `requests_oauthlib.OAuth1` (HMAC-SHA1) を使い 2026-06-19 まで正常投稿していたが、  
+collect/analyze/generate の高頻度 API 呼び出しで月次クレジットを消費しきった。
 
 | 項目 | 状態 |
 |---|---|
 | OAuth 認証 | **成功**（account ID: 1974127896232091648） |
-| 投稿失敗原因 | X API クレジット不足（課金プラン未契約） |
+| 投稿失敗原因 | X API Credits 枯渇（CreditsDepleted） |
+| tweepy 問題 | **修正済み** → requests_oauthlib.OAuth1 に変更 |
 | credentials error | **No** |
-| コードの問題 | **No** |
+| コードの問題 | **修正済み** |
 | 二重投稿リスク | **No**（post_id 未払い出し） |
 
 ## 影響
@@ -72,9 +75,19 @@ python3 scripts/import_posted_results.py \
 
 | コード | 意味 |
 |---|---|
-| `POST_FAILED_EXTERNAL_BILLING_BLOCKER` | X API 402 — 外部課金ブロッカー。認証は成功。再試行可能 |
-| `POST_FAILED` | その他の投稿失敗（認証エラー、ネットワーク等） |
+| `POST_FAILED_X_402_CREDITS_DEPLETED` | X API 402 + CreditsDepleted — 月次クレジット枯渇。認証は成功。クレジット補充後に再試行可能 |
+| `POST_FAILED_X_402_NEEDS_INVESTIGATION` | X API 402 + CreditsDepleted 以外 — 原因調査が必要 |
+| `POST_FAILED_X_401_UNAUTHORIZED` | 認証失敗 — credentials を確認 |
+| `POST_FAILED_X_403_FORBIDDEN` | 権限なし — account/app設定を確認 |
+| `POST_FAILED_X_429_RATE_LIMIT` | レート制限 — 15分待機後に再試行 |
+| `POST_FAILED` | その他の投稿失敗 |
 | `SAFETY_STOP` | 安全ガードによる停止（PUBLISH_ENABLED 未設定等） |
+
+## X API Legacy 互換方式 (2026-06-24 更新)
+
+旧repo互換の `requests_oauthlib.OAuth1` (HMAC-SHA1) 方式に移行済み。  
+`tweepy.Client.create_tweet()` は 402 CreditsDepleted を誤分類するため廃止。  
+詳細は `docs/x-api-legacy-compatibility-audit.md` 参照。
 
 ## 関連ファイル
 

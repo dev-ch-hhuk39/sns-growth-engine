@@ -16,9 +16,9 @@
         "browser_export",
         "manual_json"
       ],
-      "candidate_status": "candidate",
-      "active": false,
-      "fetch_enabled": false,
+      "candidate_status": "approved",
+      "active": true,
+      "fetch_enabled": true,
       "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
@@ -57,7 +57,7 @@
         ]
       },
       "default_queue_status": "DRAFT",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -65,8 +65,8 @@
       "priority": 99,
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
-      "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical."
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "X text reference only. 構成・フック参照のみ。実download/repost禁止。"
     },
     {
       "source_id": "src_ns_yt_cand_001",
@@ -82,17 +82,17 @@
         "youtube_transcript",
         "manual_url"
       ],
-      "candidate_status": "candidate",
-      "active": false,
-      "fetch_enabled": false,
+      "candidate_status": "approved",
+      "active": true,
+      "fetch_enabled": true,
       "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
-      "media_policy": "plan_only",
+      "media_policy": "do_not_download",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -135,7 +135,7 @@
         ]
       },
       "default_queue_status": "DRAFT",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "WAITING_APPROVED_MEDIA_SELECTION",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -143,8 +143,8 @@
       "priority": 99,
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
-      "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "ユーザー確認済み: YouTube利用可否問題なし (2026-06-24)。 現在は参考利用のみ (reference_only)。 approved_media/own_media 移行にはソース別許諾確認が必要。",
       "item_type": "video",
       "transcript_required": false,
       "video_required": true
@@ -163,17 +163,17 @@
         "youtube_transcript",
         "manual_url"
       ],
-      "candidate_status": "candidate",
-      "active": false,
-      "fetch_enabled": false,
+      "candidate_status": "approved",
+      "active": true,
+      "fetch_enabled": true,
       "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
-      "media_policy": "plan_only",
+      "media_policy": "do_not_download",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -208,7 +208,7 @@
         ]
       },
       "default_queue_status": "DRAFT",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "WAITING_APPROVED_MEDIA_SELECTION",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -216,8 +216,8 @@
       "priority": 99,
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
-      "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "ユーザー確認済み: YouTube利用可否問題なし (2026-06-24)。 現在は参考利用のみ (reference_only)。 approved_media/own_media 移行にはソース別許諾確認が必要。",
       "item_type": "video",
       "source_platform_alias": "youtube"
     },
@@ -235,9 +235,9 @@
         "browser_export",
         "agent_reach"
       ],
-      "candidate_status": "candidate",
-      "active": false,
-      "fetch_enabled": false,
+      "candidate_status": "approved",
+      "active": true,
+      "fetch_enabled": true,
       "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
@@ -273,7 +273,7 @@
         "require_transform": true
       },
       "default_queue_status": "DRAFT",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -281,8 +281,8 @@
       "priority": 99,
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
-      "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "note text reference only. 構成・テーマ参照のみ。実download禁止。",
       "item_type": "article",
       "article_extraction_fields": [
         "title",
@@ -314,7 +314,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -355,7 +355,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -363,8 +363,8 @@
       "priority": 99,
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
-      "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "beauty_account 永続ブロック。active化不可。",
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
@@ -392,7 +392,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -427,7 +427,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -435,8 +435,8 @@
       "priority": 99,
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
-      "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "beauty_account 永続ブロック。active化不可。",
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
@@ -501,7 +501,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -509,8 +509,8 @@
       "priority": 99,
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
-      "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "beauty_account 永続ブロック。active化不可。",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true
@@ -576,6 +576,537 @@
       "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
       "query_term": "キャバ嬢",
       "confirm_fetch_required": true
+    },
+    {
+      "source_id": "src_ns_x_cand_002",
+      "source_name": "night_scout X reference (@cabalounge)",
+      "source_platform": "x",
+      "source_handle": "@cabalounge",
+      "source_url": "https://x.com/cabalounge",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_ns_x_cand_003",
+      "source_name": "night_scout X reference (@minatoku789)",
+      "source_platform": "x",
+      "source_handle": "@minatoku789",
+      "source_url": "https://x.com/minatoku789",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_ns_x_cand_004",
+      "source_name": "night_scout X reference (@amuxamudaily)",
+      "source_platform": "x",
+      "source_handle": "@amuxamudaily",
+      "source_url": "https://x.com/amuxamudaily",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_ns_x_cand_005",
+      "source_name": "night_scout X reference (@1okukure_)",
+      "source_platform": "x",
+      "source_handle": "@1okukure_",
+      "source_url": "https://x.com/1okukure_",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_ns_x_cand_006",
+      "source_name": "night_scout X reference (@onigiriscout_0)",
+      "source_platform": "x",
+      "source_handle": "@onigiriscout_0",
+      "source_url": "https://x.com/onigiriscout_0",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_ns_x_cand_007",
+      "source_name": "night_scout X reference (@urarament)",
+      "source_platform": "x",
+      "source_handle": "@urarament",
+      "source_url": "https://x.com/urarament",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_ns_x_cand_008",
+      "source_name": "night_scout X reference (@3j2c9q)",
+      "source_platform": "x",
+      "source_handle": "@3j2c9q",
+      "source_url": "https://x.com/3j2c9q",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_lm_x_cand_001",
+      "source_name": "liver_manager X reference (@meg_lsm)",
+      "source_platform": "x",
+      "source_handle": "@meg_lsm",
+      "source_url": "https://x.com/meg_lsm",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+    },
+    {
+      "source_id": "src_lm_x_cand_002",
+      "source_name": "liver_manager X reference (@ryoyan_1130)",
+      "source_platform": "x",
+      "source_handle": "@ryoyan_1130",
+      "source_url": "https://x.com/ryoyan_1130",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "agent_reach",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "trend_research"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-24T07:49:28+09:00",
+      "updated_at": "2026-06-24T07:49:28+09:00",
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
     }
   ]
 }

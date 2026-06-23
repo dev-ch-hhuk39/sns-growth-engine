@@ -1,0 +1,150 @@
+name: Media Approved Pilot
+
+# approved_media / own_media ソースに対するメディア処理パイプライン。
+# workflow_dispatch のみ（定時実行なし）。
+# beauty_account は不可。
+#
+# mode:
+#   plan_only              - metadata/transcript/clip候補生成まで（download/cut/upload なし）
+#   approved_media_dry_run - download/cut/upload コマンド生成まで（実実行なし）
+#   approved_media_real    - confirm=true + ALLOW_CLOUDINARY_UPLOAD=true で実実行
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_id:
+        description: "処理対象 source_id（例: src_ns_yt_cand_001）"
+        required: true
+      account_id:
+        description: "対象アカウント (night_scout / liver_manager)"
+        required: true
+        default: "night_scout"
+      mode:
+        description: "実行モード: plan_only / approved_media_dry_run / approved_media_real"
+        required: true
+        default: "plan_only"
+      confirm:
+        description: "approved_media_real で実実行する場合のみ 'yes' を入力"
+        required: false
+        default: "no"
+
+# 安全制約: すべてのフラグをデフォルト false で固定
+# approved_media_real かつ confirm=yes の場合のみ run: で上書き可
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  DRY_RUN: "true"
+  MOCK_LLM: "false"
+
+jobs:
+  media-pilot:
+    name: Media Pilot [${{ github.event.inputs.mode }}] ${{ github.event.inputs.source_id }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # beauty_account は不可
+    if: |
+      github.event.inputs.account_id != 'beauty_account'
+
+    env:
+      SOURCE_ID: ${{ github.event.inputs.source_id }}
+      ACCOUNT_ID: ${{ github.event.inputs.account_id }}
+      MODE: ${{ github.event.inputs.mode }}
+      CONFIRM: ${{ github.event.inputs.confirm }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
+      THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
+      THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
+      THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Media policy guard check
+        run: |
+          python3 scripts/test_media_policy_guard.py
+
+      - name: Source policy preflight
+        run: |
+          python3 scripts/test_source_intake_schema.py
+
+      - name: plan_only — fetch metadata + clip candidates (no download)
+        if: env.MODE == 'plan_only'
+        run: |
+          python3 scripts/preflight_media_assets.py \
+            --account-id "$ACCOUNT_ID" \
+            --mock --dry-run
+
+      - name: approved_media_dry_run — download/cut/upload plan (no real execution)
+        if: env.MODE == 'approved_media_dry_run'
+        run: |
+          echo "[INFO] approved_media_dry_run: download/cut/upload コマンド生成のみ (実実行なし)"
+          python3 scripts/preflight_media_assets.py \
+            --account-id "$ACCOUNT_ID" \
+            --dry-run
+
+      - name: approved_media_real — real download (confirm=yes required)
+        if: env.MODE == 'approved_media_real' && env.CONFIRM == 'yes'
+        env:
+          ALLOW_TRANSCRIPTION_API: "true"
+        run: |
+          echo "[INFO] approved_media_real: confirm=yes / source=$SOURCE_ID"
+          python3 scripts/download_video_assets.py \
+            --account-id "$ACCOUNT_ID" \
+            --source-id "$SOURCE_ID" \
+            --confirm-download
+
+      - name: approved_media_real — real cut (confirm=yes required)
+        if: env.MODE == 'approved_media_real' && env.CONFIRM == 'yes'
+        run: |
+          python3 scripts/cut_video_clips.py \
+            --account-id "$ACCOUNT_ID" \
+            --source-id "$SOURCE_ID" \
+            --confirm-cut
+
+      - name: approved_media_real — real Cloudinary upload (confirm=yes required)
+        if: env.MODE == 'approved_media_real' && env.CONFIRM == 'yes'
+        env:
+          ALLOW_CLOUDINARY_UPLOAD: "true"
+        run: |
+          python3 scripts/upload_media_assets.py \
+            --account-id "$ACCOUNT_ID" \
+            --upload --confirm-upload
+
+      - name: Safety stop if approved_media_real without confirm
+        if: env.MODE == 'approved_media_real' && env.CONFIRM != 'yes'
+        run: |
+          echo "[SAFETY_STOP] approved_media_real requires confirm=yes"
+          exit 1
+
+      - name: Discord notify on failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "$DISCORD_WEBHOOK_URL" ]; then
+            python3 -c "
+          import requests, os
+          url = os.environ['DISCORD_WEBHOOK_URL']
+          mode = os.environ.get('MODE', '?')
+          source_id = os.environ.get('SOURCE_ID', '?')
+          run_url = os.environ.get('RUN_URL', '')
+          requests.post(url, json={'content': f'[FAIL] media-approved-pilot [{mode}] {source_id} failed: {run_url}'})
+          "
+          fi

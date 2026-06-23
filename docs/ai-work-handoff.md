@@ -4,11 +4,64 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-06-23
+- Date: 2026-06-24
 - 作業AI: Claude Code (Sonnet 4.6)
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-06-22 (第2回 / workflow env + source registry)
+- 前回更新: 2026-06-23 (Threads初回実投稿成功 / バグ修正3件)
+
+## 最新作業内容 (2026-06-24)
+
+### X API Legacy 互換方式への移行 + エラー再分類
+
+- `src/publishers/x_publisher.py`: `tweepy.Client` → `requests_oauthlib.OAuth1` (HMAC-SHA1) に変更
+  - `TWEET_URL` 定数追加
+  - `_handle_post_error()` 追加: 402 CreditsDepleted / 401 / 403 / 429 を個別コードに分類
+- **原因**: X API Credits 枯渇（月次クレジット）。旧repo の高頻度 API 呼び出しで消費しきった
+- `data/manual_post_queue.json`: 次回実投稿候補テキストを `retry_ready` で保存済み
+- `docs/x-api-legacy-compatibility-audit.md`: 新規作成（旧/新 repo 比較・結論・復旧手順）
+
+### Source Registry 拡充 (8 → 17 sources)
+
+- `config/source_accounts/default_sources.json`: 17ソースに更新
+  - YouTube 2件 (ns/lm): `rights_policy=reference_only`, `review_notes="ユーザー確認済み (2026-06-24)"`
+  - beauty_account 3件: `review_status=BLOCKED_BEAUTY_ACCOUNT`, `active=false`
+  - 旧repo移行 X sources 10件: ns 8件 + lm 2件
+- `scripts/test_source_rights_user_confirmed.py`: 19項目 全PASS
+
+### Threads 次投稿候補 Queue 保存
+
+- `data/threads_night_scout_next_queue.json`: 3候補 `WAITING_REVIEW` で保存
+- 投稿案: LINEの返しテンポ / 店選びの失敗 / 辞めずに続けられる子
+- `scripts/test_reference_transform_guard.py`: 22項目 全PASS
+
+### GitHub Actions Workflow 整備
+
+- `.github/workflows/content-daily-dry-run.yml`: X/Threads secrets env 追加
+- `.github/workflows/media-approved-pilot.yml`: 新規作成（3モード / 全安全フラグ false）
+  - `${{ github.event.inputs.* }}` 直接展開なし（コマンドインジェクション対策）
+- `docs/media-approved-pilot.md`: 新規作成
+
+### テスト追加 (5本)
+
+| テスト | PASS | FAIL |
+|---|---|---|
+| test_x_legacy_compatibility.py | 13 | 0 |
+| test_source_rights_user_confirmed.py | 19 | 0 |
+| test_cloudinary_upload_guard.py | 9 | 0 |
+| test_media_approved_pilot_workflow.py | 13 | 0 |
+| test_reference_transform_guard.py | 22 | 0 |
+
+## 現在のブロッカー / ペンディング事項
+
+| 課題 | 内容 | 必要な対応 |
+|---|---|---|
+| X API Credits 枯渇 | 402 CreditsDepleted。認証は成功済み。tweepy は廃止 | X Developer Portal > Usage & Credits で補充 |
+| src_ns_query_001 | query source の URL 未登録 | 対象アカウント URL を入力後 default_sources.json を更新 |
+| src_ns_yt_cand_001 / src_lm_yt_cand_001 | rights_policy=reference_only (download 禁止) | approved_media 昇格は別途承認フロー必要 |
+| Threads 次投稿 | WAITING_REVIEW の 3候補あり | ユーザーレビュー後に投稿実行 |
+| beauty_account | 実投稿・active化禁止 | 永続的な制約 |
+| Threads 48h 指標 | 初回投稿の impressions/likes 未取得 | 2026-06-25 以降に Threads インサイトで確認 |
 
 ## 最新作業内容 (2026-06-23)
 
