@@ -112,14 +112,24 @@ Each command must print `BLOCKED`.
 - `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, `X_ACCESS_TOKEN_SECRET`（X投稿の場合）
 - `THREADS_ACCESS_TOKEN`, `THREADS_USER_ID`（Threads投稿の場合）
 
+## Threads 初回実投稿 (2026-06-23) ✅
+
+- アカウント: night_scout (`@kyaba_consul_mizu`)
+- post_id: `18127402414723102`
+- posted_url: https://www.threads.com/@kyaba_consul_mizu/post/DZ6Drm5k9SL
+- posted_at: 2026-06-23T00:00:00Z
+- posted_results: result_id=`r-5da1d941`
+- 修正: workflow env渡し漏れ / post_url生成 / is_dry_run_ok @property
+- 詳細: `docs/threads-first-live-post-report.md` 参照
+
 ## Human Next Steps
 
-1. `.env` に X または Threads 認証情報を設定する
-2. `ALLOW_REAL_X_POST=true` / `PUBLISH_ENABLED=true` を `.env` に追加（永続コミット禁止）
-3. 上記の確定テキストで `publish_x_post.py --no-dry-run` を実行（1件のみ）
-4. posted_results に post_id/post_url/posted_at を登録
-5. 24時間後にメトリクス確認、48時間後に PDCA 実行
-6. 詳細手順: `docs/first-live-post-report.md` 参照
+1. 2026-06-25 以降: Threads インサイトで impressions/likes/replies 確認
+2. posted_results の metrics_status を MEASURED に更新
+3. PDCA 分析 → 次回投稿テキスト生成
+4. X API: Developer Portal で Basic Plan 以上を契約（402 解消）
+5. X 投稿: `data/manual_post_queue.json` (status=retry_ready) を使用
+6. YouTube/TikTok clip pipeline: `docs/youtube-tiktok-clipping-runbook.md` 参照
 
 ## Consolidation Policy (2026-06-20)
 

@@ -21,6 +21,7 @@ class PublishResult:
     message: str = ""
     raw_response: dict | None = None
 
+    @property
     def is_dry_run_ok(self) -> bool:
         """dry-run 成功かどうかを返す。"""
         return self.dry_run and self.success

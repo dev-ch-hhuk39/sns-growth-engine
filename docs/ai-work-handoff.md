@@ -4,12 +4,52 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-06-22 (第2回)
+- Date: 2026-06-23
 - 作業AI: Claude Code (Sonnet 4.6)
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 作業開始 HEAD: `0502bad`
-- 前回更新: 2026-06-22 (第1回 / tone guides + X pilot)
+- 前回更新: 2026-06-22 (第2回 / workflow env + source registry)
+
+## 最新作業内容 (2026-06-23)
+
+### Threads 初回実投稿 SUCCESS
+
+- アカウント: night_scout (`@kyaba_consul_mizu`)
+- 投稿文: 「キャバで指名が取れる子って〜」(86字)
+- post_id: `18127402414723102`
+- posted_url: https://www.threads.com/@kyaba_consul_mizu/post/DZ6Drm5k9SL
+- posted_at: 2026-06-23T00:00:00Z
+- posted_results: result_id=`r-5da1d941` (Sheets書き込み済み)
+- metrics_status: PENDING (48h後に確認)
+
+### バグ修正 3件
+
+1. **GitHub Actions workflow env渡し漏れ**: `content-pilot-publish.yml` にアカウント固有 Threads secrets 8本を追加。`THREADS_ACCESS_TOKEN_NIGHT_SCOUT` 等が workflow から参照可能に。
+2. **Threads post_url 生成方法**: 数値 user_id URL（無効）→ Threads API permalink 取得 (`_try_fetch_permalink`)。
+3. **PublishResult.is_dry_run_ok @property**: デコレータ欠落 → bound method が常に truthy → 実投稿時も "DRY_RUN" 表示。`@property` 追加で修正。
+
+### Source registry 整備
+
+- `docs/youtube-tiktok-clipping-runbook.md`: 新規作成（clip pipeline 実行手順・前提条件・制約一覧）
+- 全 8ソースの状態を確認・更新
+
+### テスト追加
+
+| テスト | PASS | FAIL |
+|---|---|---|
+| test_content_workflows_safety.py (更新: +1件) | 8 | 0 |
+| is_dry_run_ok @property 確認 (新規) | 1 | 0 |
+
+## 現在のブロッカー / ペンディング事項
+
+| 課題 | 内容 | 必要な対応 |
+|---|---|---|
+| X API 402 | APIクレジット不足。認証は成功済み | X Developer Portal で Basic Plan 以上を契約 |
+| src_ns_query_001 | night_scout query source の URL 未登録 | 対象アカウント URL を入力後 default_sources.json を更新 |
+| src_ns_yt_cand_001 / src_lm_yt_cand_001 | rights_policy=unknown | YouTube チャンネルの利用規約を確認し権利ポリシーを更新 |
+| content_categories 空 | WARN (機能影響なし) | setup_and_verify.py --setup で解消可能 |
+| beauty_account | 実投稿・active化禁止 | 永続的な制約 |
+| Threads 48h 指標 | impressions/likes/replies 未取得 | 2026-06-25 以降に Threads インサイトで確認 |
 
 ## 最新作業内容 (2026-06-22 第2回)
 

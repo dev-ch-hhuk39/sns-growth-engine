@@ -78,8 +78,22 @@ def _publish_container(
     return resp.json()
 
 
-def _build_post_url(user_id: str, post_id: str) -> str:
-    return f"https://www.threads.net/@{user_id}/post/{post_id}"
+def _try_fetch_permalink(post_id: str, access_token: str) -> str | None:
+    """Threads API から投稿の permalink を取得する。失敗時は None を返す。
+
+    数値 user_id をそのまま URL に使うと不正確（@username が必要）なため、
+    API から permalink を取得するアプローチを採用。
+    """
+    try:
+        import requests
+        url = f"{THREADS_API_BASE}/{post_id}"
+        params = {"fields": "permalink", "access_token": access_token}
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        permalink = resp.json().get("permalink")
+        return permalink if permalink else None
+    except Exception:
+        return None
 
 
 class ThreadsPublisher(BasePublisher):
@@ -215,7 +229,18 @@ class ThreadsPublisher(BasePublisher):
             )
 
         post_id = result.get("id", "")
-        posted_url = _build_post_url(user_id, post_id) if post_id else None
+        posted_url = None
+        permalink_pending = False
+        if post_id:
+            posted_url = _try_fetch_permalink(post_id, access_token)
+            if posted_url is None:
+                permalink_pending = True
+
+        url_note = (
+            f" posted_url={posted_url}"
+            if posted_url
+            else " permalink_pending=true (URLは API から取得できませんでした)"
+        )
 
         return PublishResult(
             platform="threads",
@@ -228,6 +253,7 @@ class ThreadsPublisher(BasePublisher):
                 f" post_id={post_id}"
                 f" account={account_id}"
                 f" queue_id={queue_id}"
+                f"{url_note}"
             ),
             raw_response=result,
         )

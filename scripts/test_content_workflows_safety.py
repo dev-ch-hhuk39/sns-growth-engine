@@ -138,6 +138,28 @@ def test_pilot_publish_x_blocked_in_actions():
     print(f"  [PASS] content-pilot-publish.yml の X 実投稿ブロック確認")
 
 
+def test_pilot_publish_account_specific_secrets():
+    """content-pilot-publish.yml にアカウント固有の Threads secrets が渡されていること。
+
+    threads_credentials.py は THREADS_ACCESS_TOKEN_{ACCOUNT_ID_UPPER} を優先するため、
+    workflow で渡さないと BLOCKED_MISSING_CREDENTIALS になる。
+    """
+    content = _load("content-pilot-publish.yml")
+    required = [
+        "THREADS_ACCESS_TOKEN_NIGHT_SCOUT",
+        "THREADS_USER_ID_NIGHT_SCOUT",
+        "THREADS_ACCESS_TOKEN_LIVER_MANAGER",
+        "THREADS_USER_ID_LIVER_MANAGER",
+    ]
+    missing = [k for k in required if k not in content]
+    assert not missing, f"content-pilot-publish.yml に account-specific secrets がありません: {missing}"
+    # secrets.NAME 形式で参照されていることも確認
+    for key in required:
+        assert f"secrets.{key}" in content, \
+            f"content-pilot-publish.yml: {key} が secrets.{key} から渡されていません"
+    print(f"  [PASS] content-pilot-publish.yml に account-specific Threads secrets ({len(required)}件) 確認")
+
+
 def main():
     tests = [
         test_expected_workflows_exist,
@@ -147,6 +169,7 @@ def main():
         test_no_direct_expression_in_run_steps,
         test_secrets_via_env_not_run,
         test_pilot_publish_x_blocked_in_actions,
+        test_pilot_publish_account_specific_secrets,
     ]
     passed = 0
     failed = 0
