@@ -1,8 +1,8 @@
 name: Content Daily Dry-Run
 
-# 毎日の dry-run サニティチェック。
+# 毎日の Threads-first dry-run サニティチェック。
 # 実投稿・実ダウンロード・実アップロードは一切行わない。
-# preflight + LLM生成 + publisher dry-run のみ。
+# Sheets verify + queue worker dry-run + refill dry-run + publisher dry-run のみ。
 on:
   schedule:
     - cron: "0 1 * * *"  # UTC 01:00 = JST 10:00
@@ -12,6 +12,10 @@ on:
         description: "チェック対象アカウントID"
         required: false
         default: "night_scout"
+        type: choice
+        options:
+          - "night_scout"
+          - "liver_manager"
 
 # 安全制約: 全フラグを明示的にfalseで固定（schedule実行時も同様）
 env:
@@ -33,14 +37,9 @@ jobs:
     env:
       ACCOUNT_ID: ${{ github.event.inputs.account_id || 'night_scout' }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
-      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-      # X credentials (requests_oauthlib.OAuth1)
-      X_API_KEY: ${{ secrets.X_API_KEY }}
-      X_API_SECRET: ${{ secrets.X_API_SECRET }}
-      X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
-      X_ACCESS_TOKEN_SECRET: ${{ secrets.X_ACCESS_TOKEN_SECRET }}
-      # Threads: account-specific secrets（threads_credentials.py が優先使用）
+      SNS_MASTER_SHEET_ID: ${{ secrets.SPREADSHEET_ID }}
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
       THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
@@ -56,31 +55,34 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Preflight check (dry-run)
+      - name: Guard account
         run: |
-          python3 scripts/preflight_check.py \
+          if [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ]; then
+            echo "[BLOCKED] unsupported account"
+            exit 1
+          fi
+
+      - name: Sheets verify
+        run: |
+          python3 scripts/recover_production_sheets_threads_first.py --verify-only
+
+      - name: Queue worker dry-run
+        run: |
+          python3 scripts/process_threads_queue.py \
             --account-id "$ACCOUNT_ID" \
+            --max-posts 1 \
             --dry-run
 
-      - name: Publisher dry-run (X)
+      - name: Refill candidate dry-run
         run: |
-          python3 scripts/publish_x_post.py \
+          python3 scripts/refill_threads_queue.py \
             --account-id "$ACCOUNT_ID" \
-            --text "毎日 dry-run チェック" \
-            --confirm-post --dry-run
+            --count 1 \
+            --dry-run
 
-      - name: Publisher dry-run (Threads)
+      - name: Publisher dry-run
         run: |
           python3 scripts/publish_threads_post.py \
             --account-id "$ACCOUNT_ID" \
-            --text "毎日 dry-run チェック" \
+            --text "毎日 dry-run チェック。実投稿せず、Threads投稿文の検証だけを行います。" \
             --confirm-post --dry-run
-
-      - name: PDCA dry-run
-        run: |
-          python3 scripts/run_pdca_cycle.py \
-            --account-id "$ACCOUNT_ID" \
-            --platform x \
-            --days 7 \
-            --dry-run --mock \
-            --generate-next-plan

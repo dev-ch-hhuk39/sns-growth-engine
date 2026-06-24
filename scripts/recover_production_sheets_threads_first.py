@@ -531,6 +531,15 @@ def posted_result_recovery_row() -> dict[str, Any]:
         "external_post_id": "RECOVERED_MANUAL",
         "post_url": "",
         "status": "RECOVERED",
+        "queue_id": "",
+        "derivative_id": "",
+        "metrics_status": "MANUAL_PENDING",
+        "real_post": "false",
+        "media_used": "false",
+        "posted_text": "",
+        "source_queue_status": "",
+        "save_source": "recover_production_sheets_threads_first",
+        "created_by": "recover_production_sheets_threads_first",
     }
 
 
@@ -664,6 +673,10 @@ def run_recovery(client: SheetsClient) -> dict[str, Any]:
     else:
         operations[_display("posted_results")] = {"added": 0, "updated": 0}
 
+    backfilled = backfill_posted_results(client)
+    if backfilled:
+        operations[_display("posted_results")]["updated"] += backfilled
+
     seed("logs", "log_id", [log_row("production sheets recovered for Threads-first operation")])
     verification = verify_state(client)
     return {
@@ -695,6 +708,39 @@ def credential_status() -> dict[str, Any]:
             "allow_upload": bool(cloudinary.get("allow_upload")),
         },
     }
+
+
+def backfill_posted_results(client: SheetsClient) -> int:
+    ws = _ws(client, "posted_results")
+    headers = ws.row_values(1)
+    rows = ws.get_all_records()
+    updated = 0
+    allowed_status = {"POSTED", "RECOVERED"}
+    for idx, row in enumerate(rows, start=2):
+        status = str(row.get("status", "")).upper()
+        platform = str(row.get("platform", "")).lower()
+        if status not in allowed_status and platform != "threads":
+            continue
+        changes: dict[str, str] = {}
+        if "platform" in headers and not platform:
+            changes["platform"] = "threads"
+        if "status" in headers and not status:
+            changes["status"] = "RECOVERED"
+        if "metrics_status" in headers and not str(row.get("metrics_status", "")).strip():
+            changes["metrics_status"] = "MANUAL_PENDING"
+        if "real_post" in headers and not str(row.get("real_post", "")).strip():
+            changes["real_post"] = "true" if status == "POSTED" else "false"
+        if "media_used" in headers and not str(row.get("media_used", "")).strip():
+            changes["media_used"] = "false"
+        if "save_source" in headers and not str(row.get("save_source", "")).strip():
+            changes["save_source"] = "backfill_recover_production_sheets"
+        if "created_by" in headers and not str(row.get("created_by", "")).strip():
+            changes["created_by"] = "recover_production_sheets_threads_first"
+        if changes and not client.dry_run:
+            for field, value in changes.items():
+                ws.update_cell(idx, headers.index(field) + 1, value)
+            updated += 1
+    return updated
 
 
 def verify_state(client: SheetsClient) -> dict[str, Any]:
@@ -730,6 +776,45 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         or str(r.get("allow_upload", "")).lower() == "true"
         or str(r.get("auto_priority_change_allowed", "")).lower() == "true"
     ]
+    threads_posted_or_recovered = [
+        r for r in posted
+        if str(r.get("platform", "")).lower() == "threads"
+        and str(r.get("status", "")).upper() in {"POSTED", "RECOVERED"}
+    ]
+    posted_threads = [
+        r for r in posted
+        if str(r.get("platform", "")).lower() == "threads"
+        and str(r.get("status", "")).upper() == "POSTED"
+    ]
+    allowed_metrics = {"PENDING", "MEASURED", "MANUAL_PENDING"}
+    queue_by_id = {str(r.get("queue_id", "")): r for r in queue if str(r.get("queue_id", ""))}
+    posted_by_queue = {str(r.get("queue_id", "")): r for r in posted if str(r.get("queue_id", ""))}
+    queue_posted_rows = [r for r in queue if str(r.get("status", "")).upper() == "POSTED"]
+    queue_consistency_ok = all(
+        str(r.get("queue_id", "")) in queue_by_id
+        for r in posted
+        if str(r.get("queue_id", ""))
+    )
+    queue_posted_has_result = all(
+        str(r.get("queue_id", "")) in posted_by_queue
+        for r in queue_posted_rows
+        if str(r.get("queue_id", ""))
+    )
+    duplicate_seen: set[tuple[str, str, str]] = set()
+    duplicate_found = False
+    for row in posted_threads:
+        text = str(row.get("posted_text", "")).strip()
+        if not text:
+            continue
+        key = (str(row.get("account_id", "")), "threads", text)
+        if key in duplicate_seen:
+            duplicate_found = True
+            break
+        duplicate_seen.add(key)
+    posted_save_failed = [
+        r for r in queue
+        if str(r.get("status", "")).upper() == "POSTED_SAVE_FAILED"
+    ]
     checks = {
         "accounts_3_present": all(a in accounts for a in ["night_scout", "liver_manager", "beauty_account"]),
         "night_scout_cta": accounts.get("night_scout", {}).get("cta_type") == "LINE_AND_DM",
@@ -747,6 +832,27 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             or "threads" in str(r.get("manual_memo", "")).lower()
             for r in posted
         ),
+        "posted_night_scout_threads_exists": any(
+            r.get("account_id") == "night_scout" for r in threads_posted_or_recovered
+        ),
+        "posted_liver_manager_threads_posted": any(
+            r.get("account_id") == "liver_manager" for r in posted_threads
+        ),
+        "posted_rows_have_external_post_id": all(
+            bool(str(r.get("external_post_id", "")).strip()) for r in posted_threads
+        ),
+        "posted_rows_platform_threads": all(
+            str(r.get("platform", "")).lower() == "threads" for r in posted_threads
+        ),
+        "posted_rows_status_posted": all(
+            str(r.get("status", "")).upper() == "POSTED" for r in posted_threads
+        ),
+        "posted_metrics_status_allowed": all(
+            str(r.get("metrics_status", "")).upper() in allowed_metrics for r in threads_posted_or_recovered
+        ),
+        "posted_queue_id_consistent": queue_consistency_ok,
+        "queue_posted_has_posted_result": queue_posted_has_result,
+        "posted_duplicate_text_absent": not duplicate_found,
         "learning_inactive": all(not _bool(r.get("active")) for r in learning),
         "learning_auto_apply_false": all(not _bool(r.get("auto_apply")) for r in learning),
         "media_no_unapproved_upload": not unapproved_uploads,
@@ -761,6 +867,9 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "checks": checks,
         "passed": sum(1 for ok in checks.values() if ok),
         "failed": [k for k, ok in checks.items() if not ok],
+        "warnings": {
+            "posted_save_failed_count": len(posted_save_failed),
+        },
         "counts": {
             "accounts": len(accounts),
             "categories": len(categories),

@@ -172,11 +172,22 @@ Each command must print `BLOCKED`.
 - [x] media download/cut/upload not executed.
 - [x] transcription API not called.
 - [x] `liver_manager` Threads real post executed once and recorded.
+- [x] Threads queue worker implemented.
+- [x] Metrics manual import CLI implemented.
+- [x] Queue refill CLI implemented.
+- [x] Manual-only GitHub Actions queue worker implemented.
+- [x] Daily dry-run workflow switched to Threads-first queue dry-run.
+- [ ] Stricter live Sheets verify after queue worker release: blocked by local approval credits.
+- [ ] Live queue worker dry-run for night/liver after queue worker release: blocked by local approval credits.
 
 ### Recovery Commands
 
 ```bash
 python3 scripts/recover_production_sheets_threads_first.py --verify-only
+python3 scripts/process_threads_queue.py --account-id night_scout --dry-run
+python3 scripts/process_threads_queue.py --account-id liver_manager --dry-run
+python3 scripts/refill_threads_queue.py --account-id night_scout --count 1 --dry-run
+python3 scripts/refill_threads_queue.py --account-id liver_manager --count 1 --dry-run
 python3 scripts/publish_threads_post.py --account-id night_scout --text "<text>" --dry-run
 python3 scripts/publish_threads_post.py --account-id liver_manager --text "<text>" --dry-run
 ```
@@ -187,4 +198,6 @@ python3 scripts/publish_threads_post.py --account-id liver_manager --text "<text
 - `docs/sheets-manual-check-guide.md`
 - `docs/cta-rules.md`
 - `docs/threads-operation-runbook.md`
+- `docs/threads-queue-worker.md`
+- `docs/metrics-import-runbook.md`
 - `docs/production-completion-status.md`

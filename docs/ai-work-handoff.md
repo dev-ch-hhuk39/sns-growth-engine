@@ -12,6 +12,187 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最新作業内容 (2026-06-24)
 
+### Codex: Threads Queue Worker / Metrics Import Loop 実装
+
+- 作業AI: Codex
+- 作業ブランチ: `main`
+- 作業開始HEAD: `5e4197eba17c25730d59b400df0113a5ef381169`
+- 現在HEAD: このhandoffを含む最新commit。最終hashは `git rev-parse HEAD` / 完了報告で確認。
+- origin/main開始確認: `5e4197eba17c25730d59b400df0113a5ef381169`
+- 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
+- 目的: Sheets `投稿キュー` から Threads 投稿を1件ずつ安全に処理し、posted_results / queue / logs / PDCA まで接続する。
+
+#### 本システムについて
+
+- `night_scout` / `liver_manager` は Threads-first 運用。
+- `beauty_account` は `draft_only` / CTAなし / 実投稿禁止。
+- X投稿は当面OFF。X queueも作らない。
+- media download / cut / upload / Cloudinary upload / transcription API は未実行・無効。
+- `learning_rules.active=false`、`auto_apply=false` を維持し、PDCA提案は `WAITING_REVIEW` に留める。
+
+#### 変更ファイル一覧
+
+- `.github/workflows/content-daily-dry-run.yml`
+- `.github/workflows/threads-queue-worker.yml`
+- `src/config_loader.py`
+- `src/sheets_client.py`
+- `scripts/recover_production_sheets_threads_first.py`
+- `scripts/process_threads_queue.py`
+- `scripts/import_threads_metrics_manual.py`
+- `scripts/refill_threads_queue.py`
+- `scripts/test_process_threads_queue.py`
+- `scripts/test_threads_queue_duplicate_guard.py`
+- `scripts/test_posted_results_integrity.py`
+- `scripts/test_import_threads_metrics_manual.py`
+- `scripts/test_refill_threads_queue.py`
+- `scripts/test_threads_queue_worker_workflow.py`
+- `scripts/test_content_workflows_safety.py`
+- `scripts/test_x_disabled_mode.py`
+- `scripts/test_beauty_account_block.py`
+- `docs/threads-queue-worker.md`
+- `docs/metrics-import-runbook.md`
+- `docs/threads-operation-runbook.md`
+- `docs/sheets-manual-check-guide.md`
+- `docs/production-completion-status.md`
+- `docs/production-launch-checklist.md`
+- `docs/ai-dev-status.md`
+- `docs/phase13-16-test-matrix.md`
+- `docs/ai-work-handoff.md`
+
+#### 追加ファイル一覧
+
+- `.github/workflows/threads-queue-worker.yml`
+- `scripts/process_threads_queue.py`
+- `scripts/import_threads_metrics_manual.py`
+- `scripts/refill_threads_queue.py`
+- `scripts/test_process_threads_queue.py`
+- `scripts/test_threads_queue_duplicate_guard.py`
+- `scripts/test_posted_results_integrity.py`
+- `scripts/test_import_threads_metrics_manual.py`
+- `scripts/test_refill_threads_queue.py`
+- `scripts/test_threads_queue_worker_workflow.py`
+- `docs/threads-queue-worker.md`
+- `docs/metrics-import-runbook.md`
+
+#### 実装内容
+
+- `process_threads_queue.py`
+  - `WAITING_REVIEW` / `PLANNED` の Threads queue row のみ対象。
+  - `beauty_account` BLOCKED、X row ignored。
+  - dry-runは投稿なしで候補・validation結果を出力。
+  - real modeは `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` + `--confirm-real-post` 必須。
+  - duplicate guard: `queue_id` / `derivative_id` / `draft_id` / same text-account-platform。
+  - 成功時: queue `POSTED`、posted_results `POSTED/PENDING`、logs、PDCA initial、suggestion `WAITING_REVIEW`。
+  - 投稿失敗時: queue `FAILED`、即retryなし。
+  - posted_results保存失敗時: queue `POSTED_SAVE_FAILED`、`output/posted_results_fallback/*.json` 退避、再投稿禁止。
+- `import_threads_metrics_manual.py`
+  - 手入力Threads metricsを `posted_results` に反映。
+  - `metrics_status=MEASURED`、logs / pdca_runs / suggestions を作成。
+- `refill_threads_queue.py`
+  - `night_scout` / `liver_manager` のThreads投稿案を `drafts` / `social_derivatives` / `queue` に補充。
+  - `beauty_account` とXは作成しない。
+- GitHub Actions
+  - `threads-queue-worker.yml`: `workflow_dispatch` only。scheduleなし。dry-run後にだけ処理。
+  - `content-daily-dry-run.yml`: Threads-first dry-runへ変更。
+- Sheets
+  - `posted_results` に queue/derivative/platform/external id/metrics/status/text/source columns を追加。
+  - `SheetsClient._ws()` に worksheet cache を追加し、setup/workerのSheets read quotaを削減。
+- verify
+  - `recover_production_sheets_threads_first.py` の `verify_state()` を posted_results整合性、metrics_status、queue整合、duplicate textまで厳密化。
+
+#### 未完了事項
+
+- Live Sheets上での厳密30チェック verify-only は未完了。
+- Live Sheets上での `process_threads_queue.py --account-id night_scout --dry-run` / `liver_manager --dry-run` は未完了。
+- Live Sheets上での `refill_threads_queue.py --dry-run` は未完了。
+- 理由: Google Sheets実行のための承認システムが `out of credits` で rejected。迂回はしていない。
+- 実投稿は今回未実行。
+
+#### 残WARN
+
+- Sheets API 429 が発生した後、`posted_results` の新規列追加までは完了。backfill/strict verify は承認credits復旧後に再実行すること。
+- `check_credentials_readiness.py`: Cloudflare transcription任意credential、GitHub secret write token は optional missing。必須20件はREADY。
+- X credentialsはSETだが、X投稿運用は引き続きOFF。
+
+#### 全テスト結果
+
+- `test_account_tone_guide.py`: PASS 41 / FAIL 0
+- `test_threads_credentials.py`: PASS 24 / FAIL 0
+- `test_phase13_publishers_production_safety.py`: PASS 4 / FAIL 0
+- `test_content_workflows_safety.py`: PASS 9 / FAIL 0
+- `test_source_intake_schema.py`: PASS 7 / FAIL 0
+- `test_media_policy_guard.py`: PASS 8 / FAIL 0
+- `test_sheets_seed_state.py`: PASS 7 / FAIL 0
+- `test_cta_rules.py`: PASS 6 / FAIL 0
+- `test_threads_queue_seed.py`: PASS 6 / FAIL 0
+- `test_beauty_account_block.py`: PASS 9 / FAIL 0
+- `test_x_disabled_mode.py`: PASS 9 / FAIL 0
+- `test_process_threads_queue.py`: PASS 8 / FAIL 0
+- `test_threads_queue_duplicate_guard.py`: PASS 5 / FAIL 0
+- `test_posted_results_integrity.py`: PASS 7 / FAIL 0
+- `test_import_threads_metrics_manual.py`: PASS 4 / FAIL 0
+- `test_refill_threads_queue.py`: PASS 8 / FAIL 0
+- `test_threads_queue_worker_workflow.py`: PASS 11 / FAIL 0
+- `check_credentials_readiness.py`: READY for required 20 items; optional WARN only.
+
+#### dry-run結果
+
+- ローカル・credential不要dry-run:
+  - `import_threads_metrics_manual.py --dry-run`: PASS。
+- Live Sheets dry-run:
+  - 未完了。承認システム `out of credits` によりGoogle Sheetsアクセス不可。
+
+#### confirmなしBLOCKED確認結果
+
+- `test_phase13_publishers_production_safety.py`: confirmなしX post BLOCKED、beauty BLOCKED、publisher dry-run PASS。
+- `process_threads_queue.py`: real mode は `--confirm-real-post` なしでBLOCKED、さらに `PUBLISH_ENABLED` / `ALLOW_REAL_THREADS_POST` なしでBLOCKED。
+- 実fetch / 実download / 実cut / 実upload / 実post は今回未実行。
+
+#### 次にClaude Codeが触ってよいファイル
+
+- `scripts/process_threads_queue.py`
+- `scripts/import_threads_metrics_manual.py`
+- `scripts/refill_threads_queue.py`
+- `docs/threads-queue-worker.md`
+- `docs/metrics-import-runbook.md`
+- `docs/threads-operation-runbook.md`
+- `docs/sheets-manual-check-guide.md`
+
+#### 次にCodexが触ってよいファイル
+
+- `scripts/recover_production_sheets_threads_first.py`
+- `src/sheets_client.py`
+- `.github/workflows/threads-queue-worker.yml`
+- `.github/workflows/content-daily-dry-run.yml`
+- `scripts/test_*threads*queue*.py`
+
+#### 衝突しやすいファイル
+
+- `src/sheets_client.py`
+- `scripts/recover_production_sheets_threads_first.py`
+- `.github/workflows/content-daily-dry-run.yml`
+- `docs/ai-work-handoff.md`
+- `docs/production-launch-checklist.md`
+
+#### 触らない方がいいファイル
+
+- `.env`
+- `data/threads_tokens/`
+- `output/media_cache/`
+- `output/cloudinary_cache/`
+- `output/posted_results_fallback/` の実運用退避ファイル
+- `.claude/plans/`（未追跡のためcommitしない）
+- `docs/session-report-2026-06-22-2.md`（未追跡の既存ファイル。今回commit対象外）
+
+#### 次AIへの引き継ぎメモ
+
+1. 承認credits復旧後、まず `python3 scripts/recover_production_sheets_threads_first.py --verify-only` を実行。
+2. verifyがfailedなら、`python3 scripts/recover_production_sheets_threads_first.py --json` を1回実行して backfill。
+3. 次に `python3 scripts/process_threads_queue.py --account-id night_scout --dry-run` と `--account-id liver_manager --dry-run` を確認。
+4. 実投稿は原則まだしない。必要ならdry-run PASS後、1アカウント1件だけ `PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true --confirm-real-post --max-posts 1`。
+5. `POSTED_SAVE_FAILED` が出た場合は絶対に再投稿しない。fallback JSONと実SNS画面を照合してposted_resultsを手で復旧する。
+6. `beauty_account`、X、media download/cut/upload、Cloudinary upload、transcription APIは引き続きOFF。
+
 ### X API Legacy 互換方式への移行 + エラー再分類
 
 - `src/publishers/x_publisher.py`: `tweepy.Client` → `requests_oauthlib.OAuth1` (HMAC-SHA1) に変更

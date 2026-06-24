@@ -2,12 +2,22 @@
 
 ## Current Status
 
-- Date: 2026-06-16
-- Branch: `feature/codex-final-production-audit`
-- Audit start HEAD: `1edf83abc93623be83abe05bd0a9e12e2ff14d00`
-- Status: Phase 13 final production audit complete; ready for PR review.
+- Date: 2026-06-24
+- Branch: `main`
+- Start HEAD: `5e4197eba17c25730d59b400df0113a5ef381169`
+- Status: Threads queue worker / metrics import / refill loop implemented; local safety tests PASS; live Sheets runtime checks blocked by approval credits.
 
-## What Changed
+## Latest What Changed
+
+- Added `scripts/process_threads_queue.py` for one-row Threads queue processing.
+- Added `scripts/import_threads_metrics_manual.py` for manual Threads insights import.
+- Added `scripts/refill_threads_queue.py` for night/liver Threads review queue refill.
+- Added `.github/workflows/threads-queue-worker.yml` as manual-only worker.
+- Switched `.github/workflows/content-daily-dry-run.yml` to Threads-first queue dry-run/refill dry-run/publisher dry-run.
+- Strengthened `posted_results` schema and recovery verification.
+- Added local safety tests for worker, duplicate guards, posted_results integrity, metrics import, refill, and workflow safety.
+
+## Previous Phase 13 What Changed
 
 - Replaced production source placeholders with user-provided real source URLs.
 - Added query source candidates for `night_scout`, `liver_manager`, and `beauty_account`.

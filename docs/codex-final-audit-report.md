@@ -1,5 +1,17 @@
 # Codex Final Production Audit Report
 
+## Queue Worker Follow-up (2026-06-24)
+
+- Start HEAD: `5e4197eba17c25730d59b400df0113a5ef381169`
+- Purpose: move from Threads-first manual review operation to a safe Sheets queue worker.
+- Added `scripts/process_threads_queue.py`, `scripts/import_threads_metrics_manual.py`, `scripts/refill_threads_queue.py`.
+- Added manual-only `.github/workflows/threads-queue-worker.yml`.
+- Switched `content-daily-dry-run.yml` to Threads-first queue/refill/publisher dry-run.
+- Strengthened `posted_results` columns and recovery verification.
+- Local safety tests: PASS.
+- Live Sheets runtime check: pending because approval system rejected Google Sheets access with `out of credits` after the new `posted_results` columns were added.
+- Real fetch/download/cut/upload/post: not executed in this follow-up.
+
 ## Summary
 
 - Date: 2026-06-16

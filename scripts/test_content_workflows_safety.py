@@ -28,6 +28,7 @@ EXPECTED_WORKFLOWS = [
     "content-daily-dry-run.yml",
     "content-pilot-publish.yml",
     "source-fetch-dry-run.yml",
+    "threads-queue-worker.yml",
 ]
 
 
@@ -160,6 +161,20 @@ def test_pilot_publish_account_specific_secrets():
     print(f"  [PASS] content-pilot-publish.yml に account-specific Threads secrets ({len(required)}件) 確認")
 
 
+def test_threads_queue_worker_manual_only_and_safe():
+    content = _load("threads-queue-worker.yml")
+    assert "workflow_dispatch:" in content, "threads-queue-worker.yml に workflow_dispatch がありません"
+    assert "schedule:" not in content, "threads-queue-worker.yml に schedule が入っています"
+    assert "process_threads_queue.py" in content, "threads queue worker が process_threads_queue.py を呼んでいません"
+    assert content.find("Queue worker dry-run") < content.find("Process queue"), \
+        "実処理前の Queue worker dry-run が確認できません"
+    assert "publish_x_post.py" not in content, "threads-queue-worker.yml が X publisher を呼んでいます"
+    assert '"beauty_account"' not in content, "threads-queue-worker.yml に beauty_account option が入っています"
+    assert "confirm_real_post" in content and "ALLOW_REAL_THREADS_POST" in content, \
+        "real_post 安全確認が不足しています"
+    print("  [PASS] threads-queue-worker.yml manual-only / safe 確認")
+
+
 def main():
     tests = [
         test_expected_workflows_exist,
@@ -170,6 +185,7 @@ def main():
         test_secrets_via_env_not_run,
         test_pilot_publish_x_blocked_in_actions,
         test_pilot_publish_account_specific_secrets,
+        test_threads_queue_worker_manual_only_and_safe,
     ]
     passed = 0
     failed = 0

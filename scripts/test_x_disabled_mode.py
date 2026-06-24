@@ -24,6 +24,9 @@ def main() -> int:
     _, socials, queues = mod.draft_social_queue_rows()
     src_accounts, _ = mod.source_rows()
     x_sources = [r for r in src_accounts if r["source_platform"] == "x"]
+    workflow_daily = (ROOT / ".github/workflows/content-daily-dry-run.yml").read_text(encoding="utf-8")
+    workflow_worker = (ROOT / ".github/workflows/threads-queue-worker.yml").read_text(encoding="utf-8")
+    refill_source = (ROOT / "scripts/refill_threads_queue.py").read_text(encoding="utf-8")
     checks = [
         ("night x disabled", str(accounts["night_scout"]["x_enabled"]).lower() == "false"),
         ("liver x disabled", str(accounts["liver_manager"]["x_enabled"]).lower() == "false"),
@@ -31,6 +34,9 @@ def main() -> int:
         ("no x queue", all(r["platform"] != "x" for r in queues)),
         ("no x social", all(r["platform"] != "x" for r in socials)),
         ("x source fetch disabled", bool(x_sources) and all(str(r["fetch_enabled"]).lower() == "false" for r in x_sources)),
+        ("daily workflow no x publisher", "publish_x_post.py" not in workflow_daily),
+        ("queue worker no x publisher", "publish_x_post.py" not in workflow_worker),
+        ("refill no x queue", '"platform": "x"' not in refill_source),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

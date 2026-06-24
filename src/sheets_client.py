@@ -122,6 +122,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "manual_memo", "collected_at",
         # Threads-first recovery columns.
         "platform", "external_post_id", "post_url", "status",
+        "queue_id", "derivative_id", "metrics_status",
+        "real_post", "media_used", "posted_text",
+        "source_queue_status", "save_source", "created_by",
     ],
     # カテゴリ別パフォーマンス集計。AIが投稿比率を調整するために参照。
     "category_scores": [
@@ -423,6 +426,8 @@ class SheetsClient:
         self.dry_run = dry_run
         self._gc = _auth(sa_dict)
         self._sh = self._gc.open_by_key(sheet_id)
+        self._ws_cache: dict[str, gspread.Worksheet] = {}
+        self._ws_cache_loaded = False
 
     # ---------------------------------------------------------------- #
     # セットアップ
@@ -442,13 +447,17 @@ class SheetsClient:
         表示名が存在すれば優先し、なければ論理名でフォールバックする。
         これにより英語→日本語タブ移行後も既存呼び出しが壊れない。
         """
+        if not self._ws_cache_loaded:
+            self._ws_cache = {ws.title: ws for ws in self._sh.worksheets()}
+            self._ws_cache_loaded = True
         display_name = TAB_DISPLAY_NAMES.get(logical_name, logical_name)
-        try:
-            return self._sh.worksheet(display_name)
-        except gspread.exceptions.WorksheetNotFound:
-            if display_name != logical_name:
-                return self._sh.worksheet(logical_name)
-            raise
+        if display_name in self._ws_cache:
+            return self._ws_cache[display_name]
+        if display_name != logical_name and logical_name in self._ws_cache:
+            return self._ws_cache[logical_name]
+        raise gspread.exceptions.WorksheetNotFound(
+            f"Worksheet not found: {display_name}"
+        )
 
     def _ensure_tab(self, name: str, headers: list[str]) -> gspread.Worksheet:
         """タブがなければ作成し、ヘッダー不足列を右端に追記する（冪等）。"""
@@ -459,6 +468,9 @@ class SheetsClient:
             print(f"  [create] タブ '{display_name}' を作成します")
             if not self.dry_run:
                 ws = self._sh.add_worksheet(title=display_name, rows=1000, cols=len(headers) + 10)
+                self._ws_cache[display_name] = ws
+                if display_name != name:
+                    self._ws_cache[name] = ws
                 ws.update([headers], "A1")
             else:
                 print(f"  [dry-run] タブ '{display_name}' 作成をスキップ")

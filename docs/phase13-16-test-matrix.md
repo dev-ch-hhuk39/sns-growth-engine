@@ -1,5 +1,22 @@
 # Phase 13-16 テストマトリクス
 
+## Threads Queue Worker Release (2026-06-24)
+
+| テストファイル | 対象 | 結果 |
+|---|---|---|
+| test_process_threads_queue.py | worker safety gates | PASS 8 / FAIL 0 |
+| test_threads_queue_duplicate_guard.py | duplicate guard | PASS 5 / FAIL 0 |
+| test_posted_results_integrity.py | posted_results schema / verifier constraints | PASS 7 / FAIL 0 |
+| test_import_threads_metrics_manual.py | metrics import dry-run | PASS 4 / FAIL 0 |
+| test_refill_threads_queue.py | refill safety | PASS 8 / FAIL 0 |
+| test_threads_queue_worker_workflow.py | manual-only GitHub Actions worker | PASS 11 / FAIL 0 |
+| test_content_workflows_safety.py | workflow safety including worker | PASS 9 / FAIL 0 |
+| test_beauty_account_block.py | beauty block including worker/refill | PASS 9 / FAIL 0 |
+| test_x_disabled_mode.py | X disabled including worker/refill | PASS 9 / FAIL 0 |
+
+Required local test sweep on 2026-06-24: PASS.
+Live Sheets runtime verification after this release: pending due to approval system out-of-credits, after `posted_results` columns were added.
+
 ## Phase 13 — Production Media Source Pipeline
 
 | テストファイル | 対象コンポーネント | テスト数 | 状態 |

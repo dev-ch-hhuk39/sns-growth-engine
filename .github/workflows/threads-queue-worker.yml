@@ -1,0 +1,125 @@
+name: Threads Queue Worker
+
+# Manual only. The worker always performs a dry-run before a real post.
+on:
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: "Threads account to process"
+        required: true
+        default: "night_scout"
+        type: choice
+        options:
+          - "night_scout"
+          - "liver_manager"
+      mode:
+        description: "dry_run validates only; real_post requires confirm_real_post=true"
+        required: true
+        default: "dry_run"
+        type: choice
+        options:
+          - "dry_run"
+          - "real_post"
+      max_posts:
+        description: "Maximum queue rows to process"
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
+      confirm_real_post:
+        description: "Must be true for real_post mode"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  DRY_RUN: "true"
+  MOCK_LLM: "false"
+  MOCK_SHEETS: "false"
+
+jobs:
+  threads-queue-worker:
+    name: Threads Queue Worker (${{ github.event.inputs.account_id }} / ${{ github.event.inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id }}
+      MODE: ${{ github.event.inputs.mode }}
+      MAX_POSTS: ${{ github.event.inputs.max_posts }}
+      CONFIRM_REAL_POST: ${{ github.event.inputs.confirm_real_post }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
+      THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
+      THREADS_APP_ID_NIGHT_SCOUT: ${{ secrets.THREADS_APP_ID_NIGHT_SCOUT }}
+      THREADS_APP_SECRET_NIGHT_SCOUT: ${{ secrets.THREADS_APP_SECRET_NIGHT_SCOUT }}
+      THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
+      THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
+      THREADS_APP_ID_LIVER_MANAGER: ${{ secrets.THREADS_APP_ID_LIVER_MANAGER }}
+      THREADS_APP_SECRET_LIVER_MANAGER: ${{ secrets.THREADS_APP_SECRET_LIVER_MANAGER }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Guard account and mode
+        run: |
+          if [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ]; then
+            echo "[BLOCKED] unsupported account"
+            exit 1
+          fi
+          if [ "$MODE" = "real_post" ] && [ "$CONFIRM_REAL_POST" != "true" ]; then
+            echo "[BLOCKED] real_post mode requires confirm_real_post=true"
+            exit 1
+          fi
+
+      - name: Sheets verify before processing
+        run: |
+          python3 scripts/recover_production_sheets_threads_first.py --verify-only
+
+      - name: Queue worker dry-run
+        run: |
+          python3 scripts/process_threads_queue.py \
+            --account-id "$ACCOUNT_ID" \
+            --max-posts "$MAX_POSTS" \
+            --dry-run
+
+      - name: Process queue
+        env:
+          PUBLISH_ENABLED: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
+          ALLOW_REAL_THREADS_POST: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
+        run: |
+          if [ "$MODE" = "real_post" ] && [ "$CONFIRM_REAL_POST" = "true" ]; then
+            python3 scripts/process_threads_queue.py \
+              --account-id "$ACCOUNT_ID" \
+              --max-posts "$MAX_POSTS" \
+              --confirm-real-post
+          else
+            python3 scripts/process_threads_queue.py \
+              --account-id "$ACCOUNT_ID" \
+              --max-posts "$MAX_POSTS" \
+              --dry-run
+          fi
+
+      - name: Sheets verify after processing
+        run: |
+          python3 scripts/recover_production_sheets_threads_first.py --verify-only

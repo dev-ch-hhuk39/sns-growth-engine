@@ -134,6 +134,7 @@ def get_config_partial() -> dict:
     sheet_id = (
         os.environ.get("SNS_MASTER_SHEET_ID", "").strip()
         or os.environ.get("NOTE_MASTER_SHEET_ID", "").strip()
+        or os.environ.get("SPREADSHEET_ID", "").strip()
     )
     sa_dict = None
     try:
@@ -164,6 +165,7 @@ def get_config() -> dict:
     sheet_id = (
         os.environ.get("SNS_MASTER_SHEET_ID", "").strip()
         or os.environ.get("NOTE_MASTER_SHEET_ID", "").strip()
+        or os.environ.get("SPREADSHEET_ID", "").strip()
     )
     cfg = {
         "sheet_id": sheet_id,
@@ -192,7 +194,10 @@ def get_config() -> dict:
 
 def _load_sa_dict() -> dict | None:
     """SA_JSON_BASE64 または GCP_SA_JSON からサービスアカウントdictを返す。"""
-    b64 = os.environ.get("SA_JSON_BASE64", "").strip()
+    b64 = (
+        os.environ.get("SA_JSON_BASE64", "").strip()
+        or os.environ.get("GCP_SA_JSON_BASE64", "").strip()
+    )
     # 非ASCII文字（プレースホルダー等）は無効とみなして GCP_SA_JSON にフォールバック
     if b64 and all(ord(c) < 128 for c in b64):
         try:
