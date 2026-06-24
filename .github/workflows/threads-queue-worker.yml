@@ -58,10 +58,10 @@ jobs:
       MODE: ${{ github.event.inputs.mode }}
       MAX_POSTS: ${{ github.event.inputs.max_posts }}
       CONFIRM_REAL_POST: ${{ github.event.inputs.confirm_real_post }}
-      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
-      SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
-      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-      SNS_MASTER_SHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
       THREADS_APP_ID_NIGHT_SCOUT: ${{ secrets.THREADS_APP_ID_NIGHT_SCOUT }}

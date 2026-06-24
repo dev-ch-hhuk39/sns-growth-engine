@@ -174,6 +174,8 @@ def test_threads_queue_worker_manual_only_and_safe():
         "real_post 安全確認が不足しています"
     assert "THREADS_ACCESS_TOKEN_NIGHT_SCOUT" in content and "GCP_SA_JSON_BASE64" in content, \
         "threads worker に必要な account-specific secrets / Sheets env が不足しています"
+    assert "secrets.SNS_MASTER_SHEET_ID" in content and "secrets.SA_JSON_BASE64" in content, \
+        "threads worker に Sheets secret fallback が不足しています"
     assert "X_API_KEY" not in content and "X_ACCESS_TOKEN" not in content, \
         "threads worker に X secrets が含まれています"
     print("  [PASS] threads-queue-worker.yml manual-only / safe 確認")

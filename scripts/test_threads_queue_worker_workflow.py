@@ -22,6 +22,7 @@ def main() -> int:
         ("no beauty option", '"beauty_account"' not in content),
         ("verify after", "Sheets verify after processing" in content),
         ("account-specific secrets", "THREADS_ACCESS_TOKEN_NIGHT_SCOUT" in content and "THREADS_ACCESS_TOKEN_LIVER_MANAGER" in content),
+        ("sheets secret fallback", "secrets.SNS_MASTER_SHEET_ID" in content and "secrets.SA_JSON_BASE64" in content),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
