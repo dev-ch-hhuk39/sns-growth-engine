@@ -66,3 +66,12 @@ python3 scripts/recover_production_sheets_threads_first.py --verify-only
 Expected: `verification_passed=21 failed=0`.
 
 For the queue worker release, the stricter verifier contains 30 checks. Last successful full Sheets verification before this release was 21 / 21. The stricter 30-check runtime verification is pending because the local approval system ran out of credits while calling Google Sheets.
+
+## GitHub Actions Sheets Secrets
+
+The `Threads Queue Worker` workflow requires these repository secrets before live dry-run can reach Sheets:
+
+- `SNS_MASTER_SHEET_ID` or `SPREADSHEET_ID`
+- `SA_JSON_BASE64` or `GCP_SA_JSON_BASE64`
+
+If either group is missing, the workflow stops at `Guard Sheets secrets` with `BLOCKED`; no post or Sheets write occurs.

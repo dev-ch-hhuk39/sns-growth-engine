@@ -23,6 +23,8 @@ python3 scripts/recover_production_sheets_threads_first.py --verify-only
 python3 scripts/process_threads_queue.py --account-id <account_id> --dry-run
 ```
 
+Dry-run is read-only: it does not run `setup_all()`, create tabs, add headers, update queue rows, append logs, save posted_results, create PDCA rows, or write fallback JSON.
+
 4. For real post, execute only one row at a time and never retry immediately after failure:
 
 ```bash
@@ -62,3 +64,19 @@ python3 scripts/refill_threads_queue.py --account-id <account_id> --count 1 --dr
 - Queue worker: `docs/threads-queue-worker.md`
 - Metrics import: `docs/metrics-import-runbook.md`
 - Manual Sheets checks: `docs/sheets-manual-check-guide.md`
+
+## GitHub Actions Manual Run
+
+Before running, confirm repository secrets include:
+
+- `SNS_MASTER_SHEET_ID` or `SPREADSHEET_ID`
+- `SA_JSON_BASE64` or `GCP_SA_JSON_BASE64`
+
+Then open GitHub Actions > `Threads Queue Worker` > `Run workflow`:
+
+- `account_id`: `night_scout` or `liver_manager`
+- `mode`: `dry_run`
+- `max_posts`: `1`
+- `confirm_real_post`: `false`
+
+Do not use `real_post` until dry-run has passed and one queue row has been reviewed.

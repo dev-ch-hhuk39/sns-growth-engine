@@ -10,12 +10,15 @@
 | test_import_threads_metrics_manual.py | metrics import dry-run | PASS 4 / FAIL 0 |
 | test_refill_threads_queue.py | refill safety | PASS 8 / FAIL 0 |
 | test_threads_queue_worker_workflow.py | manual-only GitHub Actions worker | PASS 11 / FAIL 0 |
+| test_true_dry_run_no_setup_all.py | queue/refill dry-run read-only guarantee | PASS 7 / FAIL 0 |
+| test_live_verify_schema_strictness.py | strict live verifier checks | PASS 10 / FAIL 0 |
+| test_metrics_import_dry_run_no_sheets_connection.py | metrics dry-run avoids Sheets connection | PASS 3 / FAIL 0 |
 | test_content_workflows_safety.py | workflow safety including worker | PASS 9 / FAIL 0 |
 | test_beauty_account_block.py | beauty block including worker/refill | PASS 9 / FAIL 0 |
 | test_x_disabled_mode.py | X disabled including worker/refill | PASS 9 / FAIL 0 |
 
 Required local test sweep on 2026-06-24: PASS.
-Live Sheets runtime verification after this release: pending due to approval system out-of-credits, after `posted_results` columns were added.
+Live local Sheets runtime verification after this release: pending due to approval system out-of-credits. GitHub Actions dry-run was attempted and stopped before queue processing because repository Sheets secrets were missing.
 
 ## Phase 13 — Production Media Source Pipeline
 

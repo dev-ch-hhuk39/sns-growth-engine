@@ -92,6 +92,17 @@ jobs:
             exit 1
           fi
 
+      - name: Guard Sheets secrets
+        run: |
+          if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
+            echo "[BLOCKED] Sheets spreadsheet secret is missing. Set SNS_MASTER_SHEET_ID or SPREADSHEET_ID."
+            exit 1
+          fi
+          if [ -z "$SA_JSON_BASE64" ] && [ -z "$GCP_SA_JSON_BASE64" ]; then
+            echo "[BLOCKED] Sheets service account secret is missing. Set SA_JSON_BASE64 or GCP_SA_JSON_BASE64."
+            exit 1
+          fi
+
       - name: Sheets verify before processing
         run: |
           python3 scripts/recover_production_sheets_threads_first.py --verify-only

@@ -44,6 +44,8 @@ python3 scripts/import_threads_metrics_manual.py \
   --dry-run
 ```
 
+Dry-run does not call `get_config()`, instantiate `SheetsClient`, or run `setup_all()`. It only validates numeric inputs and prints the fields that would be updated.
+
 ## Required Human Review
 
 After import, review:

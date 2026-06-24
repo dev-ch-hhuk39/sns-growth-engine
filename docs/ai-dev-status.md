@@ -5,7 +5,7 @@
 - Date: 2026-06-24
 - Branch: `main`
 - Start HEAD: `5e4197eba17c25730d59b400df0113a5ef381169`
-- Status: Threads queue worker / metrics import / refill loop implemented; local safety tests PASS; live Sheets runtime checks blocked by approval credits.
+- Status: Threads queue worker / metrics import / refill loop implemented; true dry-run fixed; local safety tests PASS; live local Sheets checks blocked by approval credits; GitHub Actions dry_run blocked by missing repository Sheets secrets.
 
 ## Latest What Changed
 
@@ -16,6 +16,8 @@
 - Switched `.github/workflows/content-daily-dry-run.yml` to Threads-first queue dry-run/refill dry-run/publisher dry-run.
 - Strengthened `posted_results` schema and recovery verification.
 - Added local safety tests for worker, duplicate guards, posted_results integrity, metrics import, refill, and workflow safety.
+- Added true dry-run tests: no `setup_all()` in queue/refill dry-run and metrics dry-run has no Sheets connection.
+- GitHub Actions run `28136692522` and `28136764181`: both failed before queue processing because Sheets secrets were missing in the repository.
 
 ## Previous Phase 13 What Changed
 

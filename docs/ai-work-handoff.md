@@ -193,6 +193,35 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 5. `POSTED_SAVE_FAILED` が出た場合は絶対に再投稿しない。fallback JSONと実SNS画面を照合してposted_resultsを手で復旧する。
 6. `beauty_account`、X、media download/cut/upload、Cloudinary upload、transcription APIは引き続きOFF。
 
+### Codex: true dry-run / Actions dry_run follow-up (2026-06-25)
+
+- 作業開始HEAD: `b3f6188296424c0b74f22b92adeaa65619abc47d`
+- code/test commit: `97950f75e272c47f94a8bc78c7f94ef09fa2a28f`
+- workflow secret fallback commit: `3b862de49b6441ec8bd8ef6ed8820b9ab108dd55`
+- true dry-run修正:
+  - `process_threads_queue.py --dry-run`: `setup_all()`なし、read-only出力あり。
+  - `refill_threads_queue.py --dry-run`: `setup_all()`なし、appendなし、planned/tone_check出力あり。
+  - `import_threads_metrics_manual.py --dry-run`: Sheets接続なし。実行時も不要な `setup_all()` を削除。
+- Live local Sheets verify:
+  - `python3 scripts/recover_production_sheets_threads_first.py --verify-only --json` は承認システム `out of credits` で拒否。迂回せず未実行。
+- GitHub Actions dry_run:
+  - run `28136692522`: failure。Sheets secrets未設定で `SNS_MASTER_SHEET_ID` missing。
+  - run `28136764181`: failure。fallback追加後もrepositoryにSheets secretsがなく、verify前に停止。
+  - `gh secret list` でThreads secretsは確認、Sheets secretsは未登録。
+  - `gh secret set` はGitHub API接続エラーで登録未完了。値は表示していない。
+- 実投稿: 未実行。
+- metrics import:
+  - dummy `--dry-run` 実行PASS。
+- 追加テスト:
+  - `test_true_dry_run_no_setup_all.py`: PASS 7 / FAIL 0
+  - `test_live_verify_schema_strictness.py`: PASS 10 / FAIL 0
+  - `test_metrics_import_dry_run_no_sheets_connection.py`: PASS 3 / FAIL 0
+- 次に必要:
+  1. GitHub repository secretsへ `SNS_MASTER_SHEET_ID` または `SPREADSHEET_ID` を登録。
+  2. `SA_JSON_BASE64` または `GCP_SA_JSON_BASE64` を登録。
+  3. GitHub UIで `Threads Queue Worker` を `dry_run` / `night_scout` / `max_posts=1` / `confirm=false` で実行。
+  4. PASS後にLive local Sheets dry-runを再確認。
+
 ### X API Legacy 互換方式への移行 + エラー再分類
 
 - `src/publishers/x_publisher.py`: `tweepy.Client` → `requests_oauthlib.OAuth1` (HMAC-SHA1) に変更

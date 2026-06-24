@@ -177,8 +177,11 @@ Each command must print `BLOCKED`.
 - [x] Queue refill CLI implemented.
 - [x] Manual-only GitHub Actions queue worker implemented.
 - [x] Daily dry-run workflow switched to Threads-first queue dry-run.
+- [x] True dry-run fixed: queue/refill dry-run do not call `setup_all()` or write.
+- [x] GitHub Actions dry-run attempted and failure classified.
 - [ ] Stricter live Sheets verify after queue worker release: blocked by local approval credits.
 - [ ] Live queue worker dry-run for night/liver after queue worker release: blocked by local approval credits.
+- [ ] GitHub Actions queue worker dry-run PASS: blocked until Sheets repository secrets are registered.
 
 ### Recovery Commands
 
@@ -191,6 +194,21 @@ python3 scripts/refill_threads_queue.py --account-id liver_manager --count 1 --d
 python3 scripts/publish_threads_post.py --account-id night_scout --text "<text>" --dry-run
 python3 scripts/publish_threads_post.py --account-id liver_manager --text "<text>" --dry-run
 ```
+
+### GitHub Actions Dry-Run
+
+Required repository secrets:
+
+- `SNS_MASTER_SHEET_ID` or `SPREADSHEET_ID`
+- `SA_JSON_BASE64` or `GCP_SA_JSON_BASE64`
+
+Workflow inputs:
+
+- workflow: `Threads Queue Worker`
+- `account_id=night_scout`
+- `mode=dry_run`
+- `max_posts=1`
+- `confirm_real_post=false`
 
 ### Recovery Docs
 

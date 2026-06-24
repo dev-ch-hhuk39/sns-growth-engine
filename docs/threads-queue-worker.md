@@ -28,6 +28,21 @@ python3 scripts/process_threads_queue.py --account-id night_scout --confirm-real
 
 The worker always performs a Threads publisher dry-run before real posting.
 
+## True Dry-Run Definition
+
+`--dry-run` is read-only:
+
+- no `client.setup_all()`
+- no tab creation
+- no header addition
+- no queue status update
+- no logs append
+- no `posted_results` append
+- no `pdca_runs` / `prompt_improvement_suggestions` append
+- no fallback JSON creation
+
+The CLI prints `read_only=true` in dry-run outcomes.
+
 Duplicate guards block:
 
 - same `queue_id` already in `posted_results`
@@ -67,3 +82,28 @@ It runs:
 4. Sheets verify after processing
 
 No schedule is configured.
+
+## GitHub Actions Dry-Run Result
+
+2026-06-25:
+
+- run `28136692522`: failed before queue dry-run because Sheets secrets were empty in Actions.
+- run `28136764181`: failed for the same reason after secret fallback support was pushed.
+- `gh secret list` confirmed Threads secrets exist, but Sheets secrets were not registered in the repository at that time.
+
+Required Actions secrets:
+
+- `SNS_MASTER_SHEET_ID` or `SPREADSHEET_ID`
+- `SA_JSON_BASE64` or `GCP_SA_JSON_BASE64`
+- account-specific Threads secrets for night/liver
+
+After registering Sheets secrets, run:
+
+```bash
+gh workflow run threads-queue-worker.yml \
+  --repo dev-ch-hhuk39/sns-growth-engine \
+  -f account_id=night_scout \
+  -f mode=dry_run \
+  -f max_posts=1 \
+  -f confirm_real_post=false
+```
