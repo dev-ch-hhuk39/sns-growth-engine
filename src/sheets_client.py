@@ -37,6 +37,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "auto_publish", "min_publish_score", "brand_risk_threshold",
         "post_time", "timezone",
         "active", "notes",
+        # Threads-first recovery columns. Appended for backward compatibility.
+        "x_enabled", "threads_enabled", "status",
+        "line_cta_enabled", "dm_cta_enabled", "sns_dm_cta_enabled",
+        "default_queue_status",
     ],
     # 参考投稿。本文模倣でなく「勝ち要素」を抽出して再利用する。
     "reference_posts": [
@@ -116,6 +120,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "applications", "site_registrations",
         "screening_requests", "sales",
         "manual_memo", "collected_at",
+        # Threads-first recovery columns.
+        "platform", "external_post_id", "post_url", "status",
     ],
     # カテゴリ別パフォーマンス集計。AIが投稿比率を調整するために参照。
     "category_scores": [
@@ -134,6 +140,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rule_id", "account_id", "insight_type",
         "content", "source_draft_id",
         "confidence", "applied_count", "created_at", "active",
+        "auto_apply", "status",
     ],
     # プロンプトテンプレートのバージョン管理。prompt_version で drafts と紐づく。
     "prompt_templates": [
@@ -146,6 +153,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "queue_id", "draft_id", "account_id",
         "platform", "scheduled_at", "priority",
         "status", "error", "created_at", "processed_at",
+        "auto_publish",
         # Phase 2.13-2.15 追加
         "generation_mode", "confidence_level", "ai_publish_recommendation",
         "media_asset_id", "text_policy_status",
@@ -185,6 +193,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "permission_status",  # unknown / granted / denied / not_required
         "aspect_ratio",       # 16:9 / 9:16 / 1:1 等
         "duration_seconds",   # 動画長（秒）
+        "rights_policy", "reuse_policy", "media_policy",
+        "allow_download", "allow_cut", "allow_upload", "upload_status",
     ],
     # 参考投稿のパフォーマンス分析結果。スコアリング・分類を保存する。
     "reference_post_scores": [
@@ -207,6 +217,11 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "handle", "priority", "active",
         "collection_frequency", "last_collected_at",
         "notes",
+        "source_category", "collection_method", "candidate_status",
+        "fetch_enabled", "allow_network_fetch",
+        "rights_policy", "reuse_policy", "media_policy",
+        "allow_download", "allow_cut", "allow_upload",
+        "auto_priority_change_allowed", "blocked",
     ],
     # 動画文字起こし結果。Cloudflare Whisper の出力を保存する。
     "video_transcripts": [
@@ -315,6 +330,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "min_engagement_rate", "min_views", "top_n",
         "rights_policy", "reuse_policy", "media_policy",
         "notes", "created_at", "updated_at",
+        "source_category", "candidate_status", "fetch_enabled",
+        "allow_network_fetch", "allow_download", "allow_cut", "allow_upload",
+        "auto_priority_change_allowed",
     ],
     # source account別の収集した投稿記録
     "source_account_posts": [

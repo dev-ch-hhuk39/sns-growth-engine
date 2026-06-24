@@ -604,3 +604,63 @@ Source candidates
 - `config/source_accounts/production_sources.example.json`（active/fetch_enabled は false のまま）
 - `config/accounts/*.json`（beauty_account は draft_only のまま）
 - 実メディアファイル
+
+## Sheets 実運用リカバリー (2026-06-24)
+
+- 担当AI: Codex
+- ブランチ: `main`
+- 目的: Google Sheets がほぼ空だった状態から、Threads-first 実運用に必要な初期データを実Sheetsへseedし、read-after-writeで検証。
+- 事前push: 未pushだった `b91c26f fix: reconcile x legacy posting and enable media source pipeline` を `origin/main` へpush済み。
+
+### 実施内容
+
+- `scripts/recover_production_sheets_threads_first.py` を追加。
+- `src/sheets_client.py` に Threads-first / CTA / source media policy / posted_results 用の不足列を追加。
+- `src/seeds.py` のアカウントseedを Threads-first / LINE_AND_DM / beauty CTAなしへ更新。
+- Google Sheetsに以下を実書き込み:
+  - アカウント管理 3件
+  - 投稿カテゴリ 17件
+  - プロンプト管理 5件
+  - 収集元アカウント 17件
+  - 動画収集元 4件
+  - 投稿下書き 6件
+  - SNS投稿文 6件
+  - 投稿キュー night_scout 3件 / liver_manager 3件 / beauty 0件
+  - 学習ルール 3件 (`active=false`, `auto_apply=false`)
+  - 実行ログ
+- `posted_results` に復旧記録と liver_manager 実投稿結果を記録。
+- `liver_manager` Threads 実投稿を1件だけ実行。即retryなし。
+
+### Read-after-write結果
+
+- `python3 scripts/recover_production_sheets_threads_first.py --verify-only`
+- result: 21 / 21 PASS
+- posted_results: 3件
+- media_assets: 0件、未承認uploadなし
+- X queue: 0件
+- Cloudinary upload: 未実行
+- download/cut/upload/transcription: 未実行
+
+### テスト結果
+
+- `test_account_tone_guide.py`: PASS 41 / FAIL 0
+- `test_threads_credentials.py`: PASS 24 / FAIL 0
+- `test_phase13_publishers_production_safety.py`: PASS 4 / FAIL 0
+- `test_content_workflows_safety.py`: PASS 8 / FAIL 0
+- `test_source_intake_schema.py`: PASS 7 / FAIL 0
+- `test_media_policy_guard.py`: PASS 8 / FAIL 0
+- 追加テスト5本: PASS
+- `check_credentials_readiness.py`: READY、Cloudflare/GH write tokenは任意MISSING
+
+### 残WARN
+
+- Google Sheets API read quota 429 が発生したため、復旧CLIはworksheet cache / batch upsertへ最適化済み。
+- X投稿は停止中。X API調査は今回対象外。
+- Cloudinary credentialsはSETだが `ALLOW_CLOUDINARY_UPLOAD=false` 維持。
+- beauty_account は引き続き draft_only / 実投稿禁止。
+
+### 次AIへのメモ
+
+- Google Sheets確認は `scripts/recover_production_sheets_threads_first.py --verify-only` を使う。
+- 実投稿はThreadsのみ、1件ずつ、dry-run後。失敗時の即retryは禁止。
+- `data/threads_tokens`, `.env`, `output/media_cache`, `cloudinary_cache` はcommit禁止。

@@ -157,3 +157,34 @@ Each command must print `BLOCKED`.
 - `docs/legacy-repo-migration-audit.md`: 旧 repo 詳細調査
 - `docs/legacy-repo-shutdown-plan.md`: 停止手順
 - `docs/credential-migration-plan.md`: 認証情報移行手順
+
+## Sheets Recovery / Threads-first Operation (2026-06-24)
+
+- [x] Google Sheets actual tabs audited.
+- [x] Empty production tabs seeded.
+- [x] Read-after-write verification passed: 21 / 21.
+- [x] `night_scout` queue seeded: 3 Threads rows.
+- [x] `liver_manager` queue seeded: 3 Threads rows.
+- [x] `beauty_account` queue rows: 0.
+- [x] CTA policy applied: night/liver `LINE_AND_DM`, beauty `NONE`.
+- [x] X posting disabled for recovery mode.
+- [x] Cloudinary upload not executed.
+- [x] media download/cut/upload not executed.
+- [x] transcription API not called.
+- [x] `liver_manager` Threads real post executed once and recorded.
+
+### Recovery Commands
+
+```bash
+python3 scripts/recover_production_sheets_threads_first.py --verify-only
+python3 scripts/publish_threads_post.py --account-id night_scout --text "<text>" --dry-run
+python3 scripts/publish_threads_post.py --account-id liver_manager --text "<text>" --dry-run
+```
+
+### Recovery Docs
+
+- `docs/sheets-recovery-report.md`
+- `docs/sheets-manual-check-guide.md`
+- `docs/cta-rules.md`
+- `docs/threads-operation-runbook.md`
+- `docs/production-completion-status.md`
