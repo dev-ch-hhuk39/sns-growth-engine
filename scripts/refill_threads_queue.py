@@ -182,18 +182,34 @@ def main() -> int:
 
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    client.setup_all()
+    if args.dry_run:
+        print("[READ_ONLY] --dry-run: setup_all/append/read-after-write are disabled")
+    else:
+        client.setup_all()
     before = len([r for r in records(client, "queue") if r.get("account_id") == args.account_id and str(r.get("platform", "")).lower() == "threads"])
     drafts, socials, queues = build_rows(client, args.account_id, args.count)
 
     if args.dry_run:
         print(json.dumps({
             "dry_run": True,
+            "read_only": True,
             "account_id": args.account_id,
             "count": args.count,
             "queue_before": before,
             "sample_queue_id": queues[0]["queue_id"],
             "sample_text_length": len(socials[0]["text"]),
+            "planned": [
+                {
+                    "queue_id": queue["queue_id"],
+                    "draft_id": queue["draft_id"],
+                    "text_length": len(social["text"]),
+                    "tone_check": social["text_policy_status"],
+                    "cta_present": bool(draft.get("cta_text", "")),
+                    "platform": queue["platform"],
+                    "status": queue["status"],
+                }
+                for draft, social, queue in zip(drafts, socials, queues)
+            ],
         }, ensure_ascii=False))
         return 0
 

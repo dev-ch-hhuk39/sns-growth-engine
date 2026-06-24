@@ -215,6 +215,7 @@ def save_posted_result(
     post_url: str,
 ) -> str:
     result_id = f"threads_{queue_row.get('queue_id')}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    permalink_note = " permalink_pending=true" if not post_url else ""
     append_row(client, "posted_results", {
         "result_id": result_id,
         "queue_id": queue_row.get("queue_id", ""),
@@ -240,7 +241,7 @@ def save_posted_result(
         "follows": "0",
         "profile_clicks": "0",
         "line_adds": "0",
-        "manual_memo": "Created by process_threads_queue. Metrics pending.",
+        "manual_memo": f"Created by process_threads_queue. Metrics pending.{permalink_note}",
         "collected_at": now_iso(),
     })
     return result_id
@@ -312,6 +313,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     if dry_run:
         return {
             "status": "DRY_RUN",
+            "read_only": True,
             "queue_id": queue_id,
             "account_id": account_id,
             "draft_id": queue_row.get("draft_id", ""),
@@ -404,7 +406,10 @@ def main() -> int:
 
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    client.setup_all()
+    if args.dry_run:
+        print("[READ_ONLY] --dry-run: setup_all/update/append/post/fallback are disabled")
+    else:
+        client.setup_all()
 
     candidates = select_candidates(client, args.account_id, args.max_posts)
     print(f"[process_threads_queue] candidates={len(candidates)} dry_run={args.dry_run} max_posts={args.max_posts}")

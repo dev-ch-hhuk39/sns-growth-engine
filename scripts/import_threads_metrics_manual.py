@@ -134,7 +134,6 @@ def main() -> int:
 
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    client.setup_all()
     updated = update_posted_result(client, args.result_id, fields)
     log_event(client, str(updated.get("account_id", "")), args.result_id, args.memo)
     save_pdca(client, updated, args.memo)

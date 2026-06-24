@@ -29,6 +29,7 @@ def main() -> int:
         ("real requires env flags", "PUBLISH_ENABLED" in source and "ALLOW_REAL_THREADS_POST" in source),
         ("posted save fallback", "POSTED_SAVE_FAILED" in source and "posted_results_fallback" in source),
         ("pdca waiting review", "WAITING_REVIEW" in source and "auto_apply=false" in source),
+        ("dry-run read-only output", "[READ_ONLY]" in source and '"read_only": True' in source),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

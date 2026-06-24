@@ -800,6 +800,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         for r in queue_posted_rows
         if str(r.get("queue_id", ""))
     )
+    post_url_or_pending_ok = all(
+        bool(str(r.get("post_url", "")).strip())
+        or "permalink_pending=true" in str(r.get("manual_memo", "")).lower()
+        or "permalink_pending=true" in str(r.get("notes", "")).lower()
+        for r in posted_threads
+    )
     duplicate_seen: set[tuple[str, str, str]] = set()
     duplicate_found = False
     for row in posted_threads:
@@ -841,6 +847,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "posted_rows_have_external_post_id": all(
             bool(str(r.get("external_post_id", "")).strip()) for r in posted_threads
         ),
+        "posted_rows_have_post_url_or_permalink_pending": post_url_or_pending_ok,
         "posted_rows_platform_threads": all(
             str(r.get("platform", "")).lower() == "threads" for r in posted_threads
         ),
@@ -849,6 +856,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         ),
         "posted_metrics_status_allowed": all(
             str(r.get("metrics_status", "")).upper() in allowed_metrics for r in threads_posted_or_recovered
+        ),
+        "posted_real_post_true": all(
+            str(r.get("real_post", "")).lower() == "true" for r in posted_threads
+        ),
+        "posted_media_used_false": all(
+            str(r.get("media_used", "")).lower() == "false" for r in posted_threads
         ),
         "posted_queue_id_consistent": queue_consistency_ok,
         "queue_posted_has_posted_result": queue_posted_has_result,

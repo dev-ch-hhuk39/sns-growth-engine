@@ -29,6 +29,8 @@ def main() -> int:
         ("queue threads only", '"platform": "threads"' in source),
         ("no auto publish", '"auto_publish": "false"' in source),
         ("waiting review", '"status": "WAITING_REVIEW"' in source),
+        ("dry-run read-only output", "[READ_ONLY]" in source and '"read_only": True' in source),
+        ("tone check in plan", '"tone_check"' in source),
         ("night CTA optional", "LINE" in night_text and "DM" in night_text and night_title),
         ("liver CTA optional", "LINE" in liver_text and "DM" in liver_text and liver_title),
     ]
