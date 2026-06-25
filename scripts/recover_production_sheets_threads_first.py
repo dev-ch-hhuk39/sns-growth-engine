@@ -727,9 +727,9 @@ def backfill_posted_results(client: SheetsClient) -> int:
         if "status" in headers and not status:
             changes["status"] = "RECOVERED"
         if "metrics_status" in headers and not str(row.get("metrics_status", "")).strip():
-            changes["metrics_status"] = "MANUAL_PENDING"
+            changes["metrics_status"] = "PENDING" if status == "POSTED" else "MANUAL_PENDING"
         if "real_post" in headers and not str(row.get("real_post", "")).strip():
-            changes["real_post"] = "true" if status == "POSTED" else "false"
+            changes["real_post"] = "true"
         if "media_used" in headers and not str(row.get("media_used", "")).strip():
             changes["media_used"] = "false"
         if "save_source" in headers and not str(row.get("save_source", "")).strip():

@@ -57,15 +57,36 @@ Check these tabs first:
 - `収集元アカウント` and `動画収集元`: `allow_download=false`, `allow_cut=false`, `allow_upload=false`.
 - `メディア資産`: no row should be ready for upload.
 
+## posted_results 整合性修復 (2026-06-25)
+
+posted_results 既存行の新規カラム（metrics_status / real_post / media_used）が空のまま残っていた場合、
+以下のスクリプトで安全に補正できる。
+
+```bash
+# 確認のみ
+python3 scripts/repair_posted_results_integrity.py --audit
+
+# 補正内容を確認（書き込みなし）
+python3 scripts/repair_posted_results_integrity.py --dry-run
+
+# 実際に補正
+python3 scripts/repair_posted_results_integrity.py --apply
+```
+
+補正ルール:
+- POSTED 行: metrics_status="" → "PENDING", real_post="" → "true", media_used="" → "false"
+- RECOVERED 行: metrics_status="" → "MANUAL_PENDING", real_post="" → "true", media_used="" → "false"
+- 既に正しい値があれば変更しない（idempotent）
+
+この repair は `.github/workflows/threads-queue-worker.yml` に組み込み済みで、毎回 verify 前に自動実行される。
+
 ## Verification Command
 
 ```bash
 python3 scripts/recover_production_sheets_threads_first.py --verify-only
 ```
 
-Expected: `verification_passed=21 failed=0`.
-
-For the queue worker release, the stricter verifier contains 30 checks. Last successful full Sheets verification before this release was 21 / 21. The stricter 30-check runtime verification is pending because the local approval system ran out of credits while calling Google Sheets.
+Expected: `verification_passed=33 failed=0` (2026-06-25 達成).
 
 ## GitHub Actions Sheets Secrets
 

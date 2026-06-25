@@ -1,6 +1,7 @@
 # Threads Queue Worker
 
-Date: 2026-06-24
+Date: 2026-06-25 (最終更新)
+Created: 2026-06-24
 
 ## Purpose
 
@@ -76,10 +77,11 @@ python3 scripts/process_threads_queue.py --account-id night_scout --confirm-real
 
 It runs:
 
-1. Sheets verify
-2. queue worker dry-run
-3. process queue only if `mode=real_post` and `confirm_real_post=true`
-4. Sheets verify after processing
+1. **Repair posted_results integrity** (`repair_posted_results_integrity.py --apply`) — 新規ステップ
+2. Sheets verify before processing
+3. queue worker dry-run
+4. process queue only if `mode=real_post` and `confirm_real_post=true`
+5. Sheets verify after processing
 
 No schedule is configured.
 

@@ -184,14 +184,15 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 - `.claude/plans/`（未追跡のためcommitしない）
 - `docs/session-report-2026-06-22-2.md`（未追跡の既存ファイル。今回commit対象外）
 
-#### 次AIへの引き継ぎメモ
+#### 次AIへの引き継ぎメモ（2026-06-25更新）
 
-1. 承認credits復旧後、まず `python3 scripts/recover_production_sheets_threads_first.py --verify-only` を実行。
-2. verifyがfailedなら、`python3 scripts/recover_production_sheets_threads_first.py --json` を1回実行して backfill。
-3. 次に `python3 scripts/process_threads_queue.py --account-id night_scout --dry-run` と `--account-id liver_manager --dry-run` を確認。
-4. 実投稿は原則まだしない。必要ならdry-run PASS後、1アカウント1件だけ `PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true --confirm-real-post --max-posts 1`。
-5. `POSTED_SAVE_FAILED` が出た場合は絶対に再投稿しない。fallback JSONと実SNS画面を照合してposted_resultsを手で復旧する。
-6. `beauty_account`、X、media download/cut/upload、Cloudinary upload、transcription APIは引き続きOFF。
+1. **verify は現在 PASS** (`verification_passed=33 failed=0`)。`--verify-only` のみ実行すれば確認できる。
+2. `repair_posted_results_integrity.py --apply` は workflow に組み込み済み（毎回 verify 前に自動実行）。
+3. `process_threads_queue.py --account-id night_scout --dry-run` → status=DRY_RUN ✓
+4. `process_threads_queue.py --account-id liver_manager --dry-run` → status=DUPLICATE_BLOCKED ✓（duplicate guard 正常。liver_manager に新候補が必要なら `refill_threads_queue.py` を実行）
+5. 実投稿は原則まだしない。dry-run PASS後、1アカウント1件だけ `PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true --confirm-real-post --max-posts 1`。
+6. `POSTED_SAVE_FAILED` が出た場合は絶対に再投稿しない。fallback JSONと実SNS画面を照合してposted_resultsを手で復旧する。
+7. `beauty_account`、X、media download/cut/upload、Cloudinary upload、transcription APIは引き続きOFF。
 
 ### Codex: true dry-run / Actions dry_run follow-up (2026-06-25)
 
