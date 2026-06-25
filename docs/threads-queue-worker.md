@@ -77,13 +77,50 @@ python3 scripts/process_threads_queue.py --account-id night_scout --confirm-real
 
 It runs:
 
-1. **Repair posted_results integrity** (`repair_posted_results_integrity.py --apply`) — 新規ステップ
+1. **Repair posted_results integrity** (`repair_posted_results_integrity.py --apply`)
 2. Sheets verify before processing
 3. queue worker dry-run
 4. process queue only if `mode=real_post` and `confirm_real_post=true`
 5. Sheets verify after processing
+6. **Upload fallback artifact** (`output/posted_results_fallback/`) — 実投稿後 Sheets 保存が失敗した場合の fallback JSON を Actions artifact として 30 日保存 (`if: always()`)
 
 No schedule is configured.
+
+## Sheets 429 対策
+
+`process_threads_queue.py` の `append_row` / `update_row` は以下の対策済み:
+
+- **ヘッダーキャッシュ**: `ws.row_values(1)` はセッション内で1回のみ呼ぶ。
+- **指数バックオフ**: 429 発生時は 5s / 15s / 30s で最大 4 回リトライ。
+- **setup_all 削除**: real_post モードで `client.setup_all()` を呼ばない（タブは初期化済み前提）。
+
+## 孤児投稿の復旧
+
+Threads 投稿は成功したが Sheets 保存が失敗した場合 (`POSTED_SAVE_FAILED` / `PROCESSING` 放置):
+
+```bash
+# 状況確認（dry-run）
+python3 scripts/recover_orphan_threads_post.py \\
+    --account-id night_scout \\
+    --queue-id <queue_id> \\
+    --skip-api-lookup
+
+# 外部投稿IDが分かっている場合
+python3 scripts/recover_orphan_threads_post.py \\
+    --account-id night_scout \\
+    --queue-id <queue_id> \\
+    --external-post-id <id> \\
+    --post-url "https://www.threads.net/..." \\
+    --apply
+
+# 外部投稿IDなし（Threads API ではテキスト一致探索）
+python3 scripts/recover_orphan_threads_post.py \\
+    --account-id night_scout \\
+    --queue-id <queue_id> \\
+    --apply
+```
+
+復旧後: posted_results に `status=RECOVERED` 行が追加され、queue は `status=POSTED` に更新される。
 
 ## GitHub Actions Dry-Run Result
 

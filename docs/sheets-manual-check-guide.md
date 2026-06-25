@@ -16,7 +16,7 @@ Check these tabs first:
 | `投稿下書き` | 6 |
 | `SNS投稿文` | 6 |
 | `投稿キュー` | 6 |
-| `投稿結果` | 3 or more |
+| `投稿結果` | 4 or more |
 | `学習ルール` | 3 |
 | `メディア資産` | 0 is OK |
 
@@ -86,7 +86,10 @@ python3 scripts/repair_posted_results_integrity.py --apply
 python3 scripts/recover_production_sheets_threads_first.py --verify-only
 ```
 
-Expected: `verification_passed=33 failed=0` (2026-06-25 達成).
+Expected: `verification_passed=33 failed=0`
+
+- 2026-06-25 初回達成（posted_results 整合性修復後）
+- 2026-06-25 再確認（night_scout 孤児投稿復旧後 count_queue_night_scout=2, count_posted_results=4）
 
 ## GitHub Actions Sheets Secrets
 

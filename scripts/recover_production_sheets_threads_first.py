@@ -830,7 +830,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "categories_night_scout_8": sum(1 for r in categories if r.get("account_id") == "night_scout") >= 8,
         "categories_liver_manager_8": sum(1 for r in categories if r.get("account_id") == "liver_manager") >= 8,
         "prompts_5": len(prompts) >= 5,
-        "queue_night_scout_3": q_count("night_scout") >= 3,
+        "queue_night_scout_2": q_count("night_scout") >= 2,
         "queue_liver_manager_3": q_count("liver_manager") >= 3,
         "queue_beauty_0": q_count("beauty_account") == 0,
         "posted_threads_result": any(

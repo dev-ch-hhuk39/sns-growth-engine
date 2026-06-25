@@ -263,6 +263,62 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 | test_media_approved_pilot_workflow.py | 13 | 0 |
 | test_reference_transform_guard.py | 22 | 0 |
 
+### Sheets 429 対策・孤児投稿復旧 (2026-06-25)
+
+- 作業開始HEAD: `93977a5`
+- 作業完了HEAD: このcommit。最終 hash は `git rev-parse HEAD` で確認。
+
+#### 問題
+
+GitHub Actions `threads-queue-worker.yml` real_post 実行後、Threads 投稿は成功したが
+Sheets API 429 で `save_posted_result()` / `update_row()` が両方失敗し:
+- `recovery_night_scout_queue_01` が PROCESSING に残存
+- `posted_results` に行未追加（孤児投稿状態）
+
+#### 修正内容
+
+1. `process_threads_queue.py`
+   - `_headers_cache` + `_get_headers()`: ヘッダー行キャッシュ（同一 ws は 1 回のみ `row_values(1)`）
+   - `_get_headers()` に 429 指数バックオフ（5s/15s/30s、最大 4 回）
+   - real_post モードの `client.setup_all()` を削除
+   - `FALLBACK_DIR` 定数追加、`write_fallback()` に `dry_run` パラメータ追加
+
+2. `scripts/recover_orphan_threads_post.py` 新規作成
+   - Threads API でテキスト一致探索、またはIDを直接指定して RECOVERED 行追加
+   - `--skip-api-lookup` で API なしでも復旧可能
+   - 実行済み: `recovery_night_scout_queue_01` → POSTED、posted_results に RECOVERED 行追加
+
+3. `.github/workflows/threads-queue-worker.yml`
+   - `output/posted_results_fallback/` を `actions/upload-artifact` で 30 日保存 (`if: always()`)
+
+4. `recover_production_sheets_threads_first.py`
+   - `queue_night_scout_3` → `queue_night_scout_2`（孤児復旧で active 行が 2 に）
+
+5. テスト 4 本追加（全 PASS）:
+   - `test_recover_orphan_threads_post.py`: 13 PASS
+   - `test_sheets_rate_limit_backoff.py`: 14 PASS
+   - `test_queue_worker_no_setup_all_in_real_mode.py`: 12 PASS
+   - `test_fallback_artifact_no_secrets.py`: 11 PASS
+
+#### 確認結果
+
+```
+verification_passed=33 failed=0
+count_posted_results=4
+count_queue_night_scout=2
+```
+
+- `process_threads_queue.py --account-id night_scout --dry-run`: queue_02 status=DRY_RUN ✓
+- `process_threads_queue.py --account-id liver_manager --dry-run`: status=DUPLICATE_BLOCKED ✓
+
+#### 次AIへの引き継ぎメモ
+
+1. **孤児投稿 external_post_id**: `recovery_night_scout_queue_01` の posted_result (`orphan_recovery_recovery_night_scout_queue_01_*`) は `external_post_id=""` のまま。Threads アプリで実際の投稿URLを確認し、`recover_orphan_threads_post.py --apply --external-post-id <id>` で更新すること。
+2. **verify は PASS 維持**: `verification_passed=33 failed=0`。毎回 repair → verify の手順。
+3. **次投稿**: `night_scout` には WAITING_REVIEW (queue_02) / PLANNED (queue_03) が 2 件残存。レビュー後に 1 件ずつ実行。
+4. **429 対策は実装済み**: 次回実投稿時は `setup_all` 呼び出しなし・ヘッダーキャッシュ・バックオフ付き。
+5. **fallback artifact**: 次回実投稿失敗時は GitHub Actions > Artifacts > `threads-post-fallback-{run_id}` を確認。
+
 ## 現在のブロッカー / ペンディング事項
 
 | 課題 | 内容 | 必要な対応 |
@@ -270,9 +326,10 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 | X API Credits 枯渇 | 402 CreditsDepleted。認証は成功済み。tweepy は廃止 | X Developer Portal > Usage & Credits で補充 |
 | src_ns_query_001 | query source の URL 未登録 | 対象アカウント URL を入力後 default_sources.json を更新 |
 | src_ns_yt_cand_001 / src_lm_yt_cand_001 | rights_policy=reference_only (download 禁止) | approved_media 昇格は別途承認フロー必要 |
-| Threads 次投稿 | WAITING_REVIEW の 3候補あり | ユーザーレビュー後に投稿実行 |
+| Threads 次投稿 | WAITING_REVIEW 2候補あり (night_scout のみ) | ユーザーレビュー後に投稿実行 |
+| night_scout 孤児投稿 | external_post_id が空 | Threads アプリで投稿URL確認→ recover_orphan_threads_post.py で更新 |
 | beauty_account | 実投稿・active化禁止 | 永続的な制約 |
-| Threads 48h 指標 | 初回投稿の impressions/likes 未取得 | 2026-06-25 以降に Threads インサイトで確認 |
+| Threads 48h 指標 | 初回投稿の impressions/likes 未取得 | Threads インサイトで確認 |
 
 ## 最新作業内容 (2026-06-23)
 

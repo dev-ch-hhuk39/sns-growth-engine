@@ -138,3 +138,12 @@ jobs:
       - name: Sheets verify after processing
         run: |
           python3 scripts/recover_production_sheets_threads_first.py --verify-only
+
+      - name: Upload posted_results fallback (if any)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: threads-post-fallback-${{ github.run_id }}
+          path: output/posted_results_fallback/
+          if-no-files-found: ignore
+          retention-days: 30

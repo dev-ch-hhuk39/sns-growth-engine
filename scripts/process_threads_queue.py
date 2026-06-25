@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,11 @@ FINAL_OR_LOCKED_STATUSES = {
 }
 BEAUTY_BLOCKED = {"beauty_account"}
 
+# Sheets ヘッダー行のキャッシュ（ws オブジェクトの id をキーにする）
+_headers_cache: dict[int, list[str]] = {}
+
+FALLBACK_DIR = ROOT / "output" / "posted_results_fallback"
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -58,15 +64,38 @@ def row_by_key(rows: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]
     return {str(r.get(key, "")): r for r in rows if str(r.get(key, ""))}
 
 
+def _get_headers(ws) -> list[str]:
+    """ヘッダー行を取得する。セッション内でキャッシュし、429 発生時は指数バックオフでリトライする。"""
+    ws_id = id(ws)
+    if ws_id in _headers_cache:
+        return _headers_cache[ws_id]
+    delays = [0, 5, 15, 30]
+    for attempt, delay in enumerate(delays):
+        if delay > 0:
+            print(f"[RATE_LIMIT] Sheets 429; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+            time.sleep(delay)
+        try:
+            headers = ws.row_values(1)
+            _headers_cache[ws_id] = headers
+            return headers
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "429" in msg or "quota" in msg:
+                if attempt < len(delays) - 1:
+                    continue
+            raise
+    return []
+
+
 def append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     ws = get_ws(client, logical)
-    headers = ws.row_values(1)
+    headers = _get_headers(ws)
     ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
 
 
 def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fields: dict[str, Any]) -> bool:
     ws = get_ws(client, logical)
-    headers = ws.row_values(1)
+    headers = _get_headers(ws)
     if key not in headers:
         raise KeyError(f"{logical}: missing key header {key}")
     cell = ws.find(key_value, in_column=headers.index(key) + 1)
@@ -247,8 +276,10 @@ def save_posted_result(
     return result_id
 
 
-def write_fallback(queue_row: dict[str, Any], social: dict[str, Any] | None, text: str, result: Any) -> Path:
-    fallback_dir = ROOT / "output" / "posted_results_fallback"
+def write_fallback(queue_row: dict[str, Any], social: dict[str, Any] | None = None, text: str = "", result: Any = None, *, dry_run: bool = False) -> Path | None:
+    if dry_run:
+        return None
+    fallback_dir = FALLBACK_DIR
     fallback_dir.mkdir(parents=True, exist_ok=True)
     path = fallback_dir / f"{queue_row.get('queue_id', 'unknown')}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.json"
     payload = {
@@ -409,7 +440,9 @@ def main() -> int:
     if args.dry_run:
         print("[READ_ONLY] --dry-run: setup_all/update/append/post/fallback are disabled")
     else:
-        client.setup_all()
+        # setup_all はタブ初期化に多くの API 呼び出しを行うため、本番運用では呼ばない。
+        # タブは recover_production_sheets_threads_first.py で既に初期化済みであること。
+        print("[REAL_POST] setup_all をスキップします（本番タブは初期化済みを前提）")
 
     candidates = select_candidates(client, args.account_id, args.max_posts)
     print(f"[process_threads_queue] candidates={len(candidates)} dry_run={args.dry_run} max_posts={args.max_posts}")
