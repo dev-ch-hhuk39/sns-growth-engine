@@ -118,10 +118,13 @@ def _fetch_recent_threads_posts(account_id: str, limit: int = 25) -> list[dict]:
     params = {
         "fields": "id,text,timestamp,permalink",
         "limit": str(limit),
-        "access_token": access_token,
     }
-    resp = requests.get(url, params=params, timeout=30)
-    resp.raise_for_status()
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=30)
+        resp.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(f"Threads API error: status={exc.response.status_code}") from None
     data = resp.json()
     return data.get("data", [])
 
