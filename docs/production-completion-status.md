@@ -123,12 +123,56 @@ count_queue_night_scout=2
 - `python3 scripts/process_threads_queue.py --account-id night_scout --dry-run`: queue_02 status=DRY_RUN ✓
 - `python3 scripts/process_threads_queue.py --account-id liver_manager --dry-run`: status=DUPLICATE_BLOCKED ✓
 
+## 2026-06-25 アップデート — queue WARN 設計 / liver_manager dup 解消
+
+### 変更内容
+
+1. `recover_production_sheets_threads_first.py` `verify_state()`
+   - `queue_night_scout_3` / `queue_liver_manager_3` チェックを廃止
+   - 代わりに `queue_night_scout_min1` / `queue_liver_manager_min1`（>= 1 なら PASS）を採用
+   - queue が 1〜2 件 → `warning_list` / `refill_needed_accounts` に追記。FAIL にはならない
+   - queue が 0 件 → 従来通り FAIL
+   - `RECOVERED` 行の `external_post_id` 未補完 → WARN のみ（FAIL にしない）
+   - `posted_save_failed` > 0 → WARN のみ
+
+2. night_scout queue 補充
+   - `refill_threads_queue.py --account-id night_scout --count 1` 実行
+   - queue_after=4（WAITING_REVIEW 3 / PLANNED 1）
+
+3. liver_manager DUPLICATE_BLOCKED 解消
+   - `recovery_liver_manager_queue_01`（draft=`recovery_liver_manager_draft_01`）が posted_results に既存のため dry-run でも DUPLICATE_BLOCKED だった
+   - `refill_threads_queue.py --account-id liver_manager --count 1` で新候補追加
+   - Sheets 上で `recovery_liver_manager_queue_01` を直接 `DUPLICATE_BLOCKED` に更新（実投稿なし）
+   - `process_threads_queue.py --account-id liver_manager --dry-run` → `status=DRY_RUN` ✓（`recovery_liver_manager_queue_02` が選ばれる）
+
+4. night_scout posted_results 孤児投稿
+   - `orphan_recovery_recovery_night_scout_queue_01_*` の `post_url` を更新
+   - `https://www.threads.com/@kyaba_consul_mizu/post/DZ_bylhAIqz`
+   - `external_post_id=18050331680547160`
+   - WARN なし（補完済み）
+
+5. 新規テスト 3本追加（各 14〜15 PASS）
+   - `test_verify_queue_minimum_warn_not_fail.py`: 15 PASS
+   - `test_refill_needed_accounts_warning.py`: 15 PASS
+   - `test_posted_recovered_post_url_backfill.py`: 14 PASS
+
+### 修復後の確認結果
+
+```
+verification_passed=33 failed=0
+warning_list=[]
+count_posted_results=4
+count_queue_night_scout=3
+count_queue_liver_manager=3
+```
+
+- `python3 scripts/process_threads_queue.py --account-id night_scout --dry-run`: queue_02 status=DRY_RUN ✓
+- `python3 scripts/process_threads_queue.py --account-id liver_manager --dry-run`: queue_02 status=DRY_RUN ✓
+
 ## Remaining Manual Checks
 
-- GitHub Actions `threads-queue-worker.yml` dry_run を再実行して verification_passed=33 failed=0 を Actions 上でも確認する
-- `night_scout` の Threads 次投稿候補（WAITING_REVIEW 2案）をレビューして承認する
-- night_scout 孤児投稿の external_post_id を Threads アプリで確認し、`recover_orphan_threads_post.py --apply --external-post-id <id>` で更新する
-- liver_manager の DUPLICATE_BLOCKED を解消するには queue 行に別 draft_id の新候補を追加する
+- GitHub Actions `threads-queue-worker.yml` dry_run を再実行して verification_passed=33 failed=0 を Actions 上でも確認する（Sheets secrets 登録後）
+- `night_scout` の Threads 次投稿候補（WAITING_REVIEW 3案）をレビューして承認する
 - Threads insights（night_scout 初回投稿 / liver_manager 投稿）を確認する
 - X API Credits を補充し、X 投稿を再開するかどうか判断する
 - Cloudinary upload を使う場合は `ALLOW_CLOUDINARY_UPLOAD=true` で `media-approved-pilot.yml` を実行する

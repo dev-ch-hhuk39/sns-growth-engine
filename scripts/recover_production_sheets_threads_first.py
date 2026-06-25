@@ -821,6 +821,36 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         r for r in queue
         if str(r.get("status", "")).upper() == "POSTED_SAVE_FAILED"
     ]
+    # キュー件数（投稿消費後は 1〜2 件になりうる — WARN だが FAIL にしない）
+    ns_count = q_count("night_scout")
+    lm_count = q_count("liver_manager")
+    REFILL_THRESHOLD = 3
+
+    # WARN / refill 判定（queue が 1〜2 件の場合）
+    warning_list: list[str] = []
+    refill_needed_accounts: list[str] = []
+    recommended_actions: list[str] = []
+    if 0 < ns_count < REFILL_THRESHOLD:
+        warning_list.append(f"queue_night_scout_low: count={ns_count} (recommend refill to {REFILL_THRESHOLD})")
+        refill_needed_accounts.append("night_scout")
+        recommended_actions.append(f"python3 scripts/refill_threads_queue.py --account-id night_scout --count {REFILL_THRESHOLD - ns_count}")
+    if 0 < lm_count < REFILL_THRESHOLD:
+        warning_list.append(f"queue_liver_manager_low: count={lm_count} (recommend refill to {REFILL_THRESHOLD})")
+        refill_needed_accounts.append("liver_manager")
+        recommended_actions.append(f"python3 scripts/refill_threads_queue.py --account-id liver_manager --count {REFILL_THRESHOLD - lm_count}")
+    if len(posted_save_failed) > 0:
+        warning_list.append(f"posted_save_failed_count: {len(posted_save_failed)} (run recover_orphan_threads_post.py)")
+
+    # RECOVERED 行の未補完フィールド WARN
+    recovered_missing_ext_id = [
+        r for r in threads_posted_or_recovered
+        if str(r.get("status", "")).upper() == "RECOVERED"
+        and not str(r.get("external_post_id", "")).strip()
+    ]
+    if recovered_missing_ext_id:
+        warning_list.append(f"recovered_missing_external_post_id: count={len(recovered_missing_ext_id)}")
+        recommended_actions.append("recover_orphan_threads_post.py --apply --external-post-id <id> で更新してください")
+
     checks = {
         "accounts_3_present": all(a in accounts for a in ["night_scout", "liver_manager", "beauty_account"]),
         "night_scout_cta": accounts.get("night_scout", {}).get("cta_type") == "LINE_AND_DM",
@@ -830,8 +860,9 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "categories_night_scout_8": sum(1 for r in categories if r.get("account_id") == "night_scout") >= 8,
         "categories_liver_manager_8": sum(1 for r in categories if r.get("account_id") == "liver_manager") >= 8,
         "prompts_5": len(prompts) >= 5,
-        "queue_night_scout_2": q_count("night_scout") >= 2,
-        "queue_liver_manager_3": q_count("liver_manager") >= 3,
+        # FAIL: queue が 0 件なら即 FAIL。1〜2 件は WARN（上記 warning_list に追加済み）
+        "queue_night_scout_min1": ns_count >= 1,
+        "queue_liver_manager_min1": lm_count >= 1,
         "queue_beauty_0": q_count("beauty_account") == 0,
         "posted_threads_result": any(
             str(r.get("platform", "")).lower() == "threads"
@@ -882,6 +913,9 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "failed": [k for k, ok in checks.items() if not ok],
         "warnings": {
             "posted_save_failed_count": len(posted_save_failed),
+            "warning_list": warning_list,
+            "refill_needed_accounts": refill_needed_accounts,
+            "recommended_actions": recommended_actions,
         },
         "counts": {
             "accounts": len(accounts),
@@ -941,6 +975,13 @@ def main() -> int:
             print(f"verification_passed={verification['passed']} failed={len(verification['failed'])}")
             if verification["failed"]:
                 print("failed_checks=" + ",".join(verification["failed"]))
+            warn_data = verification.get("warnings", {})
+            warn_list = warn_data.get("warning_list", [])
+            refill = warn_data.get("refill_needed_accounts", [])
+            if warn_list:
+                print("warnings=" + "; ".join(warn_list))
+            if refill:
+                print("refill_needed_accounts=" + ",".join(refill))
             for key, value in verification["counts"].items():
                 print(f"count_{key}={value}")
         elif "audit" in result:
@@ -951,6 +992,13 @@ def main() -> int:
             print(f"verification_passed={verification['passed']} failed={len(verification['failed'])}")
             if verification["failed"]:
                 print("failed_checks=" + ",".join(verification["failed"]))
+            warn_data = verification.get("warnings", {})
+            warn_list = warn_data.get("warning_list", [])
+            refill = warn_data.get("refill_needed_accounts", [])
+            if warn_list:
+                print("warnings=" + "; ".join(warn_list))
+            if refill:
+                print("refill_needed_accounts=" + ",".join(refill))
             for key, value in verification["counts"].items():
                 print(f"count_{key}={value}")
         creds = result["credentials"]

@@ -1,6 +1,6 @@
 # Threads Queue Worker
 
-Date: 2026-06-25 (最終更新)
+Date: 2026-06-25 (最終更新 — queue WARN 設計追加)
 Created: 2026-06-24
 
 ## Purpose
@@ -121,6 +121,18 @@ python3 scripts/recover_orphan_threads_post.py \\
 ```
 
 復旧後: posted_results に `status=RECOVERED` 行が追加され、queue は `status=POSTED` に更新される。
+
+## Queue 件数の FAIL / WARN 設計
+
+| 件数 | 動作 |
+|------|------|
+| 0 | `queue_night_scout_min1` or `queue_liver_manager_min1` = False → FAIL |
+| 1〜2 | check = True（PASS）+ `warning_list` に `_low` 追記 + `refill_needed_accounts` に追加 |
+| 3以上 | check = True、警告なし |
+
+- `REFILL_THRESHOLD = 3`
+- WARN だけでは `failed=0` のまま → GitHub Actions は exit 0 で通過する
+- night_scout を投稿消費後 queue が 1〜2 に減っても FAIL にならない
 
 ## GitHub Actions Dry-Run Result
 
