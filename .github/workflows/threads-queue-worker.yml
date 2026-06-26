@@ -136,9 +136,11 @@ jobs:
           fi
 
       - name: Wait before post-processing verify (Sheets 429 対策)
-        run: sleep 20
+        if: ${{ github.event.inputs.mode == 'real_post' }}
+        run: sleep 60
 
       - name: Sheets verify after processing
+        if: ${{ github.event.inputs.mode == 'real_post' }}
         run: |
           python3 scripts/recover_production_sheets_threads_first.py --verify-only
 
