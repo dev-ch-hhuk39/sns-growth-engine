@@ -53,8 +53,21 @@ python3 scripts/test_generate_social_card.py   # 22 PASS
 検証内容: 両フォーマットのサイズ整合、不正フォーマット拒否、self_generated 権利値、
 `no_reuse`/`plan_only` でないこと、Cloudinary ゲート維持、出力先が `output/` 配下であること。
 
+## ThreadsPublisher の media 配線（dry-run 限定・実装済み）
+
+`src/publishers/threads_publisher.py` の `publish()` に任意引数 `media_url` を追加した。
+
+- **dry-run + media_url**: テキスト検証に加え「IMAGE 添付予定」を計画表示する（API 呼び出しなし）。
+  メッセージ末尾に `media=IMAGE media_url=... (DRY_RUN_PLAN_ONLY)` が付く。
+- **real mode + media_url**: `PUBLISH_ENABLED` / `ALLOW_REAL_THREADS_POST` が true でも
+  env チェックより前に `SAFETY_STOP` で**ハードに拒否**する。実 media 投稿は構造的に不可能。
+- **media_url なし**: 既存の text-only 挙動のまま（後方互換）。
+
+テスト: `python3 scripts/test_threads_publisher_media_dryrun.py`（11 PASS）。
+既存 publisher テスト（phase10 threads/x、phase13 safety、preflight）も回帰なし。
+
 ## 未実装（意図的に保留 / 別途ユーザー判断）
 
 - queue 行への media 添付（`attach_media_to_queue.py`）
-- ThreadsPublisher の media 投稿配線（dry-run 限定で配線予定。実 media 投稿は禁止のまま）
 - Cloudinary 実 upload（`ALLOW_CLOUDINARY_UPLOAD=true` 明示時のみ）
+- 実 media 投稿（構造的に拒否中。本番化は別途レビュー必須）

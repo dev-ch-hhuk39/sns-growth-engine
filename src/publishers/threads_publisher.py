@@ -112,10 +112,12 @@ class ThreadsPublisher(BasePublisher):
         derivative: dict,
         queue_item: dict,
         dry_run: bool = True,
+        media_url: str | None = None,
     ) -> PublishResult:
         account_id = account.get("account_id", "")
         queue_id = queue_item.get("queue_id", "")
         derivative_id = derivative.get("derivative_id", "")
+        has_media = bool(media_url and media_url.strip())
 
         # ---- dry_run=True: 検証のみ ----
         if dry_run:
@@ -133,6 +135,9 @@ class ThreadsPublisher(BasePublisher):
                     f" derivative_id={derivative_id}"
                     f" queue_id={queue_id}"
                 )
+                if has_media:
+                    # media は dry-run でのみ「添付予定」を計画表示する。実 media 投稿は行わない。
+                    message += f" | media=IMAGE media_url={media_url} (DRY_RUN_PLAN_ONLY)"
             return PublishResult(
                 platform="threads",
                 success=success,
@@ -140,6 +145,19 @@ class ThreadsPublisher(BasePublisher):
                 posted_url=None,
                 external_post_id=None,
                 message=message,
+            )
+
+        # ---- dry_run=False: media は実投稿禁止（env フラグに関係なくハードに拒否） ----
+        if has_media:
+            return PublishResult(
+                platform="threads",
+                success=False,
+                dry_run=False,
+                message=(
+                    "SAFETY_STOP: media 付き実投稿は禁止です（dry-run 限定）。"
+                    " media の本番投稿は別途レビューが必要です。"
+                    f" (account={account_id} queue_id={queue_id})"
+                ),
             )
 
         # ---- dry_run=False: 安全ガードチェック ----
