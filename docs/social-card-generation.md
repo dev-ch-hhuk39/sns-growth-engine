@@ -66,8 +66,26 @@ python3 scripts/test_generate_social_card.py   # 22 PASS
 テスト: `python3 scripts/test_threads_publisher_media_dryrun.py`（11 PASS）。
 既存 publisher テスト（phase10 threads/x、phase13 safety、preflight）も回帰なし。
 
+## queue への media 付与計画（plan-only・実装済み）
+
+`src/media/queue_media_attach.py` + `scripts/attach_media_to_queue.py`。
+
+- **計画のみ**。Sheets への書き込みは行わない（本番付与は別途ユーザー判断）。
+- 付与候補にできるのは権利クリアな media だけ:
+  - `status` ∈ {APPROVED, READY, SELF_GENERATED}
+  - `rights_policy` ∈ {owned, allowed, approved}（unknown / not_allowed は不可）
+  - `reuse_policy` ≠ no_reuse
+  - `media_policy` ∉ {do_not_download, plan_only}
+  - `media_reuse_risk` ≠ high
+- URL 未確定（Cloudinary upload 前）の self_generated カードは `media_url_pending=true` として表示。
+- 入力はオフライン JSON（`--input-json`）でレジストリ不要・credentials 不要・テスト可能。
+
+テスト: `python3 scripts/test_attach_media_to_queue.py`（14 PASS）。
+
 ## 未実装（意図的に保留 / 別途ユーザー判断）
 
-- queue 行への media 添付（`attach_media_to_queue.py`）
+- queue worker (`process_threads_queue.py`) への media 読み込み配線
+  （dry-run で media_url を publish() に渡す。本番 Sheets 読み込み 429 リスクを考慮し別途判断）
+- queue 行への media_asset_id 実書き込み（本番 Sheets write）
 - Cloudinary 実 upload（`ALLOW_CLOUDINARY_UPLOAD=true` 明示時のみ）
 - 実 media 投稿（構造的に拒否中。本番化は別途レビュー必須）
