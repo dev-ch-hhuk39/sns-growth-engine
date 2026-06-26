@@ -181,6 +181,31 @@ count_queue_liver_manager=3
 - `.github/workflows/threads-queue-worker.yml`: dry_run では post-processing verify を skip（`if: mode == 'real_post'` 条件付き）。real_post では sleep 60 + verify を実行。
 - `test_threads_queue_worker_workflow.py`: verify-after の `if: real_post` 条件チェック追加（14 PASS）
 
+## 2026-06-26 アップデート — self_generated media パイプライン追加
+
+法的リスク最小の「自前生成テキストカード」パスを実装（第三者 media・実投稿・実 upload は一切なし）。
+
+1. `src/media/social_card.py` + `scripts/generate_social_card.py`
+   - PIL で 1080x1350 / 1080x1080 のテキストカード描画
+   - self_generated レコード（rights_policy=owned / reuse_policy=allow_reuse / media_policy=owned / status=SELF_GENERATED）
+   - 出力は `output/social_cards/`（gitignore 済）。Sheets 書き込みなし。Cloudinary upload は別ゲート維持
+2. `src/publishers/threads_publisher.py` — `publish()` に `media_url` 追加
+   - dry-run + media: 「IMAGE 添付予定」を計画表示（API 呼び出しなし）
+   - real mode + media: env フラグ true でも `SAFETY_STOP` でハード拒否（実 media 投稿は構造的に不可能）
+3. `src/media/queue_media_attach.py` + `scripts/attach_media_to_queue.py`
+   - 権利クリア media のみ queue 付与計画（plan-only・Sheets 書き込みなし）
+
+テスト 3 本追加: social_card 22 / publisher_media_dryrun 11 / attach_media 14（全 PASS）。
+既存 publisher テスト（phase10/phase13/preflight）回帰なし。
+commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
+
+### 保留（別途ユーザー判断）
+
+- queue worker への media 読み込み配線（本番 Sheets 読み込み 429 リスク考慮）
+- queue 行への media_asset_id 実書き込み（本番 Sheets write）
+- `generate_next_queue_from_metrics.py` / media-approved-pilot.yml
+- Cloudinary 実 upload・実 media 投稿
+
 ## Remaining Manual Checks
 
 - `night_scout` の Threads 次投稿候補（WAITING_REVIEW 3案）をレビューして承認する
