@@ -135,6 +135,9 @@ jobs:
               --dry-run
           fi
 
+      - name: Wait before post-processing verify (Sheets 429 対策)
+        run: sleep 20
+
       - name: Sheets verify after processing
         run: |
           python3 scripts/recover_production_sheets_threads_first.py --verify-only
