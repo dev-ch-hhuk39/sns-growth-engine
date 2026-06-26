@@ -81,7 +81,7 @@ It runs:
 2. Sheets verify before processing
 3. queue worker dry-run
 4. process queue only if `mode=real_post` and `confirm_real_post=true`
-5. Sheets verify after processing
+5. **Sheets verify after processing** — `mode=real_post` のみ実行（`if: mode == 'real_post'`）。dry_run はSheets変更なしのため skip。sleep 60 を前置して 429 を回避。
 6. **Upload fallback artifact** (`output/posted_results_fallback/`) — 実投稿後 Sheets 保存が失敗した場合の fallback JSON を Actions artifact として 30 日保存 (`if: always()`)
 
 No schedule is configured.
@@ -136,11 +136,17 @@ python3 scripts/recover_orphan_threads_post.py \\
 
 ## GitHub Actions Dry-Run Result
 
-2026-06-25:
+2026-06-26 (**最新・成功**):
 
-- run `28136692522`: failed before queue dry-run because Sheets secrets were empty in Actions.
-- run `28136764181`: failed for the same reason after secret fallback support was pushed.
-- `gh secret list` confirmed Threads secrets exist, but Sheets secrets were not registered in the repository at that time.
+- run `28212477795` (night_scout): **success** — verification_passed=33 failed=0, status=DRY_RUN ✓
+- run `28212482318` (liver_manager): **success** — verification_passed=33 failed=0, status=DRY_RUN ✓
+
+2026-06-25 (失敗履歴):
+
+- run `28136692522`, `28136764181`: Sheets secrets が Actions に未登録のため失敗
+- run `28152571068` (night_scout): success
+- run `28152572576` (liver_manager): verify-after で 429 → sleep 20 では不足だったため失敗
+- run `28212294485`, `28212291830`: sleep 20 でも 429 が継続 → dry_run では verify-after を skip する設計に変更
 
 Required Actions secrets:
 
@@ -148,7 +154,7 @@ Required Actions secrets:
 - `SA_JSON_BASE64` or `GCP_SA_JSON_BASE64`
 - account-specific Threads secrets for night/liver
 
-After registering Sheets secrets, run:
+Run command:
 
 ```bash
 gh workflow run threads-queue-worker.yml \

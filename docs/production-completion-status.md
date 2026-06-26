@@ -169,9 +169,20 @@ count_queue_liver_manager=3
 - `python3 scripts/process_threads_queue.py --account-id night_scout --dry-run`: queue_02 status=DRY_RUN ✓
 - `python3 scripts/process_threads_queue.py --account-id liver_manager --dry-run`: queue_02 status=DRY_RUN ✓
 
+## 2026-06-26 アップデート — GitHub Actions dry_run 両アカウント PASS
+
+### GitHub Actions dry_run 結果
+
+- run `28212477795` (night_scout): **success** — verification_passed=33 failed=0, status=DRY_RUN ✓
+- run `28212482318` (liver_manager): **success** — verification_passed=33 failed=0, status=DRY_RUN ✓
+
+### 追加変更
+
+- `.github/workflows/threads-queue-worker.yml`: dry_run では post-processing verify を skip（`if: mode == 'real_post'` 条件付き）。real_post では sleep 60 + verify を実行。
+- `test_threads_queue_worker_workflow.py`: verify-after の `if: real_post` 条件チェック追加（14 PASS）
+
 ## Remaining Manual Checks
 
-- GitHub Actions `threads-queue-worker.yml` dry_run を再実行して verification_passed=33 failed=0 を Actions 上でも確認する（Sheets secrets 登録後）
 - `night_scout` の Threads 次投稿候補（WAITING_REVIEW 3案）をレビューして承認する
 - Threads insights（night_scout 初回投稿 / liver_manager 投稿）を確認する
 - X API Credits を補充し、X 投稿を再開するかどうか判断する
