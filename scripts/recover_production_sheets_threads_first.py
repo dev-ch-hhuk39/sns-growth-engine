@@ -755,6 +755,43 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     reference_sources = _records(client, "reference_sources")
     social = _records(client, "social_derivatives")
     drafts = _records(client, "drafts")
+    suggestions = _records(client, "prompt_improvement_suggestions")
+
+    # --- media 承認・Cloudinary upload の整合（承認ゲートの不変条件を verify）---
+    from media.queue_media_attach import is_media_rights_clear, resolve_media_url
+
+    def _approved(asset: dict[str, Any]) -> bool:
+        return (
+            str(asset.get("approval_status", "")).strip().upper() == "APPROVED"
+            or str(asset.get("status", "")).strip().upper() == "SELF_GENERATED"
+        )
+
+    # APPROVED な media は必ず権利クリアであること（no_reuse/high/plan_only 等を承認しない）
+    approved_not_clear = [
+        r for r in media
+        if str(r.get("approval_status", "")).strip().upper() == "APPROVED"
+        and not is_media_rights_clear(r)
+    ]
+    # upload 済み（cloudinary_url 等あり / upload_status=UPLOADED）の media は承認済みのみ
+    uploaded_unapproved = [
+        r for r in media
+        if (resolve_media_url(r) or str(r.get("upload_status", "")).upper() == "UPLOADED")
+        and not _approved(r)
+    ]
+
+    # --- metrics ループの安全（生成候補が worker に拾われない）---
+    metrics_candidate_postable = [
+        r for r in queue
+        if str(r.get("generation_mode", "")).strip() == "metrics_driven_candidate"
+        and str(r.get("status", "")).upper() in {"WAITING_REVIEW", "PLANNED"}
+    ]
+    # metrics 由来の改善提案は WAITING_REVIEW（自動適用しない）
+    metrics_sugg_sources = {"import_threads_metrics_manual", "generate_next_queue_from_metrics"}
+    metrics_sugg_not_waiting = [
+        r for r in suggestions
+        if str(r.get("source", "")).strip() in metrics_sugg_sources
+        and str(r.get("status", "")).strip().upper() != "WAITING_REVIEW"
+    ]
 
     def q_count(account_id: str) -> int:
         return sum(
@@ -900,6 +937,10 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "learning_inactive": all(not _bool(r.get("active")) for r in learning),
         "learning_auto_apply_false": all(not _bool(r.get("auto_apply")) for r in learning),
         "media_no_unapproved_upload": not unapproved_uploads,
+        "media_approved_rows_rights_clear": not approved_not_clear,
+        "media_uploaded_only_if_approved": not uploaded_unapproved,
+        "metrics_candidates_not_postable": not metrics_candidate_postable,
+        "metrics_suggestions_waiting_review": not metrics_sugg_not_waiting,
         "source_registry_reflected": len(source_accounts) >= len(source_rows()[0]),
         "video_sources_reflected": len(reference_sources) >= len(source_rows()[1]),
         "source_media_policy_safe": not unsafe_sources,
@@ -931,6 +972,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             "posted_results": len(posted),
             "learning_rules": len(learning),
             "media_assets": len(media),
+            "prompt_improvement_suggestions": len(suggestions),
         },
     }
 

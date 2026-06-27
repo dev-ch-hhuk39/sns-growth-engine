@@ -21,8 +21,24 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def compute_engagement_rate(views: int, likes: int, comments: int) -> float:
+    """ER = (likes + comments) / views。views<=0 なら 0。純粋関数（テスト用に分離）。"""
+    if views <= 0:
+        return 0.0
+    return round((likes + comments) / views, 4)
+
+
 def ws(client: SheetsClient, logical: str):
     return client._ws(logical)
+
+
+def row_exists(client: SheetsClient, logical: str, id_field: str, id_value: str) -> bool:
+    """指定タブの id_field 列に id_value が既に存在するか（再インポートの重複防止）。"""
+    sheet = ws(client, logical)
+    headers = sheet.row_values(1)
+    if id_field not in headers:
+        return False
+    return sheet.find(id_value, in_column=headers.index(id_field) + 1) is not None
 
 
 def append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
@@ -60,44 +76,60 @@ def log_event(client: SheetsClient, account_id: str, result_id: str, memo: str) 
     })
 
 
-def save_pdca(client: SheetsClient, row: dict[str, Any], memo: str) -> None:
+def save_pdca(client: SheetsClient, row: dict[str, Any], memo: str) -> dict[str, Any]:
     result_id = str(row.get("result_id", ""))
     account_id = str(row.get("account_id", ""))
     likes = int(str(row.get("likes", "0") or "0"))
     comments = int(str(row.get("comments", "0") or "0"))
     views = int(str(row.get("views", "0") or "0"))
-    er = round((likes + comments) / views, 4) if views > 0 else 0
+    er = compute_engagement_rate(views, likes, comments)
     created_at = now_iso()
-    append_row(client, "pdca_runs", {
-        "run_id": f"pdca_metrics_{result_id}",
-        "account_id": account_id,
-        "platform": "threads",
-        "days": "manual",
-        "total_results": "1",
-        "suggestion_count": "1",
-        "next_jobs_count": "1",
-        "best_content_type": "manual_metric_import",
-        "best_er": str(er),
-        "created_at": created_at,
-        "notes": f"Manual metrics import. {memo}",
-    })
-    append_row(client, "prompt_improvement_suggestions", {
-        "suggestion_id": f"sug_metrics_{result_id}",
-        "account_id": account_id,
-        "created_at": created_at,
-        "source": "import_threads_metrics_manual",
-        "suggestion_type": "strategy_review",
-        "target_template": "",
-        "current_behavior": "Manual metrics imported.",
-        "suggested_change": "Review metrics before changing prompt or queue policy.",
-        "reason": f"views={views} likes={likes} comments={comments} er={er}",
-        "expected_impact": "Human-reviewed PDCA only.",
-        "priority": "medium",
-        "status": "WAITING_REVIEW",
-        "reviewed_by": "",
-        "reviewed_at": "",
-        "notes": "auto_apply=false; learning_rules remain inactive.",
-    })
+    run_id = f"pdca_metrics_{result_id}"
+    suggestion_id = f"sug_metrics_{result_id}"
+
+    # 再インポート時の重複防止: 決定論的 id が既にあれば追記しない。
+    pdca_exists = row_exists(client, "pdca_runs", "run_id", run_id)
+    sug_exists = row_exists(client, "prompt_improvement_suggestions", "suggestion_id", suggestion_id)
+    if pdca_exists and sug_exists:
+        return {"pdca_appended": False, "suggestion_appended": False, "er": er, "reason": "already imported"}
+
+    if not pdca_exists:
+        append_row(client, "pdca_runs", {
+            "run_id": run_id,
+            "account_id": account_id,
+            "platform": "threads",
+            "days": "manual",
+            "total_results": "1",
+            "suggestion_count": "1",
+            "next_jobs_count": "1",
+            "best_content_type": "manual_metric_import",
+            "best_er": str(er),
+            "created_at": created_at,
+            "notes": f"Manual metrics import. {memo}",
+        })
+    if not sug_exists:
+        append_row(client, "prompt_improvement_suggestions", {
+            "suggestion_id": suggestion_id,
+            "account_id": account_id,
+            "created_at": created_at,
+            "source": "import_threads_metrics_manual",
+            "suggestion_type": "strategy_review",
+            "target_template": "",
+            "current_behavior": "Manual metrics imported.",
+            "suggested_change": "Review metrics before changing prompt or queue policy.",
+            "reason": f"views={views} likes={likes} comments={comments} er={er}",
+            "expected_impact": "Human-reviewed PDCA only.",
+            "priority": "medium",
+            "status": "WAITING_REVIEW",
+            "reviewed_by": "",
+            "reviewed_at": "",
+            "notes": "auto_apply=false; learning_rules remain inactive.",
+        })
+    return {
+        "pdca_appended": not pdca_exists,
+        "suggestion_appended": not sug_exists,
+        "er": er,
+    }
 
 
 def main() -> int:
@@ -136,12 +168,15 @@ def main() -> int:
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     updated = update_posted_result(client, args.result_id, fields)
     log_event(client, str(updated.get("account_id", "")), args.result_id, args.memo)
-    save_pdca(client, updated, args.memo)
+    pdca = save_pdca(client, updated, args.memo)
     print(json.dumps({
         "status": "MEASURED",
         "result_id": args.result_id,
         "account_id": updated.get("account_id", ""),
         "metrics_status": "MEASURED",
+        "er": pdca.get("er"),
+        "pdca_appended": pdca.get("pdca_appended"),
+        "suggestion_appended": pdca.get("suggestion_appended"),
     }, ensure_ascii=False))
     return 0
 

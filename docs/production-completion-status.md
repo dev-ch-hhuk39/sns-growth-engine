@@ -199,12 +199,52 @@ count_queue_liver_manager=3
 既存 publisher テスト（phase10/phase13/preflight）回帰なし。
 commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
 
-### 保留（別途ユーザー判断）
+## 2026-06-27 アップデート — media 承認ワークフロー + metrics ループ実装
 
-- queue worker への media 読み込み配線（本番 Sheets 読み込み 429 リスク考慮）
-- queue 行への media_asset_id 実書き込み（本番 Sheets write）
-- `generate_next_queue_from_metrics.py` / media-approved-pilot.yml
-- Cloudinary 実 upload・実 media 投稿
+2026-06-26 時点で「保留」だった項目のうち、**コード・ゲート・テストで完結する範囲**を実装した。
+実 upload / 実 media 投稿 / 本番 Sheets への実書き込みは、引き続き明示フラグと確認ゲートの後ろに保持する。
+
+### 実装した内容
+
+1. `scripts/attach_media_to_queue.py`（item G）
+   - 権利クリア media を queue 行へ付与。既定 PLAN_ONLY。実書き込みは `--apply --confirm-attach`。
+   - 既存ヘッダーのある列だけに書き込む（防御的）。`--apply` と `--input-json` の併用は拒否。
+2. `scripts/upload_approved_media_to_cloudinary.py`（item H）
+   - `evaluate_upload_gate()`: approval_status=APPROVED または status=SELF_GENERATED、かつ権利クリア、
+     かつ rights_review_required≠true、かつローカルファイル存在、のときのみ許可。
+   - 実 upload は `--apply --confirm-upload` かつ `ALLOW_CLOUDINARY_UPLOAD=true` のときだけ。secrets は出力しない。
+3. `scripts/approve_self_generated_media.py`（item I）
+   - self_generated・権利クリア・未承認の media のみ approval_status=APPROVED に。
+   - 既定 PLAN_ONLY。実書き込みは `--apply --confirm-approve`。beauty_account は不可。
+4. `scripts/import_threads_metrics_manual.py` 強化（item L）
+   - ER 計算を純粋関数 `compute_engagement_rate()` に分離。
+   - 決定論的 id による再インポートの二重追記を `row_exists()` ガードで防止（冪等化）。
+5. `scripts/generate_next_queue_from_metrics.py` 新規（item L）
+   - posted_results の MEASURED 行を ER 降順でランキングし、次回候補を生成。
+   - 生成 queue 行の status は `process_threads_queue.py` の `ELIGIBLE_STATUSES`（{WAITING_REVIEW, PLANNED}）に
+     **含めない**（`DRAFT`）。worker が自動投稿しないことをコードで保証（assert）。
+   - 既定 PLAN_ONLY。実書き込みは `--apply --confirm-generate`。beauty_account / x は対象外。
+     改善提案は status=WAITING_REVIEW（auto_apply=false）。
+6. `recover_production_sheets_threads_first.py` verify 強化（item M）
+   - `media_approved_rows_rights_clear`: APPROVED media は権利クリアであること
+   - `media_uploaded_only_if_approved`: upload 済み media は承認済みのみ
+   - `metrics_candidates_not_postable`: metrics 由来候補は worker 非対象 status であること
+   - `metrics_suggestions_waiting_review`: metrics 由来提案は WAITING_REVIEW であること
+
+### テスト（item N）
+
+新規 7 本 + 関連既存 29 本 = **curated 36 / 36 PASS**（offline 完結）。
+- 新規: `test_generate_next_queue_from_metrics`(17) / `test_metrics_import_idempotency_and_er`(11) /
+  `test_recover_verify_media_metrics_checks`(8) / `test_approve_self_generated_media`(11) /
+  `test_upload_approved_media_gate`(10) / `test_attach_media_apply_writes`(14) / `test_attach_media_to_queue`(14)
+- 既存回帰なし（queue worker / refill / posted_results integrity / verify / beauty/x safety / cta 等）。
+
+### 引き続きゲート保持（明示確認が必要・自動実行しない）
+
+- liver_manager Threads 実投稿（`PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true --confirm-real-post`）
+- Cloudinary 実 upload（`ALLOW_CLOUDINARY_UPLOAD=true --confirm-upload`）
+- 上記スクリプトの本番 Sheets `--apply`（attach / approve / generate）
+- git commit / push
 
 ## Remaining Manual Checks
 

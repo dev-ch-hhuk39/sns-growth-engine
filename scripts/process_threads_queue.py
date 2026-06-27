@@ -38,6 +38,9 @@ FINAL_OR_LOCKED_STATUSES = {
 }
 BEAUTY_BLOCKED = {"beauty_account"}
 
+# media_status がこれらのときだけ「投稿に使える media」とみなす
+MEDIA_OK_STATUSES = {"ATTACHED", "UPLOADED"}
+
 # Sheets ヘッダー行のキャッシュ（ws オブジェクトの id をキーにする）
 _headers_cache: dict[int, list[str]] = {}
 
@@ -129,12 +132,41 @@ def text_for_queue(queue_row: dict[str, Any], social: dict[str, Any] | None, dra
     return ""
 
 
+def resolve_queue_media(queue_row: dict[str, Any]) -> dict[str, Any]:
+    """queue 行から media 関連フィールドを防御的に読む。
+
+    queue タブに存在する列は media_asset_id のみで、media_url / media_status /
+    media_required は列が無いことがあるため .get() で安全に読む。
+    media_status が ATTACHED / UPLOADED かつ media_url があるときだけ
+    「投稿に使える media」とみなす。
+    """
+    media_asset_id = str(queue_row.get("media_asset_id", "")).strip()
+    media_url = str(queue_row.get("media_url", "")).strip()
+    media_status = str(queue_row.get("media_status", "")).strip().upper()
+    media_required = is_true(queue_row.get("media_required", "false"))
+    status_ok = media_status in MEDIA_OK_STATUSES
+    media_usable = bool(media_url) and status_ok
+    block_reason = ""
+    if media_required and not media_usable:
+        block_reason = "MEDIA_REQUIRED_MISSING"
+    return {
+        "media_asset_id": media_asset_id,
+        "media_url": media_url,
+        "media_status": media_status,
+        "media_required": media_required,
+        "media_usable": media_usable,
+        "effective_media_url": media_url if media_usable else "",
+        "block_reason": block_reason,
+    }
+
+
 def duplicate_reason(
     *,
     queue_row: dict[str, Any],
     social: dict[str, Any] | None,
     text: str,
     posted_rows: list[dict[str, Any]],
+    media_asset_id: str = "",
 ) -> str:
     queue_id = str(queue_row.get("queue_id", ""))
     draft_id = str(queue_row.get("draft_id", ""))
@@ -157,10 +189,11 @@ def duplicate_reason(
             and str(posted.get("account_id", "")) == account_id
             and str(posted.get("platform", "")).lower() == "threads"
             and str(posted.get("posted_text", "")).strip() == text.strip()
+            and str(posted.get("media_asset_id", "")).strip() == media_asset_id
             and text.strip()
         )
         if same_text:
-            return "same text/account/platform already POSTED"
+            return "same text/account/platform/media already POSTED"
     return ""
 
 
@@ -242,6 +275,10 @@ def save_posted_result(
     text: str,
     external_post_id: str,
     post_url: str,
+    media_used: str = "false",
+    media_asset_id: str = "",
+    media_url: str = "",
+    media_status: str = "",
 ) -> str:
     result_id = f"threads_{queue_row.get('queue_id')}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     permalink_note = " permalink_pending=true" if not post_url else ""
@@ -259,7 +296,10 @@ def save_posted_result(
         "status": "POSTED",
         "metrics_status": "PENDING",
         "real_post": "true",
-        "media_used": "false",
+        "media_used": media_used,
+        "media_asset_id": media_asset_id,
+        "media_url": media_url,
+        "media_status": media_status,
         "source_queue_status": queue_row.get("status", ""),
         "save_source": "process_threads_queue",
         "created_by": "process_threads_queue",
@@ -316,7 +356,27 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             log_event(client, account_id, "FAILED", "Queue text is empty", {"queue_id": queue_id})
         return {"status": "FAILED", "reason": "EMPTY_TEXT", "queue_id": queue_id}
 
-    duplicate = duplicate_reason(queue_row=queue_row, social=social, text=text, posted_rows=posted_rows)
+    media = resolve_queue_media(queue_row)
+
+    # media_required=true なのに使える media_url が無い場合は投稿しない（dry-run でもブロック）。
+    if media["block_reason"]:
+        if not dry_run:
+            log_event(client, account_id, "DRY_RUN_BLOCKED", media["block_reason"], {"queue_id": queue_id, "media_asset_id": media["media_asset_id"]})
+        return {
+            "status": "DRY_RUN_BLOCKED",
+            "reason": media["block_reason"],
+            "queue_id": queue_id,
+            "media_asset_id": media["media_asset_id"],
+            "media_status": media["media_status"],
+        }
+
+    duplicate = duplicate_reason(
+        queue_row=queue_row,
+        social=social,
+        text=text,
+        posted_rows=posted_rows,
+        media_asset_id=media["media_asset_id"],
+    )
     if duplicate:
         if not dry_run:
             update_row(client, "queue", "queue_id", queue_id, {
@@ -334,6 +394,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         derivative={"derivative_id": social.get("derivative_id", "") if social else "", "platform": "threads"},
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=True,
+        media_url=media["effective_media_url"] or None,
     )
     if not dry_result.success:
         if not dry_run:
@@ -350,7 +411,21 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "draft_id": queue_row.get("draft_id", ""),
             "derivative_id": social.get("derivative_id", "") if social else "",
             "text_length": len(text),
+            "media_asset_id": media["media_asset_id"],
+            "media_status": media["media_status"],
+            "media_required": media["media_required"],
+            "media_planned": bool(media["effective_media_url"]),
             "message": dry_result.message,
+        }
+
+    # media 付き実投稿は今回は構造的に禁止（dry-run 限定）。worker 側でも publisher 到達前に止める。
+    if media["effective_media_url"]:
+        log_event(client, account_id, "SAFETY_STOP_MEDIA", "media 付き実投稿は禁止（dry-run 限定）", {"queue_id": queue_id, "media_asset_id": media["media_asset_id"]})
+        return {
+            "status": "SAFETY_STOP_MEDIA",
+            "reason": "media 付き実投稿は禁止です（dry-run 限定）",
+            "queue_id": queue_id,
+            "media_asset_id": media["media_asset_id"],
         }
 
     if not confirm_real_post:
@@ -385,6 +460,10 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             text=text,
             external_post_id=result.external_post_id or "",
             post_url=result.posted_url or "",
+            media_used="false",
+            media_asset_id=media["media_asset_id"],
+            media_url="",
+            media_status=media["media_status"],
         )
         update_row(client, "queue", "queue_id", queue_id, {
             "status": "POSTED",

@@ -100,3 +100,30 @@ def plan_queue_media_attachment(
         )
         plans.append(plan)
     return plans
+
+
+def build_attach_write_specs(plans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """付与計画から「queue 行に書き込むフィールド」を組み立てる（書き込みは別途）。
+
+    - URL 確定 (attachable かつ非 pending): media_status=ATTACHED + media_url を書く
+    - URL 未確定 (attachable かつ pending): media_status=PENDING_UPLOAD（media_url は書かない）
+    - 付与不可: スキップ（write spec を作らない）
+
+    media_asset_id は常に書く。media_url/media_status の列が queue タブに
+    無い場合は呼び出し側（update）がその列だけ無視する（安全書込）。
+    """
+    specs: list[dict[str, Any]] = []
+    for plan in plans:
+        if not plan.get("attachable"):
+            continue
+        queue_id = str(plan.get("queue_id", ""))
+        if not queue_id:
+            continue
+        fields: dict[str, Any] = {"media_asset_id": str(plan.get("media_asset_id", ""))}
+        if plan.get("media_url_pending"):
+            fields["media_status"] = "PENDING_UPLOAD"
+        else:
+            fields["media_status"] = "ATTACHED"
+            fields["media_url"] = str(plan.get("media_url", ""))
+        specs.append({"queue_id": queue_id, "fields": fields})
+    return specs
