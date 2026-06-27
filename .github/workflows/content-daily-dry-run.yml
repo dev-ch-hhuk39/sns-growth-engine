@@ -86,3 +86,21 @@ jobs:
             --account-id "$ACCOUNT_ID" \
             --text "毎日 dry-run チェック。実投稿せず、Threads投稿文の検証だけを行います。" \
             --confirm-post --dry-run
+
+      - name: Reference collect dry-run (PLAN_ONLY)
+        run: |
+          python3 scripts/collect_reference_posts.py \
+            --account-id "$ACCOUNT_ID" \
+            --source-platform threads
+
+      - name: Reference score dry-run (PLAN_ONLY)
+        run: |
+          python3 scripts/score_reference_posts.py \
+            --account-id "$ACCOUNT_ID"
+
+      - name: Threads ideas from references dry-run (PLAN_ONLY)
+        run: |
+          python3 scripts/generate_threads_ideas_from_references.py \
+            --account-id "$ACCOUNT_ID" \
+            --platform threads \
+            --source references

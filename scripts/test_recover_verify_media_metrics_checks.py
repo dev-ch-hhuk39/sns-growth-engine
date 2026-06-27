@@ -56,6 +56,8 @@ def _base_tabs():
         "media_assets": [],
         "source_accounts": [],
         "reference_sources": [],
+        "source_account_posts": [],
+        "reference_post_scores": [],
         "social_derivatives": [],
         "drafts": [],
         "prompt_improvement_suggestions": [],
@@ -84,11 +86,26 @@ def main() -> int:
         {"suggestion_id": "s1", "source": "generate_next_queue_from_metrics", "status": "WAITING_REVIEW"},
         {"suggestion_id": "s2", "source": "import_threads_metrics_manual", "status": "WAITING_REVIEW"},
     ]
+    clean["source_account_posts"] = [
+        # 参考のみ・流用不可（許諾未確認）→ 安全
+        {"post_id": "p1", "use_status": "REFERENCE_ONLY", "rights_status": "unknown", "can_reuse_media": "false"},
+        # 流用可だが許諾が明示されている → 安全
+        {"post_id": "p2", "use_status": "IDEA_SEED", "rights_status": "owned", "can_reuse_media": "true"},
+    ]
+    clean["reference_post_scores"] = [
+        # 流用リスク高 → REFERENCE_ONLY 推奨・投稿可ステータスなし → 安全
+        {"score_id": "qs1", "reuse_risk_score": "3.0", "recommended_use": "REFERENCE_ONLY"},
+        {"score_id": "qs2", "reuse_risk_score": "1.0", "recommended_use": "IDEA_SEED"},
+    ]
     res = mod.verify_state(_FakeClient(clean))["checks"]
     checks.append(("clean: media_approved_rows_rights_clear", res["media_approved_rows_rights_clear"] is True))
     checks.append(("clean: media_uploaded_only_if_approved", res["media_uploaded_only_if_approved"] is True))
     checks.append(("clean: metrics_candidates_not_postable", res["metrics_candidates_not_postable"] is True))
     checks.append(("clean: metrics_suggestions_waiting_review", res["metrics_suggestions_waiting_review"] is True))
+    checks.append(("clean: reference_posts_use_status_safe", res["reference_posts_use_status_safe"] is True))
+    checks.append(("clean: reference_posts_reuse_rights_safe", res["reference_posts_reuse_rights_safe"] is True))
+    checks.append(("clean: reference_scores_high_risk_reference_only", res["reference_scores_high_risk_reference_only"] is True))
+    checks.append(("clean: reference_scores_not_postable", res["reference_scores_not_postable"] is True))
 
     # --- 違反ケース: 各チェックが False になる ---
     bad = _base_tabs()
@@ -109,11 +126,25 @@ def main() -> int:
         # metrics 由来なのに自動適用されている
         {"suggestion_id": "s3", "source": "generate_next_queue_from_metrics", "status": "APPLIED"},
     ]
+    bad["source_account_posts"] = [
+        # 参考投稿に投稿可ステータス（危険）
+        {"post_id": "pb1", "use_status": "WAITING_REVIEW", "rights_status": "owned", "can_reuse_media": "false"},
+        # 流用可なのに許諾未確認（危険）
+        {"post_id": "pb2", "use_status": "REFERENCE_ONLY", "rights_status": "unknown", "can_reuse_media": "true"},
+    ]
+    bad["reference_post_scores"] = [
+        # 流用リスク高なのに IDEA_SEED 推奨（危険）かつ投稿可ステータス
+        {"score_id": "qsb", "reuse_risk_score": "3.5", "recommended_use": "IDEA_SEED", "status": "PLANNED"},
+    ]
     res = mod.verify_state(_FakeClient(bad))["checks"]
     checks.append(("bad: media_approved_rows_rights_clear=False", res["media_approved_rows_rights_clear"] is False))
     checks.append(("bad: media_uploaded_only_if_approved=False", res["media_uploaded_only_if_approved"] is False))
     checks.append(("bad: metrics_candidates_not_postable=False", res["metrics_candidates_not_postable"] is False))
     checks.append(("bad: metrics_suggestions_waiting_review=False", res["metrics_suggestions_waiting_review"] is False))
+    checks.append(("bad: reference_posts_use_status_safe=False", res["reference_posts_use_status_safe"] is False))
+    checks.append(("bad: reference_posts_reuse_rights_safe=False", res["reference_posts_reuse_rights_safe"] is False))
+    checks.append(("bad: reference_scores_high_risk_reference_only=False", res["reference_scores_high_risk_reference_only"] is False))
+    checks.append(("bad: reference_scores_not_postable=False", res["reference_scores_not_postable"] is False))
 
     failed = [n for n, ok in checks if not ok]
     for n, ok in checks:

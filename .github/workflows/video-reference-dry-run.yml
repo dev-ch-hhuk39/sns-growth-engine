@@ -1,0 +1,87 @@
+name: Video Reference Dry-Run
+
+# 動画参考パイプライン（準備・文字起こし・切り抜き候補）の dry-run サニティチェック。
+# 実download・実切り抜き(ffmpeg)・実文字起こしAPI・実Cloudinary upload は一切行わない。
+# 新標準CLI が PLAN_ONLY のままガードどおり停止することを確認する。
+on:
+  schedule:
+    - cron: "0 3 * * 1"  # UTC 03:00 月曜 = JST 12:00 月曜
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: "チェック対象アカウントID"
+        required: false
+        default: "liver_manager"
+        type: choice
+        options:
+          - "night_scout"
+          - "liver_manager"
+
+# 安全制約: 実download/transcription/upload は常に false
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  DRY_RUN: "true"
+  MOCK_LLM: "true"
+  MOCK_SHEETS: "false"
+
+jobs:
+  video-reference-dry-run:
+    name: Video Reference Dry-Run (${{ github.event.inputs.account_id || 'liver_manager' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id || 'liver_manager' }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Guard account
+        run: |
+          if [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ]; then
+            echo "[BLOCKED] unsupported account"
+            exit 1
+          fi
+
+      - name: Prepare video reference dry-run (PLAN_ONLY / no download)
+        run: |
+          python3 scripts/prepare_video_reference.py \
+            --account-id "$ACCOUNT_ID" \
+            --platform threads \
+            --source-platform youtube \
+            --video-url "https://example.com/reference-video"
+
+      - name: Transcribe video reference dry-run (PLAN_ONLY / mock)
+        run: |
+          python3 scripts/transcribe_video_reference.py \
+            --account-id "$ACCOUNT_ID" \
+            --limit 3
+
+      - name: Generate clip candidates dry-run (PLAN_ONLY / no ffmpeg cut)
+        run: |
+          python3 scripts/generate_clip_candidates.py \
+            --account-id "$ACCOUNT_ID" \
+            --limit 3 \
+            --n-candidates 4
+
+      - name: Threads ideas from clips dry-run (PLAN_ONLY)
+        run: |
+          python3 scripts/generate_threads_ideas_from_references.py \
+            --account-id "$ACCOUNT_ID" \
+            --platform threads \
+            --source clips

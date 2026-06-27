@@ -753,6 +753,8 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     media = _records(client, "media_assets")
     source_accounts = _records(client, "source_accounts")
     reference_sources = _records(client, "reference_sources")
+    reference_posts = _records(client, "source_account_posts")
+    reference_scores = _records(client, "reference_post_scores")
     social = _records(client, "social_derivatives")
     drafts = _records(client, "drafts")
     suggestions = _records(client, "prompt_improvement_suggestions")
@@ -888,6 +890,36 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         warning_list.append(f"recovered_missing_external_post_id: count={len(recovered_missing_ext_id)}")
         recommended_actions.append("recover_orphan_threads_post.py --apply --external-post-id <id> で更新してください")
 
+    # --- 参考収集・採点パイプラインの安全不変条件 ---
+    def _to_float(value: Any) -> float:
+        try:
+            return float(str(value).strip())
+        except (TypeError, ValueError):
+            return 0.0
+
+    # 収集した参考投稿は参考利用のみ。投稿可能ステータスを持たせない。
+    REF_USE_OK = {"", "REFERENCE_ONLY", "IDEA_SEED"}
+    POSTABLE_STATUSES = {"WAITING_REVIEW", "PLANNED", "POSTED", "READY", "QUEUED"}
+    ref_posts_use_safe = all(
+        str(r.get("use_status", "")).strip().upper() in REF_USE_OK for r in reference_posts
+    )
+    # 第三者メディア流用可は、許諾が明示(unknown/空でない)のときだけ。
+    ref_posts_reuse_safe = all(
+        (not _bool(r.get("can_reuse_media")))
+        or str(r.get("rights_status", "")).strip().lower() not in ("", "unknown")
+        for r in reference_posts
+    )
+    # 質的採点: 流用リスクが高い行は必ず REFERENCE_ONLY 推奨。
+    ref_scores_high_risk_reference_only = all(
+        _to_float(r.get("reuse_risk_score")) < 2.5
+        or str(r.get("recommended_use", "")).strip().upper() == "REFERENCE_ONLY"
+        for r in reference_scores
+    )
+    # 採点行は投稿可能ステータスを持たない（採点は投稿生成ではない）。
+    ref_scores_not_postable = all(
+        str(r.get("status", "")).strip().upper() not in POSTABLE_STATUSES for r in reference_scores
+    )
+
     checks = {
         "accounts_3_present": all(a in accounts for a in ["night_scout", "liver_manager", "beauty_account"]),
         "night_scout_cta": accounts.get("night_scout", {}).get("cta_type") == "LINE_AND_DM",
@@ -944,6 +976,10 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "source_registry_reflected": len(source_accounts) >= len(source_rows()[0]),
         "video_sources_reflected": len(reference_sources) >= len(source_rows()[1]),
         "source_media_policy_safe": not unsafe_sources,
+        "reference_posts_use_status_safe": ref_posts_use_safe,
+        "reference_posts_reuse_rights_safe": ref_posts_reuse_safe,
+        "reference_scores_high_risk_reference_only": ref_scores_high_risk_reference_only,
+        "reference_scores_not_postable": ref_scores_not_postable,
         "x_queue_absent": not any(str(r.get("platform", "")).lower() == "x" for r in queue),
         "drafts_seeded": len([r for r in drafts if str(r.get("draft_id", "")).startswith("recovery_")]) >= 6,
         "social_threads_seeded": len([r for r in social if str(r.get("platform", "")).lower() == "threads"]) >= 6,
@@ -964,6 +1000,8 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             "prompt_templates": len(prompts),
             "source_accounts": len(source_accounts),
             "reference_sources": len(reference_sources),
+            "reference_posts": len(reference_posts),
+            "reference_post_scores": len(reference_scores),
             "drafts": len(drafts),
             "social_derivatives": len(social),
             "queue_night_scout": q_count("night_scout"),

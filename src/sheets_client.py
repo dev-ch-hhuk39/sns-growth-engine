@@ -210,6 +210,18 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "hook_style", "content_angle",
         "media_label", "text_length_bucket",
         "analyzed_at",
+        # 質的ルーブリックスコア（score_reference_posts.py / 内容適合の人手評価軸）。
+        # performance/buzz とは別軸で「自社アカウントに刺さるか」を 0〜100 で評価する。
+        "collected_post_id",          # source_account_posts.post_id への紐付け
+        "hook_score",                 # 冒頭フックの強さ
+        "insight_score",              # 悩み解決・気づきの深さ
+        "cta_score",                  # LINE/DM等への導線の自然さ
+        "originality_score",          # 独自性（模倣リスクの裏返し）
+        "reuse_risk_score",           # 素材・表現の流用リスク（高いほど危険）
+        "total_score",                # 上記の合算/加重
+        "reason",                     # 採点根拠（日本語）
+        "recommended_use",            # REFERENCE_ONLY / IDEA_SEED など
+        "scored_at",                  # 採点日時
     ],
     # ------------------------------------------------------------------ #
     # Phase 2.18 追加タブ（video reference pipeline / transcription）
@@ -225,6 +237,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_policy", "reuse_policy", "media_policy",
         "allow_download", "allow_cut", "allow_upload",
         "auto_priority_change_allowed", "blocked",
+        # 動画参照登録（prepare_video_reference.py）追加。メタ情報のみ。動画/サムネはdownloadしない。
+        "title",                      # 動画タイトル（メタ情報）
+        "transcript_status",         # PENDING（既定）/ COMPLETED / FAILED
     ],
     # 動画文字起こし結果。Cloudflare Whisper の出力を保存する。
     "video_transcripts": [
@@ -346,6 +361,11 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "engagement_rate", "buzz",
         "rights_policy", "reuse_policy",
         "status", "collected_at",
+        # 収集/インポート系（collect_reference_posts.py / import_reference_urls.py）追加。
+        "post_url",                   # 元投稿URL。重複検知キー（同一URLは再収集しない）。
+        "use_status",                 # REFERENCE_ONLY（既定）/ IDEA_SEED。自動投稿対象にはしない。
+        "rights_status",             # unknown / reference_only（既定）。許諾未確認は流用不可。
+        "can_reuse_media",           # 第三者メディア流用可否。既定 false（許諾なしは流用禁止）。
     ],
     # source collection計画記録
     "source_collection_plans": [

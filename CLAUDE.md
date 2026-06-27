@@ -91,6 +91,7 @@
 
 主要ドキュメント:
 - `docs/roadmap.md` — Phase別ロードマップ
+- `docs/reference-pipeline-runbook.md` — 参考収集/採点/動画/切り抜き/投稿案の標準CLI運用
 - `docs/source-account-registry.md` — source registry設計
 - `docs/operation-runbook.md` — 運用手順
 - `docs/manual-smoke-test-sequence.md` — スモークテスト手順

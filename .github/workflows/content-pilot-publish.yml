@@ -41,6 +41,7 @@ env:
   ALLOW_REAL_THREADS_POST: "false"
   ALLOW_TRANSCRIPTION_API: "false"
   ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
   DRY_RUN: "true"
   MOCK_LLM: "false"
   MOCK_SHEETS: "false"
@@ -84,7 +85,7 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Guard: beauty_account は投稿禁止
+      - name: "Guard: beauty_account は投稿禁止"
         run: |
           if [ "$ACCOUNT_ID" = "beauty_account" ]; then
             echo "[BLOCKED] beauty_account への投稿は禁止されています"
