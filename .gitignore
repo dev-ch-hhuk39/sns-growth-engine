@@ -84,6 +84,10 @@ output/
 # --- CodeGraph（index/cache はcommit禁止） ---
 .codegraph/
 
+# --- Claude Code ローカル作業ファイル（plans等はcommit禁止） ---
+.claude/*
+!.claude/settings.json
+
 # --- context-mode（SQLite/cache/index はcommit禁止） ---
 .context-mode/
 context-mode.db

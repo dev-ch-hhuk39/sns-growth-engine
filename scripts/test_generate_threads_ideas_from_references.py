@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """generate_threads_ideas_from_references.build_plan の安全ゲートを検証する。
 
-最重要: 生成案は worker の ELIGIBLE_STATUSES に入らない（自動投稿されない）。
+最重要: 本 CLI は生成専用で投稿経路を持たず、実投稿は三重ゲート（全禁止）が必要。
+候補は WAITING_REVIEW（worker eligible）で書かれるが自動投稿はされない。
 """
 from __future__ import annotations
 
@@ -34,11 +35,16 @@ def main() -> int:
 
     p = mod.build_plan(_args())
     checks.append(("既定は PLAN_ONLY", p["status"] == "PLAN_ONLY"))
-    # 最重要安全不変条件
-    checks.append(("候補 status は DRAFT", p["safety"]["candidate_status"] == "DRAFT"))
-    checks.append(("DRAFT は ELIGIBLE に含まれない", p["safety"]["in_eligible_statuses"] is False))
-    checks.append(("DRAFT not in ELIGIBLE_STATUSES", "DRAFT" not in mod.ELIGIBLE_STATUSES))
-    checks.append(("auto_post false", p["safety"]["auto_post"] is False))
+    # 最重要安全不変条件: 本 CLI は生成専用で投稿経路を持たない
+    checks.append(("委譲先は投稿しない（生成専用）", p["safety"]["delegate_posts"] is False))
+    checks.append(("実投稿は現状不可能", p["safety"]["real_post_possible_now"] is False))
+    # 候補は WAITING_REVIEW で書かれる（正直な現実）
+    checks.append(("候補 status は WAITING_REVIEW", p["safety"]["candidate_status"] == "WAITING_REVIEW"))
+    checks.append(("WAITING_REVIEW は worker eligible（事実）", p["safety"]["worker_selectable"] is True))
+    # 実投稿に必要なゲートが明示されている
+    checks.append(("実投稿ゲートに ALLOW_REAL_THREADS_POST 含む",
+                   "ALLOW_REAL_THREADS_POST=true" in p["safety"]["real_post_requires"]))
+    checks.append(("人間ゲートは approve_queue", "approve_queue.py" in p["safety"]["human_gate"]))
 
     # source 切り替え
     checks.append(("references → generate_from_references",

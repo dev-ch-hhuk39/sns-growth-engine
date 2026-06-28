@@ -81,6 +81,11 @@ def main() -> int:
     ]
     clean["queue"] = [
         {"queue_id": "q1", "generation_mode": "metrics_driven_candidate", "status": "DRAFT"},
+        # 境界ピン留め: refill / clip 由来候補は設計上 WAITING_REVIEW（worker eligible）で書かれる。
+        # これらは metrics チェックを発火させてはならない（誤検知すると正常な補充キューで FAIL する）。
+        {"queue_id": "q_refill", "generation_mode": "refill_seed", "status": "WAITING_REVIEW"},
+        {"queue_id": "q_clip", "generation_mode": "video_clip_reference", "status": "WAITING_REVIEW"},
+        {"queue_id": "q_seed", "generation_mode": "threads_first_manual_seed", "status": "WAITING_REVIEW"},
     ]
     clean["prompt_improvement_suggestions"] = [
         {"suggestion_id": "s1", "source": "generate_next_queue_from_metrics", "status": "WAITING_REVIEW"},
@@ -101,6 +106,11 @@ def main() -> int:
     checks.append(("clean: media_approved_rows_rights_clear", res["media_approved_rows_rights_clear"] is True))
     checks.append(("clean: media_uploaded_only_if_approved", res["media_uploaded_only_if_approved"] is True))
     checks.append(("clean: metrics_candidates_not_postable", res["metrics_candidates_not_postable"] is True))
+    # 境界回帰: refill_seed / video_clip_reference / manual_seed は設計上 WAITING_REVIEW で
+    # worker eligible に書かれる。metrics チェックはこれらを誤検知してはならない（上の clean
+    # キューに 3 行とも WAITING_REVIEW で含まれているのに True であることがそれを保証する）。
+    checks.append(("clean(境界): refill/clip/seed の WAITING_REVIEW は metrics チェックを発火しない",
+                   res["metrics_candidates_not_postable"] is True))
     checks.append(("clean: metrics_suggestions_waiting_review", res["metrics_suggestions_waiting_review"] is True))
     checks.append(("clean: reference_posts_use_status_safe", res["reference_posts_use_status_safe"] is True))
     checks.append(("clean: reference_posts_reuse_rights_safe", res["reference_posts_reuse_rights_safe"] is True))
