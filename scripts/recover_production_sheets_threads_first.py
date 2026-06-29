@@ -54,6 +54,29 @@ def now_iso() -> str:
     return datetime.now(JST).replace(microsecond=0).isoformat()
 
 
+def _norm_reg_url(u: str) -> str:
+    """source_url を dedup 比較用に正規化 (scheme/www/末尾slash/query を吸収)。"""
+    import re
+    if not u:
+        return ""
+    u = str(u).strip()
+    u = re.sub(r"^http://", "https://", u)
+    if not u.startswith("http"):
+        u = "https://" + u
+    u = u.split("?")[0].split("#")[0]
+    u = re.sub(r"/+$", "", u)
+    u = re.sub(r"^https://(www\.)?", "https://", u)
+    return u.lower()
+
+
+def _priority_in_range(p: Any) -> bool:
+    """source priority は 0..100 の範囲内であること。"""
+    try:
+        return 0 <= int(p) <= 100
+    except (ValueError, TypeError):
+        return False
+
+
 def _bool(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "y"}
 
@@ -543,19 +566,32 @@ def posted_result_recovery_row() -> dict[str, Any]:
     }
 
 
-def source_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    data = json.loads((ROOT / "config/source_accounts/default_sources.json").read_text())
+def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    path = Path(source_path) if source_path else (ROOT / "config/source_accounts/default_sources.json")
+    data = json.loads(path.read_text())
     rows_accounts: list[dict[str, Any]] = []
     rows_video: list[dict[str, Any]] = []
     for src in data.get("sources", []):
         targets = src.get("target_account_ids") or []
         account_id = targets[0] if targets else ""
         platform = str(src.get("source_platform", ""))
-        is_beauty = account_id == "beauty_account"
+        future_track = str(src.get("future_track", "") or "")
+        is_beauty = "beauty_account" in targets or future_track == "beauty_future"
         is_x = platform == "x"
         blocked = is_beauty
         active = "false" if blocked or is_x else str(bool(src.get("active", False))).lower()
         fetch_enabled = "false"
+        rights_policy = "reference_only" if is_beauty else src.get("rights_policy", "reference_only")
+        reuse_policy = src.get("reuse_policy", "reference_only")
+        media_policy = src.get("media_policy", "do_not_download")
+        review_status = "BLOCKED_BEAUTY_ACCOUNT" if is_beauty else src.get("review_status", "WAITING_REVIEW")
+        default_queue_status = "WAITING_REVIEW" if is_beauty else src.get("default_queue_status", "DRAFT")
+        source_track = src.get("source_track") or future_track
+        usage_scope = src.get("usage_scope") or ("future_reference_only" if is_beauty else "reference_only")
+        use_policy = src.get("use_policy") or "REFERENCE_ONLY"
+        can_reuse_media = bool(src.get("can_reuse_media", False)) and not is_beauty
+        draft_only = bool(src.get("draft_only", False)) or is_beauty
+        beauty_account_status = src.get("beauty_account_status") or ("WAITING_REVIEW" if is_beauty else "")
         note_bits = [
             str(src.get("notes", "")),
             "auto_priority_change_allowed=false",
@@ -579,9 +615,9 @@ def source_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             "min_engagement_rate": str(src.get("min_engagement_rate", "")),
             "min_views": str(src.get("min_views", "")),
             "top_n": str(src.get("top_n", "")),
-            "rights_policy": src.get("rights_policy", "reference_only"),
-            "reuse_policy": src.get("reuse_policy", "reference_only"),
-            "media_policy": src.get("media_policy", "do_not_download"),
+            "rights_policy": rights_policy,
+            "reuse_policy": reuse_policy,
+            "media_policy": media_policy,
             "notes": " / ".join(x for x in note_bits if x),
             "created_at": src.get("created_at", now_iso()),
             "updated_at": now_iso(),
@@ -593,6 +629,15 @@ def source_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
             "allow_cut": "false",
             "allow_upload": "false",
             "auto_priority_change_allowed": "false",
+            "review_status": review_status,
+            "default_queue_status": default_queue_status,
+            "future_track": future_track,
+            "source_track": source_track,
+            "usage_scope": usage_scope,
+            "use_policy": use_policy,
+            "can_reuse_media": str(can_reuse_media).lower(),
+            "draft_only": str(draft_only).lower(),
+            "beauty_account_status": beauty_account_status,
         }
         rows_accounts.append(common)
         if platform in {"youtube", "tiktok"}:
@@ -620,6 +665,15 @@ def source_rows() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
                 "allow_upload": "false",
                 "auto_priority_change_allowed": "false",
                 "blocked": str(blocked).lower(),
+                "review_status": common["review_status"],
+                "default_queue_status": common["default_queue_status"],
+                "future_track": common["future_track"],
+                "source_track": common["source_track"],
+                "usage_scope": common["usage_scope"],
+                "use_policy": common["use_policy"],
+                "can_reuse_media": common["can_reuse_media"],
+                "draft_only": common["draft_only"],
+                "beauty_account_status": common["beauty_account_status"],
             })
     return rows_accounts, rows_video
 
@@ -1020,6 +1074,59 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         for _f in ("PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_REAL_X_POST")
     )
 
+    # --- source registry 不変条件(回収済み共有sourceの安全性) ---
+    _reg = json.loads((ROOT / "config/source_accounts/default_sources.json").read_text()).get("sources", [])
+    _reg_acc, _reg_vid = source_rows()
+    _reg_by_id = {s.get("source_id"): s for s in _reg}
+    _required_cats = {"night_work_scout", "cabaret_knowhow", "video_reference", "article_reference", "trend_query", "text_reference"}
+    _present_cats = set()
+    for s in _reg:
+        c = s.get("source_category")
+        for cc in (c if isinstance(c, list) else [c]):
+            if cc:
+                _present_cats.add(cc)
+        for cc in (s.get("source_categories") or []):
+            _present_cats.add(cc)
+    # 少なくとも各target系統と、実際に使うカテゴリ群が存在
+    _has_required_cats = (
+        _required_cats <= _present_cats
+        and
+        any(t in (s.get("target_account_ids") or []) for s in _reg for t in ["night_scout"])
+        and any("liver_manager" in (s.get("target_account_ids") or []) for s in _reg)
+        and any(s.get("future_track") == "beauty_future" for s in _reg)
+    )
+    _reg_urls = [_norm_reg_url(s.get("source_url", "")) for s in _reg if str(s.get("source_url", "")).strip()]
+    _urls_deduped = len(_reg_urls) == len(set(_reg_urls))
+    _x_reg = [r for r in _reg_acc if r["source_platform"] == "x"]
+    _x_manual_only = all(r["active"] == "false" and r["fetch_enabled"] == "false" for r in _x_reg)
+    _vid_reg = [r for r in _reg_acc if r["source_platform"] in ("tiktok", "youtube")]
+    _vid_reference_only = all(
+        r.get("reuse_policy") == "reference_only" and r.get("media_policy") == "do_not_download"
+        and r["allow_download"] == "false" and r["allow_cut"] == "false" and r["allow_upload"] == "false"
+        for r in _vid_reg
+    )
+    _beauty_reg = [r for r in _reg_acc if _reg_by_id.get(r["source_id"], {}).get("future_track") == "beauty_future"]
+    _beauty_inactive = all(r["active"] == "false" for r in _beauty_reg)
+    _beauty_raw = [
+        s for s in _reg
+        if s.get("future_track") == "beauty_future" or "beauty_account" in (s.get("target_account_ids") or [])
+    ]
+    _beauty_target_safe = all(
+        "beauty_account" in (s.get("target_account_ids") or [])
+        and "beauty_future" not in (s.get("target_account_ids") or [])
+        for s in _beauty_raw
+    )
+    _beauty_reference_only = all(
+        s.get("rights_policy") == "reference_only"
+        and (s.get("use_policy") or "REFERENCE_ONLY") == "REFERENCE_ONLY"
+        and not bool(s.get("can_reuse_media", False))
+        for s in _beauty_raw
+    )
+    _waiting = [r for r in _reg_acc if not str(r.get("source_url", "")).strip()]
+    _waiting_not_fetchable = all(r["fetch_enabled"] == "false" for r in _waiting)
+    _third_party_not_reusable = all(r["allow_upload"] == "false" and r["allow_cut"] == "false" for r in _reg_acc)
+    _priority_valid = all(_priority_in_range(s.get("priority")) for s in _reg)
+
     checks = {
         "accounts_3_present": all(a in accounts for a in ["night_scout", "liver_manager", "beauty_account"]),
         "night_scout_cta": accounts.get("night_scout", {}).get("cta_type") == "LINE_AND_DM",
@@ -1094,6 +1201,17 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "no_unapproved_media_ready": not ready_media_unapproved,
         "no_reference_only_media_ready": not ready_media_reference_only,
         "real_post_flags_false_default": real_post_flags_false,
+        # --- 回収済み共有 source registry の不変条件 ---
+        "source_registry_has_required_categories": _has_required_cats,
+        "source_urls_are_deduped": _urls_deduped,
+        "x_sources_manual_only_current_phase": _x_manual_only,
+        "tiktok_youtube_reference_only": _vid_reference_only,
+        "beauty_future_inactive": _beauty_inactive,
+        "beauty_target_account_id_preserved": _beauty_target_safe,
+        "beauty_reference_only_safety": _beauty_reference_only,
+        "waiting_url_input_not_fetchable": _waiting_not_fetchable,
+        "third_party_media_not_reusable_by_default": _third_party_not_reusable,
+        "source_priority_valid_range": _priority_valid,
     }
     return {
         "checks": checks,

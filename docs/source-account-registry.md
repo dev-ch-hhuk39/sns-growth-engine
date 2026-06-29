@@ -68,3 +68,15 @@ source_account_registry
   → pdca_orchestrator         (analyze_by_source)
   → content_mix_planner       (source_ids参照)
 ```
+
+## 過去共有sourceの回収・seed (2026-06-29)
+
+ユーザーは過去にソースアカウントURL/選定ルールを共有済み。既存 repo / `production_sources.example.json` から
+回収し `default_sources.json` へ dedup マージ済み(17→59件)。Threads 3件 + X/TikTok/YouTube/note の個人発信者中心。
+seed CLI は `scripts/seed_source_registry.py`(dry-run/apply/--target-account/--platform/--source-file)。
+詳細とポリシー・貼り付け形式・次手順は [source-recovery-and-seed.md](source-recovery-and-seed.md)。
+
+beauty は posting account `beauty_account` を維持(安全機構が block するため改名しない)し、
+将来用ラベルは `future_track="beauty_future"` / `source_track="beauty_future"` /
+`usage_scope="future_reference_only"` フィールドで表現。`active=false` / `fetch_enabled=false` /
+`can_reuse_media=false` / `use_policy=REFERENCE_ONLY` 固定。

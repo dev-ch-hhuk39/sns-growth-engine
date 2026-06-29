@@ -237,6 +237,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_policy", "reuse_policy", "media_policy",
         "allow_download", "allow_cut", "allow_upload",
         "auto_priority_change_allowed", "blocked",
+        "review_status", "default_queue_status",
+        "future_track", "source_track", "usage_scope",
+        "use_policy", "can_reuse_media", "draft_only",
+        "beauty_account_status",
         # 動画参照登録（prepare_video_reference.py）追加。メタ情報のみ。動画/サムネはdownloadしない。
         "title",                      # 動画タイトル（メタ情報）
         "transcript_status",         # PENDING（既定）/ COMPLETED / FAILED
@@ -351,6 +355,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_category", "candidate_status", "fetch_enabled",
         "allow_network_fetch", "allow_download", "allow_cut", "allow_upload",
         "auto_priority_change_allowed",
+        "review_status", "default_queue_status",
+        "future_track", "source_track", "usage_scope",
+        "use_policy", "can_reuse_media", "draft_only",
+        "beauty_account_status",
     ],
     # source account別の収集した投稿記録
     "source_account_posts": [

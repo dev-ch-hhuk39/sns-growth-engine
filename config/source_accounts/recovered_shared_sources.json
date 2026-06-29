@@ -1,0 +1,245 @@
+{
+  "_comment": "ユーザーが過去に共有済みのソースアカウントURLを回収してレジストリ化したファイル。default_sources.json と同一スキーマ。production_sources.example.json は変更せず、回収済み共有URLのみをここに集約する。",
+  "_warning": "No real fetch/download/cut/upload/post is authorized by this file. Threads/X は参考のみ・実取得なし。動画は download/cut/upload 禁止。",
+  "_recovery_note": "ユーザーは過去にソースアカウントURLと選定ルールを共有済み。本ファイルはそれを既存materialから回収したもの。未回収カテゴリは別途 WAITING_URL_INPUT として扱う。",
+  "_mandate_alias_keys": "use_policy / source_type / manual_only / can_reuse_media / status / collection_mode / category は mandate由来の別名キー。既存スキーマ field（rights_policy/reuse_policy/requires_local_login/allow_network_fetch/source_category/collection_method/candidate_status）と整合させた派生値。",
+  "sources": [
+    {
+      "source_id": "src_ns_threads_shared_001",
+      "source_name": "night_scout Threads shared kyaba_oohata",
+      "source_platform": "threads",
+      "platform": "threads",
+      "source_handle": "@kyaba_oohata",
+      "account_handle": "@kyaba_oohata",
+      "account_name": "kyaba_oohata",
+      "source_url": "https://www.threads.com/@kyaba_oohata",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "target_account_id": "night_scout",
+      "collection_method": "manual_url",
+      "collection_mode": "manual_only",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "approved",
+      "status": "approved",
+      "active": true,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "manual_only": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "can_reuse_media": false,
+      "media_policy": "do_not_download",
+      "use_policy": "REFERENCE_ONLY",
+      "source_type": "personal_creator",
+      "pdca_enabled": false,
+      "source_category": "night_work_scout",
+      "category": "night_work_scout",
+      "source_categories": [
+        "night_work_scout",
+        "cabaret_knowhow",
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "idea_seed",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "rules": [
+          "require_transform",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 20,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-29T00:00:00+09:00",
+      "updated_at": "2026-06-29T00:00:00+09:00",
+      "review_notes": "ユーザー共有済みThreads URL（回収）。キャバ嬢系個人発信。構成・フック・投稿アイデア参照のみ。実download/repost禁止。manual_only（実fetchなし）。"
+    },
+    {
+      "source_id": "src_ns_threads_shared_002",
+      "source_name": "night_scout Threads shared kyaba_rui_scout",
+      "source_platform": "threads",
+      "platform": "threads",
+      "source_handle": "@kyaba_rui_scout",
+      "account_handle": "@kyaba_rui_scout",
+      "account_name": "kyaba_rui_scout",
+      "source_url": "https://www.threads.com/@kyaba_rui_scout",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "target_account_id": "night_scout",
+      "collection_method": "manual_url",
+      "collection_mode": "manual_only",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "approved",
+      "status": "approved",
+      "active": true,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "manual_only": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "can_reuse_media": false,
+      "media_policy": "do_not_download",
+      "use_policy": "REFERENCE_ONLY",
+      "source_type": "personal_creator",
+      "pdca_enabled": false,
+      "source_category": "night_work_scout",
+      "category": "night_work_scout",
+      "source_categories": [
+        "night_work_scout",
+        "cabaret_knowhow",
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "idea_seed",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "rules": [
+          "require_transform",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 20,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-29T00:00:00+09:00",
+      "updated_at": "2026-06-29T00:00:00+09:00",
+      "review_notes": "ユーザー共有済みThreads URL（回収）。スカウト/夜職系個人発信。構成・フック・投稿アイデア参照のみ。実download/repost禁止。manual_only（実fetchなし）。"
+    },
+    {
+      "source_id": "src_ns_threads_shared_003",
+      "source_name": "night_scout Threads shared chiikawan400",
+      "source_platform": "threads",
+      "platform": "threads",
+      "source_handle": "@chiikawan400",
+      "account_handle": "@chiikawan400",
+      "account_name": "chiikawan400",
+      "source_url": "https://www.threads.com/@chiikawan400",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "target_account_id": "night_scout",
+      "collection_method": "manual_url",
+      "collection_mode": "manual_only",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "approved",
+      "status": "approved",
+      "active": true,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "manual_only": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "can_reuse_media": false,
+      "media_policy": "do_not_download",
+      "use_policy": "REFERENCE_ONLY",
+      "source_type": "personal_creator",
+      "pdca_enabled": false,
+      "source_category": "cabaret_knowhow",
+      "category": "cabaret_knowhow",
+      "source_categories": [
+        "cabaret_knowhow",
+        "night_work_scout",
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "idea_seed",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "rules": [
+          "require_transform",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 20,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-29T00:00:00+09:00",
+      "updated_at": "2026-06-29T00:00:00+09:00",
+      "review_notes": "ユーザー共有済みThreads URL（回収）。キャバ/夜職系個人発信。構成・フック・投稿アイデア参照のみ。実download/repost禁止。manual_only（実fetchなし）。"
+    }
+  ]
+}

@@ -952,3 +952,12 @@ Source candidates
 - Google Sheets確認は `scripts/recover_production_sheets_threads_first.py --verify-only` を使う。
 - 実投稿はThreadsのみ、1件ずつ、dry-run後。失敗時の即retryは禁止。
 - `data/threads_tokens`, `.env`, `output/media_cache`, `cloudinary_cache` はcommit禁止。
+
+## 過去共有sourceの回収・seed (2026-06-29 追記)
+
+- **ユーザーは過去にソースアカウントURL/選定ルールを共有済み**。「URLを入れてください」と返さない。
+- 既存 repo / `production_sources.example.json` から回収し `config/source_accounts/default_sources.json` へ dedup マージ済み(17→59件)。真実源は default_sources.json(`src/reference/source_registry.py` がロード)。
+- seed: `python3 scripts/seed_source_registry.py --dry-run --target-account all --platform all`(apply は `--apply --confirm-seed`)。
+- 安全方針: **X は今は投稿/開発対象外だが reference source として保持**(active=false/fetch_enabled=false/manual_only)。**TikTok/YouTube は動画参考・文字起こし・切り抜き候補化の対象だが reference_only / can_reuse_media=false**。**beauty は将来用で active=false**(posting account は `beauty_account` 維持、ラベルは `future_track=beauty_future`)。公式メディアは低優先(`low_priority_media_official`)。URL未入力は `WAITING_URL_INPUT`。third-party素材は勝手に再利用しない。
+- verify: `recover_production_sheets_threads_first.py --verify-only` に source registry 8 checks 追加。registry を増やした直後は `source_registry_reflected`/`video_sources_reflected` が「Sheets未seed」を示し fail することがある(seed apply で解消)。
+- 詳細・追加URL貼り付け形式・次手順(収集→採点→投稿案生成): [source-recovery-and-seed.md](source-recovery-and-seed.md)。
