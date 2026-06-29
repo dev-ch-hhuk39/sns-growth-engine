@@ -56,4 +56,4 @@ python3 scripts/import_reference_urls.py --source-id <id> --platform youtube --u
 - [reference-collection-usage.md](reference-collection-usage.md) — 収集の詳細手順
 - [source-to-post-pipeline.md](source-to-post-pipeline.md) — source → 投稿案までの全体像
 - [reference-pipeline-runbook.md](reference-pipeline-runbook.md) — 全 CLI 横断の安全設計
-- [source-recovery-and-seed.md](source-recovery-and-seed.md) — **過去共有sourceの回収・seed**。ユーザーは過去にURL/選定ルールを共有済みで、既存 repo/example から回収して `default_sources.json` に dedup マージ済み(17→59件)。`seed_source_registry.py` で dry-run/apply。X=reference保持(manual_only)、TikTok/YouTube=reference_only、beauty_future=inactive、公式メディア=低優先、URL未入力=WAITING_URL_INPUT。
+- [source-recovery-and-seed.md](source-recovery-and-seed.md) — **過去共有sourceの回収・seed**。ユーザーは過去にURL/選定ルールを共有済みで、既存 repo/example から回収して `default_sources.json` に dedup マージ済み(17→59件)。`seed_source_registry.py` で dry-run/apply。X=reference保持(manual_only)、TikTok/YouTube=reference_only、beautyは`target_account_ids=["beauty_account"]`維持でinactive、`beauty_future`はtrack labelのみ、公式メディア=低優先、URL未入力=WAITING_URL_INPUT。

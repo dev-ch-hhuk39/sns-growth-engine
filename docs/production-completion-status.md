@@ -269,5 +269,5 @@ commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
 
 - ユーザーが過去に共有済みのソースアカウントURL/選定ルールを、既存 repo / `production_sources.example.json` から回収し `config/source_accounts/default_sources.json` へ dedup マージ済み(17→59件)。
 - `scripts/seed_source_registry.py`(dry-run/apply)で source_accounts / reference_sources タブへ seed。
-- X=reference保持(投稿対象外・manual_only)、TikTok/YouTube=reference_only(can_reuse_media=false)、beauty_future=inactive、公式メディア=低優先、URL未入力=WAITING_URL_INPUT。
+- X=reference保持(投稿対象外・manual_only)、TikTok/YouTube=reference_only(can_reuse_media=false)、beautyは`target_account_ids=["beauty_account"]`維持でinactive、`beauty_future`はtrack labelのみ、公式メディア=低優先、URL未入力=WAITING_URL_INPUT。
 - 詳細: [source-recovery-and-seed.md](source-recovery-and-seed.md) / [ai-work-handoff.md](ai-work-handoff.md)。

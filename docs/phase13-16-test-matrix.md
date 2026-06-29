@@ -148,6 +148,24 @@ Live local Sheets runtime verification after this release: pending due to approv
 | `test_phase13_smoke_plan.py` | ✅ 18 / 18 PASS |
 | `test_phase13_publishers_production_safety.py` | ✅ 4 / 4 PASS |
 
+## Source Registry Integration Recheck (2026-06-29)
+
+| Check | Result |
+|---|---|
+| `default_sources.json` truth source | ✅ 59 sources / active 6 / fetch_enabled 0 |
+| `production_sources.example.json` source count | ✅ 91 sources / active 0 / fetch_enabled 0 |
+| `recovered_shared_sources.json` | ✅ 3 recovered Threads sources |
+| Placeholder URL/handle audit | ✅ `test_phase13_production_sources_real_urls.py` PASS |
+| Beauty target safety | ✅ `target_account_ids=["beauty_account"]`; no `beauty_future` target |
+| Beauty reference-only safety | ✅ `rights_policy=reference_only`, `use_policy=REFERENCE_ONLY`, `can_reuse_media=false` |
+| `source_rows()` safety columns | ✅ source_accounts/reference_sources both emit review/track/use/reuse safety fields |
+| seed dry-run all | ✅ 59 source_accounts / 33 reference_sources / no Sheets write |
+| seed apply without confirm | ✅ dry-run扱い / no Sheets write |
+| `test_seed_source_registry.py` | ✅ 10 / 10 PASS |
+| `test_source_registry_verify_checks.py` | ✅ 11 / 11 PASS |
+| Selected Phase13 regression | ✅ PASS / FAIL 0 |
+| Selected Phase10-11 queue/publisher safety | ✅ PASS / FAIL 0 |
+
 ## Phase 14-16 (未実装・テスト計画)
 
 ### Phase 14 — Scheduled Execution
