@@ -969,7 +969,8 @@ Source candidates
 - 作業ブランチ: `feature/codex-source-registry-integration`
 - 作業開始HEAD: `6942179828c5efb55c24e9287f02f7e8c8c1c628`
 - origin/main確認: `6942179828c5efb55c24e9287f02f7e8c8c1c628`
-- 完了commit: `2d60c537fddc6a5f4bfa58f260f89950884f23f3`
+- 実装commit: `3dc6e4c4167ee39e193947e2b0f93150849aef58`
+- handoff docs commit: `0eaa271258ce0a050c8498f7bc363e61fbeb8438`（この行以降の最終push HEADは `git rev-parse HEAD` / 最終報告を参照）
 
 ### 本システムについて
 
