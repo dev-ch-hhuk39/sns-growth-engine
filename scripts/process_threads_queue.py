@@ -28,7 +28,11 @@ from config_loader import get_config  # noqa: E402
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
-ELIGIBLE_STATUSES = {"WAITING_REVIEW", "PLANNED"}
+# 投稿対象として選ばれるのは READY のみ。
+# WAITING_REVIEW はレビュー待ち（人間が approve_queue.py で READY に昇格させるまで投稿不可）、
+# PLANNED は計画段階、DRAFT は生成/PDCA候補で、いずれも投稿対象にしない。
+# READY への昇格は approve_queue.py 経由でのみ行う（生成系CLIが直接 READY を書かない）。
+ELIGIBLE_STATUSES = {"READY"}
 FINAL_OR_LOCKED_STATUSES = {
     "POSTED",
     "PROCESSING",

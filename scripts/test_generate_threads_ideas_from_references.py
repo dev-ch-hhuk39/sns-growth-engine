@@ -2,7 +2,7 @@
 """generate_threads_ideas_from_references.build_plan の安全ゲートを検証する。
 
 最重要: 本 CLI は生成専用で投稿経路を持たず、実投稿は三重ゲート（全禁止）が必要。
-候補は WAITING_REVIEW（worker eligible）で書かれるが自動投稿はされない。
+候補は WAITING_REVIEW（worker 非対象=READY のみ）で書かれ、自動投稿はされない。
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ def main() -> int:
     checks.append(("実投稿は現状不可能", p["safety"]["real_post_possible_now"] is False))
     # 候補は WAITING_REVIEW で書かれる（正直な現実）
     checks.append(("候補 status は WAITING_REVIEW", p["safety"]["candidate_status"] == "WAITING_REVIEW"))
-    checks.append(("WAITING_REVIEW は worker eligible（事実）", p["safety"]["worker_selectable"] is True))
+    checks.append(("WAITING_REVIEW は worker 非対象（READY のみ）", p["safety"]["worker_selectable"] is False))
     # 実投稿に必要なゲートが明示されている
     checks.append(("実投稿ゲートに ALLOW_REAL_THREADS_POST 含む",
                    "ALLOW_REAL_THREADS_POST=true" in p["safety"]["real_post_requires"]))

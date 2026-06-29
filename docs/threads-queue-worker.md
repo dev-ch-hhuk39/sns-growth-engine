@@ -1,6 +1,6 @@
 # Threads Queue Worker
 
-Date: 2026-06-25 (最終更新 — queue WARN 設計追加)
+Date: 2026-06-29 (最終更新 — READY 承認モデル必須化)
 Created: 2026-06-24
 
 ## Purpose
@@ -11,11 +11,41 @@ It is intentionally narrow:
 
 - account: `night_scout` or `liver_manager`
 - platform: `threads`
-- eligible status: `WAITING_REVIEW` or `PLANNED`
+- eligible status: **`READY` のみ**（`ELIGIBLE_STATUSES = {"READY"}`）
 - default batch: 1 row
 - hard cap: 2 rows
 - `beauty_account`: blocked
 - X rows: ignored
+
+## Status モデル（READY 承認モデル）
+
+投稿対象は **`READY` のみ**。それ以外は投稿対象にしない。
+
+| status | 意味 | 投稿可否 |
+|--------|------|----------|
+| `WAITING_REVIEW` | レビュー待ち（生成系CLIの既定出力 / 人間レビュー前） | ✗ |
+| `READY` | 人間が `approve_queue.py` で承認済み | ✓ worker 対象 |
+| `PROCESSING` | worker 処理中（一時状態） | — |
+| `POSTED` | 投稿完了 | ✗（再投稿しない） |
+| `DRAFT` | 生成 / PDCA 候補 | ✗ |
+| `PLANNED` | 計画段階（投稿対象外） | ✗ |
+| `REJECTED` | レビューで却下 | ✗ |
+
+状態遷移: `WAITING_REVIEW → READY → PROCESSING → POSTED`
+
+- `READY` への昇格は **`approve_queue.py` 経由でのみ** 行う。生成系CLI（refill / ideas / metrics 候補）は直接 `READY` を書かない（既定は `WAITING_REVIEW` / `DRAFT`）。
+- `approve_queue.py` は status を `READY` か `REJECTED` にのみ変更し、`generation_mode` を保持したまま logs に `queue_approved` 証跡を残す。
+
+```bash
+# 一覧確認（読み取り専用）
+python3 scripts/approve_queue.py --account-id night_scout --status WAITING_REVIEW --list
+# WAITING_REVIEW → READY へ昇格（人間承認）。--approve は READY 変更のショートカット
+python3 scripts/approve_queue.py --queue-id <id> --approve --reason "<理由>"
+# 却下（REJECTED）
+python3 scripts/approve_queue.py --queue-id <id> --reject --reason "<理由>"
+```
+
+`--status` に指定できる値は `READY` / `REJECTED` のみ（`ALLOWED_NEW_STATUSES`）。`--reason` は変更時必須。`--dry-run` では Sheets を変更せず logs にも証跡を残さない。
 
 ## Safety Gates
 

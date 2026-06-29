@@ -758,6 +758,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     social = _records(client, "social_derivatives")
     drafts = _records(client, "drafts")
     suggestions = _records(client, "prompt_improvement_suggestions")
+    logs = _records(client, "logs")
 
     # --- media 承認・Cloudinary upload の整合（承認ゲートの不変条件を verify）---
     from media.queue_media_attach import is_media_rights_clear, resolve_media_url
@@ -782,10 +783,11 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     ]
 
     # --- metrics ループの安全（生成候補が worker に拾われない）---
+    # metrics 由来候補は DRAFT 既定。WAITING_REVIEW/PLANNED/READY のいずれにもしない。
     metrics_candidate_postable = [
         r for r in queue
         if str(r.get("generation_mode", "")).strip() == "metrics_driven_candidate"
-        and str(r.get("status", "")).upper() in {"WAITING_REVIEW", "PLANNED"}
+        and str(r.get("status", "")).upper() in {"WAITING_REVIEW", "PLANNED", "READY"}
     ]
     # metrics 由来の改善提案は WAITING_REVIEW（自動適用しない）
     metrics_sugg_sources = {"import_threads_metrics_manual", "generate_next_queue_from_metrics"}
@@ -920,6 +922,104 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         str(r.get("status", "")).strip().upper() not in POSTABLE_STATUSES for r in reference_scores
     )
 
+    # --- READY 必須化の不変条件（worker eligibility = 唯一の真実）---
+    import importlib
+
+    _scripts_dir = str(ROOT / "scripts")
+    if _scripts_dir not in sys.path:
+        sys.path.insert(0, _scripts_dir)
+    _ptq = importlib.import_module("process_threads_queue")
+    _aq = importlib.import_module("approve_queue")
+    worker_eligible = set(_ptq.ELIGIBLE_STATUSES)
+    approve_allowed = set(getattr(_aq, "ALLOWED_NEW_STATUSES", set()))
+
+    def _is_generated_candidate(r: dict[str, Any]) -> bool:
+        gm = str(r.get("generation_mode", "")).strip().lower()
+        src = str(r.get("save_source", "")).strip().lower()
+        gen_sources = {
+            "generate_next_queue_from_metrics",
+            "refill_threads_queue",
+            "generate_threads_ideas_from_references",
+        }
+        return (gm not in ("", "manual")) or (src in gen_sources)
+
+    ready_rows = [r for r in queue if str(r.get("status", "")).upper() == "READY"]
+
+    # READY への昇格は approve_queue.py 経由でのみ正当（logs タブに queue_approved が残る）。
+    # 生成系CLIが READY を直接書いた／承認証跡なしに READY になった行だけを違反として検出する。
+    # 人間が承認した生成候補（status=READY かつ generation_mode が残る）は誤検知しない。
+    import re as _re
+
+    _approved_qids: set[str] = set()
+    for _lg in logs:
+        if str(_lg.get("operation", "")).strip() != "queue_approved":
+            continue
+        _blob = f"{_lg.get('details', '')} {_lg.get('message', '')}"
+        for _mt in _re.findall(r"queue_id=([^\s]+)", _blob):
+            _approved_qids.add(_mt.strip())
+
+    generated_ready = [r for r in ready_rows if _is_generated_candidate(r)]
+    generated_ready_unapproved = [
+        r for r in generated_ready
+        if str(r.get("queue_id", "")).strip() not in _approved_qids
+    ]
+    ready_x_or_beauty = [
+        r for r in ready_rows
+        if str(r.get("platform", "")).lower() == "x"
+        or str(r.get("account_id", "")) == "beauty_account"
+    ]
+
+    # media は queue 行から media_url（埋め込み）か media_asset_id（参照）のどちらでも辿れる。
+    media_by_url: dict[str, dict[str, Any]] = {}
+    media_by_id: dict[str, dict[str, Any]] = {}
+    for _m in media:
+        _u = (resolve_media_url(_m) or "").strip()
+        if _u:
+            media_by_url[_u] = _m
+        _aid = str(_m.get("media_asset_id", "")).strip()
+        if _aid:
+            media_by_id[_aid] = _m
+
+    def _row_media_url(r: dict[str, Any]) -> str:
+        return str(r.get("media_url", "")).strip()
+
+    def _row_media(r: dict[str, Any]) -> dict[str, Any] | None:
+        """queue 行が指す media asset を media_url 優先・media_asset_id 補完で解決する。"""
+        u = _row_media_url(r)
+        if u and u in media_by_url:
+            return media_by_url[u]
+        aid = str(r.get("media_asset_id", "")).strip()
+        if aid and aid in media_by_id:
+            return media_by_id[aid]
+        return None
+
+    def _row_has_media_ref(r: dict[str, Any]) -> bool:
+        return bool(_row_media_url(r)) or bool(str(r.get("media_asset_id", "")).strip())
+
+    def _row_requires_media(r: dict[str, Any]) -> bool:
+        strat = str(r.get("media_strategy", "")).strip().lower()
+        return _bool(r.get("media_required")) or (strat not in ("", "none", "text_only"))
+
+    ready_media_missing = [
+        r for r in ready_rows if _row_requires_media(r) and not _row_has_media_ref(r)
+    ]
+    ready_media_unapproved = [
+        r for r in ready_rows
+        if _row_media(r) is not None and not _approved(_row_media(r))
+    ]
+    ready_media_reference_only = [
+        r for r in ready_rows
+        if _row_media(r) is not None
+        and (
+            str(_row_media(r).get("reuse_policy", "")).strip().lower() == "no_reuse"
+            or str(_row_media(r).get("use_status", "")).strip().upper() == "REFERENCE_ONLY"
+        )
+    ]
+    real_post_flags_false = all(
+        str(os.environ.get(_f, "")).strip().lower() not in {"1", "true", "yes"}
+        for _f in ("PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_REAL_X_POST")
+    )
+
     checks = {
         "accounts_3_present": all(a in accounts for a in ["night_scout", "liver_manager", "beauty_account"]),
         "night_scout_cta": accounts.get("night_scout", {}).get("cta_type") == "LINE_AND_DM",
@@ -983,6 +1083,17 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "x_queue_absent": not any(str(r.get("platform", "")).lower() == "x" for r in queue),
         "drafts_seeded": len([r for r in drafts if str(r.get("draft_id", "")).startswith("recovery_")]) >= 6,
         "social_threads_seeded": len([r for r in social if str(r.get("platform", "")).lower() == "threads"]) >= 6,
+        # --- READY 必須化の不変条件 ---
+        "waiting_review_not_postable": "WAITING_REVIEW" not in worker_eligible,
+        "ready_is_only_postable_status": worker_eligible == {"READY"},
+        "planned_not_postable_or_documented": "PLANNED" not in worker_eligible,
+        "generated_candidates_not_ready_by_default": not generated_ready_unapproved,
+        "approve_queue_required_for_ready": "READY" in approve_allowed,
+        "no_ready_for_x_or_beauty": not ready_x_or_beauty,
+        "no_media_required_without_media_url": not ready_media_missing,
+        "no_unapproved_media_ready": not ready_media_unapproved,
+        "no_reference_only_media_ready": not ready_media_reference_only,
+        "real_post_flags_false_default": real_post_flags_false,
     }
     return {
         "checks": checks,

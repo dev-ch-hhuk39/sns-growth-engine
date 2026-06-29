@@ -21,7 +21,9 @@ def main() -> int:
     mod = _load()
     source = SCRIPT.read_text(encoding="utf-8")
     checks = [
-        ("eligible statuses", mod.ELIGIBLE_STATUSES == {"WAITING_REVIEW", "PLANNED"}),
+        ("eligible statuses READY only", mod.ELIGIBLE_STATUSES == {"READY"}),
+        ("waiting_review not eligible", "WAITING_REVIEW" not in mod.ELIGIBLE_STATUSES),
+        ("planned not eligible", "PLANNED" not in mod.ELIGIBLE_STATUSES),
         ("final statuses skipped", {"POSTED", "PROCESSING", "FAILED", "POSTED_SAVE_FAILED"}.issubset(mod.FINAL_OR_LOCKED_STATUSES)),
         ("beauty blocked", "beauty_account" in mod.BEAUTY_BLOCKED),
         ("threads only selector", 'platform != "threads"' in source),

@@ -48,7 +48,9 @@ Check these tabs first:
 ## Safety Checks
 
 - `投稿キュー`: no `platform=x` rows from recovery seed.
-- `投稿キュー`: only `WAITING_REVIEW` or `PLANNED` rows.
+- `投稿キュー`: worker が投稿するのは **`status=READY` の行のみ**。`WAITING_REVIEW` / `DRAFT` / `PLANNED` は投稿対象外（recovery seed は既定で `WAITING_REVIEW`）。
+- `投稿キュー`: `READY` は `approve_queue.py` 経由の人間承認でのみ付く（logs に `queue_approved` 証跡が残る）。生成系CLIが直接 `READY` を書いていないこと。
+- `投稿キュー`: `platform=x` / `beauty_account` の行が `READY` になっていないこと。
 - `投稿キュー`: rows already `POSTED`, `PROCESSING`, `FAILED`, `POSTED_SAVE_FAILED`, or `DUPLICATE_BLOCKED` must not be reposted.
 - `投稿結果`: real Threads rows should include `queue_id`, `derivative_id`, `platform=threads`, `external_post_id`, `status=POSTED`, `metrics_status=PENDING|MEASURED|MANUAL_PENDING`, `real_post`, `media_used=false`, and `posted_text`.
 - `投稿結果`: no duplicate `posted_text` for the same `account_id/platform/status=POSTED`.
@@ -86,7 +88,7 @@ python3 scripts/repair_posted_results_integrity.py --apply
 python3 scripts/recover_production_sheets_threads_first.py --verify-only
 ```
 
-Expected: `verification_passed=33 failed=0`
+Expected: `failed=0`（check 総数は **51 件**＝2026-06-25 snapshot の 33 件 → item J の media/metrics チェック等で +8 → READY 承認モデルで +10。`passed` は seed 充足状況で変動するが、`failed=[]` であれば合格）
 
 - 2026-06-25 初回達成（posted_results 整合性修復後）
 - 2026-06-25 再確認（night_scout 孤児投稿復旧後 count_queue_night_scout=2, count_posted_results=4）

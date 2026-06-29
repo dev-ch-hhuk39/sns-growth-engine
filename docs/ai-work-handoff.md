@@ -4,11 +4,31 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-06-24
-- 作業AI: Claude Code (Sonnet 4.6)
+- Date: 2026-06-29
+- 作業AI: Claude Code (Opus 4.8)
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-06-23 (Threads初回実投稿成功 / バグ修正3件)
+- 前回更新: 2026-06-24 (Threads初回実投稿成功 / バグ修正3件 ほか)
+
+## 最新作業内容 (2026-06-29) — Threads worker READY 承認モデル必須化（Phase 3）
+
+**重要（現行仕様）**: Threads worker が投稿するのは **`status=READY` の行のみ**（`process_threads_queue.py` `ELIGIBLE_STATUSES = {"READY"}`）。
+本ドキュメント下部の旧エントリにある「`WAITING_REVIEW` / `PLANNED` のみ対象」は **旧仕様** であり、以後は無効。
+
+- 投稿可否モデル: `WAITING_REVIEW → READY → PROCESSING → POSTED`。
+  - `WAITING_REVIEW`: 生成系CLIの既定出力（レビュー待ち、投稿不可）
+  - `DRAFT`: 生成 / PDCA 候補（投稿不可）
+  - `PLANNED`: 計画段階（投稿不可）
+  - `READY`: 人間が `approve_queue.py` で承認済み（worker 投稿対象）
+  - `POSTED`: 投稿完了（再投稿しない）
+- `READY` 昇格は **`approve_queue.py`（WAITING_REVIEW → READY/REJECTED）経由のみ**。生成系CLIは `READY` を直接書かない。承認時 logs に `queue_approved` 証跡。
+- X 側 `publish_queue.py`（`--status READY` 必須）と対称化。旧「承認モデル非対称」課題は解消。
+- verify（`recover_production_sheets_threads_first.py`）に READY 承認モデル安全チェック10件追加。check 総数 51 件、合格条件 `failed=[]`。
+  - `generated_candidates_not_ready_by_default` は logs の `queue_approved` 証跡で人間承認済み生成行を誤検知しない。
+  - media 権利チェックは `media_url` / `media_asset_id` 双方で連携。
+- 回帰固定テスト `test_recover_verify_ready_checks.py` ほか READY 系を追加。offline curated suite **55 / 55 PASS**。
+- 更新docs: `threads-queue-worker.md` / `threads-operation-runbook.md` / `sheets-manual-check-guide.md` / `reference-pipeline-runbook.md` / `production-completion-status.md` / 本ファイル。
+- 安全境界（変更なし）: 実投稿/実upload/download なし。`PUBLISH_ENABLED` / `ALLOW_REAL_THREADS_POST` / `ALLOW_CLOUDINARY_UPLOAD` 等は false 既定。beauty_account は draft_only。X は将来実装予定（設計・docs から削除しない）。
 
 ## 最新作業内容 (2026-06-24)
 
@@ -77,7 +97,7 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 #### 実装内容
 
 - `process_threads_queue.py`
-  - `WAITING_REVIEW` / `PLANNED` の Threads queue row のみ対象。
+  - （※旧仕様。現在は worker 投稿対象は `READY` のみ。冒頭の 2026-06-29 エントリ参照）`WAITING_REVIEW` / `PLANNED` の Threads queue row のみ対象。
   - `beauty_account` BLOCKED、X row ignored。
   - dry-runは投稿なしで候補・validation結果を出力。
   - real modeは `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` + `--confirm-real-post` 必須。

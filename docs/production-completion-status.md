@@ -1,12 +1,23 @@
 # Production Completion Status
 
-Date: 2026-06-25 (最終更新)
+Date: 2026-06-29 (最終更新 — READY 承認モデル必須化)
 Created: 2026-06-24
 
 ## Status
 
 The project is operational for Threads-first manual review operation.
-`threads-queue-worker.yml` の Sheets verify は 2026-06-25 時点で **verification_passed=33 failed=0** を達成・維持。
+`threads-queue-worker.yml` の Sheets verify は check 総数 **51 件**（2026-06-25 snapshot の 33 件 → item J の media/metrics チェック等で +8 → READY 承認モデルで +10）。合格条件は `failed=[]`（`passed` は seed 充足状況で変動）。READY 承認モデル追加後の live `--verify-only` 再確認は #68 で実施。
+
+## 2026-06-29 アップデート — Threads worker READY 承認モデル必須化（Phase 3）
+
+### 変更点
+
+- `process_threads_queue.py` の投稿対象を **`READY` のみ**に変更（`ELIGIBLE_STATUSES = {"READY"}`）。
+  `WAITING_REVIEW` / `DRAFT` / `PLANNED` は投稿対象外。状態遷移 `WAITING_REVIEW → READY → PROCESSING → POSTED`。
+- 生成系CLI（refill / clip / metrics 候補 / seed）は `READY` を直接書かない。`READY` 昇格は `approve_queue.py`（WAITING_REVIEW → READY/REJECTED）経由のみ。承認時は logs に `queue_approved` 証跡を残す。
+- X 側 `publish_queue.py` の `--status READY` 必須ゲートと対称になり、旧「承認モデル非対称」の潜在課題を解消。
+- verify に READY 承認モデルの安全チェック10件を追加（`waiting_review_not_postable` / `ready_is_only_postable_status` / `generated_candidates_not_ready_by_default`（承認証跡で誤検知防止）/ `no_ready_for_x_or_beauty` / media 権利3件 ほか）。
+- 回帰固定テスト `test_recover_verify_ready_checks.py` ほか READY 系11本を追加。curated suite **55 / 55 PASS**（offline）。
 
 ## 2026-06-25 アップデート — posted_results 整合性修復
 
@@ -221,8 +232,9 @@ commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
    - 決定論的 id による再インポートの二重追記を `row_exists()` ガードで防止（冪等化）。
 5. `scripts/generate_next_queue_from_metrics.py` 新規（item L）
    - posted_results の MEASURED 行を ER 降順でランキングし、次回候補を生成。
-   - 生成 queue 行の status は `process_threads_queue.py` の `ELIGIBLE_STATUSES`（{WAITING_REVIEW, PLANNED}）に
+   - 生成 queue 行の status は worker の `ELIGIBLE_STATUSES`（現在は {READY}）に
      **含めない**（`DRAFT`）。worker が自動投稿しないことをコードで保証（assert）。
+     ※ 2026-06-29 に `ELIGIBLE_STATUSES` は {READY} に変更（READY 承認モデル）。本項記載時は {WAITING_REVIEW, PLANNED} だったが、DRAFT が非対象である点は変わらない。
    - 既定 PLAN_ONLY。実書き込みは `--apply --confirm-generate`。beauty_account / x は対象外。
      改善提案は status=WAITING_REVIEW（auto_apply=false）。
 6. `recover_production_sheets_threads_first.py` verify 強化（item M）
@@ -248,7 +260,7 @@ commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
 
 ## Remaining Manual Checks
 
-- `night_scout` の Threads 次投稿候補（WAITING_REVIEW 3案）をレビューして承認する
+- `night_scout` の Threads 次投稿候補（WAITING_REVIEW）をレビューし、`approve_queue.py --queue-id <id> --approve --reason "..."` で `READY` に昇格して初めて worker 投稿対象になる
 - Threads insights（night_scout 初回投稿 / liver_manager 投稿）を確認する
 - X API Credits を補充し、X 投稿を再開するかどうか判断する
 - Cloudinary upload を使う場合は `ALLOW_CLOUDINARY_UPLOAD=true` で `media-approved-pilot.yml` を実行する

@@ -10,16 +10,18 @@
   - 投稿先は threads のみ（X は将来対応のみ・本 CLI からは生成しない）。
   - 本 CLI は「生成」だけを行う。委譲先（generate_from_references.py /
     generate_from_video_clips.py）は候補を作るだけで投稿 worker を呼ばない。
-  - 生成候補は WAITING_REVIEW で書き込まれる。これは worker の ELIGIBLE_STATUSES
-    に含まれる（worker が拾える）ため、自動投稿されない保証は次の多層で担保する:
-      1. 本 CLI も委譲先も投稿処理を一切呼ばない（生成専用）。
-      2. 実投稿には別経路 worker の三重ゲート（--confirm-real-post かつ
+  - 生成候補は WAITING_REVIEW（レビュー待ち）で書き込まれる。これは worker の
+    ELIGIBLE_STATUSES（={READY}）に含まれないため、worker は決して拾わない。
+    自動投稿されない保証は次の多層で担保する:
+      1. 生成候補は WAITING_REVIEW であり worker 非対象（worker は READY のみ拾う）。
+      2. 本 CLI も委譲先も投稿処理を一切呼ばない（生成専用）。
+      3. READY への昇格は approve_queue.py で人間が行う（生成系は READY を書かない）。
+      4. 実投稿には別経路 worker の三重ゲート（--confirm-real-post かつ
          PUBLISH_ENABLED=true かつ ALLOW_REAL_THREADS_POST=true）が必要。
          これら 3 つは現状すべて禁止のため実投稿は不可能。
-      3. beauty_account / X は本 CLI で BLOCKED。
-  - 残存アーキ懸念: Threads worker は WAITING_REVIEW を eligible 扱いし、X の
-    publish_queue.py のような「項目ごとの人間 READY 昇格ゲート」を持たない。
-    人間ゲートは approve_queue.py（WAITING_REVIEW → READY/REJECTED）に依存する。
+      5. beauty_account / X は本 CLI で BLOCKED。
+  - 人間ゲート: approve_queue.py（WAITING_REVIEW → READY/REJECTED）。worker が
+    READY のみを eligible 扱いすることで「項目ごとの人間 READY 昇格ゲート」を担保する。
   - beauty_account は対象外。
 """
 from __future__ import annotations
@@ -36,8 +38,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI_NAME = "generate_threads_ideas_from_references"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
 ALLOWED_PLATFORMS = {"threads"}
-# worker が拾うステータス（process_threads_queue.py の ELIGIBLE_STATUSES と一致）。
-ELIGIBLE_STATUSES = {"WAITING_REVIEW", "PLANNED"}
+# worker が拾うステータス（process_threads_queue.py の ELIGIBLE_STATUSES と一致させる）。
+# READY のみが worker 対象。生成候補(WAITING_REVIEW)は worker 非対象であることを明示する。
+ELIGIBLE_STATUSES = {"READY"}
 # 委譲先が実際に書き込む候補ステータス（両委譲先とも WAITING_REVIEW 固定）。
 CANDIDATE_STATUS = "WAITING_REVIEW"
 # 実投稿に必要なゲート（現状すべて禁止 → 実投稿は不可能）。
