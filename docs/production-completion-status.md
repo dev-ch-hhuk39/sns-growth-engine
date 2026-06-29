@@ -264,3 +264,10 @@ commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
 - Threads insights（night_scout 初回投稿 / liver_manager 投稿）を確認する
 - X API Credits を補充し、X 投稿を再開するかどうか判断する
 - Cloudinary upload を使う場合は `ALLOW_CLOUDINARY_UPLOAD=true` で `media-approved-pilot.yml` を実行する
+
+## 過去共有sourceの回収・registry化 (2026-06-29)
+
+- ユーザーが過去に共有済みのソースアカウントURL/選定ルールを、既存 repo / `production_sources.example.json` から回収し `config/source_accounts/default_sources.json` へ dedup マージ済み(17→59件)。
+- `scripts/seed_source_registry.py`(dry-run/apply)で source_accounts / reference_sources タブへ seed。
+- X=reference保持(投稿対象外・manual_only)、TikTok/YouTube=reference_only(can_reuse_media=false)、beautyは`target_account_ids=["beauty_account"]`維持でinactive、`beauty_future`はtrack labelのみ、公式メディア=低優先、URL未入力=WAITING_URL_INPUT。
+- 詳細: [source-recovery-and-seed.md](source-recovery-and-seed.md) / [ai-work-handoff.md](ai-work-handoff.md)。

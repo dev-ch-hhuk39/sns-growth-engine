@@ -80,7 +80,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_002",
@@ -146,7 +149,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_003",
@@ -212,7 +218,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_004",
@@ -278,7 +287,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_005",
@@ -344,7 +356,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_006",
@@ -410,7 +425,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_007",
@@ -476,7 +494,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_008",
@@ -542,7 +563,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_009",
@@ -608,7 +632,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-16T08:36:54+09:00",
-      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates."
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_001",
@@ -689,7 +716,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_002",
@@ -770,7 +800,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_003",
@@ -851,7 +884,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_004",
@@ -932,7 +968,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_005",
@@ -1013,7 +1052,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_006",
@@ -1094,7 +1136,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_007",
@@ -1175,7 +1220,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_008",
@@ -1256,7 +1304,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_009",
@@ -1337,7 +1388,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_001",
@@ -1409,7 +1463,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
-      "source_platform_alias": "youtube"
+      "source_platform_alias": "youtube",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_002",
@@ -1481,7 +1538,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
-      "source_platform_alias": "youtube"
+      "source_platform_alias": "youtube",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_003",
@@ -1553,7 +1613,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
-      "source_platform_alias": "youtube_playlist"
+      "source_platform_alias": "youtube_playlist",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_004",
@@ -1625,7 +1688,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
-      "source_platform_alias": "youtube"
+      "source_platform_alias": "youtube",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_005",
@@ -1697,7 +1763,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
-      "source_platform_alias": "youtube"
+      "source_platform_alias": "youtube",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_006",
@@ -1769,7 +1838,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
-      "source_platform_alias": "youtube_streams"
+      "source_platform_alias": "youtube_streams",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_007",
@@ -1841,7 +1913,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "item_type": "video",
-      "source_platform_alias": "youtube"
+      "source_platform_alias": "youtube",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_note_cand_001",
@@ -1912,7 +1987,10 @@
         "key_points",
         "replay_tip"
       ],
-      "copy_policy": "do_not_copy_body"
+      "copy_policy": "do_not_copy_body",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_note_cand_002",
@@ -1983,7 +2061,10 @@
         "key_points",
         "replay_tip"
       ],
-      "copy_policy": "do_not_copy_body"
+      "copy_policy": "do_not_copy_body",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_note_cand_003",
@@ -2054,7 +2135,10 @@
         "key_points",
         "replay_tip"
       ],
-      "copy_policy": "do_not_copy_body"
+      "copy_policy": "do_not_copy_body",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_note_cand_004",
@@ -2125,7 +2209,10 @@
         "key_points",
         "replay_tip"
       ],
-      "copy_policy": "do_not_copy_body"
+      "copy_policy": "do_not_copy_body",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_note_cand_005",
@@ -2196,7 +2283,10 @@
         "key_points",
         "replay_tip"
       ],
-      "copy_policy": "do_not_copy_body"
+      "copy_policy": "do_not_copy_body",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_note_cand_006",
@@ -2267,7 +2357,10 @@
         "key_points",
         "replay_tip"
       ],
-      "copy_policy": "do_not_copy_body"
+      "copy_policy": "do_not_copy_body",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ba_yt_cand_001",
@@ -2291,7 +2384,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2332,7 +2425,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2345,7 +2438,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_002",
@@ -2369,7 +2467,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2410,7 +2508,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2423,7 +2521,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_003",
@@ -2447,7 +2550,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2488,7 +2591,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2501,7 +2604,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_004",
@@ -2525,7 +2633,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2566,7 +2674,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2579,7 +2687,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_005",
@@ -2603,7 +2716,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2644,7 +2757,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2657,7 +2770,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_006",
@@ -2681,7 +2799,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2722,7 +2840,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2735,7 +2853,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_007",
@@ -2759,7 +2882,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2800,7 +2923,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2813,7 +2936,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_008",
@@ -2837,7 +2965,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2878,7 +3006,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2891,7 +3019,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_009",
@@ -2915,7 +3048,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -2956,7 +3089,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -2969,7 +3102,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_yt_cand_010",
@@ -2993,7 +3131,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": false,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3034,7 +3172,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3047,7 +3185,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_001",
@@ -3071,7 +3214,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3106,7 +3249,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3122,7 +3265,12 @@
       "draft_only": true,
       "review_flags": [
         "美容専門ではない可能性があるため要レビュー"
-      ]
+      ],
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_002",
@@ -3146,7 +3294,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3181,7 +3329,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3197,7 +3345,12 @@
       "draft_only": true,
       "review_flags": [
         "ASMR系は癒し/ルーティン/雰囲気参考のみ"
-      ]
+      ],
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_003",
@@ -3221,7 +3374,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3256,7 +3409,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3269,7 +3422,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_004",
@@ -3293,7 +3451,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3328,7 +3486,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3341,7 +3499,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_005",
@@ -3365,7 +3528,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3400,7 +3563,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3413,7 +3576,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_006",
@@ -3437,7 +3605,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3472,7 +3640,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3485,7 +3653,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_007",
@@ -3509,7 +3682,7 @@
       "allow_cut": false,
       "allow_upload": false,
       "requires_local_login": true,
-      "rights_policy": "unknown",
+      "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "plan_only",
       "pdca_enabled": false,
@@ -3544,7 +3717,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3557,7 +3730,12 @@
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_x_cand_001",
@@ -3615,7 +3793,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3627,7 +3805,12 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_x_cand_002",
@@ -3685,7 +3868,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3697,7 +3880,12 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_x_cand_003",
@@ -3755,7 +3943,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3767,7 +3955,12 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_x_cand_004",
@@ -3825,7 +4018,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3837,7 +4030,12 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_x_cand_005",
@@ -3895,7 +4093,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3907,7 +4105,12 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_x_cand_006",
@@ -3965,7 +4168,7 @@
         ]
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -3977,7 +4180,12 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ns_query_001",
@@ -4039,7 +4247,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "キャバ嬢",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_002",
@@ -4101,7 +4312,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "夜職",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_003",
@@ -4163,7 +4377,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "キャバクラ",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_004",
@@ -4225,7 +4442,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "ラウンジ嬢",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_005",
@@ -4287,7 +4507,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "昼職から夜職",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_006",
@@ -4349,7 +4572,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "キャバ 働き方",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_007",
@@ -4411,7 +4637,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "キャバ メンタル",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_008",
@@ -4473,7 +4702,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "キャバ 売上",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_009",
@@ -4535,7 +4767,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "指名",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_010",
@@ -4597,7 +4832,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "本指名",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_011",
@@ -4659,7 +4897,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "同伴",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_012",
@@ -4721,7 +4962,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "アフター",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_query_013",
@@ -4783,7 +5027,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "夜職あるある",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_001",
@@ -4845,7 +5092,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "Pococha",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_002",
@@ -4907,7 +5157,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "ポコチャ",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_003",
@@ -4969,7 +5222,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "ライバー",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_004",
@@ -5031,7 +5287,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "ライブ配信",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_005",
@@ -5093,7 +5352,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "TikTok LIVE",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_006",
@@ -5155,7 +5417,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "配信者",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_007",
@@ -5217,7 +5482,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "リスナー対応",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_008",
@@ -5279,7 +5547,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "配信 メンタル",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_009",
@@ -5341,7 +5612,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "ライバー事務所",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_010",
@@ -5403,7 +5677,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "投げ銭",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_query_011",
@@ -5465,7 +5742,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "query_term": "ファン化",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ba_query_001",
@@ -5520,7 +5800,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -5534,7 +5814,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "コスメ",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_002",
@@ -5589,7 +5874,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -5603,7 +5888,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "美容",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_003",
@@ -5658,7 +5948,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -5672,7 +5962,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "垢抜け",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_004",
@@ -5727,7 +6022,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -5741,7 +6036,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "美容家電",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_005",
@@ -5796,7 +6096,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -5810,7 +6110,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "ヘアケア",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_006",
@@ -5865,7 +6170,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -5879,7 +6184,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "スキンケア",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_007",
@@ -5934,7 +6244,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -5948,7 +6258,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "メイク",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_008",
@@ -6003,7 +6318,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -6017,7 +6332,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "美容サロン",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_009",
@@ -6072,7 +6392,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -6086,7 +6406,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "ReFa",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_010",
@@ -6141,7 +6466,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -6155,7 +6480,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "Dyson",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_011",
@@ -6210,7 +6540,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -6224,7 +6554,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "BALMUDA",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_012",
@@ -6279,7 +6614,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -6293,7 +6628,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "ホテルステイ",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_query_013",
@@ -6348,7 +6688,7 @@
         "beauty_medical_risk_review_required": true
       },
       "default_queue_status": "WAITING_REVIEW",
-      "review_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
       "max_items_per_run": 10,
       "language": "ja",
       "region": "JP",
@@ -6362,7 +6702,12 @@
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "query_term": "優待",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "future_track": "beauty_future",
+      "source_track": "beauty_future"
     }
   ]
 }

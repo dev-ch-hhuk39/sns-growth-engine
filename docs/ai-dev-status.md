@@ -2,6 +2,29 @@
 
 ## Current Status
 
+- Date: 2026-06-29
+- Branch: `feature/codex-source-registry-integration`
+- Start HEAD: `6942179828c5efb55c24e9287f02f7e8c8c1c628`
+- Status: Source registry integration completed locally. `default_sources.json` is the truth source with 59 sources; `production_sources.example.json` has 91 sources; `recovered_shared_sources.json` has 3 recovered Threads sources. Beauty sources keep `target_account_ids=["beauty_account"]`; future usage is represented by `future_track/source_track/usage_scope`, not by renaming the posting account.
+
+## Latest Source Registry Work
+
+- Normalized source safety fields: `use_policy=REFERENCE_ONLY`, `can_reuse_media=false`, and beauty `rights_policy=reference_only`.
+- Extended `source_rows()` to pass `review_status`, `default_queue_status`, `future_track`, `source_track`, `usage_scope`, `use_policy`, `can_reuse_media`, `draft_only`, and `beauty_account_status` into `source_accounts` / `reference_sources`.
+- Extended Sheets tab headers by appending the same safety columns; existing columns are not removed or reordered.
+- Added `scripts/seed_source_registry.py` support for `--target-account beauty_account` and `--platform query`, while keeping `beauty_future` as a filter alias only.
+- Added source scoring helper and tests for priority/scoring guidance; scoring does not auto-change source priority.
+- Added verify checks for preserving `beauty_account` target and reference-only beauty safety.
+
+## Latest Test Status
+
+- Source registry tests: `test_seed_source_registry.py` PASS 10 / FAIL 0; `test_source_registry_verify_checks.py` PASS 11 / FAIL 0.
+- Phase13/source/media/publisher/PDCA selected regression: PASS, 0 FAIL.
+- Phase10/11/thread/queue safety selected regression: PASS, 0 FAIL.
+- Dry-run: `seed_source_registry.py --dry-run --target-account all --platform all` PASS; `--apply` without `--confirm-seed` stays dry-run.
+
+## Previous Status
+
 - Date: 2026-06-24
 - Branch: `main`
 - Start HEAD: `5e4197eba17c25730d59b400df0113a5ef381169`

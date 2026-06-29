@@ -952,3 +952,174 @@ Source candidates
 - Google Sheets確認は `scripts/recover_production_sheets_threads_first.py --verify-only` を使う。
 - 実投稿はThreadsのみ、1件ずつ、dry-run後。失敗時の即retryは禁止。
 - `data/threads_tokens`, `.env`, `output/media_cache`, `cloudinary_cache` はcommit禁止。
+
+## 過去共有sourceの回収・seed (2026-06-29 追記)
+
+- **ユーザーは過去にソースアカウントURL/選定ルールを共有済み**。「URLを入れてください」と返さない。
+- 既存 repo / `production_sources.example.json` から回収し `config/source_accounts/default_sources.json` へ dedup マージ済み(17→59件)。真実源は default_sources.json(`src/reference/source_registry.py` がロード)。
+- seed: `python3 scripts/seed_source_registry.py --dry-run --target-account all --platform all`(apply は `--apply --confirm-seed`)。
+- 安全方針: **X は今は投稿/開発対象外だが reference source として保持**(active=false/fetch_enabled=false/manual_only)。**TikTok/YouTube は動画参考・文字起こし・切り抜き候補化の対象だが reference_only / can_reuse_media=false**。**beauty は将来用で active=false**(posting account は `beauty_account` 維持、ラベルは `future_track=beauty_future`)。公式メディアは低優先(`low_priority_media_official`)。URL未入力は `WAITING_URL_INPUT`。third-party素材は勝手に再利用しない。
+- verify: `recover_production_sheets_threads_first.py --verify-only` に source registry 10 checks 追加。registry を増やした直後は `source_registry_reflected`/`video_sources_reflected` が「Sheets未seed」を示し fail することがある(seed apply で解消)。
+- 詳細・追加URL貼り付け形式・次手順(収集→採点→投稿案生成): [source-recovery-and-seed.md](source-recovery-and-seed.md)。
+
+## Codex source registry 統合最終監査 (2026-06-29 追記)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `feature/codex-source-registry-integration`
+- 作業開始HEAD: `6942179828c5efb55c24e9287f02f7e8c8c1c628`
+- origin/main確認: `6942179828c5efb55c24e9287f02f7e8c8c1c628`
+- 実装commit: `3dc6e4c4167ee39e193947e2b0f93150849aef58`
+- handoff docs commit: `0eaa271258ce0a050c8498f7bc363e61fbeb8438`（この行以降の最終push HEADは `git rev-parse HEAD` / 最終報告を参照）
+
+### 本システムについて
+
+- 真実源は `config/source_accounts/default_sources.json`。`src/reference/source_registry.py` と seed/recovery 経路はこの registry を使う。
+- `source_rows()` は `source_accounts` / `reference_sources` タブへ変換する正規化層。Sheets へ書く前に safety field をここで強制する。
+- `beauty_account` は posting account id のまま維持する。`beauty_future` は `future_track` / `source_track` / `usage_scope` の label のみ。target に使わない。
+
+### 変更ファイル一覧
+
+- `config/source_accounts/default_sources.json`
+- `config/source_accounts/production_sources.example.json`
+- `config/source_accounts/recovered_shared_sources.json`
+- `scripts/recover_production_sheets_threads_first.py`
+- `scripts/seed_source_registry.py`
+- `scripts/test_seed_source_registry.py`
+- `scripts/test_source_registry_verify_checks.py`
+- `src/reference/source_scoring.py`
+- `src/sheets_client.py`
+- `docs/ai-work-handoff.md`
+- `docs/ai-dev-status.md`
+- `docs/phase13-16-test-matrix.md`
+- `docs/source-recovery-and-seed.md`
+- `docs/source-account-registry.md`
+- `docs/production-completion-status.md`
+- `docs/source-collection-runbook.md`
+
+### 追加ファイル一覧
+
+- `config/source_accounts/recovered_shared_sources.json`
+- `scripts/seed_source_registry.py`
+- `scripts/test_seed_source_registry.py`
+- `scripts/test_source_registry_verify_checks.py`
+- `src/reference/source_scoring.py`
+
+### 完了内容
+
+- default registry: 59 sources、active 6、fetch_enabled 0、X active 0、beauty 23、beauty_future target 0。
+- production example: 91 sources、active 0、fetch_enabled 0、beauty_future target 0。
+- recovered shared: 3 Threads sources。
+- 全 source に `use_policy=REFERENCE_ONLY` / `can_reuse_media=false` を明示。
+- beauty source は `rights_policy=reference_only` / `usage_scope=future_reference_only` / `review_status=BLOCKED_BEAUTY_ACCOUNT` / `default_queue_status=WAITING_REVIEW`。
+- `source_rows()` と Sheets headers に safety columns を追加。既存列は削除・並び替えなし。
+- `seed_source_registry.py` は `beauty_account` target alias と `query` platform filter に対応。`beauty_future` は filter alias のみ。
+- verify checks に `beauty_target_account_id_preserved` / `beauty_reference_only_safety` を追加。
+
+### 未完了事項
+
+- Sheets への実 seed apply は未実行。必要時のみ `python3 scripts/seed_source_registry.py --apply --confirm-seed --target-account all --platform all` を人間承認後に実行。
+- live Sheets verify は未実行。外部 Sheets 読み取りになるため、今回は local/unit/dry-run で確認。
+- 実 fetch/download/cut/upload/post は未実行。
+
+### スケール方針
+
+- source は `default_sources.json` に追加し、`source_rows()` を通して Sheets へ反映する。並行 writer/schema は作らない。
+- X は reference/manual のまま。自動 fetch/post の対象にしない。
+- third-party media は `can_reuse_media=false` 既定。権利許諾が明示されるまで download/cut/upload/post 利用しない。
+- scoring は並び替え・候補提示のみ。source priority の自動変更は禁止。
+
+### 残WARN
+
+- `src/reference/source_scoring.py` は helper とテスト接続済みだが、本番の採点CLI本線への深い接続は次フェーズ。
+- `recover_production_sheets_threads_first.py --verify-only` は live Sheets 読み取りのため、今回は未実行。
+- 旧 repo workflow 停止は引き続き人間作業。
+
+### 全テスト結果
+
+- `python3 -m py_compile ...`: PASS
+- `python3 scripts/test_seed_source_registry.py`: PASS 10 / FAIL 0
+- `python3 scripts/test_source_registry_verify_checks.py`: PASS 11 / FAIL 0
+- `python3 scripts/test_phase13_production_sources_real_urls.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_phase13_source_registry_production.py`: PASS 28 / FAIL 0
+- `python3 scripts/test_phase13_query_source_support.py`: PASS 5 / FAIL 0
+- `python3 scripts/test_phase13_article_source_support.py`: PASS 5 / FAIL 0
+- `python3 scripts/test_source_account_registry.py`: PASS 27 / FAIL 0
+- `python3 scripts/test_beauty_account_block.py`: PASS 9 / FAIL 0
+- `python3 scripts/test_no_beauty_ready_queue.py`: PASS 4 / FAIL 0
+- `python3 scripts/test_no_x_ready_queue.py`: PASS 4 / FAIL 0
+- `python3 scripts/test_media_policy_guard.py`: PASS 8 / FAIL 0
+- `python3 scripts/test_recover_verify_ready_checks.py`: PASS 10 / FAIL 0
+- `python3 scripts/test_phase13_pipeline_store.py`: PASS 15 / FAIL 0
+- `python3 scripts/test_phase13_source_fetcher_tool_doctor.py`: PASS 29 / FAIL 0
+- `python3 scripts/test_phase13_fetcher_production_paths.py`: PASS 2 / FAIL 0
+- `python3 scripts/test_phase13_source_to_post_production_path.py`: PASS 4 / FAIL 0
+- `python3 scripts/test_phase13_publishers_production_safety.py`: PASS 4 / FAIL 0
+- `python3 scripts/test_phase13_generation_production.py`: PASS 3 / FAIL 0
+- `python3 scripts/test_phase13_real_smoke_plan.py`: PASS 18 / FAIL 0
+- `python3 scripts/test_phase13_pdca_production_loop.py`: PASS 3 / FAIL 0
+- `python3 scripts/test_phase13_media_asset_storage.py`: PASS 3 / FAIL 0
+- `python3 scripts/test_phase13_video_clip_execution.py`: PASS 3 / FAIL 0
+- `python3 scripts/test_phase13_media_post_preflight.py`: PASS 3 / FAIL 0
+- `python3 scripts/test_phase13_source_lifecycle.py`: PASS 23 / FAIL 0
+- `python3 scripts/test_phase13_source_concept_matching.py`: PASS 4 / FAIL 0
+- `python3 scripts/test_phase11_source_to_post_orchestrator.py`: PASS 23 / FAIL 0
+- `python3 scripts/test_approve_queue_ready_transition.py`: PASS 11 / FAIL 0
+- `python3 scripts/test_refill_outputs_waiting_review_not_ready.py`: PASS 4 / FAIL 0
+- `python3 scripts/test_queue_worker_no_setup_all_in_real_mode.py`: PASS 12 / FAIL 0
+- `python3 scripts/test_phase60_thread_series.py`: PASS 21 / FAIL 0
+- `python3 scripts/test_thread_series_learning_loop.py`: PASS 11 / FAIL 0
+- `python3 scripts/test_phase10_threads_publisher.py`: PASS 7 / FAIL 0
+- `python3 scripts/test_phase10_x_publisher.py`: PASS 5 / FAIL 0
+- `python3 scripts/test_phase10_publishers_safety.py`: PASS 14 / FAIL 0
+
+### dry-run / BLOCKED確認結果
+
+- `python3 scripts/seed_source_registry.py --dry-run --target-account all --platform all`: PASS、59 source_accounts / 33 reference_sources、Sheets writeなし。
+- `python3 scripts/seed_source_registry.py --apply --target-account all --platform all --json`: `--confirm-seed` なしのため dry-run扱い、Sheets writeなし。
+- `python3 scripts/seed_source_registry.py --dry-run --target-account beauty_account --platform youtube --json`: PASS、10 source_accounts / 10 reference_sources。
+- `python3 scripts/seed_source_registry.py --dry-run --target-account beauty_future --platform tiktok --json`: PASS、7 source_accounts / 7 reference_sources。
+- `python3 scripts/seed_source_registry.py --dry-run --target-account all --platform query --json`: PASS、1 source、fetch_enabled=false。
+
+### confirmなしBLOCKED確認結果
+
+- confirmなし seed apply: dry-run扱いでBLOCKED相当。
+- confirmなし fetch/download/cut/upload/post は既存 Phase13 tests で BLOCKED/PASS 確認済み。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `config/source_accounts/default_sources.json`（source追加・安全field維持）
+- `scripts/seed_source_registry.py`（Sheets applyの表示改善、429 backoff改善）
+- `src/reference/source_scoring.py`（本番採点CLIへの接続）
+- `docs/source-recovery-and-seed.md`
+
+### 次にCodexが触ってよいファイル
+
+- `scripts/recover_production_sheets_threads_first.py`
+- `src/sheets_client.py`
+- `scripts/test_seed_source_registry.py`
+- `scripts/test_source_registry_verify_checks.py`
+- Phase13 source/media/publisher safety tests
+
+### 衝突しやすいファイル
+
+- `config/source_accounts/default_sources.json`
+- `config/source_accounts/production_sources.example.json`
+- `scripts/recover_production_sheets_threads_first.py`
+- `src/sheets_client.py`
+- `docs/ai-work-handoff.md`
+
+### 触らない方がいいファイル
+
+- `.env` / token / cookie / credential files
+- `data/threads_tokens`
+- `output/media_cache` / `cloudinary_cache`
+- 旧 repo の任意ファイル
+- `config/accounts/beauty_account.json` の `draft_only` 解除
+
+### 次AIへの引き継ぎメモ
+
+- `beauty_future` を target account にしない。必ず `target_account_ids=["beauty_account"]` を維持する。
+- 実 Sheets 反映が必要なら、まず `seed_source_registry.py --dry-run` の件数を確認し、その後だけ `--apply --confirm-seed`。
+- `source_rows()` は source registry の安全ゲート。新しい field を Sheets に出す場合は `src/sheets_client.py` のヘッダーにも末尾追加する。
+- 実投稿・実fetch・download/cut/upload・Cloudinary upload・transcription API はこの作業では一切実行していない。

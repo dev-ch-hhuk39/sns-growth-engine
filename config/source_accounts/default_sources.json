@@ -11,15 +11,15 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
       ],
       "candidate_status": "approved",
-      "active": true,
-      "fetch_enabled": true,
-      "allow_network_fetch": true,
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -66,7 +66,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "X text reference only. 構成・フック参照のみ。実download/repost禁止。"
+      "review_notes": "X text reference only. 構成・フック参照のみ。実download/repost禁止。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_yt_cand_001",
@@ -84,7 +87,7 @@
       ],
       "candidate_status": "approved",
       "active": true,
-      "fetch_enabled": true,
+      "fetch_enabled": false,
       "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
@@ -144,10 +147,13 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "ユーザー確認済み: YouTube利用可否問題なし (2026-06-24)。 現在は参考利用のみ (reference_only)。 approved_media/own_media 移行にはソース別許諾確認が必要。",
+      "review_notes": "ユーザー確認済み: YouTube利用可否問題なし (2026-06-24)。 現在は参考利用のみ (reference_only)。 approved_media/own_media 移行にはソース別許諾確認が必要。 | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "item_type": "video",
       "transcript_required": false,
-      "video_required": true
+      "video_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_yt_cand_001",
@@ -165,7 +171,7 @@
       ],
       "candidate_status": "approved",
       "active": true,
-      "fetch_enabled": true,
+      "fetch_enabled": false,
       "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
@@ -217,9 +223,12 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "ユーザー確認済み: YouTube利用可否問題なし (2026-06-24)。 現在は参考利用のみ (reference_only)。 approved_media/own_media 移行にはソース別許諾確認が必要。",
+      "review_notes": "ユーザー確認済み: YouTube利用可否問題なし (2026-06-24)。 現在は参考利用のみ (reference_only)。 approved_media/own_media 移行にはソース別許諾確認が必要。 | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "item_type": "video",
-      "source_platform_alias": "youtube"
+      "source_platform_alias": "youtube",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_note_cand_001",
@@ -237,7 +246,7 @@
       ],
       "candidate_status": "approved",
       "active": true,
-      "fetch_enabled": true,
+      "fetch_enabled": false,
       "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
@@ -290,7 +299,10 @@
         "key_points",
         "replay_tip"
       ],
-      "copy_policy": "do_not_copy_body"
+      "copy_policy": "do_not_copy_body",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ba_yt_cand_001",
@@ -316,7 +328,7 @@
       "requires_local_login": false,
       "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
-      "media_policy": "plan_only",
+      "media_policy": "do_not_download",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -364,11 +376,16 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "beauty_account 永続ブロック。active化不可。",
+      "review_notes": "beauty_account 永続ブロック。active化不可。 | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_tt_cand_001",
@@ -394,7 +411,7 @@
       "requires_local_login": true,
       "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
-      "media_policy": "plan_only",
+      "media_policy": "do_not_download",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -436,14 +453,19 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "beauty_account 永続ブロック。active化不可。",
+      "review_notes": "beauty_account 永続ブロック。active化不可。 | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
       "item_type": "video",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
       "draft_only": true,
       "review_flags": [
         "美容専門ではない可能性があるため要レビュー"
-      ]
+      ],
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ba_x_cand_001",
@@ -454,7 +476,7 @@
       "target_account_ids": [
         "beauty_account"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -462,7 +484,7 @@
       "candidate_status": "disabled",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -510,10 +532,15 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-16T08:36:54+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "beauty_account 永続ブロック。active化不可。",
+      "review_notes": "beauty_account 永続ブロック。active化不可。 | X reference-only manual_only (current phase, no posting/dev) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future"
     },
     {
       "source_id": "src_ns_query_001",
@@ -575,7 +602,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "Safe default candidate mirrored from production_sources.example.json. Production file is canonical.",
       "query_term": "キャバ嬢",
-      "confirm_fetch_required": true
+      "confirm_fetch_required": true,
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_002",
@@ -586,7 +616,7 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -594,7 +624,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -634,7 +664,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_003",
@@ -645,7 +678,7 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -653,7 +686,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -693,7 +726,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_004",
@@ -704,7 +740,7 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -712,7 +748,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -752,7 +788,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_005",
@@ -763,7 +802,7 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -771,7 +810,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -811,7 +850,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_006",
@@ -822,7 +864,7 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -830,7 +872,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -870,7 +912,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_007",
@@ -881,7 +926,7 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -889,7 +934,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -929,7 +974,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_ns_x_cand_008",
@@ -940,7 +988,7 @@
       "target_account_ids": [
         "night_scout"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -948,7 +996,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -988,7 +1036,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_x_cand_001",
@@ -999,7 +1050,7 @@
       "target_account_ids": [
         "liver_manager"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -1007,7 +1058,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -1047,7 +1098,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
     },
     {
       "source_id": "src_lm_x_cand_002",
@@ -1058,7 +1112,7 @@
       "target_account_ids": [
         "liver_manager"
       ],
-      "collection_method": "agent_reach",
+      "collection_method": "manual_url",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -1066,7 +1120,7 @@
       "candidate_status": "candidate",
       "active": false,
       "fetch_enabled": false,
-      "allow_network_fetch": true,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -1106,7 +1160,3209 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-24T07:49:28+09:00",
       "updated_at": "2026-06-24T07:49:28+09:00",
-      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。"
+      "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_threads_shared_001",
+      "source_name": "night_scout Threads shared kyaba_oohata",
+      "source_platform": "threads",
+      "source_handle": "@kyaba_oohata",
+      "source_url": "https://www.threads.com/@kyaba_oohata",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "approved",
+      "active": true,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "night_work_scout",
+      "source_categories": [
+        "night_work_scout",
+        "cabaret_knowhow",
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "idea_seed",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "rules": [
+          "require_transform",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 20,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-29T00:00:00+09:00",
+      "updated_at": "2026-06-29T00:00:00+09:00",
+      "review_notes": "ユーザー共有済みThreads URL（回収）。キャバ嬢系個人発信。構成・フック・投稿アイデア参照のみ。実download/repost禁止。manual_only（実fetchなし）。",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_threads_shared_002",
+      "source_name": "night_scout Threads shared kyaba_rui_scout",
+      "source_platform": "threads",
+      "source_handle": "@kyaba_rui_scout",
+      "source_url": "https://www.threads.com/@kyaba_rui_scout",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "approved",
+      "active": true,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "night_work_scout",
+      "source_categories": [
+        "night_work_scout",
+        "cabaret_knowhow",
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "idea_seed",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "rules": [
+          "require_transform",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 20,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-29T00:00:00+09:00",
+      "updated_at": "2026-06-29T00:00:00+09:00",
+      "review_notes": "ユーザー共有済みThreads URL（回収）。スカウト/夜職系個人発信。構成・フック・投稿アイデア参照のみ。実download/repost禁止。manual_only（実fetchなし）。",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_threads_shared_003",
+      "source_name": "night_scout Threads shared chiikawan400",
+      "source_platform": "threads",
+      "source_handle": "@chiikawan400",
+      "source_url": "https://www.threads.com/@chiikawan400",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "approved",
+      "active": true,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "cabaret_knowhow",
+      "source_categories": [
+        "cabaret_knowhow",
+        "night_work_scout",
+        "text_reference"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "idea_seed",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "rules": [
+          "require_transform",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 20,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-29T00:00:00+09:00",
+      "updated_at": "2026-06-29T00:00:00+09:00",
+      "review_notes": "ユーザー共有済みThreads URL（回収）。キャバ/夜職系個人発信。構成・フック・投稿アイデア参照のみ。実download/repost禁止。manual_only（実fetchなし）。",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_002",
+      "source_name": "night_scout YouTube reference 02",
+      "source_platform": "youtube",
+      "source_handle": "@sakuraimizuki",
+      "source_url": "https://www.youtube.com/@sakuraimizuki",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_003",
+      "source_name": "night_scout YouTube reference 03",
+      "source_platform": "youtube",
+      "source_handle": "@shingekinoa3485",
+      "source_url": "https://www.youtube.com/@shingekinoa3485",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_004",
+      "source_name": "night_scout YouTube reference 04",
+      "source_platform": "youtube",
+      "source_handle": "UC_GIhz5Cvb1NANQr_QPsnpA",
+      "source_url": "https://www.youtube.com/channel/UC_GIhz5Cvb1NANQr_QPsnpA",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_005",
+      "source_name": "night_scout YouTube reference 05",
+      "source_platform": "youtube",
+      "source_handle": "UCbclA18j8r-O1LyzTVpnI-A",
+      "source_url": "https://www.youtube.com/channel/UCbclA18j8r-O1LyzTVpnI-A",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_006",
+      "source_name": "night_scout YouTube reference 06",
+      "source_platform": "youtube",
+      "source_handle": "@ichijo_hibiki",
+      "source_url": "https://www.youtube.com/@ichijo_hibiki",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_007",
+      "source_name": "night_scout YouTube reference 07",
+      "source_platform": "youtube",
+      "source_handle": "@ClubUNJOURTOKYO",
+      "source_url": "https://www.youtube.com/@ClubUNJOURTOKYO",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_008",
+      "source_name": "night_scout YouTube reference 08",
+      "source_platform": "youtube",
+      "source_handle": "@miyuchannel1108",
+      "source_url": "https://www.youtube.com/@miyuchannel1108",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ns_yt_cand_009",
+      "source_name": "night_scout YouTube reference 09",
+      "source_platform": "youtube",
+      "source_handle": "@kyaba_camera",
+      "source_url": "https://www.youtube.com/@kyaba_camera/",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "x",
+        "threads"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "no_male_scout_talking_head_for_clip": true,
+        "analysis_only_if_male_scout": true,
+        "no_store_pr_only": true,
+        "no_recruitment_lp_style": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "no_male_scout_talking_head_for_clip",
+          "analysis_only_if_male_scout",
+          "no_store_pr_only",
+          "no_recruitment_lp_style",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_yt_cand_002",
+      "source_name": "liver_manager YouTube reference 02",
+      "source_platform": "youtube",
+      "source_handle": "@nanachan7pococha",
+      "source_url": "https://www.youtube.com/@nanachan7pococha",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_yt_cand_003",
+      "source_name": "liver_manager YouTube reference 03",
+      "source_platform": "youtube",
+      "source_handle": "@youtube_playlist",
+      "source_url": "https://www.youtube.com/playlist?list=PLc2iRTy3vD2ES8qEy3RdcHIavU7AMf8by",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_yt_cand_004",
+      "source_name": "liver_manager YouTube reference 04",
+      "source_platform": "youtube",
+      "source_handle": "@%E3%83%A9%E3%82%A4%E3%83%90%E3%83%BC%E7%A0%94%E7%A9%B6%E6%89%80%E3%83%A9%E3%82%A4%E3%83%96%E3%83%8A%E3%82%A6",
+      "source_url": "https://www.youtube.com/@%E3%83%A9%E3%82%A4%E3%83%90%E3%83%BC%E7%A0%94%E7%A9%B6%E6%89%80%E3%83%A9%E3%82%A4%E3%83%96%E3%83%8A%E3%82%A6",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_yt_cand_005",
+      "source_name": "liver_manager YouTube reference 05",
+      "source_platform": "youtube",
+      "source_handle": "@yukidora",
+      "source_url": "https://www.youtube.com/@yukidora",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_yt_cand_006",
+      "source_name": "liver_manager YouTube reference 06",
+      "source_platform": "youtube",
+      "source_handle": "@yukidora/streams",
+      "source_url": "https://www.youtube.com/@yukidora/streams",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_yt_cand_007",
+      "source_name": "liver_manager YouTube reference 07",
+      "source_platform": "youtube",
+      "source_handle": "@amaneri333",
+      "source_url": "https://www.youtube.com/@amaneri333",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "yt_dlp",
+      "fallback": [
+        "youtube_transcript",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "unknown",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "clip_candidate"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "clip_candidate",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_note_cand_002",
+      "source_name": "liver_manager note reference 02",
+      "source_platform": "note",
+      "source_handle": "@taitan_118",
+      "source_url": "https://note.com/taitan_118",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "agent_reach"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "article_reference",
+      "source_categories": [
+        "article_reference"
+      ],
+      "use_cases": [
+        "article_reference",
+        "structure_reference",
+        "hook_reference",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "rules": [
+          "require_transform"
+        ],
+        "require_transform": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_note_cand_003",
+      "source_name": "liver_manager note reference 03",
+      "source_platform": "note",
+      "source_handle": "@nf70121f2fda2",
+      "source_url": "https://note.com/taitan_118/n/nf70121f2fda2",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "agent_reach"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "article_reference",
+      "source_categories": [
+        "article_reference"
+      ],
+      "use_cases": [
+        "article_reference",
+        "structure_reference",
+        "hook_reference",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "rules": [
+          "require_transform"
+        ],
+        "require_transform": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_note_cand_004",
+      "source_name": "liver_manager note reference 04",
+      "source_platform": "note",
+      "source_handle": "@all",
+      "source_url": "https://note.com/tiktok_live/all",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "agent_reach"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "article_reference",
+      "source_categories": [
+        "article_reference"
+      ],
+      "use_cases": [
+        "article_reference",
+        "structure_reference",
+        "hook_reference",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "rules": [
+          "require_transform"
+        ],
+        "require_transform": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_note_cand_005",
+      "source_name": "liver_manager note reference 05",
+      "source_platform": "note",
+      "source_handle": "@libertas_group",
+      "source_url": "https://note.com/libertas_group",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "agent_reach"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "article_reference",
+      "source_categories": [
+        "article_reference"
+      ],
+      "use_cases": [
+        "article_reference",
+        "structure_reference",
+        "hook_reference",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "rules": [
+          "require_transform"
+        ],
+        "require_transform": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_lm_note_cand_006",
+      "source_name": "liver_manager note reference 06",
+      "source_platform": "note",
+      "source_handle": "@n4349020204a7",
+      "source_url": "https://note.com/libertas_group/n/n4349020204a7",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "agent_reach"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "article_reference",
+      "source_categories": [
+        "article_reference"
+      ],
+      "use_cases": [
+        "article_reference",
+        "structure_reference",
+        "hook_reference",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "rules": [
+          "require_transform"
+        ],
+        "require_transform": true
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "reference_only"
+    },
+    {
+      "source_id": "src_ba_yt_cand_002",
+      "source_name": "beauty_account YouTube reference 02",
+      "source_platform": "youtube",
+      "source_handle": "UCffg7iYU2K7HFJDhylZzUBw",
+      "source_url": "https://www.youtube.com/channel/UCffg7iYU2K7HFJDhylZzUBw",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_003",
+      "source_name": "beauty_account YouTube reference 03",
+      "source_platform": "youtube",
+      "source_handle": "@hirobeautychannel",
+      "source_url": "https://www.youtube.com/@hirobeautychannel",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_004",
+      "source_name": "beauty_account YouTube reference 04",
+      "source_platform": "youtube",
+      "source_handle": "@aratatomori",
+      "source_url": "https://www.youtube.com/@aratatomori",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_005",
+      "source_name": "beauty_account YouTube reference 05",
+      "source_platform": "youtube",
+      "source_handle": "@775nanako",
+      "source_url": "https://www.youtube.com/@775nanako",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_006",
+      "source_name": "beauty_account YouTube reference 06",
+      "source_platform": "youtube",
+      "source_handle": "@fukurena",
+      "source_url": "https://www.youtube.com/@fukurena",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_007",
+      "source_name": "beauty_account YouTube reference 07",
+      "source_platform": "youtube",
+      "source_handle": "@yui_yanagihashi",
+      "source_url": "https://www.youtube.com/@yui_yanagihashi",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_008",
+      "source_name": "beauty_account YouTube reference 08",
+      "source_platform": "youtube",
+      "source_handle": "@saaya3831",
+      "source_url": "https://www.youtube.com/@saaya3831",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_009",
+      "source_name": "beauty_account YouTube reference 09",
+      "source_platform": "youtube",
+      "source_handle": "@shikanoma",
+      "source_url": "https://www.youtube.com/@shikanoma",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_yt_cand_010",
+      "source_name": "beauty_account YouTube reference 10",
+      "source_platform": "youtube",
+      "source_handle": "@arichan_make",
+      "source_url": "https://www.youtube.com/@arichan_make",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "youtube_transcript",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": false,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "no_medical_effect_guarantee": true,
+        "no_before_after_claim": true,
+        "no_clinic_determination": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform",
+          "no_medical_effect_guarantee",
+          "no_before_after_claim",
+          "no_clinic_determination"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_tt_cand_002",
+      "source_name": "beauty_account TikTok reference 02",
+      "source_platform": "tiktok",
+      "source_handle": "@miwa_asmr",
+      "source_url": "https://www.tiktok.com/@miwa_asmr",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "tiktok_to_ytdlp",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_tt_cand_003",
+      "source_name": "beauty_account TikTok reference 03",
+      "source_platform": "tiktok",
+      "source_handle": "@mote_cosme",
+      "source_url": "https://www.tiktok.com/@mote_cosme",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "tiktok_to_ytdlp",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_tt_cand_004",
+      "source_name": "beauty_account TikTok reference 04",
+      "source_platform": "tiktok",
+      "source_handle": "@machimachi_877",
+      "source_url": "https://www.tiktok.com/@machimachi_877",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "tiktok_to_ytdlp",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_tt_cand_005",
+      "source_name": "beauty_account TikTok reference 05",
+      "source_platform": "tiktok",
+      "source_handle": "@snam8_",
+      "source_url": "https://www.tiktok.com/@snam8_",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "tiktok_to_ytdlp",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_tt_cand_006",
+      "source_name": "beauty_account TikTok reference 06",
+      "source_platform": "tiktok",
+      "source_handle": "@shushu_223_",
+      "source_url": "https://www.tiktok.com/@shushu_223_",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "tiktok_to_ytdlp",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_tt_cand_007",
+      "source_name": "beauty_account TikTok reference 07",
+      "source_platform": "tiktok",
+      "source_handle": "@coscoslife",
+      "source_url": "https://www.tiktok.com/@coscoslife",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "tiktok_to_ytdlp",
+      "fallback": [
+        "yt_dlp",
+        "manual_url"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_x_cand_002",
+      "source_name": "beauty_account X reference 02",
+      "source_platform": "x",
+      "source_handle": "@hondayuni",
+      "source_url": "https://x.com/hondayuni",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | X reference-only manual_only (current phase, no posting/dev) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_x_cand_003",
+      "source_name": "beauty_account X reference 03",
+      "source_platform": "x",
+      "source_handle": "@mochi__cosme",
+      "source_url": "https://x.com/mochi__cosme",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | X reference-only manual_only (current phase, no posting/dev) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_x_cand_004",
+      "source_name": "beauty_account X reference 04",
+      "source_platform": "x",
+      "source_handle": "@fortune_sachiko",
+      "source_url": "https://x.com/fortune_sachiko",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | X reference-only manual_only (current phase, no posting/dev) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_x_cand_005",
+      "source_name": "beauty_account X reference 05",
+      "source_platform": "x",
+      "source_handle": "@chicoecco",
+      "source_url": "https://x.com/chicoecco",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | X reference-only manual_only (current phase, no posting/dev) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
+    },
+    {
+      "source_id": "src_ba_x_cand_006",
+      "source_name": "beauty_account X reference 06",
+      "source_platform": "x",
+      "source_handle": "@soi_beauty",
+      "source_url": "https://x.com/soi_beauty",
+      "target_account_ids": [
+        "beauty_account"
+      ],
+      "collection_method": "manual_url",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "disabled",
+      "active": false,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "requires_local_login": true,
+      "rights_policy": "reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "pdca_enabled": false,
+      "source_category": "text_reference",
+      "source_categories": [
+        "text_reference",
+        "trend_query"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "pdca_source"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads",
+        "x"
+      ],
+      "subject_policy": {
+        "female_subject_required": true,
+        "beauty_medical_risk_review_required": true,
+        "require_transform": true,
+        "rules": [
+          "female_subject_required",
+          "beauty_medical_risk_review_required",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "BLOCKED_BEAUTY_ACCOUNT",
+      "max_items_per_run": 10,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 99,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-06-16T08:36:54+09:00",
+      "updated_at": "2026-06-16T08:36:54+09:00",
+      "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | X reference-only manual_only (current phase, no posting/dev) | beauty_future: future beauty/IP/TikTok Shop reference, inactive, no posting/queue",
+      "future_track": "beauty_future",
+      "use_policy": "REFERENCE_ONLY",
+      "can_reuse_media": false,
+      "usage_scope": "future_reference_only",
+      "source_track": "beauty_future",
+      "beauty_account": "WAITING_REVIEW",
+      "beauty_account_status": "WAITING_REVIEW",
+      "draft_only": true
     }
-  ]
+  ],
+  "_recovery_note": "過去にユーザーが共有済みのソースアカウントURL/選定ルールを回収し本登録。Threads3件(recovered) + production_sources.example.json 非query実URLを dedup マージ。現フェーズは fetch_enabled=false 維持。X=reference manual_only / beauty_future=inactive / TikTok・YouTube=reference_only(can_reuse_media=false)。公式メディア系は low_priority_media_official。"
 }
