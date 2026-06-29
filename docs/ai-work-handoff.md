@@ -1123,3 +1123,79 @@ Source candidates
 - 実 Sheets 反映が必要なら、まず `seed_source_registry.py --dry-run` の件数を確認し、その後だけ `--apply --confirm-seed`。
 - `source_rows()` は source registry の安全ゲート。新しい field を Sheets に出す場合は `src/sheets_client.py` のヘッダーにも末尾追加する。
 - 実投稿・実fetch・download/cut/upload・Cloudinary upload・transcription API はこの作業では一切実行していない。
+
+## Codex required source URL照合・追加 (2026-06-29 追記)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD: `1e8966b5e3376d1cb4c7b117626df32317f660a4`
+- 完了commit: この変更を含む最終 `main` HEAD は `git rev-parse HEAD` と最終レポートを参照
+
+### 本システムについて
+
+- ユーザー明示URLは `config/source_accounts/required_source_urls.json` を authoritative list とする。
+- 今後 required URL が追加されたら、この JSON に追記し、required source tests を通す。
+- X status URL は profile source と別に `post_url` / `canonical_url` / `status_url` で保持できるようにした。
+
+### 変更ファイル一覧
+
+- `config/source_accounts/default_sources.json`
+- `config/source_accounts/required_source_urls.json`
+- `scripts/required_source_url_checks.py`
+- `scripts/test_required_source_urls_present.py`
+- `scripts/test_required_threads_sources_present.py`
+- `scripts/test_required_x_sources_manual_only.py`
+- `scripts/test_source_canonical_url_matching.py`
+- `scripts/test_no_fetch_enabled_required_sources.py`
+- `scripts/test_required_sources_classification.py`
+- `scripts/recover_production_sheets_threads_first.py`
+- `src/sheets_client.py`
+- `docs/source-account-registry.md`
+- `docs/source-recovery-and-seed.md`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+
+### 完了内容
+
+- required Threads URL 6件を全件照合。既存2件、追加4件。
+- required X URL 7件を全件照合。6件はURL一致済み、`minatoku789` status URLは既存sourceへ保持。
+- `default_sources.json`: 59件 → 63件。
+- `active`: 6件 → 10件（追加Threads 4件は `active=true`）。
+- `fetch_enabled=true`: 0件維持。
+- `night_scout`: 21件 → 25件、`liver_manager`: 15件維持、`beauty_account`: 23件維持。
+- `target_account_ids=["beauty_future"]`: 0件維持。
+- YouTube/TikTok再探索: production example の33件はすべて default に存在。追加すべき未登録の実source account URLはなし。
+
+### 未完了事項 / 残WARN
+
+- `recover_production_sheets_threads_first.py --verify-only --json` は承認システム側の out of credits で実行拒否。Sheets apply/write は未実行。
+- 実fetch / 実download / 実cut / 実upload / 実投稿 / Cloudinary upload / transcription API は未実行。
+
+### 全テスト結果
+
+- `python3 -m py_compile ...`: PASS
+- `python3 scripts/test_required_source_urls_present.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_required_threads_sources_present.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_required_x_sources_manual_only.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_source_canonical_url_matching.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_no_fetch_enabled_required_sources.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_required_sources_classification.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_seed_source_registry.py`: PASS 10 / FAIL 0
+- `python3 scripts/test_source_registry_verify_checks.py`: PASS 11 / FAIL 0
+- `python3 scripts/test_phase13_production_sources_real_urls.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_beauty_account_block.py`: PASS 9 / FAIL 0
+- `python3 scripts/test_no_beauty_ready_queue.py`: PASS 4 / FAIL 0
+- `python3 scripts/test_media_policy_guard.py`: PASS 8 / FAIL 0
+
+### dry-run / verify結果
+
+- `python3 scripts/seed_source_registry.py --dry-run --target-account all --platform all`: PASS、63 source_accounts / 33 reference_sources、`fetch_enabled_true=0`、Sheets writeなし。
+- `python3 scripts/recover_production_sheets_threads_first.py --verify-only --json`: 未実行（approval credits拒否）。外部API回避は行っていない。
+
+### 次AIへの引き継ぎメモ
+
+- required URLの追加は `config/source_accounts/required_source_urls.json` と `default_sources.json` の両方を更新する。
+- `test_required_source_urls_present.py` が required URL抜けの防止ゲート。
+- X required source は `manual_only=true` / `active=false` / `fetch_enabled=false` を維持し、X APIやqueueに接続しない。
+- Threads required source は `night_scout` 用。実fetchはせず、manual/reference sourceとして保持する。

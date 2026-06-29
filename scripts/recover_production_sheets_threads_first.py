@@ -638,6 +638,14 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
             "can_reuse_media": str(can_reuse_media).lower(),
             "draft_only": str(draft_only).lower(),
             "beauty_account_status": beauty_account_status,
+            "canonical_url": src.get("canonical_url", ""),
+            "post_url": src.get("post_url", ""),
+            "author_handle": src.get("author_handle", src.get("source_handle", "")),
+            "manual_only": str(bool(src.get("manual_only", False))).lower(),
+            "target_account_id": src.get("target_account_id", account_id),
+            "category": src.get("category", ""),
+            "collection_mode": src.get("collection_mode", ""),
+            "source_type": src.get("source_type", ""),
         }
         rows_accounts.append(common)
         if platform in {"youtube", "tiktok"}:
@@ -674,6 +682,14 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
                 "can_reuse_media": common["can_reuse_media"],
                 "draft_only": common["draft_only"],
                 "beauty_account_status": common["beauty_account_status"],
+                "canonical_url": common["canonical_url"],
+                "post_url": common["post_url"],
+                "author_handle": common["author_handle"],
+                "manual_only": common["manual_only"],
+                "target_account_id": common["target_account_id"],
+                "category": common["category"],
+                "collection_mode": common["collection_mode"],
+                "source_type": common["source_type"],
             })
     return rows_accounts, rows_video
 

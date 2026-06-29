@@ -271,3 +271,13 @@ commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
 - `scripts/seed_source_registry.py`(dry-run/apply)で source_accounts / reference_sources タブへ seed。
 - X=reference保持(投稿対象外・manual_only)、TikTok/YouTube=reference_only(can_reuse_media=false)、beautyは`target_account_ids=["beauty_account"]`維持でinactive、`beauty_future`はtrack labelのみ、公式メディア=低優先、URL未入力=WAITING_URL_INPUT。
 - 詳細: [source-recovery-and-seed.md](source-recovery-and-seed.md) / [ai-work-handoff.md](ai-work-handoff.md)。
+
+## required source URL固定化 (2026-06-29)
+
+- ユーザー明示の required source URL 13件を `config/source_accounts/required_source_urls.json` に固定。
+- Threads / night_scout required 6件を照合し、不足4件を `default_sources.json` に追加。
+- X / night_scout required 7件を照合し、`minatoku789` status URL を既存sourceの `post_url` / `canonical_url` / `status_url` に追加。
+- `default_sources.json`: 59件 → 63件。`fetch_enabled=true` は0件維持。
+- YouTube/TikTok は再探索し、production example の33件がすべて default に存在。追加すべき未登録の実source account URLはなし。
+- 固定テスト: `test_required_source_urls_present.py` / `test_required_threads_sources_present.py` / `test_required_x_sources_manual_only.py` / `test_source_canonical_url_matching.py` / `test_no_fetch_enabled_required_sources.py` / `test_required_sources_classification.py`。
+- Sheets apply / 実fetch / 実download / 実cut / 実upload / 実投稿は未実行。

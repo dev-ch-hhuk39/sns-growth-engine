@@ -241,6 +241,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "future_track", "source_track", "usage_scope",
         "use_policy", "can_reuse_media", "draft_only",
         "beauty_account_status",
+        "canonical_url", "post_url", "author_handle",
+        "manual_only", "target_account_id", "category",
+        "collection_mode", "source_type",
         # 動画参照登録（prepare_video_reference.py）追加。メタ情報のみ。動画/サムネはdownloadしない。
         "title",                      # 動画タイトル（メタ情報）
         "transcript_status",         # PENDING（既定）/ COMPLETED / FAILED
@@ -359,6 +362,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "future_track", "source_track", "usage_scope",
         "use_policy", "can_reuse_media", "draft_only",
         "beauty_account_status",
+        "canonical_url", "post_url", "author_handle",
+        "manual_only", "target_account_id", "category",
+        "collection_mode", "source_type",
     ],
     # source account別の収集した投稿記録
     "source_account_posts": [

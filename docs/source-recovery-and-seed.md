@@ -22,6 +22,19 @@
 - Threads 3件(`@kyaba_oohata` / `@kyaba_rui_scout` / `@chiikawan400`)を含む
 - 重複(source_id / source_url正規化 / handle)は skip
 
+## ユーザー明示 required source URL 反映 (2026-06-29)
+
+追加の明示必須URLを authoritative required sources として扱い、`config/source_accounts/required_source_urls.json`
+に固定した。今後 required URL が追加された場合もこのファイルへ追記し、required source tests の対象にする。
+
+- required Threads / night_scout: 6件すべて照合。既存2件、追加4件。
+- required X / night_scout: 7件すべて照合。6件はURL一致済み、`minatoku789` status URLは既存author sourceに `post_url` / `canonical_url` / `status_url` として追加。
+- `default_sources.json`: 59件 → 63件。
+- `fetch_enabled=true`: 0件のまま。
+- Threads required source: `platform=threads` / `target_account_ids=["night_scout"]` / `active=true` / `manual_only=true` / `source_track=night_scout_reference`。
+- X required source: `platform=x` / `target_account_ids=["night_scout"]` / `active=false` / `fetch_enabled=false` / `manual_only=true` / `source_track=x_manual_reference`。
+- YouTube/TikTok再探索: production example の video source 33件はすべて default に存在。repo内の追加候補は個別動画/タグ/fixture/templateであり、source accountとして追加しない。
+
 ## 現フェーズ安全方針(`source_rows()` が強制)
 
 - **全 source**: `fetch_enabled=false`、`allow_download/cut/upload=false`、`auto_priority_change_allowed=false`
@@ -44,6 +57,7 @@ scoring は並び替え・候補提示用であり、priority の自動変更や
 ```bash
 # dry-run(差分のみ、Sheets書き込みなし)
 python3 scripts/seed_source_registry.py --dry-run --target-account all --platform all
+python3 scripts/test_required_source_urls_present.py
 python3 scripts/seed_source_registry.py --dry-run --target-account night_scout --platform threads --json
 python3 scripts/seed_source_registry.py --dry-run --target-account beauty_account --platform youtube --json
 python3 scripts/seed_source_registry.py --dry-run --target-account beauty_future --platform all --json

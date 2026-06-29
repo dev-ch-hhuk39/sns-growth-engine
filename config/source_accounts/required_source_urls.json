@@ -1,0 +1,97 @@
+{
+  "_comment": "Authoritative required source URLs explicitly provided by the user. Tests must fail if any required URL is missing from default_sources.json.",
+  "required_sources": [
+    {
+      "url": "https://www.threads.com/@kyaba_ryo",
+      "platform": "threads",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://www.threads.com/@mizuno9120",
+      "platform": "threads",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://www.threads.com/@kyaba_oohata",
+      "platform": "threads",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://www.threads.com/@chiikawan400",
+      "platform": "threads",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://www.threads.com/@kyabaraunzi",
+      "platform": "threads",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://www.threads.com/@levi_kyaba",
+      "platform": "threads",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://x.com/cabalounge",
+      "platform": "x",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://x.com/minatoku789/status/1996442283076735119",
+      "platform": "x",
+      "target_account_id": "night_scout",
+      "source_type": "post",
+      "author_handle": "@minatoku789",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://x.com/amuxamudaily",
+      "platform": "x",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://x.com/1okukure_",
+      "platform": "x",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://x.com/onigiriscout_0",
+      "platform": "x",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://x.com/urarament",
+      "platform": "x",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    },
+    {
+      "url": "https://x.com/3j2c9q",
+      "platform": "x",
+      "target_account_id": "night_scout",
+      "source_type": "account",
+      "required_policy": "REFERENCE_ONLY"
+    }
+  ]
+}
