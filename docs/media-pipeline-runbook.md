@@ -32,3 +32,11 @@ Production cut/upload requires explicit rights review before the confirm flags a
 - `pillow`: requirementsに追加。今後の画像検証用。現時点では実upload/postには使わない。
 
 Third-party videos/images remain reference-only unless rights are explicitly owned/licensed/approved. Do not download, cut, upload, or repost third-party media from this pipeline.
+
+## 2026-07-01 Verification
+
+- `ffmpeg-python` imports as `ffmpeg`.
+- `cloudinary` imports successfully.
+- `cut_approved_clips.py --dry-run --rights-status third_party_reference_only` remains `BLOCKED`.
+- `upload_media_assets.py --account-id night_scout --dry-run` remains `BLOCKED` for third-party/reference-only media.
+- No real cut or upload was executed.

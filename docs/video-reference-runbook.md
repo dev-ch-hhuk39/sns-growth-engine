@@ -94,3 +94,10 @@ TikTok/YouTube third-party videos remain reference-analysis only. Do not downloa
 - `youtube-transcript-api`: `collect_video_references.py --fetch-transcript` と `transcribe_video_reference.py --fetch-youtube-transcript` に接続済み。公式/公開字幕が無い場合は `UNAVAILABLE`。
 - `google-api-python-client`: optional。YouTube Data APIキー/Quotaが必要なため未導入。
 - `TikTokApi`, `pytube`, `moviepy`, `whisper`, `faster-whisper`, `PaddleOCR`, `VoxCPM`: optional。重さ、規約、安定性、認証、環境依存があるため未導入。
+
+## 2026-07-01 Adapter Verification
+
+- `yt-dlp` adapter fetched YouTube metadata in dry-run with `download=false`.
+- `youtube-transcript-api` adapter fetched transcript metadata/count in dry-run with `download=false`; transcript text preview is suppressed.
+- TikTok profile URL dry-run returns `UNAVAILABLE` quickly with `tiktok_profile_metadata_not_supported_no_download`; use an individual `/video/` URL for metadata checks.
+- No video download, cut, upload, repost, or external transcription API call was executed.

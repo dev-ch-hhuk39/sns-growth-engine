@@ -74,3 +74,21 @@ Agent Reach, if later enabled, should feed source discovery, external signals, r
 ## CLI-Anything Clarification
 
 CLI-Anything is not installed, imported, or wired in this repo. It is documented as an optional candidate only. Do not report it as available unless a concrete binary/package and adapter are added.
+
+## Environment Verification (2026-07-01)
+
+`pip install -r requirements.txt` completed successfully after network approval.
+
+Import check:
+
+- OK: `bs4`, `lxml`, `playwright`, `yt_dlp`, `youtube_transcript_api`, `PIL`, `ffmpeg`, `cloudinary`.
+
+Playwright:
+
+- `python3 -m playwright install chromium` exited with code 0.
+- `collect_threads_metrics.py --source browser --browser-engine playwright` ran in dry-run and returned `UNAVAILABLE` / `playwright_no_metrics` for the two live Threads post URLs. Unknown metrics stayed null.
+
+Media:
+
+- `cut_approved_clips.py --rights-status third_party_reference_only` reports `ffmpeg_cli=installed`, `ffmpeg_python=installed`, and blocks cutting.
+- `upload_media_assets.py --dry-run` reports `cloudinary=installed` and blocks third-party/reference-only upload.

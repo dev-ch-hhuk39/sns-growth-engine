@@ -432,3 +432,14 @@ No real fetch, download, cut, upload, media post, X post, or beauty post was exe
 - CLI-Anything remains optional/not_found: no repo import, no requirements entry, no CLI wiring.
 - Threads Scraper系, TikTokApi, twikit, snscrape, moviepy, local whisper/faster-whisper, PaddleOCR, VoxCPM, MoneyPrinterTurbo, ViMax remain optional or rejected for this phase due to ToS, stability, weight, auth, or scope risks.
 - AUTOPOST remains OFF. No real post, X fetch/post, beauty post, download, cut, upload, or transcription API call is enabled by these dependency changes.
+
+## Dependency Runtime Verification (2026-07-01)
+
+- `pip install -r requirements.txt`: completed successfully.
+- Imports OK: `bs4`, `lxml`, `playwright`, `yt_dlp`, `youtube_transcript_api`, `PIL`, `ffmpeg`, `cloudinary`.
+- Playwright Chromium install: command exited 0; browser adapter dry-run returned `UNAVAILABLE` because public Threads pages did not expose metrics.
+- Threads source public metadata dry-run collected two public OG metadata rows as `source_account_posts`-shaped plan rows.
+- YouTube metadata dry-run via `yt-dlp`: `FETCHED`, `download=false`.
+- YouTube transcript dry-run via `youtube-transcript-api`: `FETCHED`, text preview suppressed.
+- TikTok profile metadata dry-run: `UNAVAILABLE` without download.
+- No Sheets apply, media download, cut, Cloudinary upload, SNS post, X fetch/post, beauty post, or transcription API call was executed.

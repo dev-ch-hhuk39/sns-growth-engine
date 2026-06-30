@@ -10,6 +10,7 @@ checks = [
     ("no real transcription api", d["real_transcription_api"] is False),
     ("no download", d["download"] is False),
     ("adapter status", "youtube_transcript_api" in d["adapter_status"]),
+    ("no transcript preview", all(t.get("text_preview", "") == "" for t in d.get("transcripts", []))),
 ]
 bad = [n for n, ok in checks if not ok]
 for n, ok in checks:

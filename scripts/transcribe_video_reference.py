@@ -43,8 +43,15 @@ def fetch_youtube_transcript_plan(url: str) -> dict[str, Any]:
     except Exception as exc:
         return {"status": "UNAVAILABLE", "reason": f"youtube_transcript_api_not_installed: {type(exc).__name__}", "download": False}
     try:
-        chunks = YouTubeTranscriptApi.get_transcript(video_id, languages=["ja", "en"])
-        return {"status": "FETCHED", "reason": "", "download": False, "chunk_count": len(chunks), "text_preview": "\n".join(c.get("text", "") for c in chunks[:5])}
+        api = YouTubeTranscriptApi()
+        if hasattr(api, "fetch"):
+            fetched = api.fetch(video_id, languages=["ja", "en"])
+            chunks = list(fetched)
+        else:
+            chunks = YouTubeTranscriptApi.get_transcript(video_id, languages=["ja", "en"])
+        def chunk_text(c: Any) -> str:
+            return str(c.get("text", "") if isinstance(c, dict) else getattr(c, "text", ""))
+        return {"status": "FETCHED", "reason": "", "download": False, "chunk_count": len(chunks), "text_preview": ""}
     except Exception as exc:
         return {"status": "UNAVAILABLE", "reason": f"transcript_unavailable: {type(exc).__name__}", "download": False}
 
@@ -99,7 +106,7 @@ def build_plan(args: argparse.Namespace, env: dict[str, str] | None = None) -> d
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="transcribe video references (thin wrapper, gated)")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="night_scout", choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--apply", action="store_true", help="run delegate (needs --confirm-transcribe)")
     parser.add_argument("--confirm-transcribe", action="store_true")
@@ -109,6 +116,7 @@ def _parse_args() -> argparse.Namespace:
                         help="YouTube URL for official transcript lookup; no video download")
     parser.add_argument("--fetch-youtube-transcript", action="store_true",
                         help="Use youtube-transcript-api when official transcript is available")
+    parser.add_argument("--dry-run", action="store_true", help="accepted for runbook compatibility; default is PLAN_ONLY")
     return parser.parse_args()
 
 

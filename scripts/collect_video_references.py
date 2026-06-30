@@ -45,6 +45,15 @@ def fetch_video_metadata(url: str) -> dict[str, Any]:
 
 
 def fetch_ytdlp_metadata(url: str) -> dict[str, Any]:
+    if "tiktok.com" in url and "/video/" not in url:
+        return {
+            "ok": False,
+            "title": "",
+            "thumbnail_url": "",
+            "author_handle": "",
+            "extractor": "TikTok",
+            "error": "tiktok_profile_metadata_not_supported_no_download",
+        }
     try:
         import yt_dlp
     except Exception as exc:
@@ -61,6 +70,10 @@ def fetch_ytdlp_metadata(url: str) -> dict[str, Any]:
             "no_warnings": True,
             "logger": QuietLogger(),
             "noplaylist": True,
+            "playlistend": 1,
+            "socket_timeout": 15,
+            "retries": 1,
+            "fragment_retries": 1,
             "extract_flat": False,
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -90,9 +103,15 @@ def fetch_youtube_transcript(url: str) -> dict[str, Any]:
     except Exception as exc:
         return {"status": "UNAVAILABLE", "reason": f"youtube_transcript_api_not_installed: {type(exc).__name__}", "text": ""}
     try:
-        chunks = YouTubeTranscriptApi.get_transcript(video_id, languages=["ja", "en"])
-        text = "\n".join(str(c.get("text", "")) for c in chunks if c.get("text"))
-        return {"status": "FETCHED", "reason": "", "text": text[:5000], "chunk_count": len(chunks)}
+        api = YouTubeTranscriptApi()
+        if hasattr(api, "fetch"):
+            fetched = api.fetch(video_id, languages=["ja", "en"])
+            chunks = list(fetched)
+        else:
+            chunks = YouTubeTranscriptApi.get_transcript(video_id, languages=["ja", "en"])
+        def chunk_text(c: Any) -> str:
+            return str(c.get("text", "") if isinstance(c, dict) else getattr(c, "text", ""))
+        return {"status": "FETCHED", "reason": "", "text": "", "chunk_count": len(chunks)}
     except Exception as exc:
         return {"status": "UNAVAILABLE", "reason": f"transcript_unavailable: {type(exc).__name__}", "text": ""}
 

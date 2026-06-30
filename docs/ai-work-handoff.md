@@ -2124,3 +2124,96 @@ Source candidates
 - X/Threads/TikTok非公式取得はToS/安定性リスクを必ず明記。
 - `fetch_enabled=true` は増やさない。
 - Cloudinary/ffmpeg/Playwrightの実動作はenv/confirm/人間レビューが揃うまでdry-runのみ。
+
+## Dependency runtime verification (2026-07-01)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD / origin/main: `f1cead0dfdd5db5b591445ec12ea1bd597ffaa6f`
+- 追加commit予定: `chore: 収集ライブラリ実行環境を検証`
+
+### 変更ファイル一覧
+
+- `scripts/transcribe_video_reference.py`
+- `scripts/collect_video_references.py`
+- `scripts/test_optional_dependency_imports.py`
+- `docs/dependency-inventory.md`
+- `docs/growth-loop-runbook.md`
+- `docs/media-pipeline-runbook.md`
+- `docs/video-reference-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 実行環境確認
+
+- `git fetch origin && git checkout main && git pull origin main`: PASS。開始時 `HEAD == origin/main == f1cead0dfdd5db5b591445ec12ea1bd597ffaa6f`。
+- `pip install -r requirements.txt`: 初回はsandbox DNSで `ffmpeg-python` 取得失敗。承認付き再実行で成功。
+- import確認:
+  - OK: `bs4`, `lxml`, `playwright`, `yt_dlp`, `youtube_transcript_api`, `PIL`, `ffmpeg`, `cloudinary`。
+- `python3 -m playwright install chromium`: 承認付き実行でexit 0。
+
+### adapter dry-run結果
+
+- Threads metrics Playwright:
+  - `collect_threads_metrics.py --source browser --browser-engine playwright --post-url ... --dry-run`
+  - `snapshot_count=2`
+  - 両方 `metrics_status=UNAVAILABLE`, `error_reason=playwright_no_metrics`
+  - 全metrics null。0捏造なし。cookie/storage_state表示なし。
+- Threads source collect:
+  - `selected_count=2`, `deduped_count=2`, `status=COLLECTED`
+  - parser=`lxml`
+  - `media_download=false`, `rights_status=reference_only`, `can_reuse_media=false`
+  - raw payload redacted。Sheets applyなし。
+- YouTube metadata:
+  - `yt-dlp` adapterで `metadata_status=FETCHED`
+  - `title/author_handle/extractor/duration` 取得
+  - `download=false`
+- YouTube transcript:
+  - `youtube-transcript-api` adapterで `status=FETCHED`, `chunk_count=60`
+  - transcript本文previewは空に修正。外部transcription APIなし、downloadなし。
+- TikTok metadata:
+  - profile URL `https://www.tiktok.com/@egachannel1`
+  - `metadata_status=UNAVAILABLE`, `fetch_error=tiktok_profile_metadata_not_supported_no_download`
+  - downloadなし。TikTokApi未使用。
+- media adapters:
+  - `cut_approved_clips.py --rights-status third_party_reference_only`: `BLOCKED`, `ffmpeg_cli=installed`, `ffmpeg_python=installed`
+  - `upload_media_assets.py --dry-run`: `BLOCKED`, `cloudinary=installed`
+- growth loop:
+  - `run_growth_loop.py --dry-run --account-id all`: adapter_status表示OK、`auto_post=false`, `real_post=false`
+
+### テスト結果
+
+- 新規/adapter系13本: PASS。
+- 既存重要:
+  - `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0
+  - `test_process_threads_queue.py`: PASS 11 / FAIL 0
+  - `test_run_growth_loop_no_auto_post.py`: PASS 3 / FAIL 0
+- `git diff --check`: PASS。
+
+### 安全確認
+
+- SNS実投稿なし。
+- AUTOPOST OFF維持。
+- X fetch/postなし。
+- beauty投稿なし。
+- third-party動画download/cut/upload/repostなし。
+- Cloudinary実uploadなし。
+- 外部transcription API呼び出しなし。
+- Sheets applyなし。
+- `.env`, `data/`, `output/`, `.claude/plans/` はcommit対象外。
+- `fetch_enabled=true` は増やしていない。
+
+### 未完了事項 / 残WARN
+
+- Threads metricsはPlaywrightでも公開ページ上の数値が取れず `UNAVAILABLE`。正規APIまたは合法な管理画面導線が必要。
+- TikTok profile URLはplaylist展開を避けるため `UNAVAILABLE` とした。実metadata確認は個別 `/video/` URLで行う。
+- Agent Reachはoptional維持。導入元/ToS/ログイン状態管理の確認が必要。
+
+### 次に本番applyする条件
+
+- metrics値を信頼できる導線で取得できること。
+- source fetchは1〜2件だけ `fetch_enabled=true` にしてdry-run確認済みであること。
+- mediaは `owned/licensed/approved_creator_clip` の権利確認済みであること。
+- Cloudinary uploadは `ALLOW_CLOUDINARY_UPLOAD=true` + `--confirm-upload` をコマンドスコープでのみ使うこと。
+- AUTOPOSTをONにする前にqueue/posted_results/duplicate guard verifyがPASSしていること。

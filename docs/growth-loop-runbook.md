@@ -59,3 +59,10 @@ Use `--use-sheets` only when intentionally reading existing Sheets state. Do not
 - video: yt-dlp / youtube-transcript-api availability and download blocked status.
 
 This summary is informational only. It does not enable fetch, upload, or posting. AUTOPOST remains off.
+
+## 2026-07-01 Environment Check
+
+- `pip install -r requirements.txt`: completed.
+- Adapter imports: `bs4`, `lxml`, `playwright`, `yt_dlp`, `youtube_transcript_api`, `PIL`, `ffmpeg`, `cloudinary` all import successfully.
+- `run_growth_loop.py --dry-run --account-id all`: reports adapter_status and keeps `auto_post=false`, `real_post=false`.
+- Public metadata dry-runs may perform HTTP reads for the provided public URLs, but they do not write Sheets, download media, upload media, or post.
