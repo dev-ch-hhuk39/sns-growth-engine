@@ -1717,3 +1717,65 @@ Source candidates
 - transcription API / Cloudinary uploadなし。
 - secret/token/cookie値はdocs/finalに表示しない。
 - `.env`, `data/`, `output/`, `.claude/plans/` はcommitしない。
+
+## Production Sheets verify / night_scout post completion (2026-06-30)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD / origin/main: `84bf3f6c8b5964de127de3d100a3392d67806823`
+- 追加commit予定: `feat: 本番metrics PDCAとnight_scout投稿を完了`
+
+### 実行結果
+
+- 本番Sheets verify: PASS 61 / FAIL 0。
+- `liver_manager` result_id: `threads_q_liver_manager_manualref_src_lm_note_cand_001_threads_20260630025810`
+- `liver_manager` post_url: `https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs`
+- `liver_manager` metrics: `PENDING` 維持。
+- metrics dry-run: 値なしでは `would_mark_measured=false`。
+- metrics apply: 未実行。公開URLはHTTP 200だが、数値を取得できず、0値MEASURED化は安全レビューで拒否されたため回避しない。
+- `liver_manager` PDCA dry-run: `measured_count=0`, `candidate_count=0`。
+- `liver_manager` PDCA apply: 未実行。
+- `night_scout` dry-run: candidates=1、mediaなし、Threadsのみ、queue_id確認済み。
+- `night_scout` 実投稿: 1件のみ成功。retryなし。
+- `night_scout` queue_id: `q_night_scout_manualref_src_ns_threads_required_001_threads`
+- `night_scout` result_id: `threads_q_night_scout_manualref_src_ns_threads_required_001_threads_20260630111243`
+- `night_scout` external_post_id: `18104495005994780`
+- `night_scout` post_url: `https://www.threads.com/@kyaba_consul_mizu/post/DaNToTqgQ7i`
+
+### 投稿後Sheets状態
+
+- `posted_results`: 6件
+- `queue` status: `POSTED=3`, `WAITING_REVIEW=8`, `PLANNED=2`, `DUPLICATE_BLOCKED=1`, `READY=0`
+- `metrics_status`: empty=1, `MANUAL_PENDING=2`, `PENDING=3`
+- `fetch_enabled=true`: 0
+- `beauty_active`: 0
+- `x_active`: 0
+- `media_assets`: 0
+
+### dry-run / test結果
+
+- `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post --use-sheets`: PASS。`auto_post_gate.allowed=false`。worker candidates=0。
+- `plan_media_mix.py --dry-run --account-id all --use-sheets`: PASS。`media_candidate_count=0`。
+- `generate_video_reference_posts.py --dry-run --account-id all`: PASS。6件の `WAITING_REVIEW` planのみ。
+- 必須テスト:
+  - `test_import_threads_metrics_manual.py`: PASS 4 / FAIL 0
+  - `test_generate_next_queue_from_metrics.py`: PASS 17 / FAIL 0
+  - `test_process_threads_queue.py`: PASS 11 / FAIL 0
+  - `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0
+  - `test_autopost_remains_off_after_first_posts.py`: PASS 6 / FAIL 0
+  - `test_metrics_import_does_not_fabricate_values.py`: PASS 5 / FAIL 0
+
+### 未完了事項
+
+- 本番metricsのMEASURED化は未完了。Threads Insights等で実測値を確認してから明示値でapplyする。
+- 本番PDCA applyは未完了。MEASURED metricsが入ってから実行する。
+- AUTOPOSTはまだOFF。
+
+### 次にAUTOPOSTをONにする条件
+
+- 2アカウント投稿は完了済み。次は両アカウントのmetricsをMEASURED化する。
+- `posted_results` verify / duplicate guard / queue consistency が継続PASS。
+- `daily_post_cap=1`, `cooldown_minutes=180`, `max_posts_per_run=1`, `kill_switch=false` を確認。
+- 失敗時rollback、POSTED_SAVE_FAILED fallback回収、AUTOPOST停止手順を運用者が確認。
+- 上記が揃うまで `auto_post_enabled=false` を維持。

@@ -376,3 +376,32 @@ offline運用確認:
 - offline sample MEASURED PDCA dry-run: PASS。`candidate_count=1`, `candidate_status=DRAFT`。
 - AUTO_READY dry-run（Sheetsなし）: PASS。`auto_post_gate.allowed=false`。
 - media/video dry-run（Sheetsなし）: PASS。download/cut/upload/transcriptionなし。
+
+## Production verify / night_scout post tests (2026-06-30)
+
+本番実行後の確認:
+
+- `recover_production_sheets_threads_first.py --verify-only --json`: PASS 61 / FAIL 0
+- `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post --use-sheets`: PASS
+- `plan_media_mix.py --dry-run --account-id all --use-sheets`: PASS (`media_candidate_count=0`)
+- `generate_video_reference_posts.py --dry-run --account-id all`: PASS (`WAITING_REVIEW` planのみ)
+
+必須テスト:
+
+```bash
+python3 scripts/test_import_threads_metrics_manual.py
+python3 scripts/test_generate_next_queue_from_metrics.py
+python3 scripts/test_process_threads_queue.py
+python3 scripts/test_all_workflows_safety_flags.py
+python3 scripts/test_autopost_remains_off_after_first_posts.py
+python3 scripts/test_metrics_import_does_not_fabricate_values.py
+```
+
+結果:
+
+- `test_import_threads_metrics_manual.py`: PASS 4 / FAIL 0
+- `test_generate_next_queue_from_metrics.py`: PASS 17 / FAIL 0
+- `test_process_threads_queue.py`: PASS 11 / FAIL 0
+- `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0
+- `test_autopost_remains_off_after_first_posts.py`: PASS 6 / FAIL 0
+- `test_metrics_import_does_not_fabricate_values.py`: PASS 5 / FAIL 0

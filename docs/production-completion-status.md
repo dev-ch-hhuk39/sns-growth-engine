@@ -393,3 +393,19 @@ Media / video:
 - offline sample MEASUREDではPDCA `candidate_count=1` を確認。生成候補は `DRAFT` でworker非対象。
 - AUTOPOSTは引き続き `auto_post_enabled=false`。
 - night_scout追加投稿は未実行。次回、Sheets/Threads接続承認が回復してから1件だけ実施する。
+
+## Production verify and night_scout first post (2026-06-30)
+
+承認回復後に本番Sheets verifyと `night_scout` の1件投稿を完了。
+
+- verify: PASS 61 / FAIL 0。
+- `posted_results`: 6件。
+- `night_scout` queue_id: `q_night_scout_manualref_src_ns_threads_required_001_threads`
+- `night_scout` result_id: `threads_q_night_scout_manualref_src_ns_threads_required_001_threads_20260630111243`
+- `night_scout` external_post_id: `18104495005994780`
+- `night_scout` post_url: `https://www.threads.com/@kyaba_consul_mizu/post/DaNToTqgQ7i`
+- `queue`: `POSTED=3`, `READY=0`, `WAITING_REVIEW=8`, `PLANNED=2`, `DUPLICATE_BLOCKED=1`
+- `fetch_enabled=true=0`, `beauty_active=0`, `x_active=0`
+- `AUTOPOST`: OFF維持。`auto_post_enabled=false`
+
+`liver_manager` metricsは、公開URL到達はHTTP 200で確認したが実数値は取得できなかった。0値をMEASUREDとして本番保存する操作は安全レビューで拒否されたため未実行。`metrics_status=PENDING` のまま、実測値確認後に明示値でapplyする。

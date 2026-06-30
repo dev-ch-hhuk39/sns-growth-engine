@@ -301,3 +301,19 @@ python3 scripts/generate_next_queue_from_metrics.py \
 ```
 
 このturnではSheets承認が拒否されたため、本番PDCA applyは未実行。
+
+## Production PDCA status after second account post (2026-06-30)
+
+`night_scout` 投稿後も、metricsがまだ `PENDING` のため本番PDCA applyは未実行。
+
+- `liver_manager` metrics: `PENDING`
+- `night_scout` metrics: `PENDING`
+- `generate_next_queue_from_metrics.py --account-id liver_manager --dry-run --use-sheets`: `measured_count=0`, `candidate_count=0`
+- `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post --use-sheets`: `auto_post_gate.allowed=false`
+
+本番PDCAを進める条件:
+
+- Threads Insights等で実測値を取得。
+- `import_threads_metrics_manual.py --apply --confirm-metrics` でMEASURED化。
+- `generate_next_queue_from_metrics.py --dry-run --use-sheets` で `candidate_count>0` を確認。
+- applyしても生成queueは `DRAFT` のまま。READY昇格は別工程。

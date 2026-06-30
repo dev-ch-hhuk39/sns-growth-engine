@@ -216,3 +216,26 @@ PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true python3 scripts/process_thread
 ```
 
 失敗時にretryしない。成功後は `posted_results` と `queue` を確認し、metricsは別途明示値で取り込む。
+
+## 2026-06-30 night_scout post result
+
+`night_scout` のREADY 1件をdry-run確認後、1件だけ実投稿した。
+
+- queue_id: `q_night_scout_manualref_src_ns_threads_required_001_threads`
+- result_id: `threads_q_night_scout_manualref_src_ns_threads_required_001_threads_20260630111243`
+- external_post_id: `18104495005994780`
+- post_url: `https://www.threads.com/@kyaba_consul_mizu/post/DaNToTqgQ7i`
+- queue status: `POSTED`
+- metrics_status: `PENDING`
+- media_used: `FALSE`
+
+投稿後verify:
+
+- PASS 61 / FAIL 0
+- `posted_results=6`
+- `READY=0`
+- `fetch_enabled=true=0`
+- `beauty_active=0`
+- `x_active=0`
+
+次の投稿は、metrics確認とPDCA候補reviewを挟むまで実行しない。
