@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import sys
@@ -24,17 +25,20 @@ def build_upload_plan(args: argparse.Namespace, assets: list[dict[str, Any]]) ->
     if third_party:
         return {
             "status": "BLOCKED",
+            "adapter_status": {"cloudinary": "installed" if importlib.util.find_spec("cloudinary") else "not_installed"},
             "blocked_reasons": ["third-party/reference-only media cannot be uploaded"],
             "third_party_count": len(third_party),
             "upload": bool(args.upload),
             "confirm_upload": bool(args.confirm_upload),
         }
-    return plan_cloudinary_uploads(
+    result = plan_cloudinary_uploads(
         assets,
         upload=args.upload,
         confirm_upload=args.confirm_upload,
         dry_run=args.dry_run,
     )
+    result["adapter_status"] = {"cloudinary": "installed" if importlib.util.find_spec("cloudinary") else "not_installed"}
+    return result
 
 
 def main() -> int:
@@ -59,7 +63,7 @@ def main() -> int:
     print(f"  ALLOW_CLOUDINARY_UPLOAD={os.environ.get('ALLOW_CLOUDINARY_UPLOAD', '').lower() == 'true'}")
     for reason in result.get("blocked_reasons", [])[:8]:
         print(f"  [BLOCKED] {reason}")
-    print(json.dumps({"status": result["status"], "blocked_reasons": result.get("blocked_reasons", [])}, ensure_ascii=False))
+    print(json.dumps({"status": result["status"], "adapter_status": result.get("adapter_status", {}), "blocked_reasons": result.get("blocked_reasons", [])}, ensure_ascii=False))
     print("  実uploadは実行していません")
     if args.upload and not args.confirm_upload:
         return 1

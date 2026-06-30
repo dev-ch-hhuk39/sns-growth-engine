@@ -66,6 +66,28 @@ def _plan_from_real_collection(account_id: str, source_result: dict[str, Any]) -
     }
 
 
+def collect_adapter_status() -> dict[str, Any]:
+    sys.path.insert(0, str(ROOT / "scripts"))
+    try:
+        from collect_source_posts import adapter_status as source_adapter_status
+    except Exception:
+        source_adapter_status = lambda: {"source_adapters": "unavailable"}  # noqa: E731
+    try:
+        from collect_video_references import adapter_status as video_adapter_status
+    except Exception:
+        video_adapter_status = lambda: {"video_adapters": "unavailable"}  # noqa: E731
+    try:
+        from collect_threads_metrics import dependency_status as metrics_dependency_status
+    except Exception:
+        metrics_dependency_status = lambda: {"metrics_adapters": "unavailable"}  # noqa: E731
+    return {
+        "metrics": metrics_dependency_status(),
+        "source": source_adapter_status(),
+        "video": video_adapter_status(),
+        "autopost": "off",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="run safe growth loop")
     parser.add_argument("--dry-run", action="store_true")
@@ -117,6 +139,7 @@ def main() -> int:
         "auto_post": False,
         "kill_switch_respected": True,
         "real_post": False,
+        "adapter_status": collect_adapter_status(),
         "real_collection_pipeline": real_collection_pipeline,
         "results": results,
     }, ensure_ascii=False, indent=2))

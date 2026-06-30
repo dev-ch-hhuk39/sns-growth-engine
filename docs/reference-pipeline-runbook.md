@@ -64,6 +64,16 @@ python3 scripts/collect_source_posts.py --platform threads --account-id all --dr
 - raw payloadはtoken/cookie/secret系キーをredactしたうえでplanに含める。第三者media本体はdownloadしない。
 - 保存先は `source_account_posts`。`post_url` 重複はdry-run/applyともskipする。
 
+### Dependency adapters (2026-06-30)
+
+- `beautifulsoup4` / `lxml`: `collect_source_posts.py` のOG metadata parserへ接続済み。未インストール時はregex fallback。
+- `requests`: 既存HTTPクライアントで利用済み。
+- `tweepy`: requirementsにはあるが、source collectionではX fetch skeletonのみ。X fetchは既定OFF。
+- Agent Reach / CLI-Anything / last30days-skill: optional external signal扱い。SNS本文生成には使わない。
+- Threads Scraper系 / twikit / snscrape / TikTokApi: 非公式/安定性/ToSリスクのため、このphaseでは未導入。
+
+詳細な installed/imported/wired/tested 状態は [dependency-inventory.md](dependency-inventory.md) を参照。
+
 ## 2. 参考 URL の登録
 
 ```bash

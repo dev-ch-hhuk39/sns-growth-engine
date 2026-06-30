@@ -87,3 +87,10 @@ Dry-run result on 2026-06-30:
 - Transcript remains gated: use official/API transcript only. Real transcription API requires `ALLOW_TRANSCRIPTION_API=true` plus explicit confirmation.
 
 TikTok/YouTube third-party videos remain reference-analysis only. Do not download, cut, upload, or repost unless the asset is owned/licensed and the separate media gates are opened.
+
+## Dependency Adapters
+
+- `yt-dlp`: `collect_video_references.py --metadata-adapter yt-dlp` に接続済み。`download=False` / `skip_download=True` でmetadataのみ。
+- `youtube-transcript-api`: `collect_video_references.py --fetch-transcript` と `transcribe_video_reference.py --fetch-youtube-transcript` に接続済み。公式/公開字幕が無い場合は `UNAVAILABLE`。
+- `google-api-python-client`: optional。YouTube Data APIキー/Quotaが必要なため未導入。
+- `TikTokApi`, `pytube`, `moviepy`, `whisper`, `faster-whisper`, `PaddleOCR`, `VoxCPM`: optional。重さ、規約、安定性、認証、環境依存があるため未導入。

@@ -9,8 +9,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import html
+import importlib.util
 import json
 import re
+import shutil
 import sys
 import urllib.request
 from datetime import datetime, timezone
@@ -52,25 +54,76 @@ def _meta(pattern: str, text: str) -> str:
     return html.unescape(m.group(1).strip()) if m else ""
 
 
+def adapter_status() -> dict[str, str]:
+    return {
+        "beautifulsoup4": "installed" if importlib.util.find_spec("bs4") else "not_installed",
+        "lxml": "installed" if importlib.util.find_spec("lxml") else "not_installed",
+        "requests": "installed" if importlib.util.find_spec("requests") else "not_installed",
+        "tweepy": "installed" if importlib.util.find_spec("tweepy") else "not_installed",
+        "agent_reach": "installed" if shutil.which("agent-reach") else "optional_not_installed",
+        "cli_anything": "installed" if shutil.which("cli-anything") else "optional_not_installed",
+        "threads_public_og": "wired",
+        "x_fetch": "blocked_by_default",
+    }
+
+
+def parse_og_metadata(body: str, url: str) -> dict[str, str]:
+    """Parse public OG metadata with BS4/lxml when present, regex fallback otherwise."""
+    title = description = image = ""
+    parser_used = "regex"
+    try:
+        from bs4 import BeautifulSoup
+        parser = "lxml" if importlib.util.find_spec("lxml") else "html.parser"
+        soup = BeautifulSoup(body, parser)
+        parser_used = parser
+
+        def content(prop: str) -> str:
+            tag = soup.find("meta", attrs={"property": prop}) or soup.find("meta", attrs={"name": prop})
+            return html.unescape(str(tag.get("content", "")).strip()) if tag else ""
+
+        title = content("og:title")
+        description = content("og:description")
+        image = content("og:image")
+    except Exception:
+        title = _meta(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']*)', body)
+        description = _meta(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']*)', body)
+        image = _meta(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']*)', body)
+    return {
+        "og_title": title,
+        "og_description": description,
+        "og_image": image,
+        "author_handle": _meta(r"threads\.com/@([^/\"'?]+)", url),
+        "parser": parser_used,
+    }
+
+
 def fetch_threads_post(url: str) -> dict[str, Any]:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; sns-growth-engine/2.0; +dry-run)"})
     try:
         with urllib.request.urlopen(req, timeout=PUBLIC_TIMEOUT_SECONDS) as res:
             body = res.read(2_000_000).decode("utf-8", errors="replace")
-        description = _meta(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']*)', body)
-        title = _meta(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']*)', body)
-        image = _meta(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']*)', body)
-        handle = _meta(r"threads\.com/@([^/\"'?]+)", url)
+        meta = parse_og_metadata(body, url)
         return {
             "ok": True,
-            "text": description or title,
-            "author_handle": handle,
-            "thumbnail_url": image,
-            "raw": redact_raw({"url": url, "og_title": title, "og_description": description, "og_image": image}),
+            "text": meta["og_description"] or meta["og_title"],
+            "author_handle": meta["author_handle"],
+            "thumbnail_url": meta["og_image"],
+            "raw": redact_raw({"url": url, **meta}),
             "error": "",
         }
     except Exception as exc:
         return {"ok": False, "text": "", "author_handle": "", "thumbnail_url": "", "raw": {"url": url}, "error": f"{type(exc).__name__}: {exc}"}
+
+
+def plan_x_fetch_adapter(src: dict[str, Any], *, include_x: bool) -> dict[str, Any]:
+    return {
+        "source_id": src.get("source_id", ""),
+        "platform": "x",
+        "adapter": "tweepy",
+        "status": "BLOCKED" if not include_x else "PLAN_ONLY",
+        "reason": "X fetch is disabled by default; no API call is made",
+        "installed": importlib.util.find_spec("tweepy") is not None,
+    }
 
 
 def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: str, include_x: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -164,6 +217,7 @@ def main() -> int:
     parser.add_argument("--source-id", action="append", default=[])
     parser.add_argument("--source-url", action="append", default=[], help="Ephemeral Threads source URL for small dry-run/approved tests")
     parser.add_argument("--fetch-real", action="store_true", help="Fetch public Threads page metadata/text")
+    parser.add_argument("--show-adapter-status", action="store_true")
     parser.add_argument("--limit", type=int, default=4)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
@@ -191,9 +245,15 @@ def main() -> int:
     selected = selected[: max(1, args.limit)]
     rows = []
     archive_payloads = []
+    x_adapter_plans = []
     for src in selected:
         url = src.get("url") or src.get("source_url") or src.get("canonical_url") or ""
-        fetched = fetch_threads_post(url) if args.fetch_real and str(src.get("source_platform", "")).lower() == "threads" else {}
+        src_platform = str(src.get("source_platform", "")).lower()
+        if src_platform == "x":
+            x_adapter_plans.append(plan_x_fetch_adapter(src, include_x=args.include_x))
+            fetched = {}
+        else:
+            fetched = fetch_threads_post(url) if args.fetch_real and src_platform == "threads" else {}
         rows.append(normalize_source(src, fetched))
         if fetched:
             archive_payloads.append(fetched.get("raw", {}))
@@ -207,6 +267,8 @@ def main() -> int:
         "media_download": False,
         "x_enabled": bool(args.include_x),
         "real_fetch": bool(args.fetch_real),
+        "adapter_status": adapter_status(),
+        "x_adapter_plans": x_adapter_plans[:10],
         "rows": rows[:10],
         "archive_payloads": archive_payloads[:10],
         "skipped": skipped[:20],

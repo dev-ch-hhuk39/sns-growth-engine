@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,6 +17,8 @@ CUTTABLE_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 def build_plan(args: argparse.Namespace) -> dict:
     allowed_env = os.environ.get("ALLOW_VIDEO_CUT", "").lower() == "true"
     rights_ok = args.rights_status in CUTTABLE_RIGHTS
+    ffmpeg_cli = shutil.which("ffmpeg") is not None
+    ffmpeg_python = importlib.util.find_spec("ffmpeg") is not None
     blocked = []
     if not rights_ok:
         blocked.append("rights_status must be owned/licensed/approved_creator_clip")
@@ -22,8 +26,14 @@ def build_plan(args: argparse.Namespace) -> dict:
         blocked.append("--cut requires --confirm-cut")
     if args.cut and not allowed_env:
         blocked.append("ALLOW_VIDEO_CUT=true is required")
+    if args.cut and not ffmpeg_cli:
+        blocked.append("ffmpeg CLI is not installed")
     return {
         "status": "READY" if args.cut and not blocked else "BLOCKED" if blocked else "PLAN_ONLY",
+        "adapter_status": {
+            "ffmpeg_cli": "installed" if ffmpeg_cli else "not_installed",
+            "ffmpeg_python": "installed" if ffmpeg_python else "not_installed",
+        },
         "rights_status": args.rights_status,
         "input_path": args.input_path,
         "output_path": str(ROOT / "output" / "clips" / f"clip_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.mp4"),

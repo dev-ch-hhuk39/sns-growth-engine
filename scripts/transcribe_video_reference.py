@@ -13,8 +13,10 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -25,6 +27,26 @@ ROOT = Path(__file__).resolve().parents[1]
 CLI_NAME = "transcribe_video_reference"
 DELEGATE_SCRIPT = "scripts/transcribe_videos.py"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+
+
+def youtube_transcript_status() -> str:
+    return "installed" if importlib.util.find_spec("youtube_transcript_api") else "not_installed"
+
+
+def fetch_youtube_transcript_plan(url: str) -> dict[str, Any]:
+    m = re.search(r"(?:v=|youtu\.be/|shorts/)([A-Za-z0-9_-]{6,})", url)
+    video_id = m.group(1) if m else ""
+    if not video_id:
+        return {"status": "UNAVAILABLE", "reason": "youtube_video_id_missing", "download": False}
+    try:
+        from youtube_transcript_api import YouTubeTranscriptApi
+    except Exception as exc:
+        return {"status": "UNAVAILABLE", "reason": f"youtube_transcript_api_not_installed: {type(exc).__name__}", "download": False}
+    try:
+        chunks = YouTubeTranscriptApi.get_transcript(video_id, languages=["ja", "en"])
+        return {"status": "FETCHED", "reason": "", "download": False, "chunk_count": len(chunks), "text_preview": "\n".join(c.get("text", "") for c in chunks[:5])}
+    except Exception as exc:
+        return {"status": "UNAVAILABLE", "reason": f"transcript_unavailable: {type(exc).__name__}", "download": False}
 
 
 def build_plan(args: argparse.Namespace, env: dict[str, str] | None = None) -> dict[str, Any]:
@@ -83,11 +105,28 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--confirm-transcribe", action="store_true")
     parser.add_argument("--allow-real-transcription", action="store_true",
                         help="use external transcription API (also needs env ALLOW_TRANSCRIPTION_API=true)")
+    parser.add_argument("--video-url", action="append", default=[],
+                        help="YouTube URL for official transcript lookup; no video download")
+    parser.add_argument("--fetch-youtube-transcript", action="store_true",
+                        help="Use youtube-transcript-api when official transcript is available")
     return parser.parse_args()
 
 
 def main() -> int:
-    plan = build_plan(_parse_args())
+    args = _parse_args()
+    if args.video_url and args.fetch_youtube_transcript:
+        result = {
+            "status": "PLAN_ONLY",
+            "cli": CLI_NAME,
+            "account_id": args.account_id,
+            "adapter_status": {"youtube_transcript_api": youtube_transcript_status()},
+            "real_transcription_api": False,
+            "download": False,
+            "transcripts": [{"video_url": url, **fetch_youtube_transcript_plan(url)} for url in args.video_url],
+        }
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    plan = build_plan(args)
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     if plan["status"] == "BLOCKED":
         return 1

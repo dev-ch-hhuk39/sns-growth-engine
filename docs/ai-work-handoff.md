@@ -1980,3 +1980,147 @@ Source candidates
 - metrics自動取得は公開HTMLでは数値不可だった。`UNAVAILABLE` は正常な安全結果で、0にしない。
 - source収集のapply先は `source_account_posts`。`reference_posts` ではない。
 - `run_growth_loop.py` はdry-run summaryで候補数を出すだけ。投稿しない。
+
+## Dependency inventory / adapter wiring (2026-06-30)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD / origin/main: `dfdd955bc67b26184e22378e49127e17402250b6`
+- 追加commit予定: `feat: 収集ライブラリ依存関係を棚卸し接続`
+
+### 変更ファイル一覧
+
+- `requirements.txt`
+- `scripts/collect_threads_metrics.py`
+- `scripts/collect_source_posts.py`
+- `scripts/collect_video_references.py`
+- `scripts/transcribe_video_reference.py`
+- `scripts/cut_approved_clips.py`
+- `scripts/upload_media_assets.py`
+- `scripts/run_growth_loop.py`
+- `docs/dependency-inventory.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/video-reference-runbook.md`
+- `docs/media-pipeline-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/threads-operation-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_dependency_inventory.py`
+- `scripts/test_agent_reach_not_claimed_unless_installed.py`
+- `scripts/test_cli_anything_not_claimed_unless_installed.py`
+- `scripts/test_optional_dependency_imports.py`
+- `scripts/test_playwright_adapter_safe.py`
+- `scripts/test_bs4_lxml_source_parser.py`
+- `scripts/test_ytdlp_metadata_adapter_no_download.py`
+- `scripts/test_youtube_transcript_adapter_gate.py`
+- `scripts/test_tiktok_metadata_adapter_no_download.py`
+- `scripts/test_ffmpeg_cut_requires_owned_rights.py`
+- `scripts/test_cloudinary_upload_requires_confirm.py`
+- `scripts/test_no_secret_cookie_in_scraper_adapters.py`
+- `scripts/test_run_growth_loop_reports_adapter_status.py`
+
+### requirements追加内容
+
+- `beautifulsoup4`
+- `lxml`
+- `playwright`
+- `yt-dlp`
+- `youtube-transcript-api`
+- `ffmpeg-python`
+- `cloudinary`
+- `pillow`
+
+### 実装内容
+
+- `collect_threads_metrics.py`
+  - Playwright browser adapterを追加。
+  - `--browser-engine public|playwright` と `--storage-state` を追加。
+  - storage_state内容、cookie、tokenは読まない・表示しない。
+  - Playwright未導入/ブラウザ未準備時は `UNAVAILABLE`。
+- `collect_source_posts.py`
+  - BeautifulSoup/lxml OG parserを追加。未導入時はregex fallback。
+  - adapter_statusに `beautifulsoup4`, `lxml`, `requests`, `tweepy`, `agent_reach`, `cli_anything` を表示。
+  - Xはtweepy skeletonのみ。fetch/postは引き続きOFF。
+- `collect_video_references.py`
+  - `yt-dlp` metadata adapterを追加。`skip_download=True`, `download=False`。
+  - YouTube transcript adapterを追加。取得不可は `UNAVAILABLE`。
+  - TikTok URLもplatform判定・dry-run可能。
+- `transcribe_video_reference.py`
+  - `--video-url` + `--fetch-youtube-transcript` を追加。
+  - 外部transcription APIは引き続き `ALLOW_TRANSCRIPTION_API=true` + CLI confirm必須。
+- `cut_approved_clips.py`
+  - ffmpeg CLI / ffmpeg-python adapter statusを表示。
+  - third_party_reference_onlyはcut不可。
+- `upload_media_assets.py`
+  - Cloudinary SDK adapter statusを表示。
+  - third-party media upload拒否、env + confirm gate維持。
+- `run_growth_loop.py`
+  - adapter_status summaryを表示。
+  - AUTOPOST OFF / real_post false維持。
+
+### Agent Reach / CLI-Anything 状態
+
+- Agent Reach:
+  - repo内: `src/reference/fetchers/agent_reach_fetcher.py` とsource registryに記述あり。
+  - requirements: なし。
+  - import: 既存fetcher内のみ。
+  - 実行CLI: optional fetcher経由。今回インストール/実行なし。
+  - 状態: optional。別プロジェクトのLibrary Scoutとは混同しない。
+- CLI-Anything:
+  - repo内: 実import/requirements/CLI wiringなし。
+  - 状態: optional / not_found。導入済みとは扱わない。
+
+### dry-run / test結果
+
+- `pip install -r requirements.txt`: 多くは既にinstalled。sandboxでは `ffmpeg-python` 取得時にDNS失敗。承認付き再実行は承認システム `out of credits` で拒否。迂回なし。
+- import確認:
+  - OK: `bs4`, `lxml`, `playwright`, `yt_dlp`, `youtube_transcript_api`, `PIL`
+  - MISSING: `ffmpeg` (`ffmpeg-python`), `cloudinary`
+- 新規13本: PASS。
+- 既存重要テスト:
+  - `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0
+  - `test_process_threads_queue.py`: PASS 11 / FAIL 0
+  - `test_collect_source_posts_no_x_by_default.py`: PASS 2 / FAIL 0
+  - `test_collect_threads_metrics_does_not_zero_unknowns.py`: PASS 3 / FAIL 0
+  - `test_video_reference_no_download_for_third_party.py`: PASS 3 / FAIL 0
+  - `test_upload_media_assets_rejects_third_party.py`: PASS 2 / FAIL 0
+  - `test_run_growth_loop_no_auto_post.py`: PASS 3 / FAIL 0
+- `git diff --check`: PASS。
+
+### dry-run結果
+
+- `collect_source_posts.py --platform threads --source-url ... --fetch-real --dry-run`: sandbox DNSでは `UNAVAILABLE`。adapter_status表示OK。media_download=false。
+- `collect_video_references.py --url <YouTube URL> --fetch-metadata --metadata-adapter yt-dlp --dry-run`: sandbox DNSでは `UNAVAILABLE`。download=false。
+- `run_growth_loop.py --dry-run --account-id all`: adapter_status表示OK、AUTOPOST OFF、real_post=false。
+
+### 安全確認
+
+- 実投稿なし。
+- AUTOPOST OFF維持。
+- X fetch/postなし。
+- beauty投稿なし。
+- third-party動画download/cut/upload/repostなし。
+- Cloudinary実uploadなし。
+- transcription API実呼び出しなし。
+- secret/token/cookie表示なし。
+- `.env`, `data/`, `output/`, `.claude/plans/` はcommit対象外。
+
+### 未完了事項 / 残WARN
+
+- `ffmpeg-python` と `cloudinary` はrequirementsに追加済みだが、承認システム `out of credits` により今回のpip install完了確認は未完。
+- Playwright packageはimport可能だが、ブラウザbinary install状況は未確認。必要なら別途 `python -m playwright install chromium` を人間確認後に行う。
+- Agent Reach / CLI-Anything は未導入。使う場合は導入元/ToS/ログイン状態の扱いを人間確認する。
+- Threads公式APIでmetrics取得できるかは未完。公開HTMLはmetrics非表示があるため `UNAVAILABLE` を正常扱い。
+
+### 次AIへの引き継ぎメモ
+
+- `docs/dependency-inventory.md` を真実源として確認。
+- optional候補を「導入済み」と報告しないこと。
+- X/Threads/TikTok非公式取得はToS/安定性リスクを必ず明記。
+- `fetch_enabled=true` は増やさない。
+- Cloudinary/ffmpeg/Playwrightの実動作はenv/confirm/人間レビューが揃うまでdry-runのみ。

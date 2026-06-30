@@ -22,3 +22,13 @@ python3 scripts/upload_media_assets.py --account-id night_scout --dry-run
 ```
 
 Production cut/upload requires explicit rights review before the confirm flags are used.
+
+# Dependency Adapter Notes (2026-06-30)
+
+- `ffmpeg-python`: requirementsに追加。`cut_approved_clips.py` のadapter statusで検出する。ただし実cutにはsystem `ffmpeg` CLIも必要。
+- `ffmpeg` CLI: `owned` / `licensed` / `approved_creator_clip` のみcut可能。`ALLOW_VIDEO_CUT=true` + `--confirm-cut` 必須。
+- `cloudinary`: requirementsに追加。`upload_media_assets.py` のadapter statusで検出する。
+- Cloudinary実upload: `ALLOW_CLOUDINARY_UPLOAD=true` + `--confirm-upload` 必須。third-party/reference-only mediaはBLOCKED。
+- `pillow`: requirementsに追加。今後の画像検証用。現時点では実upload/postには使わない。
+
+Third-party videos/images remain reference-only unless rights are explicitly owned/licensed/approved. Do not download, cut, upload, or repost third-party media from this pipeline.

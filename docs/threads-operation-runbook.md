@@ -105,6 +105,12 @@ Behavior:
 - Apply requires `--apply --confirm-metrics --use-sheets`, writes `metric_snapshots`, and reflects latest known status into `posted_results`.
 - Do not mark `MEASURED` unless trusted values are present or manually supplied by a human.
 
+### Playwright Adapter
+
+`collect_threads_metrics.py --source browser --browser-engine playwright` can attempt a browser-based page read. Use `--storage-state <path>` only when a human has prepared a safe local Playwright state file. The file contents, cookies, and tokens must never be printed or committed.
+
+If Playwright or browser binaries are unavailable, the result is `UNAVAILABLE` with an error reason. Unknown metrics stay null.
+
 ## GitHub Actions Manual Run
 
 Before running, confirm repository secrets include:

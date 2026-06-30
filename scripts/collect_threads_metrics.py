@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import importlib.util
 import json
 import re
 import sys
@@ -55,6 +56,13 @@ def _first_int(patterns: list[str], text: str) -> int | None:
     return None
 
 
+def dependency_status() -> dict[str, str]:
+    return {
+        "playwright": "installed" if importlib.util.find_spec("playwright") else "not_installed",
+        "public_html_og": "wired",
+    }
+
+
 def collect_public_threads_metrics(row: dict[str, Any], source: str) -> tuple[dict[str, int | None], str, str]:
     """Best-effort public page parser.
 
@@ -72,6 +80,41 @@ def collect_public_threads_metrics(row: dict[str, Any], source: str) -> tuple[di
     if any(v is not None for v in metrics.values()):
         return metrics, "low", "public_html_partial"
     return metrics, "none", "public_html_no_metrics"
+
+
+def collect_playwright_threads_metrics(row: dict[str, Any], storage_state: str = "") -> tuple[dict[str, int | None], str, str]:
+    """Best-effort Playwright page adapter.
+
+    This never prints cookies/tokens. If browser binaries or login state are
+    unavailable, the caller gets UNAVAILABLE rather than fabricated zeroes.
+    """
+    metrics = {k: None for k in METRIC_KEYS}
+    url = str(row.get("post_url", ""))
+    if not url:
+        return metrics, "none", "post_url_missing"
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:
+        return metrics, "none", f"playwright_not_installed: {type(exc).__name__}"
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context_kwargs = {}
+            if storage_state:
+                context_kwargs["storage_state"] = storage_state
+            context = browser.new_context(**context_kwargs)
+            page = context.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=15_000)
+            text = page.locator("body").inner_text(timeout=5_000)
+            browser.close()
+        metrics["likes"] = _first_int([r"(\d[\d,]*)\s+likes?", r"いいね\s*(\d[\d,]*)"], text)
+        metrics["comments"] = _first_int([r"(\d[\d,]*)\s+repl(?:y|ies)", r"返信\s*(\d[\d,]*)"], text)
+        metrics["reposts"] = _first_int([r"(\d[\d,]*)\s+reposts?", r"再投稿\s*(\d[\d,]*)"], text)
+        if any(v is not None for v in metrics.values()):
+            return metrics, "medium", "playwright_partial"
+        return metrics, "none", "playwright_no_metrics"
+    except Exception as exc:
+        return metrics, "none", f"playwright_unavailable: {type(exc).__name__}"
 
 
 def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics: dict[str, int | None], memo: str, error_reason: str = "") -> dict[str, Any]:
@@ -171,6 +214,10 @@ def main() -> int:
     parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--result-id")
     parser.add_argument("--source", default="unavailable", choices=["api", "browser", "manual", "unavailable"])
+    parser.add_argument("--browser-engine", default="public", choices=["public", "playwright"],
+                        help="browser source adapter. public uses urllib; playwright can use --storage-state.")
+    parser.add_argument("--storage-state", default="",
+                        help="Optional Playwright storage_state path. File contents are never printed.")
     parser.add_argument("--confidence", default="none", choices=["none", "low", "medium", "high"])
     for key in METRIC_KEYS:
         parser.add_argument(f"--{key.replace('_', '-')}", dest=key)
@@ -209,7 +256,10 @@ def main() -> int:
             confidence = args.confidence
             memo = args.memo or "operator supplied metrics"
         elif args.source in {"api", "browser"}:
-            metrics, confidence, error_reason = collect_public_threads_metrics(row, args.source)
+            if args.source == "browser" and args.browser_engine == "playwright":
+                metrics, confidence, error_reason = collect_playwright_threads_metrics(row, args.storage_state)
+            else:
+                metrics, confidence, error_reason = collect_public_threads_metrics(row, args.source)
             source = args.source
             memo = args.memo or f"public Threads {args.source} adapter; unknowns left null"
         else:
@@ -221,7 +271,7 @@ def main() -> int:
         snapshots.append(build_snapshot(row=row, source=source, confidence=confidence, metrics=metrics, memo=memo, error_reason=error_reason))
 
     if not args.apply:
-        print(json.dumps({"status": "PLAN_ONLY", "snapshot_count": len(snapshots), "snapshots": snapshots}, ensure_ascii=False, indent=2))
+        print(json.dumps({"status": "PLAN_ONLY", "adapter_status": dependency_status(), "snapshot_count": len(snapshots), "snapshots": snapshots}, ensure_ascii=False, indent=2))
         return 0
     if not args.confirm_metrics:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-metrics"}, ensure_ascii=False))

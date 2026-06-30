@@ -49,3 +49,13 @@ Expected behavior:
 - AUTOPOST remains off. No real post, media download, cut, upload, or X action is performed.
 
 Use `--use-sheets` only when intentionally reading existing Sheets state. Do not bulk-enable `fetch_enabled=true`; use `--source-url` or a small reviewed set first.
+
+## Adapter Status Summary
+
+`run_growth_loop.py --dry-run` includes `adapter_status` with metrics/source/video adapter availability:
+
+- metrics: public HTML and optional Playwright browser adapter.
+- source: BeautifulSoup/lxml parser, X blocked status, Agent Reach / CLI-Anything optional status.
+- video: yt-dlp / youtube-transcript-api availability and download blocked status.
+
+This summary is informational only. It does not enable fetch, upload, or posting. AUTOPOST remains off.

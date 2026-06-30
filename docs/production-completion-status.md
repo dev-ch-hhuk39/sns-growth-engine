@@ -423,3 +423,12 @@ Fully safe v2 pipeline scaffolding has been added:
 - Growth loop dry-run orchestration.
 
 No real fetch, download, cut, upload, media post, X post, or beauty post was executed. AUTOPOST remains off.
+
+# Dependency Inventory Update (2026-06-30)
+
+- Added safe runtime dependencies to `requirements.txt`: `beautifulsoup4`, `lxml`, `playwright`, `yt-dlp`, `youtube-transcript-api`, `ffmpeg-python`, `cloudinary`, `pillow`.
+- Created `docs/dependency-inventory.md` to distinguish installed/imported/wired/tested/optional/rejected/not_found.
+- Agent Reach remains optional: repo has fetcher/config references, but no requirements entry and no confirmed local CLI installation in this turn.
+- CLI-Anything remains optional/not_found: no repo import, no requirements entry, no CLI wiring.
+- Threads Scraper系, TikTokApi, twikit, snscrape, moviepy, local whisper/faster-whisper, PaddleOCR, VoxCPM, MoneyPrinterTurbo, ViMax remain optional or rejected for this phase due to ToS, stability, weight, auth, or scope risks.
+- AUTOPOST remains OFF. No real post, X fetch/post, beauty post, download, cut, upload, or transcription API call is enabled by these dependency changes.
