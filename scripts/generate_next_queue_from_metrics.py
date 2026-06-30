@@ -169,16 +169,16 @@ def build_next_queue_candidates(
     return drafts, queues, suggestion
 
 
-def _load_posted_results(input_json: str | None, apply: bool, account_id: str):
+def _load_posted_results(input_json: str | None, read_sheets: bool, account_id: str):
     if input_json:
         with open(input_json, encoding="utf-8") as f:
             data = json.load(f)
         return None, data.get("posted_results", [])
-    if apply:
+    if read_sheets:
         from config_loader import get_config
         from sheets_client import SheetsClient
         cfg = get_config()
-        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=not read_sheets)
         rows = [dict(r) for r in client._ws("posted_results").get_all_records()]
         return client, rows
     return None, []
@@ -200,6 +200,7 @@ def main() -> int:
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--input-json", help='{"posted_results":[...]} for offline planning/testing')
+    parser.add_argument("--dry-run", action="store_true", help="explicit PLAN_ONLY mode; reads Sheets without writing")
     parser.add_argument("--apply", action="store_true", help="write candidates (needs --confirm-generate)")
     parser.add_argument("--confirm-generate", action="store_true", help="explicit confirmation for real write")
     args = parser.parse_args()
@@ -211,7 +212,7 @@ def main() -> int:
         print(json.dumps({"status": "BLOCKED", "reason": "--count must be 1..10"}, ensure_ascii=False))
         return 1
 
-    client, posted = _load_posted_results(args.input_json, args.apply, args.account_id)
+    client, posted = _load_posted_results(args.input_json, args.apply or args.dry_run, args.account_id)
     ranked = rank_results_by_engagement(posted, args.account_id)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     drafts, queues, suggestion = build_next_queue_candidates(ranked, args.account_id, args.count, stamp)

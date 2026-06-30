@@ -205,3 +205,34 @@ done
 # SmokePlan
 python3 scripts/run_phase13_smoke_plan.py --account-id night_scout --platform x
 ```
+
+## Production loop completion tests (2026-06-30)
+
+以下を追加し、全件PASS確認済み。
+
+```bash
+python3 scripts/test_seed_reference_posts_from_sources.py
+python3 scripts/test_reference_posts_generated_without_fetch.py
+python3 scripts/test_reference_post_scores_generated.py
+python3 scripts/test_threads_ideas_waiting_review_only.py
+python3 scripts/test_waiting_review_not_worker_selectable.py
+python3 scripts/test_ready_only_worker_after_source_loop.py
+python3 scripts/test_pdca_dry_run_safe_without_posted_results.py
+python3 scripts/test_no_real_fetch_in_production_loop.py
+python3 scripts/test_no_beauty_active_in_production_loop.py
+python3 scripts/test_no_fetch_enabled_added.py
+```
+
+既存重要テストもPASS:
+
+- `test_required_source_urls_present.py`
+- `test_seed_source_registry.py`
+- `test_source_registry_verify_checks.py`
+- `test_beauty_account_block.py`
+- `test_no_beauty_ready_queue.py`
+- `test_media_policy_guard.py`
+- `test_phase13_production_sources_real_urls.py`
+- `test_score_reference_posts.py`
+- `test_generate_threads_ideas_from_references.py`
+- `test_approve_queue_ready_transition.py`
+- `test_process_threads_queue.py`

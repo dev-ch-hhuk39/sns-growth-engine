@@ -118,8 +118,8 @@ def display_queue_detail(sheets, q: dict) -> None:
 
     # draft 取得
     draft: dict = {}
-    if hasattr(sheets, "_sh"):
-        ws = sheets._sh.worksheet("drafts")
+    if hasattr(sheets, "_ws"):
+        ws = sheets._ws("drafts")
         for row in ws.get_all_records():
             if row.get("draft_id") == draft_id:
                 draft = dict(row)

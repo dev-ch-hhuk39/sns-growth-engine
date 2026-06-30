@@ -281,3 +281,35 @@ commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
 - YouTube/TikTok は再探索し、production example の33件がすべて default に存在。追加すべき未登録の実source account URLはなし。
 - 固定テスト: `test_required_source_urls_present.py` / `test_required_threads_sources_present.py` / `test_required_x_sources_manual_only.py` / `test_source_canonical_url_matching.py` / `test_no_fetch_enabled_required_sources.py` / `test_required_sources_classification.py`。
 - Sheets apply / 実fetch / 実download / 実cut / 実upload / 実投稿は未実行。
+
+## production loop completion (2026-06-30)
+
+Source registry / Sheets apply / READY承認モデルの上に、実データの半自動運用ループを1周できる状態まで接続した。
+
+- `source_account_posts`（verify上の reference_posts）: 0件 → 10件。`seed_reference_posts_from_sources.py` で source registry から manual reference seed を作成。実fetchなし、X fetchなし、media downloadなし、`use_status=REFERENCE_ONLY`、`can_reuse_media=false`。
+- `reference_post_scores`: 0件 → 10件。`score_reference_posts.py --apply --confirm-score` で deterministic scoring を保存。流用リスクが高いため全件 `recommended_use=REFERENCE_ONLY`。
+- Threads投稿案: `night_scout` 3件、`liver_manager` 3件を `WAITING_REVIEW` で `drafts` / `social_derivatives` / `queue` に生成。`READY` は0件、自動投稿対象外。
+- Worker dry-run: `process_threads_queue.py --dry-run --max-posts 2` は両アカウント `candidates=0`。`WAITING_REVIEW` は拾わず、`READY` のみ対象。
+- Approval dry-run: `approve_queue.py --queue-id q_night_scout_manualref_src_ns_threads_required_001_threads --approve --dry-run --use-sheets` で `WAITING_REVIEW → READY` の計画のみ確認。実昇格なし。
+- PDCA dry-run: `import_threads_metrics_manual.py --dry-run` と `generate_next_queue_from_metrics.py --dry-run` は安全終了。MEASURED posted_results がないため candidate_count=0。
+- Verify: `recover_production_sheets_threads_first.py --verify-only --json` は PASS 61 / FAIL 0。
+
+現在の安全状態:
+
+- `source_accounts=63`, `reference_sources=33`, `fetch_enabled=true=0`
+- `queue_total=14`, `WAITING_REVIEW=10`, `READY=0`
+- `beauty_active=0`, `x_active=0`
+- 実fetch / 実投稿 / X投稿 / video download / transcription API / Cloudinary upload は未実行
+
+人間が次に見るべきタブ:
+
+- `収集済み投稿`: `manualref_` で始まる10件
+- `参考投稿スコア`: `qscore_` で始まる10件
+- `SNS投稿文`: `idea_` で始まる6件
+- `投稿キュー`: `q_night_scout_manualref_...` / `q_liver_manager_manualref_...` の6件
+
+実投稿に進む条件:
+
+1. 人間が `投稿キュー` のWAITING_REVIEW行を読み、1件だけ `approve_queue.py --approve --reason ...` で `READY` に昇格する。
+2. `process_threads_queue.py --dry-run --max-posts 1` で対象1件が妥当と確認する。
+3. 実投稿は別作業として、`--confirm-real-post` + `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` を明示する。

@@ -101,3 +101,21 @@ Then open GitHub Actions > `Threads Queue Worker` > `Run workflow`:
 - `confirm_real_post`: `false`
 
 Do not use `real_post` until dry-run has passed and one queue row has been reviewed.
+
+## 2026-06-30 current review targets
+
+Source registry由来の初回投稿案は、以下のprefixで確認する。
+
+- `投稿キュー`: `q_night_scout_manualref_...` 3件、`q_liver_manager_manualref_...` 3件
+- `SNS投稿文`: `idea_night_scout_manualref_...` 3件、`idea_liver_manager_manualref_...` 3件
+- `収集済み投稿`: `manualref_...` 10件
+- `参考投稿スコア`: `qscore_...` 10件
+
+現在 `READY=0`。人間が1件だけ選び、以下を実行するまでは投稿worker対象にならない。
+
+```bash
+python3 scripts/approve_queue.py --queue-id <queue_id> --approve --reason "<確認内容>" --use-sheets
+python3 scripts/process_threads_queue.py --account-id <account_id> --dry-run --max-posts 1
+```
+
+実投稿へ進むのは、dry-runで対象テキスト・アカウント・重複・media状態を確認した後の別作業とする。

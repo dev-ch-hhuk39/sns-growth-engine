@@ -70,7 +70,12 @@ def _clip(value: float, lo: float = 0.0, hi: float = 5.0) -> float:
 
 
 def _text_of(post: dict[str, Any]) -> str:
-    return str(post.get("text", "") or post.get("content", "") or post.get("body", ""))
+    return str(
+        post.get("text", "")
+        or post.get("post_text", "")
+        or post.get("content", "")
+        or post.get("body", "")
+    )
 
 
 def _as_bool(value: Any, default: bool = False) -> bool:
@@ -205,8 +210,11 @@ def build_scores(posts: list[dict[str, Any]], account_id: str, stamp: str) -> li
     for i, post in enumerate(posts, 1):
         s = score_post(post, account_id)
         collected_post_id = str(post.get("post_id", "") or post.get("collected_post_id", ""))
+        reference_post_id = str(post.get("reference_post_id", "") or collected_post_id)
+        stable_part = collected_post_id or f"{stamp}_{i:03d}"
         rows.append({
-            "score_id": f"qscore_{account_id}_{stamp}_{i:03d}",
+            "score_id": f"qscore_{account_id}_{stable_part}",
+            "reference_post_id": reference_post_id,
             "account_id": account_id,
             "collected_post_id": collected_post_id,
             "hook_score": s["hook_score"],
@@ -225,31 +233,47 @@ def build_scores(posts: list[dict[str, Any]], account_id: str, stamp: str) -> li
     return rows
 
 
-def _load_posts(input_json: str | None, apply: bool, account_id: str):
+def _load_posts(input_json: str | None, read_sheets: bool, account_id: str, *, dry_run_client: bool = False):
     if input_json:
         with open(input_json, encoding="utf-8") as f:
             data = json.load(f)
         return None, data.get("posts", data.get("source_account_posts", []))
-    if apply:
+    if read_sheets:
         from config_loader import get_config
         from sheets_client import SheetsClient
         cfg = get_config()
-        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=dry_run_client)
         rows = [dict(r) for r in client._ws("source_account_posts").get_all_records()
                 if str(r.get("account_id", "")) in ("", account_id)]
         return client, rows
     return None, []
 
 
-def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> None:
+def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> dict[str, int]:
     if not rows:
-        return
+        return {"added": 0, "skipped": 0}
     sheet = client._ws(logical)
     headers = sheet.row_values(1)
-    sheet.append_rows(
-        [[str(row.get(h, "")) for h in headers] for row in rows],
-        value_input_option="USER_ENTERED",
-    )
+    existing = sheet.get_all_records()
+    existing_score_ids = {str(r.get("score_id", "")) for r in existing}
+    existing_refs = {
+        str(r.get("reference_post_id", "") or r.get("collected_post_id", ""))
+        for r in existing
+    }
+    to_append = []
+    skipped = 0
+    for row in rows:
+        score_id = str(row.get("score_id", ""))
+        ref_id = str(row.get("reference_post_id", "") or row.get("collected_post_id", ""))
+        if (score_id and score_id in existing_score_ids) or (ref_id and ref_id in existing_refs):
+            skipped += 1
+            continue
+        to_append.append([str(row.get(h, "")) for h in headers])
+        existing_score_ids.add(score_id)
+        existing_refs.add(ref_id)
+    if to_append:
+        sheet.append_rows(to_append, value_input_option="USER_ENTERED")
+    return {"added": len(to_append), "skipped": skipped}
 
 
 def main() -> int:
@@ -257,6 +281,7 @@ def main() -> int:
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--input-json", help='{"posts":[...]} for offline scoring/testing')
     parser.add_argument("--limit", type=int, default=50)
+    parser.add_argument("--dry-run", action="store_true", help="explicit PLAN_ONLY mode (default unless --apply)")
     parser.add_argument("--apply", action="store_true", help="write scores to Sheets (needs --confirm-score)")
     parser.add_argument("--confirm-score", action="store_true", help="explicit confirmation for real write")
     args = parser.parse_args()
@@ -265,7 +290,7 @@ def main() -> int:
         print(json.dumps({"status": "BLOCKED", "reason": "beauty_account は対象外（draft_only）"}, ensure_ascii=False))
         return 1
 
-    client, posts = _load_posts(args.input_json, args.apply, args.account_id)
+    client, posts = _load_posts(args.input_json, args.apply or args.dry_run, args.account_id, dry_run_client=args.dry_run and not args.apply)
     posts = posts[: max(0, args.limit)]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     rows = build_scores(posts, args.account_id, stamp)
@@ -297,8 +322,8 @@ def main() -> int:
                          ensure_ascii=False))
         return 1
 
-    _append_many(client, "reference_post_scores", rows)
-    print(json.dumps({"status": "SCORED", **summary}, ensure_ascii=False, indent=2))
+    result = _append_many(client, "reference_post_scores", rows)
+    print(json.dumps({"status": "SCORED", **summary, **result}, ensure_ascii=False, indent=2))
     return 0
 
 

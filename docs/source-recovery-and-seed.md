@@ -106,3 +106,23 @@ beauty 将来用途は `target_account_ids=["beauty_account"]` のまま、`futu
 3. `scripts/score_reference_posts.py`(採点)
 4. `scripts/generate_threads_ideas_from_references.py`(Threads投稿案: night_scout / liver_manager)
 5. 動画は `scripts/prepare_video_reference.py` → `transcribe_video_reference.py` → `plan_video_reference_posts.py`(参考・文字起こし・切り抜き候補化のみ)
+
+## 2026-06-30 production loop seed完了
+
+source registry の Sheets apply 後、実fetchなしで初回運用ループ用の手動reference seedを作成済み。
+
+```bash
+python3 scripts/seed_reference_posts_from_sources.py --account-id all --limit 5 --apply --confirm-seed
+python3 scripts/score_reference_posts.py --account-id night_scout --limit 5 --apply --confirm-score
+python3 scripts/score_reference_posts.py --account-id liver_manager --limit 5 --apply --confirm-score
+python3 scripts/generate_threads_ideas_from_references.py --account-id night_scout --top-n 3 --apply --confirm-generate
+python3 scripts/generate_threads_ideas_from_references.py --account-id liver_manager --top-n 3 --apply --confirm-generate
+```
+
+結果:
+
+- `source_account_posts`: 10件（`manualref_`、REFERENCE_ONLY、media reuse不可）
+- `reference_post_scores`: 10件（`qscore_`、採点行は投稿可statusなし）
+- `queue`: `reference_score_to_threads` 6件（night_scout 3 / liver_manager 3）、すべて `WAITING_REVIEW`
+- `READY`: 0件。人間承認までworkerは拾わない。
+- 実fetch / X fetch / video download / transcription / Cloudinary upload / 実投稿は未実行。

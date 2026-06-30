@@ -190,3 +190,28 @@ python3 scripts/test_generate_threads_ideas_from_references.py
 python3 scripts/test_recover_verify_media_metrics_checks.py
 python3 scripts/test_all_workflows_safety_flags.py
 ```
+
+## 2026-06-30 初回reference loop
+
+本番Sheets上で、外部fetchなしの manual reference loop が通っている。
+
+1. Source registryから `source_account_posts` へ `manualref_` 10件をseed。
+2. `score_reference_posts.py` で `reference_post_scores` 10件を作成。
+3. `generate_threads_ideas_from_references.py` で `WAITING_REVIEW` のThreads候補を6件作成。
+4. `process_threads_queue.py --dry-run --max-posts 2` は `candidates=0`。`WAITING_REVIEW` はworker非対象。
+5. `approve_queue.py --dry-run --use-sheets` で1件だけREADYにする計画を確認。実READY昇格はしていない。
+
+追加テスト:
+
+```bash
+python3 scripts/test_seed_reference_posts_from_sources.py
+python3 scripts/test_reference_posts_generated_without_fetch.py
+python3 scripts/test_reference_post_scores_generated.py
+python3 scripts/test_threads_ideas_waiting_review_only.py
+python3 scripts/test_waiting_review_not_worker_selectable.py
+python3 scripts/test_ready_only_worker_after_source_loop.py
+python3 scripts/test_pdca_dry_run_safe_without_posted_results.py
+python3 scripts/test_no_real_fetch_in_production_loop.py
+python3 scripts/test_no_beauty_active_in_production_loop.py
+python3 scripts/test_no_fetch_enabled_added.py
+```

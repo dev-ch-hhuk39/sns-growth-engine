@@ -1259,3 +1259,124 @@ Source candidates
 - 次に進めるなら、X以外の安全なThreads/手動sourceから `reference_posts` を人間確認前提で少量作る段階。
 - 投稿案を実生成する場合も `WAITING_REVIEW` までに止め、`READY` 化と worker選択は人間承認後にする。
 - source registryの再applyは `seed_source_registry.py --dry-run` で63/33/0件を確認してから実施する。
+
+## Codex production loop completion (2026-06-30 追記)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD: `67ee0db8e5b723becdf079b7fffba43a0abb163c`
+- 完了commit: 最終レポートの `HEAD` を参照
+
+### 本システムについて
+
+- source registry / Sheets apply / READY承認モデルは維持したまま、実fetchなしで `収集済み投稿 → 参考投稿スコア → WAITING_REVIEW投稿案 → approval dry-run → worker dry-run → PDCA dry-run` まで接続した。
+- 完全自動投稿ではなく、人間承認付き半自動運用。生成候補は `WAITING_REVIEW` で止まり、worker は `READY` のみ拾う。
+
+### 変更ファイル一覧
+
+- `scripts/seed_reference_posts_from_sources.py`
+- `scripts/score_reference_posts.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/generate_next_queue_from_metrics.py`
+- `scripts/approve_queue.py`
+- `scripts/test_seed_reference_posts_from_sources.py`
+- `scripts/test_reference_posts_generated_without_fetch.py`
+- `scripts/test_reference_post_scores_generated.py`
+- `scripts/test_threads_ideas_waiting_review_only.py`
+- `scripts/test_waiting_review_not_worker_selectable.py`
+- `scripts/test_ready_only_worker_after_source_loop.py`
+- `scripts/test_pdca_dry_run_safe_without_posted_results.py`
+- `scripts/test_no_real_fetch_in_production_loop.py`
+- `scripts/test_no_beauty_active_in_production_loop.py`
+- `scripts/test_no_fetch_enabled_added.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `docs/source-recovery-and-seed.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/threads-operation-runbook.md`
+- `docs/phase13-16-test-matrix.md`
+
+### 追加ファイル一覧
+
+- `scripts/seed_reference_posts_from_sources.py`
+- production loop completion tests 10本（上記 `test_*production_loop*` / reference seed系）
+
+### 完了内容
+
+- `seed_reference_posts_from_sources.py` を追加。source registryから `source_account_posts` へ manual reference seed を作成。実fetchなし、Xなし、mediaなし。
+- `score_reference_posts.py` を `source_account_posts.post_text` 対応、`reference_post_id` 付与、重複skip対応、明示 `--dry-run` 対応に補強。
+- `generate_threads_ideas_from_references.py` を採点済みreferenceから `drafts` / `social_derivatives` / `queue` へ `WAITING_REVIEW` 生成できるよう接続。READYは書かない。
+- `approve_queue.py` の実Sheets detail表示で論理タブ名 `_ws("drafts")` を使うよう修正。
+- `generate_next_queue_from_metrics.py` に明示 `--dry-run` を追加。
+
+### Sheets実行結果
+
+- `source_account_posts`: 0件 → 10件（night_scout 5 / liver_manager 5）
+- `reference_post_scores`: 0件 → 10件（night_scout 5 / liver_manager 5）
+- `drafts`: 8件 → 14件
+- `social_derivatives`: 8件 → 14件
+- `queue_total`: 14件
+- `reference_score_to_threads` queue: night_scout 3 / liver_manager 3
+- `WAITING_REVIEW`: 10件
+- `READY`: 0件
+- `source_accounts`: 63件、`reference_sources`: 33件、`fetch_enabled=true`: 0件維持
+
+### 未完了事項 / 残WARN
+
+- 実投稿は未実行。READY昇格も未実行。
+- MEASUREDなposted_resultsが無いため、PDCA候補生成は `candidate_count=0` で安全終了。
+- beauty_accountのThreads tokenは未設定のまま（意図どおり。beautyは運用対象外）。
+
+### 全テスト結果
+
+- 新規10本: PASS
+- 既存重要テスト: `test_required_source_urls_present.py`, `test_seed_source_registry.py`, `test_source_registry_verify_checks.py`, `test_beauty_account_block.py`, `test_no_beauty_ready_queue.py`, `test_media_policy_guard.py`, `test_phase13_production_sources_real_urls.py`, `test_score_reference_posts.py`, `test_generate_threads_ideas_from_references.py`, `test_approve_queue_ready_transition.py`, `test_process_threads_queue.py` すべてPASS。
+- `recover_production_sheets_threads_first.py --verify-only --json`: PASS 61 / FAIL 0。
+
+### dry-run結果 / safety確認
+
+- `process_threads_queue.py --account-id night_scout --dry-run --max-posts 2`: `candidates=0`
+- `process_threads_queue.py --account-id liver_manager --dry-run --max-posts 2`: `candidates=0`
+- `approve_queue.py --queue-id q_night_scout_manualref_src_ns_threads_required_001_threads --approve --dry-run --use-sheets`: `WAITING_REVIEW → READY` の計画のみ確認、書き込みなし。
+- `import_threads_metrics_manual.py --dry-run`: PASS
+- `generate_next_queue_from_metrics.py --dry-run`: 両アカウント `measured_count=0`, `candidate_count=0`
+- 実fetch / X fetch / video download / transcription API / Cloudinary upload / 実投稿 / X投稿は未実行。
+- secret値 / cookie値は表示していない。
+- beauty_account active化なし、`target_account_id=beauty_future` 作成なし、`fetch_enabled=true` 追加なし。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `scripts/seed_reference_posts_from_sources.py`
+- `scripts/score_reference_posts.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `docs/reference-pipeline-runbook.md`
+- `docs/threads-operation-runbook.md`
+
+### 次にCodexが触ってよいファイル
+
+- `scripts/process_threads_queue.py`
+- `scripts/approve_queue.py`
+- `scripts/generate_next_queue_from_metrics.py`
+- `scripts/import_threads_metrics_manual.py`
+- production loop completion tests
+
+### 衝突しやすいファイル
+
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/score_reference_posts.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+
+### 触らない方がいいファイル
+
+- `.env` / token / cookie / credential files
+- `data/` / `output/` / `.claude/plans/`
+- beauty_account の active/fetch/READY関連設定
+- X fetch/posting関連の実行フラグ
+
+### 次AIへの引き継ぎメモ
+
+- 次に人間が見るべき行は `投稿キュー` の `q_night_scout_manualref_...` / `q_liver_manager_manualref_...` 6件。
+- 実投稿へ進む前に、人間が1件だけ `approve_queue.py --approve --reason ... --use-sheets` でREADY化し、`process_threads_queue.py --dry-run --max-posts 1` を通す。
+- 実投稿は別作業。`--confirm-real-post` + `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` が必要。
