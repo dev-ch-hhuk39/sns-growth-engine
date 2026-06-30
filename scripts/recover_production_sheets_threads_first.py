@@ -39,6 +39,7 @@ TARGET_TABS = [
     "thread_series",
     "queue",
     "posted_results",
+    "metric_snapshots",
     "media_assets",
     "video_transcripts",
     "video_clip_candidates",

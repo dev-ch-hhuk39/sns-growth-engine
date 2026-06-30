@@ -126,6 +126,14 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "real_post", "media_used", "posted_text",
         "source_queue_status", "save_source", "created_by",
     ],
+    # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
+    "metric_snapshots": [
+        "snapshot_id", "result_id", "account_id", "platform", "post_url",
+        "collected_at", "source", "confidence", "metrics_status",
+        "views", "likes", "comments", "reposts", "quotes",
+        "profile_clicks", "follows", "line_adds",
+        "memo", "error_reason",
+    ],
     # カテゴリ別パフォーマンス集計。AIが投稿比率を調整するために参照。
     "category_scores": [
         "category_id", "account_id", "category_name",
@@ -431,6 +439,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "media_assets":                   "メディア資産",
     "reference_post_scores":          "参考投稿スコア",
     "reference_sources":              "動画収集元",
+    "metric_snapshots":                "計測スナップショット",
     "video_transcripts":              "動画文字起こし",
     "video_clip_candidates":          "動画クリップ候補",
     "transcription_runs":             "文字起こし実行履歴",

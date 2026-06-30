@@ -8,8 +8,11 @@ unknown metrics stay null, confirmed zero stays 0. Real writes require
 from __future__ import annotations
 
 import argparse
+import html
 import json
+import re
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,6 +23,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 METRIC_KEYS = ("views", "likes", "comments", "reposts", "quotes", "profile_clicks", "follows", "line_adds")
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+PUBLIC_TIMEOUT_SECONDS = 15
 
 
 def now_iso() -> str:
@@ -32,13 +36,51 @@ def parse_metric(value: str | None) -> int | None:
     return int(str(value).strip())
 
 
-def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics: dict[str, int | None], memo: str) -> dict[str, Any]:
+def _fetch_public_html(url: str) -> tuple[str, str]:
+    if not url:
+        return "", "post_url_missing"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; sns-growth-engine/2.0; +dry-run)"})
+    try:
+        with urllib.request.urlopen(req, timeout=PUBLIC_TIMEOUT_SECONDS) as res:
+            return res.read(2_000_000).decode("utf-8", errors="replace"), ""
+    except Exception as exc:
+        return "", f"{type(exc).__name__}: {exc}"
+
+
+def _first_int(patterns: list[str], text: str) -> int | None:
+    for pattern in patterns:
+        m = re.search(pattern, text, flags=re.I)
+        if m:
+            return int(str(m.group(1)).replace(",", ""))
+    return None
+
+
+def collect_public_threads_metrics(row: dict[str, Any], source: str) -> tuple[dict[str, int | None], str, str]:
+    """Best-effort public page parser.
+
+    Threads public pages often hide exact metrics from logged-out HTML. When
+    values are absent, keep them as None and return UNAVAILABLE/low confidence.
+    """
+    html_text, error = _fetch_public_html(str(row.get("post_url", "")))
+    metrics = {k: None for k in METRIC_KEYS}
+    if error:
+        return metrics, "none", error
+    text = html.unescape(html_text)
+    metrics["likes"] = _first_int([r'"like_count"\s*:\s*(\d+)', r'(\d[\d,]*)\s+likes?'], text)
+    metrics["comments"] = _first_int([r'"reply_count"\s*:\s*(\d+)', r'(\d[\d,]*)\s+repl(?:y|ies)'], text)
+    metrics["reposts"] = _first_int([r'"reshare_count"\s*:\s*(\d+)', r'(\d[\d,]*)\s+reposts?'], text)
+    if any(v is not None for v in metrics.values()):
+        return metrics, "low", "public_html_partial"
+    return metrics, "none", "public_html_no_metrics"
+
+
+def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics: dict[str, int | None], memo: str, error_reason: str = "") -> dict[str, Any]:
     known = {k: v for k, v in metrics.items() if v is not None}
     if len(known) == len(METRIC_KEYS):
         status = "MEASURED"
     elif known:
         status = "PARTIAL"
-    elif source == "unavailable":
+    elif source == "unavailable" or error_reason:
         status = "UNAVAILABLE"
     else:
         status = "PENDING"
@@ -53,6 +95,7 @@ def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics
         "confidence": confidence,
         "metrics_status": status,
         "memo": memo,
+        "error_reason": error_reason,
         **{k: metrics.get(k) for k in METRIC_KEYS},
     }
 
@@ -64,6 +107,7 @@ def collect_unavailable(row: dict[str, Any], source: str = "unavailable") -> dic
         confidence="none",
         metrics={k: None for k in METRIC_KEYS},
         memo="Metrics collector could not obtain trusted values; unknowns left null.",
+        error_reason="unavailable",
     )
 
 
@@ -72,6 +116,9 @@ def _headers(ws) -> list[str]:
 
 
 def _append_row(client, logical: str, row: dict[str, Any]) -> bool:
+    if logical == "metric_snapshots":
+        from sheets_client import TAB_DEFINITIONS
+        client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     ws = client._ws(logical)
     headers = _headers(ws)
     if not headers:
@@ -132,6 +179,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-metrics", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
+    parser.add_argument("--post-url", action="append", default=[], help="Public Threads post URL for dry-run adapter checks")
     args = parser.parse_args()
 
     if args.account_id == "beauty_account":
@@ -144,16 +192,33 @@ def main() -> int:
         return 1
 
     client, rows = load_rows(args.use_sheets and (args.apply or args.dry_run), args.result_id, args.account_id)
+    if args.post_url:
+        rows = [
+            {"result_id": args.result_id or f"url_{i}", "account_id": args.account_id, "platform": "threads", "post_url": url}
+            for i, url in enumerate(args.post_url, 1)
+        ]
     if not rows:
         rows = [{"result_id": args.result_id or "sample_result", "account_id": args.account_id, "platform": "threads", "post_url": ""}]
 
     snapshots = []
     for row in rows:
-        metrics = supplied if any(v is not None for v in supplied.values()) else {k: None for k in METRIC_KEYS}
-        source = args.source if any(v is not None for v in metrics.values()) else "unavailable"
-        confidence = args.confidence if any(v is not None for v in metrics.values()) else "none"
-        memo = args.memo or ("operator supplied metrics" if source != "unavailable" else "metrics unavailable; no values fabricated")
-        snapshots.append(build_snapshot(row=row, source=source, confidence=confidence, metrics=metrics, memo=memo))
+        error_reason = ""
+        if any(v is not None for v in supplied.values()):
+            metrics = supplied
+            source = args.source
+            confidence = args.confidence
+            memo = args.memo or "operator supplied metrics"
+        elif args.source in {"api", "browser"}:
+            metrics, confidence, error_reason = collect_public_threads_metrics(row, args.source)
+            source = args.source
+            memo = args.memo or f"public Threads {args.source} adapter; unknowns left null"
+        else:
+            metrics = {k: None for k in METRIC_KEYS}
+            source = "unavailable"
+            confidence = "none"
+            memo = args.memo or "metrics unavailable; no values fabricated"
+            error_reason = "no_adapter_requested"
+        snapshots.append(build_snapshot(row=row, source=source, confidence=confidence, metrics=metrics, memo=memo, error_reason=error_reason))
 
     if not args.apply:
         print(json.dumps({"status": "PLAN_ONLY", "snapshot_count": len(snapshots), "snapshots": snapshots}, ensure_ascii=False, indent=2))

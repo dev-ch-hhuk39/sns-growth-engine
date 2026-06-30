@@ -86,6 +86,25 @@ python3 scripts/refill_threads_queue.py --account-id <account_id> --count 1 --dr
 - Metrics import: `docs/metrics-import-runbook.md`
 - Manual Sheets checks: `docs/sheets-manual-check-guide.md`
 
+## Automatic Metrics Collection (v2)
+
+`scripts/collect_threads_metrics.py` now supports `--source api/browser/manual/unavailable`.
+
+```bash
+python3 scripts/collect_threads_metrics.py --source browser \
+  --post-url "https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs" \
+  --post-url "https://www.threads.com/@kyaba_consul_mizu/post/DaNToTqgQ7i" \
+  --dry-run
+```
+
+Behavior:
+
+- Public browser adapter attempts trusted count extraction from the post page.
+- If metrics are hidden, it stores/plans `metrics_status=UNAVAILABLE`, `confidence=none`, and an `error_reason`.
+- Unknown values are `null`; they are not converted to `0`.
+- Apply requires `--apply --confirm-metrics --use-sheets`, writes `metric_snapshots`, and reflects latest known status into `posted_results`.
+- Do not mark `MEASURED` unless trusted values are present or manually supplied by a human.
+
 ## GitHub Actions Manual Run
 
 Before running, confirm repository secrets include:

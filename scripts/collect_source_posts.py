@@ -7,8 +7,12 @@ are skipped by default. This script does not download media.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import html
 import json
+import re
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -17,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
+PUBLIC_TIMEOUT_SECONDS = 15
 
 
 def now_iso() -> str:
@@ -30,6 +35,42 @@ def is_true(value: Any) -> bool:
 def load_sources_from_file() -> list[dict[str, Any]]:
     data = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
     return data.get("sources", data if isinstance(data, list) else [])
+
+
+def redact_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    redacted = {}
+    for key, value in raw.items():
+        if re.search(r"(token|secret|cookie|authorization|password|api[_-]?key)", str(key), re.I):
+            redacted[key] = "[REDACTED]"
+        else:
+            redacted[key] = value
+    return redacted
+
+
+def _meta(pattern: str, text: str) -> str:
+    m = re.search(pattern, text, flags=re.I | re.S)
+    return html.unescape(m.group(1).strip()) if m else ""
+
+
+def fetch_threads_post(url: str) -> dict[str, Any]:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; sns-growth-engine/2.0; +dry-run)"})
+    try:
+        with urllib.request.urlopen(req, timeout=PUBLIC_TIMEOUT_SECONDS) as res:
+            body = res.read(2_000_000).decode("utf-8", errors="replace")
+        description = _meta(r'<meta[^>]+property=["\']og:description["\'][^>]+content=["\']([^"\']*)', body)
+        title = _meta(r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']*)', body)
+        image = _meta(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']*)', body)
+        handle = _meta(r"threads\.com/@([^/\"'?]+)", url)
+        return {
+            "ok": True,
+            "text": description or title,
+            "author_handle": handle,
+            "thumbnail_url": image,
+            "raw": redact_raw({"url": url, "og_title": title, "og_description": description, "og_image": image}),
+            "error": "",
+        }
+    except Exception as exc:
+        return {"ok": False, "text": "", "author_handle": "", "thumbnail_url": "", "raw": {"url": url}, "error": f"{type(exc).__name__}: {exc}"}
 
 
 def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: str, include_x: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -56,24 +97,51 @@ def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: 
     return selected, skipped
 
 
-def normalize_source(src: dict[str, Any]) -> dict[str, Any]:
+def normalize_source(src: dict[str, Any], fetched: dict[str, Any] | None = None) -> dict[str, Any]:
     url = src.get("url") or src.get("source_url") or src.get("canonical_url") or ""
+    fetched = fetched or {}
+    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:12] if url else datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    media_urls = [fetched.get("thumbnail_url")] if fetched.get("thumbnail_url") else []
     return {
-        "reference_post_id": f"ref_{src.get('source_id', 'source')}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        "post_id": f"sap_{digest}",
         "source_id": src.get("source_id", ""),
         "account_id": ",".join(src.get("target_account_ids") or [src.get("target_account_id", "")]),
-        "platform": src.get("source_platform", ""),
+        "source_platform": src.get("source_platform", ""),
+        "source_handle": fetched.get("author_handle") or src.get("handle", ""),
+        "post_text": fetched.get("text", ""),
+        "media_urls": json.dumps(media_urls, ensure_ascii=False),
+        "likes": "",
+        "reposts": "",
+        "replies": "",
+        "views": "",
+        "bookmarks": "",
+        "engagement_rate": "",
+        "buzz": "",
+        "rights_policy": src.get("rights_policy", "reference_only"),
+        "reuse_policy": src.get("reuse_policy", "reference_only"),
+        "status": "COLLECTED" if fetched.get("ok") else "UNAVAILABLE",
+        "collected_at": now_iso(),
         "post_url": url,
-        "author_handle": src.get("handle", ""),
-        "posted_at": "",
-        "text": "",
-        "thumbnail_url": "",
-        "engagement_json": "{}",
-        "raw_json": json.dumps({"url": url, "source_id": src.get("source_id", "")}, ensure_ascii=False),
         "use_status": "REFERENCE_ONLY",
+        "rights_status": "reference_only",
         "can_reuse_media": "false",
-        "created_at": now_iso(),
+        "fetch_error": fetched.get("error", ""),
     }
+
+
+def dedupe_rows(rows: list[dict[str, Any]], existing_urls: set[str] | None = None) -> tuple[list[dict[str, Any]], int]:
+    existing = set(existing_urls or set())
+    deduped: list[dict[str, Any]] = []
+    skipped = 0
+    for row in rows:
+        key = str(row.get("post_url", "")).strip()
+        if key and key in existing:
+            skipped += 1
+            continue
+        deduped.append(row)
+        if key:
+            existing.add(key)
+    return deduped, skipped
 
 
 def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> int:
@@ -81,8 +149,11 @@ def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> int:
         return 0
     ws = client._ws(logical)
     headers = ws.row_values(1)
-    ws.append_rows([["" if row.get(h) is None else str(row.get(h, "")) for h in headers] for row in rows], value_input_option="USER_ENTERED")
-    return len(rows)
+    existing_urls = {str(r.get("post_url", "")).strip() for r in ws.get_all_records()}
+    to_append, _ = dedupe_rows(rows, existing_urls)
+    if to_append:
+        ws.append_rows([["" if row.get(h) is None else str(row.get(h, "")) for h in headers] for row in to_append], value_input_option="USER_ENTERED")
+    return len(to_append)
 
 
 def main() -> int:
@@ -90,6 +161,10 @@ def main() -> int:
     parser.add_argument("--platform", default="all", choices=["threads", "x", "youtube", "tiktok", "all"])
     parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--include-x", action="store_true")
+    parser.add_argument("--source-id", action="append", default=[])
+    parser.add_argument("--source-url", action="append", default=[], help="Ephemeral Threads source URL for small dry-run/approved tests")
+    parser.add_argument("--fetch-real", action="store_true", help="Fetch public Threads page metadata/text")
+    parser.add_argument("--limit", type=int, default=4)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-collect", action="store_true")
@@ -100,15 +175,40 @@ def main() -> int:
         print(json.dumps({"status": "BLOCKED", "reason": "beauty_account collection is disabled"}, ensure_ascii=False))
         return 1
     sources = load_sources_from_file()
+    if args.source_id:
+        wanted = set(args.source_id)
+        sources = [s for s in sources if str(s.get("source_id", "")) in wanted]
+    for i, url in enumerate(args.source_url, 1):
+        sources.append({
+            "source_id": f"local_threads_source_{i}",
+            "source_platform": "threads",
+            "target_account_ids": ["night_scout" if args.account_id == "all" else args.account_id],
+            "url": url,
+            "fetch_enabled": True,
+            "manual_only": False,
+        })
     selected, skipped = select_sources(sources, account_id=args.account_id, platform=args.platform, include_x=args.include_x)
-    rows = [normalize_source(src) for src in selected]
+    selected = selected[: max(1, args.limit)]
+    rows = []
+    archive_payloads = []
+    for src in selected:
+        url = src.get("url") or src.get("source_url") or src.get("canonical_url") or ""
+        fetched = fetch_threads_post(url) if args.fetch_real and str(src.get("source_platform", "")).lower() == "threads" else {}
+        rows.append(normalize_source(src, fetched))
+        if fetched:
+            archive_payloads.append(fetched.get("raw", {}))
+    rows, duplicate_skipped = dedupe_rows(rows)
     plan = {
         "status": "PLAN_ONLY" if not args.apply else "WILL_APPLY",
         "selected_count": len(selected),
+        "deduped_count": len(rows),
+        "duplicate_skipped": duplicate_skipped,
         "skipped_count": len(skipped),
         "media_download": False,
         "x_enabled": bool(args.include_x),
+        "real_fetch": bool(args.fetch_real),
         "rows": rows[:10],
+        "archive_payloads": archive_payloads[:10],
         "skipped": skipped[:20],
     }
     if not args.apply:
@@ -121,8 +221,8 @@ def main() -> int:
     from sheets_client import SheetsClient
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    appended = _append_many(client, "reference_posts", rows)
-    print(json.dumps({"status": "APPLIED", "reference_posts_appended": appended}, ensure_ascii=False))
+    appended = _append_many(client, "source_account_posts", rows)
+    print(json.dumps({"status": "APPLIED", "source_account_posts_appended": appended}, ensure_ascii=False))
     return 0
 
 

@@ -47,6 +47,23 @@ python3 scripts/collect_reference_posts.py --account-id night_scout --source-pla
 - 収集対象は参考メタのみ（`use_status=REFERENCE_ONLY`）。実 X API は起動しない。
 - 書き込み先タブ: `source_account_posts`（`post_url` で重複検知 / `rights_status` / `can_reuse_media`）。
 
+### Threads public source collection (v2 real adapter)
+
+`scripts/collect_source_posts.py` は、Threads公開投稿URLからOG metadataを取得して `source_account_posts` 形式の行を計画できる。
+
+```bash
+python3 scripts/collect_source_posts.py --platform threads --account-id all --dry-run \
+  --source-url "https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs" \
+  --source-url "https://www.threads.com/@kyaba_consul_mizu/post/DaNToTqgQ7i" \
+  --fetch-real
+```
+
+- 本番source registryでは `fetch_enabled=true` が0件のため、標準dry-runは `selected_count=0` が正常。
+- 小さく試す場合は `--source-url` か、レビュー済みsourceを1〜2件だけ `fetch_enabled=true` にする。大量ONは禁止。
+- Xは既定OFF。`manual_only=true` のX sourceはこの工程ではfetchしない。
+- raw payloadはtoken/cookie/secret系キーをredactしたうえでplanに含める。第三者media本体はdownloadしない。
+- 保存先は `source_account_posts`。`post_url` 重複はdry-run/applyともskipする。
+
 ## 2. 参考 URL の登録
 
 ```bash

@@ -1839,3 +1839,144 @@ Source candidates
 - source fetchは `fetch_enabled=true` が0件のため収集applyなし。
 - metric_snapshotsタブへの本番書き込みは未実行。
 - 自社/許諾済み素材が登録されるまでcut/upload/media queue applyは行わない。
+
+## v2 real data collection adapters (2026-06-30)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD / origin/main: `9a1c4fa3418dacc032845de14027f1172cf7a320`
+- 追加commit予定: `feat: v2実データ収集アダプタを追加`
+
+### 変更ファイル一覧
+
+- `scripts/collect_threads_metrics.py`
+- `scripts/collect_source_posts.py`
+- `scripts/collect_video_references.py`
+- `scripts/run_growth_loop.py`
+- `scripts/recover_production_sheets_threads_first.py`
+- `src/sheets_client.py`
+- `docs/growth-loop-runbook.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/video-reference-runbook.md`
+- `docs/threads-operation-runbook.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_collect_threads_metrics_browser_or_api_adapter.py`
+- `scripts/test_collect_threads_metrics_saves_partial_snapshot.py`
+- `scripts/test_collect_threads_metrics_updates_posted_results_without_fabrication.py`
+- `scripts/test_collect_source_posts_threads_real_adapter_plan.py`
+- `scripts/test_collect_source_posts_deduplicates_real_urls.py`
+- `scripts/test_collect_source_posts_archives_redacted_raw.py`
+- `scripts/test_video_metadata_real_adapter_plan.py`
+- `scripts/test_transcript_pipeline_no_download_for_third_party.py`
+- `scripts/test_growth_loop_uses_real_collection_outputs.py`
+- `scripts/test_growth_loop_still_no_auto_post.py`
+
+### 実装内容
+
+- Threads metrics:
+  - `collect_threads_metrics.py --source api/browser/manual/unavailable`。
+  - `--post-url` で公開Threads投稿URLをdry-run確認可能。
+  - 公開HTMLから信頼できる数値が取れない場合は `UNAVAILABLE` / `confidence=none` / `error_reason` を保存予定。
+  - unknownはnull維持。0確定と取得不可を分離。
+  - `metric_snapshots` tab schemaを追加。apply時は不足タブ/列を冪等作成。
+  - `posted_results` 更新時にNone metricsを空文字で上書きしない。
+- Threads source collection:
+  - `collect_source_posts.py --platform threads --source-url ... --fetch-real --dry-run` で公開OG metadataを取得。
+  - 保存予定行は `source_account_posts` schema。
+  - `post_url` dedupeをdry-run/apply双方で実施。
+  - third-party mediaはdownloadせず、`can_reuse_media=false` / `rights_status=reference_only`。
+  - raw payloadはsecret/cookie/token系キーをredact。
+- YouTube/TikTok metadata:
+  - `collect_video_references.py --fetch-metadata` で公開metadataを取得。
+  - download/cut/uploadは常にfalse。
+  - transcriptは公式/API取得のみ。実APIは別gate必須。
+- Growth loop:
+  - `--metric-post-url` と `--source-url --fetch-real` を既存収集CLIへ配線。
+  - source収集dry-runの出力を既存 `build_scores()` / `build_generation_rows()` に渡し、WAITING_REVIEW候補数をsummary表示。
+  - AUTOPOST OFF / real_post false維持。
+
+### dry-run結果
+
+- Sheets verify: PASS 61 / FAIL 0。
+- `collect_threads_metrics.py --source browser` 2投稿URL: `snapshot_count=2`、両方 `metrics_status=UNAVAILABLE`、`public_html_no_metrics`、全metrics null。
+- `collect_source_posts.py --platform threads --account-id all --source-url ... --fetch-real --dry-run`: `selected_count=2`, `deduped_count=2`, `status=COLLECTED`, media download false。
+- `collect_source_posts.py --platform threads --account-id all --dry-run`: `selected_count=0`。`fetch_enabled=true` が0件のため正常。
+- `collect_video_references.py --url <youtube> --fetch-metadata --dry-run`: `metadata_status=FETCHED`, download false。
+- `collect_video_references.py --dry-run`: `metadata_status=PLAN_ONLY`, download false。
+- `run_growth_loop.py --dry-run --account-id all --metric-post-url ... --source-url ... --fetch-real`: `real_collection_pipeline.source_posts=2`, `scored_count=2`, `candidate_count=2`, `candidate_status=WAITING_REVIEW`, `auto_post=false`。
+- `run_growth_loop.py --dry-run --account-id all`: `NO_DATA`。標準状態ではsource fetch_enabled 0件で安全。
+
+### テスト結果
+
+- 新規10本: PASS。
+- `test_phase8_sheets_schema.py`: PASS 81 / FAIL 0。
+- `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0。
+- `test_run_growth_loop_no_auto_post.py`: PASS 3 / FAIL 0。
+- `test_collect_source_posts_no_x_by_default.py`: PASS 2 / FAIL 0。
+- `test_process_threads_queue.py`: PASS 11 / FAIL 0。
+
+### 安全確認
+
+- 実投稿なし。
+- X投稿なし / X fetchなし。
+- beauty投稿なし。
+- third-party動画download/cut/upload/repostなし。
+- Cloudinary uploadなし。
+- transcription API呼び出しなし。
+- AUTOPOSTはOFF維持。
+- `fetch_enabled=true` は増やしていない。
+- secret/token/cookie値は表示・docs記載なし。
+- `.env`, `data/`, `output/`, `.claude/plans/` はcommit対象外。
+
+### 未完了事項 / 残WARN
+
+- Threads公開ページでは投稿metrics数値が出ないため、自動metricsは現在 `UNAVAILABLE`。正規APIまたはログイン済み管理画面の合法導線が必要。
+- `metric_snapshots` の本番applyは未実行。実施時は `--apply --confirm-metrics --use-sheets`。
+- source registry側の `fetch_enabled=true` は0件維持。実収集apply前に1〜2件だけ人間レビューしてONにする。
+- TikTok metadata実URLのネットワークdry-runは未実施。実施時もdownload禁止。
+
+### スケール方針
+
+- 最初は `--source-url` または `fetch_enabled=true` 1〜2件で運用確認。
+- 大量ONは禁止。duplicate rate、取得失敗率、source品質を見てから段階的に増やす。
+- metricsは `PARTIAL/UNAVAILABLE` を許容し、0埋めでPDCAしない。
+- 投稿案は `WAITING_REVIEW` または `DRAFT` まで。READY化は別承認。
+
+### 次に触ってよいファイル
+
+- `scripts/collect_threads_metrics.py`
+- `scripts/collect_source_posts.py`
+- `scripts/collect_video_references.py`
+- `scripts/run_growth_loop.py`
+- `scripts/score_reference_posts.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- 上記対応テスト
+- runbook docs
+
+### 衝突しやすいファイル
+
+- `src/sheets_client.py`（タブ定義が広い）
+- `scripts/recover_production_sheets_threads_first.py`（verify項目が多い）
+- `config/source_accounts/default_sources.json`（source registry真実源）
+- `docs/ai-work-handoff.md`（並行AIが追記しやすい）
+
+### 触らない方がいいファイル
+
+- `.env*`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secret/token/cookieを含む可能性があるローカル認証ファイル
+- beauty_accountをactive/READY/POSTED化する設定
+
+### 次AIへの引き継ぎメモ
+
+- まず `git status --short` と `git rev-parse HEAD origin/main` を確認。
+- `fetch_enabled=true` は0件が正しい。増やす場合は1〜2件だけ、必ずdry-runから。
+- metrics自動取得は公開HTMLでは数値不可だった。`UNAVAILABLE` は正常な安全結果で、0にしない。
+- source収集のapply先は `source_account_posts`。`reference_posts` ではない。
+- `run_growth_loop.py` はdry-run summaryで候補数を出すだけ。投稿しない。

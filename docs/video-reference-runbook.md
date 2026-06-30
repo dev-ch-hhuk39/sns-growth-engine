@@ -67,3 +67,23 @@ Safety rules:
 - Transcript is used only when official/API text is available or the API gate is explicitly opened.
 - Download/cut/upload/repost is prohibited for `third_party_reference_only`.
 - Generated ideas are `WAITING_REVIEW` or `DRAFT`, never `READY`.
+
+## Public Metadata Adapter (2026-06-30)
+
+`scripts/collect_video_references.py` can fetch public page metadata for YouTube/TikTok reference URLs without downloading video.
+
+```bash
+python3 scripts/collect_video_references.py \
+  --url "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
+  --fetch-metadata \
+  --dry-run
+```
+
+Dry-run result on 2026-06-30:
+
+- YouTube title / author / thumbnail metadata was fetched from public metadata.
+- `download=false`, `can_download=false`, `can_cut=false`, `can_upload=false`.
+- `rights_status=third_party_reference_only`.
+- Transcript remains gated: use official/API transcript only. Real transcription API requires `ALLOW_TRANSCRIPTION_API=true` plus explicit confirmation.
+
+TikTok/YouTube third-party videos remain reference-analysis only. Do not download, cut, upload, or repost unless the asset is owned/licensed and the separate media gates are opened.
