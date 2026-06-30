@@ -139,3 +139,45 @@ python3 scripts/process_threads_queue.py --account-id liver_manager --dry-run --
 - 実投稿には `PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true` と `--confirm-real-post` が必要
 
 AUTO_POSTを有効化する場合も `run_autopilot_loop.py --auto-post` だけでは投稿されない。設定側の `auto_post_enabled=true`、env gate、`--confirm-real-post` が全て必要。
+
+## 2026-06-30 first real post result
+
+1件だけ実投稿を実施済み。再実行しないこと。
+
+- account: `liver_manager`
+- queue_id: `q_liver_manager_manualref_src_lm_note_cand_001_threads`
+- result_id: `threads_q_liver_manager_manualref_src_lm_note_cand_001_threads_20260630025810`
+- post_url: `https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs`
+- queue status: `POSTED`
+- posted_results: `POSTED`, `metrics_status=PENDING`, `real_post=TRUE`, `media_used=FALSE`
+
+実投稿後の確認:
+
+```bash
+python3 scripts/recover_production_sheets_threads_first.py --verify-only --json
+python3 scripts/import_threads_metrics_manual.py --result-id threads_q_liver_manager_manualref_src_lm_note_cand_001_threads_20260630025810 --views 0 --likes 0 --comments 0 --follows 0 --profile-clicks 0 --line-adds 0 --memo "first post metrics dry-run template" --dry-run
+python3 scripts/generate_next_queue_from_metrics.py --dry-run --account-id liver_manager
+```
+
+運用メモ:
+
+- metrics実測値が取れるまでは `metrics_status=PENDING` のまま。
+- metrics applyは人間が数値を確認してから行う。
+- 次の実投稿候補は `night_scout` のREADY 1件のみ。必ずdry-runで対象確認してから、別作業で1件だけ実行する。
+- `PUBLISH_ENABLED=true` と `ALLOW_REAL_THREADS_POST=true` はコマンドスコープでのみ使う。
+
+## Scheduled AUTO_READY pilot
+
+`.github/workflows/autopilot-auto-ready.yml` を追加した。6時間ごとにAUTO_READYまでを実行する設計で、投稿はしない。
+
+安全条件:
+
+- `PUBLISH_ENABLED=false`
+- `ALLOW_REAL_THREADS_POST=false`
+- `ALLOW_REAL_X_POST=false`
+- `ALLOW_TRANSCRIPTION_API=false`
+- `ALLOW_CLOUDINARY_UPLOAD=false`
+- `run_autopilot_loop.py --apply --confirm-run --auto-ready --skip-real-post`
+- `--confirm-real-post` はworkflowに含めない
+
+Actionsはこの作業では実行していない。初回運用時はGitHub Secrets設定を確認し、workflow logsにsecret値が出ていないことを確認する。

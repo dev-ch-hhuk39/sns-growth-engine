@@ -237,3 +237,40 @@ AUTO_READY条件:
 - `kill_switch=false`
 
 AUTO_READY後も実投稿はしない。workerは `READY` のみをdry-run/実投稿対象として検出する。
+
+## Post-first-run metrics and PDCA path (2026-06-30)
+
+初回Threads実投稿後のreference pipeline状態:
+
+- `posted_results` に `liver_manager` の本番Threads投稿1件を保存済み。
+- result_id: `threads_q_liver_manager_manualref_src_lm_note_cand_001_threads_20260630025810`
+- metricsは未測定のため `metrics_status=PENDING`。
+
+安全なmetrics dry-run:
+
+```bash
+python3 scripts/import_threads_metrics_manual.py \
+  --result-id threads_q_liver_manager_manualref_src_lm_note_cand_001_threads_20260630025810 \
+  --views 0 \
+  --likes 0 \
+  --comments 0 \
+  --follows 0 \
+  --profile-clicks 0 \
+  --line-adds 0 \
+  --memo "first post metrics dry-run template" \
+  --dry-run
+```
+
+安全なPDCA dry-run:
+
+```bash
+python3 scripts/generate_next_queue_from_metrics.py --dry-run --account-id liver_manager
+```
+
+現在はMEASURED metricsがないため `candidate_count=0`。PDCA候補生成をapplyするのは、実測値を人間が確認し、metricsを保存してから。
+
+Media / video pilot:
+
+- `plan_media_mix.py --dry-run --account-id all --use-sheets`: `media_candidate_count=0`
+- `generate_video_reference_posts.py --dry-run --account-id all`: 6件の `WAITING_REVIEW` planのみ
+- video referenceは構成参考だけ。download/cut/upload/transcription/repostなし。

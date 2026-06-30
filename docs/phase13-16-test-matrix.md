@@ -269,3 +269,69 @@ python3 scripts/test_cloudinary_upload_requires_confirm_flag.py
 ```
 
 結果: 全件PASS。既存重要テストもPASS。
+
+## First real Threads post / AUTOPOST pilot tests (2026-06-30)
+
+追加テスト:
+
+```bash
+python3 scripts/test_first_real_post_requires_triple_gate.py
+python3 scripts/test_process_threads_queue_single_post_cap.py
+python3 scripts/test_posted_results_written_after_success.py
+python3 scripts/test_no_retry_loop_on_post_failure.py
+python3 scripts/test_autopost_stays_disabled_by_default.py
+python3 scripts/test_autopost_pilot_requires_all_gates.py
+python3 scripts/test_daily_autopilot_workflow_no_real_post.py
+python3 scripts/test_metrics_import_safe_after_first_post.py
+python3 scripts/test_pdca_safe_after_first_post_without_metrics.py
+python3 scripts/test_media_pilot_requires_approved_asset.py
+```
+
+結果: 新規10本 PASS 56 / FAIL 0。
+
+既存重要テスト:
+
+```bash
+python3 scripts/test_process_threads_queue.py
+python3 scripts/test_threads_queue_duplicate_guard.py
+python3 scripts/test_import_threads_metrics_manual.py
+python3 scripts/test_generate_next_queue_from_metrics.py
+python3 scripts/test_pdca_dry_run_safe_without_posted_results.py
+python3 scripts/test_auto_approve_queue_dry_run.py
+python3 scripts/test_auto_approve_queue_apply_ready_only_safe_items.py
+python3 scripts/test_auto_approve_queue_never_approves_media_without_gate.py
+python3 scripts/test_run_autopilot_loop_plan_only.py
+python3 scripts/test_run_autopilot_loop_auto_ready_only.py
+python3 scripts/test_run_autopilot_loop_no_auto_post_without_flags.py
+python3 scripts/test_run_autopilot_loop_auto_post_requires_triple_gate.py
+python3 scripts/test_media_mix_ratio_plan.py
+python3 scripts/test_media_plan_never_reuses_third_party.py
+python3 scripts/test_video_reference_posts_waiting_review_only.py
+python3 scripts/test_one_video_generates_multiple_posts.py
+python3 scripts/test_transcription_requires_confirm_flag.py
+python3 scripts/test_video_download_requires_confirm_flag.py
+python3 scripts/test_cloudinary_upload_requires_confirm_flag.py
+python3 scripts/test_threads_queue_worker_workflow.py
+python3 scripts/test_all_workflows_safety_flags.py
+python3 scripts/test_media_approved_pilot_workflow.py
+python3 scripts/test_required_source_urls_present.py
+python3 scripts/test_seed_source_registry.py
+python3 scripts/test_source_registry_verify_checks.py
+python3 scripts/test_beauty_account_block.py
+python3 scripts/test_no_beauty_ready_queue.py
+python3 scripts/test_media_policy_guard.py
+python3 scripts/test_phase13_production_sources_real_urls.py
+python3 scripts/test_waiting_review_not_worker_selectable.py
+python3 scripts/test_ready_only_worker_after_source_loop.py
+```
+
+結果: 全件PASS。`test_all_workflows_safety_flags.py` は PASS 103 / FAIL 0。
+
+Live verify / dry-run:
+
+- `recover_production_sheets_threads_first.py --verify-only --json`: PASS 61 / FAIL 0
+- `import_threads_metrics_manual.py --dry-run`: PASS
+- `generate_next_queue_from_metrics.py --dry-run --account-id liver_manager`: PASS (`candidate_count=0`)
+- `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post --use-sheets`: PASS (`auto_post_gate.allowed=false`)
+- `plan_media_mix.py --dry-run --account-id all --use-sheets`: PASS (`media_candidate_count=0`)
+- `generate_video_reference_posts.py --dry-run --account-id all`: PASS (`WAITING_REVIEW` planのみ)

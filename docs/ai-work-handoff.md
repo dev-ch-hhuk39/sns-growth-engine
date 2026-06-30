@@ -1530,3 +1530,106 @@ Source candidates
 - 次に実投稿へ進むなら、READY化済み2件のうち1件だけ `process_threads_queue.py --dry-run --max-posts 1` で再確認し、別途三重ゲート付きで実行する。
 - AUTO_READY追加実行はcooldown 180分後。`kill_switch=true` にすると即停止。
 - AUTOPOSTを有効化する場合も `auto_post_enabled=true`、env gate、`--confirm-real-post` が全て必要。
+
+## First real Threads post / autopilot pilot (2026-06-30)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD / origin/main: `82eeef90b1c525f07533d6cf11140d9a8566426d`
+- 追加commit: `feat: 初回実投稿テストと自動運用パイロットを追加`
+
+### 変更ファイル一覧
+
+- `.github/workflows/autopilot-auto-ready.yml`
+- `scripts/test_first_real_post_requires_triple_gate.py`
+- `scripts/test_process_threads_queue_single_post_cap.py`
+- `scripts/test_posted_results_written_after_success.py`
+- `scripts/test_no_retry_loop_on_post_failure.py`
+- `scripts/test_autopost_stays_disabled_by_default.py`
+- `scripts/test_autopost_pilot_requires_all_gates.py`
+- `scripts/test_daily_autopilot_workflow_no_real_post.py`
+- `scripts/test_metrics_import_safe_after_first_post.py`
+- `scripts/test_pdca_safe_after_first_post_without_metrics.py`
+- `scripts/test_media_pilot_requires_approved_asset.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `docs/threads-operation-runbook.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/phase13-16-test-matrix.md`
+
+### 初回実投稿結果
+
+- 実投稿: 1件のみ実行。追加retryなし。
+- account: `liver_manager`
+- queue_id: `q_liver_manager_manualref_src_lm_note_cand_001_threads`
+- result_id: `threads_q_liver_manager_manualref_src_lm_note_cand_001_threads_20260630025810`
+- post_url: `https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs`
+- queue status: `POSTED`
+- posted_results: `status=POSTED`, `metrics_status=PENDING`, `real_post=TRUE`, `media_used=FALSE`
+- 実行時envはコマンドスコープのみ: `PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true`
+
+### 現在のSheets状態
+
+- `recover_production_sheets_threads_first.py --verify-only --json`: PASS 61 / FAIL 0
+- `posted_results`: 5件
+- `queue` status: `POSTED=2`, `READY=1`, `WAITING_REVIEW=8`, `PLANNED=2`, `DUPLICATE_BLOCKED=1`
+- `night_scout`: `POSTED=1`, `READY=1`, `WAITING_REVIEW=4`, `PLANNED=1`
+- `liver_manager`: `POSTED=1`, `WAITING_REVIEW=4`, `PLANNED=1`, `DUPLICATE_BLOCKED=1`
+
+### dry-run / BLOCKED確認結果
+
+- `process_threads_queue.py --account-id liver_manager --dry-run --max-posts 1`: 実投稿前に対象1件を確認。
+- `import_threads_metrics_manual.py --result-id ... --dry-run`: PASS。0値metricsテンプレートを表示のみ、保存なし。
+- `generate_next_queue_from_metrics.py --dry-run --account-id liver_manager`: PASS。MEASURED metricsなしのため `candidate_count=0`。
+- `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post --use-sheets`: PASS。`auto_post_gate.allowed=false`。
+- `plan_media_mix.py --dry-run --account-id all --use-sheets`: PASS。`media_candidate_count=0`。
+- `generate_video_reference_posts.py --dry-run --account-id all`: PASS。6件の `WAITING_REVIEW` planのみ。
+
+### 未完了事項 / 残WARN
+
+- AUTOPOSTはOFFのまま。`auto_post_enabled=false` 維持。
+- Metricsはまだ本測定値未投入。`posted_results.metrics_status=PENDING`。
+- MEASURED metricsがないためPDCA実候補は0件。
+- Media assetsは0件。media/video pilotは計画のみで、download/cut/upload/transcription/Cloudinaryは未実行。
+- GitHub Actionsの `autopilot-auto-ready.yml` は追加したが、この作業ではActions実行なし。
+
+### 全テスト結果
+
+- 新規10本: PASS 56 / FAIL 0。
+- 既存重要31本: PASS。代表結果:
+  - `test_process_threads_queue.py`: PASS 11 / FAIL 0
+  - `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0
+  - `test_seed_source_registry.py`: PASS 10 / FAIL 0
+  - `test_source_registry_verify_checks.py`: PASS 11 / FAIL 0
+  - `test_beauty_account_block.py`: PASS 9 / FAIL 0
+
+### 安全確認
+
+- 実fetch未実行。
+- X fetch / X投稿未実行。
+- video download / cut / upload 未実行。
+- transcription API未実行。
+- Cloudinary upload未実行。
+- media付き投稿未実行。
+- 実投稿はThreads 1件のみ。retryなし。
+- secret/token/cookie値は表示していない。
+- `beauty_account` はactive化なし、READY/POSTED化なし。
+- `fetch_enabled=true` 追加なし。
+- source priority自動変更なし。
+
+### 次に触ってよいファイル
+
+- Claude Code: `docs/threads-operation-runbook.md`, `docs/reference-pipeline-runbook.md`, `.github/workflows/autopilot-auto-ready.yml`
+- Codex: `scripts/process_threads_queue.py`, `scripts/import_threads_metrics_manual.py`, `scripts/generate_next_queue_from_metrics.py`, `scripts/run_autopilot_loop.py`
+
+### 衝突しやすいファイル / 触らない方がいいファイル
+
+- 衝突しやすい: `docs/ai-work-handoff.md`, `docs/production-completion-status.md`, `scripts/run_autopilot_loop.py`, `.github/workflows/threads-queue-worker.yml`
+- 触らない: `.env`, credential/token/cookie files, `data/`, `output/`, `.claude/plans/`, X real-post/fetch flags, beauty active/fetch/READY settings
+
+### 次AIへの引き継ぎメモ
+
+- 次は `posted_results` の実metricsを人間が手入力し、`import_threads_metrics_manual.py --dry-run` で値を確認してから apply する。
+- `night_scout` にREADYが1件残っている。投稿する場合は必ず `process_threads_queue.py --account-id night_scout --dry-run --max-posts 1` を再確認し、別作業として1件だけ実行する。
+- AUTO_READYの定期workflowはREADY昇格まで。投稿はしない。

@@ -1,0 +1,93 @@
+name: Autopilot AUTO_READY Pilot
+
+# Scheduled AUTO_READY pilot.
+# This workflow may promote safe Threads queue rows to READY, but it never posts.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: "Target account scope"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - "all"
+          - "night_scout"
+          - "liver_manager"
+      max_ready:
+        description: "Maximum rows to promote to READY"
+        required: true
+        default: "1"
+        type: choice
+        options:
+          - "1"
+          - "2"
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  DRY_RUN: "false"
+  MOCK_LLM: "false"
+  MOCK_SHEETS: "false"
+
+jobs:
+  auto-ready:
+    name: AUTO_READY without posting
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id || 'all' }}
+      MAX_READY: ${{ github.event.inputs.max_ready || '1' }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Guard account and Sheets secrets
+        run: |
+          if [ "$ACCOUNT_ID" != "all" ] && [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ]; then
+            echo "[BLOCKED] unsupported account"
+            exit 1
+          fi
+          if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
+            echo "[BLOCKED] Sheets spreadsheet secret is missing."
+            exit 1
+          fi
+          if [ -z "$SA_JSON_BASE64" ] && [ -z "$GCP_SA_JSON_BASE64" ]; then
+            echo "[BLOCKED] Sheets service account secret is missing."
+            exit 1
+          fi
+
+      - name: Verify Sheets before AUTO_READY
+        run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
+
+      - name: AUTO_READY apply only
+        run: |
+          python3 scripts/run_autopilot_loop.py \
+            --apply \
+            --confirm-run \
+            --account-id "$ACCOUNT_ID" \
+            --auto-ready \
+            --max-ready "$MAX_READY" \
+            --max-posts 1 \
+            --use-sheets \
+            --skip-real-post
+
+      - name: Verify Sheets after AUTO_READY
+        run: python3 scripts/recover_production_sheets_threads_first.py --verify-only

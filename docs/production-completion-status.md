@@ -356,3 +356,27 @@ Media / video:
 - 初期AUTO_READY対象はmediaなしのみ。media付きは別review/gate。
 - YouTube/TikTokはreference analysis用。download/cut/upload/repostは行わない。
 - `generate_video_reference_posts.py` で1動画から複数のWAITING_REVIEW案をPLAN_ONLY生成可能。
+
+## First real Threads post and pilot hardening (2026-06-30)
+
+初回の本番Threads投稿を1件だけ実施し、結果保存、metrics import経路、PDCA dry-run、AUTO_READY定期化、media/video pilotの安全確認まで完了。
+
+- 実投稿: `liver_manager` 1件のみ。
+- queue_id: `q_liver_manager_manualref_src_lm_note_cand_001_threads`
+- result_id: `threads_q_liver_manager_manualref_src_lm_note_cand_001_threads_20260630025810`
+- post_url: `https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs`
+- queue更新: `READY -> POSTED`
+- posted_results: `POSTED`, `metrics_status=PENDING`, `real_post=TRUE`, `media_used=FALSE`
+- verify: PASS 61 / FAIL 0。`posted_results=5`
+- metrics import: `--dry-run` で0値テンプレート確認。保存なし。
+- PDCA: MEASURED metricsなしのため `candidate_count=0`。保存なし。
+- AUTOPOST: `auto_post_enabled=false` 維持。`run_autopilot_loop.py` dry-runで `auto_post_gate.allowed=false`。
+- GitHub Actions: `.github/workflows/autopilot-auto-ready.yml` を追加。scheduleはAUTO_READY適用のみで `--skip-real-post` 固定。
+- media/video: `media_assets=0`、media付き投稿なし。video referenceは `WAITING_REVIEW` planのみ。
+
+残状態:
+
+- `queue`: `POSTED=2`, `READY=1`, `WAITING_REVIEW=8`, `PLANNED=2`, `DUPLICATE_BLOCKED=1`
+- `night_scout`: READY 1件あり。実投稿する場合は別作業でdry-run後に1件だけ。
+- `liver_manager`: READY 0件。今回の対象はPOSTED済み。
+- 実fetch / X fetch / X投稿 / video download / cut / upload / transcription API / Cloudinary upload は未実行。
