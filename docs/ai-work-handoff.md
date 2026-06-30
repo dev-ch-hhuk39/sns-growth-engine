@@ -1199,3 +1199,63 @@ Source candidates
 - `test_required_source_urls_present.py` が required URL抜けの防止ゲート。
 - X required source は `manual_only=true` / `active=false` / `fetch_enabled=false` を維持し、X APIやqueueに接続しない。
 - Threads required source は `night_scout` 用。実fetchはせず、manual/reference sourceとして保持する。
+
+## Codex source registry Sheets apply / 初回導通確認 (2026-06-30 追記)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- HEAD / `origin/main`: `564987b03f27a9baeef447815797d4952d7f6f33`
+- 作業内容: source registry の Google Sheets seed apply と、収集→採点→Threads投稿案生成の PLAN_ONLY 導通確認。
+
+### 変更ファイル一覧
+
+- `docs/ai-work-handoff.md`（この追記のみ）
+
+### Sheets apply結果
+
+- `python3 scripts/recover_production_sheets_threads_first.py --verify-only --json`: apply前は `source_registry_reflected` / `video_sources_reflected` のみ未反映で FAIL。
+- `python3 scripts/seed_source_registry.py --dry-run --target-account all --platform all`: PASS。63 source_accounts / 33 reference_sources、`fetch_enabled_true=0`、X manual_only、beauty safety維持、duplicateなし。
+- `python3 scripts/seed_source_registry.py --apply --confirm-seed --target-account all --platform all`: PASS。source registry seed のみ Sheets へ反映。
+- apply内訳: `source_accounts` added 46 / updated 17、`reference_sources` added 29 / updated 4。
+- apply後 `python3 scripts/recover_production_sheets_threads_first.py --verify-only --json`: PASS 61 / FAIL 0。
+- apply後 Sheets確認: source_accounts 63、reference_sources 33、required Threads 6/6、required X 7/7、`fetch_enabled=true` 0、beauty active 0、`target_account_id=beauty_future` 0。
+
+### 初回導通dry-run結果
+
+- `python3 scripts/collect_reference_posts.py --account-id night_scout`: PLAN_ONLY。REFERENCE_ONLY、media_download=false、real_x_api=false、auto_post=false。
+- `python3 scripts/score_reference_posts.py --account-id night_scout`: PLAN_ONLY。
+- `python3 scripts/generate_threads_ideas_from_references.py --account-id night_scout`: PLAN_ONLY。delegateは `generate_from_references.py --mock --dry-run`、生成候補statusは WAITING_REVIEW、worker_selectable=false。
+- `python3 scripts/collect_reference_posts.py --account-id liver_manager`: PLAN_ONLY。REFERENCE_ONLY、media_download=false、real_x_api=false、auto_post=false。
+- `python3 scripts/score_reference_posts.py --account-id liver_manager`: PLAN_ONLY。
+- `python3 scripts/generate_threads_ideas_from_references.py --account-id liver_manager`: PLAN_ONLY。delegateは `generate_from_references.py --mock --dry-run`、生成候補statusは WAITING_REVIEW、worker_selectable=false。
+
+### 未完了事項 / 残WARN
+
+- 実収集は未実行のため、`reference_posts` / `reference_post_scores` は 0件のまま。
+- WAITING_REVIEW実生成applyは未実行。既存reference_postsが0件だったため、今回は dry-run確認で停止。
+- `collect_reference_posts.py` / `score_reference_posts.py` / `generate_threads_ideas_from_references.py` は `--dry-run` optionを持たず、`--apply`なしが PLAN_ONLY dry-run相当。
+
+### 安全確認
+
+- 実fetch / X fetch / video download / transcription API / Cloudinary upload / 実投稿 / X投稿は未実行。
+- Sheets applyは source registry seed のみ。
+- `fetch_enabled=true` は0件維持。
+- `beauty_account` は active化なし、target維持。
+- secret値 / cookie値は表示していない。
+
+### 次に人間が見るべきSheetsタブ
+
+- `収集元アカウント`
+- `動画収集元`
+- `収集済み投稿`
+- `参考投稿`
+- `参考投稿スコア`
+- `投稿キュー`
+- `SNS投稿文`
+
+### 次AIへの引き継ぎメモ
+
+- 次に進めるなら、X以外の安全なThreads/手動sourceから `reference_posts` を人間確認前提で少量作る段階。
+- 投稿案を実生成する場合も `WAITING_REVIEW` までに止め、`READY` 化と worker選択は人間承認後にする。
+- source registryの再applyは `seed_source_registry.py --dry-run` で63/33/0件を確認してから実施する。
