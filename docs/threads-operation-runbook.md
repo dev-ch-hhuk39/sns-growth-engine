@@ -181,3 +181,38 @@ python3 scripts/generate_next_queue_from_metrics.py --dry-run --account-id liver
 - `--confirm-real-post` はworkflowに含めない
 
 Actionsはこの作業では実行していない。初回運用時はGitHub Secrets設定を確認し、workflow logsにsecret値が出ていないことを確認する。
+
+## Metrics / second account pilot note (2026-06-30)
+
+`import_threads_metrics_manual.py` は、本番保存時に以下が必須。
+
+```bash
+python3 scripts/import_threads_metrics_manual.py \
+  --result-id <result_id> \
+  --views <数値> \
+  --likes <数値> \
+  --comments <数値> \
+  --follows <数値> \
+  --profile-clicks <数値> \
+  --line-adds <数値> \
+  --memo "<確認メモ>" \
+  --use-sheets \
+  --apply \
+  --confirm-metrics
+```
+
+値なしdry-runはテンプレート表示のみで、`MEASURED` にはしない。
+
+```bash
+python3 scripts/import_threads_metrics_manual.py --result-id <result_id> --dry-run
+```
+
+`night_scout` の追加投稿は、このturnでは承認システム `out of credits` により未実行。次回は以下の順で1件のみ実施する。
+
+```bash
+python3 scripts/recover_production_sheets_threads_first.py --verify-only --json
+python3 scripts/process_threads_queue.py --account-id night_scout --dry-run --max-posts 1
+PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true python3 scripts/process_threads_queue.py --account-id night_scout --max-posts 1 --confirm-real-post
+```
+
+失敗時にretryしない。成功後は `posted_results` と `queue` を確認し、metricsは別途明示値で取り込む。

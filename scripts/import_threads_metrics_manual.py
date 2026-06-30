@@ -21,6 +21,9 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+METRIC_FIELDS = ("views", "likes", "comments", "follows", "profile_clicks", "line_adds")
+
+
 def compute_engagement_rate(views: int, likes: int, comments: int) -> float:
     """ER = (likes + comments) / views。views<=0 なら 0。純粋関数（テスト用に分離）。"""
     if views <= 0:
@@ -132,37 +135,101 @@ def save_pdca(client: SheetsClient, row: dict[str, Any], memo: str) -> dict[str,
     }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Import manual Threads metrics")
-    parser.add_argument("--result-id", required=True)
-    parser.add_argument("--views", type=int, required=True)
-    parser.add_argument("--likes", type=int, required=True)
-    parser.add_argument("--comments", type=int, required=True)
-    parser.add_argument("--follows", type=int, required=True)
-    parser.add_argument("--profile-clicks", type=int, default=0)
-    parser.add_argument("--line-adds", type=int, default=0)
-    parser.add_argument("--memo", default="")
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+def build_metric_fields(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
+    """Build Sheets fields from explicitly supplied metrics only.
 
-    if min(args.views, args.likes, args.comments, args.follows, args.profile_clicks, args.line_adds) < 0:
-        print("[ERROR] metrics must be >= 0")
-        return 1
-
-    fields = {
+    `--dry-run --result-id ...` is allowed as an operator template, but it must
+    not silently fabricate 0 values. To write MEASURED, all core fields must be
+    supplied by the operator, even if the observed value is 0.
+    """
+    comments = args.comments if args.comments is not None else args.replies
+    values = {
         "views": args.views,
         "likes": args.likes,
-        "comments": args.comments,
+        "comments": comments,
         "follows": args.follows,
         "profile_clicks": args.profile_clicks,
         "line_adds": args.line_adds,
-        "metrics_status": "MEASURED",
-        "collected_at": now_iso(),
-        "manual_memo": args.memo,
     }
+    missing = [key for key, value in values.items() if value is None]
+    fields = {key: value for key, value in values.items() if value is not None}
+    if args.reposts is not None:
+        fields["reposts"] = args.reposts
+    if args.quotes is not None:
+        fields["quotes"] = args.quotes
+    if not missing:
+        fields.update({
+            "metrics_status": "MEASURED",
+            "collected_at": now_iso(),
+            "manual_memo": args.memo,
+        })
+    return fields, missing
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Import manual Threads metrics")
+    parser.add_argument("--result-id", required=True)
+    parser.add_argument("--views", type=int)
+    parser.add_argument("--likes", type=int)
+    parser.add_argument("--comments", type=int)
+    parser.add_argument("--replies", type=int, help="Alias for --comments")
+    parser.add_argument("--reposts", type=int)
+    parser.add_argument("--quotes", type=int)
+    parser.add_argument("--follows", type=int)
+    parser.add_argument("--profile-clicks", "--profile_clicks", dest="profile_clicks", type=int)
+    parser.add_argument("--line-adds", "--line_adds", dest="line_adds", type=int)
+    parser.add_argument("--memo", default="")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--use-sheets", action="store_true", help="Accepted for production runbook compatibility")
+    parser.add_argument("--apply", action="store_true", help="Write metrics to Sheets")
+    parser.add_argument("--confirm-metrics", action="store_true", help="Required with --apply")
+    args = parser.parse_args()
+
+    supplied = [
+        v for v in (
+            args.views,
+            args.likes,
+            args.comments,
+            args.replies,
+            args.reposts,
+            args.quotes,
+            args.follows,
+            args.profile_clicks,
+            args.line_adds,
+        )
+        if v is not None
+    ]
+    if supplied and min(supplied) < 0:
+        print("[ERROR] metrics must be >= 0")
+        return 1
+
+    fields, missing = build_metric_fields(args)
     if args.dry_run:
-        print(json.dumps({"dry_run": True, "result_id": args.result_id, "fields": fields}, ensure_ascii=False))
+        print(json.dumps({
+            "dry_run": True,
+            "result_id": args.result_id,
+            "fields": fields,
+            "missing_metrics": missing,
+            "would_mark_measured": not missing,
+            "notes": "Missing metrics are not fabricated. Supply explicit 0 values to mark MEASURED.",
+        }, ensure_ascii=False))
         return 0
+
+    if not args.apply or not args.confirm_metrics:
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "Metrics write requires --apply --confirm-metrics",
+            "result_id": args.result_id,
+            "missing_metrics": missing,
+        }, ensure_ascii=False))
+        return 1
+    if missing:
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "All core metrics must be supplied explicitly; use 0 for confirmed unknown/zero values",
+            "missing_metrics": missing,
+        }, ensure_ascii=False))
+        return 1
 
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)

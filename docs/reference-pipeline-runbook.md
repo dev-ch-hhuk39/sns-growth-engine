@@ -274,3 +274,30 @@ Media / video pilot:
 - `plan_media_mix.py --dry-run --account-id all --use-sheets`: `media_candidate_count=0`
 - `generate_video_reference_posts.py --dry-run --account-id all`: 6件の `WAITING_REVIEW` planのみ
 - video referenceは構成参考だけ。download/cut/upload/transcription/repostなし。
+
+## Metrics-driven PDCA candidate behavior (2026-06-30)
+
+metrics import後のPDCAは、`metrics_status=MEASURED` の `posted_results` のみを根拠にする。
+
+- `PENDING` metricsは候補生成に使わない。
+- 値なしmetrics dry-runでは `MEASURED` にしない。
+- 本番値が取れない場合、0を入れるなら「人間が0または不明を0扱いと明示判断した」場合だけ。
+- offline test/sample MEASUREDでは `candidate_count=1` を確認済み。
+- 本番applyで生成するqueueは `DRAFT`。`READY` にはせず、AUTO_READYまたは人間reviewを別工程にする。
+
+本番Sheets apply例:
+
+```bash
+python3 scripts/generate_next_queue_from_metrics.py \
+  --account-id liver_manager \
+  --dry-run \
+  --use-sheets
+
+python3 scripts/generate_next_queue_from_metrics.py \
+  --account-id liver_manager \
+  --apply \
+  --confirm-generate \
+  --use-sheets
+```
+
+このturnではSheets承認が拒否されたため、本番PDCA applyは未実行。

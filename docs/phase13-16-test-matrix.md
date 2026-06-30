@@ -335,3 +335,44 @@ Live verify / dry-run:
 - `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post --use-sheets`: PASS (`auto_post_gate.allowed=false`)
 - `plan_media_mix.py --dry-run --account-id all --use-sheets`: PASS (`media_candidate_count=0`)
 - `generate_video_reference_posts.py --dry-run --account-id all`: PASS (`WAITING_REVIEW` planのみ)
+
+## Metrics / PDCA / second account pilot tests (2026-06-30)
+
+追加テスト:
+
+```bash
+python3 scripts/test_metrics_measured_updates_pdca_candidate.py
+python3 scripts/test_pdca_generates_waiting_review_after_measured_metrics.py
+python3 scripts/test_night_scout_single_real_post_requires_triple_gate.py
+python3 scripts/test_two_account_posted_results_recorded.py
+python3 scripts/test_autopilot_workflow_static_no_post.py
+python3 scripts/test_autopost_remains_off_after_first_posts.py
+python3 scripts/test_metrics_import_does_not_fabricate_values.py
+python3 scripts/test_pdca_never_auto_ready_without_auto_approval.py
+```
+
+結果: 新規8本 PASS 50 / FAIL 0。
+
+既存重要テスト:
+
+```bash
+python3 scripts/test_process_threads_queue.py
+python3 scripts/test_import_threads_metrics_manual.py
+python3 scripts/test_generate_next_queue_from_metrics.py
+python3 scripts/test_threads_queue_duplicate_guard.py
+python3 scripts/test_all_workflows_safety_flags.py
+python3 scripts/test_auto_approve_queue_dry_run.py
+python3 scripts/test_run_autopilot_loop_no_auto_post_without_flags.py
+python3 scripts/test_media_policy_guard.py
+python3 scripts/test_beauty_account_block.py
+```
+
+結果: 全件PASS。`test_all_workflows_safety_flags.py` は PASS 103 / FAIL 0。
+
+offline運用確認:
+
+- 値なしmetrics dry-run: PASS。`missing_metrics` を返し、捏造せず `would_mark_measured=false`。
+- 明示ゼロ値metrics dry-run: PASS。`would_mark_measured=true`。
+- offline sample MEASURED PDCA dry-run: PASS。`candidate_count=1`, `candidate_status=DRAFT`。
+- AUTO_READY dry-run（Sheetsなし）: PASS。`auto_post_gate.allowed=false`。
+- media/video dry-run（Sheetsなし）: PASS。download/cut/upload/transcriptionなし。

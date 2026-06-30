@@ -380,3 +380,16 @@ Media / video:
 - `night_scout`: READY 1件あり。実投稿する場合は別作業でdry-run後に1件だけ。
 - `liver_manager`: READY 0件。今回の対象はPOSTED済み。
 - 実fetch / X fetch / X投稿 / video download / cut / upload / transcription API / Cloudinary upload は未実行。
+
+## Metrics / PDCA pilot hardening (2026-06-30)
+
+投稿後metricsとPDCA候補生成の運用ループを補強した。ただし、この作業中はGoogle Sheets接続が承認システムの `out of credits` で拒否されたため、本番metrics apply / night_scout実投稿は未実行。
+
+- Threads post URLはHTTP 200で到達確認済み。
+- 公開ページから信頼できるmetrics値は取得できず、本番値は捏造しない方針。
+- `import_threads_metrics_manual.py` は `--apply --confirm-metrics` 必須に変更。
+- 値なしdry-runは `missing_metrics` を返し、`MEASURED` にしない。
+- 明示ゼロ値dry-runは `would_mark_measured=true` まで確認。
+- offline sample MEASUREDではPDCA `candidate_count=1` を確認。生成候補は `DRAFT` でworker非対象。
+- AUTOPOSTは引き続き `auto_post_enabled=false`。
+- night_scout追加投稿は未実行。次回、Sheets/Threads接続承認が回復してから1件だけ実施する。

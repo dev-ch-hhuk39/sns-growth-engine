@@ -1633,3 +1633,87 @@ Source candidates
 - 次は `posted_results` の実metricsを人間が手入力し、`import_threads_metrics_manual.py --dry-run` で値を確認してから apply する。
 - `night_scout` にREADYが1件残っている。投稿する場合は必ず `process_threads_queue.py --account-id night_scout --dry-run --max-posts 1` を再確認し、別作業として1件だけ実行する。
 - AUTO_READYの定期workflowはREADY昇格まで。投稿はしない。
+
+## Metrics / PDCA / second-account pilot prep (2026-06-30)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD / origin/main: `557de587efcdda9ab5b7347982bafab66395acfa`
+- 追加commit予定: `feat: metrics PDCAと2アカウント投稿パイロットを追加`
+
+### 変更ファイル一覧
+
+- `scripts/import_threads_metrics_manual.py`
+- `scripts/generate_next_queue_from_metrics.py`
+- `scripts/test_metrics_measured_updates_pdca_candidate.py`
+- `scripts/test_pdca_generates_waiting_review_after_measured_metrics.py`
+- `scripts/test_night_scout_single_real_post_requires_triple_gate.py`
+- `scripts/test_two_account_posted_results_recorded.py`
+- `scripts/test_autopilot_workflow_static_no_post.py`
+- `scripts/test_autopost_remains_off_after_first_posts.py`
+- `scripts/test_metrics_import_does_not_fabricate_values.py`
+- `scripts/test_pdca_never_auto_ready_without_auto_approval.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `docs/threads-operation-runbook.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/phase13-16-test-matrix.md`
+
+### 実運用結果
+
+- Threads post URL: HTTP 200で到達確認済み。
+- 公開ページから信頼できるmetrics値は取得できなかったため、本番metricsは盛らない方針。
+- Google Sheets verify / read / apply は承認システム側の `out of credits` で拒否。回避せず停止。
+- `liver_manager` 本番metrics apply: 未実行。
+- `liver_manager` 本番PDCA apply: 未実行。
+- `night_scout` dry-run / 実投稿: Sheets接続不可のため未実行。追加実投稿なし。
+
+### 実装補強
+
+- `import_threads_metrics_manual.py`
+  - `--use-sheets`, `--apply`, `--confirm-metrics` を追加。
+  - `--replies` を `--comments` aliasとして追加。
+  - `--reposts`, `--quotes`, `--profile_clicks`, `--line_adds` を受け付ける。
+  - 値なし `--dry-run` はテンプレート表示のみ。欠損値を0として捏造しない。
+  - 実保存は `--apply --confirm-metrics` と全core metrics明示が必須。
+- `generate_next_queue_from_metrics.py`
+  - runbook互換の `--use-sheets` を受け付ける。
+  - 生成queueは引き続き `DRAFT` で、READYにはしない。
+
+### dry-run / test結果
+
+- `import_threads_metrics_manual.py --result-id ... --dry-run`: PASS。`missing_metrics` を返し `would_mark_measured=false`。
+- 明示ゼロ値のmetrics dry-run: PASS。`would_mark_measured=true`。
+- offline sample MEASUREDで `generate_next_queue_from_metrics.py --input-json ... --dry-run`: PASS。`candidate_count=1`, `candidate_status=DRAFT`。
+- `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post`: PASS。`auto_post_gate.allowed=false`。
+- `plan_media_mix.py --dry-run --account-id all`: PASS。media実行なし。
+- `generate_video_reference_posts.py --dry-run --account-id all`: PASS。`WAITING_REVIEW` planのみ。
+- 新規8本: PASS 50 / FAIL 0。
+- 既存重要9本: PASS。`test_all_workflows_safety_flags.py` は PASS 103 / FAIL 0。
+
+### 未完了事項 / 残WARN
+
+- 承認システム `out of credits` のため、Google Sheets verify/applyとnight_scout実投稿は未実行。
+- `liver_manager` metricsは本番値未投入。`PENDING` 維持想定。
+- 本番Sheetsの最新件数はこのturnでは再取得できていない。
+
+### AUTOPOSTをONにする条件
+
+- `night_scout` / `liver_manager` の2アカウントで各1件以上の投稿成功。
+- `posted_results` に `queue_id`, `external_post_id`, `post_url`, `status=POSTED` が保存済み。
+- metrics importが `MEASURED` として確認済み。
+- duplicate guard / posted_results整合性verifyがPASS。
+- `kill_switch` 動作確認済み。
+- `daily_post_cap=1`, `cooldown_minutes=180`, `max_posts_per_run=1` 維持。
+- rollback手順とPOSTED_SAVE_FAILED時のfallback回収手順が明文化済み。
+
+### 安全確認
+
+- 今回、実投稿なし。
+- 実fetch / X fetch / X投稿なし。
+- beauty投稿なし。
+- media download / cut / uploadなし。
+- transcription API / Cloudinary uploadなし。
+- secret/token/cookie値はdocs/finalに表示しない。
+- `.env`, `data/`, `output/`, `.claude/plans/` はcommitしない。

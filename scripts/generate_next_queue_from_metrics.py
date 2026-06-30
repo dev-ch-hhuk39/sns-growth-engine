@@ -203,6 +203,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="explicit PLAN_ONLY mode; reads Sheets without writing")
     parser.add_argument("--apply", action="store_true", help="write candidates (needs --confirm-generate)")
     parser.add_argument("--confirm-generate", action="store_true", help="explicit confirmation for real write")
+    parser.add_argument("--use-sheets", action="store_true", help="Accepted for production runbook compatibility")
     args = parser.parse_args()
 
     if args.account_id == "beauty_account":
