@@ -405,3 +405,35 @@ python3 scripts/test_metrics_import_does_not_fabricate_values.py
 - `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0
 - `test_autopost_remains_off_after_first_posts.py`: PASS 6 / FAIL 0
 - `test_metrics_import_does_not_fabricate_values.py`: PASS 5 / FAIL 0
+
+## v2 collection / media / growth tests (2026-06-30)
+
+追加テスト:
+
+```bash
+python3 scripts/test_collect_threads_metrics_dry_run.py
+python3 scripts/test_collect_threads_metrics_does_not_zero_unknowns.py
+python3 scripts/test_metric_snapshot_history.py
+python3 scripts/test_metrics_partial_status.py
+python3 scripts/test_collect_source_posts_respects_fetch_enabled.py
+python3 scripts/test_collect_source_posts_skips_manual_only.py
+python3 scripts/test_collect_source_posts_no_x_by_default.py
+python3 scripts/test_collect_source_posts_no_media_download.py
+python3 scripts/test_reference_archive_no_secrets.py
+python3 scripts/test_video_reference_transcription_requires_gate.py
+python3 scripts/test_video_reference_no_download_for_third_party.py
+python3 scripts/test_generate_clip_candidates_reference_only.py
+python3 scripts/test_one_video_generates_multiple_post_ideas.py
+python3 scripts/test_cut_approved_clips_requires_rights.py
+python3 scripts/test_cut_approved_clips_rejects_third_party.py
+python3 scripts/test_cut_approved_clips_requires_confirm.py
+python3 scripts/test_upload_media_assets_requires_confirm.py
+python3 scripts/test_upload_media_assets_rejects_third_party.py
+python3 scripts/test_generate_media_post_queue_waiting_review_only.py
+python3 scripts/test_media_ratio_policy.py
+python3 scripts/test_run_growth_loop_no_auto_post.py
+python3 scripts/test_run_growth_loop_respects_kill_switch.py
+python3 scripts/test_run_growth_loop_auto_ready_only.py
+```
+
+結果: 追加23本PASS。既存重要12本PASS。`recover_production_sheets_threads_first.py --verify-only --json`: PASS 61 / FAIL 0。

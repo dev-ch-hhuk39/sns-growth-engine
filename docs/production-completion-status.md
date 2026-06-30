@@ -409,3 +409,17 @@ Media / video:
 - `AUTOPOST`: OFF維持。`auto_post_enabled=false`
 
 `liver_manager` metricsは、公開URL到達はHTTP 200で確認したが実数値は取得できなかった。0値をMEASUREDとして本番保存する操作は安全レビューで拒否されたため未実行。`metrics_status=PENDING` のまま、実測値確認後に明示値でapplyする。
+
+## v2 collection / analysis / media pipeline (2026-06-30)
+
+Fully safe v2 pipeline scaffolding has been added:
+
+- Threads metrics snapshots with null unknowns and `PARTIAL/MEASURED/UNAVAILABLE`.
+- Source collection planning for Threads/X/YouTube/TikTok with `fetch_enabled` and `manual_only` gates.
+- Sanitized reference archive.
+- Video reference metadata, transcript gate, structure analysis, and multi-post idea generation.
+- Clip candidate and approved-only clip cutting gates.
+- Approved-only media upload and media queue generation.
+- Growth loop dry-run orchestration.
+
+No real fetch, download, cut, upload, media post, X post, or beauty post was executed. AUTOPOST remains off.

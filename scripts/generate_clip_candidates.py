@@ -49,10 +49,19 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "account_id": args.account_id,
         "delegate_script": DELEGATE_SCRIPT,
         "delegate_argv": argv,
+        "candidate_fields": {
+            "start_time": "required when transcript timestamps exist",
+            "end_time": "required when transcript timestamps exist",
+            "reason": "hook/retention/CTA analysis",
+            "hook_text": "short transformed hook",
+            "caption_angle": "target-account adaptation",
+            "rights_status": "third_party_reference_only by default",
+        },
         "safety": {
             "ffmpeg_cut": False,
             "media_download": False,
             "auto_post": False,
+            "third_party_reference_only_cuttable": False,
         },
         "notes": "切り抜き候補化のみ。ffmpeg 実切り抜きなし。本番書き込みは --apply --confirm-generate。",
     }

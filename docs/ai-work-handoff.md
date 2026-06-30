@@ -1779,3 +1779,63 @@ Source candidates
 - `daily_post_cap=1`, `cooldown_minutes=180`, `max_posts_per_run=1`, `kill_switch=false` を確認。
 - 失敗時rollback、POSTED_SAVE_FAILED fallback回収、AUTOPOST停止手順を運用者が確認。
 - 上記が揃うまで `auto_post_enabled=false` を維持。
+
+## v2 collection / metrics / video / media pipeline (2026-06-30)
+
+### 変更ファイル一覧
+
+- `scripts/collect_threads_metrics.py`
+- `scripts/collect_source_posts.py`
+- `scripts/archive_reference_data.py`
+- `scripts/collect_video_references.py`
+- `scripts/analyze_video_structure.py`
+- `scripts/cut_approved_clips.py`
+- `scripts/generate_media_post_queue.py`
+- `scripts/run_growth_loop.py`
+- `scripts/generate_clip_candidates.py`
+- `scripts/upload_media_assets.py`
+- v2追加テスト23本
+- `docs/video-reference-runbook.md`
+- `docs/media-pipeline-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/threads-operation-runbook.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/phase13-16-test-matrix.md`
+
+### 実装内容
+
+- Threads metrics collector: snapshot履歴、`PENDING/PARTIAL/MEASURED/UNAVAILABLE`、unknownはnull、0確定と取得不可を分離。
+- Source collector: `fetch_enabled=true` のみ対象、manual_only skip、Xは初期OFF、media downloadなし。
+- Archive: secret/cookie/token系キーをredactし、third-party media本体は保存しない。
+- Video reference: metadata plan、transcription gate、structure analysis、複数投稿案生成。
+- Clip candidate: transcript timestamp前提の候補フィールドを定義。third-partyはcut不可。
+- Approved clip cutter: `owned/licensed/approved_creator_clip` のみ、`ALLOW_VIDEO_CUT=true` + `--confirm-cut` 必須。
+- Media upload: third-party拒否、Cloudinaryは `ALLOW_CLOUDINARY_UPLOAD=true` + `--confirm-upload` 必須。
+- Media queue: approved mediaのみ、`WAITING_REVIEW` まで、mediaなし70%/media付き30%方針。
+- Growth loop: metrics -> PDCA -> source collect -> media queue -> AUTO_READY dry-run。AUTOPOSTなし。
+
+### 実行結果
+
+- v2追加テスト23本: PASS。
+- 既存重要テスト12本: PASS。
+- 本番Sheets verify: PASS 61 / FAIL 0。
+- 新規CLI dry-run: PASS。`run_growth_loop.py --dry-run` は全step returncode 0。
+
+### 安全確認
+
+- 実fetchなし。
+- 実downloadなし。
+- 実cutなし。
+- 実uploadなし。
+- 実投稿なし。
+- AUTOPOSTはOFF維持。
+- X投稿/beauty投稿なし。
+- secret/token/cookie表示なし。
+
+### 未完了事項
+
+- 実metrics自動取得のAPI/browser実装は抽象化まで。実API連携は認証/利用規約確認後。
+- source fetchは `fetch_enabled=true` が0件のため収集applyなし。
+- metric_snapshotsタブへの本番書き込みは未実行。
+- 自社/許諾済み素材が登録されるまでcut/upload/media queue applyは行わない。

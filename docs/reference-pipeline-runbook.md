@@ -317,3 +317,19 @@ python3 scripts/generate_next_queue_from_metrics.py \
 - `import_threads_metrics_manual.py --apply --confirm-metrics` でMEASURED化。
 - `generate_next_queue_from_metrics.py --dry-run --use-sheets` で `candidate_count>0` を確認。
 - applyしても生成queueは `DRAFT` のまま。READY昇格は別工程。
+
+## v2 Source Collection
+
+`collect_source_posts.py` plans reference collection across Threads/X/YouTube/TikTok.
+
+```bash
+python3 scripts/collect_source_posts.py --platform all --account-id all --dry-run
+```
+
+Rules:
+
+- Only `fetch_enabled=true` sources are eligible.
+- `manual_only=true` and manual collection methods are skipped.
+- X is disabled unless explicitly requested with `--include-x`.
+- Third-party media is not downloaded.
+- Raw JSON must be sanitized before archive; no cookies/tokens/secrets.

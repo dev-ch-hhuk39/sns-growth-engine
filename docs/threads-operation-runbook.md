@@ -239,3 +239,21 @@ PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true python3 scripts/process_thread
 - `x_active=0`
 
 次の投稿は、metrics確認とPDCA候補reviewを挟むまで実行しない。
+
+## v2 Metrics Collector
+
+Use `collect_threads_metrics.py` for snapshots. Unknown values remain null.
+
+```bash
+python3 scripts/collect_threads_metrics.py --account-id all --dry-run
+```
+
+Real writes require:
+
+```bash
+python3 scripts/collect_threads_metrics.py --result-id <result_id> --source manual --confidence high \
+  --views <confirmed> --likes <confirmed> --comments <confirmed> \
+  --use-sheets --apply --confirm-metrics
+```
+
+Do not write guessed zero values. Use null/UNAVAILABLE when metrics cannot be trusted.

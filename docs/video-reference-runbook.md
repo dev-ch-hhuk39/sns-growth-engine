@@ -51,3 +51,19 @@ ALLOW_TRANSCRIPTION_API=true python3 scripts/transcribe_video_reference.py --acc
 - [cloudflare-transcription-runbook.md](cloudflare-transcription-runbook.md) — 文字起こし実 API 運用
 - [clip-candidate-runbook.md](clip-candidate-runbook.md) — 切り抜き候補生成
 - [reference-pipeline-runbook.md](reference-pipeline-runbook.md) — 全 CLI 横断の安全設計
+## v2 Reference Expansion (2026-06-30)
+
+New safe entrypoints:
+
+- `scripts/collect_video_references.py`: plans YouTube/TikTok metadata rows without downloading video.
+- `scripts/transcribe_video_reference.py`: thin gated transcription entrypoint. Real API requires `ALLOW_TRANSCRIPTION_API=true` and `--allow-real-transcription`.
+- `scripts/analyze_video_structure.py`: transcript structure analysis for hooks/topics.
+- `scripts/generate_video_reference_posts.py`: creates 3-10 text-only ideas as `WAITING_REVIEW`.
+- `scripts/generate_clip_candidates.py`: plans clip candidates only. Third-party defaults to `third_party_reference_only`.
+
+Safety rules:
+
+- Third-party video is reference analysis only.
+- Transcript is used only when official/API text is available or the API gate is explicitly opened.
+- Download/cut/upload/repost is prohibited for `third_party_reference_only`.
+- Generated ideas are `WAITING_REVIEW` or `DRAFT`, never `READY`.
