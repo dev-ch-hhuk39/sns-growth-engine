@@ -215,3 +215,25 @@ python3 scripts/test_no_real_fetch_in_production_loop.py
 python3 scripts/test_no_beauty_active_in_production_loop.py
 python3 scripts/test_no_fetch_enabled_added.py
 ```
+
+## AUTO_READY接続 (2026-06-30)
+
+Reference pipelineで生成された `WAITING_REVIEW` は、条件を満たす場合だけ `auto_approve_queue.py` が `READY` に昇格できる。
+
+```bash
+python3 scripts/auto_approve_queue.py --dry-run --account-id all --max-ready 2 --use-sheets
+python3 scripts/auto_approve_queue.py --apply --confirm-auto-ready --account-id all --max-ready 2 --use-sheets
+```
+
+AUTO_READY条件:
+
+- account: `night_scout` / `liver_manager`
+- platform: `threads`
+- status: `WAITING_REVIEW`
+- mediaなし、third-party素材なし
+- `quality_score >= 75`, `safety_score >= 90`, `risk_score <= 10`
+- duplicate / near_duplicate ではない
+- `daily_ready_cap=2`, `cooldown_minutes=180`, `max_posts_per_run=1`
+- `kill_switch=false`
+
+AUTO_READY後も実投稿はしない。workerは `READY` のみをdry-run/実投稿対象として検出する。

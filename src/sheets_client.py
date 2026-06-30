@@ -169,6 +169,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "media_reuse_risk",        # low / medium / high（queue 追加時にコピー）
         "source_video_url",        # 元動画 URL（queue 追加時にコピー）
         "source_time_range",       # 使用区間（queue 追加時にコピー）
+        # AUTO_READY（品質・安全スコアでWAITING_REVIEW→READYへ自動承認した記録）。
+        "auto_ready_by", "auto_ready_reason", "auto_ready_score", "auto_ready_at",
+        "quality_score", "safety_score", "risk_score",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [

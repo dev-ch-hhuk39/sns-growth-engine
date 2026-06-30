@@ -236,3 +236,36 @@ python3 scripts/test_no_fetch_enabled_added.py
 - `test_generate_threads_ideas_from_references.py`
 - `test_approve_queue_ready_transition.py`
 - `test_process_threads_queue.py`
+
+## AUTO_READY / autopilot tests (2026-06-30)
+
+追加テスト:
+
+```bash
+python3 scripts/test_auto_approve_queue_dry_run.py
+python3 scripts/test_auto_approve_queue_apply_ready_only_safe_items.py
+python3 scripts/test_auto_approve_queue_rejects_low_quality.py
+python3 scripts/test_auto_approve_queue_rejects_high_risk.py
+python3 scripts/test_auto_approve_queue_respects_daily_cap.py
+python3 scripts/test_auto_approve_queue_respects_cooldown.py
+python3 scripts/test_auto_approve_queue_never_approves_beauty.py
+python3 scripts/test_auto_approve_queue_never_approves_media_without_gate.py
+python3 scripts/test_auto_approve_queue_logs_reason.py
+python3 scripts/test_run_autopilot_loop_plan_only.py
+python3 scripts/test_run_autopilot_loop_auto_ready_only.py
+python3 scripts/test_run_autopilot_loop_no_auto_post_without_flags.py
+python3 scripts/test_run_autopilot_loop_auto_post_requires_triple_gate.py
+python3 scripts/test_run_autopilot_loop_kill_switch.py
+python3 scripts/test_no_auto_ready_when_kill_switch.py
+python3 scripts/test_no_x_fetch_in_autopilot.py
+python3 scripts/test_no_beauty_active_in_autopilot.py
+python3 scripts/test_media_mix_ratio_plan.py
+python3 scripts/test_media_plan_never_reuses_third_party.py
+python3 scripts/test_video_reference_posts_waiting_review_only.py
+python3 scripts/test_one_video_generates_multiple_posts.py
+python3 scripts/test_transcription_requires_confirm_flag.py
+python3 scripts/test_video_download_requires_confirm_flag.py
+python3 scripts/test_cloudinary_upload_requires_confirm_flag.py
+```
+
+結果: 全件PASS。既存重要テストもPASS。

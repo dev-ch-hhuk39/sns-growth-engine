@@ -313,3 +313,46 @@ Source registry / Sheets apply / READY承認モデルの上に、実データの
 1. 人間が `投稿キュー` のWAITING_REVIEW行を読み、1件だけ `approve_queue.py --approve --reason ...` で `READY` に昇格する。
 2. `process_threads_queue.py --dry-run --max-posts 1` で対象1件が妥当と確認する。
 3. 実投稿は別作業として、`--confirm-real-post` + `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` を明示する。
+
+## AUTO_READY / autopilot update (2026-06-30)
+
+READY承認の手間を減らすため、品質・安全・上限・cooldown・kill switch付きのAUTO_READYを追加した。
+
+- 設定: `config/auto_approval_rules.json`
+- AUTO_READY CLI: `scripts/auto_approve_queue.py`
+- Autopilot runner: `scripts/run_autopilot_loop.py`
+- Media mix plan: `scripts/plan_media_mix.py`
+- Video reference multi-post plan: `scripts/generate_video_reference_posts.py`
+
+初期設定:
+
+- `auto_ready_enabled=true`
+- `auto_post_enabled=false`
+- `min_quality_score=75`, `min_safety_score=90`, `max_risk_score=10`
+- `daily_ready_cap=2`, `daily_post_cap=1`, `cooldown_minutes=180`
+- `max_posts_per_run=1`, `kill_switch=false`
+- `allow_media_posts=false`, `allow_third_party_media=false`, `require_no_media_for_auto_ready=true`
+
+AUTO_READY適用結果:
+
+- Dry-runで安全判定後、`--apply --confirm-auto-ready --max-ready 2` を実行。
+- READY化: 2件
+  - `q_night_scout_manualref_src_ns_threads_required_001_threads`
+  - `q_liver_manager_manualref_src_lm_note_cand_001_threads`
+- `READY=2`, `WAITING_REVIEW=8`
+- 各READY行に `auto_ready_by`, `auto_ready_reason`, `auto_ready_score`, `auto_ready_at`, `quality_score`, `safety_score`, `risk_score` を記録。
+- `logs` には `queue_approved` 互換ログとして `auto_ready=true` を記録し、verifyのREADY承認証跡と互換。
+
+AUTO_POST:
+
+- AUTO_READYとは別フラグ。
+- 初期値は `auto_post_enabled=false`。
+- 実投稿は引き続き `--confirm-real-post` + `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` の三重ゲート必須。
+- 今回、実投稿は未実行。
+
+Media / video:
+
+- mediaなし70% / media付き30%方針を `plan_media_mix.py` でPLAN_ONLY化。
+- 初期AUTO_READY対象はmediaなしのみ。media付きは別review/gate。
+- YouTube/TikTokはreference analysis用。download/cut/upload/repostは行わない。
+- `generate_video_reference_posts.py` で1動画から複数のWAITING_REVIEW案をPLAN_ONLY生成可能。

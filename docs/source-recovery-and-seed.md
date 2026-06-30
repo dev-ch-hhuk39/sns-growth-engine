@@ -126,3 +126,13 @@ python3 scripts/generate_threads_ideas_from_references.py --account-id liver_man
 - `queue`: `reference_score_to_threads` 6件（night_scout 3 / liver_manager 3）、すべて `WAITING_REVIEW`
 - `READY`: 0件。人間承認までworkerは拾わない。
 - 実fetch / X fetch / video download / transcription / Cloudinary upload / 実投稿は未実行。
+
+## AUTO_READY方針 (2026-06-30)
+
+source registry由来の投稿案は、手動承認だけでなく `auto_approve_queue.py` で条件付きREADY化できる。
+
+- AUTO_READYは `config/auto_approval_rules.json` で管理。
+- 初期はmediaなし投稿のみ対象。third-party動画・画像は再利用しない。
+- `daily_ready_cap=2`, `cooldown_minutes=180`, `max_posts_per_run=1`, `kill_switch=false`。
+- AUTO_READY後もAUTO_POSTは別。実投稿は三重ゲート必須。
+- YouTube/TikTokはreference analysis用。`generate_video_reference_posts.py` で複数案を作れるが、すべて `WAITING_REVIEW` / reference_only。

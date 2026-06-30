@@ -119,3 +119,23 @@ python3 scripts/process_threads_queue.py --account-id <account_id> --dry-run --m
 ```
 
 実投稿へ進むのは、dry-runで対象テキスト・アカウント・重複・media状態を確認した後の別作業とする。
+
+## AUTO_READY運用
+
+READY承認は、手動だけでなくAUTO_READYで条件付き自動化できる。
+
+```bash
+python3 scripts/auto_approve_queue.py --dry-run --account-id all --max-ready 2 --use-sheets
+python3 scripts/auto_approve_queue.py --apply --confirm-auto-ready --account-id all --max-ready 2 --use-sheets
+python3 scripts/process_threads_queue.py --account-id night_scout --dry-run --max-posts 1
+python3 scripts/process_threads_queue.py --account-id liver_manager --dry-run --max-posts 1
+```
+
+現在はAUTO_READYで2件READY化済み。実投稿は未実行。
+
+- `READY`: 2件
+- `WAITING_REVIEW`: 8件
+- `auto_post_enabled=false`
+- 実投稿には `PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true` と `--confirm-real-post` が必要
+
+AUTO_POSTを有効化する場合も `run_autopilot_loop.py --auto-post` だけでは投稿されない。設定側の `auto_post_enabled=true`、env gate、`--confirm-real-post` が全て必要。

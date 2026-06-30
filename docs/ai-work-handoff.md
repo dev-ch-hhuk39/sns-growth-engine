@@ -1380,3 +1380,153 @@ Source candidates
 - 次に人間が見るべき行は `投稿キュー` の `q_night_scout_manualref_...` / `q_liver_manager_manualref_...` 6件。
 - 実投稿へ進む前に、人間が1件だけ `approve_queue.py --approve --reason ... --use-sheets` でREADY化し、`process_threads_queue.py --dry-run --max-posts 1` を通す。
 - 実投稿は別作業。`--confirm-real-post` + `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` が必要。
+
+## Codex AUTO_READY / autopilot completion (2026-06-30 追記)
+
+### 現在のHEAD / ブランチ
+
+- 作業ブランチ: `main`
+- 作業開始HEAD: `3ce2b9c0285ecdc652fb9808164e6d801093192f`
+- 完了commit: 最終レポート参照
+
+### 本システムについて
+
+- READY承認の手間を減らすため、`WAITING_REVIEW` から `READY` への条件付き自動承認（AUTO_READY）を追加。
+- AUTO_READYとAUTO_POSTは分離。初期運用はAUTO_READYまで自動、AUTOPOSTは `auto_post_enabled=false`。
+- 実投稿は引き続き `--confirm-real-post` + `PUBLISH_ENABLED=true` + `ALLOW_REAL_THREADS_POST=true` の三重ゲート必須。
+
+### 変更ファイル一覧
+
+- `config/auto_approval_rules.json`
+- `src/sheets_client.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/run_autopilot_loop.py`
+- `scripts/plan_media_mix.py`
+- `scripts/generate_video_reference_posts.py`
+- AUTO_READY / autopilot / media-video tests 24本
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/threads-operation-runbook.md`
+- `docs/source-recovery-and-seed.md`
+- `docs/phase13-16-test-matrix.md`
+
+### 追加ファイル一覧
+
+- `config/auto_approval_rules.json`
+- `scripts/auto_approve_queue.py`
+- `scripts/run_autopilot_loop.py`
+- `scripts/plan_media_mix.py`
+- `scripts/generate_video_reference_posts.py`
+- `scripts/test_auto_approve_queue_*.py`
+- `scripts/test_run_autopilot_loop_*.py`
+- `scripts/test_no_auto_ready_when_kill_switch.py`
+- `scripts/test_no_x_fetch_in_autopilot.py`
+- `scripts/test_no_beauty_active_in_autopilot.py`
+- `scripts/test_media_mix_ratio_plan.py`
+- `scripts/test_media_plan_never_reuses_third_party.py`
+- `scripts/test_video_reference_posts_waiting_review_only.py`
+- `scripts/test_one_video_generates_multiple_posts.py`
+- `scripts/test_transcription_requires_confirm_flag.py`
+- `scripts/test_video_download_requires_confirm_flag.py`
+- `scripts/test_cloudinary_upload_requires_confirm_flag.py`
+
+### AUTO_READY設定
+
+- `auto_ready_enabled=true`
+- `auto_post_enabled=false`
+- `min_quality_score=75`
+- `min_safety_score=90`
+- `max_risk_score=10`
+- `daily_ready_cap=2`
+- `daily_post_cap=1`
+- `cooldown_minutes=180`
+- `max_posts_per_run=1`
+- `kill_switch=false`
+- `allow_media_posts=false`
+- `allow_third_party_media=false`
+- `require_no_media_for_auto_ready=true`
+
+### Sheets apply結果
+
+- `python3 scripts/auto_approve_queue.py --dry-run --account-id all --max-ready 2 --use-sheets`: 2件APPROVABLE。
+- `python3 scripts/auto_approve_queue.py --apply --confirm-auto-ready --account-id all --max-ready 2 --use-sheets`: 2件READY化。
+- READY化したqueue:
+  - `q_night_scout_manualref_src_ns_threads_required_001_threads`
+  - `q_liver_manager_manualref_src_lm_note_cand_001_threads`
+- `投稿キュー` に `auto_ready_by`, `auto_ready_reason`, `auto_ready_score`, `auto_ready_at`, `quality_score`, `safety_score`, `risk_score` を追加。
+- `logs` に `operation=queue_approved`, `auto_ready=true` の承認証跡を記録。既存verifyと互換。
+
+### dry-run / verify結果
+
+- `recover_production_sheets_threads_first.py --verify-only --json`: PASS 61 / FAIL 0。
+- `process_threads_queue.py --account-id night_scout --dry-run --max-posts 1`: candidates=1、read_only=true。
+- `process_threads_queue.py --account-id liver_manager --dry-run --max-posts 1`: candidates=1、read_only=true。
+- `run_autopilot_loop.py --dry-run --account-id all --auto-ready --skip-real-post --use-sheets`: PASS。AUTOPOST gate allowed=false。
+- `plan_media_mix.py --dry-run --account-id all --use-sheets`: text_only=10、media_candidate=0、target 70/30。
+- `generate_video_reference_posts.py --dry-run --account-id all`: 6件のWAITING_REVIEW案をPLAN_ONLY生成。
+
+### 現在のSheets状態
+
+- `WAITING_REVIEW`: 8件
+- `READY`: 2件
+- `auto_ready_ready`: 2件
+- `fetch_enabled=true`: 0件
+- `beauty_active`: 0件
+- `x_active`: 0件
+
+### 未完了事項 / 残WARN
+
+- 実投稿は未実行。
+- AUTOPOSTは実装上のゲートのみ。初期設定は `auto_post_enabled=false`。
+- MEASURED metricsが無いためPDCA次候補はまだ0件。
+- media付き投稿は初期AUTO_READY対象外。
+
+### 全テスト結果
+
+- AUTO_READY / autopilot / media-video 追加24本: PASS。
+- 既存重要テスト: `test_process_threads_queue.py`, `test_approve_queue_ready_transition.py`, `test_required_source_urls_present.py`, `test_seed_source_registry.py`, `test_source_registry_verify_checks.py`, `test_beauty_account_block.py`, `test_no_beauty_ready_queue.py`, `test_media_policy_guard.py`, `test_phase13_production_sources_real_urls.py`, `test_waiting_review_not_worker_selectable.py`, `test_ready_only_worker_after_source_loop.py` すべてPASS。
+
+### 安全確認
+
+- 実fetch / X fetch / video download / transcription API / Cloudinary upload / Threads実投稿 / X投稿は未実行。
+- beauty_account active化なし。
+- `target_account_id=beauty_future` 作成なし。
+- `fetch_enabled=true` 追加なし。
+- third-party素材のdownload/cut/upload/repostなし。
+- secret/token/cookie値は表示していない。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `config/auto_approval_rules.json`
+- `scripts/auto_approve_queue.py`
+- `scripts/run_autopilot_loop.py`
+- `docs/threads-operation-runbook.md`
+
+### 次にCodexが触ってよいファイル
+
+- `scripts/process_threads_queue.py`
+- `scripts/import_threads_metrics_manual.py`
+- `scripts/generate_next_queue_from_metrics.py`
+- `scripts/plan_media_mix.py`
+- `scripts/generate_video_reference_posts.py`
+
+### 衝突しやすいファイル
+
+- `src/sheets_client.py`
+- `scripts/auto_approve_queue.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+
+### 触らない方がいいファイル
+
+- `.env` / token / cookie / credential files
+- `data/` / `output/` / `.claude/plans/`
+- X投稿/fetch関連の実行フラグ
+- beauty_account の active/fetch/READY関連設定
+
+### 次AIへの引き継ぎメモ
+
+- 次に実投稿へ進むなら、READY化済み2件のうち1件だけ `process_threads_queue.py --dry-run --max-posts 1` で再確認し、別途三重ゲート付きで実行する。
+- AUTO_READY追加実行はcooldown 180分後。`kill_switch=true` にすると即停止。
+- AUTOPOSTを有効化する場合も `auto_post_enabled=true`、env gate、`--confirm-real-post` が全て必要。
