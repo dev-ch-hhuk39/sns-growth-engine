@@ -66,3 +66,12 @@ This summary is informational only. It does not enable fetch, upload, or posting
 - Adapter imports: `bs4`, `lxml`, `playwright`, `yt_dlp`, `youtube_transcript_api`, `PIL`, `ffmpeg`, `cloudinary` all import successfully.
 - `run_growth_loop.py --dry-run --account-id all`: reports adapter_status and keeps `auto_post=false`, `real_post=false`.
 - Public metadata dry-runs may perform HTTP reads for the provided public URLs, but they do not write Sheets, download media, upload media, or post.
+
+## Media Rights Integration (2026-07-01)
+
+Growth loop outputs must keep media out of posting unless the media asset is `owned`, `licensed`, or `approved_creator_clip`.
+
+- Third-party source/video media remains reference-only.
+- Media queue generation produces `WAITING_REVIEW` only and excludes reference-only/unknown assets.
+- AUTOPOST remains OFF. The loop must not promote media posts to READY.
+- Copy-like generated text is blocked by the reference similarity guard before queue planning.

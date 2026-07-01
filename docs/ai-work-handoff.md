@@ -2217,3 +2217,122 @@ Source candidates
 - mediaは `owned/licensed/approved_creator_clip` の権利確認済みであること。
 - Cloudinary uploadは `ALLOW_CLOUDINARY_UPLOAD=true` + `--confirm-upload` をコマンドスコープでのみ使うこと。
 - AUTOPOSTをONにする前にqueue/posted_results/duplicate guard verifyがPASSしていること。
+
+## Codex handoff: rights-aware media ingestion (2026-07-01)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `0ce2aab2e2c0a9434097140742367390ed22ed04`
+- origin/main確認: `0ce2aab2e2c0a9434097140742367390ed22ed04`
+- 作業ブランチ: `main`
+- commit予定: `feat: 権利管理付きmedia ingestionを追加`
+
+### 本システムについて
+
+v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回の作業は、新規投稿機能ではなく、参照素材とmedia assetの権利境界を明確化する補強。第三者素材は分析のみ、所有/許諾/承認済みcreator clipだけがmedia ingestion以降に進める。
+
+### 変更ファイル一覧
+
+- `src/media/rights_policy.py`
+- `scripts/ingest_media_assets.py`
+- `scripts/cut_approved_clips.py`
+- `scripts/upload_media_assets.py`
+- `scripts/collect_source_posts.py`
+- `scripts/collect_video_references.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/generate_media_post_queue.py`
+- `docs/media-pipeline-runbook.md`
+- `docs/video-reference-runbook.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/threads-operation-runbook.md`
+- `docs/dependency-inventory.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `src/media/rights_policy.py`
+- `scripts/ingest_media_assets.py`
+- `scripts/test_rights_status_policy.py`
+- `scripts/test_ingest_media_assets_blocks_third_party.py`
+- `scripts/test_ingest_media_assets_allows_owned_dry_run.py`
+- `scripts/test_ingest_media_assets_blocks_unknown.py`
+- `scripts/test_cut_approved_clips_blocks_reference_only.py`
+- `scripts/test_upload_media_assets_blocks_reference_only.py`
+- `scripts/test_generate_posts_blocks_high_similarity_copy.py`
+- `scripts/test_generate_posts_structure_reference_allowed.py`
+- `scripts/test_x_threads_media_reference_only.py`
+- `scripts/test_youtube_tiktok_reference_only_no_download.py`
+- `scripts/test_media_queue_only_approved_assets.py`
+
+### スケール方針
+
+- 権利判定は `src/media/rights_policy.py` に寄せる。
+- `third_party_reference_only` と `unknown` はmedia保存/切り出し/upload/queue利用禁止。
+- `owned`, `licensed`, `approved_creator_clip` のみmedia pipeline eligible。
+- X/Threads/YouTube/TikTokの第三者素材はmetadata/transcript/structure分析のみ。
+- 投稿案生成はstructure/hook/topic referenceだけ許可し、薄いリライトや直接コピーをブロック。
+
+### 未完了事項 / 残WARN
+
+- 実Cloudinary uploadは未実行。
+- 実ffmpeg cutは未実行。
+- 実downloadは未実行。
+- TikTok個別 `/video/` metadataは環境/対象URL次第で `UNAVAILABLE` になる可能性あり。downloadには進めない。
+- 既存legacy docsには古い `rights_status=allowed` の記述が残る箇所があるため、次のdocs整理で新ステータスへ統一するとよい。
+
+### テスト結果
+
+- 新規rights/media/generation tests: PASS 34 / FAIL 0。
+- `test_all_workflows_safety_flags.py`: PASS 103 / FAIL 0。
+- `test_process_threads_queue.py`: PASS 11 / FAIL 0。
+- `test_video_reference_no_download_for_third_party.py`: PASS 3 / FAIL 0。
+- `test_upload_media_assets_rejects_third_party.py`: PASS 2 / FAIL 0。
+- `test_run_growth_loop_no_auto_post.py`: PASS 3 / FAIL 0。
+- `test_collect_source_posts_no_media_download.py`: PASS 2 / FAIL 0。
+- `test_cloudinary_upload_requires_confirm.py`: PASS 3 / FAIL 0。
+- `test_cut_approved_clips_requires_rights.py`: PASS 2 / FAIL 0。
+- `test_cut_approved_clips_requires_confirm.py`: PASS 2 / FAIL 0。
+- `test_generate_media_post_queue_waiting_review_only.py`: PASS 3 / FAIL 0。
+- `git diff --check`: PASS。
+
+### dry-run / BLOCKED確認
+
+- `ingest_media_assets.py --rights-status third_party_reference_only --dry-run`: `BLOCKED`。
+- `ingest_media_assets.py --rights-status unknown --dry-run`: `BLOCKED`。
+- `ingest_media_assets.py --rights-status owned --dry-run`: `PLAN_ONLY`、download/upload/postなし。
+- `cut_approved_clips.py --rights-status third_party_reference_only`: `BLOCKED`。
+- `upload_media_assets.py` third-party/reference-only asset: `BLOCKED`。
+- `collect_video_references.py` YouTube dry-run: `download=false`, metadata/transcriptは環境要因で `UNAVAILABLE`、本文previewなし。
+- `collect_video_references.py` TikTok `/video/` dry-run: `download=false`, `UNAVAILABLE`、media pipeline不可。
+- `collect_source_posts.py --platform threads --account-id all --dry-run`: `selected_count=0` because `fetch_enabled=false` maintained, `media_download=false`。
+- `run_growth_loop.py --dry-run --account-id all`: `auto_post=false`, `real_post=false`, `real_collection_pipeline.status=NO_DATA`。
+
+### 次に触ってよいファイル
+
+- `src/media/rights_policy.py`
+- `scripts/ingest_media_assets.py`
+- `scripts/generate_media_post_queue.py`
+- `scripts/collect_video_references.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `docs/*runbook.md`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secret/cookie/tokenを含む可能性があるローカルファイル
+
+### 衝突しやすいファイル
+
+- `docs/ai-work-handoff.md`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/collect_source_posts.py`
+- `scripts/collect_video_references.py`
+
+### 次AIへの引き継ぎメモ
+
+`rights_status=allowed` は互換用に `approved_creator_clip` へ正規化している。今後の実media運用では、source registryやSheets上の承認UIも `owned/licensed/approved_creator_clip` に寄せること。AUTOPOSTはOFF、生成queueはREADYにしない。third-party素材は本文・構造・傾向分析のみで、画像/動画bodyを保存しない。

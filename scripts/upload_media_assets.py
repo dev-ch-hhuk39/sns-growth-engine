@@ -13,20 +13,22 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "src"))
 
 from media.cloudinary_uploader import plan_cloudinary_uploads
-
-CUTTABLE_RIGHTS = {"owned", "licensed", "approved_creator_clip", "not_required"}
+from media.rights_policy import build_rights_decision, rights_allows_media_use
 
 
 def build_upload_plan(args: argparse.Namespace, assets: list[dict[str, Any]]) -> dict[str, Any]:
     third_party = [
         a for a in assets
-        if str(a.get("rights_status", "third_party_reference_only")).lower() not in CUTTABLE_RIGHTS
+        if not rights_allows_media_use(a.get("rights_status", "third_party_reference_only"))
     ]
     if third_party:
         return {
             "status": "BLOCKED",
             "adapter_status": {"cloudinary": "installed" if importlib.util.find_spec("cloudinary") else "not_installed"},
-            "blocked_reasons": ["third-party/reference-only media cannot be uploaded"],
+            "blocked_reasons": [
+                build_rights_decision(a.get("rights_status", "third_party_reference_only"), action="uploaded").reason
+                for a in third_party[:5]
+            ],
             "third_party_count": len(third_party),
             "upload": bool(args.upload),
             "confirm_upload": bool(args.confirm_upload),

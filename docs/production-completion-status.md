@@ -443,3 +443,14 @@ No real fetch, download, cut, upload, media post, X post, or beauty post was exe
 - YouTube transcript dry-run via `youtube-transcript-api`: `FETCHED`, text preview suppressed.
 - TikTok profile metadata dry-run: `UNAVAILABLE` without download.
 - No Sheets apply, media download, cut, Cloudinary upload, SNS post, X fetch/post, beauty post, or transcription API call was executed.
+
+## Rights-Aware Media Completion Update (2026-07-01)
+
+Completed the missing rights-aware media ingestion layer.
+
+- `third_party_reference_only` and `unknown` are blocked from media save/cut/upload/queue use.
+- `owned`, `licensed`, and `approved_creator_clip` can create media asset plans and later proceed through explicit cut/upload gates.
+- X/Threads media collection remains metadata/reference-only.
+- YouTube/TikTok third-party material remains metadata/transcript/structure analysis only.
+- Reference-based Threads generation now blocks high-similarity copy and writes only `WAITING_REVIEW` candidates.
+- Cloudinary real upload, real cut, real download, and real SNS post were not executed.

@@ -7,9 +7,16 @@ import html
 import importlib.util
 import json
 import re
+import sys
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from media.rights_policy import THIRD_PARTY_REFERENCE_ONLY, build_rights_decision
 
 PUBLIC_TIMEOUT_SECONDS = 15
 
@@ -116,9 +123,17 @@ def fetch_youtube_transcript(url: str) -> dict[str, Any]:
         return {"status": "UNAVAILABLE", "reason": f"transcript_unavailable: {type(exc).__name__}", "text": ""}
 
 
-def build_video_reference(url: str, account_id: str, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_video_reference(
+    url: str,
+    account_id: str,
+    metadata: dict[str, Any] | None = None,
+    rights_status: str = THIRD_PARTY_REFERENCE_ONLY,
+) -> dict[str, Any]:
     platform = "youtube" if "youtu" in url else "tiktok" if "tiktok" in url else "video"
     metadata = metadata or {}
+    decision = build_rights_decision(rights_status, action="download/cut/upload")
+    # Default third-party rows remain `"can_download": False`; approved rights
+    # are the only path that can later enter media ingestion.
     return {
         "reference_post_id": f"video_ref_{account_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         "account_id": account_id,
@@ -131,10 +146,13 @@ def build_video_reference(url: str, account_id: str, metadata: dict[str, Any] | 
         "duration": metadata.get("duration", ""),
         "metadata_status": "FETCHED" if metadata.get("ok") else "PLAN_ONLY" if not metadata else "UNAVAILABLE",
         "fetch_error": metadata.get("error", ""),
-        "rights_status": "third_party_reference_only",
-        "can_download": False,
-        "can_cut": False,
-        "can_upload": False,
+        "rights_status": decision.rights_status,
+        "can_download": decision.allowed,
+        "can_cut": decision.allowed,
+        "can_upload": decision.allowed,
+        "reference_analysis_allowed": decision.reference_analysis_allowed,
+        "media_pipeline_allowed": decision.allowed,
+        "rights_block_reason": decision.reason,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -145,6 +163,7 @@ def main() -> int:
     parser.add_argument("--fetch-metadata", action="store_true")
     parser.add_argument("--metadata-adapter", default="auto", choices=["auto", "public", "yt-dlp"])
     parser.add_argument("--fetch-transcript", action="store_true")
+    parser.add_argument("--rights-status", default=THIRD_PARTY_REFERENCE_ONLY)
     parser.add_argument("--account-id", default="night_scout", choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
@@ -163,7 +182,7 @@ def main() -> int:
                 meta = fetch_ytdlp_metadata(url)
             if (not meta.get("ok")) and args.metadata_adapter in {"auto", "public"}:
                 meta = fetch_video_metadata(url)
-        rows.append(build_video_reference(url, args.account_id, meta))
+        rows.append(build_video_reference(url, args.account_id, meta, rights_status=args.rights_status))
         if args.fetch_transcript:
             transcripts.append({"video_url": url, **fetch_youtube_transcript(url)})
     if not args.apply:

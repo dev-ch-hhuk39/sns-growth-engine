@@ -101,3 +101,13 @@ TikTok/YouTube third-party videos remain reference-analysis only. Do not downloa
 - `youtube-transcript-api` adapter fetched transcript metadata/count in dry-run with `download=false`; transcript text preview is suppressed.
 - TikTok profile URL dry-run returns `UNAVAILABLE` quickly with `tiktok_profile_metadata_not_supported_no_download`; use an individual `/video/` URL for metadata checks.
 - No video download, cut, upload, repost, or external transcription API call was executed.
+
+## Rights State Update (2026-07-01)
+
+`collect_video_references.py` now accepts `--rights-status`.
+
+- Default is `third_party_reference_only`, so YouTube/TikTok references stay analysis-only with `can_download=false`, `can_cut=false`, and `can_upload=false`.
+- `owned`, `licensed`, or `approved_creator_clip` can be marked as media-pipeline eligible, but this still does not download video. It only marks the row for a later explicitly confirmed media workflow.
+- Individual TikTok `/video/` URLs can be checked for metadata in dry-run. Profiles/playlists are not expanded for download.
+
+Do not cut or repost YouTube/TikTok third-party clips. Use structure, hook, topic, and transcript analysis only.

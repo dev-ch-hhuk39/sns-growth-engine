@@ -360,3 +360,10 @@ Rules:
 - X is disabled unless explicitly requested with `--include-x`.
 - Third-party media is not downloaded.
 - Raw JSON must be sanitized before archive; no cookies/tokens/secrets.
+
+## Rights and Rewrite Guard (2026-07-01)
+
+- X/Threads media discovered during source collection is stored as URL/thumbnail metadata only.
+- Collected X/Threads media rows are `rights_status=third_party_reference_only`, `can_reuse_media=false`, `media_download=false`, and `media_body_saved=false`.
+- Reference posts can influence structure, hook, and topic. They must not be lightly rewritten into a post.
+- `generate_threads_ideas_from_references.py` includes a similarity/direct-copy guard. High-similarity drafts are `BLOCKED`; valid transformed drafts remain `WAITING_REVIEW`, never `READY`.

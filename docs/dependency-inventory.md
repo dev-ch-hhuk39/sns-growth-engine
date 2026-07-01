@@ -92,3 +92,10 @@ Media:
 
 - `cut_approved_clips.py --rights-status third_party_reference_only` reports `ffmpeg_cli=installed`, `ffmpeg_python=installed`, and blocks cutting.
 - `upload_media_assets.py --dry-run` reports `cloudinary=installed` and blocks third-party/reference-only upload.
+
+## Rights-Aware Media Ingestion (2026-07-01)
+
+- Added `src/media/rights_policy.py` as the shared decision table for media workflows.
+- Added `scripts/ingest_media_assets.py` for approved media planning. It does not download URL inputs and does not upload to Cloudinary.
+- `cut_approved_clips.py`, `upload_media_assets.py`, `collect_video_references.py`, `collect_source_posts.py`, and `generate_media_post_queue.py` now align to `owned/licensed/approved_creator_clip` as the only media-use statuses.
+- No new external dependency was added for this rights layer.

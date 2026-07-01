@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 APPROVED_STATUSES = {"APPROVED", "UPLOADED", "ATTACHED"}
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from media.rights_policy import rights_allows_media_use
 
 
 def build_queue_row(asset: dict[str, Any]) -> dict[str, Any] | None:
     status = str(asset.get("status", "")).upper()
-    rights = str(asset.get("rights_status", "")).lower()
-    if status not in APPROVED_STATUSES or rights not in {"owned", "licensed", "approved_creator_clip", "not_required"}:
+    if status not in APPROVED_STATUSES or not rights_allows_media_use(asset.get("rights_status", "")):
         return None
     account_id = asset.get("account_id", "night_scout")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")

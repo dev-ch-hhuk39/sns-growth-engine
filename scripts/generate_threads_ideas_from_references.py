@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import re
 import sys
@@ -50,6 +51,14 @@ CANDIDATE_STATUS = "WAITING_REVIEW"
 REAL_POST_GATES = ["--confirm-real-post", "PUBLISH_ENABLED=true", "ALLOW_REAL_THREADS_POST=true"]
 # 人間レビューゲート（WAITING_REVIEW → READY/REJECTED）。
 HUMAN_GATE = "approve_queue.py"
+SIMILARITY_BLOCK_THRESHOLD = 0.62
+MAX_QUOTE_CHARS = 80
+ALLOWED_TRANSFORMATION_TYPES = {
+    "structure_reference",
+    "hook_reference",
+    "topic_reference",
+    "owned_media_caption",
+}
 
 DELEGATES = {
     "references": "scripts/generate_from_references.py",
@@ -74,6 +83,76 @@ def _to_float(value: Any) -> float:
 
 def _post_text(post: dict[str, Any]) -> str:
     return str(post.get("post_text") or post.get("text") or post.get("content") or "").strip()
+
+
+def _normalize_for_similarity(text: str) -> str:
+    return re.sub(r"\s+", "", str(text or "").lower())
+
+
+def original_text_similarity_guard(
+    original_text: str,
+    generated_text: str,
+    *,
+    threshold: float = SIMILARITY_BLOCK_THRESHOLD,
+) -> dict[str, Any]:
+    """Block drafts that are too close to reference wording."""
+    original = _normalize_for_similarity(original_text)
+    generated = _normalize_for_similarity(generated_text)
+    if not original or not generated:
+        return {"status": "PASS", "similarity": 0.0, "threshold": threshold, "reason": ""}
+    similarity = difflib.SequenceMatcher(None, original, generated).ratio()
+    copied_fragments = []
+    matcher = difflib.SequenceMatcher(None, original, generated)
+    for match in matcher.get_matching_blocks():
+        if match.size >= 24:
+            copied_fragments.append(original[match.a:match.a + match.size])
+    copied_chars = sum(len(x) for x in copied_fragments)
+    blocked = similarity >= threshold or copied_chars > MAX_QUOTE_CHARS
+    return {
+        "status": "BLOCKED" if blocked else "PASS",
+        "similarity": round(similarity, 4),
+        "threshold": threshold,
+        "copied_chars": copied_chars,
+        "quote_limit": MAX_QUOTE_CHARS,
+        "reason": "generated_text is too similar to source text" if blocked else "",
+    }
+
+
+def direct_copy_block(original_text: str, generated_text: str) -> bool:
+    return original_text_similarity_guard(original_text, generated_text)["status"] == "BLOCKED"
+
+
+def build_rewritten_post_candidate(
+    *,
+    account_id: str,
+    original_text: str,
+    generated_text: str,
+    transformation_type: str = "structure_reference",
+    source_ref: str = "",
+) -> dict[str, Any]:
+    if transformation_type not in ALLOWED_TRANSFORMATION_TYPES:
+        return {"status": "BLOCKED", "reason": "unsupported transformation_type", "transformation_type": transformation_type}
+    guard = original_text_similarity_guard(original_text, generated_text)
+    if guard["status"] == "BLOCKED":
+        return {
+            "status": "BLOCKED",
+            "reason": guard["reason"],
+            "transformation_type": transformation_type,
+            "similarity_guard": guard,
+            "generated_text": "",
+            "candidate_status": "",
+        }
+    return {
+        "status": "WAITING_REVIEW",
+        "account_id": account_id,
+        "generated_text": generated_text,
+        "transformation_type": transformation_type,
+        "similarity_guard": guard,
+        "source_credit": "internal_reference_only",
+        "source_ref": source_ref,
+        "candidate_status": CANDIDATE_STATUS,
+        "auto_publish": False,
+    }
 
 
 def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, Any], index: int) -> str:
@@ -138,6 +217,16 @@ def build_generation_rows(
         derivative_id = f"sd_{stable}_threads"
         queue_id = f"q_{stable}_threads"
         body = build_thread_body(account_id, post, score, i)
+        candidate = build_rewritten_post_candidate(
+            account_id=account_id,
+            original_text=_post_text(post),
+            generated_text=body,
+            transformation_type="structure_reference",
+            source_ref=ref_id,
+        )
+        if candidate["status"] == "BLOCKED":
+            continue
+        similarity_guard = candidate["similarity_guard"]
         title = body.splitlines()[0][:80]
         drafts.append({
             "draft_id": draft_id,
@@ -154,6 +243,10 @@ def build_generation_rows(
             "media_strategy": "none",
             "imitation_risk": "low",
             "media_reuse_risk": "high",
+            "transformation_type": "structure_reference",
+            "source_credit": "internal_reference_only",
+            "similarity_score": str(similarity_guard["similarity"]),
+            "direct_copy_guard": similarity_guard["status"],
             "buzz_potential_score": str(score.get("total_score", "")),
             "conversion_potential_score": str(score.get("cta_score", "")),
             "confidence_level": "medium",
@@ -173,6 +266,9 @@ def build_generation_rows(
             "char_count": str(len(body)),
             "text_policy_status": "PENDING",
             "media_strategy": "none",
+            "transformation_type": "structure_reference",
+            "source_credit": "internal_reference_only",
+            "similarity_score": str(similarity_guard["similarity"]),
         })
         queues.append({
             "queue_id": queue_id,

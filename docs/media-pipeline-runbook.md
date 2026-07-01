@@ -40,3 +40,21 @@ Third-party videos/images remain reference-only unless rights are explicitly own
 - `cut_approved_clips.py --dry-run --rights-status third_party_reference_only` remains `BLOCKED`.
 - `upload_media_assets.py --account-id night_scout --dry-run` remains `BLOCKED` for third-party/reference-only media.
 - No real cut or upload was executed.
+
+## Rights-Aware Media Ingestion (2026-07-01)
+
+Unified rights statuses:
+
+- `third_party_reference_only`: metadata/transcript/analysis only. No save, download, cut, upload, queue media use, or repost.
+- `unknown`: blocked until human rights approval. Do not treat unknown as zero-risk.
+- `owned`, `licensed`, `approved_creator_clip`: eligible for media asset planning and later gated cut/upload.
+
+Use the new ingestion planner for approved material only:
+
+```bash
+python3 scripts/ingest_media_assets.py --account-id night_scout \
+  --platform local --source-url "https://example.com/owned.mp4" \
+  --rights-status owned --dry-run
+```
+
+The CLI creates a `media_assets`-shaped plan row only. URL inputs are not downloaded. Cloudinary upload remains a separate gate and was not executed in this turn.

@@ -25,6 +25,8 @@ sys.path.insert(0, str(ROOT / "src"))
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 PUBLIC_TIMEOUT_SECONDS = 15
 
+from media.rights_policy import THIRD_PARTY_REFERENCE_ONLY
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -176,8 +178,11 @@ def normalize_source(src: dict[str, Any], fetched: dict[str, Any] | None = None)
         "collected_at": now_iso(),
         "post_url": url,
         "use_status": "REFERENCE_ONLY",
-        "rights_status": "reference_only",
+        "rights_status": THIRD_PARTY_REFERENCE_ONLY,
         "can_reuse_media": "false",
+        "media_download": "false",
+        "media_body_saved": "false",
+        "media_rights_note": "X/Threads media is third_party_reference_only unless separately approved as approved_creator_clip.",
         "fetch_error": fetched.get("error", ""),
     }
 

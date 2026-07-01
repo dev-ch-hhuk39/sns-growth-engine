@@ -282,3 +282,13 @@ python3 scripts/collect_threads_metrics.py --result-id <result_id> --source manu
 ```
 
 Do not write guessed zero values. Use null/UNAVAILABLE when metrics cannot be trusted.
+
+## Reference Media Rule (2026-07-01)
+
+Threads operation may use third-party Threads/X posts as references, but must not save or repost their media.
+
+- X/Threads media from source collection is `third_party_reference_only`.
+- Generated posts may use structure/hook/topic references only.
+- Direct copy and high-similarity rewrites are blocked.
+- Approved media posts require separate `media_assets` rows with `owned`, `licensed`, or `approved_creator_clip`, and still require human review before READY.
+- No real post or media post was executed in the 2026-07-01 rights-ingestion turn.
