@@ -119,3 +119,11 @@ Do not cut or repost YouTube/TikTok third-party clips. Use structure, hook, topi
 - Individual YouTube clip target video URLs are not selected yet; `youtube_night_scout_reference_todo` and `youtube_liver_reference_todo` are placeholders with empty `source_url`.
 - All video TODO placeholders are `fetch_enabled=false`, `manual_only=true`, `rights_status=unknown`, `clip_enabled=false`, and `media_pipeline_eligible=false`.
 - Full inventory: `docs/source-registry-inventory.md`.
+
+## Library Policy (2026-07-02)
+
+- YouTube metadata: use `yt-dlp` with `download=false`.
+- YouTube transcript: use `youtube-transcript-api` when public/official captions exist; transcript preview/body is not printed.
+- TikTok metadata: prefer individual `/video/` URLs through `yt-dlp`; `tiktok-to-ytdlp` remains optional helper, not production-enabled.
+- TikTok profile URLs are stored as references/placeholders and are not expanded into downloadable media.
+- Agent Reach and last30days-skill are optional research/source-discovery signals only.

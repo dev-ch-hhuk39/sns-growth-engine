@@ -292,3 +292,5 @@ Threads operation may use third-party Threads/X posts as references, but must no
 - Direct copy and high-similarity rewrites are blocked.
 - Approved media posts require separate `media_assets` rows with `owned`, `licensed`, or `approved_creator_clip`, and still require human review before READY.
 - No real post or media post was executed in the 2026-07-01 rights-ingestion turn.
+
+X follows the same reference-only rule in the current phase: X fetch/post is OFF, media body saving is prohibited, and X/Threads references may inform structure/hook/topic only.

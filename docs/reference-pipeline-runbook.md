@@ -375,3 +375,10 @@ Rules:
 - YouTube references: channel/account sources are registered; individual clip target URLs for `night_scout` and `liver_manager` are placeholders until a human provides real URLs.
 - TikTok references: `beauty_account` account references exist but beauty remains inactive/draft-only; `night_scout` and `liver_manager` TikTok video references are placeholders.
 - See `docs/source-registry-inventory.md` for per-source status and TODO rows.
+
+## External Signal Tools
+
+- Agent Reach: optional external signal/source discovery/shortlist enrichment. Not production runtime enabled, and not used to generate post body text directly.
+- last30days-skill: optional trend/source discovery signal. External skill runtime, query schema, and rate limits need human approval before use.
+- tiktok-to-ytdlp: optional TikTok URL helper. Individual TikTok `/video/` URLs are preferred for first dry-runs.
+- `yt-dlp` and `youtube-transcript-api` are the current wired video metadata/transcript paths, with third-party download prohibited.

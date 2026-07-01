@@ -7,13 +7,18 @@
     "source_url",
     "local_file_ref",
     "owner_name",
+    "creator_name",
     "permission_source",
+    "permission_evidence_url_or_file",
     "permission_date",
+    "permission_expire_date",
     "rights_status",
     "allowed_uses",
-    "expires_at",
+    "prohibited_uses",
     "target_account_id",
-    "notes"
+    "notes",
+    "reviewed_by",
+    "reviewed_at"
   ],
   "allowed_rights_status": [
     "owned",
@@ -26,17 +31,25 @@
     "source_url": "",
     "local_file_ref": "",
     "owner_name": "",
+    "creator_name": "",
     "permission_source": "",
+    "permission_evidence_url_or_file": "",
     "permission_date": "",
+    "permission_expire_date": "",
     "rights_status": "owned",
     "allowed_uses": {
+      "save": false,
       "cut": false,
       "upload": false,
       "repost": false,
-      "derivative_post": true
+      "derivative_post": true,
+      "paid_ad": false,
+      "organic_post": true
     },
-    "expires_at": "",
+    "prohibited_uses": "",
     "target_account_id": "night_scout",
-    "notes": "Fill all permission fields before ingest_media_assets.py --apply. No third-party media."
+    "notes": "Fill all permission fields before ingest_media_assets.py --apply. No third-party media.",
+    "reviewed_by": "",
+    "reviewed_at": ""
   }
 }

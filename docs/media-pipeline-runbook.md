@@ -63,6 +63,8 @@ The CLI creates a `media_assets`-shaped plan row only. URL inputs are not downlo
 
 Use `config/source_accounts/owned_media_asset_template.json` for any owned/licensed/approved creator material before it enters `ingest_media_assets.py`.
 
+Human-readable review template: `docs/media-rights-template.md`.
+
 Required permission fields:
 
 - `asset_id`, `platform`, `source_url` or `local_file_ref`
@@ -72,3 +74,11 @@ Required permission fields:
 - `target_account_id`, `notes`
 
 TODO placeholders in source registry are not media pipeline eligible. They exist only to show where human URLs/permission evidence are missing.
+
+| rights_status | save | cut | upload | repost | media queue |
+|---|---|---|---|---|---|
+| `third_party_reference_only` | no | no | no | no | no |
+| `unknown` | no | no | no | no | no |
+| `owned` | gated | gated | gated | gated | review-only |
+| `licensed` | gated | gated | gated | gated | review-only |
+| `approved_creator_clip` | gated | gated | gated | gated | review-only |

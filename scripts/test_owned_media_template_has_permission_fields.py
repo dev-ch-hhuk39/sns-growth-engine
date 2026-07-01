@@ -11,13 +11,18 @@ required = {
     "source_url",
     "local_file_ref",
     "owner_name",
+    "creator_name",
     "permission_source",
+    "permission_evidence_url_or_file",
     "permission_date",
+    "permission_expire_date",
     "rights_status",
     "allowed_uses",
-    "expires_at",
+    "prohibited_uses",
     "target_account_id",
     "notes",
+    "reviewed_by",
+    "reviewed_at",
 }
 example = data.get("example", {})
 allowed_uses = example.get("allowed_uses", {})
@@ -25,7 +30,7 @@ checks = [
     ("template exists", path.exists()),
     ("required listed", required.issubset(set(data.get("required_fields", [])))),
     ("example fields", required.issubset(set(example.keys()))),
-    ("allowed uses fields", {"cut", "upload", "repost", "derivative_post"}.issubset(set(allowed_uses.keys()))),
+    ("allowed uses fields", {"save", "cut", "upload", "repost", "derivative_post", "paid_ad", "organic_post"}.issubset(set(allowed_uses.keys()))),
     ("approved statuses", {"owned", "licensed", "approved_creator_clip"}.issubset(set(data.get("allowed_rights_status", [])))),
 ]
 bad = [n for n, ok in checks if not ok]

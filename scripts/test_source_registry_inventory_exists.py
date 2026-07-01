@@ -13,8 +13,10 @@ required = [
     "rights_status",
     "fetch_enabled",
     "manual_only",
+    "transcript_enabled",
     "clip_enabled",
     "media_pipeline_eligible",
+    "collection_method",
     "current_status",
     "notes",
 ]

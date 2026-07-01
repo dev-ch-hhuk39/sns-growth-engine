@@ -82,3 +82,5 @@ Growth loop outputs must keep media out of posting unless the media asset is `ow
 - TODO source placeholders are skipped by collection because they have empty `source_url`, `manual_only=true`, and `fetch_enabled=false`.
 - Growth loop can use registered references for scoring/idea planning only after humans select a small dry-run source set. Do not bulk-enable source fetch.
 - No source registry row is currently `media_pipeline_eligible=true`.
+- The local `owned_media_assets_todo` placeholder is also skipped until rights evidence and local/source references are filled.
+- Growth loop must not attach reference-only media or promote media candidates to READY. AUTOPOST remains OFF.

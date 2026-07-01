@@ -2424,3 +2424,55 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 ### 次AIへの引き継ぎメモ
 
 次に人間が渡すべきURLは、`youtube_night_scout_reference_todo`, `youtube_liver_reference_todo`, `tiktok_night_scout_reference_todo`, `tiktok_liver_reference_todo` に入れる実URL。placeholderの `source_url` は空のままが正しい状態。架空URLやexample URLを本番source registryに入れないこと。
+
+## Codex handoff: reference source/library policy finalization (2026-07-02)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `87688fa00285d6b879b874714a97835d685e7865`（ユーザー指定の `4125e36` 以降）
+- 作業ブランチ: `main`
+- commit予定: `chore: 参照ソースと収集ライブラリ方針を最終整理`
+
+### 今回の変更
+
+- `docs/dependency-inventory.md` に採用ライブラリ方針表を追加。
+- `docs/media-rights-template.md` を新規作成。
+- `config/source_accounts/default_sources.json` に `owned_media_assets_todo` を追加。
+- `config/source_accounts/owned_media_asset_template.json` をpermission evidence / creator / allowed uses / reviewer fieldsまで拡張。
+- `docs/source-registry-inventory.md` をlocal placeholder、`transcript_enabled`、`collection_method`込みで再生成。
+- Agent Reach / last30days-skill / tiktok-to-ytdlp は optional/external/helper であり、本番稼働済みとは扱わないことをdocs/testsで固定。
+
+### source registry 状況
+
+- `default_sources.json`: 68件。
+- Threads: 7件登録済み、fetch_enabled=false。
+- X: 16件登録済み、fetch_enabled=false、fetch/post OFF。
+- YouTube: 28件。既存チャンネル/playlist登録あり、個別動画URL TODO 2件。
+- TikTok: 9件。beauty_account既存7件、night_scout/liver_manager個別動画URL TODO 2件。
+- local: `owned_media_assets_todo` 1件。rights evidence / local_file_ref / allowed uses入力待ち。
+- TODO / rights-review placeholder: 5件。
+- `fetch_enabled=true`: 0。
+- `clip_enabled=true`: 0。
+- `media_pipeline_eligible=true`: 0。
+- `beauty_account active`: 0。
+
+### 人間入力待ち
+
+- `youtube_night_scout_reference_todo`: real YouTube channel/video URL.
+- `youtube_liver_reference_todo`: real YouTube channel/video URL.
+- `tiktok_night_scout_reference_todo`: real TikTok `/video/` URL preferred.
+- `tiktok_liver_reference_todo`: real TikTok `/video/` URL preferred.
+- `owned_media_assets_todo`: local file/source URL, owner/creator, permission evidence, dates, allowed/prohibited uses, reviewer.
+- Agent Reachを有効化する場合: install source, CLI command, login/session policy, ToS approval, trusted output schema.
+- last30days-skillを有効化する場合: execution method, query templates, output schema, rate limits.
+
+### 安全確認
+
+- 実投稿なし。
+- AUTOPOST OFF維持。
+- X fetch/postなし。
+- beauty_account active/READY/POSTED化なし。
+- third-party download/cut/upload/repostなし。
+- Cloudinary実uploadなし。
+- transcription API実呼び出しなし。
+- `.env`, `data/`, `output/`, `.claude/plans/` はcommit対象外。
