@@ -117,3 +117,15 @@ Generated from `config/source_accounts/default_sources.json` on 2026-07-02. This
 ## Owned / Licensed Media Registration Template
 
 Use `config/source_accounts/owned_media_asset_template.json` and `docs/media-rights-template.md` before media ingestion. Required fields include owner/creator, permission source/evidence, permission dates, rights status, allowed/prohibited uses, reviewer, and target account.
+
+## Production Pilot Candidates
+
+These are candidates only. `fetch_enabled=true` remains 0 until a human explicitly runs `prepare_pilot_sources.py --apply --confirm-pilot`.
+
+| account_id | source_id | platform | source_url | current_use |
+|---|---|---|---|---|
+| `night_scout` | `src_ns_threads_required_001` | threads | `https://www.threads.com/@kyaba_ryo` | reference metadata/text dry-run |
+| `night_scout` | `src_ns_threads_required_002` | threads | `https://www.threads.com/@mizuno9120` | reference metadata/text dry-run |
+| `liver_manager` | `src_lm_yt_cand_001` | youtube | `https://www.youtube.com/@suu-san_pococha` | metadata/transcript analysis only |
+
+Excluded from pilot: X, `beauty_account`, TODO placeholders, `unknown` rights rows, media download/cut/upload/post.

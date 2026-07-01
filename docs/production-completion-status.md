@@ -468,3 +468,13 @@ Completed the missing rights-aware media ingestion layer.
 - Owned/licensed media intake template created at `config/source_accounts/owned_media_asset_template.json`.
 - Human-readable rights template created at `docs/media-rights-template.md`.
 - Still required before pilot: human-provided YouTube/TikTok target URLs, owned/licensed permission evidence, and optional Agent Reach/last30days execution policy if those tools are enabled.
+
+## Production Pilot Preparation (2026-07-02)
+
+- Added `docs/production-pilot-runbook.md`.
+- Added `scripts/prepare_pilot_sources.py` as dry-run-first helper. It excludes X, beauty, TODO placeholders, missing URLs, TikTok profile URLs, and `unknown` rights rows.
+- Current pilot candidates:
+  - `night_scout`: `src_ns_threads_required_001`, `src_ns_threads_required_002`.
+  - `liver_manager`: `src_lm_yt_cand_001`.
+- `fetch_enabled=true` remains 0. No pilot apply was executed.
+- AUTOPOST remains OFF. No real fetch, Sheets apply, download, cut, upload, or post was executed.

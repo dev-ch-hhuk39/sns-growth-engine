@@ -2476,3 +2476,40 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Cloudinary実uploadなし。
 - transcription API実呼び出しなし。
 - `.env`, `data/`, `output/`, `.claude/plans/` はcommit対象外。
+
+## Codex handoff: production pilot dry-run preparation (2026-07-02)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `9eaa7517f60f2320cf690dbf41908df2a829d7b4`
+- 作業ブランチ: `main`
+- commit予定: `docs: 本番pilot運用手順を追加`
+
+### 今回の変更
+
+- `docs/production-pilot-runbook.md` を作成。
+- `scripts/prepare_pilot_sources.py` を追加。dry-run-firstで、applyには `--apply --confirm-pilot` が必須。
+- pilot候補を `docs/source-registry-inventory.md` とrunbookに記載。
+- pilot安全テストを追加。
+
+### pilot候補
+
+- `night_scout`: `src_ns_threads_required_001` (`https://www.threads.com/@kyaba_ryo`)
+- `night_scout`: `src_ns_threads_required_002` (`https://www.threads.com/@mizuno9120`)
+- `liver_manager`: `src_lm_yt_cand_001` (`https://www.youtube.com/@suu-san_pococha`)
+
+### 現在の安全カウント
+
+- `fetch_enabled=true`: 0。
+- `clip_enabled=true`: 0。
+- `media_pipeline_eligible=true`: 0。
+- TODO / rights placeholder: 5。
+- beauty active/fetch: 0。
+- AUTOPOST: OFF。
+
+### 次に人間がやること
+
+- pilot候補3件でよいか確認。
+- OKなら `python3 scripts/prepare_pilot_sources.py --account-id all --max-per-account 2 --apply --confirm-pilot` を実行。
+- apply後、Sheets書き込み前に `collect_source_posts.py` と `run_growth_loop.py` のdry-runを再確認。
+- AUTOPOSTはまだONにしない。
