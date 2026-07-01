@@ -111,3 +111,11 @@ TikTok/YouTube third-party videos remain reference-analysis only. Do not downloa
 - Individual TikTok `/video/` URLs can be checked for metadata in dry-run. Profiles/playlists are not expanded for download.
 
 Do not cut or repost YouTube/TikTok third-party clips. Use structure, hook, topic, and transcript analysis only.
+
+## Source Registry Inventory Update (2026-07-01)
+
+- YouTube channel/account references are registered for `night_scout`, `liver_manager`, and `beauty_account`.
+- TikTok references are registered only for `beauty_account`; `night_scout` and `liver_manager` TikTok video references are TODO placeholders until a human provides real `/video/` URLs.
+- Individual YouTube clip target video URLs are not selected yet; `youtube_night_scout_reference_todo` and `youtube_liver_reference_todo` are placeholders with empty `source_url`.
+- All video TODO placeholders are `fetch_enabled=false`, `manual_only=true`, `rights_status=unknown`, `clip_enabled=false`, and `media_pipeline_eligible=false`.
+- Full inventory: `docs/source-registry-inventory.md`.

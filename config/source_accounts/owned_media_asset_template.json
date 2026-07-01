@@ -1,0 +1,42 @@
+{
+  "template_name": "owned_or_licensed_media_asset",
+  "description": "Human-filled template for media that may enter the media pipeline after rights review.",
+  "required_fields": [
+    "asset_id",
+    "platform",
+    "source_url",
+    "local_file_ref",
+    "owner_name",
+    "permission_source",
+    "permission_date",
+    "rights_status",
+    "allowed_uses",
+    "expires_at",
+    "target_account_id",
+    "notes"
+  ],
+  "allowed_rights_status": [
+    "owned",
+    "licensed",
+    "approved_creator_clip"
+  ],
+  "example": {
+    "asset_id": "owned_media_todo_001",
+    "platform": "local",
+    "source_url": "",
+    "local_file_ref": "",
+    "owner_name": "",
+    "permission_source": "",
+    "permission_date": "",
+    "rights_status": "owned",
+    "allowed_uses": {
+      "cut": false,
+      "upload": false,
+      "repost": false,
+      "derivative_post": true
+    },
+    "expires_at": "",
+    "target_account_id": "night_scout",
+    "notes": "Fill all permission fields before ingest_media_assets.py --apply. No third-party media."
+  }
+}

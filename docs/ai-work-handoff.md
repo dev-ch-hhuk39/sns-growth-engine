@@ -2336,3 +2336,91 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 ### 次AIへの引き継ぎメモ
 
 `rights_status=allowed` は互換用に `approved_creator_clip` へ正規化している。今後の実media運用では、source registryやSheets上の承認UIも `owned/licensed/approved_creator_clip` に寄せること。AUTOPOSTはOFF、生成queueはREADYにしない。third-party素材は本文・構造・傾向分析のみで、画像/動画bodyを保存しない。
+
+## Codex handoff: source registry video/source inventory (2026-07-01)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `4125e36ca2f937c607c240eff808ccc2b49e42a6`
+- 作業ブランチ: `main`
+- commit予定: `chore: 動画参照ソース登録状況を棚卸し`
+
+### 本システムについて
+
+テキスト投稿運用、参考投稿分析、権利管理付きmedia ingestionは実装済み。今回の作業は、YouTube/TikTok/X/Threadsの参照sourceと切り抜き対象sourceの登録状況を棚卸しし、実URL未確定部分を架空URLなしのTODO placeholderとして可視化するもの。
+
+### 変更ファイル一覧
+
+- `config/source_accounts/default_sources.json`
+- `config/source_accounts/owned_media_asset_template.json`
+- `docs/source-registry-inventory.md`
+- `docs/video-reference-runbook.md`
+- `docs/media-pipeline-runbook.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `config/source_accounts/owned_media_asset_template.json`
+- `docs/source-registry-inventory.md`
+- source registry inventory tests（commit前に追加）
+
+### source registry 状況
+
+- `default_sources.json`: 67件。
+- Threads: 7件登録済み、fetch_enabled=false。
+- X: 16件登録済み、fetch_enabled=false、manual/reference-only。
+- YouTube: 28件。既存チャンネル/playlist登録あり、night_scout/liver_managerの個別動画URLはTODO placeholder 2件。
+- TikTok: 9件。beauty_account既存7件、night_scout/liver_managerの個別動画URLはTODO placeholder 2件。
+- TODO placeholder: 4件、全て `fetch_enabled=false`, `manual_only=true`, `rights_status=unknown`, `current_status=needs_human_url`。
+- `clip_enabled=true`: 0。
+- `media_pipeline_eligible=true`: 0。
+- `beauty_account active`: 0。
+- `X fetch enabled`: 0。
+
+### スケール方針
+
+- 人間が実URLを入れるまではTODO placeholderをfetch対象にしない。
+- YouTube/TikTok third-party素材はanalysis only。個別動画URLが入っても、権利承認がない限りdownload/cut/upload/repost不可。
+- 自社/許諾済み素材は `owned_media_asset_template.json` のpermission fieldsを埋めてから `ingest_media_assets.py` へ渡す。
+- `owned/licensed/approved_creator_clip` 以外はmedia pipeline eligibleにしない。
+
+### 未完了事項 / 残WARN
+
+- night_scout/liver_managerのYouTube個別clip対象URLは人間入力待ち。
+- night_scout/liver_managerのTikTok個別 `/video/` URLは人間入力待ち。
+- beauty_accountは引き続きdraft-only/inactive。美容投稿・fetchはしない。
+- Google Sheetsへのsource registry applyはこのturnでは未実行。
+
+### dry-run / テスト結果
+
+- `collect_source_posts.py --platform threads --account-id all --dry-run`: `selected_count=0`, `skipped_count=67`, `media_download=false`, `x_enabled=false`。
+- YouTube existing channel URL dry-run: `PLAN_ONLY`, `download=false`, metadataは環境/対象URL都合で `UNAVAILABLE`。
+- TikTok existing profile URL dry-run: `PLAN_ONLY`, `download=false`, `tiktok_profile_metadata_not_supported_no_download`。
+- `ingest_media_assets.py --rights-status owned --dry-run`: `PLAN_ONLY`, `media_download=false`, `cloudinary_upload=false`, `real_post=false`。
+- `run_growth_loop.py --dry-run --account-id all`: `auto_post=false`, `real_post=false`, `real_collection_pipeline.status=NO_DATA`。
+- 新規source registry inventory tests: PASS 30 / FAIL 0。
+- 既存重要安全テスト: PASS（`test_all_workflows_safety_flags.py` 103 / FAIL 0、ほか指定テストPASS）。
+- `git diff --check`: PASS。
+
+### 次に触ってよいファイル
+
+- `config/source_accounts/default_sources.json`
+- `config/source_accounts/owned_media_asset_template.json`
+- `docs/source-registry-inventory.md`
+- `docs/*runbook.md`
+- source registry inventory tests
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secret/token/cookie値を含む可能性があるファイル
+
+### 次AIへの引き継ぎメモ
+
+次に人間が渡すべきURLは、`youtube_night_scout_reference_todo`, `youtube_liver_reference_todo`, `tiktok_night_scout_reference_todo`, `tiktok_liver_reference_todo` に入れる実URL。placeholderの `source_url` は空のままが正しい状態。架空URLやexample URLを本番source registryに入れないこと。

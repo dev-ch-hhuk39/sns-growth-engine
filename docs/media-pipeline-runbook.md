@@ -58,3 +58,17 @@ python3 scripts/ingest_media_assets.py --account-id night_scout \
 ```
 
 The CLI creates a `media_assets`-shaped plan row only. URL inputs are not downloaded. Cloudinary upload remains a separate gate and was not executed in this turn.
+
+## Owned / Licensed Asset Intake (2026-07-01)
+
+Use `config/source_accounts/owned_media_asset_template.json` for any owned/licensed/approved creator material before it enters `ingest_media_assets.py`.
+
+Required permission fields:
+
+- `asset_id`, `platform`, `source_url` or `local_file_ref`
+- `owner_name`, `permission_source`, `permission_date`, `expires_at`
+- `rights_status`: `owned`, `licensed`, or `approved_creator_clip`
+- `allowed_uses`: `cut`, `upload`, `repost`, `derivative_post`
+- `target_account_id`, `notes`
+
+TODO placeholders in source registry are not media pipeline eligible. They exist only to show where human URLs/permission evidence are missing.

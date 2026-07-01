@@ -454,3 +454,15 @@ Completed the missing rights-aware media ingestion layer.
 - YouTube/TikTok third-party material remains metadata/transcript/structure analysis only.
 - Reference-based Threads generation now blocks high-similarity copy and writes only `WAITING_REVIEW` candidates.
 - Cloudinary real upload, real cut, real download, and real SNS post were not executed.
+
+## Source Registry Inventory Completion (2026-07-01)
+
+- `default_sources.json`: 67 total sources after adding 4 URL-empty TODO placeholders.
+- Platform counts: YouTube 28, TikTok 9, X 16, Threads 7, note 6, query 1.
+- `fetch_enabled=true`: 0.
+- `clip_enabled=true`: 0.
+- `media_pipeline_eligible=true`: 0.
+- `beauty_account active`: 0.
+- `X fetch enabled`: 0.
+- Full inventory created at `docs/source-registry-inventory.md`.
+- Owned/licensed media intake template created at `config/source_accounts/owned_media_asset_template.json`.

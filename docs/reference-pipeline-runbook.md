@@ -367,3 +367,11 @@ Rules:
 - Collected X/Threads media rows are `rights_status=third_party_reference_only`, `can_reuse_media=false`, `media_download=false`, and `media_body_saved=false`.
 - Reference posts can influence structure, hook, and topic. They must not be lightly rewritten into a post.
 - `generate_threads_ideas_from_references.py` includes a similarity/direct-copy guard. High-similarity drafts are `BLOCKED`; valid transformed drafts remain `WAITING_REVIEW`, never `READY`.
+
+## Source Registry Inventory (2026-07-01)
+
+- Threads references: registered in `default_sources.json`; `fetch_enabled=false` until a small reviewed dry-run set is enabled.
+- X references: registered, manual/reference-only, and X fetch remains disabled by default.
+- YouTube references: channel/account sources are registered; individual clip target URLs for `night_scout` and `liver_manager` are placeholders until a human provides real URLs.
+- TikTok references: `beauty_account` account references exist but beauty remains inactive/draft-only; `night_scout` and `liver_manager` TikTok video references are placeholders.
+- See `docs/source-registry-inventory.md` for per-source status and TODO rows.

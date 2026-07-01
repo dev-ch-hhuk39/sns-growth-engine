@@ -75,3 +75,10 @@ Growth loop outputs must keep media out of posting unless the media asset is `ow
 - Media queue generation produces `WAITING_REVIEW` only and excludes reference-only/unknown assets.
 - AUTOPOST remains OFF. The loop must not promote media posts to READY.
 - Copy-like generated text is blocked by the reference similarity guard before queue planning.
+
+## Source Registry Preconditions (2026-07-01)
+
+- `default_sources.json` currently keeps `fetch_enabled=true` at 0.
+- TODO source placeholders are skipped by collection because they have empty `source_url`, `manual_only=true`, and `fetch_enabled=false`.
+- Growth loop can use registered references for scoring/idea planning only after humans select a small dry-run source set. Do not bulk-enable source fetch.
+- No source registry row is currently `media_pipeline_eligible=true`.
