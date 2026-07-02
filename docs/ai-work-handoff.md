@@ -2870,3 +2870,22 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - `night_scout` score/generate/AUTO_READY: success。1件READY化。
 - `liver_manager` AUTO_READY: Sheets API 429 read quotaで停止。実投稿なし。
 - 修正: apply modeでは `max_posts_per_run=1` に合わせ、score/generate/AUTO_READY対象も最初の1アカウントに絞る。これにより1 run 1投稿上限を守りつつSheets read量を削減。
+
+### Actions dispatch attempt 4
+
+- `gh workflow run "Autonomous Growth Loop" -f confirm_autonomous=true -f account_id=all`: 実行成功。
+- Run id: `28571552118`。
+- Result: success。
+- Dry-run step: success。
+- Guard step: success。
+- Apply step: success。
+- YouTube metadata: success。`download=false`、channel URLのためtranscriptは `UNAVAILABLE/youtube_video_id_missing`。
+- Threads source collect apply: success、dedupeによりappend 0。
+- `night_scout` score/generate/AUTO_READY/process queue: success。
+- `liver_manager`: `max_posts_per_run=1` によりpost pipeline skip。
+- Posted queue id: `q_night_scout_manualref_src_ns_threads_required_002_threads`。
+- Result id: `threads_q_night_scout_manualref_src_ns_threads_required_002_threads_20260702065829`。
+- External post id: `17928528360351269`。
+- Post URL: `https://www.threads.com/@kyaba_consul_mizu/post/DaSAIF3lmCd`。
+- ローカルからの追加Sheets verifyは承認システムout-of-creditsで拒否。Actionsログ上は `status=POSTED` とpost URLあり。
+- 次: 初回Actions apply成功済み。schedule有効化は、ユーザーが投稿内容とSheets `posted_results` を確認してから別commitで行う。

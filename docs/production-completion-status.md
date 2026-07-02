@@ -571,3 +571,20 @@ Third dispatch attempt:
 - `liver_manager` AUTO_READY: stopped by Google Sheets API 429 read quota before posting.
 - New post URL from this attempt: none.
 - Fix: apply mode now limits score/generate/AUTO_READY work to the first `max_posts_per_run` account, so `max_posts_per_run=1` also reduces Sheets read pressure before posting.
+
+Fourth dispatch attempt:
+
+- Run id: `28571552118`.
+- Result: success.
+- Dry-run step: success.
+- Guard step: success.
+- Apply step: success.
+- YouTube metadata dry-run: success, `download=false`; transcript `UNAVAILABLE` due channel URL without `video_id`.
+- Threads source collect apply: success, appended 0 because existing rows were deduped.
+- `night_scout` score/generate/AUTO_READY/process queue: success.
+- `liver_manager` score/generate/AUTO_READY/post: skipped by `max_posts_per_run=1`.
+- Posted queue id: `q_night_scout_manualref_src_ns_threads_required_002_threads`.
+- Result id: `threads_q_night_scout_manualref_src_ns_threads_required_002_threads_20260702065829`.
+- External post id: `17928528360351269`.
+- Post URL: `https://www.threads.com/@kyaba_consul_mizu/post/DaSAIF3lmCd`.
+- Local follow-up Sheets verify was not run because the local approval system returned out-of-credits, but the Actions log reported `status=POSTED` with the result id and post URL.
