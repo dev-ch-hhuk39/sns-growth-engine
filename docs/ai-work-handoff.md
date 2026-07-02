@@ -2832,3 +2832,14 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - TikTok night/liverの個別 `/video/` URL。
 - YouTube個別動画URL。
 - owned/licensed mediaの権利証跡。
+
+### Actions dispatch attempt
+
+- `gh workflow run "Autonomous Growth Loop" -f confirm_autonomous=true -f account_id=all`: 実行成功。
+- Run id: `28571069128`。
+- Result: failure / safe BLOCKED。
+- Dry-run step: success。
+- Guard step: success。
+- Apply step: `night_scout` / `liver_manager` のThreads publish envが未設定としてpreflight BLOCK。実投稿なし。
+- 原因: workflow job envに `THREADS_ACCESS_TOKEN_NIGHT_SCOUT`, `THREADS_USER_ID_NIGHT_SCOUT`, `THREADS_ACCESS_TOKEN_LIVER_MANAGER`, `THREADS_USER_ID_LIVER_MANAGER` を渡していなかった。
+- 修正: workflowへ上記secret envを追加。次のdispatchでは同BLOCKは解消される見込み。

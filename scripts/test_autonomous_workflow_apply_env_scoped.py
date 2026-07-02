@@ -23,6 +23,12 @@ def main() -> int:
             'ALLOW_CLOUDINARY_UPLOAD: "false"',
             'ALLOW_TRANSCRIPTION_API: "false"',
         ])),
+        ("account threads secrets passed", all(name in text for name in [
+            "THREADS_ACCESS_TOKEN_NIGHT_SCOUT",
+            "THREADS_USER_ID_NIGHT_SCOUT",
+            "THREADS_ACCESS_TOKEN_LIVER_MANAGER",
+            "THREADS_USER_ID_LIVER_MANAGER",
+        ])),
         ("apply confirm gated", "if: github.event.inputs.confirm_autonomous == 'true'" in apply_step),
     ]
     failed = [name for name, ok in checks if not ok]

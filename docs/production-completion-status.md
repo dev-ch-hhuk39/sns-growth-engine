@@ -539,3 +539,12 @@ Local Codex apply is intentionally not used for the first autonomous real post b
 - Apply step is gated by `confirm_autonomous=true`, `kill_switch=false`, required Sheets secrets, and publisher credential checks.
 - Apply env keeps `ALLOW_REAL_X_POST=false`, `ALLOW_VIDEO_DOWNLOAD=false`, `ALLOW_VIDEO_CUT=false`, `ALLOW_CLOUDINARY_UPLOAD=false`, and `ALLOW_TRANSCRIPTION_API=false`.
 - Schedule remains commented out until the first manual Actions apply succeeds and the posted result is reviewed.
+
+First dispatch attempt:
+
+- Run id: `28571069128`.
+- Dry-run step: success.
+- Confirm / kill switch / Sheets secret guard: success.
+- Apply step: safely BLOCKED before posting because account-specific Threads publish secrets were not passed into the workflow environment.
+- Fix: `.github/workflows/autonomous-growth-loop.yml` now passes `THREADS_ACCESS_TOKEN_NIGHT_SCOUT`, `THREADS_USER_ID_NIGHT_SCOUT`, `THREADS_ACCESS_TOKEN_LIVER_MANAGER`, and `THREADS_USER_ID_LIVER_MANAGER` from GitHub secrets.
+- New post URL from this attempt: none.
