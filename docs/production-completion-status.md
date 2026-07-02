@@ -527,3 +527,15 @@ Apply result:
 - `python3 scripts/run_autonomous_loop.py --account-id all --dry-run`: PASS / PLAN_ONLY.
 - `python3 scripts/run_autonomous_loop.py --account-id all --apply --confirm-autonomous`: not executed; local approval reviewer rejected the real-post capable command. No bypass was attempted.
 - No new Threads post URL was produced in this turn.
+
+## Actions-Based Autonomous Start Procedure (2026-07-02)
+
+Local Codex apply is intentionally not used for the first autonomous real post because the approval reviewer blocks real-post capable commands. Start operations through GitHub Actions instead:
+
+- Workflow: `Autonomous Growth Loop`.
+- Trigger: `workflow_dispatch`.
+- Inputs: `confirm_autonomous=true`, `account_id=all`.
+- Dry-run step runs before apply.
+- Apply step is gated by `confirm_autonomous=true`, `kill_switch=false`, required Sheets secrets, and publisher credential checks.
+- Apply env keeps `ALLOW_REAL_X_POST=false`, `ALLOW_VIDEO_DOWNLOAD=false`, `ALLOW_VIDEO_CUT=false`, `ALLOW_CLOUDINARY_UPLOAD=false`, and `ALLOW_TRANSCRIPTION_API=false`.
+- Schedule remains commented out until the first manual Actions apply succeeds and the posted result is reviewed.

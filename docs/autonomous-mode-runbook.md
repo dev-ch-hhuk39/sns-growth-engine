@@ -85,6 +85,23 @@ Workflow:
 
 It is `workflow_dispatch` only at initial launch. The apply step runs only when `confirm_autonomous=true`.
 
+### First Apply From GitHub UI
+
+Use GitHub Actions for the first real autonomous apply because the local Codex approval reviewer can block real-post capable commands.
+
+1. Open the repository on GitHub: `dev-ch-hhuk39/sns-growth-engine`.
+2. Open the **Actions** tab.
+3. Select **Autonomous Growth Loop**.
+4. Click **Run workflow**.
+5. Set `confirm_autonomous` to `true`.
+6. Set `account_id` to `all` for the first combined pilot, or choose `night_scout` / `liver_manager` for a narrower run.
+7. Click **Run workflow**.
+8. Open the created run and confirm **Dry-run autonomous plan** completed before **Apply autonomous Threads loop**.
+9. If the run fails, read the failing step summary first. The expected safe failures are missing secrets, `kill_switch=true`, Sheets verify failure, source selection empty, daily cap/cooldown, or publisher credential failure.
+10. Confirm the posted URL in the workflow log summary and in Google Sheets `posted_results`. If the Threads post succeeded but Sheets save failed, use the `POSTED_SAVE_FAILED` fallback/recovery path rather than retrying blindly.
+
+Do not enable X, beauty, media, download, cut, upload, Cloudinary, or transcription flags for this workflow.
+
 The workflow sets:
 
 - `PUBLISH_ENABLED=true`
@@ -96,6 +113,41 @@ The workflow sets:
 - `ALLOW_TRANSCRIPTION_API=false`
 
 The apply step also checks `config/autonomous_mode.json` and stops when `kill_switch=true`.
+
+The workflow has a required-secrets guard before apply. It stops when the Sheets spreadsheet secret or service-account secret is missing. Threads publisher credentials are checked by `scripts/run_autonomous_loop.py` / the publisher preflight without printing secret values.
+
+Required GitHub Actions secrets for the first `account_id=all` run:
+
+- `SNS_MASTER_SHEET_ID` or `SPREADSHEET_ID`
+- `SA_JSON_BASE64` or `GCP_SA_JSON_BASE64`
+- `THREADS_ACCESS_TOKEN_NIGHT_SCOUT`
+- `THREADS_USER_ID_NIGHT_SCOUT`
+- `THREADS_ACCESS_TOKEN_LIVER_MANAGER`
+- `THREADS_USER_ID_LIVER_MANAGER`
+
+Optional/unused in the initial text-only run:
+
+- Cloudinary secrets may exist, but `ALLOW_CLOUDINARY_UPLOAD=false` keeps upload disabled.
+- Threads app ID/secret may exist for refresh flows, but the autonomous post path relies on the publish credentials above.
+
+### Schedule Policy
+
+The workflow intentionally keeps `schedule` commented out until one manual `workflow_dispatch` apply succeeds.
+
+After a successful first Actions apply and a human review of the posted result:
+
+1. Edit `.github/workflows/autonomous-growth-loop.yml`.
+2. Uncomment this schedule block:
+
+```yaml
+schedule:
+  # JST 09:15 daily
+  - cron: "15 0 * * *"
+```
+
+3. Keep `confirm_autonomous` gating for manual runs.
+4. Keep `max_posts_per_run=1`, `daily_post_cap_per_account=1`, and `kill_switch=false` unless intentionally stopping.
+5. Commit the schedule change separately and monitor the first scheduled run.
 
 ## Hard Blocks
 

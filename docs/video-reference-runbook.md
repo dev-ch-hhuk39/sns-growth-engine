@@ -133,6 +133,8 @@ Do not cut or repost YouTube/TikTok third-party clips. Use structure, hook, topi
 Video references are now connected to `scripts/run_autonomous_loop.py` for the approved pilot path.
 
 - YouTube reference rows can produce text-only Threads idea candidates from structure/hook analysis.
+- Current autonomous pilot YouTube source `src_lm_yt_cand_001` is a channel URL (`https://www.youtube.com/@suu-san_pococha`), so transcript fetch can be `UNAVAILABLE` because channel URLs do not provide a single `video_id`.
+- To improve transcript/structure quality, provide an individual YouTube video URL for the relevant account/source.
 - Transcript fetch is attempted only through the existing safe transcript adapter. If a channel URL has no video ID, the result is `UNAVAILABLE` and the loop falls back to metadata/structure only.
 - TikTok analysis is wired but requires a real individual `/video/` URL. Current `night_scout` and `liver_manager` TikTok rows remain TODO placeholders and are skipped.
 - The autonomous output suppresses transcript body/preview.

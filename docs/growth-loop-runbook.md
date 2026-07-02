@@ -109,3 +109,5 @@ Current invariant gates:
 - max real posts per autonomous run: 1.
 
 On 2026-07-02 the dry-run passed, but the apply command was stopped by the local approval reviewer because it can perform real Threads posts. No workaround was used.
+
+For production start, run **Autonomous Growth Loop** from GitHub Actions UI with `confirm_autonomous=true` and `account_id=all`. Keep the schedule commented out until the first manual Actions apply succeeds and the posted result is reviewed.

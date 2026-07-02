@@ -2792,3 +2792,43 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 ### 次AIへのメモ
 
 承認レス自動運用のコード接続は完了。安全テストもPASS。唯一残った実運用BLOCKは、ローカル承認システムがreal Threads post可能なapplyコマンドを拒否したこと。次に進める場合は、まず `run_autonomous_loop.py --dry-run` と Sheets verify を再確認し、real post承認が取れた状態で `--apply --confirm-autonomous` を1回だけ実行する。X/beauty/media/third-party download系は触らない。
+
+## Codex handoff: GitHub Actions autonomous apply runbook (2026-07-02)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `072c317b3aa7dd33239e46f009cf397af51edd6a`
+- 作業ブランチ: `main`
+- commit予定: `docs: Actions経由の承認レス自動運用手順を追加`
+
+### 今回の目的
+
+ローカルCodexでは `run_autonomous_loop.py --apply --confirm-autonomous` がreal Threads post可能コマンドとして承認レビューに拒否された。回避実行はせず、GitHub Actions上で安全に初回autonomous applyを実行できるようにrunbookとテストを補強する。
+
+### 変更内容
+
+- `docs/autonomous-mode-runbook.md` にGitHub UIでの初回実行手順を追加。
+- `docs/autonomous-mode-runbook.md` にschedule有効化条件とJST 09:15 cron手順を追加。
+- `docs/video-reference-runbook.md` に `src_lm_yt_cand_001` がchannel URLでありtranscript `UNAVAILABLE` になり得ること、個別動画URLが必要なことを追記。
+- `docs/growth-loop-runbook.md` と `docs/production-completion-status.md` にActions経由運用方針を追記。
+- workflow安全性とdocs記載を固定するテストを追加予定。
+
+### GitHub Actions運用メモ
+
+- Workflow: `Autonomous Growth Loop`
+- Trigger: `workflow_dispatch`
+- Inputs: `confirm_autonomous=true`, `account_id=all`
+- Dry-run stepはapply前に必ず走る。
+- Apply stepは `confirm_autonomous=true` の時のみ。
+- `PUBLISH_ENABLED=true` と `ALLOW_REAL_THREADS_POST=true` はapply step内だけ。
+- `ALLOW_REAL_X_POST=false`, `ALLOW_VIDEO_DOWNLOAD=false`, `ALLOW_VIDEO_CUT=false`, `ALLOW_CLOUDINARY_UPLOAD=false`, `ALLOW_TRANSCRIPTION_API=false` 維持。
+- `kill_switch=true` なら停止。
+- scheduleは初回Actions apply成功までコメントアウト維持。
+
+### まだ必要な人間入力
+
+- GitHub Actions UIで初回 `Run workflow` を押す、またはCodexが `gh workflow run` を許可されること。
+- 初回apply成功後、投稿結果を確認してからschedule有効化判断。
+- TikTok night/liverの個別 `/video/` URL。
+- YouTube個別動画URL。
+- owned/licensed mediaの権利証跡。
