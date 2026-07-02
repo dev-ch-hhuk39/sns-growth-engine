@@ -498,7 +498,17 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             cmd += ["--source-url", url]
         if not run_step(cmd):
             return results
+    max_posts_per_run = max(1, int(plan["gate_summary"].get("max_posts_per_run", 1)))
+    post_candidate_accounts = accounts[:max_posts_per_run]
     for account in accounts:
+        if account not in post_candidate_accounts:
+            results.append({
+                "cmd": f"score/generate/auto_ready --account-id {account}",
+                "returncode": 0,
+                "status": "SKIPPED",
+                "reason": "max_posts_per_run_reached_before_account_apply",
+            })
+            continue
         if not run_step([sys.executable, "scripts/score_reference_posts.py", "--account-id", account, "--apply", "--confirm-score"]):
             return results
         if not run_step([sys.executable, "scripts/generate_threads_ideas_from_references.py", "--account-id", account, "--apply", "--confirm-generate"]):
@@ -510,7 +520,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         env.setdefault("PUBLISH_ENABLED", "true")
         env.setdefault("ALLOW_REAL_THREADS_POST", "true")
         env.setdefault("ALLOW_REAL_X_POST", "false")
-        remaining_posts = int(plan["gate_summary"].get("max_posts_per_run", 1))
+        remaining_posts = max_posts_per_run
         for account in accounts:
             if remaining_posts <= 0:
                 results.append({

@@ -2855,3 +2855,18 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Apply step: Sheets verifyが `real_post_flags_false_default` でBLOCK。実投稿なし。
 - 原因: apply step envの `PUBLISH_ENABLED=true` をread-only verifyが継承したため。
 - 修正: `run_autonomous_loop.py` の `verify_sheets_connectivity()` でverify実行時だけ `PUBLISH_ENABLED=false` / real post and media flags false の安全envを渡すように変更。
+
+### Actions dispatch attempt 3
+
+- `gh workflow run "Autonomous Growth Loop" -f confirm_autonomous=true -f account_id=all`: 実行成功。
+- Run id: `28571306895`。
+- Result: failure / PARTIAL。
+- Dry-run step: success。
+- Guard step: success。
+- Apply preflight: success。
+- Read-only Sheets verify: success。
+- YouTube metadata: success。`download=false`、channel URLのためtranscriptは `UNAVAILABLE/youtube_video_id_missing`。
+- Threads source collect apply: success、dedupeによりappend 0。
+- `night_scout` score/generate/AUTO_READY: success。1件READY化。
+- `liver_manager` AUTO_READY: Sheets API 429 read quotaで停止。実投稿なし。
+- 修正: apply modeでは `max_posts_per_run=1` に合わせ、score/generate/AUTO_READY対象も最初の1アカウントに絞る。これにより1 run 1投稿上限を守りつつSheets read量を削減。
