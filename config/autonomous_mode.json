@@ -1,0 +1,45 @@
+{
+  "autonomous_mode_enabled": true,
+  "auto_source_fetch_enabled": true,
+  "auto_idea_generation_enabled": true,
+  "auto_ready_enabled": true,
+  "auto_post_enabled": true,
+  "allowed_accounts": [
+    "night_scout",
+    "liver_manager"
+  ],
+  "blocked_accounts": [
+    "beauty_account"
+  ],
+  "allowed_platforms_for_fetch": [
+    "threads",
+    "youtube"
+  ],
+  "blocked_platforms_for_fetch": [
+    "x"
+  ],
+  "allowed_platforms_for_post": [
+    "threads"
+  ],
+  "blocked_platforms_for_post": [
+    "x"
+  ],
+  "allow_media_posts": false,
+  "allow_third_party_media": false,
+  "allow_unknown_rights": false,
+  "allow_cloudinary_upload": false,
+  "allow_video_download": false,
+  "allow_video_cut": false,
+  "allow_transcription_api": false,
+  "daily_post_cap_per_account": 1,
+  "daily_ready_cap_per_account": 2,
+  "max_posts_per_run": 1,
+  "cooldown_minutes": 180,
+  "min_quality_score": 75,
+  "min_safety_score": 90,
+  "max_risk_score": 10,
+  "max_similarity_to_source": 0.55,
+  "kill_switch": false,
+  "report_only": false,
+  "human_review_required": false
+}

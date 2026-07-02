@@ -1,0 +1,89 @@
+name: Autonomous Growth Loop
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_autonomous:
+        description: "Type true to run the autonomous Threads loop"
+        required: true
+        default: "false"
+      account_id:
+        description: "Target account scope"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - "all"
+          - "night_scout"
+          - "liver_manager"
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+
+jobs:
+  autonomous-growth-loop:
+    name: Rules-based Threads autonomous loop
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id || 'all' }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Dry-run autonomous plan
+        run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --dry-run
+
+      - name: Guard autonomous confirm and kill switch
+        if: github.event.inputs.confirm_autonomous == 'true'
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("config/autonomous_mode.json").read_text())
+          if cfg.get("kill_switch"):
+              raise SystemExit("[BLOCKED] autonomous kill_switch=true")
+          print("[OK] autonomous confirm input accepted and kill_switch=false")
+          PY
+          if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
+            echo "[BLOCKED] Sheets spreadsheet secret is missing."
+            exit 1
+          fi
+          if [ -z "$SA_JSON_BASE64" ] && [ -z "$GCP_SA_JSON_BASE64" ]; then
+            echo "[BLOCKED] Sheets service account secret is missing."
+            exit 1
+          fi
+
+      - name: Apply autonomous Threads loop
+        if: github.event.inputs.confirm_autonomous == 'true'
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+          ALLOW_REAL_X_POST: "false"
+          ALLOW_VIDEO_DOWNLOAD: "false"
+          ALLOW_VIDEO_CUT: "false"
+          ALLOW_CLOUDINARY_UPLOAD: "false"
+          ALLOW_TRANSCRIPTION_API: "false"
+        run: |
+          python3 scripts/run_autonomous_loop.py \
+            --apply \
+            --confirm-autonomous \
+            --account-id "$ACCOUNT_ID"

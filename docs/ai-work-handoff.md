@@ -4,11 +4,173 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-06-29
-- 作業AI: Claude Code (Opus 4.8)
+- Date: 2026-07-02
+- 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-06-24 (Threads初回実投稿成功 / バグ修正3件 ほか)
+- 前回更新: 2026-06-29 (Threads worker READY 承認モデル必須化)
+
+## 最新作業内容 (2026-07-02) — 承認レス自動運用モード追加
+
+### 本システムについて
+
+- `night_scout` / `liver_manager` の text-only Threads pilot は、個別投稿ごとの人間承認なしで動かせる autonomous mode を追加。
+- `beauty_account` は引き続き blocked / draft_only。
+- X fetch/post は blocked。
+- media post / third-party media / unknown rights / video download / cut / Cloudinary upload / transcription API は blocked。
+- 自動運用は `config/autonomous_mode.json` の rules と `--confirm-autonomous` のコマンドレベル確認で管理。
+- 初期 cap は daily post 1/account、daily READY 2/account、max posts/run 1、cooldown 180分。
+- kill switch は `config/autonomous_mode.json` の `kill_switch`。
+
+### 今回の作業ブランチ
+
+- `main`
+- 作業開始HEAD: `209c684e7798499ae2ba1228f20fe4966e22ae5f`
+- 現在HEAD: commit後に `git rev-parse HEAD` で確認。
+
+### 変更ファイル一覧
+
+- `docs/production-pilot-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/source-registry-inventory.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `config/autonomous_mode.json`
+- `scripts/run_autonomous_loop.py`
+- `.github/workflows/autonomous-growth-loop.yml`
+- `docs/autonomous-mode-runbook.md`
+- `scripts/test_autonomous_config_exists.py`
+- `scripts/test_autonomous_mode_blocks_beauty.py`
+- `scripts/test_autonomous_mode_blocks_x_post.py`
+- `scripts/test_autonomous_mode_blocks_x_fetch.py`
+- `scripts/test_autonomous_mode_blocks_media_initially.py`
+- `scripts/test_autonomous_mode_blocks_third_party_media.py`
+- `scripts/test_autonomous_mode_respects_kill_switch.py`
+- `scripts/test_autonomous_mode_daily_caps.py`
+- `scripts/test_autonomous_mode_similarity_guard.py`
+- `scripts/test_autonomous_loop_dry_run_no_post.py`
+- `scripts/test_autonomous_loop_apply_requires_confirm.py`
+- `scripts/test_autonomous_workflow_no_x_no_media.py`
+- `scripts/test_autonomous_workflow_has_kill_switch.py`
+- `scripts/test_autonomous_posts_only_threads.py`
+- `scripts/test_autonomous_excludes_todo_placeholders.py`
+
+### autonomous mode 初期設定
+
+- `autonomous_mode_enabled=true`
+- `auto_source_fetch_enabled=true`
+- `auto_idea_generation_enabled=true`
+- `auto_ready_enabled=true`
+- `auto_post_enabled=true`
+- `allowed_accounts=["night_scout","liver_manager"]`
+- `blocked_accounts=["beauty_account"]`
+- `allowed_platforms_for_fetch=["threads","youtube"]`
+- `blocked_platforms_for_fetch=["x"]`
+- `allowed_platforms_for_post=["threads"]`
+- `blocked_platforms_for_post=["x"]`
+- `allow_media_posts=false`
+- `daily_post_cap_per_account=1`
+- `daily_ready_cap_per_account=2`
+- `max_posts_per_run=1`
+- `kill_switch=false`
+- `human_review_required=false`
+
+### selected pilot/autonomous sources
+
+- `src_ns_threads_required_001`
+- `src_ns_threads_required_002`
+- `src_lm_yt_cand_001`
+
+### 未完了事項
+
+- 本番 `--apply --confirm-autonomous` は未実行。
+- GitHub Actions `autonomous-growth-loop.yml` は追加済みだが、手動 dispatch は未実行。
+- YouTube は初期状態では metadata/transcript/reference analysis plan のみ。download/cut/upload は禁止。
+- daily cap/cooldown の実カウントは apply 時に Sheets 側の最新状態と合わせて確認する。
+
+### 残WARN
+
+- autonomous dry-run は Sheets/API に触らない計画表示中心。Live Sheets verify は apply workflow 側で実行する。
+- `config/auto_approval_rules.json` の既存 `auto_post_enabled=false` は legacy autopilot 用。autonomous mode は `config/autonomous_mode.json` を新しい制御元として使う。
+
+### 全テスト結果
+
+- `test_autonomous_config_exists.py`: PASS 8 / FAIL 0
+- `test_autonomous_mode_blocks_beauty.py`: PASS 1 / FAIL 0
+- `test_autonomous_mode_blocks_x_post.py`: PASS 1 / FAIL 0
+- `test_autonomous_mode_blocks_x_fetch.py`: PASS 1 / FAIL 0
+- `test_autonomous_mode_blocks_media_initially.py`: PASS 1 / FAIL 0
+- `test_autonomous_mode_blocks_third_party_media.py`: PASS 1 / FAIL 0
+- `test_autonomous_mode_respects_kill_switch.py`: PASS 1 / FAIL 0
+- `test_autonomous_mode_daily_caps.py`: PASS 1 / FAIL 0
+- `test_autonomous_mode_similarity_guard.py`: PASS 1 / FAIL 0
+- `test_autonomous_loop_dry_run_no_post.py`: PASS 1 / FAIL 0
+- `test_autonomous_loop_apply_requires_confirm.py`: PASS 1 / FAIL 0
+- `test_autonomous_workflow_no_x_no_media.py`: PASS 1 / FAIL 0
+- `test_autonomous_workflow_has_kill_switch.py`: PASS 1 / FAIL 0
+- `test_autonomous_posts_only_threads.py`: PASS 1 / FAIL 0
+- `test_autonomous_excludes_todo_placeholders.py`: PASS 1 / FAIL 0
+- `test_all_workflows_safety_flags.py`: PASS 111 / FAIL 0
+- `test_process_threads_queue.py`: PASS 11 / FAIL 0
+- `test_rights_status_policy.py`: PASS 6 / FAIL 0
+- `test_generate_posts_blocks_high_similarity_copy.py`: PASS 2 / FAIL 0
+- `test_run_growth_loop_no_auto_post.py`: PASS 3 / FAIL 0
+- `test_source_registry_no_beauty_active.py`: PASS 1 / FAIL 0
+- `test_source_registry_no_x_fetch_by_default.py`: PASS 1 / FAIL 0
+- `test_youtube_tiktok_placeholders_not_fetch_enabled.py`: PASS 5 / FAIL 0
+
+### dry-run結果
+
+- `python3 scripts/run_autonomous_loop.py --account-id all --dry-run`
+  - selected sources: `src_ns_threads_required_001`, `src_ns_threads_required_002`, `src_lm_yt_cand_001`
+  - X/beauty/TODO/media excluded
+  - real post: false
+  - media download/cut/upload: false
+
+### confirmなしBLOCKED確認結果
+
+- `python3 scripts/run_autonomous_loop.py --account-id all --apply` は `--apply requires --confirm-autonomous` で BLOCKED。
+- `beauty_account` は autonomous plan で BLOCKED。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `docs/autonomous-mode-runbook.md`
+- `scripts/run_autonomous_loop.py`
+- `.github/workflows/autonomous-growth-loop.yml`
+- autonomous test files
+
+### 次にCodexが触ってよいファイル
+
+- `scripts/run_autonomous_loop.py`
+- `scripts/collect_source_posts.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/process_threads_queue.py`
+- `docs/ai-work-handoff.md`
+
+### 衝突しやすいファイル
+
+- `config/auto_approval_rules.json`
+- `config/autonomous_mode.json`
+- `.github/workflows/*.yml`
+- `docs/ai-work-handoff.md`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secrets/tokens/cookies/storage_state
+
+### 次AIへの引き継ぎメモ
+
+- ユーザー意図は「毎回承認しないで動く」こと。ただし安全ゲートは壊さない。
+- 初回は text-only Threads だけ。X/beauty/media は広げない。
+- workflow は `workflow_dispatch` の `confirm_autonomous=true` で apply step が動く。
+- 悪い投稿が出たら `config/autonomous_mode.json` の `kill_switch=true` を最優先で入れる。
 
 ## 最新作業内容 (2026-06-29) — Threads worker READY 承認モデル必須化（Phase 3）
 

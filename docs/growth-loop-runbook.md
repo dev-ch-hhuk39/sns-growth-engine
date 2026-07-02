@@ -10,6 +10,8 @@
 4. plan media queue generation
 5. run AUTO_READY dry-run
 
+For command-level autonomous operation, use `scripts/run_autonomous_loop.py` instead. It reads `config/autonomous_mode.json`, selects only the reviewed pilot sources, keeps X/beauty/media blocked, and can run the initial text-only Threads loop without per-post human approval when `--apply --confirm-autonomous` is used.
+
 ## Default Behavior
 
 - Default is dry-run / `PLAN_ONLY`.
@@ -19,6 +21,8 @@
 - beauty_account is blocked.
 - media download/cut/upload is not executed.
 - The runner reports `kill_switch_respected=true`; production automation must still check `config/auto_approval_rules.json`.
+
+`run_autonomous_loop.py` is the exception for the approved pilot: `auto_post_enabled=true` in `config/autonomous_mode.json`, but posting is still capped to Threads, max 1 post per run, max 1 per account per day, and requires `--confirm-autonomous` plus the existing Threads worker real-post gates.
 
 ## Command
 

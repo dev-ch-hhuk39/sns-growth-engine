@@ -4,6 +4,32 @@ Date: 2026-07-02
 
 This pilot is a small source-fetch validation step. It is not full automation.
 
+## 2026-07-02 Autonomous Pilot Update
+
+`config/autonomous_mode.json` now enables a command-level autonomous mode for text-only Threads operation. This means the user does not need to approve every individual post, but hard gates still apply:
+
+- `night_scout` / `liver_manager` only.
+- Threads posting only.
+- X fetch/post remains blocked.
+- `beauty_account` remains blocked.
+- Media posts, third-party media, video download/cut, Cloudinary upload, and transcription API remain blocked.
+- Daily cap is 1 post per account, with max 1 post per run.
+- `kill_switch=true` stops the autonomous workflow.
+
+Autonomous dry-run:
+
+```bash
+python3 scripts/run_autonomous_loop.py --account-id all --dry-run
+```
+
+Autonomous apply requires explicit command-level confirmation:
+
+```bash
+python3 scripts/run_autonomous_loop.py --account-id all --apply --confirm-autonomous
+```
+
+The first selected autonomous sources are the same pilot candidates listed below.
+
 ## Purpose
 
 Validate that a tiny, reviewed set of source URLs can be enabled for reference collection without enabling posting, X fetch/post, media download, media cut, Cloudinary upload, transcription API, or AUTOPOST.

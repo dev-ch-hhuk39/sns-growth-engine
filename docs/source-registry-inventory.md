@@ -11,6 +11,16 @@ Generated from `config/source_accounts/default_sources.json` on 2026-07-02. This
 - `media_pipeline_eligible=true`: 0
 - TODO/placeholders needing human URL or rights review: 5
 
+## Autonomous Mode Source Use
+
+Autonomous mode does not bulk-enable the registry. `fetch_enabled=true` remains 0 in the registry by default. The autonomous loop selects only reviewed pilot source candidates at runtime:
+
+- `src_ns_threads_required_001`
+- `src_ns_threads_required_002`
+- `src_lm_yt_cand_001`
+
+X, beauty, TODO placeholders, unknown-rights media, and all media-pipeline rows remain excluded. YouTube in the first autonomous scope is metadata/transcript/reference analysis only; no download, cut, upload, or repost is allowed.
+
 ## Rights Rules
 
 - `third_party_reference_only`: analysis only. Do not save media bodies, download, cut, upload, or repost.

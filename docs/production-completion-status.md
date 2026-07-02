@@ -8,6 +8,29 @@ Created: 2026-06-24
 The project is operational for Threads-first manual review operation.
 `threads-queue-worker.yml` の Sheets verify は check 総数 **51 件**（2026-06-25 snapshot の 33 件 → item J の media/metrics チェック等で +8 → READY 承認モデルで +10）。合格条件は `failed=[]`（`passed` は seed 充足状況で変動）。READY 承認モデル追加後の live `--verify-only` 再確認は #68 で実施。
 
+## 2026-07-02 Update — Autonomous Text-Only Threads Pilot
+
+Autonomous mode has been added for the initial reviewed text-only Threads pilot.
+
+- Config: `config/autonomous_mode.json`
+- Runner: `scripts/run_autonomous_loop.py`
+- Workflow: `.github/workflows/autonomous-growth-loop.yml`
+- Runbook: `docs/autonomous-mode-runbook.md`
+
+The user no longer needs to approve every individual post in this autonomous path. Safety remains rules-based:
+
+- only `night_scout` and `liver_manager`
+- Threads posting only
+- X fetch/post blocked
+- `beauty_account` blocked
+- media posts blocked
+- third-party/unknown-rights media blocked
+- max 1 post per run and daily post cap 1 per account
+- `kill_switch=true` stops the workflow
+- apply requires `--confirm-autonomous`
+
+No autonomous apply or real post was executed during this implementation pass.
+
 ## 2026-06-29 アップデート — Threads worker READY 承認モデル必須化（Phase 3）
 
 ### 変更点
