@@ -29,7 +29,7 @@ def main() -> int:
             "THREADS_ACCESS_TOKEN_LIVER_MANAGER",
             "THREADS_USER_ID_LIVER_MANAGER",
         ])),
-        ("apply confirm gated", "if: github.event.inputs.confirm_autonomous == 'true'" in apply_step),
+        ("apply schedule or confirm gated", "if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" in apply_step),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

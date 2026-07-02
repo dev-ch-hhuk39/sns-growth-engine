@@ -9,8 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def main() -> int:
     text = (ROOT / ".github/workflows/autonomous-growth-loop.yml").read_text(encoding="utf-8")
     checks = [
-        ("schedule disabled comment", "# schedule:" in text),
+        ("schedule enabled", "schedule:" in text),
+        ("jst 0915 cron", 'cron: "15 0 * * *"' in text),
         ("confirm still required", "confirm_autonomous" in text),
+        ("schedule can apply", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" in text),
         ("kill switch checked", "kill_switch" in text),
         ("workflow default false", 'PUBLISH_ENABLED: "false"' in text),
     ]

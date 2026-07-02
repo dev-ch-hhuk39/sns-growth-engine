@@ -511,7 +511,7 @@ Status:
 - Sheets counts: `source_accounts=68`, `reference_sources=37`, `posted_results=6`, `media_assets=0`.
 - Local registry counts: `fetch_enabled=true=0`, `clip_enabled=true=0`, `media_pipeline_eligible=true=0`, `beauty_active=0`, `beauty_fetch=0`.
 - Autonomous config: `autonomous_mode_enabled=true`, `auto_source_fetch_enabled=true`, `auto_ready_enabled=true`, `auto_post_enabled=true`.
-- GitHub Actions: `Autonomous Growth Loop` exists and is active; schedule remains commented out. Apply runs only with `confirm_autonomous=true`.
+- GitHub Actions: `Autonomous Growth Loop` exists and is active; schedule is enabled for JST 09:15 daily after successful run `28571552118`. Manual apply still requires `confirm_autonomous=true`.
 
 Implemented:
 
@@ -536,7 +536,7 @@ Local Codex apply is intentionally not used for the first autonomous real post b
 - Trigger: `workflow_dispatch`.
 - Inputs: `confirm_autonomous=true`, `account_id=all`.
 - Dry-run step runs before apply.
-- Apply step is gated by `confirm_autonomous=true`, `kill_switch=false`, required Sheets secrets, and publisher credential checks.
+- Apply step is gated by schedule or `confirm_autonomous=true`, `kill_switch=false`, required Sheets secrets, and publisher credential checks.
 - Apply env keeps `ALLOW_REAL_X_POST=false`, `ALLOW_VIDEO_DOWNLOAD=false`, `ALLOW_VIDEO_CUT=false`, `ALLOW_CLOUDINARY_UPLOAD=false`, and `ALLOW_TRANSCRIPTION_API=false`.
 - Schedule remains commented out until the first manual Actions apply succeeds and the posted result is reviewed.
 
@@ -588,3 +588,11 @@ Fourth dispatch attempt:
 - External post id: `17928528360351269`.
 - Post URL: `https://www.threads.com/@kyaba_consul_mizu/post/DaSAIF3lmCd`.
 - Local follow-up Sheets verify was not run because the local approval system returned out-of-credits, but the Actions log reported `status=POSTED` with the result id and post URL.
+
+Schedule enablement:
+
+- Enabled on 2026-07-02 after successful Actions apply.
+- Cron: `15 0 * * *` (JST 09:15 daily).
+- The scheduled run still executes dry-run first, then guard, then apply.
+- `kill_switch=true` stops scheduled apply.
+- `max_posts_per_run=1`, `daily_post_cap_per_account=1`, X/media/beauty/download/cut/upload/transcription blocks remain unchanged.

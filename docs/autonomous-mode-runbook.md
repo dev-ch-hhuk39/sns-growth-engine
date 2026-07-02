@@ -132,12 +132,9 @@ Optional/unused in the initial text-only run:
 
 ### Schedule Policy
 
-The workflow intentionally keeps `schedule` commented out until one manual `workflow_dispatch` apply succeeds.
+The first Actions apply succeeded on run `28571552118`, and the workflow schedule is now enabled.
 
-After a successful first Actions apply and a human review of the posted result:
-
-1. Edit `.github/workflows/autonomous-growth-loop.yml`.
-2. Uncomment this schedule block:
+Current schedule:
 
 ```yaml
 schedule:
@@ -145,9 +142,13 @@ schedule:
   - cron: "15 0 * * *"
 ```
 
-3. Keep `confirm_autonomous` gating for manual runs.
-4. Keep `max_posts_per_run=1`, `daily_post_cap_per_account=1`, and `kill_switch=false` unless intentionally stopping.
-5. Commit the schedule change separately and monitor the first scheduled run.
+Operational rules:
+
+- Scheduled runs apply automatically once per day at JST 09:15.
+- Manual runs still use `workflow_dispatch` and `confirm_autonomous=true`.
+- Keep `max_posts_per_run=1`, `daily_post_cap_per_account=1`, and `cooldown_minutes=180`.
+- If a bad post appears, set `kill_switch=true` in `config/autonomous_mode.json`, commit, and push.
+- To stop the schedule without changing runtime config, comment out the `schedule` block in `.github/workflows/autonomous-growth-loop.yml` and push.
 
 ## Hard Blocks
 

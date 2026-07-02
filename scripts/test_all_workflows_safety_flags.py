@@ -154,9 +154,25 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             )
 
     # --- 不変条件 5: schedule トリガは実アクションを一切持たない ---
+    # 例外: autonomous-growth-loop.yml は初回Actions apply成功後の明示方針として、
+    # scheduleでもThreads text-only applyを許可する。ただしdry-run先行、kill_switch、
+    # X/media/download/cut/upload/transcription禁止、confirm/schedule if gateを必須にする。
     on_val = _get_on(wf)
     has_schedule = isinstance(on_val, dict) and "schedule" in on_val
     if has_schedule:
+        if name == "autonomous-growth-loop.yml":
+            checks.append((f"{name} [schedule] JST 09:15 cron", 'cron: "15 0 * * *"' in text))
+            checks.append((f"{name} [schedule] dry-run step exists", "Dry-run autonomous plan" in text))
+            checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
+            checks.append((f"{name} [schedule] schedule or confirm apply gate", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" in text))
+            checks.append((f"{name} [schedule] X/media flags remain false", all(flag in text for flag in [
+                'ALLOW_REAL_X_POST: "false"',
+                'ALLOW_VIDEO_DOWNLOAD: "false"',
+                'ALLOW_VIDEO_CUT: "false"',
+                'ALLOW_CLOUDINARY_UPLOAD: "false"',
+                'ALLOW_TRANSCRIPTION_API: "false"',
+            ])))
+            return checks
         # ファイル全体で literal "true" フラグ無し。
         lower = text.lower()
         for flag in WATCHED_FLAGS:

@@ -110,4 +110,4 @@ Current invariant gates:
 
 On 2026-07-02 the dry-run passed, but the apply command was stopped by the local approval reviewer because it can perform real Threads posts. No workaround was used.
 
-For production start, run **Autonomous Growth Loop** from GitHub Actions UI with `confirm_autonomous=true` and `account_id=all`. Keep the schedule commented out until the first manual Actions apply succeeds and the posted result is reviewed.
+Production start succeeded through **Autonomous Growth Loop** run `28571552118`, which posted one text-only Threads item. The workflow schedule is now enabled for JST 09:15 daily (`cron: "15 0 * * *"`). Keep `max_posts_per_run=1`, daily caps, X/media/beauty blocks, and use `kill_switch=true` for emergency stop.

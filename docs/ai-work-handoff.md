@@ -2720,7 +2720,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - third-party動画はdownload/cut/upload/repost不可を維持。
 - `max_posts_per_run=1` をアカウントごとではなくrun全体で強制。
 - `auto_approve_queue.py --skip-setup` と `seed_source_registry.py --skip-setup` を追加し、Sheets read quota消費を抑制。
-- GitHub Actionsはscheduleコメントアウト維持。applyは `confirm_autonomous=true` のworkflow_dispatchのみ。
+- GitHub Actionsは初回成功後にschedule有効化済み。JST 09:15 daily。手動applyは `confirm_autonomous=true` のworkflow_dispatch。
 
 ### source / Sheets 状況
 
@@ -2768,7 +2768,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - TikTok night/liverの個別 `/video/` URLは未入力。
 - YouTube個別動画URL TODOは残る。現状pilotはchannel URL metadata/reference only。
 - third-party mediaは引き続きmedia pipeline対象外。
-- GitHub Actions scheduleはまだ有効化しない。初回apply成功後に人間レビューしてから。
+- GitHub Actions scheduleは初回Actions apply成功後に有効化済み。停止時は `kill_switch=true` またはworkflow scheduleコメントアウト。
 
 ### 次に触ってよいファイル
 
@@ -2823,12 +2823,12 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - `PUBLISH_ENABLED=true` と `ALLOW_REAL_THREADS_POST=true` はapply step内だけ。
 - `ALLOW_REAL_X_POST=false`, `ALLOW_VIDEO_DOWNLOAD=false`, `ALLOW_VIDEO_CUT=false`, `ALLOW_CLOUDINARY_UPLOAD=false`, `ALLOW_TRANSCRIPTION_API=false` 維持。
 - `kill_switch=true` なら停止。
-- scheduleは初回Actions apply成功までコメントアウト維持。
+- scheduleは初回Actions apply成功後に有効化済み。JST 09:15 daily。
 
 ### まだ必要な人間入力
 
 - GitHub Actions UIで初回 `Run workflow` を押す、またはCodexが `gh workflow run` を許可されること。
-- 初回apply成功後、投稿結果を確認してからschedule有効化判断。
+- 初回apply成功済み。schedule有効化済み。次は定期投稿結果とSheets `posted_results` を確認。
 - TikTok night/liverの個別 `/video/` URL。
 - YouTube個別動画URL。
 - owned/licensed mediaの権利証跡。
@@ -2888,4 +2888,27 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - External post id: `17928528360351269`。
 - Post URL: `https://www.threads.com/@kyaba_consul_mizu/post/DaSAIF3lmCd`。
 - ローカルからの追加Sheets verifyは承認システムout-of-creditsで拒否。Actionsログ上は `status=POSTED` とpost URLあり。
-- 次: 初回Actions apply成功済み。schedule有効化は、ユーザーが投稿内容とSheets `posted_results` を確認してから別commitで行う。
+- 次: schedule有効化済み。次回JST 09:15 scheduled run後に投稿内容とSheets `posted_results` を確認する。
+
+## Codex handoff: autonomous schedule enabled (2026-07-02)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `dafad9f140091f294219878630f5bc6bf5e86822`
+- 作業ブランチ: `main`
+- commit予定: `chore: autonomous growth loop scheduleを有効化`
+
+### 今回の変更
+
+- `.github/workflows/autonomous-growth-loop.yml` のscheduleを有効化。
+- Cron: `15 0 * * *` (JST 09:15 daily)。
+- schedule時も `Guard autonomous confirm and kill switch` と `Apply autonomous Threads loop` が動くよう、条件を `github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'` に更新。
+- `PUBLISH_ENABLED=true` / `ALLOW_REAL_THREADS_POST=true` はapply step内のみ。
+- `ALLOW_REAL_X_POST=false`, `ALLOW_VIDEO_DOWNLOAD=false`, `ALLOW_VIDEO_CUT=false`, `ALLOW_CLOUDINARY_UPLOAD=false`, `ALLOW_TRANSCRIPTION_API=false` 維持。
+- `max_posts_per_run=1`, `daily_post_cap_per_account=1`, `cooldown_minutes=180`, `kill_switch=false` 維持。
+
+### 運用メモ
+
+- 変な投稿が出たら最優先で `config/autonomous_mode.json` の `kill_switch=true` をcommit/push。
+- scheduleだけ止める場合は `.github/workflows/autonomous-growth-loop.yml` の `schedule` blockをコメントアウト。
+- TikTok night/liverの個別 `/video/` URL、YouTube個別動画URL、owned/licensed media権利証跡は引き続き人間入力待ち。

@@ -1,10 +1,9 @@
 name: Autonomous Growth Loop
 
 on:
-  # Enable after first successful autonomous apply:
-  # schedule:
-  #   # JST 09:15 daily
-  #   - cron: "15 0 * * *"
+  schedule:
+    # JST 09:15 daily
+    - cron: "15 0 * * *"
   workflow_dispatch:
     inputs:
       confirm_autonomous:
@@ -61,7 +60,7 @@ jobs:
         run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --dry-run
 
       - name: Guard autonomous confirm and kill switch
-        if: github.event.inputs.confirm_autonomous == 'true'
+        if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -69,7 +68,7 @@ jobs:
           cfg = json.loads(Path("config/autonomous_mode.json").read_text())
           if cfg.get("kill_switch"):
               raise SystemExit("[BLOCKED] autonomous kill_switch=true")
-          print("[OK] autonomous confirm input accepted and kill_switch=false")
+          print("[OK] autonomous schedule/confirm accepted and kill_switch=false")
           PY
           if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
             echo "[BLOCKED] Sheets spreadsheet secret is missing."
@@ -81,7 +80,7 @@ jobs:
           fi
 
       - name: Apply autonomous Threads loop
-        if: github.event.inputs.confirm_autonomous == 'true'
+        if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"

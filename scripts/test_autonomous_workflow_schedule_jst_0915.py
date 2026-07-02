@@ -7,13 +7,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
-    workflow = (ROOT / ".github/workflows/autonomous-growth-loop.yml").read_text(encoding="utf-8")
+    text = (ROOT / ".github/workflows/autonomous-growth-loop.yml").read_text(encoding="utf-8")
     docs = (ROOT / "docs/autonomous-mode-runbook.md").read_text(encoding="utf-8")
     checks = [
-        ("schedule enabled after first apply", "schedule:" in workflow),
-        ("schedule active", 'cron: "15 0 * * *"' in workflow),
-        ("first apply success documented", "first Actions apply succeeded" in docs or "初回Actions apply成功済み" in docs),
-        ("cron documented", 'cron: "15 0 * * *"' in docs),
+        ("cron is jst 0915", 'cron: "15 0 * * *"' in text),
+        ("jst comment exists", "JST 09:15 daily" in text),
+        ("docs mention jst 0915", "JST 09:15" in docs),
+        ("docs mention daily", "daily" in docs.lower() or "毎日" in docs),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
