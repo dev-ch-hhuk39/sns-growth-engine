@@ -127,3 +127,15 @@ Do not cut or repost YouTube/TikTok third-party clips. Use structure, hook, topi
 - TikTok metadata: prefer individual `/video/` URLs through `yt-dlp`; `tiktok-to-ytdlp` remains optional helper, not production-enabled.
 - TikTok profile URLs are stored as references/placeholders and are not expanded into downloadable media.
 - Agent Reach and last30days-skill are optional research/source-discovery signals only.
+
+## Autonomous Loop Connection (2026-07-02)
+
+Video references are now connected to `scripts/run_autonomous_loop.py` for the approved pilot path.
+
+- YouTube reference rows can produce text-only Threads idea candidates from structure/hook analysis.
+- Transcript fetch is attempted only through the existing safe transcript adapter. If a channel URL has no video ID, the result is `UNAVAILABLE` and the loop falls back to metadata/structure only.
+- TikTok analysis is wired but requires a real individual `/video/` URL. Current `night_scout` and `liver_manager` TikTok rows remain TODO placeholders and are skipped.
+- The autonomous output suppresses transcript body/preview.
+- `download=false`, `cut=false`, `upload=false`, `repost=false` are invariant for third-party video references.
+
+This connection does not make any media pipeline row eligible. Media eligibility still requires `owned`, `licensed`, or `approved_creator_clip` plus permission evidence and separate confirm gates.

@@ -4,7 +4,8 @@ Generated from `config/source_accounts/default_sources.json` on 2026-07-02. This
 
 ## Summary
 
-- Total inventoried Threads/X/YouTube/TikTok/local rows: 61
+- Total source registry rows: 68
+- Inventoried Threads/X/YouTube/TikTok/local rows shown below: 61
 - Platform counts: {"local": 1, "threads": 7, "tiktok": 9, "x": 16, "youtube": 28}
 - `fetch_enabled=true`: 0
 - `clip_enabled=true`: 0

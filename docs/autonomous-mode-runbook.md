@@ -148,3 +148,16 @@ Media can only be considered after all are true:
 - Cloudinary/video download/cut flags are intentionally enabled with separate tests
 
 Until then, all source media is reference analysis only.
+
+## 2026-07-02 Video Reference Connection
+
+`scripts/run_autonomous_loop.py` now includes a video reference analysis step before scoring and queue work.
+
+- Selected YouTube/TikTok pilot sources are analyzed as reference-only inputs.
+- YouTube metadata uses the existing safe metadata/transcript path; channel URLs may return transcript `UNAVAILABLE` because no individual `video_id` exists.
+- TikTok is connected only for individual `/video/` URLs. TODO placeholders and profile-only URLs are skipped.
+- Transcript body/preview is not returned in autonomous output.
+- Generated ideas from video references are text-only Threads candidates. They do not attach media.
+- Third-party video download, cut, upload, repost, and Cloudinary upload remain blocked.
+
+Initial production apply attempt on 2026-07-02 was not executed because the local approval reviewer rejected the real-post capable command. Do not work around that gate. Re-run only with an explicit operator approval path for real Threads posting.

@@ -88,3 +88,24 @@ Growth loop outputs must keep media out of posting unless the media asset is `ow
 - No source registry row is currently `media_pipeline_eligible=true`.
 - The local `owned_media_assets_todo` placeholder is also skipped until rights evidence and local/source references are filled.
 - Growth loop must not attach reference-only media or promote media candidates to READY. AUTOPOST remains OFF.
+
+## Autonomous Video Reference Pilot (2026-07-02)
+
+`scripts/run_autonomous_loop.py` is the autonomous exception to the normal dry-run growth loop. It now includes:
+
+1. Safe source selection from reviewed pilot candidates.
+2. Threads source collection for selected Threads URLs only.
+3. YouTube/TikTok reference analysis for selected video references.
+4. Text-only Threads idea generation from video structure/hook signals.
+5. Scoring, candidate generation, capped AUTO_READY, and capped Threads posting when the real-post command is explicitly approved.
+
+Current invariant gates:
+
+- X fetch/post: blocked.
+- `beauty_account`: blocked.
+- media post: blocked.
+- third-party video download/cut/upload/repost: blocked.
+- transcription API: blocked unless separately enabled with the existing confirm/env gates.
+- max real posts per autonomous run: 1.
+
+On 2026-07-02 the dry-run passed, but the apply command was stopped by the local approval reviewer because it can perform real Threads posts. No workaround was used.

@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE_FILE = ROOT / "config/source_accounts/default_sources.json"
 
 TARGET_CHOICES = ["night_scout", "liver_manager", "beauty_account", "beauty_future", "all"]
-PLATFORM_CHOICES = ["threads", "x", "tiktok", "youtube", "instagram", "note", "manual_url", "query", "all"]
+PLATFORM_CHOICES = ["threads", "x", "tiktok", "youtube", "instagram", "note", "manual_url", "query", "local", "all"]
 
 
 def _load_recover_module():
@@ -171,6 +171,7 @@ def main() -> int:
     p.add_argument("--platform", choices=PLATFORM_CHOICES, default="all")
     p.add_argument("--source-file", default=str(DEFAULT_SOURCE_FILE))
     p.add_argument("--json", action="store_true", help="JSON サマリのみ出力")
+    p.add_argument("--skip-setup", action="store_true", help="既存タブ初期化済みとして setup_all() を省略し、Sheets read quota を節約する")
     args = p.parse_args()
 
     source_file = Path(args.source_file)
@@ -209,7 +210,8 @@ def main() -> int:
     # apply: 既存 SheetsClient + _upsert_many を再利用
     cfg = mod.get_config()
     client = mod.SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    client.setup_all()
+    if not args.skip_setup:
+        client.setup_all()
     if hasattr(mod, "_refresh_ws_cache"):
         mod._refresh_ws_cache(client)
     ops = {}

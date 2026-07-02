@@ -501,3 +501,29 @@ Completed the missing rights-aware media ingestion layer.
   - `liver_manager`: `src_lm_yt_cand_001`.
 - `fetch_enabled=true` remains 0. No pilot apply was executed.
 - AUTOPOST remains OFF. No real fetch, Sheets apply, download, cut, upload, or post was executed.
+
+## Autonomous Video Reference Connection (2026-07-02)
+
+Status:
+
+- `main` start HEAD: `c415b8320a92da77d9a2612fa7c9fe815787ea83`.
+- Source registry reflected in Sheets: PASS 61 / FAIL 0.
+- Sheets counts: `source_accounts=68`, `reference_sources=37`, `posted_results=6`, `media_assets=0`.
+- Local registry counts: `fetch_enabled=true=0`, `clip_enabled=true=0`, `media_pipeline_eligible=true=0`, `beauty_active=0`, `beauty_fetch=0`.
+- Autonomous config: `autonomous_mode_enabled=true`, `auto_source_fetch_enabled=true`, `auto_ready_enabled=true`, `auto_post_enabled=true`.
+- GitHub Actions: `Autonomous Growth Loop` exists and is active; schedule remains commented out. Apply runs only with `confirm_autonomous=true`.
+
+Implemented:
+
+- YouTube/TikTok reference analysis connected into `run_autonomous_loop.py`.
+- YouTube selected pilot source can produce text-only Threads idea candidates.
+- TikTok path is wired but current night/liver TikTok rows are TODO placeholders without real `/video/` URLs.
+- Transcript preview/body is suppressed.
+- Third-party download/cut/upload/repost remains blocked.
+- `max_posts_per_run=1` is enforced across the whole autonomous run, not per account.
+
+Apply result:
+
+- `python3 scripts/run_autonomous_loop.py --account-id all --dry-run`: PASS / PLAN_ONLY.
+- `python3 scripts/run_autonomous_loop.py --account-id all --apply --confirm-autonomous`: not executed; local approval reviewer rejected the real-post capable command. No bypass was attempted.
+- No new Threads post URL was produced in this turn.

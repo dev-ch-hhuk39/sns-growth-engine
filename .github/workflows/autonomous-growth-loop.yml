@@ -1,6 +1,10 @@
 name: Autonomous Growth Loop
 
 on:
+  # Enable after first successful autonomous apply:
+  # schedule:
+  #   # JST 09:15 daily
+  #   - cron: "15 0 * * *"
   workflow_dispatch:
     inputs:
       confirm_autonomous:

@@ -2675,3 +2675,120 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - OKなら `python3 scripts/prepare_pilot_sources.py --account-id all --max-per-account 2 --apply --confirm-pilot` を実行。
 - apply後、Sheets書き込み前に `collect_source_posts.py` と `run_growth_loop.py` のdry-runを再確認。
 - AUTOPOSTはまだONにしない。
+
+## Codex handoff: autonomous video reference connection (2026-07-02)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `c415b8320a92da77d9a2612fa7c9fe815787ea83`
+- 作業ブランチ: `main`
+- origin/main開始値: `c415b8320a92da77d9a2612fa7c9fe815787ea83`
+- commit予定: `feat: 動画参照分析を承認レス自動運用に接続`
+
+### 今回の変更ファイル
+
+- `.github/workflows/autonomous-growth-loop.yml`
+- `config/source_accounts/default_sources.json`
+- `scripts/run_autonomous_loop.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/seed_source_registry.py`
+- `docs/autonomous-mode-runbook.md`
+- `docs/video-reference-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/source-registry-inventory.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル
+
+- `scripts/test_autonomous_apply_blocks_when_no_sources.py`
+- `scripts/test_autonomous_apply_blocks_when_required_secrets_missing.py`
+- `scripts/test_autonomous_loop_includes_youtube_reference_analysis.py`
+- `scripts/test_autonomous_loop_skips_tiktok_placeholder.py`
+- `scripts/test_autonomous_transcript_preview_suppressed.py`
+- `scripts/test_autonomous_video_reference_blocks_unavailable_metadata.py`
+- `scripts/test_autonomous_video_reference_generates_text_only_post.py`
+- `scripts/test_autonomous_video_reference_no_download.py`
+- `scripts/test_autonomous_workflow_schedule_safe.py`
+
+### 実装内容
+
+- `run_autonomous_loop.py` にYouTube/TikTokの参照分析ステップを接続。
+- YouTube metadata/transcript/structure由来のtext-only Threads候補生成を接続。
+- TikTokは個別 `/video/` URLのみ対象。TODO placeholderとprofile-onlyはskip。
+- transcript本文previewをautonomous出力に含めない。
+- third-party動画はdownload/cut/upload/repost不可を維持。
+- `max_posts_per_run=1` をアカウントごとではなくrun全体で強制。
+- `auto_approve_queue.py --skip-setup` と `seed_source_registry.py --skip-setup` を追加し、Sheets read quota消費を抑制。
+- GitHub Actionsはscheduleコメントアウト維持。applyは `confirm_autonomous=true` のworkflow_dispatchのみ。
+
+### source / Sheets 状況
+
+- ローカル `default_sources.json`: 68件。
+- Sheets verify: PASS 61 / FAIL 0。
+- Sheets counts: `source_accounts=68`, `reference_sources=37`, `posted_results=6`, `media_assets=0`。
+- `fetch_enabled=true`: 0。
+- `clip_enabled=true`: 0。
+- `media_pipeline_eligible=true`: 0。
+- beauty active/fetch: 0。
+- YouTube real source: 26件。
+- TikTok real individual `/video/`: 0件。
+- TikTok TODO: 2件。
+
+### dry-run / apply結果
+
+- `python3 scripts/run_autonomous_loop.py --account-id all --dry-run`: PASS / `PLAN_ONLY`。
+- Selected sources:
+  - `src_lm_yt_cand_001` (`https://www.youtube.com/@suu-san_pococha`)
+  - `src_ns_threads_required_001` (`https://www.threads.com/@kyaba_ryo`)
+  - `src_ns_threads_required_002` (`https://www.threads.com/@mizuno9120`)
+- YouTube analysis: connected。
+- YouTube transcript: connected。ただしchannel URLはvideo_idが無いため実transcriptは `UNAVAILABLE` になり得る。
+- TikTok analysis: code path connected。実URLは未入力/TODOのためskip。
+- media posts: OFF。
+- video download/cut/upload/repost: 未実行・不可。
+- `python3 scripts/run_autonomous_loop.py --account-id all --apply --confirm-autonomous`: 承認レビュー側でreal Threads post可能コマンドとして拒否。回避実行なし。
+- 新規実投稿URL: なし。
+
+### テスト結果
+
+- `py_compile`: PASS。
+- Autonomous/video/safety targeted tests: 32 commands PASS / FAIL 0。
+- 代表:
+  - `test_autonomous_loop_includes_youtube_reference_analysis.py`: PASS。
+  - `test_autonomous_video_reference_no_download.py`: PASS。
+  - `test_autonomous_video_reference_generates_text_only_post.py`: PASS。
+  - `test_autonomous_apply_blocks_when_required_secrets_missing.py`: PASS。
+  - `test_all_workflows_safety_flags.py`: PASS 111 / FAIL 0。
+  - `test_process_threads_queue.py`: PASS 11 / FAIL 0。
+
+### 残WARN / 未完了
+
+- 実applyはローカル承認レビューで停止。次に実投稿まで進める場合は、人間がreal Threads post可能な操作として明示承認する必要がある。
+- TikTok night/liverの個別 `/video/` URLは未入力。
+- YouTube個別動画URL TODOは残る。現状pilotはchannel URL metadata/reference only。
+- third-party mediaは引き続きmedia pipeline対象外。
+- GitHub Actions scheduleはまだ有効化しない。初回apply成功後に人間レビューしてから。
+
+### 次に触ってよいファイル
+
+- `scripts/run_autonomous_loop.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/collect_video_references.py`
+- `scripts/generate_video_reference_posts.py`
+- `docs/autonomous-mode-runbook.md`
+- `docs/video-reference-runbook.md`
+- `docs/ai-work-handoff.md`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- cookie/storage_state/token類
+- `config/source_accounts/default_sources.json` のbeauty target名とsafety field
+
+### 次AIへのメモ
+
+承認レス自動運用のコード接続は完了。安全テストもPASS。唯一残った実運用BLOCKは、ローカル承認システムがreal Threads post可能なapplyコマンドを拒否したこと。次に進める場合は、まず `run_autonomous_loop.py --dry-run` と Sheets verify を再確認し、real post承認が取れた状態で `--apply --confirm-autonomous` を1回だけ実行する。X/beauty/media/third-party download系は触らない。

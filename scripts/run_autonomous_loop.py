@@ -20,11 +20,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_threads_ideas_from_references import original_text_similarity_guard  # noqa: E402
+from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
+from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
 
 CONFIG_FILE = ROOT / "config/autonomous_mode.json"
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 PILOT_MAX_PER_ACCOUNT = 2
+VIDEO_REFERENCE_PLATFORMS = {"youtube", "tiktok"}
 
 
 def is_true(value: Any) -> bool:
@@ -165,6 +168,141 @@ def filter_autonomous_sources(plan: dict[str, Any], config: dict[str, Any]) -> d
     }
 
 
+def _safe_video_metadata(source: dict[str, Any], *, fetch_metadata: bool = False) -> dict[str, Any]:
+    """Build video metadata without download/cut/upload or transcript body output."""
+    url = str(source.get("source_url", "")).strip()
+    platform = str(source.get("source_platform", "")).lower()
+    if platform == "tiktok" and "/video/" not in url:
+        return {
+            "ok": False,
+            "title": "",
+            "thumbnail_url": "",
+            "author_handle": "",
+            "extractor": "TikTok",
+            "error": "tiktok_requires_individual_video_url",
+        }
+    if not fetch_metadata or not url.startswith("http"):
+        return {}
+    meta = fetch_ytdlp_metadata(url)
+    if not meta.get("ok"):
+        meta = fetch_video_metadata(url)
+    return meta
+
+
+def build_video_reference_analysis(plan: dict[str, Any], config: dict[str, Any], *, fetch_metadata: bool = False) -> dict[str, Any]:
+    """Connect selected YouTube/TikTok references to text-only idea planning.
+
+    Third-party video stays reference-analysis only. Transcript text/body is
+    never returned; only status/count/reason are included.
+    """
+    rows: list[dict[str, Any]] = []
+    post_ideas: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    for account_id, sources in (plan.get("selected_pilot_sources") or {}).items():
+        for source in sources:
+            platform = str(source.get("source_platform", "")).lower()
+            url = str(source.get("source_url", "")).strip()
+            if platform not in VIDEO_REFERENCE_PLATFORMS:
+                continue
+            if platform == "tiktok" and "/video/" not in url:
+                skipped.append({"source_id": str(source.get("source_id", "")), "reason": "tiktok_requires_individual_video_url"})
+                continue
+            metadata = _safe_video_metadata(source, fetch_metadata=fetch_metadata)
+            video_row = build_video_reference(url, account_id, metadata, rights_status="third_party_reference_only")
+            transcript = {"status": "NOT_REQUESTED", "reason": "", "chunk_count": 0, "text": ""}
+            if platform == "youtube" and fetch_metadata:
+                transcript = fetch_youtube_transcript(url)
+            transcript_safe = {k: v for k, v in transcript.items() if k != "text"}
+            video_row.update({
+                "source_id": source.get("source_id", ""),
+                "metadata_fallback": "title_description_metadata" if metadata.get("ok") else "skip_when_unavailable",
+                "transcript_status": transcript_safe.get("status", "NOT_REQUESTED"),
+                "transcript_chunk_count": transcript_safe.get("chunk_count", 0),
+                "transcript_reason": transcript_safe.get("reason", ""),
+                "download": False,
+                "cut": False,
+                "upload": False,
+                "repost": False,
+                "text_body_returned": False,
+            })
+            rows.append(video_row)
+            if metadata.get("ok") or not fetch_metadata:
+                idea_video = {**video_row, "title": video_row.get("title") or f"{platform} reference structure"}
+                ideas = build_video_posts(idea_video, account_id, limit=1)
+                for idea in ideas:
+                    gate = original_text_similarity_guard(
+                        str(video_row.get("title") or video_row.get("video_url", "")),
+                        str(idea.get("text", "")),
+                        threshold=float(config.get("max_similarity_to_source", 0.55)),
+                    )
+                    if gate["status"] == "BLOCKED":
+                        skipped.append({"source_id": str(source.get("source_id", "")), "reason": "video_idea_similarity_blocked"})
+                        continue
+                    post_ideas.append({
+                        **idea,
+                        "status": "AUTO_READY_CANDIDATE" if config.get("auto_ready_enabled") else "WAITING_REVIEW",
+                        "media_strategy": "none",
+                        "similarity_guard": gate,
+                        "autonomous_text_only": True,
+                    })
+            else:
+                skipped.append({"source_id": str(source.get("source_id", "")), "reason": "metadata_unavailable"})
+    return {
+        "status": "CONNECTED",
+        "fetch_metadata": fetch_metadata,
+        "video_reference_count": len(rows),
+        "text_only_post_idea_count": len(post_ideas),
+        "rows": rows,
+        "post_ideas": post_ideas,
+        "skipped": skipped,
+        "safety": {
+            "download": False,
+            "cut": False,
+            "upload": False,
+            "repost": False,
+            "media_posts": False,
+            "transcript_preview_suppressed": True,
+            "third_party_reference_only": True,
+        },
+    }
+
+
+def apply_preflight(plan: dict[str, Any]) -> dict[str, Any]:
+    """Check production prerequisites without printing secret values."""
+    try:
+        from config_loader import get_config_partial
+        from publishers.threads_credentials import has_required_for_publish, resolve_credentials
+    except Exception as exc:
+        return {"ok": False, "blocked_reasons": [f"preflight_import_failed:{type(exc).__name__}"]}
+    cfg = get_config_partial()
+    blocked: list[str] = []
+    if not cfg.get("sheet_id") or not cfg.get("sa_dict"):
+        blocked.append("required_sheets_credentials_missing")
+    for account_id in plan.get("accounts", []):
+        ok, reason = has_required_for_publish(resolve_credentials(account_id))
+        if not ok:
+            blocked.append(f"{account_id}:{reason}")
+    if plan.get("selected_source_count", 0) < 1:
+        blocked.append("source_selection_empty")
+    if plan.get("safety", {}).get("x_fetch") or plan.get("safety", {}).get("x_post"):
+        blocked.append("x_mixed_into_autonomous_plan")
+    if plan.get("safety", {}).get("beauty_account"):
+        blocked.append("beauty_mixed_into_autonomous_plan")
+    if any(plan.get("safety", {}).get(k) for k in ("media_download", "video_cut", "cloudinary_upload", "third_party_media", "unknown_rights_media")):
+        blocked.append("media_or_rights_gate_failed")
+    return {
+        "ok": not blocked,
+        "blocked_reasons": blocked,
+        "sheets_credentials_set": bool(cfg.get("sheet_id") and cfg.get("sa_dict")),
+        "threads_credentials_checked": list(plan.get("accounts", [])),
+    }
+
+
+def verify_sheets_connectivity() -> dict[str, Any]:
+    """Read-only production verify. Failure blocks all apply steps."""
+    return _run([sys.executable, "scripts/recover_production_sheets_threads_first.py", "--verify-only", "--json"])
+
+
 def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None, rules: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_autonomous_config()
     rules = rules or load_auto_approval_rules()
@@ -192,7 +330,7 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
     if gate["media_gates"]["allow_media_posts"]:
         blocked_reasons.append("media_posts_not_allowed_initial_scope")
 
-    return {
+    plan_result = {
         "status": "BLOCKED" if blocked_reasons else "PLAN_ONLY",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "account_id": account_id,
@@ -217,6 +355,8 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
             "kill_switch",
             "select_pilot_sources",
             "source_fetch_threads_only",
+            "video_reference_analysis",
+            "video_reference_text_only_ideas",
             "reference_scoring",
             "idea_generation",
             "safety_risk_similarity",
@@ -249,6 +389,8 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
         },
         "blocked_reasons": blocked_reasons,
     }
+    plan_result["video_reference_analysis"] = build_video_reference_analysis(plan_result, config, fetch_metadata=False)
+    return plan_result
 
 
 def _run(cmd: list[str], *, env: dict[str, str] | None = None) -> dict[str, Any]:
@@ -319,7 +461,18 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             })
         return results
 
-    results.append(_run([sys.executable, "scripts/recover_production_sheets_threads_first.py", "--verify-only", "--json"]))
+    def run_step(cmd: list[str], *, env: dict[str, str] | None = None) -> bool:
+        result = _run(cmd, env=env)
+        results.append(result)
+        return result.get("returncode") == 0
+
+    video_urls = source_urls_for_platform(plan, "youtube") + source_urls_for_platform(plan, "tiktok")
+    if video_urls:
+        cmd = [sys.executable, "scripts/collect_video_references.py", "--account-id", "liver_manager", "--dry-run", "--fetch-metadata", "--fetch-transcript"]
+        for url in video_urls:
+            cmd += ["--url", url]
+        if not run_step(cmd):
+            return results
     if threads_source_urls and plan["gate_summary"]["auto_source_fetch_enabled"]:
         cmd = [
             sys.executable,
@@ -335,18 +488,33 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         ]
         for url in threads_source_urls:
             cmd += ["--source-url", url]
-        results.append(_run(cmd))
+        if not run_step(cmd):
+            return results
     for account in accounts:
-        results.append(_run([sys.executable, "scripts/score_reference_posts.py", "--account-id", account, "--apply", "--confirm-score"]))
-        results.append(_run([sys.executable, "scripts/generate_threads_ideas_from_references.py", "--account-id", account, "--apply", "--confirm-generate"]))
-        results.append(_run([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets"]))
+        if not run_step([sys.executable, "scripts/score_reference_posts.py", "--account-id", account, "--apply", "--confirm-score"]):
+            return results
+        if not run_step([sys.executable, "scripts/generate_threads_ideas_from_references.py", "--account-id", account, "--apply", "--confirm-generate"]):
+            return results
+        if not run_step([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"]):
+            return results
     if plan["gate_summary"]["auto_post_enabled"]:
         env = dict(os.environ)
         env.setdefault("PUBLISH_ENABLED", "true")
         env.setdefault("ALLOW_REAL_THREADS_POST", "true")
         env.setdefault("ALLOW_REAL_X_POST", "false")
+        remaining_posts = int(plan["gate_summary"].get("max_posts_per_run", 1))
         for account in accounts:
-            results.append(_run([sys.executable, "scripts/process_threads_queue.py", "--account-id", account, "--confirm-real-post", "--max-posts", "1"], env=env))
+            if remaining_posts <= 0:
+                results.append({
+                    "cmd": f"scripts/process_threads_queue.py --account-id {account} --confirm-real-post --max-posts 1",
+                    "returncode": 0,
+                    "status": "SKIPPED",
+                    "reason": "max_posts_per_run_reached",
+                })
+                continue
+            if not run_step([sys.executable, "scripts/process_threads_queue.py", "--account-id", account, "--confirm-real-post", "--max-posts", "1"], env=env):
+                return results
+            remaining_posts -= 1
     return results
 
 
@@ -376,6 +544,15 @@ def main() -> int:
         return 1
 
     mode = "apply" if args.apply and args.confirm_autonomous else "dry-run"
+    if mode == "apply":
+        preflight = apply_preflight(plan)
+        if not preflight["ok"]:
+            print(json.dumps({**plan, "mode": mode, "status": "BLOCKED", "apply_preflight": preflight}, ensure_ascii=False, indent=2))
+            return 1
+        verify = verify_sheets_connectivity()
+        if verify.get("returncode") != 0:
+            print(json.dumps({**plan, "mode": mode, "status": "BLOCKED", "apply_preflight": preflight, "verify_result": verify, "blocked_reasons": ["sheets_verify_failed"]}, ensure_ascii=False, indent=2))
+            return 1
     results = build_results(args, plan)
     failed_results = [r for r in results if r.get("returncode") not in {0, None}]
     status = "DONE" if mode == "apply" and not failed_results else "PLAN_ONLY"

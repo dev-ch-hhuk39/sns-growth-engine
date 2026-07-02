@@ -389,6 +389,7 @@ def main() -> int:
     parser.add_argument("--max-ready", type=int, default=1)
     parser.add_argument("--rules-file", default=str(RULES_FILE))
     parser.add_argument("--use-sheets", action="store_true")
+    parser.add_argument("--skip-setup", action="store_true", help="Assume Sheets tabs already exist and skip setup_all() to reduce read quota")
     args = parser.parse_args()
 
     if args.account_id == "beauty_account":
@@ -401,7 +402,7 @@ def main() -> int:
         from sheets_client import SheetsClient
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-        if args.apply and args.confirm_auto_ready:
+        if args.apply and args.confirm_auto_ready and not args.skip_setup:
             client.setup_all()
     else:
         from sheets_client import MockSheetsClient
