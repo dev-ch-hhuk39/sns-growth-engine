@@ -2843,3 +2843,15 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Apply step: `night_scout` / `liver_manager` のThreads publish envが未設定としてpreflight BLOCK。実投稿なし。
 - 原因: workflow job envに `THREADS_ACCESS_TOKEN_NIGHT_SCOUT`, `THREADS_USER_ID_NIGHT_SCOUT`, `THREADS_ACCESS_TOKEN_LIVER_MANAGER`, `THREADS_USER_ID_LIVER_MANAGER` を渡していなかった。
 - 修正: workflowへ上記secret envを追加。次のdispatchでは同BLOCKは解消される見込み。
+
+### Actions dispatch attempt 2
+
+- `gh workflow run "Autonomous Growth Loop" -f confirm_autonomous=true -f account_id=all`: 実行成功。
+- Run id: `28571199364`。
+- Result: failure / safe BLOCKED。
+- Dry-run step: success。
+- Guard step: success。
+- Apply preflight: success。Threads credentialsはSET。
+- Apply step: Sheets verifyが `real_post_flags_false_default` でBLOCK。実投稿なし。
+- 原因: apply step envの `PUBLISH_ENABLED=true` をread-only verifyが継承したため。
+- 修正: `run_autonomous_loop.py` の `verify_sheets_connectivity()` でverify実行時だけ `PUBLISH_ENABLED=false` / real post and media flags false の安全envを渡すように変更。

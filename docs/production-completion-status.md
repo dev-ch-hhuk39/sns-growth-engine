@@ -548,3 +548,13 @@ First dispatch attempt:
 - Apply step: safely BLOCKED before posting because account-specific Threads publish secrets were not passed into the workflow environment.
 - Fix: `.github/workflows/autonomous-growth-loop.yml` now passes `THREADS_ACCESS_TOKEN_NIGHT_SCOUT`, `THREADS_USER_ID_NIGHT_SCOUT`, `THREADS_ACCESS_TOKEN_LIVER_MANAGER`, and `THREADS_USER_ID_LIVER_MANAGER` from GitHub secrets.
 - New post URL from this attempt: none.
+
+Second dispatch attempt:
+
+- Run id: `28571199364`.
+- Dry-run step: success.
+- Confirm / kill switch / Sheets secret guard: success.
+- Apply preflight: success; Threads credentials were present.
+- Apply step: safely BLOCKED before posting because read-only Sheets verify inherited `PUBLISH_ENABLED=true` from the apply step and failed `real_post_flags_false_default`.
+- Fix: `run_autonomous_loop.py` now runs `recover_production_sheets_threads_first.py --verify-only` with a safe read-only env (`PUBLISH_ENABLED=false`, real-post/media/upload/transcription flags false), then restores normal apply flow after verify.
+- New post URL from this attempt: none.

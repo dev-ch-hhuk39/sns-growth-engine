@@ -300,7 +300,15 @@ def apply_preflight(plan: dict[str, Any]) -> dict[str, Any]:
 
 def verify_sheets_connectivity() -> dict[str, Any]:
     """Read-only production verify. Failure blocks all apply steps."""
-    return _run([sys.executable, "scripts/recover_production_sheets_threads_first.py", "--verify-only", "--json"])
+    verify_env = dict(os.environ)
+    verify_env["PUBLISH_ENABLED"] = "false"
+    verify_env["ALLOW_REAL_THREADS_POST"] = "false"
+    verify_env["ALLOW_REAL_X_POST"] = "false"
+    verify_env["ALLOW_VIDEO_DOWNLOAD"] = "false"
+    verify_env["ALLOW_VIDEO_CUT"] = "false"
+    verify_env["ALLOW_CLOUDINARY_UPLOAD"] = "false"
+    verify_env["ALLOW_TRANSCRIPTION_API"] = "false"
+    return _run([sys.executable, "scripts/recover_production_sheets_threads_first.py", "--verify-only", "--json"], env=verify_env)
 
 
 def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None, rules: dict[str, Any] | None = None) -> dict[str, Any]:
