@@ -2912,3 +2912,98 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 変な投稿が出たら最優先で `config/autonomous_mode.json` の `kill_switch=true` をcommit/push。
 - scheduleだけ止める場合は `.github/workflows/autonomous-growth-loop.yml` の `schedule` blockをコメントアウト。
 - TikTok night/liverの個別 `/video/` URL、YouTube個別動画URL、owned/licensed media権利証跡は引き続き人間入力待ち。
+
+## Codex handoff: public post leak fix and account rotation (2026-07-03)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `04b834364a14959fbdf2ec96283d64b8b64aa1fc`
+- 作業完了HEAD: このhandoff更新commitの `git rev-parse HEAD`。最終報告で正確なSHAを提示する。
+- 作業ブランチ: `main`
+- commit: `fix: 投稿本文の内部情報漏れを防ぎアカウントローテーションを追加`
+
+### 問題
+
+- 直近の `night_scout` 投稿に、内部メモ・参照元情報・AIの生成指示に相当する文言が漏れた。
+- 代表例: `今回の切り口`, `threads / night_work_scout`, `そのまま真似るのではなく`, `LINE/DMへの導線は最後`。
+- これは読者向け投稿ではなく、以後は必ずBLOCKする。
+
+### 変更ファイル一覧
+
+- `scripts/public_post_quality.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/generate_video_reference_posts.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/process_threads_queue.py`
+- `scripts/run_autonomous_loop.py`
+- `config/post_generation_rules.json`
+- `config/autonomous_mode.json`
+- `config/auto_approval_rules.json`
+- `docs/autonomous-mode-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+- `scripts/test_public_post_validator_*.py`
+- `scripts/test_autonomous_loop_*.py`
+- `scripts/test_bad_ready_queue_blocked_before_post.py`
+- `scripts/test_night_scout_post_generation_reader_facing.py`
+- `scripts/test_liver_manager_post_generation_reader_facing.py`
+- `scripts/test_account_rotation_*.py`
+- `scripts/test_internal_terms_never_in_posted_text.py`
+
+### 実装内容
+
+- `final_public_post_validator` を追加し、内部語・参照元情報・URL・score/queue/result系メタデータ・AI/生成指示文・高圧CTA・誇大収益表現をBLOCK。
+- 投稿生成出力を `{internal_analysis, public_post_text, safety_notes, blocked_reasons}` として扱い、publisherへ渡すのは `public_post_text` のみ。
+- `auto_approve_queue.py` でAUTO_READY前に公開本文品質を検査。
+- `process_threads_queue.py` で投稿直前に再検査し、NGなら `BLOCKED_INTERNAL_LEAK` に変更。
+- `run_autonomous_loop.py --dry-run` は安全な `public_post_preview` と validator結果を表示し、内部分析本文は出さない。
+- `night_scout` / `liver_manager` の交互投稿を狙う account rotation を追加。`max_posts_per_run=1` と daily cap は維持。
+
+### 未完了事項 / 残WARN
+
+- 既存Sheets上の悪いREADY/AUTO_READY候補への即時apply処理はこのターンでは実投稿なしのdry-run確認まで。次回worker実行時は投稿直前に `BLOCKED_INTERNAL_LEAK` で止まる。
+- TikTok `/video/` URL、YouTube個別動画URL、owned/licensed media権利証跡は人間入力待ち。
+- YouTube/TikTok切り抜き・download/cut/upload/media投稿は今回触っていない。
+
+### テスト結果 / dry-run結果
+
+- `python3 -m py_compile scripts/public_post_quality.py scripts/run_autonomous_loop.py scripts/process_threads_queue.py scripts/auto_approve_queue.py scripts/generate_threads_ideas_from_references.py scripts/generate_video_reference_posts.py`: PASS。
+- 追加テスト15本: PASS。
+- 既存安全テスト:
+  - `test_all_workflows_safety_flags.py`: PASS 116 / FAIL 0。
+  - `test_autonomous_workflow_schedule_enabled.py`: PASS 4 / FAIL 0。
+  - `test_autonomous_workflow_no_x_no_media.py`: PASS。
+  - `test_autonomous_posts_only_threads.py`: PASS。
+  - `test_process_threads_queue.py`: PASS 11 / FAIL 0。
+  - `test_generate_posts_blocks_high_similarity_copy.py`: PASS。
+  - `test_rights_status_policy.py`: PASS 6 / FAIL 0。
+  - `test_source_registry_no_beauty_active.py`: PASS。
+  - `test_source_registry_no_x_fetch_by_default.py`: PASS。
+- `git diff --check`: PASS。
+- `python3 scripts/run_autonomous_loop.py --account-id all --dry-run`: selected_account=`liver_manager`, skipped_account=`night_scout/account_rotation_not_first`, `internal_leak_check=PASS`, `account_fit_check=PASS`, `final_validator_result=PASS`, `would_post=false`。
+
+### 次に触ってよいファイル
+
+- `scripts/public_post_quality.py`
+- `scripts/run_autonomous_loop.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/process_threads_queue.py`
+- `config/post_generation_rules.json`
+- docs/runbook類
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- cookie / storage_state / token類
+- 実投稿・実download・実cut・実upload関連の認証値
+
+### 次AIへの引き継ぎメモ
+
+- scheduleは維持。事故防止は `final_public_post_validator` で担保する方針。
+- 変な投稿が出たら即 `kill_switch=true`。
+- `public_post_text` 以外をpublisherへ渡す変更は絶対に入れない。
+- `night_scout` と `liver_manager` のローテーションは posted_results を読める場合は直近投稿アカウントと反対側を優先する。

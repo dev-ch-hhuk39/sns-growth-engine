@@ -38,6 +38,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from public_post_quality import final_public_post_validator, generate_reader_facing_post  # noqa: E402
 
 CLI_NAME = "generate_threads_ideas_from_references"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
@@ -156,38 +159,16 @@ def build_rewritten_post_candidate(
 
 
 def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, Any], index: int) -> str:
-    """Build a transformed Threads draft from a scored reference row.
+    """Build reader-facing public text only.
 
-    The body intentionally references only the theme/structure. It never copies
-    third-party text or suggests media reuse.
+    Reference details stay in internal generation metadata; public output must
+    never mention source names, source platforms, scoring, or generation notes.
     """
-    theme = _post_text(post).splitlines()[0].replace("参考テーマ:", "").strip() or "参考テーマ"
-    if account_id == "night_scout":
-        hook = [
-            "夜職でしんどくなる人ほど、最初に見るべきポイントがある。",
-            "キャバで伸びる子は、気合いより先に環境を見ている。",
-            "副収入を増やしたい時ほど、焦って店を選ばない方がいい。",
-        ][(index - 1) % 3]
-        body = (
-            f"{hook}\n\n"
-            f"今回の切り口は「{theme}」。\n"
-            "そのまま真似るのではなく、働く前の不安、続かない理由、相談しやすさに分解して使う。\n\n"
-            "強い求人っぽく見せるより、迷っている子が自分の状況を整理できる投稿にする。\n"
-            "LINE/DMへの導線は最後に一言だけ。"
-        )
-    else:
-        hook = [
-            "配信が続く人は、才能より先に仕組みを作っている。",
-            "ライバー候補者に必要なのは、盛る話より続け方の設計。",
-            "ギフトを増やす前に、まずリスナーが戻る理由を作る。",
-        ][(index - 1) % 3]
-        body = (
-            f"{hook}\n\n"
-            f"今回の切り口は「{theme}」。\n"
-            "元ネタは構造だけを参考にして、配信前の準備、継続の壁、相談できる安心感に変換する。\n\n"
-            "事務所勧誘を強く出すより、候補者が一歩目を具体的に想像できる投稿にする。\n"
-            "相談導線は押し売りにせず、必要な人だけが反応できる形にする。"
-        )
+    output = generate_reader_facing_post(account_id, index=index)
+    body = str(output["public_post_text"])
+    validation = final_public_post_validator(body, account_id)
+    if validation["status"] != "PASS":
+        raise ValueError(f"public post template failed validation: {validation['blocked_reasons']}")
     return body
 
 

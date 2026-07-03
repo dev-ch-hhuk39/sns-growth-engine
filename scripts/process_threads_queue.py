@@ -23,9 +23,11 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from config_loader import get_config  # noqa: E402
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
+from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
@@ -128,11 +130,11 @@ def find_draft_for_queue(queue_row: dict[str, Any], drafts_by_id: dict[str, dict
 
 def text_for_queue(queue_row: dict[str, Any], social: dict[str, Any] | None, draft: dict[str, Any] | None) -> str:
     if social and str(social.get("text", "")).strip():
-        return str(social.get("text", "")).strip()
+        return extract_public_post_text(social.get("text", ""))
     if draft:
         for key in ("body_md", "content"):
             if str(draft.get(key, "")).strip():
-                return str(draft.get(key, "")).strip()
+                return extract_public_post_text(draft.get(key, ""))
     return ""
 
 
@@ -360,6 +362,31 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             log_event(client, account_id, "FAILED", "Queue text is empty", {"queue_id": queue_id})
         return {"status": "FAILED", "reason": "EMPTY_TEXT", "queue_id": queue_id}
 
+    public_validation = final_public_post_validator(text, account_id)
+    if public_validation["status"] != "PASS":
+        reason = "FINAL_PUBLIC_POST_VALIDATOR_BLOCKED:" + ",".join(public_validation["blocked_reasons"])
+        if not dry_run:
+            update_row(client, "queue", "queue_id", queue_id, {
+                "status": "BLOCKED_INTERNAL_LEAK",
+                "error": reason,
+                "processed_at": now_iso(),
+            })
+            log_event(client, account_id, "BLOCKED_INTERNAL_LEAK", reason, {
+                "queue_id": queue_id,
+                "internal_hits": public_validation["internal_leak_check"]["hits"],
+                "preview": public_preview(text),
+            })
+        return {
+            "status": "BLOCKED_INTERNAL_LEAK",
+            "reason": reason,
+            "queue_id": queue_id,
+            "account_id": account_id,
+            "internal_leak_check": public_validation["internal_leak_check"]["status"],
+            "account_fit_check": public_validation["account_fit_check"]["status"],
+            "final_public_post_validator": "BLOCKED",
+            "public_post_preview": public_preview(text),
+        }
+
     media = resolve_queue_media(queue_row)
 
     # media_required=true なのに使える media_url が無い場合は投稿しない（dry-run でもブロック）。
@@ -415,6 +442,10 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "draft_id": queue_row.get("draft_id", ""),
             "derivative_id": social.get("derivative_id", "") if social else "",
             "text_length": len(text),
+            "public_post_preview": public_preview(text),
+            "internal_leak_check": public_validation["internal_leak_check"]["status"],
+            "account_fit_check": public_validation["account_fit_check"]["status"],
+            "final_public_post_validator": public_validation["status"],
             "media_asset_id": media["media_asset_id"],
             "media_status": media["media_status"],
             "media_required": media["media_required"],

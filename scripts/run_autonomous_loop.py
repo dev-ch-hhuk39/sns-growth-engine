@@ -23,6 +23,7 @@ from generate_threads_ideas_from_references import original_text_similarity_guar
 from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
 from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
+from public_post_quality import account_rotation_order, final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
 
 CONFIG_FILE = ROOT / "config/autonomous_mode.json"
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
@@ -83,10 +84,11 @@ def build_gate_summary(config: dict[str, Any], rules: dict[str, Any]) -> dict[st
         "max_posts_per_run": int(config.get("max_posts_per_run", 1)),
         "cooldown_minutes": int(config.get("cooldown_minutes", 180)),
         "quality_gate": {
-            "min_quality_score": int(config.get("min_quality_score", 75)),
+            "min_quality_score": int(config.get("min_quality_score", 85)),
             "min_safety_score": int(config.get("min_safety_score", 90)),
             "max_risk_score": int(config.get("max_risk_score", 10)),
-            "max_similarity_to_source": float(config.get("max_similarity_to_source", 0.55)),
+            "max_similarity_to_source": float(config.get("max_similarity_to_source", 0.45)),
+            "public_post_quality_thresholds": config.get("public_post_quality_thresholds", {}),
         },
         "media_gates": {
             "allow_media_posts": bool(config.get("allow_media_posts")),
@@ -105,7 +107,7 @@ def candidate_passes_content_gate(candidate: dict[str, Any], config: dict[str, A
     sample_source = str(candidate.get("source_url", ""))
     sample_generated = f"{candidate.get('target_account_id')} Threads original insight from reference analysis."
     similarity = original_text_similarity_guard(sample_source, sample_generated, threshold=threshold)
-    quality_score = 80
+    quality_score = 90
     safety_score = 95
     risk_score = 5
     reasons: list[str] = []
@@ -311,11 +313,25 @@ def verify_sheets_connectivity() -> dict[str, Any]:
     return _run([sys.executable, "scripts/recover_production_sheets_threads_first.py", "--verify-only", "--json"], env=verify_env)
 
 
+def load_posted_results_for_rotation() -> list[dict[str, Any]]:
+    """Read posted_results for account rotation without printing secrets."""
+    try:
+        from config_loader import get_config
+        from sheets_client import SheetsClient
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        return [dict(r) for r in client._ws("posted_results").get_all_records()]
+    except Exception:
+        return []
+
+
 def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None, rules: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_autonomous_config()
     rules = rules or load_auto_approval_rules()
     gate = build_gate_summary(config, rules)
     accounts = account_scope(account_id, config)
+    rotation = account_rotation_order(accounts, config, posted_rows=[])
+    rotated_accounts = rotation.get("ordered_accounts", accounts)
 
     base_sources = load_sources().get("sources", [])
     pilot_plan = select_pilot_sources(
@@ -342,7 +358,10 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
         "status": "BLOCKED" if blocked_reasons else "PLAN_ONLY",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "account_id": account_id,
-        "accounts": accounts,
+        "accounts": rotated_accounts,
+        "account_rotation": rotation,
+        "selected_account": rotation.get("selected_account", rotated_accounts[0] if rotated_accounts else ""),
+        "skipped_account": rotation.get("skipped_accounts", []),
         "gate_summary": gate,
         "selected_pilot_sources": autonomous_sources["selected"],
         "selected_source_count": autonomous_sources["selected_count"],
@@ -398,6 +417,14 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
         "blocked_reasons": blocked_reasons,
     }
     plan_result["video_reference_analysis"] = build_video_reference_analysis(plan_result, config, fetch_metadata=False)
+    preview_output = generate_reader_facing_post(str(plan_result.get("selected_account") or "night_scout"), index=1)
+    preview_text = str(preview_output["public_post_text"])
+    preview_validation = final_public_post_validator(preview_text, str(plan_result.get("selected_account") or ""))
+    plan_result["public_post_preview"] = public_preview(preview_text)
+    plan_result["internal_leak_check"] = preview_validation["internal_leak_check"]["status"]
+    plan_result["account_fit_check"] = preview_validation["account_fit_check"]["status"]
+    plan_result["final_validator_result"] = preview_validation["status"]
+    plan_result["would_post"] = False
     return plan_result
 
 
@@ -434,10 +461,30 @@ def source_urls_for_platform(plan: dict[str, Any], platform: str) -> list[str]:
 def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     dry = not (args.apply and args.confirm_autonomous)
-    accounts = plan.get("accounts", [])
+    accounts = list(plan.get("accounts", []))
+    if not dry:
+        config = load_autonomous_config()
+        rotation = account_rotation_order(accounts, config, posted_rows=load_posted_results_for_rotation())
+        accounts = list(rotation.get("ordered_accounts", accounts))
+        plan["account_rotation"] = rotation
+        plan["selected_account"] = rotation.get("selected_account", accounts[0] if accounts else "")
+        plan["skipped_account"] = rotation.get("skipped_accounts", [])
     threads_source_urls = source_urls_for_platform(plan, "threads")
 
     if dry:
+        results.append({
+            "cmd": "autonomous_public_post_preview",
+            "returncode": 0,
+            "status": "PLAN_ONLY",
+            "selected_account": plan.get("selected_account", ""),
+            "skipped_account": plan.get("skipped_account", []),
+            "selected_queue_id": "PLAN_ONLY",
+            "public_post_preview": plan.get("public_post_preview", ""),
+            "internal_leak_check": plan.get("internal_leak_check", ""),
+            "account_fit_check": plan.get("account_fit_check", ""),
+            "final_validator_result": plan.get("final_validator_result", ""),
+            "would_post": False,
+        })
         cmd = [sys.executable, "scripts/collect_source_posts.py", "--platform", "threads", "--account-id", args.account_id, "--dry-run"]
         for url in threads_source_urls:
             cmd += ["--source-url", url]
@@ -530,9 +577,14 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
                     "reason": "max_posts_per_run_reached",
                 })
                 continue
-            if not run_step([sys.executable, "scripts/process_threads_queue.py", "--account-id", account, "--confirm-real-post", "--max-posts", "1"], env=env):
+            result = _run([sys.executable, "scripts/process_threads_queue.py", "--account-id", account, "--confirm-real-post", "--max-posts", "1"], env=env)
+            results.append(result)
+            if result.get("returncode") != 0:
                 return results
-            remaining_posts -= 1
+            if '"status": "POSTED"' in str(result.get("stdout_tail", "")):
+                remaining_posts -= 1
+            elif not plan.get("account_rotation", {}).get("fallback_to_available_account", True):
+                remaining_posts -= 1
     return results
 
 

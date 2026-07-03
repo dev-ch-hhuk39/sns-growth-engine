@@ -1,0 +1,85 @@
+{
+  "quality_thresholds": {
+    "public_post_quality_score_min": 85,
+    "internal_leak_score_required": 0,
+    "reader_value_score_min": 80,
+    "naturalness_score_min": 80,
+    "account_fit_score_min": 80,
+    "cta_pressure_score_max": 30,
+    "risk_score_max": 10,
+    "similarity_to_source_max": 0.45
+  },
+  "account_rotation": {
+    "account_rotation_enabled": true,
+    "rotation_accounts": ["night_scout", "liver_manager"],
+    "rotation_strategy": "alternate_by_last_posted_account",
+    "fallback_to_available_account": true,
+    "last_posted_account_hint_for_dry_run": "night_scout"
+  },
+  "accounts": {
+    "night_scout": {
+      "reader": [
+        "夜職を始めたい女性",
+        "今の店で悩んでいる女性",
+        "移籍を考えている女性",
+        "副業や将来に不安がある女性"
+      ],
+      "purpose": [
+        "不安の言語化",
+        "店選びの判断基準",
+        "スカウト不信の解消",
+        "相談しやすさの形成",
+        "夜職から副業/ライバー/次の選択肢への自然な接続"
+      ],
+      "post_structure": [
+        "悩みの言語化",
+        "よくある失敗",
+        "なぜ起きるか",
+        "判断基準",
+        "最後に軽い相談余地"
+      ],
+      "forbidden": [
+        "内部語",
+        "参照元名",
+        "求人感が強すぎる",
+        "上から目線",
+        "説教",
+        "稼げる断定",
+        "店舗名の不自然な羅列",
+        "AIの分析メモ"
+      ]
+    },
+    "liver_manager": {
+      "reader": [
+        "ライバー候補",
+        "配信初心者",
+        "TikTok LIVEに興味がある人",
+        "配信が伸び悩んでいる人",
+        "ライバー事務所選びで迷っている人"
+      ],
+      "purpose": [
+        "配信の不安を言語化",
+        "伸びない原因を整理",
+        "具体的な改善行動を示す",
+        "相談しやすさを作る",
+        "配信を始めるハードルを下げる"
+      ],
+      "post_structure": [
+        "伸びない/始められない原因",
+        "初心者がやりがちなミス",
+        "具体的に変える行動",
+        "なぜそれで変わるか",
+        "軽い相談余地"
+      ],
+      "forbidden": [
+        "内部語",
+        "参照元名",
+        "ギフト乞食感",
+        "楽して稼げる感",
+        "事務所アピールだけ",
+        "精神論だけ",
+        "AIの分析メモ"
+      ]
+    }
+  }
+}

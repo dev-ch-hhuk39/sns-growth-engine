@@ -111,3 +111,27 @@ Current invariant gates:
 On 2026-07-02 the dry-run passed, but the apply command was stopped by the local approval reviewer because it can perform real Threads posts. No workaround was used.
 
 Production start succeeded through **Autonomous Growth Loop** run `28571552118`, which posted one text-only Threads item. The workflow schedule is now enabled for JST 09:15 daily (`cron: "15 0 * * *"`). Keep `max_posts_per_run=1`, daily caps, X/media/beauty blocks, and use `kill_switch=true` for emergency stop.
+
+## Public Text Gate For Autonomous Posting (2026-07-03)
+
+Autonomous posting now separates internal analysis from public copy. Any generator that returns structured output must keep analysis in `internal_analysis` and put only reader-facing text in `public_post_text`.
+
+The worker and AUTO_READY gate both call `final_public_post_validator`:
+
+- Internal terms, source metadata, queue/result ids, dry-run/apply labels, score fields, URLs, and AI-like analysis notes are blocked.
+- Excessive hashtags, aggressive recruitment, easy-money claims, and high-pressure CTA wording are blocked.
+- `public_post_quality_score >= 85`, reader value/account fit/naturalness >= 80, CTA pressure <= 30, risk <= 10.
+- Blocked READY rows are not posted; in real worker mode they are marked `BLOCKED_INTERNAL_LEAK`.
+
+The autonomous loop dry-run now prints a safe public preview:
+
+- `selected_account`
+- `skipped_account`
+- `selected_queue_id`
+- `public_post_preview`
+- `internal_leak_check`
+- `account_fit_check`
+- `final_validator_result`
+- `would_post=false`
+
+Do not include transcript body, source text, or internal analysis in run output.

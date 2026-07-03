@@ -16,6 +16,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from public_post_quality import final_public_post_validator, generate_reader_facing_post  # noqa: E402
 
 PATTERNS = [
     "フック抽出ポスト",
@@ -32,16 +35,14 @@ PATTERNS = [
 
 
 def build_video_posts(video: dict[str, Any], account_id: str, limit: int = 3) -> list[dict[str, Any]]:
-    title = str(video.get("title") or video.get("video_url") or "video reference")
     rows: list[dict[str, Any]] = []
     created = datetime.now(timezone.utc).isoformat()
     for i, pattern in enumerate(PATTERNS[: max(1, min(limit, 10))], 1):
-        if account_id == "night_scout":
-            body = f"{pattern}: {title} の構成だけを参考に、夜職女性の不安整理と相談しやすい導線へ変換する。元動画の表現や素材は使わない。"
-        elif account_id == "liver_manager":
-            body = f"{pattern}: {title} の構成だけを参考に、配信者の継続・リスナー対応・相談導線へ変換する。元動画の表現や素材は使わない。"
-        else:
-            body = f"{pattern}: {title} をreference_onlyで要約し、自社文脈に変換する。"
+        output = generate_reader_facing_post(account_id, index=i)
+        body = str(output["public_post_text"])
+        validation = final_public_post_validator(body, account_id)
+        if validation["status"] != "PASS":
+            continue
         rows.append({
             "draft_id": f"video_ref_{account_id}_{i:02d}",
             "account_id": account_id,
@@ -54,6 +55,8 @@ def build_video_posts(video: dict[str, Any], account_id: str, limit: int = 3) ->
             "rights_status": "reference_only",
             "can_reuse_media": "false",
             "created_at": created,
+            "analysis_status": "stored_separately_not_public",
+            "template_pattern": pattern,
         })
     return rows
 

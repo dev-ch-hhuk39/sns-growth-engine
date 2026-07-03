@@ -214,3 +214,40 @@ Until then, all source media is reference analysis only.
 - Third-party video download, cut, upload, repost, and Cloudinary upload remain blocked.
 
 Initial production apply attempt on 2026-07-02 was not executed because the local approval reviewer rejected the real-post capable command. Do not work around that gate. Re-run only with an explicit operator approval path for real Threads posting.
+
+## Public Post Quality Gate (2026-07-03)
+
+The 2026-07-03 review found a real `night_scout` Threads post that leaked internal memo text into the public body. The failure pattern was an analysis note such as "今回の切り口は..." being promoted as if it were reader-facing copy.
+
+Current invariant:
+
+- Generation output is treated as `{internal_analysis, public_post_text, safety_notes, blocked_reasons}`.
+- Only `public_post_text` may be passed to `ThreadsPublisher`.
+- `internal_analysis`, source names, source URLs, score fields, queue ids, result ids, transcript metadata, dry-run/apply labels, and AI notes must never appear in posted text.
+- `final_public_post_validator` runs before AUTO_READY and again immediately before posting.
+- If the validator fails in the worker, the queue row is changed to `BLOCKED_INTERNAL_LEAK` and no post is sent.
+
+Blocked internal/public-mismatch examples include:
+
+- `今回の切り口`
+- `threads /`
+- `night_work_scout`, `night_scout`, `liver_manager`
+- `source`, `reference`, `source_url`, `source_id`, `queue_id`, `result_id`
+- `category`, `usage_scope`, `trend_signal`, `clip_candidate`
+- `投稿案`, `生成`, `分解して使う`, `そのまま真似るのではなく`
+- `構成・フック`, `投稿アイデア`
+- `AI`, `内部`, `metadata`, `transcript`, `PLAN_ONLY`, `AUTO_READY`, `WAITING_REVIEW`, `dry-run`, `apply`, `score`, `safety_score`, `risk_score`
+
+Account copy rules:
+
+- `night_scout`: write to women considering night work, store changes, or side-income anxiety. Use reader-facing posts about anxiety, store selection criteria, common mismatch reasons, and soft consultation. Avoid strong recruitment tone, income guarantees, source names, internal analysis, and AI-like explanations.
+- `liver_manager`: write to beginner or struggling streamers. Explain why streaming is hard to start or grow, beginner mistakes, concrete changes, and soft consultation. Avoid gift-begging tone, easy-money claims, office-only promotion, source names, internal analysis, and AI-like explanations.
+
+Account rotation:
+
+- `max_posts_per_run=1` remains unchanged.
+- `daily_post_cap_per_account=1` remains unchanged.
+- The autonomous loop now prefers the account different from the latest posted account among `night_scout` and `liver_manager`.
+- If the preferred account has no postable candidate, fallback to another available account is allowed.
+
+Schedule remains enabled at JST 09:15 daily. If another bad public post appears, set `kill_switch=true`, commit, and push before the next scheduled run.

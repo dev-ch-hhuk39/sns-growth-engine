@@ -596,3 +596,43 @@ Schedule enablement:
 - The scheduled run still executes dry-run first, then guard, then apply.
 - `kill_switch=true` stops scheduled apply.
 - `max_posts_per_run=1`, `daily_post_cap_per_account=1`, X/media/beauty/download/cut/upload/transcription blocks remain unchanged.
+
+## Public Post Leak Fix (2026-07-03)
+
+Status: implemented and included in the current HEAD for this handoff update. Use `git rev-parse HEAD` for the exact self-referential commit SHA.
+
+Problem:
+
+- A recent `night_scout` public Threads post exposed internal planning language such as "今回の切り口" and source/platform analysis.
+- This is not acceptable public copy and must be blocked even when autonomous posting is enabled.
+
+Implemented controls:
+
+- Added `scripts/public_post_quality.py` with `final_public_post_validator`.
+- Added `config/post_generation_rules.json` for account-specific public copy rules and account rotation.
+- Updated `generate_threads_ideas_from_references.py` and `generate_video_reference_posts.py` to produce reader-facing public text.
+- Updated `auto_approve_queue.py` to reject internal-leak candidates before AUTO_READY.
+- Updated `process_threads_queue.py` to validate immediately before publisher execution and mark bad rows `BLOCKED_INTERNAL_LEAK`.
+- Updated `run_autonomous_loop.py` to show safe public previews in dry-run and rotate `night_scout` / `liver_manager` by latest posted account.
+
+Unchanged safety gates:
+
+- Schedule remains enabled for JST 09:15 daily.
+- `max_posts_per_run=1`.
+- `daily_post_cap_per_account=1`.
+- X fetch/post remains blocked.
+- `beauty_account` remains blocked.
+- Media post, video download/cut/upload, Cloudinary upload, and transcription API remain blocked.
+
+Video/TikTok scope:
+
+- No new video download/cut/upload/media posting work was added in this fix.
+- Existing YouTube/TikTok reference analysis remains reference-only.
+
+Verification:
+
+- Public validator tests: PASS.
+- Account rotation tests: PASS.
+- Autonomous dry-run preview test: PASS.
+- Workflow/safety tests: PASS.
+- `run_autonomous_loop.py --account-id all --dry-run`: selected `liver_manager`, validator PASS, `would_post=false`.

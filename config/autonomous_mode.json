@@ -35,11 +35,31 @@
   "daily_ready_cap_per_account": 2,
   "max_posts_per_run": 1,
   "cooldown_minutes": 180,
-  "min_quality_score": 75,
+  "min_quality_score": 85,
   "min_safety_score": 90,
   "max_risk_score": 10,
-  "max_similarity_to_source": 0.55,
+  "max_similarity_to_source": 0.45,
   "kill_switch": false,
   "report_only": false,
-  "human_review_required": false
+  "human_review_required": false,
+  "account_rotation_strategy": {
+    "account_rotation_enabled": true,
+    "rotation_accounts": [
+      "night_scout",
+      "liver_manager"
+    ],
+    "rotation_strategy": "alternate_by_last_posted_account",
+    "fallback_to_available_account": true,
+    "last_posted_account_hint_for_dry_run": "night_scout"
+  },
+  "public_post_quality_thresholds": {
+    "public_post_quality_score_min": 85,
+    "internal_leak_score_required": 0,
+    "reader_value_score_min": 80,
+    "naturalness_score_min": 80,
+    "account_fit_score_min": 80,
+    "cta_pressure_score_max": 30,
+    "risk_score_max": 10,
+    "similarity_to_source_max": 0.45
+  }
 }

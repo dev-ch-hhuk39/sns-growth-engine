@@ -19,6 +19,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from public_post_quality import extract_public_post_text, final_public_post_validator  # noqa: E402
 
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
@@ -58,9 +61,9 @@ def normalize_text(text: str) -> str:
 
 def text_for_item(queue: dict[str, Any], draft: dict[str, Any] | None, derivative: dict[str, Any] | None) -> str:
     if derivative and str(derivative.get("text", "")).strip():
-        return str(derivative.get("text", "")).strip()
+        return extract_public_post_text(derivative.get("text", ""))
     if draft:
-        return str(draft.get("body_md") or draft.get("content") or "").strip()
+        return extract_public_post_text(draft.get("body_md") or draft.get("content") or "")
     return ""
 
 
@@ -191,6 +194,9 @@ def evaluate_item(
     q_score, q_parts = quality_score(text, account_id)
     r_score, r_parts = risk_score(text, queue, rules)
     s_score, s_parts = safety_score(text, queue, rules)
+    public_validation = final_public_post_validator(text, account_id)
+    q_score = min(q_score, int(public_validation["public_post_quality_score"]))
+    r_score = max(r_score, int(public_validation["risk_score"]))
     reasons: list[str] = []
 
     if account_id not in ALLOWED_ACCOUNTS:
@@ -213,12 +219,23 @@ def evaluate_item(
         reasons.append("third_party_media_not_allowed")
     if _contains_any(text, list(rules.get("blocked_terms", []))):
         reasons.append("blocked_terms")
+    if public_validation["status"] != "PASS":
+        reasons.append("final_public_post_validator_blocked")
+        reasons.extend(str(r) for r in public_validation["blocked_reasons"])
     if q_score < int(rules.get("min_quality_score", 75)):
         reasons.append("quality_below_threshold")
     if s_score < int(rules.get("min_safety_score", 90)):
         reasons.append("safety_below_threshold")
     if r_score > int(rules.get("max_risk_score", 10)):
         reasons.append("risk_above_threshold")
+    if int(public_validation["reader_value_score"]) < int(rules.get("min_reader_value_score", 80)):
+        reasons.append("reader_value_below_threshold")
+    if int(public_validation["naturalness_score"]) < int(rules.get("min_naturalness_score", 80)):
+        reasons.append("naturalness_below_threshold")
+    if int(public_validation["account_fit_score"]) < int(rules.get("min_account_fit_score", 80)):
+        reasons.append("account_fit_below_threshold")
+    if int(public_validation["cta_pressure_score"]) > int(rules.get("max_cta_pressure_score", 30)):
+        reasons.append("cta_pressure_above_threshold")
     if near_duplicate(text, existing_texts):
         reasons.append("duplicate_or_near_duplicate")
 
@@ -226,10 +243,17 @@ def evaluate_item(
         "queue_id": queue.get("queue_id", ""),
         "account_id": account_id,
         "status": "APPROVABLE" if not reasons else "REJECTED",
-        "reasons": reasons,
+        "reasons": sorted(set(reasons)),
         "quality_score": q_score,
         "safety_score": s_score,
         "risk_score": r_score,
+        "public_post_quality_score": public_validation["public_post_quality_score"],
+        "internal_leak_score": public_validation["internal_leak_check"]["internal_leak_score"],
+        "reader_value_score": public_validation["reader_value_score"],
+        "naturalness_score": public_validation["naturalness_score"],
+        "account_fit_score": public_validation["account_fit_score"],
+        "cta_pressure_score": public_validation["cta_pressure_score"],
+        "final_public_post_validator": public_validation["status"],
         "score_total": q_score + s_score - r_score,
         "quality_parts": q_parts,
         "safety_parts": s_parts,
