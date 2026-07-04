@@ -22,6 +22,8 @@ def build_plan(args: argparse.Namespace) -> dict:
     decision = build_rights_decision(args.rights_status, action="cut")
     ffmpeg_cli = shutil.which("ffmpeg") is not None
     ffmpeg_python = importlib.util.find_spec("ffmpeg") is not None
+    start_seconds = float(getattr(args, "start_seconds", 0) or 0)
+    end_seconds = float(getattr(args, "end_seconds", 0) or 0)
     blocked = []
     if not decision.allowed:
         blocked.append(decision.reason)
@@ -29,6 +31,10 @@ def build_plan(args: argparse.Namespace) -> dict:
         blocked.append("--cut requires --confirm-cut")
     if args.cut and not allowed_env:
         blocked.append("ALLOW_VIDEO_CUT=true is required")
+    if args.cut and not args.input_path:
+        blocked.append("input_path is required")
+    if args.cut and end_seconds <= start_seconds:
+        blocked.append("end_seconds must be greater than start_seconds")
     if args.cut and not ffmpeg_cli:
         blocked.append("ffmpeg CLI is not installed")
     output_path = str(ROOT / "output" / "clips" / f"clip_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.mp4")
@@ -41,8 +47,12 @@ def build_plan(args: argparse.Namespace) -> dict:
         "rights_status": decision.rights_status,
         "rights_decision": decision.as_dict(),
         "input_path": args.input_path,
+        "start_seconds": start_seconds,
+        "end_seconds": end_seconds,
+        "duration_seconds": max(0, end_seconds - start_seconds),
         "output_path": output_path,
         "ffmpeg_cut": bool(args.cut and not blocked),
+        "would_cut": bool(args.cut and not blocked),
         "blocked_reasons": blocked,
         "vertical_9x16": args.vertical,
         "burn_subtitles": args.burn_subtitles,
@@ -64,6 +74,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--cut", action="store_true")
     parser.add_argument("--confirm-cut", action="store_true")
+    parser.add_argument("--start-seconds", type=float, default=0)
+    parser.add_argument("--end-seconds", type=float, default=0)
     parser.add_argument("--vertical", action="store_true")
     parser.add_argument("--burn-subtitles", action="store_true")
     args = parser.parse_args()

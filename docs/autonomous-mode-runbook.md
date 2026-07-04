@@ -202,6 +202,23 @@ Media can only be considered after all are true:
 
 Until then, all source media is reference analysis only.
 
+## Media Growth Engine Boundary (2026-07-04)
+
+Text-only scheduled posting remains ON through the account-specific autonomous workflows. Media Growth Engine is implemented for permitted `liver_manager` sources, but scheduled media posting remains OFF.
+
+Current boundary:
+
+- `approved_creator_clip`, `owned`, or `licensed` plus permission evidence is required before a source can enter the media pipeline.
+- `third_party_reference_only`, `reference_only`, `unknown`, `restricted`, and `not_allowed` are blocked from download/cut/upload/video post.
+- YouTube channel URLs and TikTok account URLs are not unlimited download sources. A reviewed individual video URL is required for real download/cut.
+- Real video download requires `ALLOW_VIDEO_DOWNLOAD=true`, `--download`, and `--confirm-download`.
+- Real cut requires `ALLOW_VIDEO_CUT=true`, `--cut`, and `--confirm-cut`.
+- Real Cloudinary upload requires `ALLOW_CLOUDINARY_UPLOAD=true`, `--upload`, and `--confirm-upload`.
+- Video + text Threads posting requires the media validator, `ALLOW_MEDIA_POSTS=true`, `ALLOW_REAL_THREADS_VIDEO_POST=true`, and `ALLOW_REAL_THREADS_POST=true`.
+- `public_post_text` is still the only text allowed to reach the publisher.
+
+Do not enable media posting in scheduled workflows until a separate reviewed production rollout explicitly changes the media gates.
+
 ## 2026-07-02 Video Reference Connection
 
 `scripts/run_autonomous_loop.py` now includes a video reference analysis step before scoring and queue work.

@@ -649,7 +649,7 @@ Changed:
 - Removed schedule from manual `autonomous-growth-loop.yml`.
 - Added 0-1800 second jitter for scheduled runs.
 - Updated caps: `daily_post_cap_per_account=5`, `daily_ready_cap_per_account=8`, `max_posts_per_run=1`, `cooldown_minutes=90`.
-- Added one YouTube channel and three TikTok account reference sources for `liver_manager`; all are `fetch_enabled=false`, `manual_only=true`, `third_party_reference_only`, and not media-pipeline eligible.
+- Added one YouTube channel and three TikTok account reference sources for `liver_manager`. They were initially reference-only, then upgraded on 2026-07-04 to `approved_creator_clip` with user-asserted permission evidence, `fetch_enabled=false`, `manual_only=true`, and gated media pipeline eligibility.
 
 Unchanged:
 
@@ -660,3 +660,15 @@ Unchanged:
 - Cloudinary upload false.
 - transcription API false.
 - TikTok account URL auto expansion false.
+
+## Media Growth Engine Implementation (2026-07-04)
+
+Status: implemented locally in this turn, pending final commit/push.
+
+- Added `config/media_growth_engine.json`.
+- Approved the four user-provided `liver_manager` YouTube/TikTok sources as `approved_creator_clip` with permission evidence fields.
+- Added dry-run Media Growth Engine planning for metadata/transcript status, clip candidates, public post preview, media plan, and PDCA records.
+- Added guarded download/cut/upload/media-post validation paths.
+- Threads video + text post support is code-connected but remains disabled by default. It requires media validator PASS plus explicit env gates.
+- Scheduled text-only autonomous posting remains unchanged; scheduled media posting remains OFF.
+- Real download, real cut, Cloudinary upload, transcription API calls, and video + text Threads post were not executed.

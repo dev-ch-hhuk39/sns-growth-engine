@@ -162,6 +162,25 @@ Not enabled in production:
 - TikTok account URL auto expansion
 - TikTok account URL auto clip extraction
 
-New `liver_manager` TikTok account URLs are reference/trend sources only. They must stay `fetch_enabled=false`, `manual_only=true`, and `media_pipeline_eligible=false`.
+New `liver_manager` YouTube/TikTok URLs are approved creator references for Media Growth Engine planning. They must stay `fetch_enabled=false` and `manual_only=true`; their account/channel URLs are not auto-expanded or treated as direct download targets. Real download/cut/upload/video post requires an individual video URL, `approved_creator_clip` permission evidence, and the explicit env plus CLI confirmation gates.
 
-Future media work requires `owned`, `licensed`, or `approved_creator_clip`, permission evidence, clip storage, Cloudinary upload, media asset registration, a strict media validator, and explicit review before any video + text Threads post.
+## Media Growth Engine Status (2026-07-04)
+
+Implemented but not scheduled for automatic media posting:
+
+- `scripts/run_media_growth_engine.py`: selects permitted `liver_manager` sources, checks rights/permission evidence, plans transcript/metadata analysis, creates clip candidate rows, creates a reader-facing `public_post_text`, and runs `final_public_post_validator`.
+- `scripts/download_approved_media.py`: dry-run by default; real download requires an individual video URL, `ALLOW_VIDEO_DOWNLOAD=true`, `--download`, and `--confirm-download`.
+- `scripts/cut_approved_clips.py`: dry-run by default; real cut requires `owned`, `licensed`, or `approved_creator_clip`, `ALLOW_VIDEO_CUT=true`, `--cut`, and `--confirm-cut`.
+- `scripts/upload_media_assets.py`: dry-run by default; Cloudinary upload requires approved rights, `ALLOW_CLOUDINARY_UPLOAD=true`, `--upload`, and `--confirm-upload`.
+- `scripts/media_post_validator.py`: validates approved rights, permission status, video duration/aspect, account/platform, media URL/asset ID, and public post text before any video + text Threads post.
+
+Still not enabled in scheduled production:
+
+- Third-party or unknown-rights media download/cut/upload/repost.
+- Channel/account URL unlimited download.
+- TikTok account URL automatic expansion.
+- Cloudinary real upload.
+- Scheduled video + text Threads posting.
+- Transcription API real calls.
+
+Media PDCA is record/proposal only. Learning rules and prompt changes remain review-gated and must not auto-apply.

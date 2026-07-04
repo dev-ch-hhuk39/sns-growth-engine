@@ -159,4 +159,15 @@ Caps:
 - `max_posts_per_run=1`
 - `cooldown_minutes=90`
 
-All existing blocks remain: X fetch/post false, beauty blocked, media post false, third-party download/cut/upload/repost false, Cloudinary upload false, transcription API false.
+All existing blocks remain for scheduled text-only autonomous posting: X fetch/post false, beauty blocked, media post false, third-party/unknown-rights download/cut/upload/repost false, Cloudinary upload false, transcription API false.
+
+## Media Growth Engine (2026-07-04)
+
+`liver_manager` now has a dry-run Media Growth Engine for user-approved YouTube/TikTok references:
+
+- Sources with `rights_status=approved_creator_clip`, `permission_status=approved`, and permission evidence can be selected for media planning.
+- Channel/account URLs can seed metadata/transcript plans and clip candidate ideas, but are not direct download targets. Real download requires an individual video URL.
+- `run_media_growth_engine.py --account-id liver_manager --dry-run` produces rights checks, transcript/metadata status, clip candidates, a `public_post_preview`, and a PDCA plan without saving media or posting.
+- Real download/cut/upload/video post remains manual-only and gated by env vars plus `--confirm-*` flags.
+- Scheduled text-only workflows are unchanged and do not post media.
+- PDCA records from media are suggestions only; learning rules remain `active=false` / `auto_apply=false`.

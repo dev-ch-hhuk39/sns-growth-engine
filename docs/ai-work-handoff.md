@@ -4,11 +4,146 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-07-02
+- Date: 2026-07-04
 - 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-06-29 (Threads worker READY 承認モデル必須化)
+- 前回更新: 2026-07-04 (account-specific schedule and liver references)
+
+## 最新作業内容 (2026-07-04) — 許可済み動画 Media Growth Engine 追加
+
+### 本システムについて
+
+- text-only autonomous Threads schedule は継続。`night_scout` / `liver_manager` の account-specific workflow は維持。
+- 今回は `liver_manager` のユーザー許可済み YouTube/TikTok source だけを Media Growth Engine 対象にした。
+- `third_party_reference_only` / `unknown` / `reference_only` は引き続き media download/cut/upload/video post 不可。
+- `approved_creator_clip` / `owned` / `licensed` だけが media pipeline eligible。
+- 実download / 実cut / Cloudinary実upload / video + text Threads実投稿 / transcription API は未実行。
+- scheduled media posting はOFF。video + text post は manual apply 限定の実装準備まで。
+
+### 今回の作業ブランチ
+
+- `main`
+- 作業開始HEAD: `2246031487333ca765cb4d7d082872c85b6b9a88`
+- 現在HEAD: commit後に `git rev-parse HEAD` で確認。
+
+### 変更ファイル一覧
+
+- `config/source_accounts/default_sources.json`
+- `config/source_accounts/owned_media_asset_template.json`
+- `scripts/cut_approved_clips.py`
+- `scripts/upload_media_assets.py`
+- `scripts/process_threads_queue.py`
+- `src/publishers/threads_publisher.py`
+- `docs/video-reference-runbook.md`
+- `docs/media-rights-template.md`
+- `docs/growth-loop-runbook.md`
+- `docs/autonomous-mode-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/source-registry-inventory.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `config/media_growth_engine.json`
+- `scripts/media_growth_schemas.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/download_approved_media.py`
+- `scripts/media_post_validator.py`
+- `scripts/test_approved_creator_sources_have_permission_evidence.py`
+- `scripts/test_user_liver_sources_can_be_approved_creator_clip.py`
+- `scripts/test_third_party_sources_still_block_media_pipeline.py`
+- `scripts/test_channel_account_urls_not_auto_downloadable.py`
+- `scripts/test_individual_video_url_required_for_download.py`
+- `scripts/test_media_growth_engine_dry_run.py`
+- `scripts/test_media_growth_engine_selects_only_approved_sources.py`
+- `scripts/test_media_growth_engine_blocks_unknown_rights.py`
+- `scripts/test_media_growth_engine_generates_clip_candidates.py`
+- `scripts/test_media_growth_engine_outputs_public_post_preview.py`
+- `scripts/test_media_growth_engine_does_not_download_in_dry_run.py`
+- `scripts/test_video_transcript_schema.py`
+- `scripts/test_clip_candidate_schema.py`
+- `scripts/test_clip_candidate_scoring.py`
+- `scripts/test_cut_approved_clips_requires_env_and_confirm.py`
+- `scripts/test_cut_approved_clips_blocks_third_party_reference_only.py`
+- `scripts/test_cut_approved_clips_plan_vertical_subtitles.py`
+- `scripts/test_download_approved_media_requires_individual_video_url.py`
+- `scripts/test_download_approved_media_blocks_channel_url_apply.py`
+- `scripts/test_download_approved_media_requires_env_and_confirm.py`
+- `scripts/test_upload_media_assets_requires_approved_rights.py`
+- `scripts/test_upload_media_assets_requires_env_and_confirm.py`
+- `scripts/test_media_post_validator_requires_approved_rights.py`
+- `scripts/test_media_post_validator_blocks_x_beauty.py`
+- `scripts/test_media_post_validator_requires_public_post_validator_pass.py`
+- `scripts/test_threads_video_post_requires_media_gate.py`
+- `scripts/test_threads_video_post_dry_run_only_by_default.py`
+- `scripts/test_media_pdca_records_clip_candidate_id.py`
+- `scripts/test_media_pdca_suggestions_waiting_review.py`
+- `scripts/test_media_learning_rules_not_auto_applied.py`
+
+### 許可済みsource
+
+- `src_lm_yt_user_001`: `https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ`
+- `src_lm_tt_user_001`: `https://www.tiktok.com/@user5597696107300`
+- `src_lm_tt_user_002`: `https://www.tiktok.com/@me02_lsm`
+- `src_lm_tt_user_003`: `https://www.tiktok.com/@uare.inc`
+
+上記4件は `rights_status=approved_creator_clip`, `permission_status=approved`, `permission_evidence_type=user_asserted_permission`, `media_pipeline_eligible=true`, `clip_enabled=true`, `can_reuse_media=true`。ただし `fetch_enabled=false`, `manual_only=true`, `media_download=gated`, `allow_download/cut/upload=gated`。
+
+### 未完了事項
+
+- channel/account URL は直接download対象にしない。実download/cutには個別動画URLが必要。
+- Cloudinary upload は未実行。`ALLOW_CLOUDINARY_UPLOAD=true --upload --confirm-upload` が必要。
+- ffmpeg cut は未実行。`ALLOW_VIDEO_CUT=true --cut --confirm-cut` が必要。
+- video + text Threads post は未実行。media validator PASS と `ALLOW_MEDIA_POSTS=true`, `ALLOW_REAL_THREADS_VIDEO_POST=true`, `ALLOW_REAL_THREADS_POST=true` が必要。
+- media schedule は未接続。text-only schedule のみON。
+
+### 残WARN
+
+- ユーザー許可は `user_asserted_permission` として記録。必要なら後続で契約/DM/メール等の外部証跡URLを追記する。
+- TikTok account URL は自動展開しない。個別 `/video/` URLが必要。
+- YouTube channel URL は transcript が直接取れない場合がある。個別動画URLが必要。
+
+### テスト結果
+
+- この作業の最終テスト結果は完了報告の `tests結果` を参照。
+
+### dry-run結果
+
+- `run_media_growth_engine.py --account-id liver_manager --dry-run`: 許可済み4sourceを選択し、rights/permission check PASS、download/cut/upload/video post はすべてfalseの計画。
+- `download_approved_media.py` channel URL dry-run: individual video URL required。
+- `cut_approved_clips.py` dry-run: PLAN_ONLY、output path planあり。
+
+### 次に触ってよいファイル
+
+- `scripts/run_media_growth_engine.py`
+- `scripts/download_approved_media.py`
+- `scripts/cut_approved_clips.py`
+- `scripts/upload_media_assets.py`
+- `scripts/media_post_validator.py`
+- `config/media_growth_engine.json`
+- `docs/video-reference-runbook.md`
+
+### 衝突しやすいファイル
+
+- `config/source_accounts/default_sources.json`
+- `scripts/process_threads_queue.py`
+- `src/publishers/threads_publisher.py`
+- `docs/ai-work-handoff.md`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secrets/tokens/cookies/storage_state
+
+### 次AIへの引き継ぎメモ
+
+- Media Growth Engine は実装済みだが、本番ONはまだしない。まず個別動画URLと権利証跡を追加し、dry-runで candidate / validator / media plan を確認すること。
+- `public_post_text` のみ publisher に渡す invariant は維持。
+- media PDCA は記録と `WAITING_REVIEW` 提案まで。learning rules は自動適用しない。
 
 ## 最新作業内容 (2026-07-02) — 承認レス自動運用モード追加
 

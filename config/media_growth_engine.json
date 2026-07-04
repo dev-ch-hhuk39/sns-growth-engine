@@ -1,0 +1,29 @@
+{
+  "media_growth_engine_enabled": true,
+  "target_account_id": "liver_manager",
+  "allowed_rights_statuses": ["owned", "licensed", "approved_creator_clip"],
+  "blocked_rights_statuses": ["third_party_reference_only", "reference_only", "unknown", "restricted", "not_allowed"],
+  "allowed_source_ids": [
+    "src_lm_yt_user_001",
+    "src_lm_tt_user_001",
+    "src_lm_tt_user_002",
+    "src_lm_tt_user_003"
+  ],
+  "download_enabled": false,
+  "transcription_enabled": true,
+  "clip_candidate_generation_enabled": true,
+  "cut_enabled": false,
+  "upload_enabled": false,
+  "video_post_enabled": false,
+  "require_permission_evidence": true,
+  "require_clip_review_before_cut": true,
+  "require_media_validator_before_post": true,
+  "max_clips_per_source_per_run": 3,
+  "target_aspect_ratio": "9:16",
+  "clip_duration_min_seconds": 8,
+  "clip_duration_max_seconds": 45,
+  "subtitle_enabled": true,
+  "cloudinary_upload_enabled": false,
+  "threads_video_post_enabled": false,
+  "dry_run_default": true
+}

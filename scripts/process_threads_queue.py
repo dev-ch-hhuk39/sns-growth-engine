@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from config_loader import get_config  # noqa: E402
+from media_post_validator import validate_media_post  # noqa: E402
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
@@ -453,15 +454,38 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "message": dry_result.message,
         }
 
-    # media 付き実投稿は今回は構造的に禁止（dry-run 限定）。worker 側でも publisher 到達前に止める。
+    # media 付き実投稿は追加gateとmedia validatorが必須。既定ではOFF。
     if media["effective_media_url"]:
-        log_event(client, account_id, "SAFETY_STOP_MEDIA", "media 付き実投稿は禁止（dry-run 限定）", {"queue_id": queue_id, "media_asset_id": media["media_asset_id"]})
-        return {
-            "status": "SAFETY_STOP_MEDIA",
-            "reason": "media 付き実投稿は禁止です（dry-run 限定）",
-            "queue_id": queue_id,
+        allow_media = is_true(os.environ.get("ALLOW_MEDIA_POSTS", "false"))
+        allow_video_post = is_true(os.environ.get("ALLOW_REAL_THREADS_VIDEO_POST", "false"))
+        if not (allow_media and allow_video_post):
+            log_event(client, account_id, "SAFETY_STOP_MEDIA_GATE", "media付き投稿には ALLOW_MEDIA_POSTS=true と ALLOW_REAL_THREADS_VIDEO_POST=true が必要", {"queue_id": queue_id, "media_asset_id": media["media_asset_id"]})
+            return {
+                "status": "SAFETY_STOP_MEDIA_GATE",
+                "reason": "ALLOW_MEDIA_POSTS=true and ALLOW_REAL_THREADS_VIDEO_POST=true are required",
+                "queue_id": queue_id,
+                "media_asset_id": media["media_asset_id"],
+            }
+        media_validation = validate_media_post({
+            "rights_status": queue_row.get("rights_status", ""),
+            "permission_status": queue_row.get("permission_status", ""),
+            "media_url": media["effective_media_url"],
             "media_asset_id": media["media_asset_id"],
-        }
+            "platform": "threads",
+            "account_id": account_id,
+            "media_type": "video",
+            "duration_seconds": queue_row.get("duration_seconds", "0"),
+            "aspect_ratio": queue_row.get("aspect_ratio", ""),
+            "public_post_text": text,
+        })
+        if media_validation["status"] != "PASS":
+            log_event(client, account_id, "SAFETY_STOP_MEDIA_VALIDATOR", "media validator blocked post", {"queue_id": queue_id, "blocked_reasons": media_validation["blocked_reasons"]})
+            return {
+                "status": "SAFETY_STOP_MEDIA_VALIDATOR",
+                "reason": ",".join(media_validation["blocked_reasons"]),
+                "queue_id": queue_id,
+                "media_asset_id": media["media_asset_id"],
+            }
 
     if not confirm_real_post:
         return {"status": "BLOCKED", "reason": "--confirm-real-post required", "queue_id": queue_id}
@@ -477,6 +501,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         derivative={"derivative_id": social.get("derivative_id", "") if social else "", "platform": "threads"},
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=False,
+        media_url=media["effective_media_url"] or None,
     )
     if not result.success:
         update_row(client, "queue", "queue_id", queue_id, {
@@ -495,9 +520,9 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             text=text,
             external_post_id=result.external_post_id or "",
             post_url=result.posted_url or "",
-            media_used="false",
+            media_used="true" if media["effective_media_url"] else "false",
             media_asset_id=media["media_asset_id"],
-            media_url="",
+            media_url=media["effective_media_url"] or "",
             media_status=media["media_status"],
         )
         update_row(client, "queue", "queue_id", queue_id, {

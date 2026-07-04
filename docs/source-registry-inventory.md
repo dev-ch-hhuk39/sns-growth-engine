@@ -141,15 +141,15 @@ These are candidates only. `fetch_enabled=true` remains 0 until a human explicit
 
 Excluded from pilot: X, `beauty_account`, TODO placeholders, `unknown` rights rows, media download/cut/upload/post.
 
-## 2026-07-04 Liver Manager User-Provided Video/Trend References
+## 2026-07-04 Liver Manager Approved Creator Video/Trend References
 
-The following `liver_manager` sources were added after removing query parameters from the user-provided URLs. They are reference analysis only and are not fetch/download/cut/upload/repost targets.
+The following `liver_manager` sources were added after removing query parameters from the user-provided URLs. As of 2026-07-04, the user stated permission is obtained for these sources. They are therefore registered as `approved_creator_clip` with explicit permission evidence fields. They are still `fetch_enabled=false` and `manual_only=true`: channel/account URLs must not be treated as unlimited download targets. Real download/cut/upload/video post requires an individual video URL plus command/env confirmation gates.
 
 | platform | source_url | source_type | target_account_id | usage_scope | rights_status | fetch_enabled | manual_only | clip_enabled | media_pipeline_eligible | current_status | notes |
 |---|---|---|---|---|---|---:|---:|---:|---:|---|---|
-| youtube | https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ | channel | liver_manager | reference_analysis / structure_analysis / topic_research / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Query parameters removed. Use for post text inspiration and structure analysis only. No download/cut/upload/repost. |
-| tiktok | https://www.tiktok.com/@user5597696107300 | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Account URL only. Do not auto-expand, profile scrape, download, cut, upload, or repost. |
-| tiktok | https://www.tiktok.com/@me02_lsm | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Account URL only. Do not auto-expand, profile scrape, download, cut, upload, or repost. |
-| tiktok | https://www.tiktok.com/@uare.inc | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Account URL only. Do not auto-expand, profile scrape, download, cut, upload, or repost. |
+| youtube | https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ | channel | liver_manager | reference_analysis / structure_analysis / topic_research / post_idea_seed / approved_clip_candidate | approved_creator_clip | false | true | true | true | registered | Permission evidence: user_asserted_permission. Channel URL is not directly downloadable; individual video URL is required for real download/cut. |
+| tiktok | https://www.tiktok.com/@user5597696107300 | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed / approved_clip_candidate | approved_creator_clip | false | true | true | true | registered | Permission evidence: user_asserted_permission. Account URL is not auto-expanded; individual `/video/` URL is required for real download/cut. |
+| tiktok | https://www.tiktok.com/@me02_lsm | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed / approved_clip_candidate | approved_creator_clip | false | true | true | true | registered | Permission evidence: user_asserted_permission. Account URL is not auto-expanded; individual `/video/` URL is required for real download/cut. |
+| tiktok | https://www.tiktok.com/@uare.inc | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed / approved_clip_candidate | approved_creator_clip | false | true | true | true | registered | Permission evidence: user_asserted_permission. Account URL is not auto-expanded; individual `/video/` URL is required for real download/cut. |
 
 `night_scout` clip candidates are unchanged in this update.

@@ -50,14 +50,16 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", default=True)
     parser.add_argument("--upload", action="store_true")
     parser.add_argument("--confirm-upload", action="store_true")
+    parser.add_argument("--rights-status", default="third_party_reference_only")
+    parser.add_argument("--local-path", default="clips/mock.mp4")
     args = parser.parse_args()
 
     assets = [{
         "media_asset_id": "mock_media_asset_001",
         "account_id": args.account_id,
-        "local_path": "clips/mock.mp4",
-        "status": "WAITING_REVIEW",
-        "rights_status": "third_party_reference_only",
+        "local_path": args.local_path,
+        "status": "APPROVED",
+        "rights_status": args.rights_status,
     }]
     result = build_upload_plan(args, assets)
     print(f"[upload_media_assets] account={args.account_id} status={result['status']}")

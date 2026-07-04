@@ -41,6 +41,7 @@ def _create_container(
     access_token: str,
     text: str,
     media_type: str = "TEXT",
+    media_url: str | None = None,
 ) -> str:
     """投稿コンテナを作成し、container_id を返す。"""
     import requests
@@ -51,6 +52,8 @@ def _create_container(
         "text": text,
         "access_token": access_token,
     }
+    if media_url:
+        payload["video_url"] = media_url
     resp = requests.post(url, data=payload, timeout=30)
     resp.raise_for_status()
     data = resp.json()
@@ -147,18 +150,21 @@ class ThreadsPublisher(BasePublisher):
                 message=message,
             )
 
-        # ---- dry_run=False: media は実投稿禁止（env フラグに関係なくハードに拒否） ----
+        # ---- dry_run=False: media は追加ゲートが必要 ----
         if has_media:
-            return PublishResult(
-                platform="threads",
-                success=False,
-                dry_run=False,
-                message=(
-                    "SAFETY_STOP: media 付き実投稿は禁止です（dry-run 限定）。"
-                    " media の本番投稿は別途レビューが必要です。"
-                    f" (account={account_id} queue_id={queue_id})"
-                ),
-            )
+            allow_media = os.environ.get("ALLOW_MEDIA_POSTS", "false").strip().lower() in ("1", "true", "yes")
+            allow_video = os.environ.get("ALLOW_REAL_THREADS_VIDEO_POST", "false").strip().lower() in ("1", "true", "yes")
+            if not (allow_media and allow_video):
+                return PublishResult(
+                    platform="threads",
+                    success=False,
+                    dry_run=False,
+                    message=(
+                        "SAFETY_STOP: media付き実投稿には ALLOW_MEDIA_POSTS=true と "
+                        "ALLOW_REAL_THREADS_VIDEO_POST=true が必要です。"
+                        f" (account={account_id} queue_id={queue_id})"
+                    ),
+                )
 
         # ---- dry_run=False: 安全ガードチェック ----
         publish_enabled = os.environ.get("PUBLISH_ENABLED", "false").strip().lower()
@@ -234,7 +240,7 @@ class ThreadsPublisher(BasePublisher):
 
         # ---- 実投稿: 2ステップ ----
         try:
-            container_id = _create_container(user_id, access_token, text)
+            container_id = _create_container(user_id, access_token, text, media_type="VIDEO" if has_media else "TEXT", media_url=media_url)
             time.sleep(1)  # Threads API 推奨: コンテナ作成後に少し待つ
             result = _publish_container(user_id, access_token, container_id)
         except Exception as e:
