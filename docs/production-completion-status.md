@@ -636,3 +636,27 @@ Verification:
 - Autonomous dry-run preview test: PASS.
 - Workflow/safety tests: PASS.
 - `run_autonomous_loop.py --account-id all --dry-run`: selected `liver_manager`, validator PASS, `would_post=false`.
+
+## Account Schedule And Liver Reference Update (2026-07-04)
+
+Status: implemented locally in this turn, pending final commit/push.
+
+Changed:
+
+- Split scheduled autonomous operation into account-specific workflows:
+  - `autonomous-growth-loop-night-scout.yml`
+  - `autonomous-growth-loop-liver-manager.yml`
+- Removed schedule from manual `autonomous-growth-loop.yml`.
+- Added 0-1800 second jitter for scheduled runs.
+- Updated caps: `daily_post_cap_per_account=5`, `daily_ready_cap_per_account=8`, `max_posts_per_run=1`, `cooldown_minutes=90`.
+- Added one YouTube channel and three TikTok account reference sources for `liver_manager`; all are `fetch_enabled=false`, `manual_only=true`, `third_party_reference_only`, and not media-pipeline eligible.
+
+Unchanged:
+
+- X fetch/post false.
+- `beauty_account` blocked.
+- media posts false.
+- third-party video download/cut/upload/repost false.
+- Cloudinary upload false.
+- transcription API false.
+- TikTok account URL auto expansion false.

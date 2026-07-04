@@ -135,3 +135,28 @@ The autonomous loop dry-run now prints a safe public preview:
 - `would_post=false`
 
 Do not include transcript body, source text, or internal analysis in run output.
+
+## Account-Specific Schedule (2026-07-04)
+
+Autonomous scheduled posting now uses account-specific workflows:
+
+- `autonomous-growth-loop-night-scout.yml`
+- `autonomous-growth-loop-liver-manager.yml`
+
+The manual `autonomous-growth-loop.yml` remains for `workflow_dispatch` and `account_id=all`; it no longer has a schedule trigger. Account rotation is only relevant for manual `all` runs. Scheduled workflows pass a fixed `ACCOUNT_ID`.
+
+Scheduled target windows:
+
+- `night_scout`: JST 14:00, 16:00, 18:00, 21:00, 25:00.
+- `liver_manager`: JST 10:00, 13:00, 16:00, 18:00, 21:00.
+
+Each scheduled workflow starts 15 minutes before the target time and sleeps a random 0-1800 seconds before dry-run/apply. Only the sleep seconds are printed. Secrets are not printed.
+
+Caps:
+
+- `daily_post_cap_per_account=5`
+- `daily_ready_cap_per_account=8`
+- `max_posts_per_run=1`
+- `cooldown_minutes=90`
+
+All existing blocks remain: X fetch/post false, beauty blocked, media post false, third-party download/cut/upload/repost false, Cloudinary upload false, transcription API false.

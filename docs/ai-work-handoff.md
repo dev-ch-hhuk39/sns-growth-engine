@@ -3007,3 +3007,57 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 変な投稿が出たら即 `kill_switch=true`。
 - `public_post_text` 以外をpublisherへ渡す変更は絶対に入れない。
 - `night_scout` と `liver_manager` のローテーションは posted_results を読める場合は直近投稿アカウントと反対側を優先する。
+
+## Codex handoff: account-specific schedule and liver references (2026-07-04)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `a17f715fc41feec44a97be6d74afe956a613e61b`
+- 作業ブランチ: `main`
+- commit予定: `chore: 投稿スケジュールをアカウント別に変更しliver参照元を追加`
+
+### 変更ファイル一覧
+
+- `.github/workflows/autonomous-growth-loop.yml`
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+- `config/autonomous_mode.json`
+- `config/auto_approval_rules.json`
+- `config/source_accounts/default_sources.json`
+- `scripts/source_url_utils.py`
+- `scripts/prepare_pilot_sources.py`
+- `scripts/run_autonomous_loop.py`
+- schedule/source/video safety tests
+- `docs/source-registry-inventory.md`
+- `docs/video-reference-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/autonomous-mode-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 実装内容
+
+- scheduled workflowを `night_scout` / `liver_manager` に分割。
+- old `autonomous-growth-loop.yml` はmanual dispatch専用に変更。
+- 各scheduleはターゲット時刻15分前に起動し、0-1800秒jitterで±15分内に実行。
+- `daily_post_cap_per_account=5`, `daily_ready_cap_per_account=8`, `max_posts_per_run=1`, `cooldown_minutes=90`。
+- account-specific workflowは固定 `ACCOUNT_ID` を使う。manual `account_id=all` の場合のみ既存rotationを使う。
+- liver_manager用に以下のqueryなしURLを追加:
+  - `https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ`
+  - `https://www.tiktok.com/@user5597696107300`
+  - `https://www.tiktok.com/@me02_lsm`
+  - `https://www.tiktok.com/@uare.inc`
+
+### 残WARN / 未完了
+
+- 追加TikTok account URLは `manual_only=true`; profile展開・fetch・clip化はしない。
+- YouTube/TikTok third-party mediaはreference analysis only。
+- 動画download/cut/upload/media投稿は今回も未ON。
+- source registryのSheets applyはこのターンでは実行しない。
+
+### 次AIへの引き継ぎメモ
+
+- workflow schedule変更後の初回scheduled runでは、各accountの投稿時刻、jitter秒数、posted_results、daily capを確認する。
+- TikTok account URLを `/video/` に勝手に展開しない。
+- `final_public_post_validator` は弱めない。
+- `public_post_text` 以外をpublisherへ渡さない。

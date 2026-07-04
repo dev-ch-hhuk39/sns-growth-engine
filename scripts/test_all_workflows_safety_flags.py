@@ -160,9 +160,14 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
     on_val = _get_on(wf)
     has_schedule = isinstance(on_val, dict) and "schedule" in on_val
     if has_schedule:
-        if name == "autonomous-growth-loop.yml":
-            checks.append((f"{name} [schedule] JST 09:15 cron", 'cron: "15 0 * * *"' in text))
+        if name in {"autonomous-growth-loop-night-scout.yml", "autonomous-growth-loop-liver-manager.yml"}:
+            if name == "autonomous-growth-loop-night-scout.yml":
+                expected = ['cron: "45 4 * * *"', 'cron: "45 6 * * *"', 'cron: "45 8 * * *"', 'cron: "45 11 * * *"', 'cron: "45 15 * * *"']
+            else:
+                expected = ['cron: "45 0 * * *"', 'cron: "45 3 * * *"', 'cron: "45 6 * * *"', 'cron: "45 8 * * *"', 'cron: "45 11 * * *"']
+            checks.append((f"{name} [schedule] account slots cron", all(slot in text for slot in expected)))
             checks.append((f"{name} [schedule] dry-run step exists", "Dry-run autonomous plan" in text))
+            checks.append((f"{name} [schedule] jitter exists", "random.randint(0, 1800)" in text and "time.sleep(delay)" in text))
             checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
             checks.append((f"{name} [schedule] schedule or confirm apply gate", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" in text))
             checks.append((f"{name} [schedule] X/media flags remain false", all(flag in text for flag in [

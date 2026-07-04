@@ -1,23 +1,27 @@
-name: Autonomous Growth Loop
+name: Autonomous Growth Loop Liver Manager
 
 on:
+  schedule:
+    # liver_manager JST 10:00/13:00/16:00/18:00/21:00 targets.
+    # Cron starts 15 minutes before target; jitter sleeps 0-1800s.
+    - cron: "45 0 * * *"
+    - cron: "45 3 * * *"
+    - cron: "45 6 * * *"
+    - cron: "45 8 * * *"
+    - cron: "45 11 * * *"
   workflow_dispatch:
     inputs:
       confirm_autonomous:
-        description: "Type true to run the autonomous Threads loop"
+        description: "Type true to run liver_manager autonomous Threads loop"
         required: true
         default: "false"
-      account_id:
-        description: "Target account scope"
-        required: true
-        default: "all"
-        type: choice
-        options:
-          - "all"
-          - "night_scout"
-          - "liver_manager"
+      skip_jitter:
+        description: "Skip schedule jitter for manual dispatch"
+        required: false
+        default: "true"
 
 env:
+  ACCOUNT_ID: "liver_manager"
   PUBLISH_ENABLED: "false"
   ALLOW_REAL_X_POST: "false"
   ALLOW_REAL_THREADS_POST: "false"
@@ -27,13 +31,12 @@ env:
   ALLOW_VIDEO_CUT: "false"
 
 jobs:
-  autonomous-growth-loop:
-    name: Manual rules-based Threads autonomous loop
+  autonomous-growth-loop-liver-manager:
+    name: Liver Manager scheduled Threads autonomous loop
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 60
 
     env:
-      ACCOUNT_ID: ${{ github.event.inputs.account_id || 'all' }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
@@ -53,11 +56,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Schedule jitter
+        if: github.event_name == 'schedule'
+        run: |
+          python3 - <<'PY'
+          import random, time
+          delay = random.randint(0, 1800)
+          print(f"[jitter] sleeping {delay}s within ±15min window")
+          time.sleep(delay)
+          PY
+
       - name: Dry-run autonomous plan
         run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --dry-run
 
       - name: Guard autonomous confirm and kill switch
-        if: github.event.inputs.confirm_autonomous == 'true'
+        if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -77,7 +90,7 @@ jobs:
           fi
 
       - name: Apply autonomous Threads loop
-        if: github.event.inputs.confirm_autonomous == 'true'
+        if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"

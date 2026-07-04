@@ -141,3 +141,27 @@ Video references are now connected to `scripts/run_autonomous_loop.py` for the a
 - `download=false`, `cut=false`, `upload=false`, `repost=false` are invariant for third-party video references.
 
 This connection does not make any media pipeline row eligible. Media eligibility still requires `owned`, `licensed`, or `approved_creator_clip` plus permission evidence and separate confirm gates.
+
+## 2026-07-04 TikTok/YouTube Reference Status
+
+Current supported scope:
+
+- YouTube/TikTok reference analysis for text-only Threads idea generation.
+- YouTube metadata where available.
+- YouTube transcript path exists, but channel URLs may return `UNAVAILABLE`; individual video URLs are required for reliable transcript work.
+- TikTok individual `/video/` URL metadata path exists.
+- Analysis can seed text-only Threads posts after `final_public_post_validator`.
+
+Not enabled in production:
+
+- third-party video download
+- third-party video cut
+- third-party video upload
+- third-party video repost
+- video + text Threads posting
+- TikTok account URL auto expansion
+- TikTok account URL auto clip extraction
+
+New `liver_manager` TikTok account URLs are reference/trend sources only. They must stay `fetch_enabled=false`, `manual_only=true`, and `media_pipeline_eligible=false`.
+
+Future media work requires `owned`, `licensed`, or `approved_creator_clip`, permission evidence, clip storage, Cloudinary upload, media asset registration, a strict media validator, and explicit review before any video + text Threads post.

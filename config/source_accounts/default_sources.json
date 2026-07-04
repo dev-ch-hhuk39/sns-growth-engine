@@ -2560,6 +2560,363 @@
       "usage_scope": "reference_only"
     },
     {
+      "source_id": "src_lm_yt_user_001",
+      "source_name": "liver_manager user-provided YouTube reference 01",
+      "source_platform": "youtube",
+      "platform": "youtube",
+      "source_type": "channel",
+      "source_handle": "UCzFzty7aEd4tw3NqCW6pkLQ",
+      "source_url": "https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ",
+      "canonical_url": "https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "target_account_id": "liver_manager",
+      "collection_method": "manual_url",
+      "collection_mode": "manual_only",
+      "fallback": [
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "current_status": "registered",
+      "active": false,
+      "fetch_enabled": false,
+      "manual_only": true,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "media_download": false,
+      "clip_enabled": false,
+      "media_pipeline_eligible": false,
+      "transcript_enabled": false,
+      "requires_local_login": false,
+      "rights_status": "third_party_reference_only",
+      "rights_policy": "third_party_reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "can_reuse_media": false,
+      "use_policy": "REFERENCE_ONLY",
+      "pdca_enabled": false,
+      "source_category": "video_reference",
+      "source_categories": [
+        "video_reference",
+        "structure_analysis",
+        "topic_research"
+      ],
+      "usage_scope": "reference_analysis",
+      "usage_scopes": [
+        "reference_analysis",
+        "structure_analysis",
+        "topic_research",
+        "post_idea_seed"
+      ],
+      "use_cases": [
+        "video_understanding",
+        "structure_reference",
+        "hook_reference",
+        "topic_research",
+        "post_idea_seed"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 0,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 98,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-07-04T00:00:00+09:00",
+      "updated_at": "2026-07-04T00:00:00+09:00",
+      "review_notes": "User-provided liver_manager reference. URL query parameters removed. Use for post text inspiration and structure analysis only. No download/cut/upload/repost."
+    },
+    {
+      "source_id": "src_lm_tt_user_001",
+      "source_name": "liver_manager user-provided TikTok reference account 01",
+      "source_platform": "tiktok",
+      "platform": "tiktok",
+      "source_type": "account",
+      "source_handle": "@user5597696107300",
+      "source_url": "https://www.tiktok.com/@user5597696107300",
+      "canonical_url": "https://www.tiktok.com/@user5597696107300",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "target_account_id": "liver_manager",
+      "collection_method": "manual_url",
+      "collection_mode": "manual_only",
+      "fallback": [
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "current_status": "registered",
+      "active": false,
+      "fetch_enabled": false,
+      "manual_only": true,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "media_download": false,
+      "clip_enabled": false,
+      "media_pipeline_eligible": false,
+      "transcript_enabled": false,
+      "requires_local_login": false,
+      "rights_status": "third_party_reference_only",
+      "rights_policy": "third_party_reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "can_reuse_media": false,
+      "use_policy": "REFERENCE_ONLY",
+      "pdca_enabled": false,
+      "source_category": "trend_query",
+      "source_categories": [
+        "trend_signal",
+        "reference_analysis",
+        "structure_analysis"
+      ],
+      "usage_scope": "trend_signal",
+      "usage_scopes": [
+        "trend_signal",
+        "reference_analysis",
+        "structure_analysis",
+        "post_idea_seed"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "post_idea_seed"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 0,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 98,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-07-04T00:00:00+09:00",
+      "updated_at": "2026-07-04T00:00:00+09:00",
+      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Account URL only; do not expand/profile scrape automatically. Use as reference only."
+    },
+    {
+      "source_id": "src_lm_tt_user_002",
+      "source_name": "liver_manager user-provided TikTok reference account 02",
+      "source_platform": "tiktok",
+      "platform": "tiktok",
+      "source_type": "account",
+      "source_handle": "@me02_lsm",
+      "source_url": "https://www.tiktok.com/@me02_lsm",
+      "canonical_url": "https://www.tiktok.com/@me02_lsm",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "target_account_id": "liver_manager",
+      "collection_method": "manual_url",
+      "collection_mode": "manual_only",
+      "fallback": [
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "current_status": "registered",
+      "active": false,
+      "fetch_enabled": false,
+      "manual_only": true,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "media_download": false,
+      "clip_enabled": false,
+      "media_pipeline_eligible": false,
+      "transcript_enabled": false,
+      "requires_local_login": false,
+      "rights_status": "third_party_reference_only",
+      "rights_policy": "third_party_reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "can_reuse_media": false,
+      "use_policy": "REFERENCE_ONLY",
+      "pdca_enabled": false,
+      "source_category": "trend_query",
+      "source_categories": [
+        "trend_signal",
+        "reference_analysis",
+        "structure_analysis"
+      ],
+      "usage_scope": "trend_signal",
+      "usage_scopes": [
+        "trend_signal",
+        "reference_analysis",
+        "structure_analysis",
+        "post_idea_seed"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "post_idea_seed"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 0,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 98,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-07-04T00:00:00+09:00",
+      "updated_at": "2026-07-04T00:00:00+09:00",
+      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Account URL only; do not expand/profile scrape automatically. Use as reference only."
+    },
+    {
+      "source_id": "src_lm_tt_user_003",
+      "source_name": "liver_manager user-provided TikTok reference account 03",
+      "source_platform": "tiktok",
+      "platform": "tiktok",
+      "source_type": "account",
+      "source_handle": "@uare.inc",
+      "source_url": "https://www.tiktok.com/@uare.inc",
+      "canonical_url": "https://www.tiktok.com/@uare.inc",
+      "target_account_ids": [
+        "liver_manager"
+      ],
+      "target_account_id": "liver_manager",
+      "collection_method": "manual_url",
+      "collection_mode": "manual_only",
+      "fallback": [
+        "manual_url"
+      ],
+      "candidate_status": "candidate",
+      "current_status": "registered",
+      "active": false,
+      "fetch_enabled": false,
+      "manual_only": true,
+      "allow_network_fetch": false,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "media_download": false,
+      "clip_enabled": false,
+      "media_pipeline_eligible": false,
+      "transcript_enabled": false,
+      "requires_local_login": false,
+      "rights_status": "third_party_reference_only",
+      "rights_policy": "third_party_reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "can_reuse_media": false,
+      "use_policy": "REFERENCE_ONLY",
+      "pdca_enabled": false,
+      "source_category": "trend_query",
+      "source_categories": [
+        "trend_signal",
+        "reference_analysis",
+        "structure_analysis"
+      ],
+      "usage_scope": "trend_signal",
+      "usage_scopes": [
+        "trend_signal",
+        "reference_analysis",
+        "structure_analysis",
+        "post_idea_seed"
+      ],
+      "use_cases": [
+        "trend_research",
+        "structure_reference",
+        "hook_reference",
+        "post_idea_seed"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "subject_policy": {
+        "creator_subject_required": true,
+        "no_suspicious_income_claims": true,
+        "no_aggressive_recruiting": true,
+        "require_transform": true,
+        "rules": [
+          "creator_subject_required",
+          "no_suspicious_income_claims",
+          "no_aggressive_recruiting",
+          "require_transform"
+        ]
+      },
+      "default_queue_status": "DRAFT",
+      "review_status": "WAITING_REVIEW",
+      "max_items_per_run": 0,
+      "language": "ja",
+      "region": "JP",
+      "concept_match_score": 0.0,
+      "priority": 98,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-07-04T00:00:00+09:00",
+      "updated_at": "2026-07-04T00:00:00+09:00",
+      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Account URL only; do not expand/profile scrape automatically. Use as reference only."
+    },
+    {
       "source_id": "src_lm_note_cand_002",
       "source_name": "liver_manager note reference 02",
       "source_platform": "note",

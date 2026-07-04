@@ -13,8 +13,8 @@ def main() -> int:
     defaults = json.loads(RULES.read_text(encoding="utf-8")).get("defaults", {})
     checks = [
         ("auto post disabled", defaults.get("auto_post_enabled") is False),
-        ("daily post cap one", int(defaults.get("daily_post_cap", 0)) == 1),
-        ("cooldown 180", int(defaults.get("cooldown_minutes", 0)) == 180),
+        ("daily post cap five", int(defaults.get("daily_post_cap", 0)) == 5),
+        ("cooldown 90", int(defaults.get("cooldown_minutes", 0)) == 90),
         ("max posts one", int(defaults.get("max_posts_per_run", 0)) == 1),
         ("kill switch present", "kill_switch" in defaults),
         ("media posts disabled", defaults.get("allow_media_posts") is False),

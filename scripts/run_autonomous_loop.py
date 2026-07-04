@@ -12,7 +12,7 @@ import json
 import os
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -325,6 +325,28 @@ def load_posted_results_for_rotation() -> list[dict[str, Any]]:
         return []
 
 
+def posts_used_today(account_id: str, posted_rows: list[dict[str, Any]], *, now: datetime | None = None) -> int:
+    """Count today's posted Threads rows for an account using JST day boundary."""
+    jst = timezone(timedelta(hours=9))
+    today = (now or datetime.now(timezone.utc)).astimezone(jst).date()
+    count = 0
+    for row in posted_rows:
+        if str(row.get("account_id", "")) != account_id:
+            continue
+        if str(row.get("platform", "")).lower() not in {"", "threads"}:
+            continue
+        if str(row.get("status", "")).upper() not in {"POSTED", "RECOVERED", ""}:
+            continue
+        raw = str(row.get("posted_at") or row.get("created_at") or row.get("collected_at") or "")
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if dt.astimezone(jst).date() == today:
+            count += 1
+    return count
+
+
 def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None, rules: dict[str, Any] | None = None) -> dict[str, Any]:
     config = config or load_autonomous_config()
     rules = rules or load_auto_approval_rules()
@@ -462,9 +484,11 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
     results: list[dict[str, Any]] = []
     dry = not (args.apply and args.confirm_autonomous)
     accounts = list(plan.get("accounts", []))
+    posted_rows_for_caps: list[dict[str, Any]] = []
     if not dry:
         config = load_autonomous_config()
-        rotation = account_rotation_order(accounts, config, posted_rows=load_posted_results_for_rotation())
+        posted_rows_for_caps = load_posted_results_for_rotation()
+        rotation = account_rotation_order(accounts, config, posted_rows=posted_rows_for_caps)
         accounts = list(rotation.get("ordered_accounts", accounts))
         plan["account_rotation"] = rotation
         plan["selected_account"] = rotation.get("selected_account", accounts[0] if accounts else "")
@@ -546,7 +570,23 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         if not run_step(cmd):
             return results
     max_posts_per_run = max(1, int(plan["gate_summary"].get("max_posts_per_run", 1)))
-    post_candidate_accounts = accounts[:max_posts_per_run]
+    daily_post_cap = int(plan["gate_summary"].get("daily_post_cap_per_account", 1))
+    post_candidate_accounts = []
+    for account in accounts:
+        used_today = posts_used_today(account, posted_rows_for_caps) if posted_rows_for_caps else 0
+        plan.setdefault("daily_cap_state", {}).setdefault(account, {})["posts_used_today"] = used_today
+        if used_today >= daily_post_cap:
+            results.append({
+                "cmd": f"score/generate/auto_ready --account-id {account}",
+                "returncode": 0,
+                "status": "SKIPPED",
+                "reason": "daily_post_cap_reached",
+                "posts_used_today": used_today,
+                "daily_post_cap": daily_post_cap,
+            })
+            continue
+        if len(post_candidate_accounts) < max_posts_per_run:
+            post_candidate_accounts.append(account)
     for account in accounts:
         if account not in post_candidate_accounts:
             results.append({

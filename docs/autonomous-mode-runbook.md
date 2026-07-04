@@ -250,4 +250,24 @@ Account rotation:
 - The autonomous loop now prefers the account different from the latest posted account among `night_scout` and `liver_manager`.
 - If the preferred account has no postable candidate, fallback to another available account is allowed.
 
-Schedule remains enabled at JST 09:15 daily. If another bad public post appears, set `kill_switch=true`, commit, and push before the next scheduled run.
+Schedule is now account-specific as of 2026-07-04. If another bad public post appears, set `kill_switch=true`, commit, and push before the next scheduled run.
+
+## Account-Specific Scheduled Operation (2026-07-04)
+
+The old single daily schedule was replaced by account-specific workflows:
+
+- `Autonomous Growth Loop Night Scout`
+- `Autonomous Growth Loop Liver Manager`
+
+The manual `Autonomous Growth Loop` workflow is still available for explicit dispatch and `account_id=all`, but it has no scheduled trigger.
+
+Schedules:
+
+| account | JST targets | UTC cron starts |
+|---|---|---|
+| `night_scout` | 14:00, 16:00, 18:00, 21:00, 25:00 | `45 4`, `45 6`, `45 8`, `45 11`, `45 15` |
+| `liver_manager` | 10:00, 13:00, 16:00, 18:00, 21:00 | `45 0`, `45 3`, `45 6`, `45 8`, `45 11` |
+
+Each schedule starts 15 minutes early and applies a random 0-1800 second jitter. Manual dispatch skips schedule jitter because the jitter step runs only when `github.event_name == 'schedule'`.
+
+`max_posts_per_run=1` remains per workflow run. Daily cap is now `5` per account.

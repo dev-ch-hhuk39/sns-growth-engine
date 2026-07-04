@@ -47,6 +47,8 @@ def exclusion_reason(source: dict[str, Any], *, account_id: str, platform: str) 
         return "todo_placeholder"
     if not url:
         return "missing_real_url"
+    if is_true(source.get("manual_only")):
+        return "manual_only_reference_source"
     if any(t == "beauty_account" for t in targets):
         return "beauty_excluded"
     if account_id != "all" and account_id not in targets:

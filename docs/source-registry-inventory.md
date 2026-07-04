@@ -140,3 +140,16 @@ These are candidates only. `fetch_enabled=true` remains 0 until a human explicit
 | `liver_manager` | `src_lm_yt_cand_001` | youtube | `https://www.youtube.com/@suu-san_pococha` | metadata/transcript analysis only |
 
 Excluded from pilot: X, `beauty_account`, TODO placeholders, `unknown` rights rows, media download/cut/upload/post.
+
+## 2026-07-04 Liver Manager User-Provided Video/Trend References
+
+The following `liver_manager` sources were added after removing query parameters from the user-provided URLs. They are reference analysis only and are not fetch/download/cut/upload/repost targets.
+
+| platform | source_url | source_type | target_account_id | usage_scope | rights_status | fetch_enabled | manual_only | clip_enabled | media_pipeline_eligible | current_status | notes |
+|---|---|---|---|---|---|---:|---:|---:|---:|---|---|
+| youtube | https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ | channel | liver_manager | reference_analysis / structure_analysis / topic_research / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Query parameters removed. Use for post text inspiration and structure analysis only. No download/cut/upload/repost. |
+| tiktok | https://www.tiktok.com/@user5597696107300 | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Account URL only. Do not auto-expand, profile scrape, download, cut, upload, or repost. |
+| tiktok | https://www.tiktok.com/@me02_lsm | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Account URL only. Do not auto-expand, profile scrape, download, cut, upload, or repost. |
+| tiktok | https://www.tiktok.com/@uare.inc | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed | third_party_reference_only | false | true | false | false | registered | Account URL only. Do not auto-expand, profile scrape, download, cut, upload, or repost. |
+
+`night_scout` clip candidates are unchanged in this update.
