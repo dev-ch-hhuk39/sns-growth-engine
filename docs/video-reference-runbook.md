@@ -184,3 +184,26 @@ Still not enabled in scheduled production:
 - Transcription API real calls.
 
 Media PDCA is record/proposal only. Learning rules and prompt changes remain review-gated and must not auto-apply.
+
+## Source Video Discovery (2026-07-05)
+
+Media Growth Engine no longer depends only on manually entering an individual video URL first. Approved YouTube/TikTok channel/account sources can produce bounded `source_videos` candidates:
+
+- Discovery is limited to sources with `rights_status` in `owned`, `licensed`, or `approved_creator_clip` and `permission_status=approved`.
+- `third_party_reference_only`, `reference_only`, `unknown`, `restricted`, and `not_allowed` remain blocked from media pipeline discovery.
+- `max_videos_per_source_scan=50`, `max_new_videos_per_source_per_run=10`, and `max_total_new_videos_per_run=20` are enforced.
+- TikTok account discovery is limited/manual-safe and must not become unbounded profile scraping.
+- Dedupe uses `platform + source_id + video_id`, then canonical video URL, then content hash/title-duration fallback.
+- Already seen, clipped, or posted videos are treated as duplicates for discovery.
+- `source_videos` records carry `DISCOVERED -> TRANSCRIPT_PLANNED -> ANALYZED -> CLIP_CANDIDATES_READY -> DOWNLOADED -> CUT -> UPLOADED -> POSTED/SKIPPED/BLOCKED`.
+
+Clip candidate generation is now video-based:
+
+- One video can create 1-3 clip candidates.
+- Videos under 25 seconds generate 1 clip.
+- Videos from 25-90 seconds generate up to 2 clips.
+- Videos over 90 seconds generate up to 3 clips.
+- Overlapping ranges within the configured tolerance are blocked/merged by duplicate policy.
+- Each clip candidate carries `source_video_id`, `video_id`, `canonical_video_url`, `duplicate_clip_key`, `public_post_text`, and `public_post_validator_status`.
+
+Real download/cut/upload/video post is still not scheduled. It remains env plus confirm gated and starts from reviewed `source_video_id` / `clip_candidate_id`.

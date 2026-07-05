@@ -89,3 +89,5 @@ Third-party reference material with `third_party_reference_only` or `unknown` ri
 - `unknown` remains blocked until human review changes the rights status to `owned`, `licensed`, or `approved_creator_clip`.
 - `third_party_reference_only` remains analysis-only forever unless a separate permission record is created.
 - Real cut/upload still requires the existing command gates such as `ALLOW_VIDEO_CUT=true` plus `--confirm-cut`, or `ALLOW_CLOUDINARY_UPLOAD=true` plus `--confirm-upload`.
+- Approved channel/account discovery may create `source_videos` candidates, but that is metadata planning only. It does not grant unlimited scraping, download, cut, upload, or repost rights.
+- Real media execution should reference a deduped `source_video_id` and reviewed `clip_candidate_id`; the permission record must still cover the actual video and intended platform.

@@ -672,3 +672,16 @@ Status: implemented locally in this turn, pending final commit/push.
 - Threads video + text post support is code-connected but remains disabled by default. It requires media validator PASS plus explicit env gates.
 - Scheduled text-only autonomous posting remains unchanged; scheduled media posting remains OFF.
 - Real download, real cut, Cloudinary upload, transcription API calls, and video + text Threads post were not executed.
+
+## Media Growth Engine Discovery Expansion (2026-07-05)
+
+Status: implemented locally in this turn, pending final commit/push.
+
+- Added bounded source video discovery for approved `liver_manager` YouTube/TikTok channel/account sources.
+- Added `source_videos` schema and Sheets/mock tab support.
+- Added video-level dedupe by `platform + source_id + video_id`, canonical URL fallback, and content hash fallback.
+- Added video-based clip candidate generation. One video can create up to 3 non-overlapping clip candidates; short videos produce one clip.
+- Added `source_video_id` support to download planning and `clip_candidate_id` support to cut/upload planning.
+- Added media queue preview fields for `source_video_id`, `clip_candidate_id`, `media_asset_id`, and `public_post_text`.
+- Media schedule remains OFF. Text-only autonomous schedule remains unchanged.
+- Real download/cut/upload/Cloudinary/video post/transcription API were not executed.

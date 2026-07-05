@@ -153,3 +153,16 @@ The following `liver_manager` sources were added after removing query parameters
 | tiktok | https://www.tiktok.com/@uare.inc | account | liver_manager | trend_signal / reference_analysis / structure_analysis / post_idea_seed / approved_clip_candidate | approved_creator_clip | false | true | true | true | registered | Permission evidence: user_asserted_permission. Account URL is not auto-expanded; individual `/video/` URL is required for real download/cut. |
 
 `night_scout` clip candidates are unchanged in this update.
+
+## 2026-07-05 Source Video Discovery
+
+Approved channel/account URLs can now create bounded `source_videos` discovery candidates without requiring a human to enter each individual video URL first.
+
+- Discovery対象: `src_lm_yt_user_001`, `src_lm_tt_user_001`, `src_lm_tt_user_002`, `src_lm_tt_user_003`
+- Discovery対象外: X, `beauty_account`, TODO placeholders, `third_party_reference_only`, `reference_only`, `unknown`
+- Limits: `max_videos_per_source_scan=50`, `max_new_videos_per_source_per_run=10`, `max_total_new_videos_per_run=20`
+- Dedupe: `platform + source_id + video_id`, canonical video URL fallback, content hash fallback
+- TikTok account URL: limited/manual-safe discovery plan only; no unbounded scraping
+- Media execution: still requires reviewed `source_video_id`, `clip_candidate_id`, env gates, and confirm flags
+- Media schedule: OFF
+- Text-only schedule: unchanged

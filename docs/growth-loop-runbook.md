@@ -171,3 +171,20 @@ All existing blocks remain for scheduled text-only autonomous posting: X fetch/p
 - Real download/cut/upload/video post remains manual-only and gated by env vars plus `--confirm-*` flags.
 - Scheduled text-only workflows are unchanged and do not post media.
 - PDCA records from media are suggestions only; learning rules remain `active=false` / `auto_apply=false`.
+
+### Source Video Discovery
+
+`scripts/discover_approved_source_videos.py --account-id liver_manager --dry-run` builds a bounded discovery plan from approved source channels/accounts. It shows selected sources, source-level limits, duplicate counts, and a preview of new `source_videos` candidates. Dry-run does not write to Sheets or local archive.
+
+Current defaults:
+
+- `source_video_discovery_enabled=true`
+- `source_video_discovery_apply_enabled=false`
+- `max_videos_per_source_scan=50`
+- `max_new_videos_per_source_per_run=10`
+- `max_total_new_videos_per_run=20`
+- `allow_multiple_clips_per_video=true`
+- `max_clip_candidates_per_video=3`
+- `clip_overlap_policy=block_overlapping_ranges`
+
+`run_media_growth_engine.py` now prefers `source_videos`; if none are saved yet, it uses the dry-run discovery plan as the candidate source. Download/cut/upload/video post remain false.

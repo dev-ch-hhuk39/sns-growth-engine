@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import build_rights_decision
+from discover_approved_source_videos import load_existing_source_videos
 
 
 
@@ -30,21 +31,38 @@ def is_individual_video_url(url: str) -> bool:
     return False
 
 
+def _resolve_source_video(args: argparse.Namespace) -> dict:
+    if not getattr(args, "source_video_id", ""):
+        return {}
+    for row in load_existing_source_videos(getattr(args, "source_videos_json", "")):
+        if str(row.get("source_video_id", "")) == str(args.source_video_id):
+            return dict(row)
+    return {}
+
+
 def build_download_plan(args: argparse.Namespace) -> dict:
-    decision = build_rights_decision(args.rights_status, action="download")
+    source_video = _resolve_source_video(args)
+    source_url = source_video.get("canonical_video_url") or args.source_url
+    rights_status = source_video.get("rights_status") or args.rights_status
+    decision = build_rights_decision(rights_status, action="download")
     allow_env = os.environ.get("ALLOW_VIDEO_DOWNLOAD", "").lower() == "true"
     blocked = []
+    if getattr(args, "source_video_id", "") and not source_video:
+        blocked.append("source_video_id_not_found")
     if not decision.allowed:
         blocked.append(decision.reason)
-    if not is_individual_video_url(args.source_url):
+    if not is_individual_video_url(source_url):
         blocked.append("individual_video_url_required")
+    if str(source_video.get("download_status", "")).upper() == "DOWNLOADED":
+        blocked.append("already_downloaded")
     if args.download and not args.confirm_download:
         blocked.append("--download requires --confirm-download")
     if args.download and not allow_env:
         blocked.append("ALLOW_VIDEO_DOWNLOAD=true is required")
     return {
         "status": "READY" if args.download and not blocked else "BLOCKED" if blocked else "PLAN_ONLY",
-        "source_url": args.source_url,
+        "source_video_id": getattr(args, "source_video_id", ""),
+        "source_url": source_url,
         "rights_status": decision.rights_status,
         "rights_decision": decision.as_dict(),
         "adapter_status": {"yt_dlp": "installed" if importlib.util.find_spec("yt_dlp") else "not_installed"},
@@ -64,12 +82,16 @@ def build_download_plan(args: argparse.Namespace) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="download approved media")
-    parser.add_argument("--source-url", required=True)
+    parser.add_argument("--source-url", default="")
+    parser.add_argument("--source-video-id", default="")
+    parser.add_argument("--source-videos-json", default="")
     parser.add_argument("--rights-status", default="third_party_reference_only")
     parser.add_argument("--dry-run", action="store_true", default=True)
     parser.add_argument("--download", action="store_true")
     parser.add_argument("--confirm-download", action="store_true")
     args = parser.parse_args()
+    if not args.source_url and not args.source_video_id:
+        parser.error("--source-url or --source-video-id is required")
     plan = build_download_plan(args)
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     return 1 if plan["status"] == "BLOCKED" and args.download else 0

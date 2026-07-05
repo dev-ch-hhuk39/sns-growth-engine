@@ -17,7 +17,32 @@ sys.path.insert(0, str(ROOT / "src"))
 from media.rights_policy import build_rights_decision
 
 
+def _load_clip_candidates(path: str) -> list[dict]:
+    if not path:
+        path = str(ROOT / "output/source_videos/video_clip_candidates.json")
+    candidate = Path(path)
+    if not candidate.exists():
+        return []
+    return json.loads(candidate.read_text(encoding="utf-8"))
+
+
+def _resolve_clip_candidate(args: argparse.Namespace) -> dict:
+    clip_id = getattr(args, "clip_candidate_id", "")
+    if not clip_id:
+        return {}
+    for row in _load_clip_candidates(getattr(args, "clip_candidates_json", "")):
+        if str(row.get("clip_candidate_id") or row.get("clip_id")) == str(clip_id):
+            return dict(row)
+    return {}
+
+
 def build_plan(args: argparse.Namespace) -> dict:
+    clip_candidate = _resolve_clip_candidate(args)
+    if clip_candidate:
+        args.rights_status = clip_candidate.get("rights_status") or args.rights_status
+        args.input_path = clip_candidate.get("local_path") or clip_candidate.get("local_clip_path") or args.input_path
+        args.start_seconds = float(clip_candidate.get("start_seconds") or clip_candidate.get("start_time") or args.start_seconds or 0)
+        args.end_seconds = float(clip_candidate.get("end_seconds") or clip_candidate.get("end_time") or args.end_seconds or 0)
     allowed_env = os.environ.get("ALLOW_VIDEO_CUT", "").lower() == "true"
     decision = build_rights_decision(args.rights_status, action="cut")
     ffmpeg_cli = shutil.which("ffmpeg") is not None
@@ -25,8 +50,14 @@ def build_plan(args: argparse.Namespace) -> dict:
     start_seconds = float(getattr(args, "start_seconds", 0) or 0)
     end_seconds = float(getattr(args, "end_seconds", 0) or 0)
     blocked = []
+    if getattr(args, "clip_candidate_id", "") and not clip_candidate:
+        blocked.append("clip_candidate_id_not_found")
     if not decision.allowed:
         blocked.append(decision.reason)
+    if clip_candidate and not args.input_path:
+        blocked.append("downloaded_media_required")
+    if str(clip_candidate.get("cut_status", "")).upper() in {"CUT", "DONE"}:
+        blocked.append("already_cut")
     if args.cut and not args.confirm_cut:
         blocked.append("--cut requires --confirm-cut")
     if args.cut and not allowed_env:
@@ -45,6 +76,8 @@ def build_plan(args: argparse.Namespace) -> dict:
             "ffmpeg_python": "installed" if ffmpeg_python else "not_installed",
         },
         "rights_status": decision.rights_status,
+        "clip_candidate_id": getattr(args, "clip_candidate_id", ""),
+        "source_video_id": clip_candidate.get("source_video_id", ""),
         "rights_decision": decision.as_dict(),
         "input_path": args.input_path,
         "start_seconds": start_seconds,
@@ -70,6 +103,8 @@ def build_plan(args: argparse.Namespace) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description="cut approved clips")
     parser.add_argument("--input-path", default="")
+    parser.add_argument("--clip-candidate-id", default="")
+    parser.add_argument("--clip-candidates-json", default="")
     parser.add_argument("--rights-status", default="third_party_reference_only")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--cut", action="store_true")

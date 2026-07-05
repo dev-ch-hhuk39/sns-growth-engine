@@ -259,6 +259,18 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "title",                      # 動画タイトル（メタ情報）
         "transcript_status",         # PENDING（既定）/ COMPLETED / FAILED
     ],
+    # 許可済みチャンネル/アカウントから発見した動画単位のregistry。
+    "source_videos": [
+        "source_video_id", "source_id", "account_id", "platform", "source_type",
+        "source_url", "video_id", "canonical_video_url", "original_video_url",
+        "title", "description_preview", "author_handle", "published_at",
+        "duration_seconds", "view_count", "like_count", "comment_count",
+        "transcript_status", "analysis_status", "clip_candidate_count",
+        "download_status", "cut_status", "upload_status", "post_status",
+        "rights_status", "permission_status", "discovery_status",
+        "discovered_at", "last_seen_at", "processed_at", "skip_reason",
+        "content_hash", "duplicate_key",
+    ],
     # 動画文字起こし結果。Cloudflare Whisper の出力を保存する。
     "video_transcripts": [
         "transcript_id", "account_id", "reference_post_id",
@@ -439,6 +451,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "media_assets":                   "メディア資産",
     "reference_post_scores":          "参考投稿スコア",
     "reference_sources":              "動画収集元",
+    "source_videos":                  "参照元動画",
     "metric_snapshots":                "計測スナップショット",
     "video_transcripts":              "動画文字起こし",
     "video_clip_candidates":          "動画クリップ候補",
@@ -967,6 +980,74 @@ class SheetsClient:
             if field in headers:
                 ws.update_cell(cell.row, headers.index(field) + 1, str(value))
         return True
+
+    # ---------------------------------------------------------------- #
+    # source_videos
+    # ---------------------------------------------------------------- #
+
+    def get_source_videos(
+        self,
+        account_id: str | None = None,
+        source_id: str | None = None,
+        discovery_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        """source_videos タブから条件に一致する行を返す。"""
+        ws = self._ws("source_videos")
+        rows = ws.get_all_records()
+        if account_id:
+            rows = [r for r in rows if str(r.get("account_id", "")) == str(account_id)]
+        if source_id:
+            rows = [r for r in rows if str(r.get("source_id", "")) == str(source_id)]
+        if discovery_status:
+            rows = [r for r in rows if str(r.get("discovery_status", "")).upper() == discovery_status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_source_video_by_id(self, source_video_id: str) -> dict | None:
+        """source_video_id に一致する source_video を返す。なければ None。"""
+        ws = self._ws("source_videos")
+        for row in ws.get_all_records():
+            if str(row.get("source_video_id", "")) == str(source_video_id):
+                return dict(row)
+        return None
+
+    def save_source_video(self, source_video: dict[str, Any]) -> bool:
+        """source_videos タブに1行を保存する（source_video_id でアップサート）。"""
+        if self.dry_run:
+            print(f"[dry-run] save_source_video: source_video_id={source_video.get('source_video_id', '?')!r}")
+            return False
+        source_video_id = str(source_video.get("source_video_id", ""))
+        ws = self._ws("source_videos")
+        headers = ws.row_values(1)
+        row_data = [str(source_video.get(h, "")) for h in headers]
+        if source_video_id:
+            existing = self.find_source_video_by_id(source_video_id)
+            if existing:
+                col_id = headers.index("source_video_id") + 1
+                cell = ws.find(source_video_id, in_column=col_id)
+                if cell:
+                    ws.update([row_data], f"A{cell.row}")
+                    return True
+        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        return True
+
+    def save_source_videos(self, source_videos: list[dict[str, Any]]) -> dict[str, int]:
+        """source_videos タブへ複数行を保存する。"""
+        saved = skipped = errors = 0
+        existing_ids = {str(r.get("source_video_id", "")) for r in self.get_source_videos()}
+        for row in source_videos:
+            if str(row.get("source_video_id", "")) in existing_ids:
+                skipped += 1
+                continue
+            try:
+                if self.save_source_video(row):
+                    saved += 1
+                    existing_ids.add(str(row.get("source_video_id", "")))
+            except Exception:
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
 
     # ---------------------------------------------------------------- #
     # video_clip_candidates
@@ -2042,6 +2123,60 @@ class MockSheetsClient:
                 r.update(fields)
                 return True
         return False
+
+    # ---- source_videos (mock) ----
+
+    def get_source_videos(
+        self,
+        account_id: str | None = None,
+        source_id: str | None = None,
+        discovery_status: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict]:
+        rows = list(self._source_videos) if hasattr(self, "_source_videos") else []
+        if account_id:
+            rows = [r for r in rows if str(r.get("account_id", "")) == str(account_id)]
+        if source_id:
+            rows = [r for r in rows if str(r.get("source_id", "")) == str(source_id)]
+        if discovery_status:
+            rows = [r for r in rows if str(r.get("discovery_status", "")).upper() == discovery_status.upper()]
+        if limit:
+            rows = rows[:limit]
+        return [dict(r) for r in rows]
+
+    def find_source_video_by_id(self, source_video_id: str) -> dict | None:
+        for r in (self._source_videos if hasattr(self, "_source_videos") else []):
+            if str(r.get("source_video_id", "")) == str(source_video_id):
+                return dict(r)
+        return None
+
+    def save_source_video(self, source_video: dict[str, Any]) -> bool:
+        if not hasattr(self, "_source_videos"):
+            self._source_videos: list[dict] = []
+        source_video_id = str(source_video.get("source_video_id", ""))
+        for i, r in enumerate(self._source_videos):
+            if str(r.get("source_video_id", "")) == source_video_id:
+                self._source_videos[i] = dict(source_video)
+                print(f"[mock-sheets] save_source_video update: source_video_id={source_video_id!r}")
+                return True
+        self._source_videos.append(dict(source_video))
+        print(f"[mock-sheets] save_source_video: source_video_id={source_video_id!r}")
+        return True
+
+    def save_source_videos(self, source_videos: list[dict[str, Any]]) -> dict[str, int]:
+        saved = skipped = errors = 0
+        existing_ids = {str(r.get("source_video_id", "")) for r in self.get_source_videos()}
+        for row in source_videos:
+            if str(row.get("source_video_id", "")) in existing_ids:
+                skipped += 1
+                continue
+            try:
+                if self.save_source_video(row):
+                    saved += 1
+                    existing_ids.add(str(row.get("source_video_id", "")))
+            except Exception:
+                errors += 1
+        return {"saved": saved, "skipped": skipped, "errors": errors}
 
     # ---- video_clip_candidates (mock) ----
 

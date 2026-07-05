@@ -13,7 +13,15 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import rights_allows_media_use  # noqa: E402
-from media_growth_schemas import build_clip_candidate, build_media_pdca_records, build_transcript_row  # noqa: E402
+from discover_approved_source_videos import build_discovery_plan, load_existing_source_videos  # noqa: E402
+from media_growth_schemas import (  # noqa: E402
+    build_clip_candidate_for_video,
+    build_media_pdca_records,
+    build_media_post_queue_item,
+    build_transcript_row,
+    clip_count_for_video,
+    clips_overlap,
+)
 from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
 
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
@@ -69,6 +77,7 @@ def build_media_growth_plan(account_id: str, *, apply: bool = False, confirm_med
     source_results = []
     transcript_rows = []
     clip_candidates = []
+    media_post_queue_preview = []
     for source in selected:
         rights = str(source.get("rights_status", ""))
         source_blocked = []
@@ -82,13 +91,6 @@ def build_media_growth_plan(account_id: str, *, apply: bool = False, confirm_med
         if is_channel_or_account_url(source):
             transcript_status = "INDIVIDUAL_VIDEO_URL_REQUIRED"
         transcript_rows.append(build_transcript_row(source, status=transcript_status, title=source.get("source_name", "")))
-        per_source_candidates = []
-        if not source_blocked:
-            for i in range(1, int(config.get("max_clips_per_source_per_run", 3)) + 1):
-                cand = build_clip_candidate(source, i, has_transcript=False)
-                cand["download_status"] = "INDIVIDUAL_VIDEO_URL_REQUIRED" if is_channel_or_account_url(source) else "NOT_DOWNLOADED"
-                per_source_candidates.append(cand)
-                clip_candidates.append(cand)
         source_results.append({
             "source_id": source.get("source_id"),
             "source_url": source.get("source_url"),
@@ -97,12 +99,58 @@ def build_media_growth_plan(account_id: str, *, apply: bool = False, confirm_med
             "permission_evidence": "PASS" if permission_ok(source) else "BLOCKED",
             "metadata_status": "PLAN_ONLY",
             "transcript_status": transcript_status,
-            "clip_candidate_count": len(per_source_candidates),
+            "clip_candidate_count": 0,
             "blocked_reasons": source_blocked,
         })
+
+    existing_source_videos = load_existing_source_videos()
+    discovery_plan = build_discovery_plan(account_id, existing_source_videos=existing_source_videos)
+    planned_source_videos = existing_source_videos or discovery_plan.get("new_videos_preview", [])
+    # Use the full bounded discovery plan in dry-run instead of only preview.
+    if not existing_source_videos:
+        planned_source_videos = []
+        for result in discovery_plan.get("source_results", []):
+            source = next((s for s in selected if s.get("source_id") == result.get("source_id")), None)
+            if not source or result.get("blocked_reasons"):
+                continue
+            from media_growth_schemas import build_source_video  # local import keeps public API stable
+            for i in range(1, min(int(config.get("max_new_videos_per_source_per_run", 10)), 3) + 1):
+                planned_source_videos.append(build_source_video(source, i))
+
+    source_by_id = {str(s.get("source_id", "")): s for s in selected}
     output = generate_reader_facing_post(account_id, index=1)
     public_text = str(output["public_post_text"])
     validation = final_public_post_validator(public_text, account_id)
+    existing_clips: list[dict[str, Any]] = []
+    for source_video in planned_source_videos:
+        source = source_by_id.get(str(source_video.get("source_id", "")))
+        if not source:
+            continue
+        count = clip_count_for_video(source_video, config)
+        video_candidates = []
+        for i in range(1, count + 1):
+            cand = build_clip_candidate_for_video(
+                source,
+                source_video,
+                i,
+                config=config,
+                public_post_text=public_text,
+                validator_status=validation["status"],
+            )
+            if any(clips_overlap(cand, old, config.get("clip_overlap_tolerance_seconds", 2)) for old in existing_clips):
+                cand["clip_status"] = "SKIPPED"
+                cand["reviewer_status"] = "SKIPPED"
+                cand["selected_reason"] = "overlap_blocked"
+                continue
+            existing_clips.append(cand)
+            video_candidates.append(cand)
+            clip_candidates.append(cand)
+        source_video["clip_candidate_count"] = len(video_candidates)
+        source_video["analysis_status"] = "ANALYZED"
+        source_video["discovery_status"] = "CLIP_CANDIDATES_READY" if video_candidates else source_video.get("discovery_status", "DISCOVERED")
+    media_post_queue_preview = [build_media_post_queue_item(c) for c in clip_candidates[:3]]
+    for result in source_results:
+        result["clip_candidate_count"] = sum(1 for c in clip_candidates if c.get("source_id") == result.get("source_id"))
     media_plan = {
         "download_enabled": bool(config.get("download_enabled")),
         "cut_enabled": bool(config.get("cut_enabled")),
@@ -123,9 +171,13 @@ def build_media_growth_plan(account_id: str, *, apply: bool = False, confirm_med
         "rights_check": "PASS" if all(r["rights_check"] == "PASS" for r in source_results) else "BLOCKED",
         "permission_evidence": "PASS" if all(r["permission_evidence"] == "PASS" for r in source_results) else "BLOCKED",
         "source_results": source_results,
+        "source_videos_source": "existing_source_videos" if existing_source_videos else "discovery_plan",
+        "source_video_count": len(planned_source_videos),
+        "source_videos_preview": planned_source_videos[:5],
         "video_transcripts_schema": transcript_rows,
         "clip_candidate_count": len(clip_candidates),
         "top_clip_candidates": clip_candidates[:5],
+        "media_post_queue_preview": media_post_queue_preview,
         "public_post_preview": public_preview(public_text),
         "final_public_post_validator": validation["status"],
         "media_plan": media_plan,

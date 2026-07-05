@@ -4,11 +4,97 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-07-04
+- Date: 2026-07-05
 - 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-07-04 (account-specific schedule and liver references)
+- 前回更新: 2026-07-04 (許可済み動画 Media Growth Engine 追加)
+
+## 最新作業内容 (2026-07-05) — 許可済みアカウント動画発見と複数clip候補生成
+
+### 本システムについて
+
+- `liver_manager` の許可済み YouTube/TikTok channel/account source から、bounded な動画候補 `source_videos` を作れるようにした。
+- 個別video URLの手入力だけに依存せず、source単位で動画候補を discovery plan として出せる。
+- `video_id` / `canonical_video_url` / fallback hash で重複管理する。
+- 1動画から1-3件の non-overlap clip candidate を生成できる。
+- media schedule はOFF。text-only autonomous schedule は維持。
+- 実download / 実cut / 実upload / Cloudinary upload / video post / transcription API は未実行。
+
+### 今回の作業ブランチ
+
+- `main`
+- 作業開始HEAD: `1847607e19f91b99aee336e041a1c0366f557a82`
+- 現在HEAD: commit後に `git rev-parse HEAD` で確認。
+
+### 変更ファイル一覧
+
+- `config/media_growth_engine.json`
+- `scripts/media_growth_schemas.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/download_approved_media.py`
+- `scripts/cut_approved_clips.py`
+- `scripts/upload_media_assets.py`
+- `src/sheets_client.py`
+- `src/storage/pipeline_store.py`
+- `docs/video-reference-runbook.md`
+- `docs/media-rights-template.md`
+- `docs/growth-loop-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/source-registry-inventory.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/discover_approved_source_videos.py`
+- discovery/source_videos/clip/pipeline/safety test files added in this turn.
+
+### 未完了事項
+
+- `source_video_discovery_apply_enabled=false` のため、実Sheets/local保存applyはまだOFF。
+- TikTok accountは limited/manual-safe plan。無制限profile scrapingは未実装・禁止。
+- 実download/cut/upload/postには reviewed `source_video_id` / `clip_candidate_id` と env+confirm が必要。
+
+### 残WARN
+
+- discovery dry-runは候補計画。実API/yt-dlpネットワーク取得はこの作業では行っていない。
+- 実運用前に、source_videosタブのapply可否と保存先を人間が確認すること。
+
+### テスト結果
+
+- この作業の最終テスト結果は完了報告の `tests結果` を参照。
+
+### dry-run結果
+
+- `discover_approved_source_videos.py --account-id liver_manager --dry-run`: approved 4 sourceのみ選択、bounded discovery plan、would_save_source_videos=false。
+- `run_media_growth_engine.py --account-id liver_manager --dry-run`: source_videos/discovery plan優先、video単位clip候補生成、would_download/cut/upload/post=false。
+
+### 次に触ってよいファイル
+
+- `scripts/discover_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/media_growth_schemas.py`
+- `config/media_growth_engine.json`
+- `docs/video-reference-runbook.md`
+
+### 衝突しやすいファイル
+
+- `src/sheets_client.py`
+- `docs/ai-work-handoff.md`
+- `config/media_growth_engine.json`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secrets/tokens/cookies/storage_state
+
+### 次AIへの引き継ぎメモ
+
+- 次に本番ONするなら、まず `source_video_discovery_apply_enabled=true` を別commitで検討し、`--apply --confirm-discovery` を source_videos 追記だけに限定する。
+- media download/cut/upload/post は引き続き別段階。scheduleへmedia投稿を混ぜない。
 
 ## 最新作業内容 (2026-07-04) — 許可済み動画 Media Growth Engine 追加
 

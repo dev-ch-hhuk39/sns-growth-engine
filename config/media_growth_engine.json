@@ -25,5 +25,37 @@
   "subtitle_enabled": true,
   "cloudinary_upload_enabled": false,
   "threads_video_post_enabled": false,
+  "source_video_discovery_enabled": true,
+  "source_video_discovery_apply_enabled": false,
+  "allowed_source_types_for_discovery": ["channel", "account"],
+  "max_videos_per_source_scan": 50,
+  "max_new_videos_per_source_per_run": 10,
+  "max_total_new_videos_per_run": 20,
+  "skip_already_seen_videos": true,
+  "skip_already_clipped_videos": false,
+  "allow_multiple_clips_per_video": true,
+  "max_clip_candidates_per_video": 3,
+  "min_clip_candidates_per_video": 1,
+  "clip_overlap_policy": "block_overlapping_ranges",
+  "clip_overlap_tolerance_seconds": 2,
+  "dedupe_keys": [
+    "platform",
+    "source_id",
+    "video_id",
+    "canonical_video_url"
+  ],
+  "video_status_flow": [
+    "DISCOVERED",
+    "TRANSCRIPT_PLANNED",
+    "ANALYZED",
+    "CLIP_CANDIDATES_READY",
+    "DOWNLOADED",
+    "CUT",
+    "UPLOADED",
+    "POSTED",
+    "SKIPPED",
+    "BLOCKED"
+  ],
+  "discovery_default_status": "DISCOVERED",
   "dry_run_default": true
 }

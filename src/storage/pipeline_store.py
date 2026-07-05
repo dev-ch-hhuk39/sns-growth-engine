@@ -37,6 +37,8 @@ PIPELINE_STAGES = [
     "pdca_runs",
     "prompt_improvement_suggestions",
     "source_collection_plans",
+    "source_videos",
+    "video_clip_candidates",
 ]
 
 QUEUE_ALLOWED_STATUSES = {"DRAFT", "WAITING_REVIEW", "PLANNED"}
