@@ -94,17 +94,19 @@ def _contains_any(text: str, terms: list[str]) -> list[str]:
 def quality_score(text: str, account_id: str) -> tuple[int, dict[str, int]]:
     length = len(text)
     clarity = 12 if 80 <= length <= 420 else 8 if 40 <= length <= 520 else 4
-    specificity = 12 if any(k in text for k in ("理由", "ポイント", "切り口", "準備", "相談", "配信", "夜職")) else 7
-    usefulness = 14 if any(k in text for k in ("分解", "整理", "具体", "使う", "設計", "改善")) else 8
+    specificity = 12 if any(k in text for k in ("理由", "ポイント", "準備", "相談", "配信", "夜職", "店", "初見", "コメント")) else 8
+    usefulness = 14 if any(k in text for k in ("整理", "具体", "改善", "大事", "選ぶ", "続け", "入りやすい", "変わる")) else 9
     account_terms = {
         "night_scout": ("夜職", "キャバ", "働く", "相談", "求人", "副収入"),
         "liver_manager": ("配信", "ライバー", "TikTok", "LIVE", "リスナー", "ギフト", "事務所"),
     }.get(account_id, ())
+    if account_id == "night_scout":
+        account_terms = (*account_terms, "移籍", "客層", "ノルマ", "担当", "出勤", "店")
     account_fit = 14 if any(k in text for k in account_terms) else 7
     first = text.splitlines()[0] if text else ""
     hook_strength = 12 if len(first) <= 45 and any(k in first for k in ("人", "理由", "ポイント", "仕組み", "見るべき")) else 7
     cta = 10 if any(k in text for k in ("相談", "プロフィール", "DM", "LINE")) else 6
-    originality = 12 if any(k in text for k in ("そのまま真似", "構造", "変換", "別角度")) else 8
+    originality = 12 if any(k in text for k in ("自分", "生活", "空気", "環境", "無理", "初見", "担当", "相談")) else 9
     tone_fit = 14 if not any(k in text for k in ("!!!", "絶対", "誰でも", "今すぐ稼げ")) else 4
     parts = {
         "clarity": clarity,

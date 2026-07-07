@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_run_autonomous_loop_preflight_no_real_post
+
+test_run_autonomous_loop_preflight_no_real_post()
+print('PASS test_run_autonomous_loop_preflight_no_real_post.py')

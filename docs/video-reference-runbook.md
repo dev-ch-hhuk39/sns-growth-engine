@@ -207,3 +207,16 @@ Clip candidate generation is now video-based:
 - Each clip candidate carries `source_video_id`, `video_id`, `canonical_video_url`, `duplicate_clip_key`, `public_post_text`, and `public_post_validator_status`.
 
 Real download/cut/upload/video post is still not scheduled. It remains env plus confirm gated and starts from reviewed `source_video_id` / `clip_candidate_id`.
+
+## Text-Only Schedule Boundary After 2026-07-07 Recovery
+
+The autonomous text-only schedule was repaired without enabling media execution:
+
+- `run_autonomous_loop.py` may use video/reference analysis as text inspiration only.
+- If video/source analysis fails, the runner can continue to safe text fallback generation.
+- Media Growth Engine remains dry-run/gated.
+- `source_video_discovery_apply_enabled=false` remains the default.
+- `download_enabled=false`, `cut_enabled=false`, `upload_enabled=false`, `video_post_enabled=false` remain the default.
+- No scheduled workflow posts video or media.
+
+Next media production step, when explicitly requested, should start with discovery/apply for `source_videos` only. It must not jump directly to download/cut/upload/post.

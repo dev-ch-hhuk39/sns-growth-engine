@@ -1474,6 +1474,91 @@
       "canonical_url": "https://www.threads.com/@chiikawan400"
     },
     {
+      "source_id": "src_ns_threads_user_chiishunin_s",
+      "source_name": "chiishunin_s Threads reference",
+      "source_platform": "threads",
+      "platform": "threads",
+      "source_type": "account",
+      "source_handle": "chiishunin_s",
+      "author_handle": "@chiishunin_s",
+      "source_url": "https://www.threads.com/@chiishunin_s",
+      "canonical_url": "https://www.threads.com/@chiishunin_s",
+      "target_account_ids": [
+        "night_scout"
+      ],
+      "target_account_id": "night_scout",
+      "collection_method": "manual_url",
+      "collection_mode": "reference_source",
+      "fallback": [
+        "browser_export",
+        "manual_json"
+      ],
+      "candidate_status": "candidate",
+      "current_status": "registered",
+      "active": true,
+      "fetch_enabled": true,
+      "manual_only": false,
+      "allow_network_fetch": true,
+      "allow_download": false,
+      "allow_cut": false,
+      "allow_upload": false,
+      "rights_status": "third_party_reference_only",
+      "rights_policy": "third_party_reference_only",
+      "reuse_policy": "reference_only",
+      "media_policy": "do_not_download",
+      "can_reuse_media": false,
+      "media_pipeline_eligible": false,
+      "clip_enabled": false,
+      "transcript_enabled": false,
+      "pdca_enabled": true,
+      "source_category": "text_reference",
+      "source_categories": [
+        "night_work_scout",
+        "text_reference"
+      ],
+      "usage_scope": "reference_analysis",
+      "usage_scopes": [
+        "reference_analysis",
+        "post_idea_seed",
+        "tone_reference",
+        "hook_reference",
+        "night_scout_topic_research"
+      ],
+      "use_cases": [
+        "structure_reference",
+        "hook_reference",
+        "idea_seed",
+        "trend_research",
+        "pdca_source"
+      ],
+      "target_platforms": [
+        "threads"
+      ],
+      "target_generation_modes": [
+        "reference_based",
+        "original_hypothesis"
+      ],
+      "subject_policy": {
+        "require_transform": true,
+        "no_aggressive_recruiting": true,
+        "no_suspicious_income_claims": true,
+        "rules": [
+          "require_transform",
+          "no_aggressive_recruiting",
+          "no_suspicious_income_claims"
+        ]
+      },
+      "default_queue_status": "WAITING_REVIEW",
+      "review_status": "APPROVED_REFERENCE_ONLY",
+      "priority": 18,
+      "auto_priority_change_allowed": false,
+      "created_at": "2026-07-07T00:00:00+09:00",
+      "updated_at": "2026-07-07T00:00:00+09:00",
+      "review_notes": "User-provided night_scout Threads reference. Use for post text inspiration, hook/tone/topic analysis only. Do not download/reuse media.",
+      "notes": "User-provided night_scout Threads reference. Use for post text inspiration, hook/tone/topic analysis only. Do not download/reuse media.",
+      "use_policy": "REFERENCE_ONLY"
+    },
+    {
       "source_id": "src_ns_yt_cand_002",
       "source_name": "night_scout YouTube reference 02",
       "source_platform": "youtube",

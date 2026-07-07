@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_media_growth_does_not_break_autonomous_text_posting
+
+test_media_growth_does_not_break_autonomous_text_posting()
+print('PASS test_media_growth_does_not_break_autonomous_text_posting.py')

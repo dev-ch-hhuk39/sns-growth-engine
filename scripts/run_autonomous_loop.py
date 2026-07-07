@@ -53,6 +53,31 @@ def account_scope(account_id: str, config: dict[str, Any]) -> list[str]:
     return [account_id] if account_id in allowed and account_id not in blocked else []
 
 
+def account_order_for_scope(
+    requested_account_id: str,
+    accounts: list[str],
+    config: dict[str, Any],
+    *,
+    posted_rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Use rotation only for manual all-account runs.
+
+    Account-specific scheduled workflows must never rotate away from their
+    fixed ACCOUNT_ID, otherwise the night/liver schedules can starve each other.
+    """
+    if requested_account_id != "all":
+        selected = accounts[0] if accounts else ""
+        return {
+            "enabled": False,
+            "strategy": "fixed_account_override",
+            "ordered_accounts": accounts,
+            "selected_account": selected,
+            "skipped_accounts": [],
+            "fallback_to_available_account": False,
+        }
+    return account_rotation_order(accounts, config, posted_rows=posted_rows or [])
+
+
 def build_gate_summary(config: dict[str, Any], rules: dict[str, Any]) -> dict[str, Any]:
     rule_defaults = rules.get("defaults", {})
     return {
@@ -284,8 +309,9 @@ def apply_preflight(plan: dict[str, Any]) -> dict[str, Any]:
         ok, reason = has_required_for_publish(resolve_credentials(account_id))
         if not ok:
             blocked.append(f"{account_id}:{reason}")
+    warnings: list[str] = []
     if plan.get("selected_source_count", 0) < 1:
-        blocked.append("source_selection_empty")
+        warnings.append("source_selection_empty_fallback_original_available")
     if plan.get("safety", {}).get("x_fetch") or plan.get("safety", {}).get("x_post"):
         blocked.append("x_mixed_into_autonomous_plan")
     if plan.get("safety", {}).get("beauty_account"):
@@ -295,6 +321,7 @@ def apply_preflight(plan: dict[str, Any]) -> dict[str, Any]:
     return {
         "ok": not blocked,
         "blocked_reasons": blocked,
+        "warnings": warnings,
         "sheets_credentials_set": bool(cfg.get("sheet_id") and cfg.get("sa_dict")),
         "threads_credentials_checked": list(plan.get("accounts", [])),
     }
@@ -352,7 +379,7 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
     rules = rules or load_auto_approval_rules()
     gate = build_gate_summary(config, rules)
     accounts = account_scope(account_id, config)
-    rotation = account_rotation_order(accounts, config, posted_rows=[])
+    rotation = account_order_for_scope(account_id, accounts, config, posted_rows=[])
     rotated_accounts = rotation.get("ordered_accounts", accounts)
 
     base_sources = load_sources().get("sources", [])
@@ -460,6 +487,62 @@ def _run(cmd: list[str], *, env: dict[str, str] | None = None) -> dict[str, Any]
     }
 
 
+def infer_no_post_reason(result: dict[str, Any]) -> str:
+    text = f"{result.get('stdout_tail', '')}\n{result.get('stderr_tail', '')}"
+    if '"status": "POSTED"' in text:
+        return ""
+    if "no eligible Threads queue rows" in text:
+        return "NO_READY_QUEUE"
+    if "FINAL_PUBLIC_POST_VALIDATOR_BLOCKED" in text or "BLOCKED_INTERNAL_LEAK" in text:
+        return "VALIDATOR_BLOCKED_ALL"
+    if "DUPLICATE_BLOCKED" in text:
+        return "DUPLICATE_BLOCKED_ALL"
+    if "THREADS_API_FAILED" in text:
+        return "THREADS_API_FAILED"
+    if "posted_results save failed" in text or "POSTED_SAVE_FAILED" in text:
+        return "POSTED_SAVE_FAILED"
+    if result.get("returncode") not in {0, None}:
+        return "COMMAND_FAILED"
+    return "NO_POST_UNKNOWN"
+
+
+def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[str, Any]]) -> dict[str, Any]:
+    process_results = [
+        r for r in results
+        if "process_threads_queue.py" in str(r.get("cmd", "")) and r.get("status") != "PLAN_ONLY"
+    ]
+    posted_count = sum(1 for r in process_results if '"status": "POSTED"' in str(r.get("stdout_tail", "")))
+    blocked_count = sum(
+        1 for r in process_results
+        if any(token in str(r.get("stdout_tail", "")) for token in ("BLOCKED", "BLOCKED_INTERNAL_LEAK", "DUPLICATE_BLOCKED"))
+    )
+    no_post_reasons = [infer_no_post_reason(r) for r in process_results]
+    no_post_reasons = [r for r in no_post_reasons if r]
+    ready_count = 0
+    for r in results:
+        text = str(r.get("stdout_tail", ""))
+        if '"updated_count":' in text:
+            try:
+                decoder = json.JSONDecoder()
+                for idx, char in enumerate(text):
+                    if char == "{":
+                        obj, _ = decoder.raw_decode(text[idx:])
+                        ready_count += int(obj.get("updated_count", 0))
+                        break
+            except Exception:
+                pass
+    return {
+        "account_id": account_id,
+        "mode": mode,
+        "ready_count": ready_count,
+        "processed_count": len(process_results),
+        "posted_count": posted_count,
+        "blocked_count": blocked_count,
+        "no_post_reason": "" if posted_count else (no_post_reasons[0] if no_post_reasons else "NO_PROCESS_STEP"),
+        "apply_status": "POSTED" if posted_count else ("NO_POST" if process_results else "NOT_PROCESSED"),
+    }
+
+
 def source_ids_for_platform(plan: dict[str, Any], platform: str) -> list[str]:
     ids: list[str] = []
     for rows in plan.get("selected_pilot_sources", {}).values():
@@ -488,7 +571,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
     if not dry:
         config = load_autonomous_config()
         posted_rows_for_caps = load_posted_results_for_rotation()
-        rotation = account_rotation_order(accounts, config, posted_rows=posted_rows_for_caps)
+        rotation = account_order_for_scope(args.account_id, accounts, config, posted_rows=posted_rows_for_caps)
         accounts = list(rotation.get("ordered_accounts", accounts))
         plan["account_rotation"] = rotation
         plan["selected_account"] = rotation.get("selected_account", accounts[0] if accounts else "")
@@ -545,13 +628,17 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         results.append(result)
         return result.get("returncode") == 0
 
+    def run_optional_step(cmd: list[str], *, warning_reason: str, env: dict[str, str] | None = None) -> None:
+        ok = run_step(cmd, env=env)
+        if not ok:
+            plan.setdefault("warnings", []).append(warning_reason)
+
     video_urls = source_urls_for_platform(plan, "youtube") + source_urls_for_platform(plan, "tiktok")
     if video_urls:
         cmd = [sys.executable, "scripts/collect_video_references.py", "--account-id", "liver_manager", "--dry-run", "--fetch-metadata", "--fetch-transcript"]
         for url in video_urls:
             cmd += ["--url", url]
-        if not run_step(cmd):
-            return results
+        run_optional_step(cmd, warning_reason="video_reference_analysis_failed_non_blocking")
     if threads_source_urls and plan["gate_summary"]["auto_source_fetch_enabled"]:
         cmd = [
             sys.executable,
@@ -567,8 +654,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         ]
         for url in threads_source_urls:
             cmd += ["--source-url", url]
-        if not run_step(cmd):
-            return results
+        run_optional_step(cmd, warning_reason="threads_source_collect_failed_fallback_generation_enabled")
     max_posts_per_run = max(1, int(plan["gate_summary"].get("max_posts_per_run", 1)))
     daily_post_cap = int(plan["gate_summary"].get("daily_post_cap_per_account", 1))
     post_candidate_accounts = []
@@ -596,8 +682,10 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
                 "reason": "max_posts_per_run_reached_before_account_apply",
             })
             continue
-        if not run_step([sys.executable, "scripts/score_reference_posts.py", "--account-id", account, "--apply", "--confirm-score"]):
-            return results
+        run_optional_step(
+            [sys.executable, "scripts/score_reference_posts.py", "--account-id", account, "--apply", "--confirm-score"],
+            warning_reason=f"{account}:reference_scoring_failed_fallback_generation_enabled",
+        )
         if not run_step([sys.executable, "scripts/generate_threads_ideas_from_references.py", "--account-id", account, "--apply", "--confirm-generate"]):
             return results
         if not run_step([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"]):
@@ -632,6 +720,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="run autonomous SNS growth loop")
     parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--dry-run", action="store_true", help="plan only (default)")
+    parser.add_argument("--preflight", action="store_true", help="read-only production readiness check; never posts")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-autonomous", action="store_true")
     return parser.parse_args()
@@ -649,6 +738,16 @@ def main() -> int:
     if args.apply and not args.confirm_autonomous:
         print(json.dumps({**plan, "status": "BLOCKED", "blocked_reasons": ["--apply requires --confirm-autonomous"]}, ensure_ascii=False, indent=2))
         return 1
+    if args.preflight:
+        preflight = apply_preflight(plan)
+        print(json.dumps({
+            **plan,
+            "mode": "preflight",
+            "status": "PREFLIGHT_PASS" if preflight["ok"] else "BLOCKED",
+            "apply_preflight": preflight,
+            "would_post": False,
+        }, ensure_ascii=False, indent=2))
+        return 0 if preflight["ok"] else 1
     if plan["blocked_reasons"]:
         print(json.dumps(plan, ensure_ascii=False, indent=2))
         return 1
@@ -661,14 +760,15 @@ def main() -> int:
             return 1
         verify = verify_sheets_connectivity()
         if verify.get("returncode") != 0:
-            print(json.dumps({**plan, "mode": mode, "status": "BLOCKED", "apply_preflight": preflight, "verify_result": verify, "blocked_reasons": ["sheets_verify_failed"]}, ensure_ascii=False, indent=2))
-            return 1
+            plan["verify_result"] = verify
+            plan.setdefault("warnings", []).append("sheets_verify_failed_non_blocking_runner_will_validate")
     results = build_results(args, plan)
     failed_results = [r for r in results if r.get("returncode") not in {0, None}]
     status = "DONE" if mode == "apply" and not failed_results else "PLAN_ONLY"
     if failed_results:
         status = "PARTIAL" if mode == "apply" else "PLAN_ONLY_WITH_WARN"
-    print(json.dumps({**plan, "mode": mode, "status": status, "results": results}, ensure_ascii=False, indent=2))
+    health_summary = summarize_autonomous_results(args.account_id, mode, results)
+    print(json.dumps({**plan, "mode": mode, "status": status, "results": results, "health_summary": health_summary}, ensure_ascii=False, indent=2))
     return 1 if mode == "apply" and failed_results else 0
 
 

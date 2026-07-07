@@ -8,6 +8,39 @@ Created: 2026-06-24
 The project is operational for Threads-first manual review operation.
 `threads-queue-worker.yml` の Sheets verify は check 総数 **51 件**（2026-06-25 snapshot の 33 件 → item J の media/metrics チェック等で +8 → READY 承認モデルで +10）。合格条件は `failed=[]`（`passed` は seed 充足状況で変動）。READY 承認モデル追加後の live `--verify-only` 再確認は #68 で実施。
 
+## 2026-07-07 Update — Autonomous Posting Recovery
+
+Account-specific scheduled autonomous posting is still the production text-only path:
+
+- `Autonomous Growth Loop Night Scout`
+- `Autonomous Growth Loop Liver Manager`
+
+The schedules were firing, but recent runs failed before posting because `recover_production_sheets_threads_first.py --verify-only --json` returned non-posting registry reflection failures (`source_registry_reflected`, `video_sources_reflected`) and `run_autonomous_loop.py` treated that as a hard apply blocker.
+
+Recovery changes:
+
+- Sheets verify failure is now recorded as `sheets_verify_failed_non_blocking_runner_will_validate` and no longer blocks the whole autonomous apply by itself.
+- Source fetch, video reference, and reference scoring failures are soft-fail warnings so the runner can continue to safe fallback post generation.
+- If source posts/scores are empty, `generate_threads_ideas_from_references.py` creates validated reader-facing fallback candidates in `WAITING_REVIEW`.
+- `auto_approve_queue.py` can promote safe fallback candidates to `READY`.
+- `process_threads_queue.py` reports `NO_POST` / `NO_READY_QUEUE` as JSON when there is no eligible queue row.
+- Scheduled workflows now run `scripts/check_autonomous_health.py --dry-run` in an `if: always()` summary step.
+- Added `src_ns_threads_user_chiishunin_s` as a `night_scout` Threads reference source.
+
+Current production state:
+
+- text-only schedule: ON
+- media schedule: OFF
+- X fetch/post: OFF
+- beauty posting: BLOCKED
+- real download/cut/upload/video post: OFF unless separate env+confirm gates are intentionally enabled
+- `kill_switch=false`
+- `daily_post_cap_per_account=5`
+- `max_posts_per_run=1`
+- `cooldown_minutes=90`
+
+Next scheduled run should be checked for `health_summary.posted_count`, `health_summary.no_post_reason`, `posted_results`, and queue status transitions.
+
 ## 2026-07-02 Update — Autonomous Text-Only Threads Pilot
 
 Autonomous mode has been added for the initial reviewed text-only Threads pilot.

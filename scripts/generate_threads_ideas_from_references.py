@@ -31,7 +31,7 @@ import difflib
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -279,6 +279,104 @@ def build_generation_rows(
     return {"drafts": drafts, "social_derivatives": derivatives, "queue": queues}
 
 
+def _fallback_template_index(offset: int) -> int:
+    """Rotate safe original templates across daily runs without source data."""
+    jst = timezone(timedelta(hours=9))
+    now = datetime.now(timezone.utc).astimezone(jst)
+    return ((now.timetuple().tm_yday * 5 + now.hour + offset) % 10) + 1
+
+
+def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, list[dict[str, Any]]]:
+    """Build safe reader-facing original candidates when reference data is empty.
+
+    This is the production recovery path for scheduled autonomous posting: it
+    keeps the public text separate, validates it, writes WAITING_REVIEW only,
+    and lets auto_approve_queue decide whether it may become READY.
+    """
+    created = now_iso()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    drafts: list[dict[str, Any]] = []
+    derivatives: list[dict[str, Any]] = []
+    queues: list[dict[str, Any]] = []
+    for i in range(1, max(1, top_n) + 1):
+        variant_index = _fallback_template_index(i)
+        output = generate_reader_facing_post(account_id, index=variant_index)
+        body = str(output["public_post_text"])
+        validation = final_public_post_validator(body, account_id)
+        if validation["status"] != "PASS":
+            continue
+        stable = _safe_id(f"{account_id}_fallback_{stamp}_{i}")
+        draft_id = f"idea_{stable}"
+        derivative_id = f"sd_{stable}_threads"
+        queue_id = f"q_{stable}_threads"
+        title = body.splitlines()[0][:80]
+        drafts.append({
+            "draft_id": draft_id,
+            "created_at": created,
+            "account_id": account_id,
+            "title": title,
+            "body_md": body,
+            "content": body,
+            "cta_text": "必要ならプロフィールから相談",
+            "source_refs": "",
+            "status": CANDIDATE_STATUS,
+            "generation_model": CLI_NAME,
+            "generation_mode": "safe_original_fallback_threads",
+            "media_strategy": "none",
+            "imitation_risk": "low",
+            "media_reuse_risk": "low",
+            "transformation_type": "original_hypothesis",
+            "source_credit": "none",
+            "similarity_score": "0.0",
+            "direct_copy_guard": "PASS",
+            "buzz_potential_score": "",
+            "conversion_potential_score": "",
+            "confidence_level": "medium",
+            "ai_publish_recommendation": CANDIDATE_STATUS,
+            "notes": "Safe original fallback for autonomous text-only posting when reference rows are empty.",
+        })
+        derivatives.append({
+            "derivative_id": derivative_id,
+            "draft_id": draft_id,
+            "account_id": account_id,
+            "platform": "threads",
+            "text": body,
+            "hashtags": "",
+            "status": CANDIDATE_STATUS,
+            "reason": "AUTO_READY evaluation required before posting.",
+            "created_at": created,
+            "char_count": str(len(body)),
+            "text_policy_status": "PASS",
+            "media_strategy": "none",
+            "transformation_type": "original_hypothesis",
+            "source_credit": "none",
+            "similarity_score": "0.0",
+        })
+        queues.append({
+            "queue_id": queue_id,
+            "draft_id": draft_id,
+            "account_id": account_id,
+            "platform": "threads",
+            "scheduled_at": "",
+            "priority": str(50 + i),
+            "status": CANDIDATE_STATUS,
+            "error": "",
+            "created_at": created,
+            "processed_at": "",
+            "auto_publish": "false",
+            "generation_mode": "safe_original_fallback_threads",
+            "confidence_level": "medium",
+            "ai_publish_recommendation": CANDIDATE_STATUS,
+            "media_asset_id": "",
+            "text_policy_status": "PASS",
+            "rights_status": "not_required",
+            "permission_status": "not_required",
+            "rights_review_required": "false",
+            "media_reuse_risk": "low",
+        })
+    return {"drafts": drafts, "social_derivatives": derivatives, "queue": queues}
+
+
 def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, Any]]) -> dict[str, int]:
     if not rows:
         return {"added": 0, "skipped": 0}
@@ -306,6 +404,10 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dic
     posts = [dict(r) for r in client._ws("source_account_posts").get_all_records() if str(r.get("account_id", "")) == account_id]
     scores = [dict(r) for r in client._ws("reference_post_scores").get_all_records() if str(r.get("account_id", "")) == account_id]
     rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n)
+    fallback_used = False
+    if not rows["queue"]:
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n)
+        fallback_used = True
     summary = {
         "status": "PLAN_ONLY",
         "account_id": account_id,
@@ -313,6 +415,7 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dic
         "source_scores": len(scores),
         "candidate_count": len(rows["queue"]),
         "candidate_status": CANDIDATE_STATUS,
+        "fallback_original_used": fallback_used,
         "queue_ids": [r["queue_id"] for r in rows["queue"]],
         "worker_selectable": False,
         "real_post_possible_now": False,
@@ -320,7 +423,7 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dic
     if not apply:
         return summary
     if not rows["queue"]:
-        return {**summary, "status": "NO_DATA", "reason": "reference posts/scores are missing"}
+        return {**summary, "status": "NO_DATA", "reason": "reference posts/scores and fallback candidates are missing"}
     ops = {
         "drafts": _append_missing(client, "drafts", "draft_id", rows["drafts"]),
         "social_derivatives": _append_missing(client, "social_derivatives", "derivative_id", rows["social_derivatives"]),

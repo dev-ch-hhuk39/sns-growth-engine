@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_source_video_discovery_apply_disabled_by_default
+
+test_source_video_discovery_apply_disabled_by_default()
+print('PASS test_source_video_discovery_apply_disabled_by_default.py')

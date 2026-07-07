@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_account_specific_run_does_not_rotate_away
+
+test_account_specific_run_does_not_rotate_away()
+print('PASS test_account_specific_run_does_not_rotate_away.py')

@@ -91,3 +91,7 @@ jobs:
             --apply \
             --confirm-autonomous \
             --account-id "$ACCOUNT_ID"
+
+      - name: Autonomous health summary
+        if: always()
+        run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run

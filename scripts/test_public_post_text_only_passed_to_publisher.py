@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_public_post_text_only_passed_to_publisher
+
+test_public_post_text_only_passed_to_publisher()
+print('PASS test_public_post_text_only_passed_to_publisher.py')

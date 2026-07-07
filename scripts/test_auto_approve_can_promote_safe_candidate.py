@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_auto_approve_can_promote_safe_candidate
+
+test_auto_approve_can_promote_safe_candidate()
+print('PASS test_auto_approve_can_promote_safe_candidate.py')

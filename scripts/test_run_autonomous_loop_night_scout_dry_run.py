@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_run_autonomous_loop_night_scout_dry_run
+
+test_run_autonomous_loop_night_scout_dry_run()
+print('PASS test_run_autonomous_loop_night_scout_dry_run.py')

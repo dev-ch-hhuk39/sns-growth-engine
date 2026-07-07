@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_public_post_never_contains_internal_terms
+
+test_public_post_never_contains_internal_terms()
+print('PASS test_public_post_never_contains_internal_terms.py')

@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_no_source_fallback_generates_safe_public_post
+
+test_no_source_fallback_generates_safe_public_post()
+print('PASS test_no_source_fallback_generates_safe_public_post.py')

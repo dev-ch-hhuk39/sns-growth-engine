@@ -166,3 +166,18 @@ Approved channel/account URLs can now create bounded `source_videos` discovery c
 - Media execution: still requires reviewed `source_video_id`, `clip_candidate_id`, env gates, and confirm flags
 - Media schedule: OFF
 - Text-only schedule: unchanged
+
+## 2026-07-07 Night Scout Threads Reference Addition
+
+Added a user-provided Threads reference for `night_scout`:
+
+| platform | source_url | source_type | target_account_id | usage_scope | rights_status | fetch_enabled | manual_only | clip_enabled | media_pipeline_eligible | current_status | notes |
+|---|---|---|---|---|---|---:|---:|---:|---:|---|---|
+| threads | https://www.threads.com/@chiishunin_s | account | night_scout | reference_analysis / post_idea_seed / tone_reference / hook_reference / night_scout_topic_research | third_party_reference_only | true | false | false | false | registered | User-provided night_scout Threads reference. Use for hook/tone/topic inspiration only. Do not download/reuse media. Do not mention source name or URL in public posts. |
+
+Safety notes:
+
+- This source is not media pipeline eligible.
+- It must not be copied verbatim.
+- It must pass similarity and `final_public_post_validator`.
+- It is allowed for text reference collection only. X/beauty/media gates remain unchanged.

@@ -188,3 +188,37 @@ Current defaults:
 - `clip_overlap_policy=block_overlapping_ranges`
 
 `run_media_growth_engine.py` now prefers `source_videos`; if none are saved yet, it uses the dry-run discovery plan as the candidate source. Download/cut/upload/video post remain false.
+
+## Autonomous Text-Only Recovery (2026-07-07)
+
+`run_autonomous_loop.py` is the production text-only automation entrypoint. Scheduled Actions were running, but posting stopped because read-only Sheets verification failed on registry reflection checks and the runner treated that as a hard apply blocker.
+
+Current recovery behavior:
+
+1. `run_autonomous_loop.py --apply --confirm-autonomous --account-id <account>` performs a credential/safety preflight.
+2. `recover_production_sheets_threads_first.py --verify-only --json` failure is recorded as a warning, not a hard stop.
+3. Threads source fetch, video reference analysis, and reference scoring are allowed to soft-fail.
+4. If reference rows are empty, `generate_threads_ideas_from_references.py` creates safe original fallback `WAITING_REVIEW` candidates.
+5. `auto_approve_queue.py` promotes only passing text-only candidates to `READY`.
+6. `process_threads_queue.py` posts only `READY` and writes `posted_results` / PDCA initial records.
+7. If no post happens, `health_summary.no_post_reason` identifies the cause.
+
+Read-only health:
+
+```bash
+python3 scripts/check_autonomous_health.py --account-id all --dry-run
+```
+
+Production schedules:
+
+- `night_scout`: JST 14:00, 16:00, 18:00, 21:00, 25:00 with 0-1800s jitter.
+- `liver_manager`: JST 10:00, 13:00, 16:00, 18:00, 21:00 with 0-1800s jitter.
+
+Caps remain:
+
+- `daily_post_cap_per_account=5`
+- `daily_ready_cap_per_account=8`
+- `max_posts_per_run=1`
+- `cooldown_minutes=90`
+
+Media Growth Engine remains separate: media schedule OFF; download/cut/upload/video post require explicit env+confirm gates and are not part of text-only scheduled posting.

@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_process_threads_queue_reports_no_post_reason
+
+test_process_threads_queue_reports_no_post_reason()
+print('PASS test_process_threads_queue_reports_no_post_reason.py')

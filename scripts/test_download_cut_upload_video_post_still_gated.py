@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_download_cut_upload_video_post_still_gated
+
+test_download_cut_upload_video_post_still_gated()
+print('PASS test_download_cut_upload_video_post_still_gated.py')

@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_reference_similarity_guard_still_blocks_copy
+
+test_reference_similarity_guard_still_blocks_copy()
+print('PASS test_reference_similarity_guard_still_blocks_copy.py')

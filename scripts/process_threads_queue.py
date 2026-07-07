@@ -587,6 +587,13 @@ def main() -> int:
     print(f"[process_threads_queue] candidates={len(candidates)} dry_run={args.dry_run} max_posts={args.max_posts}")
     if not candidates:
         print("[DONE] no eligible Threads queue rows")
+        print(json.dumps({
+            "status": "NO_POST",
+            "reason": "NO_READY_QUEUE",
+            "account_id": args.account_id or "all",
+            "eligible_statuses": sorted(ELIGIBLE_STATUSES),
+            "dry_run": args.dry_run,
+        }, ensure_ascii=False))
         return 0
 
     results = []

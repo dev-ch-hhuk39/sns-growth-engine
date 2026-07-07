@@ -4,11 +4,147 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-07-05
+- Date: 2026-07-07
 - 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-07-04 (許可済み動画 Media Growth Engine 追加)
+- 前回更新: 2026-07-05 (許可済みアカウント動画発見と複数clip候補生成)
+
+## 最新作業内容 (2026-07-07) — 自動投稿停止復旧と night_scout Threads 参考元追加
+
+### 本システムについて
+
+- text-only autonomous Threads posting は `night_scout` / `liver_manager` の account-specific scheduled workflow で運用する。
+- media schedule はOFF。Media Growth Engine / Source Video Discovery は dry-run/gated のまま。
+- X fetch/post、beauty投稿、third-party media download/cut/upload/repost、Cloudinary upload、transcription API は引き続き禁止。
+- 投稿本文は `public_post_text` のみを publisher に渡す。`internal_analysis` / source / queue / score / metadata / transcript / AI生成メモは投稿本文に混ぜない。
+
+### 自動投稿停止の原因
+
+- GitHub Actions schedule 自体は起動していた。
+- 直近の scheduled run は `scripts/recover_production_sheets_threads_first.py --verify-only --json` の `source_registry_reflected` / `video_sources_reflected` FAIL を hard BLOCK として扱い、apply前に終了していた。
+- 参考投稿/scoreが空の場合、`generate_threads_ideas_from_references.py` が `NO_DATA` で候補を作らず、AUTO_READY/workerへ在庫が渡らない構造だった。
+- source fetch / score など外部依存ステップが失敗すると、fallback生成へ進まず投稿停止する構造だった。
+
+### 修正内容
+
+- `run_autonomous_loop.py`
+  - account-specific workflowでは rotation を使わず、固定 `ACCOUNT_ID` を優先。
+  - `--preflight` を追加。実投稿なしで Sheets/Threads credential presence、kill_switch、source/validator状態を確認。
+  - Sheets verify failure は non-blocking warning に変更。実際のSheets/worker処理で最終検証する。
+  - source fetch / video reference / scoring failure は soft-fail warning とし、安全なfallback投稿生成へ進む。
+  - `health_summary` に ready/processed/posted/blocked/no_post_reason を出力。
+- `generate_threads_ideas_from_references.py`
+  - source posts/scores が空でも、reader-facing original fallback を `WAITING_REVIEW` に生成。
+  - fallback本文も `final_public_post_validator` を通す。
+- `auto_approve_queue.py`
+  - 内部メモ寄り語彙に依存していた品質スコアを読者向け投稿語彙へ修正。
+- `process_threads_queue.py`
+  - READY候補なしを `{"status":"NO_POST","reason":"NO_READY_QUEUE"}` としてJSON出力。
+- `.github/workflows/autonomous-growth-loop*.yml`
+  - `Autonomous health summary` step を `if: always()` で追加。
+- `scripts/check_autonomous_health.py`
+  - workflow/config/schema/source/media gateを読み取り専用で確認。secret値は表示しない。
+- `config/source_accounts/default_sources.json`
+  - `src_ns_threads_user_chiishunin_s` を追加。
+
+### 今回の作業ブランチ
+
+- `main`
+- 作業開始HEAD: `a861c4388a056a9d76cf6d684f8cc06da2b73e8a`
+- 現在HEAD: commit後に `git rev-parse HEAD` で確認。
+
+### 変更ファイル一覧
+
+- `.github/workflows/autonomous-growth-loop.yml`
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+- `config/source_accounts/default_sources.json`
+- `scripts/run_autonomous_loop.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/process_threads_queue.py`
+- `scripts/public_post_quality.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `docs/autonomous-mode-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/source-registry-inventory.md`
+- `docs/video-reference-runbook.md`
+
+### 追加ファイル一覧
+
+- `scripts/check_autonomous_health.py`
+- `scripts/autonomous_recovery_test_utils.py`
+- autonomous recovery / workflow / fallback / chiishunin / media-gate test entry files added in this turn.
+
+### 未完了事項
+
+- 実投稿は今回未実行。次回scheduled runで自然にapplyされる。
+- GitHub Actionsの最新runは修正前HEADのため失敗履歴が残っている。次回runで `health_summary` と posted_results を確認する。
+- Sheets上の `source_accounts/reference_sources` reflect差分は verify warning として残る可能性があるが、今回のrunnerでは投稿停止原因にしない。
+
+### 残WARN
+
+- ローカル `check_autonomous_health.py` では env secret presence は未設定表示。Actions上では既存ログでSheets/Threads secretsはSET確認済み。
+- `gh workflow list` は一度ネットワーク接続エラー。`gh run list` / `gh run view` は取得できた。
+
+### 全テスト結果
+
+- 指定autonomous recovery tests: PASS
+- 既存安全テスト: `test_all_workflows_safety_flags.py`, `test_autonomous_workflow_no_x_no_media.py`, `test_autonomous_posts_only_threads.py`, `test_source_registry_no_beauty_active.py`, `test_source_registry_no_x_fetch_by_default.py`, `test_rights_status_policy.py`, `test_internal_terms_never_in_posted_text.py` PASS
+- `py_compile`: PASS
+- `git diff --check`: PASS
+
+### dry-run結果
+
+- `check_autonomous_health.py --account-id all --dry-run`: PASS、workflow schedule valid、media schedule OFF、x_fetch_enabled=0、beauty_active=0。
+- `run_autonomous_loop.py --account-id night_scout --dry-run`: selected_account=`night_scout`, internal_leak_check=PASS, final_validator_result=PASS, would_post=false。
+- `run_autonomous_loop.py --account-id liver_manager --dry-run`: selected_account=`liver_manager`, internal_leak_check=PASS, final_validator_result=PASS, would_post=false。
+
+### confirmなしBLOCKED確認結果
+
+- `run_autonomous_loop.py --apply` は `--confirm-autonomous` が無い場合 BLOCKED。
+- `process_threads_queue.py` は real post に `--confirm-real-post`, `PUBLISH_ENABLED=true`, `ALLOW_REAL_THREADS_POST=true` が必要。
+- download/cut/upload/video post は既存 env + confirm gate のまま。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `scripts/run_autonomous_loop.py`
+- `scripts/check_autonomous_health.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `docs/autonomous-mode-runbook.md`
+- `docs/growth-loop-runbook.md`
+
+### 次にCodexが触ってよいファイル
+
+- `scripts/process_threads_queue.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/public_post_quality.py`
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+
+### 衝突しやすいファイル
+
+- `config/source_accounts/default_sources.json`
+- `scripts/run_autonomous_loop.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secrets/tokens/cookies/storage_state
+
+### 次AIへの引き継ぎメモ
+
+- 次回scheduled runでは、まず Actions log の `health_summary.no_post_reason`, `posted_count`, `ready_count` を見る。
+- `sheets_verify_failed_non_blocking_runner_will_validate` が出ても、それ単体では投稿停止しない設計に変更済み。
+- 投稿されない場合は `NO_READY_QUEUE`, `AUTO_READY_REJECTED_ALL`, `VALIDATOR_BLOCKED_ALL`, `DUPLICATE_BLOCKED_ALL`, `DAILY_CAP_REACHED`, `COOLDOWN_ACTIVE`, `THREADS_API_FAILED`, `POSTED_SAVE_FAILED` のいずれかを確認する。
+- 変な投稿が出た場合は即 `kill_switch=true` にする。
 
 ## 最新作業内容 (2026-07-05) — 許可済みアカウント動画発見と複数clip候補生成
 

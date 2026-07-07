@@ -1,6 +1,6 @@
 # Autonomous Mode Runbook
 
-Date: 2026-07-02
+Date: 2026-07-07
 
 ## Purpose
 
@@ -31,11 +31,11 @@ Important initial values:
 - `auto_ready_enabled=true`
 - `auto_post_enabled=true`
 - `human_review_required=false`
-- `daily_post_cap_per_account=1`
-- `daily_ready_cap_per_account=2`
+- `daily_post_cap_per_account=5`
+- `daily_ready_cap_per_account=8`
 - `max_posts_per_run=1`
-- `cooldown_minutes=180`
-- `max_similarity_to_source=0.55`
+- `cooldown_minutes=90`
+- `max_similarity_to_source=0.45`
 - `kill_switch=false`
 
 Existing `config/auto_approval_rules.json` remains integrated for legacy AUTO_READY policy and safety defaults. Autonomous priority order is:
@@ -77,13 +77,15 @@ There is no per-post approval prompt in autonomous mode. The explicit run approv
 
 ## GitHub Actions
 
-Workflow:
+Workflows:
 
 ```bash
 .github/workflows/autonomous-growth-loop.yml
+.github/workflows/autonomous-growth-loop-night-scout.yml
+.github/workflows/autonomous-growth-loop-liver-manager.yml
 ```
 
-It is `workflow_dispatch` only at initial launch. The apply step runs only when `confirm_autonomous=true`.
+The manual workflow is `workflow_dispatch` only. The account-specific workflows have schedules and fixed `ACCOUNT_ID`; scheduled runs apply automatically while preserving the real-post gates.
 
 ### First Apply From GitHub UI
 
@@ -132,23 +134,76 @@ Optional/unused in the initial text-only run:
 
 ### Schedule Policy
 
-The first Actions apply succeeded on run `28571552118`, and the workflow schedule is now enabled.
+The first Actions apply succeeded on run `28571552118`. The original daily combined schedule has been replaced by account-specific schedules.
 
-Current schedule:
+Current schedules:
 
 ```yaml
-schedule:
-  # JST 09:15 daily
-  - cron: "15 0 * * *"
+night_scout:
+  # JST 14:00/16:00/18:00/21:00/25:00 targets, cron starts 15 min earlier.
+  - cron: "45 4 * * *"
+  - cron: "45 6 * * *"
+  - cron: "45 8 * * *"
+  - cron: "45 11 * * *"
+  - cron: "45 15 * * *"
+
+liver_manager:
+  # JST 10:00/13:00/16:00/18:00/21:00 targets, cron starts 15 min earlier.
+  - cron: "45 0 * * *"
+  - cron: "45 3 * * *"
+  - cron: "45 6 * * *"
+  - cron: "45 8 * * *"
+  - cron: "45 11 * * *"
 ```
 
 Operational rules:
 
-- Scheduled runs apply automatically once per day at JST 09:15.
+- Scheduled runs apply automatically in the account-specific windows above.
+- Each scheduled run sleeps a random `0-1800` seconds before dry-run/apply.
 - Manual runs still use `workflow_dispatch` and `confirm_autonomous=true`.
-- Keep `max_posts_per_run=1`, `daily_post_cap_per_account=1`, and `cooldown_minutes=180`.
+- Keep `max_posts_per_run=1`, `daily_post_cap_per_account=5`, and `cooldown_minutes=90`.
 - If a bad post appears, set `kill_switch=true` in `config/autonomous_mode.json`, commit, and push.
-- To stop the schedule without changing runtime config, comment out the `schedule` block in `.github/workflows/autonomous-growth-loop.yml` and push.
+- To stop a schedule without changing runtime config, comment out the `schedule` block in the account-specific workflow and push.
+
+### 2026-07-07 Posting Recovery
+
+Recent scheduled runs were firing but failed before posting. The direct cause was `run_autonomous_loop.py` treating `recover_production_sheets_threads_first.py --verify-only --json` registry reflection failures as a hard blocker:
+
+- `source_registry_reflected`
+- `video_sources_reflected`
+
+The runner now records that as a non-blocking warning and lets the actual Sheets/worker steps validate. Source fetch, video reference, and reference scoring failures are also warnings so safe fallback generation can proceed.
+
+Fallback behavior:
+
+- If reference posts/scores are empty, `generate_threads_ideas_from_references.py` creates reader-facing original candidates.
+- Candidates are written as `WAITING_REVIEW`.
+- `auto_approve_queue.py` promotes only validator-passing text-only candidates to `READY`.
+- `process_threads_queue.py` posts only `READY` and reports no-post as JSON.
+
+Health check:
+
+```bash
+python3 scripts/check_autonomous_health.py --account-id all --dry-run
+```
+
+Check `health_summary` in scheduled run logs:
+
+- `posted_count`
+- `ready_count`
+- `blocked_count`
+- `no_post_reason`
+
+Common no-post reasons:
+
+- `NO_READY_QUEUE`
+- `AUTO_READY_REJECTED_ALL`
+- `VALIDATOR_BLOCKED_ALL`
+- `DUPLICATE_BLOCKED_ALL`
+- `DAILY_CAP_REACHED`
+- `COOLDOWN_ACTIVE`
+- `THREADS_API_FAILED`
+- `POSTED_SAVE_FAILED`
 
 ## Hard Blocks
 
