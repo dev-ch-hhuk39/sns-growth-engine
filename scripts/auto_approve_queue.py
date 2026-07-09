@@ -367,10 +367,38 @@ def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, An
             selected_times.setdefault(acct, []).append(now_utc())
             text = text_for_item(q, draft, deriv)
             existing_for_dup.append(text)
+    rejected = [r for r in evaluated if r["status"] != "APPROVABLE"]
+    reason_counts: dict[str, int] = {}
+    for row in rejected:
+        for reason in row.get("reasons", []):
+            reason_counts[str(reason)] = reason_counts.get(str(reason), 0) + 1
+    sample_rejected: list[dict[str, Any]] = []
+    queue_by_id = {str(r.get("queue_id", "")): r for r in queue_rows}
+    for row in rejected[:5]:
+        q = queue_by_id.get(str(row.get("queue_id", "")), {})
+        draft = drafts.get(str(q.get("draft_id", "")))
+        deriv = derivatives.get((str(q.get("draft_id", "")), "threads"))
+        sample_rejected.append({
+            "queue_id": row.get("queue_id", ""),
+            "account_id": row.get("account_id", ""),
+            "reasons": row.get("reasons", []),
+            "validator_status": row.get("final_public_post_validator", ""),
+            "quality_score": row.get("quality_score", ""),
+            "account_fit_score": row.get("account_fit_score", ""),
+            "internal_leak_score": row.get("internal_leak_score", ""),
+            "duplicate_status": "duplicate_or_near_duplicate" if "duplicate_or_near_duplicate" in row.get("reasons", []) else "PASS",
+            "public_post_preview": text_for_item(q, draft, deriv)[:160],
+        })
     return {
         "status": "PLAN_READY",
         "evaluated_count": len(evaluated),
         "approvable_count": len(approvable),
+        "checked_count": len(evaluated),
+        "approved_count": len(approvable),
+        "rejected_count": len(rejected),
+        "ready_count": len(approvable),
+        "rejected_reasons": dict(sorted(reason_counts.items())),
+        "sample_rejected_public_post_preview": sample_rejected,
         "selected_queue_ids": [r["queue_id"] for r in approvable],
         "results": evaluated,
     }
@@ -393,6 +421,16 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
             quality_score=str(r["quality_score"]),
             safety_score=str(r["safety_score"]),
             risk_score=str(r["risk_score"]),
+            validator_status=str(r.get("final_public_post_validator", "")),
+            internal_leak_status="PASS" if int(r.get("internal_leak_score", 100)) == 0 else "BLOCKED",
+            account_fit_status="PASS" if int(r.get("account_fit_score", 0)) >= 80 else "WARN",
+            public_post_quality_score=str(r.get("public_post_quality_score", "")),
+            reader_value_score=str(r.get("reader_value_score", "")),
+            naturalness_score=str(r.get("naturalness_score", "")),
+            cta_pressure_score=str(r.get("cta_pressure_score", "")),
+            rejected_reason="",
+            blocked_reason="",
+            updated_at=at,
         )
         client.log(
             operation="queue_approved",
@@ -403,6 +441,28 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
             level="INFO",
         )
         updated.append(qid)
+    for r in plan["results"]:
+        if r["status"] == "APPROVABLE":
+            continue
+        qid = str(r.get("queue_id", ""))
+        if not qid:
+            continue
+        reason = ",".join(str(x) for x in r.get("reasons", []))[:500]
+        client.update_queue_item(
+            qid,
+            validator_status=str(r.get("final_public_post_validator", "")),
+            internal_leak_status="PASS" if int(r.get("internal_leak_score", 100)) == 0 else "BLOCKED",
+            account_fit_status="PASS" if int(r.get("account_fit_score", 0)) >= 80 else "WARN",
+            quality_score=str(r.get("quality_score", "")),
+            safety_score=str(r.get("safety_score", "")),
+            risk_score=str(r.get("risk_score", "")),
+            public_post_quality_score=str(r.get("public_post_quality_score", "")),
+            reader_value_score=str(r.get("reader_value_score", "")),
+            naturalness_score=str(r.get("naturalness_score", "")),
+            cta_pressure_score=str(r.get("cta_pressure_score", "")),
+            rejected_reason=reason,
+            updated_at=at,
+        )
     return {"updated_count": len(updated), "updated_queue_ids": updated}
 
 

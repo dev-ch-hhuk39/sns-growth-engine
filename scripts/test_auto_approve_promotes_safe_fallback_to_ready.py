@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_auto_approve_promotes_safe_fallback_to_ready
+
+test_auto_approve_promotes_safe_fallback_to_ready()
+print("PASS test_auto_approve_promotes_safe_fallback_to_ready.py")

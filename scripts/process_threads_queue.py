@@ -130,6 +130,8 @@ def find_draft_for_queue(queue_row: dict[str, Any], drafts_by_id: dict[str, dict
 
 
 def text_for_queue(queue_row: dict[str, Any], social: dict[str, Any] | None, draft: dict[str, Any] | None) -> str:
+    if str(queue_row.get("public_post_text", "")).strip():
+        return extract_public_post_text(queue_row.get("public_post_text", ""))
     if social and str(social.get("text", "")).strip():
         return extract_public_post_text(social.get("text", ""))
     if draft:
@@ -286,6 +288,7 @@ def save_posted_result(
     media_asset_id: str = "",
     media_url: str = "",
     media_status: str = "",
+    validator_status: str = "",
 ) -> str:
     result_id = f"threads_{queue_row.get('queue_id')}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     permalink_note = " permalink_pending=true" if not post_url else ""
@@ -307,6 +310,10 @@ def save_posted_result(
         "media_asset_id": media_asset_id,
         "media_url": media_url,
         "media_status": media_status,
+        "source_id": queue_row.get("source_id", ""),
+        "source_url": queue_row.get("source_url", ""),
+        "generation_mode": queue_row.get("generation_mode", ""),
+        "validator_status": validator_status,
         "source_queue_status": queue_row.get("status", ""),
         "save_source": "process_threads_queue",
         "created_by": "process_threads_queue",
@@ -524,11 +531,15 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             media_asset_id=media["media_asset_id"],
             media_url=media["effective_media_url"] or "",
             media_status=media["media_status"],
+            validator_status=public_validation["status"],
         )
         update_row(client, "queue", "queue_id", queue_id, {
             "status": "POSTED",
             "error": "",
             "processed_at": now_iso(),
+            "posted_at": now_iso(),
+            "post_url": result.posted_url or "",
+            "result_id": result_id,
         })
         save_pdca_initial(client, queue_row, result_id)
         log_event(client, account_id, "POSTED", "Threads post saved to posted_results", {"queue_id": queue_id, "result_id": result_id})

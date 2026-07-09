@@ -8,7 +8,111 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 - 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-07-09 (GitHub Actions schedule発火確認とworkflow発火保証補強)
+- 前回更新: 2026-07-09 (READY生成安定化・AUTO_READY診断補強)
+
+## 最新作業内容 (2026-07-09) — READY診断 / stop-before-post / autonomous_health 追加
+
+### 本システムについて
+
+- SNS Growth Engine v2 は `night_scout` / `liver_manager` のThreads text-only自動投稿を中心に、参照元収集、投稿生成、AUTO_READY、投稿、posted_results、PDCA、Media Growth Engineを段階的に接続するシステム。
+- 今回は「Actions successだが投稿0」の原因追跡を容易にし、`NO_READY_QUEUE` / `AUTO_READY_REJECTED_ALL` の次の理由までSheets/JSONで見えるようにした。
+- 実投稿、手動apply、実download、実cut、実upload、Cloudinary upload、transcription API、X fetch/post、beauty投稿は未実行。
+
+### 変更ファイル一覧
+
+- `src/sheets_client.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/process_threads_queue.py`
+- `scripts/run_autonomous_loop.py`
+- `scripts/autonomous_recovery_test_utils.py`
+- `docs/autonomous-mode-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_auto_approve_reject_reasons_visible.py`
+- `scripts/test_autonomous_health_schema.py`
+- `scripts/test_no_ready_queue_not_expected_after_safe_fallback.py`
+- `scripts/test_run_autonomous_loop_stop_before_post_static.py`
+- `scripts/test_no_ready_queue_root_cause_report.py`
+- `scripts/test_fallback_post_generated_when_reference_rows_empty.py`
+- `scripts/test_fallback_post_passes_final_validator.py`
+- `scripts/test_auto_approve_promotes_safe_fallback_to_ready.py`
+- `scripts/test_queue_waiting_review_to_ready_flow.py`
+- `scripts/test_process_threads_queue_picks_ready_text_only.py`
+- `scripts/test_process_threads_queue_uses_public_post_text_only.py`
+- `scripts/test_duplicate_does_not_block_all_variations.py`
+- `scripts/test_daily_cap_account_specific_jst.py`
+- `scripts/test_cooldown_account_specific.py`
+- `scripts/test_media_growth_does_not_block_text_only.py`
+- `scripts/test_night_scout_fallback_topics.py`
+- `scripts/test_liver_manager_fallback_topics.py`
+- `scripts/test_account_specific_generation_not_mixed.py`
+
+### 実装内容
+
+- `queue` schemaに `public_post_text`, `internal_analysis`, source/provenance, validator状態, rejected/blocked理由、posted/result列を追加。
+- `posted_results` schemaに source/provenance, `generation_mode`, `validator_status`, media関連保存列を追加。
+- `autonomous_health` tab schemaを追加。scheduled runごとに `ready_count`, `checked_count`, `approved_count`, `rejected_count`, `posted_count`, `no_post_reason` を保存可能にした。
+- `generate_threads_ideas_from_references.py` はqueue行にも `public_post_text` と診断列を書く。
+- `auto_approve_queue.py` は `checked_count`, `approved_count`, `rejected_count`, `ready_count`, `rejected_reasons`, sample rejected previewを出力し、queueにもreject理由を残す。
+- `process_threads_queue.py` はqueue-level `public_post_text` を安全に読めるようにし、投稿成功時にvalidator/provenanceを `posted_results` とqueueへ保存する。
+- `run_autonomous_loop.py` に `--stop-before-post` を追加。`--apply --confirm-autonomous` 必須で、generate/AUTO_READYまで実行し、`process_threads_queue.py` は呼ばない。
+
+### 未完了事項
+
+- 次回scheduled runで `posted_count>=1` を確認する必要がある。
+- 実Sheets上の `autonomous_health` tabは次回 apply 時にそのタブだけ冪等作成される（全タブ `setup_all` は呼ばない）。
+- metrics取得、PDCA自動改善、source_videos apply、実download/cut/upload/video postは引き続き本番OFFまたは未完了。
+
+### 残WARN
+
+- GitHub Actionsが緑でも投稿成功とは限らない。必ず `health_summary.posted_count`, `posted_results.post_url`, `autonomous_health.no_post_reason` を見る。
+- `--stop-before-post` は診断用。実投稿はしないが、apply指定時はSheetsに生成/AUTO_READY更新を書き得る。
+
+### テスト結果
+
+- 追加/互換READY診断テスト群: PASS。
+- `check_autonomous_health.py --account-id all --dry-run`: PASS。
+- `run_autonomous_loop.py --account-id night_scout --dry-run`: PASS、validator PASS、would_post=false。
+- `run_autonomous_loop.py --account-id liver_manager --dry-run`: PASS、validator PASS、would_post=false。
+- `run_autonomous_loop.py --account-id night_scout --preflight`: PASS。
+- `run_autonomous_loop.py --account-id liver_manager --preflight`: PASS。
+- `test_all_workflows_safety_flags.py`: PASS 139 / FAIL 0。
+- `test_autonomous_workflow_no_x_no_media.py`: PASS。
+- `test_autonomous_posts_only_threads.py`: PASS。
+- `test_internal_terms_never_in_posted_text.py`: PASS。
+- `test_source_registry_no_beauty_active.py`: PASS。
+- `test_source_registry_no_x_fetch_by_default.py`: PASS。
+- `test_rights_status_policy.py`: PASS 6 / FAIL 0。
+
+### 次に触ってよいファイル
+
+- `scripts/run_autonomous_loop.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/process_threads_queue.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/check_autonomous_health.py`
+- docs/runbook類
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- cookie / storage_state / token類
+- 実download/cut/upload/postの認証値
+
+### 次AIへの引き継ぎメモ
+
+- 次回scheduled runで見る順番: Actions `health_summary` → Sheets `autonomous_health` → `queue.rejected_reason` → `posted_results.post_url`。
+- `NO_READY_QUEUE` ならREADYが作れていない。`AUTO_READY_REJECTED_ALL` なら `rejected_reasons` を確認。
+- `final_public_post_validator` は弱めない。生成側を直す。
+- Media Growth Engineはdry-run/gatedのまま。text-only scheduleを壊さない。
 
 ## 最新作業内容 (2026-07-09) — NO_READY_QUEUE / AUTO_READY_REJECTED_ALL の解消補強
 

@@ -491,6 +491,8 @@ def infer_no_post_reason(result: dict[str, Any]) -> str:
     text = f"{result.get('stdout_tail', '')}\n{result.get('stderr_tail', '')}"
     if '"status": "POSTED"' in text:
         return ""
+    if '"reason":"NO_READY_QUEUE"' in text.replace(" ", "") or '"reason": "NO_READY_QUEUE"' in text:
+        return "NO_READY_QUEUE"
     if "no eligible Threads queue rows" in text:
         return "NO_READY_QUEUE"
     if "FINAL_PUBLIC_POST_VALIDATOR_BLOCKED" in text or "BLOCKED_INTERNAL_LEAK" in text:
@@ -529,22 +531,31 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
 
     auto_ready_rejected_all = any(_auto_ready_rejected_all(r) for r in auto_ready_results)
     ready_count = 0
+    checked_count = 0
+    approved_count = 0
+    rejected_count = 0
     for r in results:
         text = str(r.get("stdout_tail", ""))
-        if '"updated_count":' in text:
-            try:
-                decoder = json.JSONDecoder()
-                for idx, char in enumerate(text):
-                    if char == "{":
-                        obj, _ = decoder.raw_decode(text[idx:])
-                        ready_count += int(obj.get("updated_count", 0))
-                        break
-            except Exception:
-                pass
+        try:
+            decoder = json.JSONDecoder()
+            for idx, char in enumerate(text):
+                if char != "{":
+                    continue
+                obj, _ = decoder.raw_decode(text[idx:])
+                ready_count += int(obj.get("updated_count", 0))
+                checked_count += int(obj.get("checked_count", obj.get("evaluated_count", 0)) or 0)
+                approved_count += int(obj.get("approved_count", obj.get("approvable_count", 0)) or 0)
+                rejected_count += int(obj.get("rejected_count", 0) or 0)
+                break
+        except Exception:
+            pass
     return {
         "account_id": account_id,
         "mode": mode,
         "ready_count": ready_count,
+        "checked_count": checked_count,
+        "approved_count": approved_count,
+        "rejected_count": rejected_count,
         "processed_count": len(process_results),
         "posted_count": posted_count,
         "blocked_count": blocked_count,
@@ -554,6 +565,49 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
         ),
         "apply_status": "POSTED" if posted_count else ("NO_POST" if process_results else "NOT_PROCESSED"),
     }
+
+
+def save_autonomous_health(plan: dict[str, Any], mode: str, health_summary: dict[str, Any], results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Best-effort run health save. Never blocks posting and never prints secrets."""
+    if mode != "apply":
+        return {"status": "SKIPPED", "reason": "not_apply_mode"}
+    try:
+        from config_loader import get_config
+        from sheets_client import TAB_DEFINITIONS, SheetsClient
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        ws = client._ensure_tab("autonomous_health", TAB_DEFINITIONS["autonomous_health"])
+        headers = ws.row_values(1)
+        now = datetime.now(timezone.utc).isoformat()
+        errors = [
+            str(r.get("stderr_tail") or r.get("stdout_tail") or "")[-240:]
+            for r in results
+            if r.get("returncode") not in {0, None}
+        ]
+        row = {
+            "run_id": os.environ.get("GITHUB_RUN_ID") or f"local_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+            "workflow_name": os.environ.get("GITHUB_WORKFLOW", "local"),
+            "account_id": health_summary.get("account_id", plan.get("account_id", "")),
+            "mode": mode,
+            "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
+            "started_at": plan.get("generated_at", ""),
+            "finished_at": now,
+            "ready_count": health_summary.get("ready_count", 0),
+            "checked_count": health_summary.get("checked_count", 0),
+            "approved_count": health_summary.get("approved_count", 0),
+            "rejected_count": health_summary.get("rejected_count", 0),
+            "processed_count": health_summary.get("processed_count", 0),
+            "posted_count": health_summary.get("posted_count", 0),
+            "blocked_count": health_summary.get("blocked_count", 0),
+            "no_post_reason": health_summary.get("no_post_reason", ""),
+            "apply_status": health_summary.get("apply_status", ""),
+            "last_error_redacted": (errors[0] if errors else "").replace("\n", " "),
+            "created_at": now,
+        }
+        ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+        return {"status": "SAVED", "tab": "autonomous_health"}
+    except Exception as exc:
+        return {"status": "WARN", "reason": f"autonomous_health_save_failed:{type(exc).__name__}"}
 
 
 def source_ids_for_platform(plan: dict[str, Any], platform: str) -> list[str]:
@@ -703,6 +757,15 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             return results
         if not run_step([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"]):
             return results
+    if getattr(args, "stop_before_post", False):
+        results.append({
+            "cmd": "scripts/process_threads_queue.py --stop-before-post",
+            "returncode": 0,
+            "status": "SKIPPED",
+            "reason": "stop_before_post",
+            "would_post": False,
+        })
+        return results
     if plan["gate_summary"]["auto_post_enabled"]:
         env = dict(os.environ)
         env.setdefault("PUBLISH_ENABLED", "true")
@@ -734,6 +797,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--dry-run", action="store_true", help="plan only (default)")
     parser.add_argument("--preflight", action="store_true", help="read-only production readiness check; never posts")
+    parser.add_argument("--stop-before-post", action="store_true", help="apply score/generate/AUTO_READY only; skip process_threads_queue and never post")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-autonomous", action="store_true")
     return parser.parse_args()
@@ -750,6 +814,9 @@ def main() -> int:
         return 1
     if args.apply and not args.confirm_autonomous:
         print(json.dumps({**plan, "status": "BLOCKED", "blocked_reasons": ["--apply requires --confirm-autonomous"]}, ensure_ascii=False, indent=2))
+        return 1
+    if args.stop_before_post and not (args.apply and args.confirm_autonomous):
+        print(json.dumps({**plan, "status": "BLOCKED", "blocked_reasons": ["--stop-before-post requires --apply --confirm-autonomous"]}, ensure_ascii=False, indent=2))
         return 1
     if args.preflight:
         preflight = apply_preflight(plan)
@@ -781,7 +848,8 @@ def main() -> int:
     if failed_results:
         status = "PARTIAL" if mode == "apply" else "PLAN_ONLY_WITH_WARN"
     health_summary = summarize_autonomous_results(args.account_id, mode, results)
-    print(json.dumps({**plan, "mode": mode, "status": status, "results": results, "health_summary": health_summary}, ensure_ascii=False, indent=2))
+    health_save = save_autonomous_health(plan, mode, health_summary, results)
+    print(json.dumps({**plan, "mode": mode, "status": status, "results": results, "health_summary": health_summary, "autonomous_health_save": health_save}, ensure_ascii=False, indent=2))
     return 1 if mode == "apply" and failed_results else 0
 
 

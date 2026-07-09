@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_process_threads_queue_uses_public_post_text_only
+
+test_process_threads_queue_uses_public_post_text_only()
+print("PASS test_process_threads_queue_uses_public_post_text_only.py")

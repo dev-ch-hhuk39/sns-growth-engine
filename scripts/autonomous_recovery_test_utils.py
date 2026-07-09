@@ -239,7 +239,12 @@ def test_posted_results_schema_required_columns() -> None:
     from sheets_client import TAB_DEFINITIONS
 
     cols = set(TAB_DEFINITIONS["posted_results"])
-    for col in ("result_id", "queue_id", "draft_id", "account_id", "platform", "post_url", "posted_text", "status", "metrics_status", "real_post"):
+    for col in (
+        "result_id", "queue_id", "draft_id", "account_id", "platform",
+        "post_url", "posted_text", "status", "metrics_status", "real_post",
+        "source_id", "source_url", "generation_mode", "validator_status",
+        "media_asset_id", "media_url", "media_status",
+    ):
         assert col in cols
 
 
@@ -247,7 +252,29 @@ def test_queue_schema_required_columns() -> None:
     from sheets_client import TAB_DEFINITIONS
 
     cols = set(TAB_DEFINITIONS["queue"])
-    for col in ("queue_id", "draft_id", "account_id", "platform", "status", "auto_publish", "generation_mode", "media_asset_id", "auto_ready_by", "quality_score", "risk_score"):
+    for col in (
+        "queue_id", "draft_id", "account_id", "target_account_id", "platform",
+        "status", "auto_publish", "generation_mode", "media_asset_id",
+        "auto_ready_by", "quality_score", "risk_score",
+        "public_post_text", "internal_analysis", "source_id", "source_url",
+        "generated_by", "validator_status", "internal_leak_status",
+        "account_fit_status", "rejected_reason", "blocked_reason",
+        "updated_at", "posted_at", "post_url", "result_id",
+    ):
+        assert col in cols
+
+
+def test_autonomous_health_schema() -> None:
+    from sheets_client import TAB_DEFINITIONS
+
+    cols = set(TAB_DEFINITIONS["autonomous_health"])
+    for col in (
+        "run_id", "workflow_name", "account_id", "mode", "event_name",
+        "started_at", "finished_at", "ready_count", "checked_count",
+        "approved_count", "rejected_count", "processed_count", "posted_count",
+        "blocked_count", "no_post_reason", "apply_status",
+        "last_error_redacted", "created_at",
+    ):
         assert col in cols
 
 
@@ -402,6 +429,188 @@ def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
         plan = build_plan(client, account_id, 1, load_rules())
         assert plan["approvable_count"] == 1, plan
         assert plan["selected_queue_ids"], plan
+
+
+def test_auto_approve_reject_reasons_visible() -> None:
+    from auto_approve_queue import build_plan, load_rules
+    from sheets_client import MockSheetsClient
+
+    client = MockSheetsClient()
+    bad = "これは投稿案です。今回の切り口は source / night_scout です。"
+    client.save_draft("night_scout", "bad", bad, draft_id="d-bad", status="WAITING_REVIEW", generation_mode="safe_original_fallback_threads", media_strategy="none", media_reuse_risk="low")
+    client.append_social_derivative({"derivative_id": "sd-bad", "draft_id": "d-bad", "account_id": "night_scout", "platform": "threads", "text": bad, "status": "WAITING_REVIEW", "media_strategy": "none"})
+    client.append_queue_item({"queue_id": "q-bad", "draft_id": "d-bad", "account_id": "night_scout", "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": "safe_original_fallback_threads", "media_reuse_risk": "low", "priority": "1"})
+    plan = build_plan(client, "night_scout", 1, load_rules())
+    assert plan["checked_count"] == 1
+    assert plan["rejected_count"] == 1
+    assert plan["rejected_reasons"], plan
+    assert plan["sample_rejected_public_post_preview"][0]["queue_id"] == "q-bad"
+
+
+def test_no_ready_queue_not_expected_after_safe_fallback() -> None:
+    from auto_approve_queue import build_plan, load_rules
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+    from sheets_client import MockSheetsClient
+
+    client = MockSheetsClient()
+    rows = build_fallback_generation_rows(account_id="liver_manager", top_n=3)
+    for draft in rows["drafts"]:
+        client.save_draft("liver_manager", draft["title"], draft["body_md"], draft_id=draft["draft_id"], status=draft["status"], generation_mode=draft["generation_mode"], media_strategy="none", media_reuse_risk="low")
+    for derivative in rows["social_derivatives"]:
+        client.append_social_derivative(derivative)
+    for queue in rows["queue"]:
+        client.append_queue_item(queue)
+    plan = build_plan(client, "liver_manager", 1, load_rules())
+    assert plan["approvable_count"] >= 1, plan
+    assert plan["ready_count"] >= 1, plan
+
+
+def test_run_autonomous_loop_stop_before_post_static() -> None:
+    text = read(ROOT / "scripts/run_autonomous_loop.py")
+    assert "--stop-before-post" in text
+    assert "stop_before_post" in text
+    assert "would_post" in text
+
+
+def test_no_ready_queue_root_cause_report() -> None:
+    from run_autonomous_loop import summarize_autonomous_results
+
+    summary = summarize_autonomous_results("night_scout", "apply", [{
+        "cmd": "scripts/process_threads_queue.py --account-id night_scout --confirm-real-post --max-posts 1",
+        "returncode": 0,
+        "stdout_tail": '{"status":"NO_POST","reason":"NO_READY_QUEUE"}',
+    }])
+    assert summary["no_post_reason"] == "NO_READY_QUEUE"
+    assert "ready_count" in summary
+
+
+def test_fallback_post_generated_when_reference_rows_empty() -> None:
+    test_no_source_fallback_generates_safe_public_post()
+
+
+def test_fallback_post_passes_final_validator() -> None:
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+    from public_post_quality import final_public_post_validator
+
+    for account_id in ("night_scout", "liver_manager"):
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=3)
+        assert rows["queue"], account_id
+        for draft in rows["drafts"]:
+            assert final_public_post_validator(draft["body_md"], account_id)["status"] == "PASS"
+
+
+def test_auto_approve_promotes_safe_fallback_to_ready() -> None:
+    test_safe_fallback_candidates_are_auto_ready_approvable()
+
+
+def test_queue_waiting_review_to_ready_flow() -> None:
+    from auto_approve_queue import apply_ready, build_plan, load_rules
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+    from sheets_client import MockSheetsClient
+
+    client = MockSheetsClient()
+    rows = build_fallback_generation_rows(account_id="night_scout", top_n=1)
+    for draft in rows["drafts"]:
+        client.save_draft("night_scout", draft["title"], draft["body_md"], draft_id=draft["draft_id"], status=draft["status"], generation_mode=draft["generation_mode"], media_strategy="none", media_reuse_risk="low")
+    for derivative in rows["social_derivatives"]:
+        client.append_social_derivative(derivative)
+    for queue in rows["queue"]:
+        client.append_queue_item(queue)
+    plan = build_plan(client, "night_scout", 1, load_rules())
+    result = apply_ready(client, plan)
+    assert result["updated_count"] == 1, result
+    assert client.get_queue_item(rows["queue"][0]["queue_id"])["status"] == "READY"
+
+
+def test_process_threads_queue_picks_ready_text_only() -> None:
+    text = read(ROOT / "scripts/process_threads_queue.py")
+    assert 'ELIGIBLE_STATUSES = {"READY"}' in text
+    assert "select_candidates" in text
+    assert "resolve_queue_media" in text
+
+
+def test_process_threads_queue_uses_public_post_text_only() -> None:
+    text = read(ROOT / "scripts/process_threads_queue.py")
+    assert 'queue_row.get("public_post_text"' in text
+    assert "extract_public_post_text" in text
+    assert "final_public_post_validator(text, account_id)" in text
+
+
+def test_duplicate_does_not_block_all_variations() -> None:
+    from process_threads_queue import duplicate_reason
+
+    posted_rows = [{
+        "status": "POSTED",
+        "account_id": "night_scout",
+        "platform": "threads",
+        "posted_text": "夜職で店を選ぶ時、時給だけで決めると続きにくい。",
+    }]
+    reason = duplicate_reason(
+        queue_row={"queue_id": "q-new", "draft_id": "d-new", "account_id": "night_scout"},
+        social={"derivative_id": "sd-new"},
+        text="夜職で長く働くなら、時給だけでなく客層や担当の相談しやすさも見た方がいい。",
+        posted_rows=posted_rows,
+    )
+    assert reason == ""
+
+
+def test_daily_cap_account_specific_jst() -> None:
+    from datetime import datetime, timedelta, timezone
+    from run_autonomous_loop import posts_used_today
+
+    now = datetime(2026, 7, 9, 3, 0, tzinfo=timezone.utc)
+    rows = [
+        {"account_id": "night_scout", "platform": "threads", "status": "POSTED", "posted_at": now.isoformat()},
+        {"account_id": "liver_manager", "platform": "threads", "status": "POSTED", "posted_at": (now - timedelta(days=1)).isoformat()},
+    ]
+    assert posts_used_today("night_scout", rows, now=now) == 1
+    assert posts_used_today("liver_manager", rows, now=now) == 0
+
+
+def test_cooldown_account_specific() -> None:
+    from auto_approve_queue import account_limits_ok, load_rules, now_utc
+
+    rules = load_rules()
+    acct_rules = rules["defaults"].copy()
+    acct_rules["daily_ready_cap"] = 5
+    acct_rules["cooldown_minutes"] = 90
+    logs = [{
+        "account_id": "night_scout",
+        "operation": "queue_approved",
+        "details": "auto_ready=true",
+        "timestamp": now_utc().isoformat(),
+    }]
+    ok_ns, reason_ns = account_limits_ok("night_scout", {}, logs, [], acct_rules)
+    ok_lm, reason_lm = account_limits_ok("liver_manager", {}, logs, [], acct_rules)
+    assert not ok_ns and reason_ns == "cooldown_not_satisfied"
+    assert ok_lm and reason_lm == "ok"
+
+
+def test_media_growth_does_not_block_text_only() -> None:
+    test_media_growth_does_not_break_autonomous_text_posting()
+
+
+def test_night_scout_fallback_topics() -> None:
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+
+    text = "\n".join(d["body_md"] for d in build_fallback_generation_rows(account_id="night_scout", top_n=5)["drafts"])
+    assert any(k in text for k in ("夜職", "店", "時給", "担当", "相談"))
+
+
+def test_liver_manager_fallback_topics() -> None:
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+
+    text = "\n".join(d["body_md"] for d in build_fallback_generation_rows(account_id="liver_manager", top_n=5)["drafts"])
+    assert any(k in text for k in ("配信", "初見", "コメント", "リスナー", "ライバー"))
+
+
+def test_account_specific_generation_not_mixed() -> None:
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+
+    ns = "\n".join(d["body_md"] for d in build_fallback_generation_rows(account_id="night_scout", top_n=3)["drafts"])
+    lm = "\n".join(d["body_md"] for d in build_fallback_generation_rows(account_id="liver_manager", top_n=3)["drafts"])
+    assert "配信" not in ns
+    assert "夜職" not in lm
 
 
 def test_health_summary_reports_auto_ready_rejected_all() -> None:

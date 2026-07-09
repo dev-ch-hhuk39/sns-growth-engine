@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_liver_manager_fallback_topics
+
+test_liver_manager_fallback_topics()
+print("PASS test_liver_manager_fallback_topics.py")

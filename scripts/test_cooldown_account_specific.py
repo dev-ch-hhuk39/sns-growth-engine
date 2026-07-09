@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_cooldown_account_specific
+
+test_cooldown_account_specific()
+print("PASS test_cooldown_account_specific.py")

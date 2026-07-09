@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_fallback_post_generated_when_reference_rows_empty
+
+test_fallback_post_generated_when_reference_rows_empty()
+print("PASS test_fallback_post_generated_when_reference_rows_empty.py")

@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_auto_approve_reject_reasons_visible
+
+test_auto_approve_reject_reasons_visible()
+print("PASS test_auto_approve_reject_reasons_visible.py")

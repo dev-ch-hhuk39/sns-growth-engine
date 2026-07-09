@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_fallback_post_passes_final_validator
+
+test_fallback_post_passes_final_validator()
+print("PASS test_fallback_post_passes_final_validator.py")

@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_run_autonomous_loop_stop_before_post_static
+
+test_run_autonomous_loop_stop_before_post_static()
+print("PASS test_run_autonomous_loop_stop_before_post_static.py")

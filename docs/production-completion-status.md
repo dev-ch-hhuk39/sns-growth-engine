@@ -749,3 +749,30 @@ Status: implemented locally in this turn, pending final commit/push.
 - Added media queue preview fields for `source_video_id`, `clip_candidate_id`, `media_asset_id`, and `public_post_text`.
 - Media schedule remains OFF. Text-only autonomous schedule remains unchanged.
 - Real download/cut/upload/Cloudinary/video post/transcription API were not executed.
+
+## READY Recovery And Diagnostics (2026-07-09)
+
+Status: implemented in the current Codex turn.
+
+Completed:
+
+- Text-only scheduled workflows remain ON for `night_scout` and `liver_manager`.
+- Safe fallback generation now refreshes stale non-locked queue rows and can top up queue candidates when reference rows are empty or stale.
+- Queue rows now carry `public_post_text`, provenance, validator status, rejected reason, and READY/post result fields so operators can inspect why a row did or did not move.
+- `auto_approve_queue.py` now reports `checked_count`, `approved_count`, `rejected_count`, `ready_count`, `rejected_reasons`, and sample rejected previews.
+- `process_threads_queue.py` can use queue-level `public_post_text`, still validates it immediately before posting, and saves validator/provenance fields into `posted_results`.
+- Added `autonomous_health` schema for scheduled run diagnostics: READY counts, rejected counts, processed count, posted count, no-post reason, and redacted error.
+- Added `run_autonomous_loop.py --stop-before-post` for production READY verification without posting. It requires `--apply --confirm-autonomous` and skips `process_threads_queue`.
+
+Still intentionally OFF:
+
+- X fetch/post.
+- `beauty_account` fetch/READY/post.
+- Media schedule.
+- Real video download/cut/upload/Cloudinary/video post.
+- Transcription API.
+
+Remaining human/ops confirmation:
+
+- Next scheduled GitHub Actions run should be checked for `health_summary.ready_count >= 1` and `posted_count >= 1`.
+- If `posted_count=0`, inspect `health_summary.no_post_reason`, `autonomous_health`, and queue `rejected_reason` rather than treating a green Actions run as a successful post.

@@ -224,3 +224,49 @@ Caps remain:
 - `cooldown_minutes=90`
 
 Media Growth Engine remains separate: media schedule OFF; download/cut/upload/video post require explicit env+confirm gates and are not part of text-only scheduled posting.
+
+## READY / AUTO_READY Diagnostics (2026-07-09)
+
+The loop now records enough information to distinguish "workflow success" from "post success".
+
+Important fields in `health_summary` and the `autonomous_health` tab:
+
+- `ready_count`: how many rows AUTO_READY promoted in this run.
+- `checked_count`: how many queue candidates AUTO_READY evaluated.
+- `approved_count`: how many candidates passed AUTO_READY.
+- `rejected_count`: how many candidates failed AUTO_READY.
+- `processed_count`: how many READY rows the worker attempted.
+- `posted_count`: how many Threads posts succeeded.
+- `no_post_reason`: the reason if `posted_count=0`.
+
+Useful no-post reasons:
+
+- `NO_READY_QUEUE`
+- `AUTO_READY_REJECTED_ALL`
+- `VALIDATOR_BLOCKED_ALL`
+- `DUPLICATE_BLOCKED_ALL`
+- `DAILY_CAP_REACHED`
+- `COOLDOWN_ACTIVE`
+- `THREADS_API_FAILED`
+- `POSTED_SAVE_FAILED`
+
+Queue diagnostics now live directly on `queue` rows:
+
+- `public_post_text`
+- `validator_status`
+- `internal_leak_status`
+- `account_fit_status`
+- `quality_score`
+- `safety_score`
+- `risk_score`
+- `rejected_reason`
+- `blocked_reason`
+
+Before allowing a real post, operators can verify READY creation without posting:
+
+```bash
+python3 scripts/run_autonomous_loop.py --account-id night_scout --apply --confirm-autonomous --stop-before-post
+python3 scripts/run_autonomous_loop.py --account-id liver_manager --apply --confirm-autonomous --stop-before-post
+```
+
+This writes only the planning/generation/AUTO_READY side and skips `process_threads_queue.py`. Do not use it as a substitute for the scheduled workflow; it is a production diagnostic.

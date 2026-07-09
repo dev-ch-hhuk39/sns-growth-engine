@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_daily_cap_account_specific_jst
+
+test_daily_cap_account_specific_jst()
+print("PASS test_daily_cap_account_specific_jst.py")

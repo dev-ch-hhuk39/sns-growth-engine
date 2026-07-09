@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_duplicate_does_not_block_all_variations
+
+test_duplicate_does_not_block_all_variations()
+print("PASS test_duplicate_does_not_block_all_variations.py")

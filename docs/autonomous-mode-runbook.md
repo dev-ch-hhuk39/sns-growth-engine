@@ -412,3 +412,40 @@ Schedules:
 Each schedule starts 15 minutes early and applies a random 0-1800 second jitter. Manual dispatch skips schedule jitter because the jitter step runs only when `github.event_name == 'schedule'`.
 
 `max_posts_per_run=1` remains per workflow run. Daily cap is now `5` per account.
+
+## READY Recovery Diagnostics (2026-07-09)
+
+The main operational failure mode is no longer "workflow did not fire"; it is usually one of these queue states:
+
+- `NO_READY_QUEUE`: no `READY` row reached `process_threads_queue.py`.
+- `AUTO_READY_REJECTED_ALL`: `auto_approve_queue.py` evaluated candidates but none passed.
+- `VALIDATOR_BLOCKED_ALL`: candidates contained internal terms or public-copy risks.
+- `DUPLICATE_BLOCKED_ALL`: queue text was too close to an already posted item.
+- `DAILY_CAP_REACHED` or `COOLDOWN_ACTIVE`: account-level posting controls stopped the run.
+
+What to inspect:
+
+1. GitHub Actions `health_summary`.
+2. Sheets `自動運用ヘルス` / `autonomous_health`.
+3. Sheets `投稿キュー` / `queue` columns: `validator_status`, `internal_leak_status`, `account_fit_status`, `rejected_reason`, `blocked_reason`, `public_post_quality_score`.
+4. Sheets `投稿結果` / `posted_results`: `queue_id`, `post_url`, `external_post_id`, `posted_text`, `validator_status`, `generation_mode`.
+
+Safe production check before posting:
+
+```bash
+python3 scripts/run_autonomous_loop.py --account-id night_scout --apply --confirm-autonomous --stop-before-post
+python3 scripts/run_autonomous_loop.py --account-id liver_manager --apply --confirm-autonomous --stop-before-post
+```
+
+This mode may write generation/AUTO_READY updates, but it never calls `process_threads_queue.py` and therefore never posts. Running `--stop-before-post` without `--apply --confirm-autonomous` is blocked.
+
+AUTO_READY output now includes:
+
+- `checked_count`
+- `approved_count`
+- `rejected_count`
+- `ready_count`
+- `rejected_reasons`
+- `sample_rejected_public_post_preview`
+
+If references are empty or stale, safe original fallback candidates are generated as `WAITING_REVIEW`, then AUTO_READY promotes only validator-passing text-only candidates to `READY`. `final_public_post_validator` is not weakened; generation is responsible for producing reader-facing public copy.

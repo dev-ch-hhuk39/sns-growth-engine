@@ -125,6 +125,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "queue_id", "derivative_id", "metrics_status",
         "real_post", "media_used", "posted_text",
         "source_queue_status", "save_source", "created_by",
+        # Autonomous text/media posting provenance and validator state.
+        "source_id", "source_url", "generation_mode", "validator_status",
+        "media_asset_id", "media_url", "media_status",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -162,6 +165,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     # 投稿キュー。scheduled_at に基づいて自動投稿を実行する（Phase 3以降）。
     "queue": [
         "queue_id", "draft_id", "account_id",
+        "target_account_id",
         "platform", "scheduled_at", "priority",
         "status", "error", "created_at", "processed_at",
         "auto_publish",
@@ -180,6 +184,15 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # AUTO_READY（品質・安全スコアでWAITING_REVIEW→READYへ自動承認した記録）。
         "auto_ready_by", "auto_ready_reason", "auto_ready_score", "auto_ready_at",
         "quality_score", "safety_score", "risk_score",
+        # Autonomous diagnosis/provenance columns. Public post text stays the
+        # publishable field; internal_analysis is never sent to a publisher.
+        "public_post_text", "internal_analysis",
+        "source_id", "source_url", "generated_by",
+        "validator_status", "internal_leak_status", "account_fit_status",
+        "public_post_quality_score", "reader_value_score", "naturalness_score",
+        "cta_pressure_score",
+        "rejected_reason", "blocked_reason",
+        "updated_at", "posted_at", "post_url", "result_id",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -433,6 +446,14 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "best_content_type", "best_er",
         "created_at", "notes",
     ],
+    # Autonomous Growth Loop の各run診断。投稿0でも原因をSheets上で追えるようにする。
+    "autonomous_health": [
+        "run_id", "workflow_name", "account_id", "mode", "event_name",
+        "started_at", "finished_at",
+        "ready_count", "checked_count", "approved_count", "rejected_count",
+        "processed_count", "posted_count", "blocked_count",
+        "no_post_reason", "apply_status", "last_error_redacted", "created_at",
+    ],
 }
 
 TAB_DISPLAY_NAMES: dict[str, str] = {
@@ -467,6 +488,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "media_ingestion_runs":           "メディア取込履歴",
     "end_to_end_preflight_runs":      "投稿前チェック履歴",
     "pdca_runs":                      "PDCA実行履歴",
+    "autonomous_health":              "自動運用ヘルス",
 }
 
 SCOPES = [

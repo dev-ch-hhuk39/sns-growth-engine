@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_autonomous_health_schema
+
+test_autonomous_health_schema()
+print("PASS test_autonomous_health_schema.py")

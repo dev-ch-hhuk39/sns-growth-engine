@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_night_scout_fallback_topics
+
+test_night_scout_fallback_topics()
+print("PASS test_night_scout_fallback_topics.py")

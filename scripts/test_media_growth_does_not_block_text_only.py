@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_media_growth_does_not_block_text_only
+
+test_media_growth_does_not_block_text_only()
+print("PASS test_media_growth_does_not_block_text_only.py")

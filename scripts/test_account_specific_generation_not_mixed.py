@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_account_specific_generation_not_mixed
+
+test_account_specific_generation_not_mixed()
+print("PASS test_account_specific_generation_not_mixed.py")

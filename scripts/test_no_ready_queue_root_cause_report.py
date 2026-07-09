@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_no_ready_queue_root_cause_report
+
+test_no_ready_queue_root_cause_report()
+print("PASS test_no_ready_queue_root_cause_report.py")

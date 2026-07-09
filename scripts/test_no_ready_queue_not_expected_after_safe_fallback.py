@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_no_ready_queue_not_expected_after_safe_fallback
+
+test_no_ready_queue_not_expected_after_safe_fallback()
+print("PASS test_no_ready_queue_not_expected_after_safe_fallback.py")

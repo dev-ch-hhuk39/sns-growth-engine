@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_queue_waiting_review_to_ready_flow
+
+test_queue_waiting_review_to_ready_flow()
+print("PASS test_queue_waiting_review_to_ready_flow.py")
