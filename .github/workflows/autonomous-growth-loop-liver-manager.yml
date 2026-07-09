@@ -19,6 +19,18 @@ on:
         description: "Skip schedule jitter for manual dispatch"
         required: false
         default: "true"
+      dry_run_only:
+        description: "Run dry-run and health summary only; never apply/post"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: autonomous-liver-manager-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   ACCOUNT_ID: "liver_manager"
@@ -53,6 +65,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Schedule heartbeat
+        run: |
+          echo "workflow=${{ github.workflow }}"
+          echo "event=${{ github.event_name }}"
+          echo "account=$ACCOUNT_ID"
+          date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -70,7 +89,7 @@ jobs:
         run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --dry-run
 
       - name: Guard autonomous confirm and kill switch
-        if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -90,7 +109,7 @@ jobs:
           fi
 
       - name: Apply autonomous Threads loop
-        if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true') && github.event.inputs.dry_run_only != 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"

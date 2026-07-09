@@ -4,11 +4,159 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-07-07
+- Date: 2026-07-09
 - 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-07-05 (許可済みアカウント動画発見と複数clip候補生成)
+- 前回更新: 2026-07-07 (自動投稿停止復旧と night_scout Threads 参考元追加)
+
+## 最新作業内容 (2026-07-09) — GitHub Actions schedule発火確認とworkflow発火保証補強
+
+### 本システムについて
+
+- text-only autonomous Threads posting は `Autonomous Growth Loop Night Scout` / `Autonomous Growth Loop Liver Manager` の account-specific scheduled workflow で運用する。
+- media schedule はOFF。Media Growth Engine / Source Video Discovery は dry-run/gated のまま。
+- X fetch/post、beauty投稿、third-party media download/cut/upload/repost、Cloudinary upload、transcription API は引き続き禁止。
+
+### 今回の調査結果
+
+- `HEAD` / `origin/main`: `9acc057c35550fbcf6c357b520f06de4ecf196a9` から開始。
+- GitHub repo default branch: `main`。
+- Actions permissions: enabled=true, allowed_actions=all。
+- Workflow state: `Autonomous Growth Loop Night Scout`, `Autonomous Growth Loop Liver Manager`, `Autonomous Growth Loop` は全て `active`。
+- 2026-06-20以降にrunがない、という状態ではなかった。
+- 直近run:
+  - Night Scout `29003612060`: event=`schedule`, conclusion=`success`, apply step到達。
+  - Liver Manager `29000408859`: event=`schedule`, conclusion=`success`, apply step到達。
+- 投稿0の実測理由:
+  - `health_summary.posted_count=0`
+  - `health_summary.no_post_reason=NO_READY_QUEUE`
+  - Liver Managerでは `auto_approve_queue.py` が候補を `REJECTED` にし、`process_threads_queue.py` が `NO_READY_QUEUE`。
+- 結論: Actions未発火ではなく、発火後にREADY queueが無いため投稿されていない。
+
+### 修正内容
+
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+  - `permissions: contents: read / actions: read` 追加。
+  - `concurrency` 追加。
+  - `dry_run_only` workflow_dispatch input追加。
+  - `Schedule heartbeat` step追加。
+  - guard/apply stepを `dry_run_only != 'true'` で保護。
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+  - Night Scoutと同じ発火保証/安全補強を追加。
+- `.github/workflows/autonomous-growth-loop.yml`
+  - manual workflowにも permissions/concurrency/heartbeat/dry_run_only を追加。scheduleはなし。
+- `scripts/check_autonomous_health.py`
+  - workflow permissions, concurrency, heartbeat, dry_run_only安全性を検査。
+- `scripts/autonomous_recovery_test_utils.py`
+  - workflow発火保証テストを追加。
+- `docs/autonomous-mode-runbook.md`
+  - workflow名、active確認、Enable workflow手順、dry_run_only、heartbeat、NO_READY_QUEUEの見方を追記。
+- `docs/production-completion-status.md`
+  - 2026-07-09のActions発火確認とNO_READY_QUEUE原因を追記。
+
+### 今回の作業ブランチ
+
+- `main`
+- 作業開始HEAD: `9acc057c35550fbcf6c357b520f06de4ecf196a9`
+- 現在HEAD: commit後に `git rev-parse HEAD` で確認。
+
+### 変更ファイル一覧
+
+- `.github/workflows/autonomous-growth-loop.yml`
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+- `scripts/check_autonomous_health.py`
+- `scripts/autonomous_recovery_test_utils.py`
+- `docs/autonomous-mode-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_workflow_permissions_declared.py`
+- `scripts/test_scheduled_workflows_have_heartbeat.py`
+- `scripts/test_scheduled_workflows_have_dry_run_only_dispatch.py`
+- `scripts/test_scheduled_workflows_have_concurrency.py`
+- `scripts/test_scheduled_workflows_schedule_event_runs_apply.py`
+- `scripts/test_manual_workflow_no_schedule.py`
+- `scripts/test_workflow_names_not_confusing.py`
+- `scripts/test_actions_enablement_runbook_docs.py`
+
+### 未完了事項
+
+- 実投稿は今回未実行。
+- scheduleは発火しているが、READY queue不足で投稿0になるリスクが残る。
+- 次回は `NO_READY_QUEUE` / `AUTO_READY_REJECTED_ALL` を潰すため、生成候補の品質・既存queue重複・auto_ready rejected理由を対象にする。
+
+### 残WARN
+
+- ローカルhealth checkではsecret presenceは未設定。Actionsログではsecretはmask済みでpresenceあり。
+- `Autopilot AUTO_READY Pilot` と `Content Daily Dry-Run` には別workflowのfailureが残る。今回の対象外。
+- GitHub Actions latest successは投稿成功ではなく `NO_READY_QUEUE` の可能性があるため、`success` だけで投稿成功と判断しない。
+
+### 全テスト結果
+
+- `scripts/check_autonomous_health.py --account-id all --dry-run`: PASS。
+- 新規workflow発火保証テスト8本: PASS。
+- 既存workflow schedule/env/account tests: PASS。
+- `scripts/test_all_workflows_safety_flags.py`: PASS 139 / FAIL 0。
+- `scripts/test_autonomous_workflow_no_x_no_media.py`: PASS。
+- `scripts/test_autonomous_posts_only_threads.py`: PASS。
+- `scripts/test_source_registry_no_beauty_active.py`: PASS。
+- `scripts/test_source_registry_no_x_fetch_by_default.py`: PASS。
+- `scripts/test_rights_status_policy.py`: PASS 6 / FAIL 0。
+- `scripts/test_internal_terms_never_in_posted_text.py`: PASS。
+- `py_compile`: PASS。
+- `git diff --check`: PASS。
+
+### dry-run結果
+
+- `run_autonomous_loop.py --account-id night_scout --dry-run`: public_post_previewあり、validator PASS、would_post=false。
+- `run_autonomous_loop.py --account-id liver_manager --dry-run`: public_post_previewあり、validator PASS、would_post=false。
+- `check_autonomous_health.py --account-id all --dry-run`: workflow/config/schema/source/media sanity PASS予定。
+
+### confirmなしBLOCKED確認結果
+
+- `dry_run_only=true` manual dispatchでは guard/apply をskip。
+- scheduled eventは従来どおりapply対象。ただし kill_switch / secrets guard / env gate / publisher gateは維持。
+- 実download/cut/upload/video postは未実行・OFF維持。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `scripts/auto_approve_queue.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/process_threads_queue.py`
+- `scripts/run_autonomous_loop.py`
+- `docs/autonomous-mode-runbook.md`
+
+### 次にCodexが触ってよいファイル
+
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+- `scripts/check_autonomous_health.py`
+- workflow tests under `scripts/test_*workflow*.py`
+
+### 衝突しやすいファイル
+
+- `.github/workflows/autonomous-growth-loop*.yml`
+- `scripts/autonomous_recovery_test_utils.py`
+- `docs/ai-work-handoff.md`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secrets / cookie / storage_state
+
+### 次AIへの引き継ぎメモ
+
+- Actionsは発火済み。次に見るべきは `NO_READY_QUEUE` の根絶。
+- 2026-07-09 18:50 JST時点の次回scheduled windowは night_scout/liver_manager とも JST 21:00 ±15min、night_scout はその後 JST 25:00 ±15min。
+- GitHub UIで見る場所: Actions → `Autonomous Growth Loop Night Scout` / `Autonomous Growth Loop Liver Manager` → 最新scheduled run → `Schedule heartbeat`, `Apply autonomous Threads loop`, `Autonomous health summary`。
+- 変な投稿が出たら `config/autonomous_mode.json` の `kill_switch=true`。
 
 ## 最新作業内容 (2026-07-07) — 自動投稿停止復旧と night_scout Threads 参考元追加
 

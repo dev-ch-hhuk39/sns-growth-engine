@@ -70,6 +70,7 @@ def test_scheduled_workflows_apply_on_schedule() -> None:
         text = read(wf)
         assert "github.event_name == 'schedule'" in text
         assert "--apply" in text and "--confirm-autonomous" in text
+        assert "dry_run_only != 'true'" in text
 
 
 def test_scheduled_workflows_have_jitter() -> None:
@@ -77,6 +78,72 @@ def test_scheduled_workflows_have_jitter() -> None:
         text = read(wf)
         assert "random.randint(0, 1800)" in text
         assert "Schedule jitter" in text
+
+
+def test_workflow_permissions_declared() -> None:
+    for wf in (NS_WF, LM_WF, MANUAL_WF):
+        text = read(wf)
+        assert "permissions:" in text
+        assert "contents: read" in text
+        assert "actions: read" in text
+
+
+def test_scheduled_workflows_have_heartbeat() -> None:
+    for wf in (NS_WF, LM_WF):
+        text = read(wf)
+        assert "Schedule heartbeat" in text
+        assert "github.workflow" in text
+        assert "github.event_name" in text
+        assert "date -u" in text
+
+
+def test_scheduled_workflows_have_dry_run_only_dispatch() -> None:
+    for wf in (NS_WF, LM_WF):
+        text = read(wf)
+        assert "dry_run_only:" in text
+        assert "Run dry-run and health summary only; never apply/post" in text
+        assert "dry_run_only != 'true'" in text
+
+
+def test_scheduled_workflows_have_concurrency() -> None:
+    for wf in (NS_WF, LM_WF):
+        text = read(wf)
+        assert "concurrency:" in text
+        assert "cancel-in-progress: false" in text
+
+
+def test_scheduled_workflows_schedule_event_runs_apply() -> None:
+    for wf in (NS_WF, LM_WF):
+        text = read(wf)
+        assert "(github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true')" in text
+        assert "dry_run_only != 'true'" in text
+        assert "--apply" in text
+        assert "--confirm-autonomous" in text
+
+
+def test_manual_workflow_no_schedule() -> None:
+    test_manual_workflow_has_no_schedule()
+
+
+def test_workflow_names_not_confusing() -> None:
+    assert "name: Autonomous Growth Loop Night Scout" in read(NS_WF)
+    assert "name: Autonomous Growth Loop Liver Manager" in read(LM_WF)
+    assert "name: Autonomous Growth Loop\n" in read(MANUAL_WF)
+    assert "ACCOUNT_ID: \"night_scout\"" in read(NS_WF)
+    assert "ACCOUNT_ID: \"liver_manager\"" in read(LM_WF)
+
+
+def test_actions_enablement_runbook_docs() -> None:
+    text = read(ROOT / "docs/autonomous-mode-runbook.md")
+    for needle in (
+        "Autonomous Growth Loop Night Scout",
+        "Autonomous Growth Loop Liver Manager",
+        "Enable workflow",
+        "dry_run_only",
+        "Schedule heartbeat",
+        "NO_READY_QUEUE",
+    ):
+        assert needle in text
 
 
 def test_scheduled_workflows_env_gates_scoped() -> None:

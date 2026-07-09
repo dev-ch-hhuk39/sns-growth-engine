@@ -107,6 +107,12 @@ def build_health(account_id: str) -> dict[str, Any]:
             "exists": path.exists(),
             "has_schedule": "schedule:" in text,
             "has_workflow_dispatch": "workflow_dispatch:" in text,
+            "has_permissions_contents_read": "contents: read" in text,
+            "has_permissions_actions_read": "actions: read" in text,
+            "has_concurrency": "concurrency:" in text and "cancel-in-progress: false" in text,
+            "has_heartbeat": "Schedule heartbeat" in text and "github.workflow" in text and "date -u" in text,
+            "has_dry_run_only_dispatch": "dry_run_only:" in text,
+            "dry_run_only_skips_apply": "dry_run_only != 'true'" in text,
             "has_jitter": "random.randint(0, 1800)" in text,
             "has_apply_step": "--confirm-autonomous" in text,
             "apply_env_scoped": 'PUBLISH_ENABLED: "true"' in text and 'ALLOW_REAL_THREADS_POST: "true"' in text,
@@ -125,6 +131,14 @@ def build_health(account_id: str) -> dict[str, Any]:
             problems.append("manual_workflow_has_schedule")
         if key != "manual" and not wf["has_schedule"]:
             problems.append(f"{key}:schedule_missing")
+        if not wf["has_permissions_contents_read"] or not wf["has_permissions_actions_read"]:
+            problems.append(f"{key}:permissions_missing")
+        if not wf["has_concurrency"]:
+            problems.append(f"{key}:concurrency_missing")
+        if not wf["has_heartbeat"]:
+            problems.append(f"{key}:heartbeat_missing")
+        if not wf["has_dry_run_only_dispatch"] or not wf["dry_run_only_skips_apply"]:
+            problems.append(f"{key}:dry_run_only_missing_or_unsafe")
         workflow_results[key] = wf
 
     source = _source_registry_sanity()

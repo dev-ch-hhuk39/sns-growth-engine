@@ -87,6 +87,48 @@ Workflows:
 
 The manual workflow is `workflow_dispatch` only. The account-specific workflows have schedules and fixed `ACCOUNT_ID`; scheduled runs apply automatically while preserving the real-post gates.
 
+### Actions Enablement And Firing Check
+
+As of 2026-07-09 JST, GitHub Actions is enabled for the repository and these autonomous workflows are `active`:
+
+- `Autonomous Growth Loop Night Scout`
+- `Autonomous Growth Loop Liver Manager`
+- `Autonomous Growth Loop`
+
+The account-specific scheduled workflows are firing. Recent observed scheduled runs:
+
+- Night Scout: run `29003612060`, event `schedule`, conclusion `success`, created `2026-07-09T08:05:56Z`
+- Liver Manager: run `29000408859`, event `schedule`, conclusion `success`, created `2026-07-09T07:04:06Z`
+
+Important distinction: a green scheduled run can still mean `NO_POST`. In the 2026-07-09 runs, the workflows reached **Apply autonomous Threads loop**, but `health_summary.posted_count=0` and `health_summary.no_post_reason=NO_READY_QUEUE`. That is a queue/auto-ready issue, not an Actions firing issue.
+
+GitHub UI checks when a user sees "not running":
+
+1. Open **Actions**.
+2. Select **Autonomous Growth Loop Night Scout** or **Autonomous Growth Loop Liver Manager**.
+3. Confirm the banner does not say the workflow is disabled.
+4. If disabled, click **Enable workflow**. This only enables the workflow; it does not post immediately.
+5. Open the latest scheduled run and check the first steps: **Schedule heartbeat**, **Dry-run autonomous plan**, then **Apply autonomous Threads loop** for scheduled events.
+6. Read `health_summary.no_post_reason` before assuming the schedule failed.
+
+Equivalent read-only CLI checks:
+
+```bash
+gh workflow list --all
+gh run list --workflow "Autonomous Growth Loop Night Scout" --limit 10
+gh run list --workflow "Autonomous Growth Loop Liver Manager" --limit 10
+gh run view <run_id> --log
+```
+
+If a workflow is disabled and a maintainer explicitly wants to re-enable it:
+
+```bash
+gh workflow enable "Autonomous Growth Loop Night Scout"
+gh workflow enable "Autonomous Growth Loop Liver Manager"
+```
+
+Do not use `gh workflow run` for immediate apply unless the user explicitly asks for a manual run.
+
 ### First Apply From GitHub UI
 
 Use GitHub Actions for the first real autonomous apply because the local Codex approval reviewer can block real-post capable commands.
@@ -97,10 +139,11 @@ Use GitHub Actions for the first real autonomous apply because the local Codex a
 4. Click **Run workflow**.
 5. Set `confirm_autonomous` to `true`.
 6. Set `account_id` to `all` for the first combined pilot, or choose `night_scout` / `liver_manager` for a narrower run.
-7. Click **Run workflow**.
-8. Open the created run and confirm **Dry-run autonomous plan** completed before **Apply autonomous Threads loop**.
-9. If the run fails, read the failing step summary first. The expected safe failures are missing secrets, `kill_switch=true`, Sheets verify failure, source selection empty, daily cap/cooldown, or publisher credential failure.
-10. Confirm the posted URL in the workflow log summary and in Google Sheets `posted_results`. If the Threads post succeeded but Sheets save failed, use the `POSTED_SAVE_FAILED` fallback/recovery path rather than retrying blindly.
+7. For a smoke test with no apply/post, set `dry_run_only=true`. This runs **Dry-run autonomous plan** and **Autonomous health summary** only.
+8. Click **Run workflow**.
+9. Open the created run and confirm **Dry-run autonomous plan** completed before **Apply autonomous Threads loop**.
+10. If the run fails, read the failing step summary first. The expected safe failures are missing secrets, `kill_switch=true`, Sheets verify failure, source selection empty, daily cap/cooldown, or publisher credential failure.
+11. Confirm the posted URL in the workflow log summary and in Google Sheets `posted_results`. If the Threads post succeeded but Sheets save failed, use the `POSTED_SAVE_FAILED` fallback/recovery path rather than retrying blindly.
 
 Do not enable X, beauty, media, download, cut, upload, Cloudinary, or transcription flags for this workflow.
 
@@ -160,10 +203,19 @@ Operational rules:
 
 - Scheduled runs apply automatically in the account-specific windows above.
 - Each scheduled run sleeps a random `0-1800` seconds before dry-run/apply.
+- Each workflow declares `permissions: contents: read` and `actions: read`.
+- Each account-specific workflow has `concurrency` with `cancel-in-progress: false` so close schedule slots do not cancel each other.
+- Each run prints **Schedule heartbeat** with workflow name, event, account, and UTC time before dependency install.
+- Manual dispatch includes `dry_run_only`; when `dry_run_only=true`, guard/apply are skipped even if `confirm_autonomous=true`.
 - Manual runs still use `workflow_dispatch` and `confirm_autonomous=true`.
 - Keep `max_posts_per_run=1`, `daily_post_cap_per_account=5`, and `cooldown_minutes=90`.
 - If a bad post appears, set `kill_switch=true` in `config/autonomous_mode.json`, commit, and push.
 - To stop a schedule without changing runtime config, comment out the `schedule` block in the account-specific workflow and push.
+
+Next configured schedule windows from 2026-07-09 18:50 JST:
+
+- `night_scout`: JST 21:00 ±15min, then JST 25:00 ±15min.
+- `liver_manager`: JST 21:00 ±15min.
 
 ### 2026-07-07 Posting Recovery
 

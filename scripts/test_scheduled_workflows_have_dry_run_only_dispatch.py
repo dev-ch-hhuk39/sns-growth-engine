@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_scheduled_workflows_have_dry_run_only_dispatch
+
+test_scheduled_workflows_have_dry_run_only_dispatch()
+print('PASS test_scheduled_workflows_have_dry_run_only_dispatch.py')

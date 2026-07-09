@@ -8,6 +8,25 @@ Created: 2026-06-24
 The project is operational for Threads-first manual review operation.
 `threads-queue-worker.yml` の Sheets verify は check 総数 **51 件**（2026-06-25 snapshot の 33 件 → item J の media/metrics チェック等で +8 → READY 承認モデルで +10）。合格条件は `failed=[]`（`passed` は seed 充足状況で変動）。READY 承認モデル追加後の live `--verify-only` 再確認は #68 で実施。
 
+## 2026-07-09 Update — GitHub Actions Schedule Firing Audit
+
+GitHub Actions itself is enabled and the autonomous workflows are active. The account-specific schedules are firing:
+
+- `Autonomous Growth Loop Night Scout`: latest checked scheduled run `29003612060`, success, reached apply.
+- `Autonomous Growth Loop Liver Manager`: latest checked scheduled run `29000408859`, success, reached apply.
+
+The current no-post symptom is not an Actions-disabled/no-schedule issue. The observed production reason is `NO_READY_QUEUE`: apply runs, `auto_approve_queue.py` rejects or skips candidates, and `process_threads_queue.py` finds no `READY` queue row. This must be checked separately from schedule firing.
+
+Workflow hardening added:
+
+- explicit `permissions: contents: read` and `actions: read`
+- account-specific `concurrency` with `cancel-in-progress: false`
+- `Schedule heartbeat` step
+- `workflow_dispatch` `dry_run_only` input that prevents guard/apply even if confirm is true
+- health check coverage for permissions, concurrency, heartbeat, and dry-run-only safety
+
+Next scheduled windows from 2026-07-09 18:50 JST are both accounts at JST 21:00 ±15min, then `night_scout` at JST 25:00 ±15min.
+
 ## 2026-07-07 Update — Autonomous Posting Recovery
 
 Account-specific scheduled autonomous posting is still the production text-only path:
