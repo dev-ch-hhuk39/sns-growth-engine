@@ -199,6 +199,8 @@ Current recovery behavior:
 2. `recover_production_sheets_threads_first.py --verify-only --json` failure is recorded as a warning, not a hard stop.
 3. Threads source fetch, video reference analysis, and reference scoring are allowed to soft-fail.
 4. If reference rows are empty, `generate_threads_ideas_from_references.py` creates safe original fallback `WAITING_REVIEW` candidates.
+5. If reference-generated rows already exist but are stale/rejected, generation refreshes non-locked rows with current validated public text.
+6. If every reference-generated row is locked/skipped, generation adds timestamped safe fallback candidates so AUTO_READY has fresh inventory.
 5. `auto_approve_queue.py` promotes only passing text-only candidates to `READY`.
 6. `process_threads_queue.py` posts only `READY` and writes `posted_results` / PDCA initial records.
 7. If no post happens, `health_summary.no_post_reason` identifies the cause.

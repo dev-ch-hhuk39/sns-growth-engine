@@ -377,22 +377,47 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
     return {"drafts": drafts, "social_derivatives": derivatives, "queue": queues}
 
 
+LOCKED_GENERATION_STATUSES = {"READY", "PROCESSING", "POSTED", "MEDIA_READY"}
+
+
+def _row_status(row: dict[str, Any]) -> str:
+    return str(row.get("status") or row.get("ai_publish_recommendation") or "").strip().upper()
+
+
+def _update_existing_row(ws: Any, headers: list[str], row_number: int, row: dict[str, Any]) -> None:
+    for header in headers:
+        if header in row:
+            ws.update_cell(row_number, headers.index(header) + 1, str(row.get(header, "")))
+
+
 def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, Any]]) -> dict[str, int]:
     if not rows:
-        return {"added": 0, "skipped": 0}
+        return {"added": 0, "skipped": 0, "refreshed": 0}
     ws = client._ws(logical)
     headers = ws.row_values(1)
-    existing = {str(r.get(key, "")) for r in ws.get_all_records()}
-    added = skipped = 0
+    existing_rows = {str(r.get(key, "")): dict(r) for r in ws.get_all_records()}
+    added = skipped = refreshed = 0
     for row in rows:
         row_key = str(row.get(key, ""))
-        if row_key in existing:
-            skipped += 1
+        existing = existing_rows.get(row_key)
+        if existing:
+            if _row_status(existing) in LOCKED_GENERATION_STATUSES:
+                skipped += 1
+                continue
+            col = headers.index(key) + 1
+            cell = ws.find(row_key, in_column=col)
+            if cell is None:
+                skipped += 1
+                continue
+            refreshed_row = {**existing, **row}
+            _update_existing_row(ws, headers, cell.row, refreshed_row)
+            existing_rows[row_key] = refreshed_row
+            refreshed += 1
             continue
         ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
-        existing.add(row_key)
+        existing_rows[row_key] = dict(row)
         added += 1
-    return {"added": added, "skipped": skipped}
+    return {"added": added, "skipped": skipped, "refreshed": refreshed}
 
 
 def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dict[str, Any]:
@@ -429,7 +454,24 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dic
         "social_derivatives": _append_missing(client, "social_derivatives", "derivative_id", rows["social_derivatives"]),
         "queue": _append_missing(client, "queue", "queue_id", rows["queue"]),
     }
-    return {**summary, "status": "GENERATED", "applied_operations": ops}
+    queue_writes = sum(int(ops["queue"].get(k, 0)) for k in ("added", "refreshed"))
+    fallback_topup_used = False
+    fallback_ops: dict[str, dict[str, int]] = {}
+    if queue_writes == 0:
+        fallback_rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n)
+        fallback_topup_used = bool(fallback_rows["queue"])
+        fallback_ops = {
+            "drafts": _append_missing(client, "drafts", "draft_id", fallback_rows["drafts"]),
+            "social_derivatives": _append_missing(client, "social_derivatives", "derivative_id", fallback_rows["social_derivatives"]),
+            "queue": _append_missing(client, "queue", "queue_id", fallback_rows["queue"]),
+        }
+    return {
+        **summary,
+        "status": "GENERATED",
+        "fallback_topup_used": fallback_topup_used,
+        "applied_operations": ops,
+        "fallback_topup_operations": fallback_ops,
+    }
 
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:

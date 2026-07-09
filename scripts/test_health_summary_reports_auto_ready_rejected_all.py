@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_health_summary_reports_auto_ready_rejected_all
+
+test_health_summary_reports_auto_ready_rejected_all()
+print('PASS test_health_summary_reports_auto_ready_rejected_all.py')

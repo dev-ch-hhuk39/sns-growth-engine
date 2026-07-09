@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_generation_does_not_refresh_ready_or_posted_rows
+
+test_generation_does_not_refresh_ready_or_posted_rows()
+print('PASS test_generation_does_not_refresh_ready_or_posted_rows.py')

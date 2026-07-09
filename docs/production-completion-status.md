@@ -27,6 +27,18 @@ Workflow hardening added:
 
 Next scheduled windows from 2026-07-09 18:50 JST are both accounts at JST 21:00 ±15min, then `night_scout` at JST 25:00 ±15min.
 
+## 2026-07-09 Update — READY Shortage Recovery
+
+The next production blocker after schedule firing was `NO_READY_QUEUE` / `AUTO_READY_REJECTED_ALL`. The text-only autonomous path now has a safer recovery mechanism:
+
+- Stale generated rows with the same IDs are refreshed when their status is not locked.
+- Locked rows (`READY`, `PROCESSING`, `MEDIA_READY`, `POSTED`) are never overwritten.
+- When reference-generated rows are all skipped because they already exist in locked states, safe timestamped fallback candidates are added.
+- Fallback candidates are validated by `final_public_post_validator` and covered by AUTO_READY tests for both `night_scout` and `liver_manager`.
+- Health summary distinguishes `AUTO_READY_REJECTED_ALL` from worker-level `NO_READY_QUEUE`.
+
+This does not execute a real post by itself. It makes the next scheduled apply capable of producing a safe `READY` candidate instead of repeatedly reusing stale rejected rows.
+
 ## 2026-07-07 Update — Autonomous Posting Recovery
 
 Account-specific scheduled autonomous posting is still the production text-only path:

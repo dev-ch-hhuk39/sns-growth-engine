@@ -301,6 +301,128 @@ def test_no_source_fallback_generates_safe_public_post() -> None:
     assert all(final_public_post_validator(d["body_md"], "night_scout")["status"] == "PASS" for d in rows["drafts"])
 
 
+class _FakeCell:
+    def __init__(self, row: int) -> None:
+        self.row = row
+
+
+class _FakeWorksheet:
+    def __init__(self, headers: list[str], rows: list[dict]) -> None:
+        self.headers = headers
+        self.rows = rows
+
+    def row_values(self, row: int) -> list[str]:
+        assert row == 1
+        return self.headers
+
+    def get_all_records(self) -> list[dict]:
+        return [dict(r) for r in self.rows]
+
+    def append_row(self, values: list[str], value_input_option: str = "") -> None:
+        self.rows.append({h: values[i] if i < len(values) else "" for i, h in enumerate(self.headers)})
+
+    def find(self, value: str, in_column: int) -> _FakeCell | None:
+        key = self.headers[in_column - 1]
+        for idx, row in enumerate(self.rows, start=2):
+            if str(row.get(key, "")) == value:
+                return _FakeCell(idx)
+        return None
+
+    def update_cell(self, row: int, col: int, value: str) -> None:
+        self.rows[row - 2][self.headers[col - 1]] = value
+
+
+class _FakeClient:
+    def __init__(self, logical: str, headers: list[str], rows: list[dict]) -> None:
+        self.logical = logical
+        self.ws = _FakeWorksheet(headers, rows)
+
+    def _ws(self, logical: str) -> _FakeWorksheet:
+        assert logical == self.logical
+        return self.ws
+
+
+def test_generation_refreshes_stale_waiting_review_rows() -> None:
+    from generate_threads_ideas_from_references import _append_missing
+
+    rows = [{"queue_id": "q1", "draft_id": "d1", "status": "REJECTED", "generation_mode": "old", "media_reuse_risk": "low"}]
+    client = _FakeClient("queue", ["queue_id", "draft_id", "status", "generation_mode", "media_reuse_risk"], rows)
+    result = _append_missing(client, "queue", "queue_id", [{
+        "queue_id": "q1",
+        "draft_id": "d1",
+        "status": "WAITING_REVIEW",
+        "generation_mode": "safe_original_fallback_threads",
+        "media_reuse_risk": "low",
+    }])
+    assert result == {"added": 0, "skipped": 0, "refreshed": 1}
+    assert rows[0]["status"] == "WAITING_REVIEW"
+    assert rows[0]["generation_mode"] == "safe_original_fallback_threads"
+
+
+def test_generation_does_not_refresh_ready_or_posted_rows() -> None:
+    from generate_threads_ideas_from_references import _append_missing
+
+    rows = [{"queue_id": "q1", "draft_id": "d1", "status": "READY", "generation_mode": "old"}]
+    client = _FakeClient("queue", ["queue_id", "draft_id", "status", "generation_mode"], rows)
+    result = _append_missing(client, "queue", "queue_id", [{
+        "queue_id": "q1",
+        "draft_id": "d1",
+        "status": "WAITING_REVIEW",
+        "generation_mode": "safe_original_fallback_threads",
+    }])
+    assert result == {"added": 0, "skipped": 1, "refreshed": 0}
+    assert rows[0]["status"] == "READY"
+    assert rows[0]["generation_mode"] == "old"
+
+
+def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
+    from auto_approve_queue import build_plan, load_rules
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+    from sheets_client import MockSheetsClient
+
+    for account_id in ("night_scout", "liver_manager"):
+        client = MockSheetsClient()
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=2)
+        for draft in rows["drafts"]:
+            client.save_draft(
+                account_id,
+                draft["title"],
+                draft["body_md"],
+                draft_id=draft["draft_id"],
+                status=draft["status"],
+                generation_mode=draft["generation_mode"],
+                media_strategy=draft["media_strategy"],
+                media_reuse_risk=draft["media_reuse_risk"],
+                source_refs=draft.get("source_refs", ""),
+            )
+        for derivative in rows["social_derivatives"]:
+            client.append_social_derivative(derivative)
+        for queue in rows["queue"]:
+            client.append_queue_item(queue)
+        plan = build_plan(client, account_id, 1, load_rules())
+        assert plan["approvable_count"] == 1, plan
+        assert plan["selected_queue_ids"], plan
+
+
+def test_health_summary_reports_auto_ready_rejected_all() -> None:
+    from run_autonomous_loop import summarize_autonomous_results
+
+    summary = summarize_autonomous_results("liver_manager", "apply", [
+        {
+            "cmd": "scripts/auto_approve_queue.py --account-id liver_manager --apply --confirm-auto-ready",
+            "returncode": 0,
+            "stdout_tail": '{"status":"APPLIED","evaluated_count":3,"approvable_count":0,"updated_count":0}',
+        },
+        {
+            "cmd": "scripts/process_threads_queue.py --account-id liver_manager --confirm-real-post --max-posts 1",
+            "returncode": 0,
+            "stdout_tail": '{"status":"NO_POST","reason":"NO_READY_QUEUE"}',
+        },
+    ])
+    assert summary["posted_count"] == 0
+    assert summary["no_post_reason"] == "AUTO_READY_REJECTED_ALL"
+
+
 def test_reference_similarity_guard_still_blocks_copy() -> None:
     from generate_threads_ideas_from_references import original_text_similarity_guard
 

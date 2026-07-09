@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_safe_fallback_candidates_are_auto_ready_approvable
+
+test_safe_fallback_candidates_are_auto_ready_approvable()
+print('PASS test_safe_fallback_candidates_are_auto_ready_approvable.py')

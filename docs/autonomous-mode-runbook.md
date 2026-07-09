@@ -257,6 +257,23 @@ Common no-post reasons:
 - `THREADS_API_FAILED`
 - `POSTED_SAVE_FAILED`
 
+### 2026-07-09 READY Recovery
+
+The scheduled workflows were firing, but no post was created when all existing generated queue rows were stale, rejected, or locked. The recovery path now handles this without weakening the final public post validator:
+
+- `generate_threads_ideas_from_references.py` refreshes existing non-locked generated rows (`WAITING_REVIEW`, `REJECTED`, blocked/stale rows) with the current validated public text.
+- Existing `READY`, `PROCESSING`, `MEDIA_READY`, and `POSTED` rows are never overwritten.
+- If reference-generated rows are all locked/skipped and no queue row is added or refreshed, the runner writes timestamped safe fallback `WAITING_REVIEW` candidates.
+- `auto_approve_queue.py` can promote those fallback candidates to `READY` when they pass quality, reader value, account fit, risk, similarity, and internal-leak gates.
+- `run_autonomous_loop.py` now reports `AUTO_READY_REJECTED_ALL` when AUTO_READY evaluates rows but selects none, instead of only surfacing the worker-level `NO_READY_QUEUE`.
+
+Expected next scheduled behavior:
+
+1. Generate or refresh at least one safe `WAITING_REVIEW` text-only candidate.
+2. AUTO_READY promotes at most one candidate per run.
+3. `process_threads_queue.py` posts only `READY`.
+4. If no post occurs, inspect `health_summary.no_post_reason`; `AUTO_READY_REJECTED_ALL` means generation quality still failed, while `NO_READY_QUEUE` means no eligible row reached the worker.
+
 ## Hard Blocks
 
 Autonomous mode must not:

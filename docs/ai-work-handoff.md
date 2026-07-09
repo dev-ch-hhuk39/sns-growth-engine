@@ -8,7 +8,129 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 - 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-07-07 (自動投稿停止復旧と night_scout Threads 参考元追加)
+- 前回更新: 2026-07-09 (GitHub Actions schedule発火確認とworkflow発火保証補強)
+
+## 最新作業内容 (2026-07-09) — NO_READY_QUEUE / AUTO_READY_REJECTED_ALL の解消補強
+
+### 本システムについて
+
+- 目的は SNS Growth Engine の text-only autonomous Threads 投稿を安定稼働させること。
+- 今回は動画本番化ではなく、`投稿候補生成 → AUTO_READY → READY → Threads worker` の詰まりを解消した。
+- 実投稿、手動apply、実download/cut/upload/video post、Cloudinary upload、transcription API、X fetch/post、beauty投稿は未実行。
+
+### 今回の調査結果
+
+- Actionsは発火済みで apply step まで到達している。
+- 投稿0の主因は `NO_READY_QUEUE`。
+- 実ログでは `generate_threads_ideas_from_references.py` が既存queueを `skipped` し、古い短文/REJECT候補が残ったまま `auto_approve_queue.py` で落ちる構造があった。
+- reference由来queue IDが固定のため、過去に `READY` / `POSTED` などロック済みになった行があると新規在庫が増えないケースもあった。
+
+### 修正内容
+
+- `scripts/generate_threads_ideas_from_references.py`
+  - 既存の非ロック行（`WAITING_REVIEW`, `REJECTED`, stale/blocked系）を現在の検証済み public text で refresh する。
+  - `READY`, `PROCESSING`, `MEDIA_READY`, `POSTED` は絶対に上書きしない。
+  - reference生成のqueue追加/refreshが0件なら、timestamp付きsafe fallback候補を追加する。
+- `scripts/run_autonomous_loop.py`
+  - AUTO_READYが候補を評価したが1件も選ばなかった場合、`health_summary.no_post_reason=AUTO_READY_REJECTED_ALL` を出す。
+- `scripts/autonomous_recovery_test_utils.py`
+  - stale row refresh、locked row非更新、fallback AUTO_READY合格、health summary原因判定のテストを追加。
+
+### 今回の作業ブランチ
+
+- `main`
+- 作業開始HEAD: `ad12090c389c57366d78b706bd881b7e36a77d0f`
+- 現在HEAD: commit後に `git rev-parse HEAD` で確認。
+
+### 変更ファイル一覧
+
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/run_autonomous_loop.py`
+- `scripts/autonomous_recovery_test_utils.py`
+- `docs/autonomous-mode-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/growth-loop-runbook.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_generation_refreshes_stale_waiting_review_rows.py`
+- `scripts/test_generation_does_not_refresh_ready_or_posted_rows.py`
+- `scripts/test_safe_fallback_candidates_are_auto_ready_approvable.py`
+- `scripts/test_health_summary_reports_auto_ready_rejected_all.py`
+
+### 未完了事項
+
+- 実投稿は今回未実行。次回scheduled runで自然にapplyされる。
+- 次回runで `health_summary.ready_count`, `posted_count`, `no_post_reason`, `posted_results` を確認する。
+- 実Sheets上に古いREJECT行がある場合、今回のrefreshで更新される想定。
+
+### 残WARN
+
+- ローカルではSheets/Threads secretsは未設定表示。Actions上ではmask済みでpresence確認済み。
+- `Autopilot AUTO_READY Pilot` など別workflowのfailureは今回対象外。
+
+### 全テスト結果
+
+- `test_generation_refreshes_stale_waiting_review_rows.py`: PASS。
+- `test_generation_does_not_refresh_ready_or_posted_rows.py`: PASS。
+- `test_safe_fallback_candidates_are_auto_ready_approvable.py`: PASS。
+- `test_health_summary_reports_auto_ready_rejected_all.py`: PASS。
+- `check_autonomous_health.py --account-id all --dry-run`: PASS。
+- `run_autonomous_loop.py --account-id night_scout --dry-run`: PASS、validator PASS、would_post=false。
+- `run_autonomous_loop.py --account-id liver_manager --dry-run`: PASS、validator PASS、would_post=false。
+- `test_all_workflows_safety_flags.py`: PASS 139 / FAIL 0。
+- `test_autonomous_workflow_no_x_no_media.py`: PASS。
+- `test_autonomous_posts_only_threads.py`: PASS。
+- `test_internal_terms_never_in_posted_text.py`: PASS。
+- `test_source_registry_no_beauty_active.py`: PASS。
+- `test_source_registry_no_x_fetch_by_default.py`: PASS。
+- `test_rights_status_policy.py`: PASS 6 / FAIL 0。
+- `py_compile`: PASS。
+
+### dry-run結果
+
+- 実投稿なし。
+- night_scout/liver_managerとも public_post_preview は読者向け自然文、internal leakなし、validator PASS。
+
+### confirmなしBLOCKED確認結果
+
+- 実投稿は `--confirm-autonomous`, worker `--confirm-real-post`, `PUBLISH_ENABLED=true`, `ALLOW_REAL_THREADS_POST=true` が必要。
+- media系は引き続きOFF。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `scripts/auto_approve_queue.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/run_autonomous_loop.py`
+- `docs/autonomous-mode-runbook.md`
+
+### 次にCodexが触ってよいファイル
+
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/run_autonomous_loop.py`
+- `scripts/autonomous_recovery_test_utils.py`
+
+### 衝突しやすいファイル
+
+- `docs/ai-work-handoff.md`
+- `scripts/autonomous_recovery_test_utils.py`
+- `scripts/generate_threads_ideas_from_references.py`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- secrets / token / cookie / storage_state
+
+### 次AIへの引き継ぎメモ
+
+- 次回scheduled runで `posted_count=1` になれば今回の本丸は通った判断。
+- まだ `AUTO_READY_REJECTED_ALL` が出る場合は、実Sheets上の候補本文・reasons・品質スコアを見る。
+- `NO_READY_QUEUE` のままなら、queue refresh/topupが実Sheetsで書けているか、`applied_operations.queue.refreshed/added` と `fallback_topup_operations` を確認する。
+- 動画本番ONはまだ後回し。text-onlyが安定してから。
 
 ## 最新作業内容 (2026-07-09) — GitHub Actions schedule発火確認とworkflow発火保証補強
 

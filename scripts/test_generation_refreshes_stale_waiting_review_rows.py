@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+from autonomous_recovery_test_utils import test_generation_refreshes_stale_waiting_review_rows
+
+test_generation_refreshes_stale_waiting_review_rows()
+print('PASS test_generation_refreshes_stale_waiting_review_rows.py')
