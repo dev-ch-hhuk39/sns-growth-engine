@@ -270,3 +270,45 @@ python3 scripts/run_autonomous_loop.py --account-id liver_manager --apply --conf
 ```
 
 This writes only the planning/generation/AUTO_READY side and skips `process_threads_queue.py`. Do not use it as a substitute for the scheduled workflow; it is a production diagnostic.
+
+## Production Autopilot Aftercare (2026-07-10)
+
+The production growth loop now has three scheduled layers:
+
+- `Autonomous Growth Loop Night Scout`: text-only Threads publishing for `night_scout`.
+- `Autonomous Growth Loop Liver Manager`: text-only Threads publishing for `liver_manager`.
+- `Production Autopilot Aftercare`: non-posting aftercare for metrics, PDCA candidates, approved source video discovery, and clip candidates.
+
+The aftercare workflow runs daily at JST 23:40. It may write safe operational records to Sheets when `confirm_aftercare=true` or the event is `schedule`, but it keeps all public-post and media execution gates closed:
+
+- `PUBLISH_ENABLED=false`
+- `ALLOW_REAL_THREADS_POST=false`
+- `ALLOW_REAL_X_POST=false`
+- `ALLOW_MEDIA_POSTS=false`
+- `ALLOW_VIDEO_DOWNLOAD=false`
+- `ALLOW_VIDEO_CUT=false`
+- `ALLOW_CLOUDINARY_UPLOAD=false`
+- `ALLOW_TRANSCRIPTION_API=false`
+
+The media side that is now automated is discovery/planning only:
+
+- approved `liver_manager` sources are discovered into `source_videos`
+- dedupe uses `platform`, `source_id`, `video_id`, and canonical URL
+- clip candidates are generated into `video_clip_candidates`
+- public post previews must pass the final public validator
+
+The media side that remains manual/gated:
+
+- real download
+- real ffmpeg cut
+- Cloudinary upload
+- Threads video+text post
+- learning_rules auto-apply
+
+Local dry-run checks:
+
+```bash
+python3 scripts/check_autonomous_health.py --account-id all --dry-run
+python3 scripts/discover_approved_source_videos.py --account-id liver_manager --dry-run
+python3 scripts/run_media_growth_engine.py --account-id liver_manager --dry-run
+```

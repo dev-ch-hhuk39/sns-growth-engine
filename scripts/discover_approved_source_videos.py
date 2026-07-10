@@ -24,6 +24,8 @@ from media_growth_schemas import (  # noqa: E402
     canonicalize_video_url,
     is_duplicate_source_video,
 )
+from config_loader import get_config  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 CONFIG_FILE = ROOT / "config/media_growth_engine.json"
@@ -43,6 +45,29 @@ def load_existing_source_videos(path: str = "") -> list[dict[str, Any]]:
     if not candidate.exists():
         return []
     return json.loads(candidate.read_text(encoding="utf-8"))
+
+
+def load_existing_source_videos_from_sheets() -> tuple[SheetsClient, list[dict[str, Any]]]:
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    client._ensure_tab("source_videos", TAB_DEFINITIONS["source_videos"])
+    return client, [dict(r) for r in client._ws("source_videos").get_all_records()]
+
+
+def append_source_videos_to_sheets(client: SheetsClient, rows: list[dict[str, Any]]) -> int:
+    if not rows:
+        return 0
+    ws = client._ws("source_videos")
+    headers = ws.row_values(1)
+    existing = [dict(r) for r in ws.get_all_records()]
+    to_add = [row for row in rows if not is_duplicate_source_video(row, existing)]
+    if not to_add:
+        return 0
+    ws.append_rows(
+        [[str(row.get(h, "")) for h in headers] for row in to_add],
+        value_input_option="USER_ENTERED",
+    )
+    return len(to_add)
 
 
 def permission_ok(source: dict[str, Any]) -> bool:
@@ -179,6 +204,7 @@ def build_discovery_plan(
         "new_video_count": len(new_videos),
         "duplicate_video_count": duplicate_count,
         "skipped_video_count": skipped_count,
+        "new_videos": new_videos,
         "new_videos_preview": new_videos[:5],
         "would_save_source_videos": bool(apply and confirm_discovery and not blocked),
         "blocked_reasons": blocked,
@@ -193,15 +219,28 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-discovery", action="store_true")
     parser.add_argument("--existing-source-videos-json", default="")
+    parser.add_argument("--use-sheets", action="store_true", help="read/write source_videos tab when applying")
     args = parser.parse_args()
 
-    existing = load_existing_source_videos(args.existing_source_videos_json) if args.existing_source_videos_json else None
+    client = None
+    existing = None
+    if args.use_sheets and (args.apply or args.dry_run):
+        client, existing = load_existing_source_videos_from_sheets()
+    elif args.existing_source_videos_json:
+        existing = load_existing_source_videos(args.existing_source_videos_json)
     plan = build_discovery_plan(
         args.account_id,
         apply=args.apply,
         confirm_discovery=args.confirm_discovery,
         existing_source_videos=existing,
     )
+    if args.apply and args.confirm_discovery and args.use_sheets and client and plan["status"] != "BLOCKED":
+        added = append_source_videos_to_sheets(client, plan.get("new_videos", []))
+        plan["saved_source_video_count"] = added
+        plan["would_save_source_videos"] = False
+        plan["source_videos_save_status"] = "SAVED" if added else "NO_NEW_ROWS"
+    elif args.apply and args.confirm_discovery and not args.use_sheets and plan["status"] != "BLOCKED":
+        plan["source_videos_save_status"] = "SKIPPED_USE_SHEETS_REQUIRED"
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     return 1 if plan["status"] == "BLOCKED" and args.apply else 0
 

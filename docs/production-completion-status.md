@@ -1,12 +1,35 @@
 # Production Completion Status
 
-Date: 2026-07-10 (最終更新 — READY生成導線・AUTO_READY整合性補強)
+Date: 2026-07-10 (最終更新 — Production Autopilot Aftercare追加)
 Created: 2026-06-24
 
 ## Status
 
 The project is operational for Threads-first text-only autonomous operation, with media/video growth features implemented as gated dry-run/manual foundations.
 `threads-queue-worker.yml` の Sheets verify は check 総数 **51 件**（2026-06-25 snapshot の 33 件 → item J の media/metrics チェック等で +8 → READY 承認モデルで +10）。合格条件は `failed=[]`（`passed` は seed 充足状況で変動）。READY 承認モデル追加後の live `--verify-only` 再確認は #68 で実施。
+
+## 2026-07-10 Update — Production Autopilot Aftercare
+
+ユーザー方針「個別確認で止めず、本番で自動運用する」に合わせて、text-only投稿の自動scheduleに加え、投稿後aftercareとMedia Growth Engineの保存系を自動運用へ接続した。
+
+本番で自動実行されるもの:
+
+- `Autonomous Growth Loop Night Scout` / `Autonomous Growth Loop Liver Manager`: account別scheduleで text-only Threads posting を自動実行。`max_posts_per_run=1`、`daily_post_cap_per_account=5`、final public post validator、X/media/beauty block は維持。
+- `Production Autopilot Aftercare`: 毎日 JST 23:40 にmetrics snapshot、PDCA候補生成、許可済みliver_manager sourceの `source_videos` discovery、`video_clip_candidates` 生成・Sheets保存を実行。
+- `source_videos` / `video_clip_candidates`: approved sourceのみ、dedupe付きで保存。dry-runでは保存しない。
+
+安全のため自動公開しないもの:
+
+- X fetch/post、beauty投稿、未許可media、`third_party_reference_only` media。
+- 実download、実cut、Cloudinary実upload、Threads video+text post。
+- learning_rules の自動適用。PDCAは候補・提案まで。
+
+今回の追加:
+
+- `config/production_autopilot.json`
+- `.github/workflows/production-autopilot-aftercare.yml`
+- `discover_approved_source_videos.py --apply --confirm-discovery --use-sheets`
+- `run_media_growth_engine.py --apply --confirm-media-growth --use-sheets`
 
 ## 2026-07-10 Update — Review Closure / Completion Classification
 

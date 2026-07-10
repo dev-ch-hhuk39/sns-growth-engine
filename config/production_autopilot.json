@@ -1,0 +1,18 @@
+{
+  "production_autopilot_enabled": true,
+  "text_only_public_posting_enabled": true,
+  "account_scheduled_posting_enabled": true,
+  "metrics_aftercare_enabled": true,
+  "pdca_candidate_generation_enabled": true,
+  "media_growth_aftercare_enabled": true,
+  "media_discovery_apply_enabled": true,
+  "media_clip_candidate_apply_enabled": true,
+  "media_public_posting_enabled": false,
+  "x_posting_enabled": false,
+  "beauty_posting_enabled": false,
+  "learning_rules_auto_apply_enabled": false,
+  "max_text_posts_per_run": 1,
+  "daily_post_cap_per_account": 5,
+  "aftercare_schedule_jst": "23:40",
+  "notes": "Text-only Threads posting is fully automated by account workflows. Media discovery and clip candidates are automatically saved for approved liver_manager sources; real media download/cut/upload/video post remains gated until an approved individual video asset is ready."
+}

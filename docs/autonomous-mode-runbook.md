@@ -87,6 +87,28 @@ Workflows:
 
 The manual workflow is `workflow_dispatch` only. The account-specific workflows have schedules and fixed `ACCOUNT_ID`; scheduled runs apply automatically while preserving the real-post gates.
 
+### Production Autopilot Aftercare
+
+`Production Autopilot Aftercare` is the scheduled non-posting aftercare workflow. It runs daily at JST 23:40 (`cron: 40 14 * * *`) and keeps the production loop moving without creating an immediate public post.
+
+It automatically runs:
+
+- metrics snapshot collection into Sheets when credentials are present
+- next queue / PDCA candidate generation for `night_scout` and `liver_manager`
+- approved `liver_manager` source video discovery into `source_videos`
+- approved clip candidate generation into `video_clip_candidates`
+
+It does not run:
+
+- real Threads posting
+- X posting or X fetch
+- beauty posting
+- video download, cut, Cloudinary upload, or video+text posting
+- transcription API calls
+- learning_rules auto-apply
+
+Operational rule: the account workflows publish text-only Threads posts. The aftercare workflow fills metrics, PDCA, source video, and clip-candidate inventory so the next scheduled loops have fresh material. Media public posting stays off until a reviewed uploaded media asset passes `media_post_validator.py`.
+
 ### Actions Enablement And Firing Check
 
 As of 2026-07-09 JST, GitHub Actions is enabled for the repository and these autonomous workflows are `active`:

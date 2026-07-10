@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import rights_allows_media_use  # noqa: E402
 from discover_approved_source_videos import build_discovery_plan, load_existing_source_videos  # noqa: E402
+from config_loader import get_config  # noqa: E402
 from media_growth_schemas import (  # noqa: E402
     build_clip_candidate_for_video,
     build_media_pdca_records,
@@ -23,6 +24,7 @@ from media_growth_schemas import (  # noqa: E402
     clips_overlap,
 )
 from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 CONFIG_FILE = ROOT / "config/media_growth_engine.json"
@@ -34,6 +36,59 @@ def load_sources() -> list[dict[str, Any]]:
 
 def load_config() -> dict[str, Any]:
     return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+
+
+def load_source_videos_from_sheets() -> tuple[SheetsClient, list[dict[str, Any]]]:
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    client._ensure_tab("source_videos", TAB_DEFINITIONS["source_videos"])
+    client._ensure_tab("video_clip_candidates", TAB_DEFINITIONS["video_clip_candidates"])
+    return client, [dict(r) for r in client._ws("source_videos").get_all_records()]
+
+
+def _clip_row_for_sheets(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **row,
+        "clip_id": row.get("clip_id") or row.get("clip_candidate_id", ""),
+        "reference_post_id": row.get("source_video_id", ""),
+        "transcript_id": f"tr_{row.get('source_video_id', '')}",
+        "source_platform": row.get("platform", ""),
+        "source_video_url": row.get("canonical_video_url") or row.get("source_video_url", ""),
+        "start_time": row.get("start_time", row.get("start_seconds", "")),
+        "end_time": row.get("end_time", row.get("end_seconds", "")),
+        "clip_title": row.get("title", ""),
+        "hook": row.get("hook_text", ""),
+        "why_it_works": row.get("reason", ""),
+        "target_persona": row.get("target_audience", ""),
+        "threads_post_angle": row.get("expected_post_angle", ""),
+        "reuse_status": "approved_creator_clip",
+        "media_reuse_risk": "low",
+        "imitation_risk": "low",
+        "confidence_score": row.get("clip_score", ""),
+        "notes": "Auto-saved by run_media_growth_engine; real cut/upload/post remains gated.",
+    }
+
+
+def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, Any]]) -> int:
+    if not rows:
+        return 0
+    ws = client._ws("video_clip_candidates")
+    headers = ws.row_values(1)
+    existing = {str(r.get("clip_id") or r.get("clip_candidate_id", "")) for r in ws.get_all_records()}
+    to_add = []
+    for row in rows:
+        mapped = _clip_row_for_sheets(row)
+        clip_id = str(mapped.get("clip_id", ""))
+        if clip_id and clip_id not in existing:
+            to_add.append(mapped)
+            existing.add(clip_id)
+    if not to_add:
+        return 0
+    ws.append_rows(
+        [[str(row.get(h, "")) for h in headers] for row in to_add],
+        value_input_option="USER_ENTERED",
+    )
+    return len(to_add)
 
 
 def is_channel_or_account_url(source: dict[str, Any]) -> bool:
@@ -64,7 +119,13 @@ def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, An
     return rows
 
 
-def build_media_growth_plan(account_id: str, *, apply: bool = False, confirm_media_growth: bool = False) -> dict[str, Any]:
+def build_media_growth_plan(
+    account_id: str,
+    *,
+    apply: bool = False,
+    confirm_media_growth: bool = False,
+    existing_source_videos: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     config = load_config()
     selected = select_sources(account_id, config)
     blocked: list[str] = []
@@ -103,7 +164,7 @@ def build_media_growth_plan(account_id: str, *, apply: bool = False, confirm_med
             "blocked_reasons": source_blocked,
         })
 
-    existing_source_videos = load_existing_source_videos()
+    existing_source_videos = existing_source_videos if existing_source_videos is not None else load_existing_source_videos()
     discovery_plan = build_discovery_plan(account_id, existing_source_videos=existing_source_videos)
     planned_source_videos = existing_source_videos or discovery_plan.get("new_videos_preview", [])
     # Use the full bounded discovery plan in dry-run instead of only preview.
@@ -158,8 +219,9 @@ def build_media_growth_plan(account_id: str, *, apply: bool = False, confirm_med
         "video_post_enabled": bool(config.get("video_post_enabled")),
         "cloudinary_upload_enabled": bool(config.get("cloudinary_upload_enabled")),
         "threads_video_post_enabled": bool(config.get("threads_video_post_enabled")),
-        "schedule_enabled": False,
-        "manual_apply_only": True,
+        "schedule_enabled": bool(config.get("media_schedule_enabled", False)),
+        "manual_apply_only": not bool(config.get("media_schedule_enabled", False)),
+        "media_public_post_auto_enabled": bool(config.get("media_public_post_auto_enabled", False)),
     }
     pdca_records = build_media_pdca_records(clip_candidates[0]) if clip_candidates else {}
     if validation["status"] != "PASS":
@@ -196,8 +258,24 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", default=True)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-media-growth", action="store_true")
+    parser.add_argument("--use-sheets", action="store_true", help="read source_videos and save clip candidates to Sheets")
     args = parser.parse_args()
-    plan = build_media_growth_plan(args.account_id, apply=args.apply, confirm_media_growth=args.confirm_media_growth)
+    client = None
+    existing = None
+    if args.use_sheets and (args.apply or args.dry_run):
+        client, existing = load_source_videos_from_sheets()
+    plan = build_media_growth_plan(
+        args.account_id,
+        apply=args.apply,
+        confirm_media_growth=args.confirm_media_growth,
+        existing_source_videos=existing,
+    )
+    if args.apply and args.confirm_media_growth and args.use_sheets and client and plan["status"] != "BLOCKED":
+        added = append_clip_candidates_to_sheets(client, plan.get("top_clip_candidates", []))
+        plan["saved_clip_candidate_count"] = added
+        plan["clip_candidate_save_status"] = "SAVED" if added else "NO_NEW_ROWS"
+    elif args.apply and args.confirm_media_growth and not args.use_sheets and plan["status"] != "BLOCKED":
+        plan["clip_candidate_save_status"] = "SKIPPED_USE_SHEETS_REQUIRED"
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     return 1 if plan["status"] == "BLOCKED" and args.apply else 0
 

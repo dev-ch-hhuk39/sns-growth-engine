@@ -22,6 +22,7 @@ WORKFLOWS = {
     "manual": ROOT / ".github/workflows/autonomous-growth-loop.yml",
     "night_scout": ROOT / ".github/workflows/autonomous-growth-loop-night-scout.yml",
     "liver_manager": ROOT / ".github/workflows/autonomous-growth-loop-liver-manager.yml",
+    "production_aftercare": ROOT / ".github/workflows/production-autopilot-aftercare.yml",
 }
 
 EXPECTED_CRONS = {
@@ -129,7 +130,7 @@ def build_health(account_id: str) -> dict[str, Any]:
             problems.append(f"{key}:schedule_mismatch")
         if key == "manual" and wf["has_schedule"]:
             problems.append("manual_workflow_has_schedule")
-        if key != "manual" and not wf["has_schedule"]:
+        if key in {"night_scout", "liver_manager", "production_aftercare"} and not wf["has_schedule"]:
             problems.append(f"{key}:schedule_missing")
         if not wf["has_permissions_contents_read"] or not wf["has_permissions_actions_read"]:
             problems.append(f"{key}:permissions_missing")
@@ -183,9 +184,12 @@ def build_health(account_id: str) -> dict[str, Any]:
         "validator_sanity": {"final_public_post_validator": "EXPECTED_IN_RUNNER_AND_WORKER"},
         "media_schedule": {
             "text_only_schedule_on": True,
-            "media_schedule_on": False,
+            "media_schedule_on": bool(media_config.get("media_schedule_enabled")) and workflow_results.get("production_aftercare", {}).get("has_schedule", False),
             "media_growth_engine_enabled": bool(media_config.get("media_growth_engine_enabled")),
             "source_video_discovery_apply_enabled": bool(media_config.get("source_video_discovery_apply_enabled")),
+            "auto_save_discovered_videos": bool(media_config.get("auto_save_discovered_videos")),
+            "auto_save_clip_candidates": bool(media_config.get("auto_save_clip_candidates")),
+            "media_public_post_auto_enabled": bool(media_config.get("media_public_post_auto_enabled")),
             "download_enabled": bool(media_config.get("download_enabled")),
             "cut_enabled": bool(media_config.get("cut_enabled")),
             "upload_enabled": bool(media_config.get("upload_enabled")),

@@ -214,9 +214,22 @@ The autonomous text-only schedule was repaired without enabling media execution:
 
 - `run_autonomous_loop.py` may use video/reference analysis as text inspiration only.
 - If video/source analysis fails, the runner can continue to safe text fallback generation.
-- Media Growth Engine remains dry-run/gated.
-- `source_video_discovery_apply_enabled=false` remains the default.
+- Media Growth Engine execution remains gated for real media operations.
+- `source_video_discovery_apply_enabled=true` is now used by the scheduled aftercare workflow to save approved-source `source_videos` only.
+- Clip candidate generation can be saved to `video_clip_candidates` for approved sources.
 - `download_enabled=false`, `cut_enabled=false`, `upload_enabled=false`, `video_post_enabled=false` remain the default.
 - No scheduled workflow posts video or media.
 
-Next media production step, when explicitly requested, should start with discovery/apply for `source_videos` only. It must not jump directly to download/cut/upload/post.
+Next media production step, when explicitly requested, should start from reviewed `source_video_id` / `clip_candidate_id`. It must not jump directly to download/cut/upload/post without env gates, confirm flags, rights evidence, and `media_post_validator.py`.
+
+## Production Autopilot Media Aftercare (2026-07-10)
+
+The production aftercare workflow is allowed to run the safe media planning layer automatically:
+
+- discover approved `liver_manager` YouTube/TikTok source videos
+- dedupe by video id and canonical URL
+- write `source_videos` rows when Sheets credentials are present
+- generate up to three non-overlapping clip candidates per video
+- write `video_clip_candidates` rows with `public_post_text` preview and validator status
+
+It is not allowed to download, cut, upload, or post media. `third_party_reference_only`, `reference_only`, and `unknown` sources remain analysis-only and are not eligible for media pipeline records beyond safe reference planning.

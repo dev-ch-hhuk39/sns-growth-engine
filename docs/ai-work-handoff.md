@@ -4,11 +4,110 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 ## 最終更新
 
-- Date: 2026-07-09
+- Date: 2026-07-10
 - 作業AI: Codex
 - 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
 - GitHub repo: `dev-ch-hhuk39/sns-growth-engine`
-- 前回更新: 2026-07-09 (READY生成安定化・AUTO_READY診断補強)
+- 前回更新: 2026-07-10 (Production Autopilot Aftercare追加)
+
+## 最新作業内容 (2026-07-10) — Production Autopilot Aftercare / media候補自動保存
+
+### 本システムについて
+
+- SNS Growth Engine v2 は `night_scout` / `liver_manager` の text-only Threads投稿をscheduleで自動公開し、投稿後metrics、PDCA候補、許可済み動画source discovery、clip candidate生成をSheetsへ蓄積する本番autopilot構成へ移行した。
+- `public_post_text` のみ投稿対象、final public post validator、X/beauty/media safety gateは維持。
+- 今回は実投稿、実download、実cut、実upload、Cloudinary upload、Threads video+text post、transcription API、X fetch/post、beauty投稿は未実行。
+
+### 変更ファイル一覧
+
+- `.github/workflows/production-autopilot-aftercare.yml`
+- `config/media_growth_engine.json`
+- `config/production_autopilot.json`
+- `scripts/check_autonomous_health.py`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+- `docs/autonomous-mode-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/video-reference-runbook.md`
+- `docs/production-completion-status.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `.github/workflows/production-autopilot-aftercare.yml`
+- `config/production_autopilot.json`
+- `scripts/test_production_autopilot_config.py`
+- `scripts/test_production_autopilot_aftercare_workflow.py`
+- `scripts/test_media_discovery_apply_to_sheets_plan.py`
+- `scripts/test_media_growth_apply_clip_candidates_plan.py`
+
+### 実装内容
+
+- `Production Autopilot Aftercare` workflowを追加。毎日 JST 23:40 にmetrics snapshot、PDCA候補生成、許可済みliver_manager sourceの `source_videos` discovery、`video_clip_candidates` 生成・Sheets保存を実行する。
+- `discover_approved_source_videos.py` に `--use-sheets` と `--apply --confirm-discovery` 保存導線を追加。dry-runでは保存しない。
+- `run_media_growth_engine.py` に `source_videos` Sheets読込、`video_clip_candidates` 保存導線、public preview validator確認を追加。
+- `check_autonomous_health.py` が production aftercare workflow と media aftercare状態を診断できるようにした。
+- `config/production_autopilot.json` で本番autopilotの有効範囲を明示した。
+
+### 未完了事項 / production-off
+
+- Media public postingは自動ONにしていない。理由: validator通過済みのuploaded media assetがまだない状態で自動公開をONにすると、壊れた投稿または不安全な投稿になるため。
+- 実download、実cut、Cloudinary実upload、Threads video+text postは引き続きenv + confirm gate必須。
+- learning_rules auto-applyはOFF。PDCAは候補・提案まで。
+
+### 残WARN
+
+- 実GitHub scheduled aftercare runの初回完走は次回Actions実行で確認する。
+- Sheets credentialsがActions secretsにない場合、aftercare guardで停止する。secret値は表示しない。
+- metrics取得は取得不能値を0にせず、PARTIAL/UNAVAILABLE/nullとして扱う設計を維持。
+
+### テスト結果 / dry-run結果
+
+- `scripts/test_production_autopilot_config.py`: PASS 9 / FAIL 0
+- `scripts/test_production_autopilot_aftercare_workflow.py`: PASS 14 / FAIL 0
+- `scripts/test_media_discovery_apply_to_sheets_plan.py`: PASS 5 / FAIL 0
+- `scripts/test_media_growth_apply_clip_candidates_plan.py`: PASS 10 / FAIL 0
+- `scripts/test_all_workflows_safety_flags.py`: PASS 155 / FAIL 0
+- `scripts/check_autonomous_health.py --account-id all --dry-run`: PASS、problemsなし
+- `scripts/run_autonomous_loop.py --account-id night_scout --dry-run`: would_post=false、public preview生成、validator PASS
+- `scripts/run_autonomous_loop.py --account-id liver_manager --dry-run`: would_post=false、public preview生成、validator PASS
+- `scripts/discover_approved_source_videos.py --account-id liver_manager --dry-run`: approved sourceのみ、would_save_source_videos=false
+- `scripts/run_media_growth_engine.py --account-id liver_manager --dry-run`: would_download=false / would_cut=false / would_upload=false / would_post_video=false
+- `git diff --check`: PASS
+
+### 次に触ってよいファイル
+
+- `.github/workflows/production-autopilot-aftercare.yml`
+- `config/production_autopilot.json`
+- `config/media_growth_engine.json`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/check_autonomous_health.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+
+### 衝突しやすいファイル
+
+- `scripts/run_autonomous_loop.py`
+- `scripts/process_threads_queue.py`
+- `scripts/auto_approve_queue.py`
+- `src/sheets_client.py`
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- cookie / token / storage_state / secret類
+
+### 次AIへの引き継ぎメモ
+
+- 「全部自動で回す」は text-only public posting + metrics/PDCA/media candidate aftercare まで本番自動化済み、という意味で扱う。
+- media video postingを完全自動ONにする前に、個別 `source_video_id` / `clip_candidate_id` のdownload/cut/upload実行、Cloudinary URL、`media_post_validator.py` PASS、rights evidence確認が必要。
+- X/beauty/third-party unapproved mediaは引き続き禁止。final public post validatorを弱めない。
 
 ## 最新作業内容 (2026-07-09) — READY診断 / stop-before-post / autonomous_health 追加
 
