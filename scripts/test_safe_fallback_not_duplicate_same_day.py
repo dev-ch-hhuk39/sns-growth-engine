@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_safe_fallback_not_duplicate_same_day
+
+test_safe_fallback_not_duplicate_same_day()
+print("PASS test_safe_fallback_not_duplicate_same_day.py")

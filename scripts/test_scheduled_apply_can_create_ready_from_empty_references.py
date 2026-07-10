@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_scheduled_apply_can_create_ready_from_empty_references
+
+test_scheduled_apply_can_create_ready_from_empty_references()
+print("PASS test_scheduled_apply_can_create_ready_from_empty_references.py")

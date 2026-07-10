@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_text_only_media_reuse_risk_not_high
+
+test_text_only_media_reuse_risk_not_high()
+print("PASS test_text_only_media_reuse_risk_not_high.py")

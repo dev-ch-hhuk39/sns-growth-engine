@@ -1,12 +1,47 @@
 # Production Completion Status
 
-Date: 2026-06-29 (最終更新 — READY 承認モデル必須化)
+Date: 2026-07-10 (最終更新 — READY生成導線・AUTO_READY整合性補強)
 Created: 2026-06-24
 
 ## Status
 
-The project is operational for Threads-first manual review operation.
+The project is operational for Threads-first text-only autonomous operation, with media/video growth features implemented as gated dry-run/manual foundations.
 `threads-queue-worker.yml` の Sheets verify は check 総数 **51 件**（2026-06-25 snapshot の 33 件 → item J の media/metrics チェック等で +8 → READY 承認モデルで +10）。合格条件は `failed=[]`（`passed` は seed 充足状況で変動）。READY 承認モデル追加後の live `--verify-only` 再確認は #68 で実施。
+
+## 2026-07-10 Update — Review Closure / Completion Classification
+
+添付レビューの指摘はおおむね正しい。`d7357e0` 時点では「診断と fallback は入ったが、空referenceからREADYを作れること、`--stop-before-post` で投稿せずREADY生成を検証できること、docsのAUTO_READY仕様整合性、text-onlyのmedia risk分類、1日5投稿に耐えるテーマ在庫」の証明が不足していた。
+
+今回の補強で完了扱いにしたもの:
+
+- text-only scheduled autonomous posting path: schedule → generation/fallback → AUTO_READY → READY → worker の導線を静的・mockテストで固定。
+- `--stop-before-post`: generation/AUTO_READY までは進め、`process_threads_queue.py` を呼ばず `would_post=false` で止める診断導線をテスト化。
+- safe fallback inventory: `night_scout` 15本、`liver_manager` 12本の reader-facing template pool を用意し、同一run内で重複しないことを検査。
+- text-only candidates: `media_reuse_risk=not_applicable` に正規化。media reuse risk は動画/画像再利用時のリスクであり、text-only fallbackを high 扱いしない。
+- AUTO_READY diagnostics: reject reason / ready count / checked count / approved count / rejected count / autonomous_health の仕様をテスト化。
+- docs comments: 「READYは人間承認のみ」という旧記述を、`approve_queue.py` または `auto_approve_queue.py` の2系統に更新。
+
+基盤はあるが本番ONではないもの:
+
+- Media Growth Engine: source video discovery、transcript/clip candidate schema、download/cut/upload/video-post runner、media validator、PDCA記録の土台はある。ただし schedule はOFF、実download/cut/upload/video post は env + confirm gate 必須。
+- Metrics/PDCA: posted_results の `metrics_status=PENDING` とPDCA初期記録は作る。実metrics自動取得、改善案の自動適用、learning_rules auto-apply は未ON。
+- YouTube/TikTok media use: approved source のみ設計上eligible。channel/account URLの無制限downloadはしない。個別video URL、権利証跡、manual apply が必要。
+
+明示的に未完成 / production-off:
+
+- 実download、実cut、Cloudinary実upload、Threads video+text post。
+- media schedule。
+- X fetch/post。
+- beauty_account posting。
+- transcription API自動呼び出し。
+- learning_rules の自動書き換え。
+
+次回scheduled runで見るべきもの:
+
+- `health_summary.ready_count > 0`
+- `health_summary.posted_count`
+- `health_summary.no_post_reason` が空、または `NO_READY_QUEUE` / `AUTO_READY_REJECTED_ALL` から変化していること。
+- `posted_results.post_url` または `external_post_id` が保存され、`metrics_status=PENDING` になっていること。
 
 ## 2026-07-09 Update — GitHub Actions Schedule Firing Audit
 
@@ -101,7 +136,7 @@ No autonomous apply or real post was executed during this implementation pass.
 
 - `process_threads_queue.py` の投稿対象を **`READY` のみ**に変更（`ELIGIBLE_STATUSES = {"READY"}`）。
   `WAITING_REVIEW` / `DRAFT` / `PLANNED` は投稿対象外。状態遷移 `WAITING_REVIEW → READY → PROCESSING → POSTED`。
-- 生成系CLI（refill / clip / metrics 候補 / seed）は `READY` を直接書かない。`READY` 昇格は `approve_queue.py`（WAITING_REVIEW → READY/REJECTED）経由のみ。承認時は logs に `queue_approved` 証跡を残す。
+- 生成系CLI（refill / clip / metrics 候補 / seed）は `READY` を直接書かない。`READY` 昇格は `approve_queue.py`（人間承認）または `auto_approve_queue.py`（AUTO_READY条件通過）経由のみ。承認時は logs に `queue_approved` 互換証跡を残す。
 - X 側 `publish_queue.py` の `--status READY` 必須ゲートと対称になり、旧「承認モデル非対称」の潜在課題を解消。
 - verify に READY 承認モデルの安全チェック10件を追加（`waiting_review_not_postable` / `ready_is_only_postable_status` / `generated_candidates_not_ready_by_default`（承認証跡で誤検知防止）/ `no_ready_for_x_or_beauty` / media 権利3件 ほか）。
 - 回帰固定テスト `test_recover_verify_ready_checks.py` ほか READY 系11本を追加。curated suite **55 / 55 PASS**（offline）。
@@ -347,7 +382,7 @@ commit: `8b14d01` / `9bdf7f5` / `cccaee6`（main に push 済み）。
 
 ## Remaining Manual Checks
 
-- `night_scout` の Threads 次投稿候補（WAITING_REVIEW）をレビューし、`approve_queue.py --queue-id <id> --approve --reason "..."` で `READY` に昇格して初めて worker 投稿対象になる
+- `night_scout` の Threads 次投稿候補（WAITING_REVIEW）は、人間が `approve_queue.py --queue-id <id> --approve --reason "..."` で `READY` に昇格するか、scheduled run 内の `auto_approve_queue.py` が安全条件を満たした場合だけ worker 投稿対象になる
 - Threads insights（night_scout 初回投稿 / liver_manager 投稿）を確認する
 - X API Credits を補充し、X 投稿を再開するかどうか判断する
 - Cloudinary upload を使う場合は `ALLOW_CLOUDINARY_UPLOAD=true` で `media-approved-pilot.yml` を実行する

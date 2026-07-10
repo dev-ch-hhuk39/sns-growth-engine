@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_night_scout_theme_pool_size
+
+test_night_scout_theme_pool_size()
+print("PASS test_night_scout_theme_pool_size.py")

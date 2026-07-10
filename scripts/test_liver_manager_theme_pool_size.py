@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_liver_manager_theme_pool_size
+
+test_liver_manager_theme_pool_size()
+print("PASS test_liver_manager_theme_pool_size.py")

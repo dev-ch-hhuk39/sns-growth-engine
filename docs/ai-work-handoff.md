@@ -3792,3 +3792,117 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - TikTok account URLを `/video/` に勝手に展開しない。
 - `final_public_post_validator` は弱めない。
 - `public_post_text` 以外をpublisherへ渡さない。
+
+## Codex handoff: READY generation review closure (2026-07-10)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `d7357e00875a41685bec92c9ebcc4bdb4583b0f5`
+- 作業ブランチ: `main`
+- commit予定: `fix: READY生成の実運用テストと仕様整合性を補強`
+
+### 今回確認したこと
+
+- 添付レビューの指摘は正しかった。`d7357e0` 時点では、schedule発火診断とfallbackは入っていたが、空referenceからREADYを作れること、`--stop-before-post`で投稿せずREADY生成を検証できること、AUTO_READY仕様とdocsの整合、text-onlyの`media_reuse_risk`分類、5投稿/日のテーマ在庫が不足していた。
+- 今回は実投稿、手動apply、実download、実cut、実upload、Cloudinary upload、transcription API、X fetch/post、beauty active化は実行していない。
+
+### 変更ファイル一覧
+
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/public_post_quality.py`
+- `scripts/autonomous_recovery_test_utils.py`
+- `scripts/process_threads_queue.py`
+- `scripts/recover_production_sheets_threads_first.py`
+- `docs/production-completion-status.md`
+- `docs/reference-pipeline-runbook.md`
+- `docs/sheets-manual-check-guide.md`
+- `docs/threads-operation-runbook.md`
+- `docs/threads-idea-generation-runbook.md`
+- `docs/threads-queue-worker.md`
+- `docs/video-clip-generation-usage.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_scheduled_apply_can_create_ready_from_empty_references.py`
+- `scripts/test_stop_before_post_creates_ready_without_posting.py`
+- `scripts/test_safe_fallback_rotates_topics.py`
+- `scripts/test_safe_fallback_not_duplicate_same_day.py`
+- `scripts/test_auto_ready_accepts_safe_original_fallback.py`
+- `scripts/test_auto_ready_reject_reasons_are_written_to_queue.py`
+- `scripts/test_auto_ready_ready_count_summary_matches_updates.py`
+- `scripts/test_process_threads_queue_posts_ready_text_only_path_static.py`
+- `scripts/test_posted_results_has_post_url_or_external_id.py`
+- `scripts/test_posted_results_metrics_pending_after_post.py`
+- `scripts/test_autonomous_health_saved_on_apply.py`
+- `scripts/test_generate_docs_comments_match_auto_ready_spec.py`
+- `scripts/test_text_only_media_reuse_risk_not_high.py`
+- `scripts/test_night_scout_theme_pool_size.py`
+- `scripts/test_liver_manager_theme_pool_size.py`
+- `scripts/test_same_day_theme_rotation.py`
+- `scripts/test_pdca_pending_after_post.py`
+- `scripts/test_media_growth_roadmap_off_by_default.py`
+
+### 実装内容
+
+- text-only fallback queueの`media_reuse_risk`を`not_applicable`へ正規化。動画/画像再利用リスクとtext-only候補を混同しない。
+- fallback template rotationをaccount別template数と15分slot基準に変更し、同日内の同一テーマ連発を避ける。
+- `night_scout` fallback templateを15本、`liver_manager`を12本に拡張。全templateは`final_public_post_validator` PASSを固定。
+- READY昇格仕様を「`approve_queue.py`人間承認または`auto_approve_queue.py` AUTO_READY」に統一。旧「人間のみ」コメント/docsを修正。
+- AUTO_READY reject reason、ready/checked/approved/rejected summary、posted_results post_url/external_id、metrics PENDING、PDCA pending、autonomous_health保存仕様をテスト化。
+- `--stop-before-post`は投稿workerを呼ばず、READY生成側だけを確認するproduction diagnosticとして固定。
+
+### 未完了事項 / production-off
+
+- 実metrics自動取得とPDCA改善の自動適用は未ON。`posted_results.metrics_status=PENDING`とPDCA初期記録まで。
+- Media Growth Engineはsource discovery / transcript / clip candidate / runner / validator / PDCA記録の基盤あり。ただしmedia scheduleはOFF。
+- 実download / 実cut / 実Cloudinary upload / Threads video+text post / transcription APIはenv+confirm必須で、今回未実行。
+- X fetch/post、beauty投稿、learning_rules auto-applyは引き続きOFF。
+
+### テスト結果 / dry-run結果
+
+- 追加READY/AUTO_READY/テーマ在庫/PDCA/media-offテスト18本: PASS。
+- `python3 scripts/check_autonomous_health.py --account-id all --dry-run`: PASS。workflows/schedules/config/source registry/media off checksにproblemなし。
+- `python3 scripts/run_autonomous_loop.py --account-id night_scout --dry-run`: PLAN_ONLY。public_post_preview自然文、internal_leak_check=PASS、final_validator_result=PASS、would_post=false。
+- `python3 scripts/run_autonomous_loop.py --account-id liver_manager --dry-run`: PLAN_ONLY。public_post_preview自然文、internal_leak_check=PASS、final_validator_result=PASS、would_post=false。
+- `python3 scripts/test_all_workflows_safety_flags.py`: PASS 139 / FAIL 0。
+- `python3 scripts/test_autonomous_workflow_no_x_no_media.py`: PASS 1 / FAIL 0。
+- `python3 scripts/test_autonomous_posts_only_threads.py`: PASS 1 / FAIL 0。
+- `python3 scripts/test_internal_terms_never_in_posted_text.py`: PASS 1 / FAIL 0。
+- `python3 scripts/test_source_registry_no_beauty_active.py`: PASS 1 / FAIL 0。
+- `python3 scripts/test_source_registry_no_x_fetch_by_default.py`: PASS 1 / FAIL 0。
+- `python3 scripts/test_rights_status_policy.py`: PASS 6 / FAIL 0。
+- `python3 -m py_compile ...`: PASS。
+- `git diff --check`: PASS。
+
+### 次に触ってよいファイル
+
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/public_post_quality.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/run_autonomous_loop.py`
+- `scripts/process_threads_queue.py`
+- `scripts/check_autonomous_health.py`
+- docs/runbook類
+
+### 衝突しやすいファイル
+
+- `docs/ai-work-handoff.md` は履歴が長く、Claude Code/Codex双方が追記しやすい。
+- `docs/production-completion-status.md` は状態分類が増えやすい。
+- `scripts/autonomous_recovery_test_utils.py` はwrapper多数の共通実装になっている。
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- cookie / storage_state / token / secret 類
+- 実投稿・実download・実cut・実upload関連の認証値
+
+### 次AIへの引き継ぎメモ
+
+- 次回scheduled runで見るべき最重要項目は `health_summary.ready_count`, `health_summary.posted_count`, `health_summary.no_post_reason`, `posted_results.post_url` or `external_post_id`, `metrics_status=PENDING`。
+- `NO_READY_QUEUE` が再発した場合、workflow発火ではなくAUTO_READY reject reason / queue diagnosticsを見る。
+- media系は「基盤あり、本番OFF」。text-only scheduleを壊さないことを最優先にする。
+- `public_post_text`以外をpublisherへ渡す変更は絶対に入れない。

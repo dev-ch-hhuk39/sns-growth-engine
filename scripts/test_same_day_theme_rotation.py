@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_same_day_theme_rotation
+
+test_same_day_theme_rotation()
+print("PASS test_same_day_theme_rotation.py")

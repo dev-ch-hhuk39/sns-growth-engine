@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_auto_ready_reject_reasons_are_written_to_queue
+
+test_auto_ready_reject_reasons_are_written_to_queue()
+print("PASS test_auto_ready_reject_reasons_are_written_to_queue.py")

@@ -10,18 +10,20 @@
   - 投稿先は threads のみ（X は将来対応のみ・本 CLI からは生成しない）。
   - 本 CLI は「生成」だけを行う。委譲先（generate_from_references.py /
     generate_from_video_clips.py）は候補を作るだけで投稿 worker を呼ばない。
-  - 生成候補は WAITING_REVIEW（レビュー待ち）で書き込まれる。これは worker の
-    ELIGIBLE_STATUSES（={READY}）に含まれないため、worker は決して拾わない。
-    自動投稿されない保証は次の多層で担保する:
+  - 生成候補は WAITING_REVIEW（レビュー待ち）で書き込まれる。worker の
+    ELIGIBLE_STATUSES（={READY}）には含まれないため、生成直後は投稿されない。
+    投稿されるには次の多層ゲートを通る:
       1. 生成候補は WAITING_REVIEW であり worker 非対象（worker は READY のみ拾う）。
       2. 本 CLI も委譲先も投稿処理を一切呼ばない（生成専用）。
-      3. READY への昇格は approve_queue.py で人間が行う（生成系は READY を書かない）。
+      3. READY への昇格は approve_queue.py による人間承認、または
+         auto_approve_queue.py による validator PASS / text-only / cap/cooldown PASS の
+         AUTO_READY のみ。生成系CLIは READY を直接書かない。
       4. 実投稿には別経路 worker の三重ゲート（--confirm-real-post かつ
          PUBLISH_ENABLED=true かつ ALLOW_REAL_THREADS_POST=true）が必要。
-         これら 3 つは現状すべて禁止のため実投稿は不可能。
+         scheduled applyではworkflow apply step内だけ true になり、ローカルdry-runでは false。
       5. beauty_account / X は本 CLI で BLOCKED。
-  - 人間ゲート: approve_queue.py（WAITING_REVIEW → READY/REJECTED）。worker が
-    READY のみを eligible 扱いすることで「項目ごとの人間 READY 昇格ゲート」を担保する。
+  - READYゲート: approve_queue.py（人間）または auto_approve_queue.py（AUTO_READY）。
+    worker が READY のみを eligible 扱いすることで、生成と投稿を分離する。
   - beauty_account は対象外。
 """
 from __future__ import annotations
@@ -40,7 +42,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from public_post_quality import final_public_post_validator, generate_reader_facing_post  # noqa: E402
+from public_post_quality import final_public_post_validator, generate_reader_facing_post, reader_facing_template_count  # noqa: E402
 
 CLI_NAME = "generate_threads_ideas_from_references"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
@@ -50,10 +52,10 @@ ALLOWED_PLATFORMS = {"threads"}
 ELIGIBLE_STATUSES = {"READY"}
 # 委譲先が実際に書き込む候補ステータス（両委譲先とも WAITING_REVIEW 固定）。
 CANDIDATE_STATUS = "WAITING_REVIEW"
-# 実投稿に必要なゲート（現状すべて禁止 → 実投稿は不可能）。
+# 実投稿に必要なゲート（scheduled apply step内だけtrue化される）。
 REAL_POST_GATES = ["--confirm-real-post", "PUBLISH_ENABLED=true", "ALLOW_REAL_THREADS_POST=true"]
-# 人間レビューゲート（WAITING_REVIEW → READY/REJECTED）。
-HUMAN_GATE = "approve_queue.py"
+# READYレビューゲート（WAITING_REVIEW → READY/REJECTED）。
+READY_GATE = "approve_queue.py or auto_approve_queue.py"
 SIMILARITY_BLOCK_THRESHOLD = 0.62
 MAX_QUOTE_CHARS = 80
 ALLOWED_TRANSFORMATION_TYPES = {
@@ -223,7 +225,7 @@ def build_generation_rows(
             "generation_mode": "reference_score_to_threads",
             "media_strategy": "none",
             "imitation_risk": "low",
-            "media_reuse_risk": "high",
+            "media_reuse_risk": "not_applicable",
             "transformation_type": "structure_reference",
             "source_credit": "internal_reference_only",
             "similarity_score": str(similarity_guard["similarity"]),
@@ -232,7 +234,7 @@ def build_generation_rows(
             "conversion_potential_score": str(score.get("cta_score", "")),
             "confidence_level": "medium",
             "ai_publish_recommendation": CANDIDATE_STATUS,
-            "notes": "Generated from REFERENCE_ONLY source metadata/scores. Human review required. No third-party media reuse.",
+            "notes": "Generated from REFERENCE_ONLY source metadata/scores. AUTO_READY or human review required. No third-party media reuse.",
         })
         derivatives.append({
             "derivative_id": derivative_id,
@@ -242,7 +244,7 @@ def build_generation_rows(
             "text": body,
             "hashtags": "",
             "status": CANDIDATE_STATUS,
-            "reason": "Human review required before READY.",
+            "reason": "AUTO_READY evaluation or human review required before READY.",
             "created_at": created,
             "char_count": str(len(body)),
             "text_policy_status": "PENDING",
@@ -272,7 +274,7 @@ def build_generation_rows(
             "rights_status": "not_required",
             "permission_status": "not_required",
             "rights_review_required": "false",
-            "media_reuse_risk": "high",
+            "media_reuse_risk": "not_applicable",
             "public_post_text": body,
             "internal_analysis": f"Generated from reference_score_to_threads for source_id={post.get('source_id', '')}; public_post_text only is publishable.",
             "source_id": post.get("source_id", ""),
@@ -291,11 +293,13 @@ def build_generation_rows(
     return {"drafts": drafts, "social_derivatives": derivatives, "queue": queues}
 
 
-def _fallback_template_index(offset: int) -> int:
+def _fallback_template_index(offset: int, account_id: str) -> int:
     """Rotate safe original templates across daily runs without source data."""
     jst = timezone(timedelta(hours=9))
     now = datetime.now(timezone.utc).astimezone(jst)
-    return ((now.timetuple().tm_yday * 5 + now.hour + offset) % 10) + 1
+    count = max(1, reader_facing_template_count(account_id))
+    slot = now.hour * 4 + (now.minute // 15)
+    return ((now.timetuple().tm_yday * 11 + slot + offset) % count) + 1
 
 
 def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, list[dict[str, Any]]]:
@@ -311,7 +315,7 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
     derivatives: list[dict[str, Any]] = []
     queues: list[dict[str, Any]] = []
     for i in range(1, max(1, top_n) + 1):
-        variant_index = _fallback_template_index(i)
+        variant_index = _fallback_template_index(i, account_id)
         output = generate_reader_facing_post(account_id, index=variant_index)
         body = str(output["public_post_text"])
         validation = final_public_post_validator(body, account_id)
@@ -336,7 +340,7 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
             "generation_mode": "safe_original_fallback_threads",
             "media_strategy": "none",
             "imitation_risk": "low",
-            "media_reuse_risk": "low",
+            "media_reuse_risk": "not_applicable",
             "transformation_type": "original_hypothesis",
             "source_credit": "none",
             "similarity_score": "0.0",
@@ -385,7 +389,7 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
             "rights_status": "not_required",
             "permission_status": "not_required",
             "rights_review_required": "false",
-            "media_reuse_risk": "low",
+            "media_reuse_risk": "not_applicable",
             "public_post_text": body,
             "internal_analysis": "Safe original fallback; public_post_text only is publishable.",
             "source_id": "",
@@ -545,12 +549,13 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
             # 実投稿は別 worker の三重ゲートが必要。現状すべて禁止 → 不可能。
             "real_post_requires": REAL_POST_GATES,
             "real_post_possible_now": False,
-            "human_gate": f"{HUMAN_GATE} (WAITING_REVIEW → READY/REJECTED)",
+            "ready_gate": f"{READY_GATE} (WAITING_REVIEW → READY/REJECTED)",
             "platform": args.platform,
         },
         "notes": (
             "本 CLI は生成専用（投稿しない）。候補は WAITING_REVIEW で書かれ worker 非対象。"
-            "実投稿には別 worker の三重ゲート（全禁止）が必要なため自動投稿されない。"
+            "READY化は approve_queue.py または auto_approve_queue.py のみ。"
+            "実投稿には別 worker の三重ゲートが必要。"
             "threads のみ。実行は --apply --confirm-generate。"
         ),
     }

@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_process_threads_queue_posts_ready_text_only_path_static
+
+test_process_threads_queue_posts_ready_text_only_path_static()
+print("PASS test_process_threads_queue_posts_ready_text_only_path_static.py")

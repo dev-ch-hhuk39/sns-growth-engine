@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_media_growth_roadmap_off_by_default
+
+test_media_growth_roadmap_off_by_default()
+print("PASS test_media_growth_roadmap_off_by_default.py")

@@ -31,7 +31,7 @@ python3 scripts/generate_threads_ideas_from_references.py --account-id night_sco
 
 1. 本 CLI も委譲先も投稿処理を一切呼ばない（生成専用）。
 2. 実投稿は別経路 worker の三重ゲート（`--confirm-real-post` かつ `PUBLISH_ENABLED=true` かつ `ALLOW_REAL_THREADS_POST=true`）が必要。現状すべて禁止。
-3. 承認は `approve_queue.py` で人間が WAITING_REVIEW → READY/REJECTED に行う。
+3. READY昇格は `approve_queue.py` で人間が WAITING_REVIEW → READY/REJECTED にするか、autonomous pathでは `auto_approve_queue.py` が安全条件を満たした候補だけ READY にする。
 
 詳細な生成姿勢マトリクス（経路別の status / generation_mode / verify 境界）は
 [reference-pipeline-runbook.md](reference-pipeline-runbook.md) の「生成姿勢マトリクス」を参照。
@@ -44,4 +44,5 @@ python3 scripts/generate_threads_ideas_from_references.py --account-id night_sco
 
 - [reference-based-prompt-design.md](reference-based-prompt-design.md) — 参考ベース prompt 設計
 - [approve-queue-usage.md](approve-queue-usage.md) — 人間承認フロー
+- [growth-loop-runbook.md](growth-loop-runbook.md) — AUTO_READY / autonomous flow
 - [reference-pipeline-runbook.md](reference-pipeline-runbook.md) — 全 CLI 横断の安全設計・生成姿勢マトリクス

@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_autonomous_health_saved_on_apply
+
+test_autonomous_health_saved_on_apply()
+print("PASS test_autonomous_health_saved_on_apply.py")

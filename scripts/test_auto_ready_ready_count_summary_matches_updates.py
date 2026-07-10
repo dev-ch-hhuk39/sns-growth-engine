@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_auto_ready_ready_count_summary_matches_updates
+
+test_auto_ready_ready_count_summary_matches_updates()
+print("PASS test_auto_ready_ready_count_summary_matches_updates.py")

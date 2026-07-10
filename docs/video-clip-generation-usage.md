@@ -98,7 +98,7 @@ python scripts/generate_from_video_clips.py --account-id night_scout --use-sheet
 | queue.status | WAITING_REVIEW |
 | video_clip_candidates.text_generation_status | done |
 
-READY への昇格は `approve_queue.py` による人間レビュー後のみ。
+READY への昇格は `approve_queue.py` による人間レビュー、または text-only autonomous path の `auto_approve_queue.py` によるAUTO_READY後のみ。media/clip候補は引き続きmanual review優先。
 
 ---
 

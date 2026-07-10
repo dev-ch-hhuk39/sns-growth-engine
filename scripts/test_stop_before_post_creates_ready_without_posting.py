@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_stop_before_post_creates_ready_without_posting
+
+test_stop_before_post_creates_ready_without_posting()
+print("PASS test_stop_before_post_creates_ready_without_posting.py")

@@ -34,7 +34,8 @@ from sheets_client import SheetsClient  # noqa: E402
 # 投稿対象として選ばれるのは READY のみ。
 # WAITING_REVIEW はレビュー待ち（人間が approve_queue.py で READY に昇格させるまで投稿不可）、
 # PLANNED は計画段階、DRAFT は生成/PDCA候補で、いずれも投稿対象にしない。
-# READY への昇格は approve_queue.py 経由でのみ行う（生成系CLIが直接 READY を書かない）。
+# READY への昇格は approve_queue.py（人間承認）または auto_approve_queue.py（AUTO_READY）経由のみ。
+# 生成系CLIは直接 READY を書かない。
 ELIGIBLE_STATUSES = {"READY"}
 FINAL_OR_LOCKED_STATUSES = {
     "POSTED",

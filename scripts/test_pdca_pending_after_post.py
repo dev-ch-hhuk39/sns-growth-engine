@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_pdca_pending_after_post
+
+test_pdca_pending_after_post()
+print("PASS test_pdca_pending_after_post.py")

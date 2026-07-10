@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_posted_results_metrics_pending_after_post
+
+test_posted_results_metrics_pending_after_post()
+print("PASS test_posted_results_metrics_pending_after_post.py")

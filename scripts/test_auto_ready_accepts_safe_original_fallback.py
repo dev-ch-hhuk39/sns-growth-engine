@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_auto_ready_accepts_safe_original_fallback
+
+test_auto_ready_accepts_safe_original_fallback()
+print("PASS test_auto_ready_accepts_safe_original_fallback.py")

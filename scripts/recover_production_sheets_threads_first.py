@@ -1016,7 +1016,8 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
 
     ready_rows = [r for r in queue if str(r.get("status", "")).upper() == "READY"]
 
-    # READY への昇格は approve_queue.py 経由でのみ正当（logs タブに queue_approved が残る）。
+    # READY への昇格は approve_queue.py（人間承認）または auto_approve_queue.py（AUTO_READY）
+    # 経由のみ正当（logs タブに queue_approved 互換証跡が残る）。
     # 生成系CLIが READY を直接書いた／承認証跡なしに READY になった行だけを違反として検出する。
     # 人間が承認した生成候補（status=READY かつ generation_mode が残る）は誤検知しない。
     import re as _re

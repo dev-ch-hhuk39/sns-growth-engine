@@ -24,7 +24,7 @@ It is intentionally narrow:
 | status | 意味 | 投稿可否 |
 |--------|------|----------|
 | `WAITING_REVIEW` | レビュー待ち（生成系CLIの既定出力 / 人間レビュー前） | ✗ |
-| `READY` | 人間が `approve_queue.py` で承認済み | ✓ worker 対象 |
+| `READY` | `approve_queue.py` で人間承認済み、または `auto_approve_queue.py` でAUTO_READY済み | ✓ worker 対象 |
 | `PROCESSING` | worker 処理中（一時状態） | — |
 | `POSTED` | 投稿完了 | ✗（再投稿しない） |
 | `DRAFT` | 生成 / PDCA 候補 | ✗ |
@@ -33,7 +33,7 @@ It is intentionally narrow:
 
 状態遷移: `WAITING_REVIEW → READY → PROCESSING → POSTED`
 
-- `READY` への昇格は **`approve_queue.py` 経由でのみ** 行う。生成系CLI（refill / ideas / metrics 候補）は直接 `READY` を書かない（既定は `WAITING_REVIEW` / `DRAFT`）。
+- `READY` への昇格は **`approve_queue.py`（人間承認）または `auto_approve_queue.py`（AUTO_READY）経由のみ** 行う。生成系CLI（refill / ideas / metrics 候補）は直接 `READY` を書かない（既定は `WAITING_REVIEW` / `DRAFT`）。
 - `approve_queue.py` は status を `READY` か `REJECTED` にのみ変更し、`generation_mode` を保持したまま logs に `queue_approved` 証跡を残す。
 
 ```bash

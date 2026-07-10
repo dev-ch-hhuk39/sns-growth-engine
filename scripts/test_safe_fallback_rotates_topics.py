@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_safe_fallback_rotates_topics
+
+test_safe_fallback_rotates_topics()
+print("PASS test_safe_fallback_rotates_topics.py")

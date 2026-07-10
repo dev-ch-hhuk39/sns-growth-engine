@@ -12,7 +12,7 @@ The system is now Threads-first.
 
 worker が投稿するのは **`READY` の行のみ**。生成系CLIが出力する行は既定で `WAITING_REVIEW`（レビュー待ち）であり、人間が内容を確認したうえで `approve_queue.py` で `READY` に昇格させて初めて投稿対象になる。`WAITING_REVIEW` のまま投稿されることはない。
 
-状態遷移: `WAITING_REVIEW → READY → PROCESSING → POSTED`（昇格は `approve_queue.py` 経由のみ）。詳細は `docs/threads-queue-worker.md` の Status モデルを参照。
+状態遷移: `WAITING_REVIEW → READY → PROCESSING → POSTED`（昇格は `approve_queue.py` の人間承認、または `auto_approve_queue.py` のAUTO_READY条件通過のみ）。詳細は `docs/threads-queue-worker.md` の Status モデルを参照。
 
 ## Daily Safe Flow
 
@@ -28,7 +28,7 @@ python3 scripts/recover_production_sheets_threads_first.py --verify-only
 python3 scripts/approve_queue.py --account-id <account_id> --status WAITING_REVIEW --list
 ```
 
-3. 内容を確認した行のみ `READY` に昇格させる（人間承認）:
+3. 手動運用では、内容を確認した行のみ `READY` に昇格させる（人間承認）:
 
 ```bash
 python3 scripts/approve_queue.py --queue-id <queue_id> --approve --reason "<確認内容>"

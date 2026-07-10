@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_posted_results_has_post_url_or_external_id
+
+test_posted_results_has_post_url_or_external_id()
+print("PASS test_posted_results_has_post_url_or_external_id.py")

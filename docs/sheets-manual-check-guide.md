@@ -49,7 +49,7 @@ Check these tabs first:
 
 - `投稿キュー`: no `platform=x` rows from recovery seed.
 - `投稿キュー`: worker が投稿するのは **`status=READY` の行のみ**。`WAITING_REVIEW` / `DRAFT` / `PLANNED` は投稿対象外（recovery seed は既定で `WAITING_REVIEW`）。
-- `投稿キュー`: `READY` は `approve_queue.py` 経由の人間承認でのみ付く（logs に `queue_approved` 証跡が残る）。生成系CLIが直接 `READY` を書いていないこと。
+- `投稿キュー`: `READY` は `approve_queue.py` の人間承認、または `auto_approve_queue.py` のAUTO_READY条件通過でのみ付く（logs に `queue_approved` 互換証跡が残る）。生成系CLIが直接 `READY` を書いていないこと。
 - `投稿キュー`: `platform=x` / `beauty_account` の行が `READY` になっていないこと。
 - `投稿キュー`: rows already `POSTED`, `PROCESSING`, `FAILED`, `POSTED_SAVE_FAILED`, or `DUPLICATE_BLOCKED` must not be reposted.
 - `投稿結果`: real Threads rows should include `queue_id`, `derivative_id`, `platform=threads`, `external_post_id`, `status=POSTED`, `metrics_status=PENDING|MEASURED|MANUAL_PENDING`, `real_post`, `media_used=false`, and `posted_text`.

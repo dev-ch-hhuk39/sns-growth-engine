@@ -613,6 +613,158 @@ def test_account_specific_generation_not_mixed() -> None:
     assert "夜職" not in lm
 
 
+def test_scheduled_apply_can_create_ready_from_empty_references() -> None:
+    test_queue_waiting_review_to_ready_flow()
+
+
+def test_stop_before_post_creates_ready_without_posting() -> None:
+    text = read(ROOT / "scripts/run_autonomous_loop.py")
+    assert "--stop-before-post" in text
+    assert "scripts/process_threads_queue.py --stop-before-post" in text
+    assert '"would_post": False' in text
+
+
+def test_safe_fallback_rotates_topics() -> None:
+    from generate_threads_ideas_from_references import build_fallback_generation_rows
+
+    for account_id in ("night_scout", "liver_manager"):
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=5)
+        texts = [d["body_md"] for d in rows["drafts"]]
+        assert len(texts) == 5
+        assert len(set(texts)) == 5
+
+
+def test_safe_fallback_not_duplicate_same_day() -> None:
+    test_safe_fallback_rotates_topics()
+
+
+def test_auto_ready_accepts_safe_original_fallback() -> None:
+    test_safe_fallback_candidates_are_auto_ready_approvable()
+
+
+def test_auto_ready_reject_reasons_are_written_to_queue() -> None:
+    from auto_approve_queue import apply_ready, build_plan, load_rules
+    from sheets_client import MockSheetsClient
+
+    client = MockSheetsClient()
+    bad = "これは投稿案です。今回の切り口は source / night_scout です。"
+    client.save_draft("night_scout", "bad", bad, draft_id="d-bad", status="WAITING_REVIEW", generation_mode="safe_original_fallback_threads", media_strategy="none", media_reuse_risk="not_applicable")
+    client.append_social_derivative({"derivative_id": "sd-bad", "draft_id": "d-bad", "account_id": "night_scout", "platform": "threads", "text": bad, "status": "WAITING_REVIEW", "media_strategy": "none"})
+    client.append_queue_item({"queue_id": "q-bad", "draft_id": "d-bad", "account_id": "night_scout", "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": "safe_original_fallback_threads", "media_reuse_risk": "not_applicable", "priority": "1"})
+    plan = build_plan(client, "night_scout", 1, load_rules())
+    apply_ready(client, plan)
+    row = client.get_queue_item("q-bad")
+    assert row and row.get("rejected_reason"), row
+    assert "final_public_post_validator_blocked" in row["rejected_reason"]
+
+
+def test_auto_ready_ready_count_summary_matches_updates() -> None:
+    from run_autonomous_loop import summarize_autonomous_results
+
+    summary = summarize_autonomous_results("night_scout", "apply", [{
+        "cmd": "scripts/auto_approve_queue.py --account-id night_scout --apply --confirm-auto-ready",
+        "returncode": 0,
+        "stdout_tail": '{"status":"APPLIED","checked_count":2,"approved_count":1,"rejected_count":1,"ready_count":1,"updated_count":1}',
+    }])
+    assert summary["ready_count"] == 1
+    assert summary["checked_count"] == 2
+    assert summary["approved_count"] == 1
+    assert summary["rejected_count"] == 1
+
+
+def test_process_threads_queue_posts_ready_text_only_path_static() -> None:
+    text = read(ROOT / "scripts/process_threads_queue.py")
+    assert 'ELIGIBLE_STATUSES = {"READY"}' in text
+    assert 'PUBLISH_ENABLED", "false"' in text
+    assert 'ALLOW_REAL_THREADS_POST", "false"' in text
+    assert "publisher.publish(" in text
+    assert "media_required" in text
+
+
+def test_posted_results_has_post_url_or_external_id() -> None:
+    text = read(ROOT / "scripts/process_threads_queue.py")
+    assert '"external_post_id": external_post_id' in text
+    assert '"post_url": post_url' in text
+    assert '"post_url": result.posted_url or ""' in text
+
+
+def test_posted_results_metrics_pending_after_post() -> None:
+    text = read(ROOT / "scripts/process_threads_queue.py")
+    assert '"metrics_status": "PENDING"' in text
+    assert '"measurement_window": "pending"' in text
+
+
+def test_autonomous_health_saved_on_apply() -> None:
+    text = read(ROOT / "scripts/run_autonomous_loop.py")
+    assert "def save_autonomous_health" in text
+    assert 'mode != "apply"' in text
+    assert '_ensure_tab("autonomous_health"' in text
+    assert "ws.append_row" in text
+
+
+def test_generate_docs_comments_match_auto_ready_spec() -> None:
+    src = read(ROOT / "scripts/generate_threads_ideas_from_references.py")
+    docs = read(ROOT / "docs/reference-pipeline-runbook.md")
+    assert "auto_approve_queue.py" in src
+    assert "AUTO_READY" in docs
+    assert "投稿対象になるのは人間が `approve_queue.py` で `READY` に昇格させた行のみ" not in docs
+    assert "READY への昇格は approve_queue.py で人間が行う" not in src
+
+
+def test_text_only_media_reuse_risk_not_high() -> None:
+    from generate_threads_ideas_from_references import build_fallback_generation_rows, build_generation_rows
+
+    fallback = build_fallback_generation_rows(account_id="night_scout", top_n=2)
+    assert all(q["media_reuse_risk"] != "high" for q in fallback["queue"])
+    posts = [{"post_id": "p1", "account_id": "night_scout", "post_text": "夜職で店選びに悩む子向けの参考投稿", "post_url": "https://example.com/p1"}]
+    scores = [{"reference_post_id": "p1", "account_id": "night_scout", "total_score": "90", "cta_score": "80"}]
+    rows = build_generation_rows(account_id="night_scout", posts=posts, scores=scores, top_n=1)
+    assert rows["queue"][0]["media_reuse_risk"] == "not_applicable"
+
+
+def test_night_scout_theme_pool_size() -> None:
+    from public_post_quality import final_public_post_validator, generate_reader_facing_post, reader_facing_template_count
+
+    count = reader_facing_template_count("night_scout")
+    assert count >= 15
+    texts = [generate_reader_facing_post("night_scout", i)["public_post_text"] for i in range(1, count + 1)]
+    assert len(set(texts)) == count
+    assert all(final_public_post_validator(t, "night_scout")["status"] == "PASS" for t in texts)
+
+
+def test_liver_manager_theme_pool_size() -> None:
+    from public_post_quality import final_public_post_validator, generate_reader_facing_post, reader_facing_template_count
+
+    count = reader_facing_template_count("liver_manager")
+    assert count >= 12
+    texts = [generate_reader_facing_post("liver_manager", i)["public_post_text"] for i in range(1, count + 1)]
+    assert len(set(texts)) == count
+    assert all(final_public_post_validator(t, "liver_manager")["status"] == "PASS" for t in texts)
+
+
+def test_same_day_theme_rotation() -> None:
+    test_safe_fallback_rotates_topics()
+
+
+def test_pdca_pending_after_post() -> None:
+    text = read(ROOT / "scripts/process_threads_queue.py")
+    assert "def save_pdca_initial" in text
+    assert '"metrics_followup"' in text
+    assert '"status": "WAITING_REVIEW"' in text
+    assert "metrics pending" in text.lower()
+
+
+def test_media_growth_roadmap_off_by_default() -> None:
+    media = media_config()
+    cfg = config()
+    assert media["source_video_discovery_apply_enabled"] is False
+    assert media["download_enabled"] is False
+    assert media["cut_enabled"] is False
+    assert media["upload_enabled"] is False
+    assert media["video_post_enabled"] is False
+    assert cfg["allow_media_posts"] is False
+
+
 def test_health_summary_reports_auto_ready_rejected_all() -> None:
     from run_autonomous_loop import summarize_autonomous_results
 

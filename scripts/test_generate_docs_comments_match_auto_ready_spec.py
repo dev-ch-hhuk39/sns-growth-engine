@@ -1,0 +1,4 @@
+from autonomous_recovery_test_utils import test_generate_docs_comments_match_auto_ready_spec
+
+test_generate_docs_comments_match_auto_ready_spec()
+print("PASS test_generate_docs_comments_match_auto_ready_spec.py")
