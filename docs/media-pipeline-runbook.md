@@ -1,5 +1,15 @@
 # Media Pipeline Runbook
 
+## 2026-07-11 Production Media Path
+
+The production media path is enabled for approved `liver_manager` creator sources and isolated in `.github/workflows/media-growth-production.yml`.
+
+1. Daily aftercare saves bounded real video metadata and auto-approved clip candidates that pass rights and public-text checks.
+2. The media production workflow selects one unposted clip, downloads the individual source video, creates a 9:16 ffmpeg clip, uploads it to Cloudinary, validates the asset and text, and places a READY media row into the Threads queue.
+3. Threads publication waits for the video container to finish and records `source_video_id` and `clip_candidate_id` in `posted_results`.
+
+Every real operation requires the dedicated schedule/dispatch guard and step-scoped environment gates. Unknown or reference-only rights, X, beauty, missing permission evidence, invalid IDs, duplicate clips, and failed validators are blocked. The daily media cap is one, and `kill_switch=true` stops the run.
+
 ## Scope
 
 The v2 media pipeline is review-first. It can plan media queue rows and gated asset operations, but it does not post media by default.

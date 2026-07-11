@@ -14,6 +14,7 @@ checks = [
     ("metrics aftercare enabled", cfg["metrics_aftercare_enabled"] is True),
     ("media discovery auto save enabled", media["source_video_discovery_apply_enabled"] is True and media["auto_save_discovered_videos"] is True),
     ("clip candidate auto save enabled", media["auto_save_clip_candidates"] is True),
+    ("approved media public posting enabled", cfg["media_public_posting_enabled"] is True and media["media_public_post_auto_enabled"] is True),
     ("x remains off", cfg["x_posting_enabled"] is False and "x" in auto["blocked_platforms_for_post"]),
     ("beauty remains off", cfg["beauty_posting_enabled"] is False and "beauty_account" in auto["blocked_accounts"]),
     ("learning rules not auto applied", cfg["learning_rules_auto_apply_enabled"] is False),

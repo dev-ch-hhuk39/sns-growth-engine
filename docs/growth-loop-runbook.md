@@ -1,5 +1,13 @@
 # Growth Loop Runbook
 
+## 2026-07-11 Connected Production Loop
+
+The text-only schedule is unchanged and remains independent of media availability. Reference generation failure is recoverable through a validator-approved original-post fallback.
+
+Approved media now has a separate production schedule. Aftercare discovers a bounded set of real individual video URLs and saves only new `source_videos`; plan-only IDs are excluded. The production runner prefers YouTube candidates, permits distinct non-duplicate clips from the same video, blocks failed candidates from endless retries, and processes at most one media post per day.
+
+The media path is enabled only for `liver_manager` sources listed in `config/media_growth_engine.json` with approved permission evidence. Download, cut, upload, and Threads video publication still require all explicit environment gates inside the scheduled job. X, beauty, reference-only media, unknown-rights media, and automatic learning-rule changes remain blocked.
+
 ## Scope
 
 `scripts/run_growth_loop.py` orchestrates the safe v2 planning loop:

@@ -1,5 +1,15 @@
 # Autonomous Mode Runbook
 
+## 2026-07-11 Production Schedules
+
+- Account-specific text schedules remain the primary public-post path. Each run posts at most one item and retains the account-specific daily cap.
+- `Production Autopilot Aftercare` runs at JST 23:40. It first seeds the current source registry into Sheets, then performs non-posting metrics/PDCA and bounded approved-source video discovery.
+- `Media Growth Production` runs at JST 09:20 for `liver_manager`. It may publish at most one approved video per day and only after rights, permission, public-text, media-format, duplicate, daily-cap, and credential checks pass.
+- Media workflow gates are step-scoped: `ALLOW_VIDEO_DOWNLOAD`, `ALLOW_VIDEO_CUT`, `ALLOW_CLOUDINARY_UPLOAD`, `ALLOW_MEDIA_POSTS`, `ALLOW_REAL_THREADS_VIDEO_POST`, `PUBLISH_ENABLED`, and `ALLOW_REAL_THREADS_POST` are true only in the guarded production step.
+- `ALLOW_REAL_X_POST`, beauty posting, and `ALLOW_TRANSCRIPTION_API` remain false.
+
+For emergency stop, set `kill_switch=true` in `config/autonomous_mode.json` and push it to `main`. Inspect the workflow summary for `posted_count`, `no_post_reason`, and redacted errors. A `NO_CANDIDATE` result is a safe no-op; repeated source registry or credential failures require operational repair before the next run.
+
 Date: 2026-07-07
 
 ## Purpose

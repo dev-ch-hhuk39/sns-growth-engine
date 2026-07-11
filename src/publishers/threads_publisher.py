@@ -81,6 +81,28 @@ def _publish_container(
     return resp.json()
 
 
+def _wait_for_video_container(container_id: str, access_token: str, *, attempts: int = 20) -> None:
+    """Wait until Threads finishes ingesting a public video URL."""
+    import requests
+
+    url = f"{THREADS_API_BASE}/{container_id}"
+    for _ in range(attempts):
+        resp = requests.get(
+            url,
+            params={"fields": "status,error_message", "access_token": access_token},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+        status = str(payload.get("status") or "").upper()
+        if status in {"FINISHED", "PUBLISHED"}:
+            return
+        if status in {"ERROR", "EXPIRED"}:
+            raise RuntimeError("Threads video container processing failed")
+        time.sleep(3)
+    raise TimeoutError("Threads video container processing timed out")
+
+
 def _try_fetch_permalink(post_id: str, access_token: str) -> str | None:
     """Threads API から投稿の permalink を取得する。失敗時は None を返す。
 
@@ -100,10 +122,7 @@ def _try_fetch_permalink(post_id: str, access_token: str) -> str | None:
 
 
 class ThreadsPublisher(BasePublisher):
-    """Threads 投稿 Publisher（Phase 3-E: 実投稿実装）。
-
-    テキスト投稿のみ対応（メディア付きは Phase 4 以降）。
-    """
+    """Threads text/video publisher with explicit media gates."""
 
     platform: str = "threads"
 
@@ -139,8 +158,7 @@ class ThreadsPublisher(BasePublisher):
                     f" queue_id={queue_id}"
                 )
                 if has_media:
-                    # media は dry-run でのみ「添付予定」を計画表示する。実 media 投稿は行わない。
-                    message += f" | media=IMAGE media_url={media_url} (DRY_RUN_PLAN_ONLY)"
+                    message += f" | media=VIDEO media_url={media_url} (DRY_RUN_PLAN_ONLY)"
             return PublishResult(
                 platform="threads",
                 success=success,
@@ -241,14 +259,19 @@ class ThreadsPublisher(BasePublisher):
         # ---- 実投稿: 2ステップ ----
         try:
             container_id = _create_container(user_id, access_token, text, media_type="VIDEO" if has_media else "TEXT", media_url=media_url)
-            time.sleep(1)  # Threads API 推奨: コンテナ作成後に少し待つ
+            if has_media:
+                _wait_for_video_container(container_id, access_token)
+            else:
+                time.sleep(1)
             result = _publish_container(user_id, access_token, container_id)
-        except Exception as e:
+        except Exception as exc:
+            # requests exceptions may include a URL containing query credentials.
+            # Never serialize the exception string into queue/log output.
             return PublishResult(
                 platform="threads",
                 success=False,
                 dry_run=False,
-                message=f"FAIL: Threads API エラー: {e} (queue_id={queue_id})",
+                message=f"FAIL: Threads API エラー: {type(exc).__name__} (queue_id={queue_id})",
                 raw_response=None,
             )
 

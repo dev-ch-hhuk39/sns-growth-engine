@@ -128,6 +128,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Autonomous text/media posting provenance and validator state.
         "source_id", "source_url", "generation_mode", "validator_status",
         "media_asset_id", "media_url", "media_status",
+        "source_video_id", "clip_candidate_id",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -193,6 +194,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "cta_pressure_score",
         "rejected_reason", "blocked_reason",
         "updated_at", "posted_at", "post_url", "result_id",
+        # Media Growth Engine provenance. Text-only rows leave these blank.
+        "source_video_id", "clip_candidate_id",
+        "media_url", "media_status", "media_required",
+        "duration_seconds", "aspect_ratio",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -283,6 +288,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_status", "permission_status", "discovery_status",
         "discovered_at", "last_seen_at", "processed_at", "skip_reason",
         "content_hash", "duplicate_key",
+        "local_path", "downloaded_at",
     ],
     # 動画文字起こし結果。Cloudflare Whisper の出力を保存する。
     "video_transcripts": [
@@ -316,6 +322,12 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "generated_at",               # 投稿文生成日時
         # Phase 2.28 追加
         "rights_review_required",     # true / false（human review required）
+        # Media Growth Engine production provenance / validator state.
+        "source_video_id", "video_id", "canonical_video_url",
+        "clip_candidate_id", "duplicate_clip_key", "reviewer_status",
+        "public_post_text", "public_post_validator_status",
+        "start_seconds", "end_seconds", "aspect_ratio",
+        "upload_status", "post_status", "storage_public_id",
     ],
     # 文字起こし日次実行記録。120分/日の上限管理に使う。
     "transcription_runs": [

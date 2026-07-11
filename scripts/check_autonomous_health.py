@@ -23,11 +23,13 @@ WORKFLOWS = {
     "night_scout": ROOT / ".github/workflows/autonomous-growth-loop-night-scout.yml",
     "liver_manager": ROOT / ".github/workflows/autonomous-growth-loop-liver-manager.yml",
     "production_aftercare": ROOT / ".github/workflows/production-autopilot-aftercare.yml",
+    "media_production": ROOT / ".github/workflows/media-growth-production.yml",
 }
 
 EXPECTED_CRONS = {
     "night_scout": {"45 4 * * *", "45 6 * * *", "45 8 * * *", "45 11 * * *", "45 15 * * *"},
     "liver_manager": {"45 0 * * *", "45 3 * * *", "45 6 * * *", "45 8 * * *", "45 11 * * *"},
+    "media_production": {"20 0 * * *"},
 }
 
 
@@ -80,10 +82,12 @@ def _schema_sanity() -> dict[str, Any]:
         "queue": [
             "queue_id", "draft_id", "account_id", "platform", "status", "auto_publish",
             "generation_mode", "media_asset_id", "auto_ready_by", "quality_score", "risk_score",
+            "source_video_id", "clip_candidate_id", "media_url", "media_status", "media_required",
         ],
         "posted_results": [
             "result_id", "queue_id", "draft_id", "account_id", "platform", "post_url",
             "posted_text", "status", "metrics_status", "real_post",
+            "source_video_id", "clip_candidate_id",
         ],
         "source_videos": ["source_video_id", "source_id", "video_id", "canonical_video_url", "duplicate_key"],
     }
@@ -130,7 +134,7 @@ def build_health(account_id: str) -> dict[str, Any]:
             problems.append(f"{key}:schedule_mismatch")
         if key == "manual" and wf["has_schedule"]:
             problems.append("manual_workflow_has_schedule")
-        if key in {"night_scout", "liver_manager", "production_aftercare"} and not wf["has_schedule"]:
+        if key in {"night_scout", "liver_manager", "production_aftercare", "media_production"} and not wf["has_schedule"]:
             problems.append(f"{key}:schedule_missing")
         if not wf["has_permissions_contents_read"] or not wf["has_permissions_actions_read"]:
             problems.append(f"{key}:permissions_missing")
@@ -176,6 +180,7 @@ def build_health(account_id: str) -> dict[str, Any]:
             "sheets_service_account_present": _env_present("SA_JSON_BASE64", "GCP_SA_JSON_BASE64"),
             "night_scout_threads_credentials_present": _env_present("THREADS_ACCESS_TOKEN_NIGHT_SCOUT") and _env_present("THREADS_USER_ID_NIGHT_SCOUT"),
             "liver_manager_threads_credentials_present": _env_present("THREADS_ACCESS_TOKEN_LIVER_MANAGER") and _env_present("THREADS_USER_ID_LIVER_MANAGER"),
+            "cloudinary_credentials_present": all(_env_present(name) for name in ("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET")),
         },
         "sheets_schema_expected": schema,
         "source_registry": source,
@@ -184,7 +189,7 @@ def build_health(account_id: str) -> dict[str, Any]:
         "validator_sanity": {"final_public_post_validator": "EXPECTED_IN_RUNNER_AND_WORKER"},
         "media_schedule": {
             "text_only_schedule_on": True,
-            "media_schedule_on": bool(media_config.get("media_schedule_enabled")) and workflow_results.get("production_aftercare", {}).get("has_schedule", False),
+            "media_schedule_on": bool(media_config.get("media_schedule_enabled")) and workflow_results.get("media_production", {}).get("has_schedule", False),
             "media_growth_engine_enabled": bool(media_config.get("media_growth_engine_enabled")),
             "source_video_discovery_apply_enabled": bool(media_config.get("source_video_discovery_apply_enabled")),
             "auto_save_discovered_videos": bool(media_config.get("auto_save_discovered_videos")),

@@ -1,5 +1,102 @@
 # AI Work Handoff
 
+## 2026-07-11 Codex Production Completion
+
+### 本システムについて
+
+SNS Growth Engine v2 は、`night_scout` / `liver_manager` のThreads文章投稿、投稿後metrics/PDCA、権利許可済み`liver_manager`動画の発見・切り抜き・Cloudinary保存・動画投稿を、独立したGitHub Actionsで運用する。公開本文は常に`public_post_text`のみを使い、X、beauty、未許可media、学習ルール自動適用は対象外。
+
+### HEAD / branch
+
+- 作業開始HEAD: `a792faedcbb280e567ddea7fe0af4efabb99df16`
+- 作業ブランチ: `main`
+- 完了HEAD: commit後に本節の次回更新で確認すること
+- 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
+
+### 変更ファイル一覧
+
+- Workflows: `.github/workflows/production-autopilot-aftercare.yml`, `.github/workflows/media-growth-production.yml`
+- Config: `config/media_growth_engine.json`, `config/production_autopilot.json`
+- Core: `src/publishers/threads_publisher.py`, `src/sheets_client.py`
+- Runners: `scripts/discover_approved_source_videos.py`, `scripts/run_media_growth_engine.py`, `scripts/run_media_production_pipeline.py`, `scripts/download_approved_media.py`, `scripts/cut_approved_clips.py`, `scripts/upload_media_assets.py`, `scripts/process_threads_queue.py`, `scripts/run_autonomous_loop.py`, `scripts/check_autonomous_health.py`
+- Test support/tests: `scripts/autonomous_recovery_test_utils.py`, `scripts/test_all_workflows_safety_flags.py`, `scripts/test_media_growth_engine_does_not_download_in_dry_run.py`, `scripts/test_media_schedule_still_off.py`, `scripts/test_production_autopilot_aftercare_workflow.py`, `scripts/test_production_autopilot_config.py`, `scripts/test_real_source_video_discovery_adapter.py`, `scripts/test_media_production_pipeline_safety.py`, `scripts/test_media_execution_runners_connected.py`, `scripts/test_media_production_workflow.py`, `scripts/test_media_queue_schema_complete.py`, `scripts/test_media_execution_paths_mocked.py`
+- Docs: `docs/production-completion-status.md`, `docs/autonomous-mode-runbook.md`, `docs/growth-loop-runbook.md`, `docs/video-reference-runbook.md`, `docs/media-pipeline-runbook.md`, `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `.github/workflows/media-growth-production.yml`
+- `scripts/run_media_production_pipeline.py`
+- 上記6本の`test_media_*` / `test_real_source_video_discovery_adapter.py`
+
+### 実装と接続
+
+- Aftercareはsource registryをSheetsへ同期してから、実media downloadなしのbounded discoveryとclip candidate保存を行う。
+- Media productionは実個別videoのみを選び、rights/permission/ID/validator/dedupe/daily capを検証後、yt-dlp -> ffmpeg 9:16 -> Cloudinary -> READY media queue -> Threads video container -> posted_resultsへ接続。
+- text-only reference generationが失敗した場合は、validator通過済みoriginal fallbackを1件補充してAUTO_READYへ進める。
+- `posted_results`の未取得metricsは空欄。未取得を`0`として捏造しない。
+
+### スケール方針
+
+- discoveryはsourceごとのscan/new上限とrun全体上限を維持する。無制限profile取得は禁止。
+- text postingは既存account別daily cap、media postingは1日1件、各runは最大1投稿。
+- 同一`clip_candidate_id`は再投稿しない。同一動画の別clipは許可する。
+- 失敗clipはBLOCKEDとして無限再試行を避ける。
+- Sheets列は追加のみ。既存列やタブを削除しない。
+
+### 未完了事項 / 残タスク
+
+- コード上の必須production pathは接続済み。次回scheduled runで、外部Threads/Cloudinary/YouTube APIと現在のcredentialが実環境で通ることを観測する必要がある。
+- TikTok側がprofile metadataを提供しない場合は安全に候補0件となる。回避のための無制限scrapeは実装しない。
+- PDCAは記録・候補生成まで。`learning_rules`の自動適用は意図的に未実装/禁止。
+
+### 残WARN
+
+- 変更前の直近scheduled ActionsはSheets source registry 68件対config 73件の不一致と、生成候補不足で失敗していた。registry syncとsafe fallbackで修正済みだが、push後の初回run観測が必要。
+- 外部APIのrate limit、動画削除、Cloudinary quota、credential失効はコードだけでは排除できない。workflow summaryのredacted errorで確認する。
+
+### テスト結果 / dry-run結果
+
+- 新規media discovery/execution/workflow/schema/mockテスト: PASS。
+- `test_all_workflows_safety_flags.py`: PASS 202 / FAIL 0。
+- X/beauty/rights/internal-term/text workflow/process queue回帰: PASS。
+- `py_compile`: PASS。`git diff --check`: PASS。
+- `run_autonomous_loop.py` night/liver dry-run: PLAN_ONLY、validator PASS、would_post=false。
+- media production dry-run: 外部download/cut/upload/postなし。
+
+### 次にClaude Codeが触ってよいファイル
+
+- `scripts/check_autonomous_health.py`
+- metrics/PDCA collector類
+- docs/runbook類
+- 追加テスト（既存ゲートを弱めないこと）
+
+### 次にCodexが触ってよいファイル
+
+- `.github/workflows/media-growth-production.yml`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+- `src/publishers/threads_publisher.py`
+
+### 衝突しやすいファイル
+
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `src/sheets_client.py`
+- `scripts/run_autonomous_loop.py`
+- `config/media_growth_engine.json`
+
+### 触らない方がいいファイル
+
+- `.env`, `data/`, `output/`, `.claude/plans/`
+- token/cookie/storage_state/secret実値
+- X/beauty投稿設定
+- `learning_rules`の自動有効化
+
+### 次AIへの引き継ぎメモ
+
+push後は新規実装より先に、`Production Autopilot Aftercare`、account別text workflows、`Media Growth Production`の最新run summaryを確認する。`NO_CANDIDATE`は安全な正常終了。credential/schema/APIエラーはredactedログで原因を切り分ける。安全ゲートを緩めて投稿件数を作らないこと。
+
 Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完了時は必ず更新してください。
 
 ## 最終更新

@@ -16,6 +16,8 @@ checks = [
     ("metrics apply step", "collect_threads_metrics.py" in wf and "--confirm-metrics" in wf and "--use-sheets" in wf),
     ("pdca apply step", "generate_next_queue_from_metrics.py" in wf and "--confirm-generate" in wf),
     ("media discovery apply step", "discover_approved_source_videos.py" in wf and "--confirm-discovery" in wf),
+    ("real bounded discovery enabled", "--fetch-real" in wf),
+    ("source registry sync step", "seed_source_registry.py" in wf and "--confirm-seed" in wf),
     ("media growth apply step", "run_media_growth_engine.py" in wf and "--confirm-media-growth" in wf),
     ("no real post command", "--confirm-real-post" not in wf),
     ("no upload/download/cut confirm", "--confirm-upload" not in wf and "--confirm-download" not in wf and "--confirm-cut" not in wf),

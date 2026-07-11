@@ -1,5 +1,18 @@
 # Production Completion Status
 
+## 2026-07-11 Production Completion Audit
+
+The production path is now connected end to end for the two approved operating modes.
+
+- Text-only Threads: the account-specific `night_scout` and `liver_manager` schedules remain enabled. A failed reference-generation step now falls back to the safe original-post inventory, so an empty or stale reference set does not silently stop READY creation.
+- Production aftercare: JST 23:40 syncs the source registry before bounded approved-source discovery, metrics/PDCA processing, and clip-candidate persistence. It never posts or downloads media.
+- Approved media: `Media Growth Production` runs daily at JST 09:20 for `liver_manager`, selects only `owned` / `licensed` / `approved_creator_clip` media with approved permission evidence, and can create at most one video post per day.
+- Media execution is a real connected chain: bounded metadata discovery -> `source_videos` -> clip candidate -> yt-dlp download -> ffmpeg 9:16 cut -> Cloudinary upload -> media validator -> READY queue -> Threads video container -> `posted_results`.
+- All real media gates are scoped to the single production step. X, beauty, unknown/reference-only media, and transcription API remain disabled. `kill_switch=true` stops execution.
+- Unknown metrics remain blank until measured; they are never fabricated as zero.
+
+The pre-fix scheduled runs failed because production Sheets lagged behind the 73-row source registry and reference generation could leave no promotable candidate. Daily registry sync and safe fallback generation address both causes. The first runs after this commit must still be observed for external API/credential availability; that is operational verification, not an unimplemented code path.
+
 Date: 2026-07-10 (最終更新 — Production Autopilot Aftercare追加)
 Created: 2026-06-24
 

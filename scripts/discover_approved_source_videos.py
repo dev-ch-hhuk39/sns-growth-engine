@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ from media_growth_schemas import (  # noqa: E402
     SOURCE_VIDEO_FIELDS,
     build_source_video,
     canonicalize_video_url,
+    extract_video_id,
     is_duplicate_source_video,
 )
 from config_loader import get_config  # noqa: E402
@@ -101,8 +103,92 @@ def build_source_video_candidates(source: dict[str, Any], config: dict[str, Any]
     planned_count = min(scan_limit, per_source_limit)
     videos = []
     for index in range(1, planned_count + 1):
-        videos.append(build_source_video(source, index=index))
+        videos.append(build_source_video(source, index=index, discovery_status="PLANNED_ONLY"))
     return videos
+
+
+def _entry_video_url(source: dict[str, Any], entry: dict[str, Any]) -> str:
+    platform = str(source.get("source_platform", ""))
+    raw = str(entry.get("webpage_url") or entry.get("url") or "")
+    video_id = str(entry.get("id") or "")
+    if platform == "youtube" and video_id:
+        return f"https://www.youtube.com/watch?v={video_id}"
+    if platform == "tiktok" and video_id:
+        handle = str(source.get("source_handle") or source.get("handle") or "").lstrip("@")
+        if not handle:
+            match = re.search(r"tiktok\.com/@([^/?]+)", str(source.get("source_url", "")))
+            handle = match.group(1) if match else ""
+        if handle:
+            return f"https://www.tiktok.com/@{handle}/video/{video_id}"
+    return raw
+
+
+def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
+    """Use yt-dlp flat extraction with strict per-source limits and no media download."""
+    if importlib.util.find_spec("yt_dlp") is None:
+        return [], "yt_dlp_not_installed"
+    import yt_dlp  # type: ignore[import]
+
+    scan_limit = max(1, int(config.get("max_videos_per_source_scan", 50)))
+    per_source_limit = max(1, int(config.get("max_new_videos_per_source_per_run", 10)))
+    opts = {
+        "extract_flat": "in_playlist",
+        "playlistend": scan_limit,
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "ignoreerrors": True,
+        "socket_timeout": 20,
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(str(source.get("source_url", "")), download=False)
+    except Exception as exc:  # noqa: BLE001
+        return [], f"{type(exc).__name__}: discovery_failed"
+    if not info:
+        return [], "metadata_unavailable"
+    entries = info.get("entries") if isinstance(info, dict) else None
+    if entries is None:
+        entries = [info]
+    rows: list[dict[str, Any]] = []
+    for index, entry in enumerate((e for e in entries if isinstance(e, dict)), start=1):
+        if len(rows) >= min(scan_limit, per_source_limit):
+            break
+        video_url = _entry_video_url(source, entry)
+        if not video_url or not extract_video_id(video_url, str(source.get("source_platform", ""))):
+            continue
+        metadata = dict(entry)
+        if not metadata.get("duration"):
+            detail_opts = {
+                "skip_download": True,
+                "quiet": True,
+                "no_warnings": True,
+                "noplaylist": True,
+                "socket_timeout": 20,
+            }
+            try:
+                with yt_dlp.YoutubeDL(detail_opts) as detail_ydl:
+                    detail = detail_ydl.extract_info(video_url, download=False)
+                if isinstance(detail, dict):
+                    metadata.update(detail)
+            except Exception:  # noqa: BLE001
+                pass
+        row = build_source_video(
+            source,
+            index=index,
+            video_url=video_url,
+            title=str(metadata.get("title") or ""),
+            duration_seconds=metadata.get("duration") or 0,
+            description=str(metadata.get("description") or ""),
+            discovery_status="DISCOVERED",
+        )
+        row["author_handle"] = str(metadata.get("uploader_id") or metadata.get("channel_id") or source.get("source_handle") or "")
+        row["published_at"] = str(metadata.get("upload_date") or metadata.get("timestamp") or "")
+        row["view_count"] = metadata.get("view_count") or ""
+        row["like_count"] = metadata.get("like_count") or ""
+        row["comment_count"] = metadata.get("comment_count") or ""
+        rows.append(row)
+    return rows, "REAL_DISCOVERY" if rows else "NO_INDIVIDUAL_VIDEOS"
 
 
 def _source_discovery_status(source: dict[str, Any]) -> str:
@@ -120,6 +206,7 @@ def build_discovery_plan(
     apply: bool = False,
     confirm_discovery: bool = False,
     existing_source_videos: list[dict[str, Any]] | None = None,
+    fetch_real: bool = False,
 ) -> dict[str, Any]:
     config = load_config()
     existing = existing_source_videos if existing_source_videos is not None else load_existing_source_videos()
@@ -147,7 +234,13 @@ def build_discovery_plan(
         if not permission_ok(source):
             source_blocked.append("permission_evidence_missing")
 
-        candidates = [] if source_blocked else build_source_video_candidates(source, config)
+        discovery_status = _source_discovery_status(source)
+        if source_blocked:
+            candidates = []
+        elif fetch_real:
+            candidates, discovery_status = discover_source_videos_real(source, config)
+        else:
+            candidates = build_source_video_candidates(source, config)
         discovered_count += len(candidates)
         source_new = []
         source_duplicates = 0
@@ -169,7 +262,7 @@ def build_discovery_plan(
             "source_url": canonicalize_video_url(source.get("source_url", ""), source.get("source_platform", "")),
             "rights_status": rights,
             "permission_status": source.get("permission_status", ""),
-            "discovery_status": _source_discovery_status(source),
+            "discovery_status": discovery_status,
             "scan_limit": int(config.get("max_videos_per_source_scan", 50)),
             "new_limit": int(config.get("max_new_videos_per_source_per_run", 10)),
             "discovered_video_count": len(candidates),
@@ -208,7 +301,9 @@ def build_discovery_plan(
         "new_videos_preview": new_videos[:5],
         "would_save_source_videos": bool(apply and confirm_discovery and not blocked),
         "blocked_reasons": blocked,
+        "fetch_real": fetch_real,
     }
+    plan["adapter_status"]["network_fetch"] = "invoked_bounded" if fetch_real else "not_invoked"
     return plan
 
 
@@ -220,6 +315,7 @@ def main() -> int:
     parser.add_argument("--confirm-discovery", action="store_true")
     parser.add_argument("--existing-source-videos-json", default="")
     parser.add_argument("--use-sheets", action="store_true", help="read/write source_videos tab when applying")
+    parser.add_argument("--fetch-real", action="store_true", help="bounded yt-dlp metadata discovery; never downloads media")
     args = parser.parse_args()
 
     client = None
@@ -233,6 +329,7 @@ def main() -> int:
         apply=args.apply,
         confirm_discovery=args.confirm_discovery,
         existing_source_videos=existing,
+        fetch_real=args.fetch_real,
     )
     if args.apply and args.confirm_discovery and args.use_sheets and client and plan["status"] != "BLOCKED":
         added = append_source_videos_to_sheets(client, plan.get("new_videos", []))

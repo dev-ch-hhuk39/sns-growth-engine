@@ -1,5 +1,13 @@
 # Video Reference Runbook
 
+## 2026-07-11 Approved Media Production
+
+Approved channel/account discovery is bounded by `max_videos_per_source_scan`, `max_new_videos_per_source_per_run`, and `max_total_new_videos_per_run`. Discovery uses metadata only and does not download media. It resolves individual canonical URLs and enriches duration metadata before clip planning. TikTok profile discovery remains bounded; it is never an unbounded profile scrape.
+
+Only real discovered IDs are eligible. `PLANNED_ONLY` rows, fake candidate titles, invalid YouTube IDs, and invalid TikTok IDs are excluded from production selection. Distinct clip candidates from one source video are allowed, while an already posted `clip_candidate_id` is skipped.
+
+The scheduled production chain is active for approved `liver_manager` sources only. It performs no transcription API call, never includes internal analysis in the post text, and requires `final_public_post_validator` plus the media validator before publication.
+
 Date: 2026-06-28
 
 第三者動画を「参考」として安全に扱うための標準 CLI 入口（メタ整理 → 文字起こし）。

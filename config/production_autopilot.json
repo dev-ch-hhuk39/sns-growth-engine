@@ -7,12 +7,12 @@
   "media_growth_aftercare_enabled": true,
   "media_discovery_apply_enabled": true,
   "media_clip_candidate_apply_enabled": true,
-  "media_public_posting_enabled": false,
+  "media_public_posting_enabled": true,
   "x_posting_enabled": false,
   "beauty_posting_enabled": false,
   "learning_rules_auto_apply_enabled": false,
   "max_text_posts_per_run": 1,
   "daily_post_cap_per_account": 5,
   "aftercare_schedule_jst": "23:40",
-  "notes": "Text-only Threads posting is fully automated by account workflows. Media discovery and clip candidates are automatically saved for approved liver_manager sources; real media download/cut/upload/video post remains gated until an approved individual video asset is ready."
+  "notes": "Text-only Threads posting is fully automated by account workflows. Approved liver_manager media is discovered and prepared by aftercare, then a dedicated daily workflow may produce at most one video post. Every media action remains limited to approved rights and requires step-scoped environment gates; X, beauty, unknown-rights media, and transcription API remain disabled."
 }

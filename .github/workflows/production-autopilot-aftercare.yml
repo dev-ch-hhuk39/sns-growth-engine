@@ -102,6 +102,15 @@ jobs:
             --confirm-metrics \
             --use-sheets
 
+      - name: Sync source registry and Sheets schema
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: |
+          python3 scripts/seed_source_registry.py \
+            --apply \
+            --confirm-seed \
+            --target-account all \
+            --platform all
+
       - name: Apply PDCA candidate generation
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |
@@ -123,6 +132,7 @@ jobs:
         run: |
           python3 scripts/discover_approved_source_videos.py \
             --account-id liver_manager \
+            --fetch-real \
             --apply \
             --confirm-discovery \
             --use-sheets

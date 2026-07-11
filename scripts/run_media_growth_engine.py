@@ -22,6 +22,7 @@ from media_growth_schemas import (  # noqa: E402
     build_transcript_row,
     clip_count_for_video,
     clips_overlap,
+    extract_video_id,
 )
 from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -65,7 +66,20 @@ def _clip_row_for_sheets(row: dict[str, Any]) -> dict[str, Any]:
         "media_reuse_risk": "low",
         "imitation_risk": "low",
         "confidence_score": row.get("clip_score", ""),
-        "notes": "Auto-saved by run_media_growth_engine; real cut/upload/post remains gated.",
+        "source_video_id": row.get("source_video_id", ""),
+        "video_id": row.get("video_id", ""),
+        "canonical_video_url": row.get("canonical_video_url", ""),
+        "clip_candidate_id": row.get("clip_candidate_id", ""),
+        "duplicate_clip_key": row.get("duplicate_clip_key", ""),
+        "reviewer_status": row.get("reviewer_status", ""),
+        "public_post_text": row.get("public_post_text", ""),
+        "public_post_validator_status": row.get("public_post_validator_status", ""),
+        "start_seconds": row.get("start_seconds", ""),
+        "end_seconds": row.get("end_seconds", ""),
+        "aspect_ratio": "9:16",
+        "upload_status": row.get("upload_status", "NOT_UPLOADED"),
+        "post_status": row.get("post_status", "NOT_POSTED"),
+        "notes": "Auto-saved by run_media_growth_engine; production execution remains rights/env gated.",
     }
 
 
@@ -104,6 +118,20 @@ def permission_ok(source: dict[str, Any]) -> bool:
         and bool(source.get("permission_evidence_note"))
         and source.get("permission_approved_by") == "user"
     )
+
+
+def is_real_discovered_video(row: dict[str, Any]) -> bool:
+    if str(row.get("discovery_status", "")).upper() == "PLANNED_ONLY":
+        return False
+    if "video candidate" in str(row.get("title", "")).lower() or str(row.get("description_preview", "")) == "candidate metadata only":
+        return False
+    platform = str(row.get("platform", "")).lower()
+    video_id = extract_video_id(str(row.get("canonical_video_url", "")), platform)
+    if platform == "youtube":
+        return len(video_id) == 11
+    if platform == "tiktok":
+        return bool(video_id and video_id.isdigit())
+    return bool(video_id)
 
 
 def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -166,8 +194,8 @@ def build_media_growth_plan(
 
     existing_source_videos = existing_source_videos if existing_source_videos is not None else load_existing_source_videos()
     discovery_plan = build_discovery_plan(account_id, existing_source_videos=existing_source_videos)
-    planned_source_videos = existing_source_videos or discovery_plan.get("new_videos_preview", [])
-    # Use the full bounded discovery plan in dry-run instead of only preview.
+    planned_source_videos = [row for row in existing_source_videos if is_real_discovered_video(row)]
+    # Preserve deterministic mock candidates only when no registry was supplied at all.
     if not existing_source_videos:
         planned_source_videos = []
         for result in discovery_plan.get("source_results", []):
@@ -183,20 +211,28 @@ def build_media_growth_plan(
     public_text = str(output["public_post_text"])
     validation = final_public_post_validator(public_text, account_id)
     existing_clips: list[dict[str, Any]] = []
-    for source_video in planned_source_videos:
+    for video_index, source_video in enumerate(planned_source_videos, start=1):
         source = source_by_id.get(str(source_video.get("source_id", "")))
         if not source:
+            continue
+        duration = float(source_video.get("duration_seconds") or 0)
+        if duration < float(config.get("clip_duration_min_seconds", 8)):
+            source_video["skip_reason"] = "duration_metadata_required_or_too_short"
+            source_video["analysis_status"] = "SKIPPED"
             continue
         count = clip_count_for_video(source_video, config)
         video_candidates = []
         for i in range(1, count + 1):
+            clip_output = generate_reader_facing_post(account_id, index=(video_index - 1) * 3 + i)
+            clip_public_text = str(clip_output["public_post_text"])
+            clip_validation = final_public_post_validator(clip_public_text, account_id)
             cand = build_clip_candidate_for_video(
                 source,
                 source_video,
                 i,
                 config=config,
-                public_post_text=public_text,
-                validator_status=validation["status"],
+                public_post_text=clip_public_text,
+                validator_status=clip_validation["status"],
             )
             if any(clips_overlap(cand, old, config.get("clip_overlap_tolerance_seconds", 2)) for old in existing_clips):
                 cand["clip_status"] = "SKIPPED"
@@ -204,6 +240,15 @@ def build_media_growth_plan(
                 cand["selected_reason"] = "overlap_blocked"
                 continue
             existing_clips.append(cand)
+            if (
+                config.get("auto_approve_clip_candidates")
+                and clip_validation["status"] == "PASS"
+                and float(cand.get("clip_score") or 0) >= float(config.get("min_auto_clip_score", 80))
+                and cand.get("rights_status") in set(config.get("allowed_rights_statuses", []))
+                and cand.get("permission_status") == "approved"
+            ):
+                cand["reviewer_status"] = "AUTO_APPROVED"
+                cand["clip_status"] = "READY"
             video_candidates.append(cand)
             clip_candidates.append(cand)
         source_video["clip_candidate_count"] = len(video_candidates)

@@ -753,8 +753,30 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             [sys.executable, "scripts/score_reference_posts.py", "--account-id", account, "--apply", "--confirm-score"],
             warning_reason=f"{account}:reference_scoring_failed_fallback_generation_enabled",
         )
-        if not run_step([sys.executable, "scripts/generate_threads_ideas_from_references.py", "--account-id", account, "--apply", "--confirm-generate"]):
-            return results
+        generation_result = _run([
+            sys.executable,
+            "scripts/generate_threads_ideas_from_references.py",
+            "--account-id",
+            account,
+            "--apply",
+            "--confirm-generate",
+        ])
+        results.append(generation_result)
+        if generation_result.get("returncode") != 0:
+            refill = _run([
+                sys.executable,
+                "scripts/refill_threads_queue.py",
+                "--account-id",
+                account,
+                "--count",
+                "1",
+            ])
+            results.append(refill)
+            if refill.get("returncode") != 0:
+                return results
+            generation_result["returncode"] = 0
+            generation_result["status"] = "RECOVERED_SAFE_ORIGINAL_FALLBACK"
+            generation_result["recovery_reason"] = "reference_generation_failed"
         if not run_step([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"]):
             return results
     if getattr(args, "stop_before_post", False):

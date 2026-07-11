@@ -52,45 +52,80 @@ def _asset_from_clip_candidate(args: argparse.Namespace) -> dict[str, Any] | Non
 
 def build_upload_plan(args: argparse.Namespace, assets: list[dict[str, Any]]) -> dict[str, Any]:
     missing_local = [a for a in assets if not a.get("local_path")]
-    if missing_local:
-        return {
-            "status": "BLOCKED",
-            "adapter_status": {"cloudinary": "installed" if importlib.util.find_spec("cloudinary") else "not_installed"},
-            "blocked_reasons": ["cut_media_local_path_required"],
-            "upload": bool(args.upload),
-            "confirm_upload": bool(args.confirm_upload),
-        }
     third_party = [
         a for a in assets
         if not rights_allows_media_use(a.get("rights_status", "third_party_reference_only"))
     ]
-    if third_party:
-        return {
-            "status": "BLOCKED",
-            "adapter_status": {"cloudinary": "installed" if importlib.util.find_spec("cloudinary") else "not_installed"},
-            "blocked_reasons": [
-                build_rights_decision(a.get("rights_status", "third_party_reference_only"), action="uploaded").reason
-                for a in third_party[:5]
-            ],
-            "third_party_count": len(third_party),
-            "upload": bool(args.upload),
-            "confirm_upload": bool(args.confirm_upload),
-        }
     result = plan_cloudinary_uploads(
         assets,
         upload=args.upload,
         confirm_upload=args.confirm_upload,
         dry_run=args.dry_run,
     )
+    extra_blocked = []
+    if missing_local:
+        extra_blocked.append("cut_media_local_path_required")
+    extra_blocked.extend(
+        build_rights_decision(a.get("rights_status", "third_party_reference_only"), action="uploaded").reason
+        for a in third_party[:5]
+    )
+    if extra_blocked:
+        result["blocked_reasons"] = list(dict.fromkeys([*result.get("blocked_reasons", []), *extra_blocked]))
+        result["status"] = "BLOCKED"
+        result["third_party_count"] = len(third_party)
     result["adapter_status"] = {"cloudinary": "installed" if importlib.util.find_spec("cloudinary") else "not_installed"}
+    result["assets"] = assets
     return result
+
+
+def execute_cloudinary_uploads(plan: dict[str, Any]) -> dict[str, Any]:
+    if plan.get("status") != "READY":
+        return plan
+    if importlib.util.find_spec("cloudinary") is None:
+        return {**plan, "status": "FAILED", "blocked_reasons": ["cloudinary_not_installed"]}
+    try:
+        import cloudinary
+        import cloudinary.uploader
+
+        cloudinary.config(
+            cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
+            api_key=os.environ.get("CLOUDINARY_API_KEY", ""),
+            api_secret=os.environ.get("CLOUDINARY_API_SECRET", ""),
+            secure=True,
+        )
+        if not all(os.environ.get(k) for k in ("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET")):
+            return {**plan, "status": "FAILED", "blocked_reasons": ["cloudinary_credentials_missing"]}
+        uploaded = []
+        for asset in plan.get("assets", []):
+            media_id = str(asset.get("media_asset_id") or Path(str(asset.get("local_path", ""))).stem)
+            response = cloudinary.uploader.upload(
+                str(asset["local_path"]),
+                resource_type="video",
+                folder=f"sns-growth-engine/{asset.get('account_id', 'liver_manager')}",
+                public_id=media_id,
+                overwrite=False,
+                unique_filename=False,
+            )
+            secure_url = str(response.get("secure_url") or "")
+            if not secure_url:
+                raise RuntimeError("cloudinary_secure_url_missing")
+            uploaded.append({
+                **asset,
+                "cloudinary_url": secure_url,
+                "storage_url": secure_url,
+                "cloudinary_public_id": str(response.get("public_id") or ""),
+                "upload_status": "UPLOADED",
+            })
+        return {**plan, "status": "UPLOADED", "uploaded_count": len(uploaded), "uploaded_assets": uploaded, "blocked_reasons": []}
+    except Exception as exc:  # noqa: BLE001
+        return {**plan, "status": "FAILED", "uploaded_count": 0, "blocked_reasons": [f"{type(exc).__name__}: cloudinary_upload_failed"]}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="upload media assets")
     parser.add_argument("--account-id", required=True)
     parser.add_argument("--mock", action="store_true")
-    parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--upload", action="store_true")
     parser.add_argument("--confirm-upload", action="store_true")
     parser.add_argument("--rights-status", default="third_party_reference_only")
@@ -109,16 +144,23 @@ def main() -> int:
         "rights_status": args.rights_status,
     }]
     result = build_upload_plan(args, assets)
+    if args.upload and args.confirm_upload and not args.dry_run and result.get("status") == "READY":
+        result = execute_cloudinary_uploads(result)
     print(f"[upload_media_assets] account={args.account_id} status={result['status']}")
     print(f"  dry_run={args.dry_run} upload={args.upload} confirm_upload={args.confirm_upload}")
     print(f"  ALLOW_CLOUDINARY_UPLOAD={os.environ.get('ALLOW_CLOUDINARY_UPLOAD', '').lower() == 'true'}")
     for reason in result.get("blocked_reasons", [])[:8]:
         print(f"  [BLOCKED] {reason}")
-    print(json.dumps({"status": result["status"], "adapter_status": result.get("adapter_status", {}), "blocked_reasons": result.get("blocked_reasons", [])}, ensure_ascii=False))
-    print("  実uploadは実行していません")
+    print(json.dumps({
+        "status": result["status"],
+        "adapter_status": result.get("adapter_status", {}),
+        "blocked_reasons": result.get("blocked_reasons", []),
+        "uploaded_count": result.get("uploaded_count", 0),
+        "media_asset_ids": [a.get("media_asset_id", "") for a in result.get("uploaded_assets", [])],
+    }, ensure_ascii=False))
     if args.upload and not args.confirm_upload:
         return 1
-    return 0 if result["status"] in {"DRY_RUN", "BLOCKED", "READY"} else 1
+    return 0 if result["status"] in {"DRY_RUN", "BLOCKED", "READY", "UPLOADED"} else 1
 
 
 if __name__ == "__main__":

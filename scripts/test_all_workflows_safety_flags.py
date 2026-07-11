@@ -37,6 +37,9 @@ WATCHED_FLAGS = [
     "ALLOW_TRANSCRIPTION_API",
     "ALLOW_CLOUDINARY_UPLOAD",
     "ALLOW_VIDEO_DOWNLOAD",
+    "ALLOW_VIDEO_CUT",
+    "ALLOW_MEDIA_POSTS",
+    "ALLOW_REAL_THREADS_VIDEO_POST",
 ]
 # 実アクションを起こす confirm コマンド（--confirm-post は dry-run と併用される
 # ため対象外。実投稿/実アップロード/実ダウンロード/実切り抜きの 4 種を対象）。
@@ -176,6 +179,21 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
                 'ALLOW_VIDEO_CUT: "false"',
                 'ALLOW_CLOUDINARY_UPLOAD: "false"',
                 'ALLOW_TRANSCRIPTION_API: "false"',
+            ])))
+            return checks
+        if name == "media-growth-production.yml":
+            checks.append((f"{name} [schedule] liver_manager only", 'ACCOUNT_ID: "liver_manager"' in text))
+            checks.append((f"{name} [schedule] daily one-slot cron", 'cron: "20 0 * * *"' in text))
+            checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
+            checks.append((f"{name} [schedule] dedicated confirmation gate", "confirm_production_media" in text))
+            checks.append((f"{name} [schedule] approved production runner only", "run_media_production_pipeline.py" in text))
+            checks.append((f"{name} [schedule] X/transcription remain false", 'ALLOW_REAL_X_POST: "false"' in text and 'ALLOW_TRANSCRIPTION_API: "false"' in text))
+            checks.append((f"{name} [schedule] step-scoped media gates", all(flag in text for flag in [
+                'ALLOW_VIDEO_DOWNLOAD: "true"',
+                'ALLOW_VIDEO_CUT: "true"',
+                'ALLOW_CLOUDINARY_UPLOAD: "true"',
+                'ALLOW_MEDIA_POSTS: "true"',
+                'ALLOW_REAL_THREADS_VIDEO_POST: "true"',
             ])))
             return checks
         # ファイル全体で literal "true" フラグ無し。

@@ -825,11 +825,18 @@ def test_media_growth_does_not_break_autonomous_text_posting() -> None:
     media = media_config()
     assert cfg["auto_post_enabled"] is True
     assert cfg["allow_media_posts"] is False
-    assert media["video_post_enabled"] is False
+    assert media["video_post_enabled"] is True
+    for name in ("autonomous-growth-loop-night-scout.yml", "autonomous-growth-loop-liver-manager.yml"):
+        workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+        assert 'ALLOW_VIDEO_DOWNLOAD: "false"' in workflow
+        assert 'ALLOW_VIDEO_CUT: "false"' in workflow
+        assert 'ALLOW_CLOUDINARY_UPLOAD: "false"' in workflow
 
 
 def test_source_video_discovery_apply_disabled_by_default() -> None:
-    assert media_config()["source_video_discovery_apply_enabled"] is False
+    media = media_config()
+    assert media["source_video_discovery_apply_enabled"] is True
+    assert media["max_total_new_videos_per_run"] <= 20
 
 
 def test_download_cut_upload_video_post_still_gated() -> None:

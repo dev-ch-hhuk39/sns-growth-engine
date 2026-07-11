@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +28,9 @@ def _load_clip_candidates(path: str) -> list[dict]:
 
 
 def _resolve_clip_candidate(args: argparse.Namespace) -> dict:
+    injected = getattr(args, "clip_candidate_row", None)
+    if isinstance(injected, dict):
+        return dict(injected)
     clip_id = getattr(args, "clip_candidate_id", "")
     if not clip_id:
         return {}
@@ -68,7 +72,9 @@ def build_plan(args: argparse.Namespace) -> dict:
         blocked.append("end_seconds must be greater than start_seconds")
     if args.cut and not ffmpeg_cli:
         blocked.append("ffmpeg CLI is not installed")
-    output_path = str(ROOT / "output" / "clips" / f"clip_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}.mp4")
+    clip_id = str(getattr(args, "clip_candidate_id", "") or clip_candidate.get("clip_id") or datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
+    safe_clip_id = "".join(c if c.isalnum() or c in "_-" else "_" for c in clip_id)[:140]
+    output_path = str(ROOT / "output" / "clips" / f"{safe_clip_id}.mp4")
     return {
         "status": "READY" if args.cut and not blocked else "BLOCKED" if blocked else "PLAN_ONLY",
         "adapter_status": {
@@ -100,6 +106,37 @@ def build_plan(args: argparse.Namespace) -> dict:
     }
 
 
+def execute_cut(plan: dict) -> dict:
+    if plan.get("status") != "READY" or not plan.get("would_cut"):
+        return plan
+    output_path = Path(str(plan["output_path"]))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    duration = float(plan.get("duration_seconds") or 0)
+    cmd = [
+        "ffmpeg", "-y", "-ss", str(plan["start_seconds"]),
+        "-i", str(plan["input_path"]), "-t", str(duration),
+    ]
+    if plan.get("vertical_9x16"):
+        cmd += ["-vf", "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920"]
+    cmd += ["-c:v", "libx264", "-preset", "medium", "-crf", "21", "-c:a", "aac", "-movflags", "+faststart", str(output_path)]
+    try:
+        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=False)
+        if completed.returncode != 0 or not output_path.exists():
+            return {**plan, "status": "FAILED", "would_cut": False, "blocked_reasons": ["ffmpeg_cut_failed"]}
+        media_asset = dict(plan.get("media_asset_result") or {})
+        media_asset.update({
+            "media_asset_id": f"ma_{plan.get('clip_candidate_id') or output_path.stem}",
+            "local_path": str(output_path),
+            "status": "APPROVED",
+            "upload_status": "NOT_UPLOADED",
+            "aspect_ratio": "9:16" if plan.get("vertical_9x16") else "source",
+            "duration_seconds": duration,
+        })
+        return {**plan, "status": "CUT", "would_cut": False, "media_asset_result": media_asset}
+    except Exception as exc:  # noqa: BLE001
+        return {**plan, "status": "FAILED", "would_cut": False, "blocked_reasons": [f"{type(exc).__name__}: ffmpeg_cut_failed"]}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="cut approved clips")
     parser.add_argument("--input-path", default="")
@@ -120,9 +157,11 @@ def main() -> int:
         return 1
     if plan["status"] != "READY":
         return 0
-    # Real ffmpeg execution intentionally left to the gated production runner.
-    print(json.dumps({"status": "NOT_EXECUTED", "reason": "ffmpeg execution runner not invoked in this dry pipeline"}, ensure_ascii=False))
-    return 0
+    if args.dry_run:
+        return 0
+    result = execute_cut(plan)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result["status"] == "CUT" else 1
 
 
 if __name__ == "__main__":
