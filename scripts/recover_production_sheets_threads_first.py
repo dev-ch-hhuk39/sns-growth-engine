@@ -141,6 +141,7 @@ def _upsert_many(client: SheetsClient, logical: str, key: str, rows_to_seed: lis
         if str(existing.get(key, ""))
     }
     appends: list[list[str]] = []
+    merged_existing = [dict(row) for row in existing_rows]
     updated = 0
     added = 0
     for row in rows_to_seed:
@@ -150,15 +151,19 @@ def _upsert_many(client: SheetsClient, logical: str, key: str, rows_to_seed: lis
         if row_id in existing_by_id:
             idx, existing = existing_by_id[row_id]
             merged = {**existing, **row}
-            values = [str(merged.get(h, "")) for h in headers]
-            if not client.dry_run:
-                ws.update([values], f"A{idx}")
+            merged_existing[idx - 2] = merged
             updated += 1
         else:
             appends.append([str(row.get(h, "")) for h in headers])
             added += 1
-    if appends and not client.dry_run:
-        ws.append_rows(appends, value_input_option="USER_ENTERED")
+    if not client.dry_run:
+        # Preserve all existing rows/columns while reducing registry writes from
+        # one request per row to at most one update and one append request.
+        if updated and merged_existing:
+            values = [[str(row.get(h, "")) for h in headers] for row in merged_existing]
+            ws.update(values, "A2", value_input_option="USER_ENTERED")
+        if appends:
+            ws.append_rows(appends, value_input_option="USER_ENTERED")
     return {"added": added, "updated": updated}
 
 

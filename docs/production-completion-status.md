@@ -13,6 +13,8 @@ The production path is now connected end to end for the two approved operating m
 
 The pre-fix scheduled runs failed because production Sheets lagged behind the 73-row source registry and reference generation could leave no promotable candidate. Daily registry sync and safe fallback generation address both causes. The first runs after this commit must still be observed for external API/credential availability; that is operational verification, not an unimplemented code path.
 
+The first manual aftercare apply on the new workflow (`29134404560`) exposed a Sheets write-quota issue in the legacy row-by-row registry upsert. Registry updates are now batched while preserving existing rows and unknown columns, reducing a full sync from roughly 70 writes to at most two writes per tab.
+
 Date: 2026-07-10 (最終更新 — Production Autopilot Aftercare追加)
 Created: 2026-06-24
 

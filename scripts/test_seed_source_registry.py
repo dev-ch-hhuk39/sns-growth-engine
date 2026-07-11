@@ -82,7 +82,10 @@ def test_video_sources_reference_only():
         assert r["media_policy"] == "do_not_download", r["source_id"]
         assert r["allow_download"] == "false" and r["allow_cut"] == "false" and r["allow_upload"] == "false"
         assert r["use_policy"] == "REFERENCE_ONLY", r["source_id"]
-        assert r["can_reuse_media"] == "false", r["source_id"]
+        if r.get("rights_policy") == "approved_creator_clip":
+            assert r["can_reuse_media"] == "true", r["source_id"]
+        else:
+            assert r["can_reuse_media"] == "false", r["source_id"]
 
 
 def test_beauty_future_inactive():
