@@ -108,6 +108,7 @@ jobs:
           python3 scripts/seed_source_registry.py \
             --apply \
             --confirm-seed \
+            --skip-setup \
             --target-account all \
             --platform all
 
