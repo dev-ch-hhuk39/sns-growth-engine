@@ -11,6 +11,7 @@ body = text[start:end]
 checks = [
     ("SheetsClient has rate limit retry helper", "def _call_with_rate_limit_retry" in text),
     ("SheetsClient has batch update helper", "def _batch_update_fields" in text),
+    ("update_queue_item retries row_values", "row_values:queue" in body),
     ("update_queue_item retries find", "_call_with_rate_limit_retry(" in body and "find:queue" in body),
     ("update_queue_item uses batch update helper", "_batch_update_fields(" in body),
     ("update_queue_item does not use update_cell", "update_cell(" not in body),

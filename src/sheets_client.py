@@ -1432,7 +1432,10 @@ class SheetsClient:
             print(f"[dry-run] update_queue_item: queue_id={queue_id} fields={fields}")
             return
         ws = self._ws("queue")
-        headers = ws.row_values(1)
+        headers = self._call_with_rate_limit_retry(
+            "row_values:queue",
+            lambda: ws.row_values(1),
+        )
         col_qid = headers.index("queue_id") + 1
         cell = self._call_with_rate_limit_retry(
             f"find:queue:{queue_id}",
