@@ -12,7 +12,7 @@ files = [
 checks = []
 for rel in files:
     text = (ROOT / rel).read_text(encoding="utf-8")
-    checks.append((f"{rel} shared concurrency", "group: sns-growth-production-${{ github.ref }}" in text))
+    checks.append((f"{rel} workflow scoped concurrency", "group: sns-growth-production-${{ github.workflow }}-${{ github.ref }}" in text))
     checks.append((f"{rel} no cancel", "cancel-in-progress: false" in text))
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

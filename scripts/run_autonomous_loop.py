@@ -582,7 +582,7 @@ def save_autonomous_health(plan: dict[str, Any], mode: str, health_summary: dict
         errors = [
             str(r.get("stderr_tail") or r.get("stdout_tail") or "")[-240:]
             for r in results
-            if r.get("returncode") not in {0, None}
+            if r.get("returncode") not in {0, None} and not r.get("non_blocking")
         ]
         row = {
             "run_id": os.environ.get("GITHUB_RUN_ID") or f"local_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
@@ -698,6 +698,9 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
     def run_optional_step(cmd: list[str], *, warning_reason: str, env: dict[str, str] | None = None) -> None:
         ok = run_step(cmd, env=env)
         if not ok:
+            results[-1]["non_blocking"] = True
+            results[-1]["status"] = "WARN_NON_BLOCKING"
+            results[-1]["warning_reason"] = warning_reason
             plan.setdefault("warnings", []).append(warning_reason)
 
     video_urls = source_urls_for_platform(plan, "youtube") + source_urls_for_platform(plan, "tiktok")
@@ -865,7 +868,10 @@ def main() -> int:
             plan["verify_result"] = verify
             plan.setdefault("warnings", []).append("sheets_verify_failed_non_blocking_runner_will_validate")
     results = build_results(args, plan)
-    failed_results = [r for r in results if r.get("returncode") not in {0, None}]
+    failed_results = [
+        r for r in results
+        if r.get("returncode") not in {0, None} and not r.get("non_blocking")
+    ]
     status = "DONE" if mode == "apply" and not failed_results else "PLAN_ONLY"
     if failed_results:
         status = "PARTIAL" if mode == "apply" else "PLAN_ONLY_WITH_WARN"

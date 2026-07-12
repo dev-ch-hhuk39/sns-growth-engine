@@ -29,7 +29,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: sns-growth-production-${{ github.ref }}
+  group: sns-growth-production-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:

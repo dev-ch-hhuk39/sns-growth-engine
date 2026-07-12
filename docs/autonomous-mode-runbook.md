@@ -7,6 +7,8 @@ If scheduled text-only posting appears stopped, check the latest account-specifi
 - `generate_threads_ideas_from_references.py` previously refreshed existing generated rows one cell at a time and hit Sheets write quota.
 - `refill_threads_queue.py` previously called `setup_all()` and performed read-after-write verification, which hit Sheets read quota under scheduled load.
 - The current implementation uses batched row updates/appends and skips production `setup_all()` in the refill fallback.
+- Reference collection, video-reference analysis, and reference scoring are treated as non-blocking WARNs in the autonomous runner. If they fail because of a temporary API/quota issue, the runner continues through safe fallback generation, AUTO_READY, final public validation, and queue processing.
+- Each workflow has workflow-scoped concurrency: `sns-growth-production-${{ github.workflow }}-${{ github.ref }}`. Do not collapse account workflows into a single shared group; GitHub Actions cancels older pending runs in the same group, which can silently skip same-time account schedules.
 
 For text-only schedules, inspect:
 
@@ -15,6 +17,7 @@ For text-only schedules, inspect:
 - `autonomous_health.last_error_redacted`
 - `queue` READY/AUTO_READY rows
 - `posted_results.post_url`
+- `results[].status == WARN_NON_BLOCKING` for recoverable reference/collection warnings
 
 Media automation is separate:
 

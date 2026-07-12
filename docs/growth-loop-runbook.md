@@ -12,6 +12,8 @@ The live production flow is now split to avoid one failing subsystem stopping ev
 
 The July 11 text schedules were firing but failed because Sheets read/write quota was exhausted by row-by-row generation updates and refill setup reads. Those paths now use batched writes and skip production setup initialization.
 
+The July 12 recovery also changed autonomous apply error handling: optional source collection / reference scoring failures are logged as `WARN_NON_BLOCKING` and no longer fail the whole scheduled run when safe fallback generation and final validation can continue. Workflow concurrency is scoped per workflow/account to avoid GitHub Actions pending-run cancellation.
+
 Media posting requires `transcript_grounded=true`; this prevents duration-only or analysis-only candidates from becoming public video posts.
 
 ## 2026-07-11 Connected Production Loop
