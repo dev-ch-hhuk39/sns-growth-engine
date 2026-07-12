@@ -245,6 +245,8 @@ def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, An
             continue
         if source.get("source_id") not in allowed_ids:
             continue
+        if config.get("require_source_media_autopilot_enabled") and not source.get("media_autopilot_enabled"):
+            continue
         rows.append(source)
     return rows
 
@@ -262,7 +264,7 @@ def build_media_growth_plan(
     blocked: list[str] = []
     if not config.get("media_growth_engine_enabled"):
         blocked.append("media_growth_engine_disabled")
-    if account_id != config.get("target_account_id"):
+    if account_id not in set(config.get("allowed_target_account_ids", [config.get("target_account_id")])):
         blocked.append("account_not_allowed")
     if apply and not confirm_media_growth:
         blocked.append("--apply requires --confirm-media-growth")

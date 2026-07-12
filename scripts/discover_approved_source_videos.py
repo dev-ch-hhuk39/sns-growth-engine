@@ -92,6 +92,8 @@ def select_discovery_sources(account_id: str, config: dict[str, Any]) -> list[di
             continue
         if source.get("source_type") not in allowed_types:
             continue
+        if config.get("require_source_media_autopilot_enabled") and not source.get("media_autopilot_enabled"):
+            continue
         rows.append(source)
     return rows
 

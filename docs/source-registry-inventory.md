@@ -1,5 +1,15 @@
 # Source Registry Inventory
 
+## 2026-07-12 Approved Media Automation Update
+
+This inventory's historical table below is a review snapshot. The current source-of-truth is `config/source_accounts/default_sources.json` and now has 73 rows.
+
+- 13 explicitly user-authorized media sources have `rights_status=approved_creator_clip`, `permission_status=approved`, `media_pipeline_eligible=true`, and `media_autopilot_enabled=true`.
+- `liver_manager`: 1 YouTube channel and 3 TikTok accounts; `night_scout`: 9 YouTube channels.
+- These 13 are the only sources selected by the scheduled media pipelines. Their media use covers bounded discovery, individual video download, local/caption transcription, clip creation, Cloudinary storage, Threads reposting, generated post text, and PDCA records.
+- Generic `fetch_enabled` remains separate from the media pipeline. A source must have the explicit media-autopilot flag plus permission evidence; ordinary YouTube/TikTok references, X, beauty, and TODO rows remain excluded.
+- The Night Scout TikTok TODO remains a TODO because no actual URL exists. It is not enabled or guessed.
+
 Generated from `config/source_accounts/default_sources.json` on 2026-07-02. This inventory is review-first: no fetch, download, cut, upload, or post is enabled by this document.
 
 ## Summary

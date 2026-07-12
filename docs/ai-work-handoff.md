@@ -4322,3 +4322,85 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - text-only自動投稿はNight/Liverとも最新HEADでsuccess済み。次に見るべきはSheets `posted_results`, `queue`, `autonomous_health`。
 - `final_public_post_validator` は弱めない。media投稿でも `public_post_text` だけをpublisherへ渡す。
 - Sheets 429が再発した場合、個別 `update_cell` / `row_values` の未retry箇所をbatch/retry化する。
+
+## Codex handoff: approved media automation for night_scout (2026-07-12)
+
+### 現在のHEAD / ブランチ
+
+- 開始HEAD: `e187d945429384a173a074e8fa8e3ebf24cb4a0b`。
+- 作業ブランチ: `main`。
+
+### 本システムの状態
+
+- 許可済みsourceだけを対象に、bounded video discovery -> video_id重複排除 -> transcript -> transcript-grounded clip candidate -> 9:16 cut -> Cloudinary -> Threads video + `public_post_text` -> `posted_results` / PDCAまで接続する。
+- `liver_manager` の4 URLと `night_scout` の9 YouTube URLは、ユーザーが2026-07-12に自動媒体利用・Cloudinary保存・Threads再投稿を明示許可したものとして、`approved_creator_clip` / `permission_status=approved` / `media_autopilot_enabled=true`を持つ。
+- generic `fetch_enabled=false` は維持。専用の`media_autopilot_enabled=true`だけがmedia workflow選択を許可するため、通常参照source、X、beauty、TODO sourceは対象外。
+
+### 変更ファイル一覧
+
+- `config/media_growth_engine.json`
+- `config/source_accounts/default_sources.json`
+- `.github/workflows/media-growth-production-night-scout.yml`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/transcribe_approved_source_videos.py`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/media_post_validator.py`
+- `scripts/media_growth_schemas.py`
+- `scripts/test_all_workflows_safety_flags.py`
+- `docs/production-completion-status.md`
+- `docs/video-reference-runbook.md`
+- `docs/media-pipeline-runbook.md`
+- `docs/source-registry-inventory.md`
+- `docs/ai-work-handoff.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_night_scout_approved_media_sources.py`
+- `scripts/test_media_growth_night_scout_account.py`
+- `scripts/test_media_post_validator_allows_night_scout.py`
+- `scripts/test_media_production_night_scout_workflow.py`
+
+### 実行設定 / スケール方針
+
+- Liver media workflow: JST 09:20, 1 account / 1 media post per day.
+- Night Scout media workflow: JST 12:20, 1 account / 1 media post per day.
+- Discovery ceiling: source scan 12, new videos 3 per source, 12 total per run. `video_id` / canonical URL / clip time rangeで重複を止め、翌日以降に残りを処理する。
+- `public_post_text`のみ投稿可能。internal analysis、URL、transcript全文、source metadataはpublisherに渡さない。
+
+### 未完了事項 / 残WARN
+
+- Night Scout TikTokの個別/アカウントURLはregistry未登録のため、TODOは自動対象外。架空URLは追加しない。
+- Google SheetsまたはGitHub APIの一時的DNS/API接続不安定により、最新投稿URL/Sheets更新のローカル再確認は環境回復時に行う。
+- 外部transcription API、X、beauty、learning rule自動変更はOFFのまま。
+
+### テスト結果
+
+- `test_night_scout_approved_media_sources.py`: PASS 6 / FAIL 0
+- `test_media_growth_night_scout_account.py`: PASS 6 / FAIL 0
+- `test_media_post_validator_allows_night_scout.py`: PASS 1 / FAIL 0
+- `test_media_production_night_scout_workflow.py`: PASS 5 / FAIL 0
+- `test_media_production_pipeline_safety.py`: PASS 11 / FAIL 0
+- `test_media_production_workflow.py`: PASS 11 / FAIL 0
+- `test_media_execution_runners_connected.py`: PASS 7 / FAIL 0
+- `test_media_post_validator_blocks_x_beauty.py`: PASS 1 / FAIL 0
+- `test_all_workflows_safety_flags.py`: PASS 245 / FAIL 0
+
+### 次に触ってよいファイル
+
+- `.github/workflows/media-growth-production*.yml`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/transcribe_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+
+### 触らない方がよいファイル
+
+- `.env`, `data/`, `output/`, `.claude/plans/`
+- cookie / storage_state / token / secret類
+
+### 次AIへの引き継ぎメモ
+
+- scheduled run後、Sheetsの`source_videos`, `video_transcripts`, `video_clip_candidates`, `media_assets`, `queue`, `posted_results`, `media_post_results`をaccount別に確認する。
+- Night ScoutのTikTokを自動対象にするには、実URLをsource registryへ追加して同じpermission evidenceと`media_autopilot_enabled=true`を設定する。現在のTODOは絶対に有効化しない。
+- `final_public_post_validator`とX/beauty blockは弱めない。

@@ -77,6 +77,20 @@
       "source_platform": "youtube",
       "source_handle": "UCh7IsMrygg8X4hEJe8mUcQw",
       "source_url": "https://www.youtube.com/channel/UCh7IsMrygg8X4hEJe8mUcQw",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -1564,6 +1578,20 @@
       "source_platform": "youtube",
       "source_handle": "@sakuraimizuki",
       "source_url": "https://www.youtube.com/@sakuraimizuki",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -1645,6 +1673,20 @@
       "source_platform": "youtube",
       "source_handle": "@shingekinoa3485",
       "source_url": "https://www.youtube.com/@shingekinoa3485",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -1726,6 +1768,20 @@
       "source_platform": "youtube",
       "source_handle": "UC_GIhz5Cvb1NANQr_QPsnpA",
       "source_url": "https://www.youtube.com/channel/UC_GIhz5Cvb1NANQr_QPsnpA",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -1807,6 +1863,20 @@
       "source_platform": "youtube",
       "source_handle": "UCbclA18j8r-O1LyzTVpnI-A",
       "source_url": "https://www.youtube.com/channel/UCbclA18j8r-O1LyzTVpnI-A",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -1888,6 +1958,20 @@
       "source_platform": "youtube",
       "source_handle": "@ichijo_hibiki",
       "source_url": "https://www.youtube.com/@ichijo_hibiki",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -1969,6 +2053,20 @@
       "source_platform": "youtube",
       "source_handle": "@ClubUNJOURTOKYO",
       "source_url": "https://www.youtube.com/@ClubUNJOURTOKYO",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -2050,6 +2148,20 @@
       "source_platform": "youtube",
       "source_handle": "@miyuchannel1108",
       "source_url": "https://www.youtube.com/@miyuchannel1108",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -2131,6 +2243,20 @@
       "source_platform": "youtube",
       "source_handle": "@kyaba_camera",
       "source_url": "https://www.youtube.com/@kyaba_camera/",
+      "source_type": "channel",
+      "rights_status": "approved_creator_clip",
+      "permission_status": "approved",
+      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
+      "permission_approved_by": "user",
+      "permission_approved_at": "2026-07-12T00:00:00+09:00",
+      "allowed_platforms_for_repost": ["threads"],
+      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "media_pipeline_eligible": true,
+      "clip_enabled": true,
+      "transcript_enabled": true,
+      "media_autopilot_enabled": true,
       "target_account_ids": [
         "night_scout"
       ],
@@ -2652,6 +2778,7 @@
       "source_type": "channel",
       "source_handle": "UCzFzty7aEd4tw3NqCW6pkLQ",
       "source_url": "https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ",
+      "media_autopilot_enabled": true,
       "canonical_url": "https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ",
       "target_account_ids": [
         "liver_manager"
@@ -2691,7 +2818,7 @@
         "pdca_analysis"
       ],
       "permission_evidence_type": "user_asserted_permission",
-      "permission_evidence_note": "User stated permission is obtained for this source in ChatGPT conversation.",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [
@@ -2766,6 +2893,7 @@
       "source_type": "account",
       "source_handle": "@user5597696107300",
       "source_url": "https://www.tiktok.com/@user5597696107300",
+      "media_autopilot_enabled": true,
       "canonical_url": "https://www.tiktok.com/@user5597696107300",
       "target_account_ids": [
         "liver_manager"
@@ -2805,7 +2933,7 @@
         "pdca_analysis"
       ],
       "permission_evidence_type": "user_asserted_permission",
-      "permission_evidence_note": "User stated permission is obtained for this source in ChatGPT conversation.",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [
@@ -2879,6 +3007,7 @@
       "source_type": "account",
       "source_handle": "@me02_lsm",
       "source_url": "https://www.tiktok.com/@me02_lsm",
+      "media_autopilot_enabled": true,
       "canonical_url": "https://www.tiktok.com/@me02_lsm",
       "target_account_ids": [
         "liver_manager"
@@ -2918,7 +3047,7 @@
         "pdca_analysis"
       ],
       "permission_evidence_type": "user_asserted_permission",
-      "permission_evidence_note": "User stated permission is obtained for this source in ChatGPT conversation.",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [
@@ -2992,6 +3121,7 @@
       "source_type": "account",
       "source_handle": "@uare.inc",
       "source_url": "https://www.tiktok.com/@uare.inc",
+      "media_autopilot_enabled": true,
       "canonical_url": "https://www.tiktok.com/@uare.inc",
       "target_account_ids": [
         "liver_manager"
@@ -3031,7 +3161,7 @@
         "pdca_analysis"
       ],
       "permission_evidence_type": "user_asserted_permission",
-      "permission_evidence_note": "User stated permission is obtained for this source in ChatGPT conversation.",
+      "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [

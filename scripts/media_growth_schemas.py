@@ -193,7 +193,7 @@ def build_transcript_row(source: dict[str, Any], *, status: str, title: str = ""
         "transcript_id": f"tr_{source_video.get('source_video_id') or source.get('source_id', 'unknown')}",
         "source_id": source.get("source_id", ""),
         "source_url": source_video.get("canonical_video_url") or source.get("source_url", ""),
-        "account_id": source.get("target_account_id", "liver_manager"),
+        "account_id": source_video.get("account_id") or source.get("target_account_id") or (source.get("target_account_ids") or [""])[0],
         "platform": source.get("source_platform", ""),
         "video_id": source_video.get("video_id", ""),
         "title": title or source_video.get("title", ""),
@@ -257,6 +257,23 @@ def clips_overlap(a: dict[str, Any], b: dict[str, Any], tolerance_seconds: int |
     return max(a_start, b_start) < min(a_end, b_end) + float(tolerance_seconds)
 
 
+def account_media_context(account_id: str) -> dict[str, str]:
+    """Keep non-public clip metadata aligned with the target account."""
+    if account_id == "night_scout":
+        return {
+            "hook_text": "夜職を無理なく続けるための判断材料を切り出す",
+            "reason": "night_scout audience fit and approved media rights",
+            "expected_post_angle": "夜職の店選びや働き方を整理する方法",
+            "target_audience": "夜職を始めたい女性 / 移籍や働き方に悩む女性",
+        }
+    return {
+        "hook_text": "配信で初見が入りやすくなる一言を切り出す",
+        "reason": "liver_manager audience fit and approved media rights",
+        "expected_post_angle": "配信初心者が入りやすい空気を作る方法",
+        "target_audience": "配信初心者 / ライバー候補",
+    }
+
+
 def build_clip_candidate_for_video(
     source: dict[str, Any],
     source_video: dict[str, Any],
@@ -290,12 +307,14 @@ def build_clip_candidate_for_video(
         start = 0
         end = min(duration, planned_duration)
     scores = score_clip_candidate(source, has_transcript=bool(transcript_signal_count))
+    account_id = str(source_video.get("account_id") or source.get("target_account_id") or (source.get("target_account_ids") or ["liver_manager"])[0])
+    context = account_media_context(account_id)
     row = {
         "clip_candidate_id": f"clipcand_{source_video.get('source_video_id', source.get('source_id', 'unknown'))}_{index:02d}",
         "clip_id": f"clipcand_{source_video.get('source_video_id', source.get('source_id', 'unknown'))}_{index:02d}",
         "source_video_id": source_video.get("source_video_id", ""),
         "source_id": source.get("source_id", ""),
-        "account_id": source_video.get("account_id") or source.get("target_account_id", "liver_manager"),
+        "account_id": account_id,
         "platform": source_video.get("platform") or source.get("source_platform", ""),
         "source_url": source_video.get("source_url") or source.get("source_url", ""),
         "source_video_url": source_video.get("canonical_video_url", ""),
@@ -318,10 +337,10 @@ def build_clip_candidate_for_video(
         "end_time": end,
         "duration_seconds": round(end - start, 3),
         "transcript_excerpt": redacted_preview(transcript_excerpt, 120) if transcript_grounded else "redacted_plan_only",
-        "hook_text": redacted_preview(transcript_excerpt, 60) if transcript_grounded else "配信で初見が入りやすくなる一言を切り出す",
-        "reason": "video-level candidate with approved media rights",
-        "expected_post_angle": "配信初心者が入りやすい空気を作る方法",
-        "target_audience": "配信初心者 / ライバー候補",
+        "hook_text": redacted_preview(transcript_excerpt, 60) if transcript_grounded else context["hook_text"],
+        "reason": context["reason"],
+        "expected_post_angle": context["expected_post_angle"],
+        "target_audience": context["target_audience"],
         "score": scores["clip_score"],
         "rights_status": source_video.get("rights_status") or source.get("rights_status", ""),
         "permission_status": source_video.get("permission_status") or source.get("permission_status", ""),
@@ -341,10 +360,12 @@ def build_clip_candidate(source: dict[str, Any], index: int = 1, *, has_transcri
     start = 10 + (index - 1) * 20
     end = start + 25
     scores = score_clip_candidate(source, has_transcript=has_transcript)
+    account_id = str(source.get("target_account_id") or (source.get("target_account_ids") or ["liver_manager"])[0])
+    context = account_media_context(account_id)
     row = {
         "clip_candidate_id": f"clipcand_{source.get('source_id', 'unknown')}_{index:02d}",
         "source_id": source.get("source_id", ""),
-        "account_id": source.get("target_account_id", "liver_manager"),
+        "account_id": account_id,
         "platform": source.get("source_platform", ""),
         "source_url": source.get("source_url", ""),
         "video_id": "",
@@ -353,10 +374,10 @@ def build_clip_candidate(source: dict[str, Any], index: int = 1, *, has_transcri
         "end_seconds": end,
         "duration_seconds": end - start,
         "transcript_excerpt": "redacted_plan_only",
-        "hook_text": "配信で初見が入りやすくなる一言を切り出す",
-        "reason": "liver_manager audience fit and approved media rights",
-        "expected_post_angle": "配信初心者が入りやすい空気を作る方法",
-        "target_audience": "配信初心者 / ライバー候補",
+        "hook_text": context["hook_text"],
+        "reason": context["reason"],
+        "expected_post_angle": context["expected_post_angle"],
+        "target_audience": context["target_audience"],
         "score": scores["clip_score"],
         "rights_status": source.get("rights_status", ""),
         "permission_status": source.get("permission_status", ""),

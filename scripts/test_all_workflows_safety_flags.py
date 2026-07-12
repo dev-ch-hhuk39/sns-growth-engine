@@ -181,9 +181,11 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
                 'ALLOW_TRANSCRIPTION_API: "false"',
             ])))
             return checks
-        if name == "media-growth-production.yml":
-            checks.append((f"{name} [schedule] liver_manager only", 'ACCOUNT_ID: "liver_manager"' in text))
-            checks.append((f"{name} [schedule] daily one-slot cron", 'cron: "20 0 * * *"' in text))
+        if name in {"media-growth-production.yml", "media-growth-production-night-scout.yml"}:
+            account_id = "liver_manager" if name == "media-growth-production.yml" else "night_scout"
+            cron = 'cron: "20 0 * * *"' if name == "media-growth-production.yml" else 'cron: "20 3 * * *"'
+            checks.append((f"{name} [schedule] fixed media account", f'ACCOUNT_ID: "{account_id}"' in text))
+            checks.append((f"{name} [schedule] daily one-slot cron", cron in text))
             checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
             checks.append((f"{name} [schedule] dedicated confirmation gate", "confirm_production_media" in text))
             checks.append((f"{name} [schedule] approved production runner only", "run_media_production_pipeline.py" in text))

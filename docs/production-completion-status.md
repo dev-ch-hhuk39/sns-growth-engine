@@ -1,5 +1,16 @@
 # Production Completion Status
 
+## 2026-07-12 Approved Media Automation Expansion
+
+The user explicitly reconfirmed permission for the configured media source URLs to be downloaded, transcribed, analysed, clipped, stored in Cloudinary, and reposted with a newly written Threads caption. The permission is recorded source-by-source as `approved_creator_clip`, `permission_status=approved`, and `media_autopilot_enabled=true`; it is not inferred for unregistered URLs.
+
+- `liver_manager`: one approved YouTube channel and three approved TikTok accounts are eligible for bounded discovery and media production.
+- `night_scout`: the nine registered YouTube channels are now eligible under the same source-level permission record. The Night Scout TikTok placeholder remains excluded because no actual Night Scout TikTok URL is registered.
+- `.github/workflows/media-growth-production.yml` runs the liver media chain daily at JST 09:20. `.github/workflows/media-growth-production-night-scout.yml` runs the Night Scout chain daily at JST 12:20. Each workflow is account-fixed and can publish at most one approved video post for that account per day.
+- The shared pipeline is: bounded metadata discovery -> individual video URL -> local/caption transcript -> transcript-grounded clip candidates -> ffmpeg 9:16 clip -> Cloudinary -> media validator -> Threads video + newly generated `public_post_text` -> `posted_results` / PDCA records.
+- `fetch_enabled=false` remains the generic reference-collection safety setting. Approved media automation uses the separate, explicit `media_autopilot_enabled=true` field and the bounded media workflow, so X, beauty, TODO entries, and ordinary reference sources remain outside this execution path.
+- X posting, beauty posting, external transcription API calls, unregistered/TODO URLs, and sources without approved permission evidence remain blocked.
+
 ## 2026-07-12 Full Automation Recovery / Transcript-Grounded Media
 
 Current production design is:

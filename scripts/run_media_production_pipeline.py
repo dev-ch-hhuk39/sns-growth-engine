@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one fully gated approved-media Threads post for liver_manager.
+"""Run one fully gated approved-media Threads post for an enabled account.
 
 The runner is intentionally single-item and stateful through Sheets. It never
 accepts arbitrary accounts or rights values and every external action requires
@@ -92,6 +92,7 @@ def select_candidate(
     clips: list[dict[str, Any]],
     source_videos: list[dict[str, Any]],
     posted_results: list[dict[str, Any]],
+    account_id: str = "liver_manager",
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     sources = {str(row.get("source_video_id", "")): row for row in source_videos}
     posted_clip_ids = {str(row.get("clip_candidate_id", "")) for row in posted_results if row.get("clip_candidate_id")}
@@ -103,6 +104,10 @@ def select_candidate(
         source_video = sources.get(source_video_id)
         if not source_video:
             reasons.append(f"{clip_id}:source_video_missing")
+            continue
+        candidate_account = str(clip.get("account_id") or source_video.get("account_id") or "")
+        if candidate_account and candidate_account != account_id:
+            reasons.append(f"{clip_id}:account_not_targeted")
             continue
         rights = str(clip.get("rights_status") or source_video.get("rights_status") or "").lower()
         permission = str(clip.get("permission_status") or source_video.get("permission_status") or "").lower()
@@ -131,7 +136,7 @@ def select_candidate(
             reasons.append(f"{clip_id}:planned_or_invalid_video_id")
             continue
         text = str(clip.get("public_post_text") or "")
-        if final_public_post_validator(text, "liver_manager")["status"] != "PASS":
+        if final_public_post_validator(text, account_id)["status"] != "PASS":
             reasons.append(f"{clip_id}:public_post_validator_blocked")
             continue
         eligible.append((clip, source_video))
@@ -145,7 +150,7 @@ def select_candidate(
     return eligible[0][0], eligible[0][1], reasons
 
 
-def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None) -> dict[str, Any]:
+def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None, account_id: str = "liver_manager") -> dict[str, Any]:
     media_cfg = _load(MEDIA_CONFIG)
     autonomous_cfg = _load(AUTONOMOUS_CONFIG)
     blocked = []
@@ -153,6 +158,8 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
         blocked.append("kill_switch=true")
     if not media_cfg.get("media_public_post_auto_enabled"):
         blocked.append("media_public_post_auto_disabled")
+    if account_id not in set(media_cfg.get("allowed_target_account_ids", [media_cfg.get("target_account_id")])):
+        blocked.append("account_not_allowed")
     if apply and not confirm:
         blocked.append("--apply requires --confirm-production-media")
     if apply:
@@ -160,7 +167,7 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
     if not client:
         return {
             "status": "BLOCKED" if blocked else "PLAN_ONLY",
-            "account_id": "liver_manager",
+            "account_id": account_id,
             "apply": apply,
             "selected_clip_candidate_id": "",
             "public_post_preview": "",
@@ -174,7 +181,7 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
     source_videos = _records(client, "source_videos")
     clips = _records(client, "video_clip_candidates")
     posted = _records(client, "posted_results")
-    today_posts = _today_posts(posted, "liver_manager")
+    today_posts = _today_posts(posted, account_id)
     daily_cap = int(autonomous_cfg.get("daily_post_cap_per_account", 5))
     media_cap = int(media_cfg.get("media_daily_post_cap", 1))
     media_today = [row for row in today_posts if _true(row.get("media_used"))]
@@ -182,7 +189,7 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
         blocked.append("daily_post_cap_reached")
     if len(media_today) >= media_cap:
         blocked.append("media_daily_post_cap_reached")
-    clip, source_video, skipped = select_candidate(clips, source_videos, posted)
+    clip, source_video, skipped = select_candidate(clips, source_videos, posted, account_id)
     no_candidate = not clip or not source_video
     if no_candidate:
         blocked.append("no_eligible_media_candidate")
@@ -190,7 +197,7 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
     text = str((clip or {}).get("public_post_text") or "")
     return {
         "status": "BLOCKED" if fatal_blocked and apply else "NO_POST" if no_candidate else "PLAN_ONLY",
-        "account_id": "liver_manager",
+        "account_id": account_id,
         "apply": apply,
         "selected_clip_candidate_id": str((clip or {}).get("clip_candidate_id") or (clip or {}).get("clip_id") or ""),
         "selected_source_video_id": str((source_video or {}).get("source_video_id") or ""),
@@ -217,6 +224,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     source_video = dict(plan["selected_source_video"])
     clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id"))
     source_video_id = str(source_video.get("source_video_id"))
+    account_id = str(plan["account_id"])
 
     download_args = SimpleNamespace(
         source_video_id=source_video_id,
@@ -255,7 +263,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", cut_status="FAILED", notes=",".join(cut.get("blocked_reasons", [])))
         return {**plan, "status": "FAILED_CUT", "cut_result": cut, "would_cut": False}
     asset = dict(cut["media_asset_result"])
-    asset["account_id"] = "liver_manager"
+    asset["account_id"] = account_id
     asset["clip_candidate_id"] = clip_id
 
     upload_args = SimpleNamespace(upload=True, confirm_upload=True, dry_run=False)
@@ -269,7 +277,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
 
     media_row = {
         "media_id": media_id,
-        "account_id": "liver_manager",
+        "account_id": account_id,
         "reference_post_id": source_video_id,
         "source_platform": source_video.get("platform", ""),
         "source_post_url": source_video.get("canonical_video_url", ""),
@@ -305,7 +313,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "media_url": media_url,
         "media_asset_id": media_id,
         "platform": "threads",
-        "account_id": "liver_manager",
+        "account_id": account_id,
         "media_type": "video",
         "duration_seconds": asset.get("duration_seconds", 0),
         "aspect_ratio": "9:16",
@@ -318,8 +326,8 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     queue_id = f"media_q_{clip_id}"
     queue_row = {
         "queue_id": queue_id,
-        "account_id": "liver_manager",
-        "target_account_id": "liver_manager",
+        "account_id": account_id,
+        "target_account_id": account_id,
         "platform": "threads",
         "priority": "1",
         "status": "READY",
@@ -380,7 +388,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="run one approved media production post")
-    parser.add_argument("--account-id", default="liver_manager", choices=["liver_manager"])
+    parser.add_argument("--account-id", default="liver_manager", choices=["liver_manager", "night_scout"])
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-production-media", action="store_true")
@@ -391,7 +399,7 @@ def main() -> int:
     if args.use_sheets:
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    plan = build_plan(apply=args.apply, confirm=args.confirm_production_media, client=client)
+    plan = build_plan(account_id=args.account_id, apply=args.apply, confirm=args.confirm_production_media, client=client)
     if args.apply and args.confirm_production_media and client and plan.get("status") not in {"BLOCKED", "NO_POST"}:
         plan = execute(plan, client)
     safe = {k: v for k, v in plan.items() if k not in {"selected_clip", "selected_source_video"}}

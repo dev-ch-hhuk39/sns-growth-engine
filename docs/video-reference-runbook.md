@@ -2,11 +2,14 @@
 
 ## 2026-07-12 Transcript-Grounded Media Growth
 
-Approved `liver_manager` video operation now has three separated schedules:
+Approved video operation now has account-separated schedules:
 
 - `Production Autopilot Aftercare` (JST 23:40): bounded discovery into `source_videos`.
 - `Media Transcription Production` (JST 00:10): approved individual video URL transcription into `video_transcripts`.
-- `Media Growth Production` (JST 09:20): one transcript-grounded approved video post at most.
+- `Media Growth Production` (JST 09:20): one transcript-grounded approved `liver_manager` video post at most.
+- `Media Growth Production Night Scout` (JST 12:20): one transcript-grounded approved `night_scout` video post at most.
+
+The source-level permission record is authoritative. The four registered `liver_manager` YouTube/TikTok sources and nine registered `night_scout` YouTube sources have `approved_creator_clip`, `permission_status=approved`, and `media_autopilot_enabled=true`. Each may be used for bounded discovery, download, transcription, analysis, vertical clipping, Cloudinary storage, Threads reposting, and post-performance analysis. The Night Scout TikTok TODO has no URL and stays excluded.
 
 Transcription rules:
 
@@ -30,7 +33,7 @@ Approved channel/account discovery is bounded by `max_videos_per_source_scan`, `
 
 Only real discovered IDs are eligible. `PLANNED_ONLY` rows, fake candidate titles, invalid YouTube IDs, and invalid TikTok IDs are excluded from production selection. Distinct clip candidates from one source video are allowed, while an already posted `clip_candidate_id` is skipped.
 
-The scheduled production chain is active for approved `liver_manager` sources only. It performs no transcription API call, never includes internal analysis in the post text, and requires `final_public_post_validator` plus the media validator before publication.
+The scheduled production chains are active only for their explicitly approved account sources. They perform no transcription API call, never include internal analysis in the post text, and require `final_public_post_validator` plus the media validator before publication. A post always uses newly generated `public_post_text`; source titles, URLs, transcript bodies, and internal analysis never enter the published caption.
 
 Date: 2026-06-28
 

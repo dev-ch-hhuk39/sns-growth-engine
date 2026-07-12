@@ -31,8 +31,8 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         reasons.append("media_asset_id_missing")
     if platform != "threads":
         reasons.append("platform_not_threads")
-    if account_id != "liver_manager":
-        reasons.append("account_not_liver_manager")
+    if account_id not in {"liver_manager", "night_scout"}:
+        reasons.append("account_not_media_enabled")
     if account_id == "beauty_account" or platform == "x":
         reasons.append("x_or_beauty_blocked")
     if str(plan.get("media_type", "video")).lower() != "video":
