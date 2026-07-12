@@ -895,10 +895,14 @@ Remaining human/ops confirmation:
   - Workflow concurrency changed to workflow-scoped groups.
   - Optional source/video/reference failures are non-blocking for text-only posting.
   - Queue / posted_results / AUTO_READY Sheets writes are batched and retried to reduce Google Sheets 429 failures.
-- New local fix pending commit:
+- New fix committed and pushed as `b304003b9372de2257b671824468a0ee1826bfce`:
   - `media-growth-production.yml` now prepares media candidates itself before posting: bounded discovery, transcription, grounded clip candidate generation, then one approved media post attempt.
   - Stale clip candidate rows are refreshed when they become transcript-grounded and READY.
   - `run_media_production_pipeline.py` treats missing eligible media candidates as `NO_POST` instead of a failed workflow, while true safety blocks still fail.
+- Latest Media Growth Production verification:
+  - Run `29178471963` on `b304003b9372de2257b671824468a0ee1826bfce` completed with conclusion `success`.
+  - Steps `Discover approved source videos`, `Transcribe approved source videos`, `Generate transcript-grounded clip candidates`, and `Run one approved media production post` all completed successfully.
+  - Detailed post URL extraction was not completed locally because GitHub log body API and local Google OAuth DNS were unavailable in the Codex environment; GitHub Actions job status itself is success.
 - Still blocked by safety:
   - X fetch/post.
   - Beauty posting.

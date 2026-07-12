@@ -4239,7 +4239,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 作業開始HEAD: `a861c4388a056a9d76cf6d684f8cc06da2b73e8a` 以降の復旧作業を継続。
 - 最新push済みHEAD: `25ff93400b52b3b6671074667339e057124e7831`。
 - 作業ブランチ: `main`。
-- 今回の追加commit予定: `fix: media production workflowを自己完結化`。
+- 追加commit: `b304003b9372de2257b671824468a0ee1826bfce` (`fix: media production workflowを自己完結化`)。
 
 ### 変更ファイル一覧
 
@@ -4271,7 +4271,8 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 - GitHub Actions runnerのNode.js 20 deprecation warningあり。Actions側のランタイム都合で、現時点では実行阻害なし。
 - GitHub APIが一時的に `error connecting to api.github.com` を返すことがあり、post URLのログ抽出が安定しなかった。run自体はsuccess確認済み。
-- Media Growthの本番動画投稿は、次の最新commit push後に再実行して確認する。
+- 最新commit push後の `Media Growth Production` run `29178471963` は success。`Discover approved source videos`、`Transcribe approved source videos`、`Generate transcript-grounded clip candidates`、`Run one approved media production post` の全ステップがsuccess。
+- 成功runの詳細ログ本文はGitHub APIが一時的に `error connecting to api.github.com` を返し取得不安定。ローカルSheets読み取りdry-runもDNS制限で失敗し、権限昇格再実行はout of creditsで拒否されたため、投稿URLのローカル再確認は未完了。
 - TikTok/YouTubeの実動画取得は許可済みsource限定。未許可source、X、beauty、third_party_reference_onlyは引き続き対象外。
 
 ### テスト結果 / dry-run結果
@@ -4317,7 +4318,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 ### 次AIへの引き継ぎメモ
 
-- `Media Growth Production` の再実行は最新commit push後に行うこと。前処理内蔵版で `no_eligible_media_candidate` が解消するか、候補なしなら `NO_POST` successになる。
+- `Media Growth Production` は最新commit `b304003` でsuccess済み。次に確認できる環境では、Sheets `posted_results`, `media_assets`, `video_clip_candidates`, `source_videos` の更新と投稿URLを確認する。
 - text-only自動投稿はNight/Liverとも最新HEADでsuccess済み。次に見るべきはSheets `posted_results`, `queue`, `autonomous_health`。
 - `final_public_post_validator` は弱めない。media投稿でも `public_post_text` だけをpublisherへ渡す。
 - Sheets 429が再発した場合、個別 `update_cell` / `row_values` の未retry箇所をbatch/retry化する。
