@@ -15,6 +15,7 @@ dry_run=True のとき書き込みメソッドはすべて print のみで早期
 from __future__ import annotations
 
 import uuid
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -554,6 +555,44 @@ class SheetsClient:
         raise gspread.exceptions.WorksheetNotFound(
             f"Worksheet not found: {display_name}"
         )
+
+    def _call_with_rate_limit_retry(self, label: str, fn):
+        """Sheets 429/quota を短い指数バックオフで吸収する。secret値は出さない。"""
+        delays = [0, 5, 15, 30]
+        for attempt, delay in enumerate(delays):
+            if delay > 0:
+                print(f"[RATE_LIMIT] Sheets 429 during {label}; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+                time.sleep(delay)
+            try:
+                return fn()
+            except Exception as exc:
+                msg = str(exc).lower()
+                if ("429" in msg or "quota" in msg) and attempt < len(delays) - 1:
+                    continue
+                raise
+
+    @staticmethod
+    def _col_letter(col: int) -> str:
+        letters = ""
+        while col:
+            col, rem = divmod(col - 1, 26)
+            letters = chr(65 + rem) + letters
+        return letters
+
+    def _batch_update_fields(self, ws, headers: list[str], row: int, fields: dict[str, Any], *, label: str) -> None:
+        update_ranges = []
+        for field, value in fields.items():
+            if field in headers:
+                col = headers.index(field) + 1
+                update_ranges.append({
+                    "range": f"{self._col_letter(col)}{row}",
+                    "values": [[str(value)]],
+                })
+        if update_ranges:
+            self._call_with_rate_limit_retry(
+                f"batch_update:{label}",
+                lambda: ws.batch_update(update_ranges, value_input_option="USER_ENTERED"),
+            )
 
     def _ensure_tab(self, name: str, headers: list[str]) -> gspread.Worksheet:
         """タブがなければ作成し、ヘッダー不足列を右端に追記する（冪等）。"""
@@ -1395,12 +1434,13 @@ class SheetsClient:
         ws = self._ws("queue")
         headers = ws.row_values(1)
         col_qid = headers.index("queue_id") + 1
-        cell = ws.find(queue_id, in_column=col_qid)
+        cell = self._call_with_rate_limit_retry(
+            f"find:queue:{queue_id}",
+            lambda: ws.find(queue_id, in_column=col_qid),
+        )
         if cell is None:
             raise KeyError(f"queue_id={queue_id!r} が queue タブに見つかりません")
-        for field, value in fields.items():
-            if field in headers:
-                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+        self._batch_update_fields(ws, headers, cell.row, fields, label=f"queue:{queue_id}")
 
     def get_prompt_templates(
         self,

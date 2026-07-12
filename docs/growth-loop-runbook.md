@@ -16,6 +16,8 @@ The July 12 recovery also changed autonomous apply error handling: optional sour
 
 Posting persistence was also hardened: `process_threads_queue.py` retries Sheets append/find/update calls on quota errors and batches queue row updates. `posted_results` and queue status remain the critical persistence path; PDCA/log follow-up write failures are warnings, not post failures.
 
+AUTO_READY promotion uses the same batched queue update path, so `WAITING_REVIEW -> READY` no longer performs one Sheets write per changed field.
+
 Media posting requires `transcript_grounded=true`; this prevents duration-only or analysis-only candidates from becoming public video posts.
 
 ## 2026-07-11 Connected Production Loop
