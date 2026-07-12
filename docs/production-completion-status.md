@@ -7,6 +7,7 @@ Current production design is:
 - Text-only Threads schedules are ON for `night_scout` and `liver_manager`.
 - The recent "no automatic posting / Sheets not written" issue was not a disabled schedule. Both account-specific scheduled workflows were firing, but apply failed on Sheets API 429. The immediate causes were row-by-row `update_cell` writes in `generate_threads_ideas_from_references.py` and repeated `setup_all()`/read-after-write behavior in `refill_threads_queue.py`.
 - Text generation writes are now batched with row-level `batch_update` and `append_rows`. Refill now skips `setup_all()` in production and avoids post-write verification reads.
+- Production workflows that touch Sheets now share the `sns-growth-production-${{ github.ref }}` concurrency group with `cancel-in-progress=false`, so same-time account schedules queue instead of racing the Sheets API.
 - `Production Autopilot Aftercare` remains ON for bounded source registry sync, metrics/PDCA, and approved video discovery.
 - `Media Transcription Production` is now ON at JST 00:10. It transcribes only approved `liver_manager` `source_videos` with individual video URLs, max 3 per run. YouTube captions are preferred; local Whisper fallback is step-scoped and does not enable external transcription API.
 - `Media Growth Production` remains ON at JST 09:20, but production selection now requires `transcript_grounded=true`. Old duration-only clip candidates are blocked by `transcript_grounding_required`.

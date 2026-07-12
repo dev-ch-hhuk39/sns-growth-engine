@@ -29,7 +29,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: autonomous-night-scout-${{ github.ref }}
+  group: sns-growth-production-${{ github.ref }}
   cancel-in-progress: false
 
 env:
