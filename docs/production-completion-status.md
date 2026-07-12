@@ -882,3 +882,26 @@ Remaining human/ops confirmation:
 
 - Next scheduled GitHub Actions run should be checked for `health_summary.ready_count >= 1` and `posted_count >= 1`.
 - If `posted_count=0`, inspect `health_summary.no_post_reason`, `autonomous_health`, and queue `rejected_reason` rather than treating a green Actions run as a successful post.
+
+## 2026-07-12 Production Recovery Update
+
+- Text-only autonomous posting is operational again on latest pushed HEAD `25ff93400b52b3b6671074667339e057124e7831`.
+- Confirmed GitHub Actions success:
+  - Night Scout: `29177989151`
+  - Liver Manager: `29178058830`
+  - Production Aftercare: `29178159618`
+  - Media Transcription Production: `29178232402`
+- Root fixes already pushed:
+  - Workflow concurrency changed to workflow-scoped groups.
+  - Optional source/video/reference failures are non-blocking for text-only posting.
+  - Queue / posted_results / AUTO_READY Sheets writes are batched and retried to reduce Google Sheets 429 failures.
+- New local fix pending commit:
+  - `media-growth-production.yml` now prepares media candidates itself before posting: bounded discovery, transcription, grounded clip candidate generation, then one approved media post attempt.
+  - Stale clip candidate rows are refreshed when they become transcript-grounded and READY.
+  - `run_media_production_pipeline.py` treats missing eligible media candidates as `NO_POST` instead of a failed workflow, while true safety blocks still fail.
+- Still blocked by safety:
+  - X fetch/post.
+  - Beauty posting.
+  - Unknown / reference-only / third-party media reuse.
+  - Any media without approved rights and permission evidence.
+  - Any post text failing `final_public_post_validator`.

@@ -4231,3 +4231,93 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - `NO_READY_QUEUE` が再発した場合、workflow発火ではなくAUTO_READY reject reason / queue diagnosticsを見る。
 - media系は「基盤あり、本番OFF」。text-only scheduleを壊さないことを最優先にする。
 - `public_post_text`以外をpublisherへ渡す変更は絶対に入れない。
+
+## Codex handoff: production recovery and media workflow closure (2026-07-12)
+
+### 現在のHEAD / ブランチ
+
+- 作業開始HEAD: `a861c4388a056a9d76cf6d684f8cc06da2b73e8a` 以降の復旧作業を継続。
+- 最新push済みHEAD: `25ff93400b52b3b6671074667339e057124e7831`。
+- 作業ブランチ: `main`。
+- 今回の追加commit予定: `fix: media production workflowを自己完結化`。
+
+### 変更ファイル一覧
+
+- `.github/workflows/media-growth-production.yml`
+- `scripts/run_media_growth_engine.py`
+- `scripts/run_media_production_pipeline.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+
+### 追加ファイル一覧
+
+- `scripts/test_media_production_no_candidate_is_no_post.py`
+- `scripts/test_media_growth_workflow_prepares_candidates_before_post.py`
+- `scripts/test_media_growth_updates_stale_clip_candidates.py`
+
+### 今回判明した原因と修正
+
+- text-only自動投稿が止まっていた主因はGoogle Sheets quota 429とworkflow concurrencyの設定衝突だった。`25ff934` までで、workflow別concurrency、optional source failureのnon-blocking化、queue/posted_results/AUTO_READY更新のbatch化とretryを入れた。
+- 最新HEADで `Autonomous Growth Loop Night Scout` run `29177989151` は success。
+- 最新HEADで `Autonomous Growth Loop Liver Manager` run `29178058830` は success。
+- 最新HEADで `Production Autopilot Aftercare` run `29178159618` は success。
+- 最新HEADで `Media Transcription Production` run `29178232402` は success。
+- `Media Growth Production` run `29178280182` は、権利/secret/ffmpeg guardまでは通ったが `no_eligible_media_candidate` で失敗。候補は存在したが、YouTubeは古いclip rowが `clip_not_ready`、TikTokは `transcript_grounding_required` で弾かれた。
+- `run_media_growth_engine.py` を修正し、既存clip候補が後から `transcript_grounded=true` / `public_post_validator_status=PASS` / `clip_status=READY` に育った場合、Sheets既存行を更新するようにした。
+- `run_media_production_pipeline.py` を修正し、候補がまだないだけの日は `NO_POST` として終了するようにした。kill switch / env gate / secret / rights等の本当のBLOCKは引き続き失敗扱い。
+- `media-growth-production.yml` を修正し、日次実行単体で `discover_approved_source_videos.py --fetch-real` → `transcribe_approved_source_videos.py` → `run_media_growth_engine.py` → `run_media_production_pipeline.py` の順に進むようにした。
+
+### 未完了事項 / 残WARN
+
+- GitHub Actions runnerのNode.js 20 deprecation warningあり。Actions側のランタイム都合で、現時点では実行阻害なし。
+- GitHub APIが一時的に `error connecting to api.github.com` を返すことがあり、post URLのログ抽出が安定しなかった。run自体はsuccess確認済み。
+- Media Growthの本番動画投稿は、次の最新commit push後に再実行して確認する。
+- TikTok/YouTubeの実動画取得は許可済みsource限定。未許可source、X、beauty、third_party_reference_onlyは引き続き対象外。
+
+### テスト結果 / dry-run結果
+
+- `python3 scripts/test_media_production_no_candidate_is_no_post.py`: PASS 3 / FAIL 0
+- `python3 scripts/test_media_growth_workflow_prepares_candidates_before_post.py`: PASS 6 / FAIL 0
+- `python3 scripts/test_media_growth_updates_stale_clip_candidates.py`: PASS 5 / FAIL 0
+- `python3 scripts/test_media_production_pipeline_safety.py`: PASS 11 / FAIL 0
+- `python3 scripts/test_media_production_workflow.py`: PASS 11 / FAIL 0
+- `python3 scripts/test_all_workflows_safety_flags.py`: PASS 221 / FAIL 0
+- `python3 scripts/test_autonomous_workflow_no_x_no_media.py`: PASS 1 / FAIL 0
+- `python3 scripts/test_media_execution_runners_connected.py`: PASS 7 / FAIL 0
+- `python3 scripts/test_media_production_requires_grounded_clip.py`: PASS 2 / FAIL 0
+- `python3 scripts/run_media_production_pipeline.py --account-id liver_manager --dry-run`: PLAN_ONLY, would_download/cut/upload/post=false
+- `python3 scripts/run_media_growth_engine.py --account-id liver_manager --dry-run`: rights PASS, permission PASS, public validator PASS, would_download/cut/upload/post=false
+- `python3 -m py_compile ...`: PASS
+- `git diff --check`: PASS
+
+### 次に触ってよいファイル
+
+- `.github/workflows/media-growth-production.yml`
+- `.github/workflows/media-transcription-production.yml`
+- `scripts/run_media_growth_engine.py`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/transcribe_approved_source_videos.py`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/process_threads_queue.py`
+
+### 衝突しやすいファイル
+
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `.github/workflows/media-growth-production.yml`
+- `scripts/run_media_growth_engine.py`
+
+### 触らない方がいいファイル
+
+- `.env`
+- `data/`
+- `output/`
+- `.claude/plans/`
+- cookie / storage_state / token / secret 類
+
+### 次AIへの引き継ぎメモ
+
+- `Media Growth Production` の再実行は最新commit push後に行うこと。前処理内蔵版で `no_eligible_media_candidate` が解消するか、候補なしなら `NO_POST` successになる。
+- text-only自動投稿はNight/Liverとも最新HEADでsuccess済み。次に見るべきはSheets `posted_results`, `queue`, `autonomous_health`。
+- `final_public_post_validator` は弱めない。media投稿でも `public_post_text` だけをpublisherへ渡す。
+- Sheets 429が再発した場合、個別 `update_cell` / `row_values` の未retry箇所をbatch/retry化する。

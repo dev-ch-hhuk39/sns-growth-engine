@@ -183,11 +183,13 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
     if len(media_today) >= media_cap:
         blocked.append("media_daily_post_cap_reached")
     clip, source_video, skipped = select_candidate(clips, source_videos, posted)
-    if not clip or not source_video:
+    no_candidate = not clip or not source_video
+    if no_candidate:
         blocked.append("no_eligible_media_candidate")
+    fatal_blocked = [reason for reason in blocked if reason != "no_eligible_media_candidate"]
     text = str((clip or {}).get("public_post_text") or "")
     return {
-        "status": "BLOCKED" if blocked and apply else "NO_POST" if "no_eligible_media_candidate" in blocked else "PLAN_ONLY",
+        "status": "BLOCKED" if fatal_blocked and apply else "NO_POST" if no_candidate else "PLAN_ONLY",
         "account_id": "liver_manager",
         "apply": apply,
         "selected_clip_candidate_id": str((clip or {}).get("clip_candidate_id") or (clip or {}).get("clip_id") or ""),

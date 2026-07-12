@@ -109,8 +109,28 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
             row_number, old = existing[clip_id]
             old_grounded = str(old.get("transcript_grounded", "")).lower() in {"1", "true", "yes"}
             new_grounded = str(mapped.get("transcript_grounded", "")).lower() in {"1", "true", "yes"}
-            if new_grounded and not old_grounded:
+            old_ready = str(old.get("clip_status") or old.get("reviewer_status") or "").upper() in {"READY", "AUTO_APPROVED"}
+            new_ready = str(mapped.get("clip_status") or mapped.get("reviewer_status") or "").upper() in {"READY", "AUTO_APPROVED"}
+            old_validator = str(old.get("public_post_validator_status", "")).upper()
+            new_validator = str(mapped.get("public_post_validator_status", "")).upper()
+            should_refresh = (
+                (new_grounded and not old_grounded)
+                or (new_ready and not old_ready)
+                or (new_validator == "PASS" and old_validator != "PASS")
+                or (bool(mapped.get("public_post_text")) and not old.get("public_post_text"))
+            )
+            if should_refresh:
                 merged = {**old, **mapped}
+                if str(old.get("post_status", "")).upper() == "POSTED":
+                    merged["post_status"] = old.get("post_status", "")
+                    merged["clip_status"] = old.get("clip_status", "")
+                    merged["reviewer_status"] = old.get("reviewer_status", "")
+                if str(old.get("cut_status", "")).upper() in {"DONE", "CUT"}:
+                    merged["cut_status"] = old.get("cut_status", "")
+                    merged["local_clip_path"] = old.get("local_clip_path", "")
+                if str(old.get("upload_status", "")).upper() == "UPLOADED":
+                    merged["upload_status"] = old.get("upload_status", "")
+                    merged["storage_url"] = old.get("storage_url", "")
                 to_update.append({
                     "range": f"{rowcol_to_a1(row_number, 1)}:{rowcol_to_a1(row_number, len(headers))}",
                     "values": [[str(merged.get(h, "")) for h in headers]],
