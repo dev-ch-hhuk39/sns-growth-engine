@@ -98,10 +98,37 @@ def _get_headers(ws) -> list[str]:
     return []
 
 
+def _col_letter(col: int) -> str:
+    letters = ""
+    while col:
+        col, rem = divmod(col - 1, 26)
+        letters = chr(65 + rem) + letters
+    return letters
+
+
+def _call_with_rate_limit_retry(label: str, fn):
+    delays = [0, 5, 15, 30]
+    for attempt, delay in enumerate(delays):
+        if delay > 0:
+            print(f"[RATE_LIMIT] Sheets 429 during {label}; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+            time.sleep(delay)
+        try:
+            return fn()
+        except Exception as exc:
+            msg = str(exc).lower()
+            if ("429" in msg or "quota" in msg) and attempt < len(delays) - 1:
+                continue
+            raise
+
+
 def append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     ws = get_ws(client, logical)
     headers = _get_headers(ws)
-    ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+    values = [str(row.get(h, "")) for h in headers]
+    _call_with_rate_limit_retry(
+        f"append_row:{logical}",
+        lambda: ws.append_row(values, value_input_option="USER_ENTERED"),
+    )
 
 
 def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fields: dict[str, Any]) -> bool:
@@ -109,12 +136,25 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
     headers = _get_headers(ws)
     if key not in headers:
         raise KeyError(f"{logical}: missing key header {key}")
-    cell = ws.find(key_value, in_column=headers.index(key) + 1)
+    cell = _call_with_rate_limit_retry(
+        f"find:{logical}:{key}",
+        lambda: ws.find(key_value, in_column=headers.index(key) + 1),
+    )
     if cell is None:
         return False
+    update_ranges = []
     for field, value in fields.items():
         if field in headers:
-            ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+            col = headers.index(field) + 1
+            update_ranges.append({
+                "range": f"{_col_letter(col)}{cell.row}",
+                "values": [[str(value)]],
+            })
+    if update_ranges:
+        _call_with_rate_limit_retry(
+            f"batch_update:{logical}:{key_value}",
+            lambda: ws.batch_update(update_ranges, value_input_option="USER_ENTERED"),
+        )
     return True
 
 
@@ -545,24 +585,34 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "post_url": result.posted_url or "",
             "result_id": result_id,
         })
-        save_pdca_initial(client, queue_row, result_id)
-        log_event(client, account_id, "POSTED", "Threads post saved to posted_results", {"queue_id": queue_id, "result_id": result_id})
-        return {
-            "status": "POSTED",
-            "queue_id": queue_id,
-            "result_id": result_id,
-            "external_post_id": result.external_post_id or "",
-            "post_url": result.posted_url or "",
-        }
     except Exception as exc:
         fallback = write_fallback(queue_row, social, text, result)
-        update_row(client, "queue", "queue_id", queue_id, {
-            "status": "POSTED_SAVE_FAILED",
-            "error": f"posted_results save failed; fallback={fallback}",
-            "processed_at": now_iso(),
-        })
-        log_event(client, account_id, "POSTED_SAVE_FAILED", "Posted but failed to save posted_results", {"queue_id": queue_id, "fallback": str(fallback), "error": str(exc)})
+        try:
+            update_row(client, "queue", "queue_id", queue_id, {
+                "status": "POSTED_SAVE_FAILED",
+                "error": f"posted_results save failed; fallback={fallback}",
+                "processed_at": now_iso(),
+            })
+            log_event(client, account_id, "POSTED_SAVE_FAILED", "Posted but failed to save posted_results", {"queue_id": queue_id, "fallback": str(fallback), "error": str(exc)})
+        except Exception:
+            pass
         return {"status": "POSTED_SAVE_FAILED", "queue_id": queue_id, "fallback": str(fallback)}
+
+    pdca_warning = ""
+    try:
+        save_pdca_initial(client, queue_row, result_id)
+        log_event(client, account_id, "POSTED", "Threads post saved to posted_results", {"queue_id": queue_id, "result_id": result_id})
+    except Exception as exc:
+        pdca_warning = f"pdca_or_log_save_failed:{type(exc).__name__}"
+
+    return {
+        "status": "POSTED",
+        "queue_id": queue_id,
+        "result_id": result_id,
+        "external_post_id": result.external_post_id or "",
+        "post_url": result.posted_url or "",
+        "warning": pdca_warning,
+    }
 
 
 def main() -> int:

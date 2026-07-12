@@ -8,6 +8,7 @@ If scheduled text-only posting appears stopped, check the latest account-specifi
 - `refill_threads_queue.py` previously called `setup_all()` and performed read-after-write verification, which hit Sheets read quota under scheduled load.
 - The current implementation uses batched row updates/appends and skips production `setup_all()` in the refill fallback.
 - Reference collection, video-reference analysis, and reference scoring are treated as non-blocking WARNs in the autonomous runner. If they fail because of a temporary API/quota issue, the runner continues through safe fallback generation, AUTO_READY, final public validation, and queue processing.
+- Threads queue posting retries Sheets 429/quota failures for append/find/update operations and updates queue rows with `batch_update`. A successful Threads post should not be marked failed just because the non-critical PDCA/log follow-up write had a temporary issue.
 - Each workflow has workflow-scoped concurrency: `sns-growth-production-${{ github.workflow }}-${{ github.ref }}`. Do not collapse account workflows into a single shared group; GitHub Actions cancels older pending runs in the same group, which can silently skip same-time account schedules.
 
 For text-only schedules, inspect:

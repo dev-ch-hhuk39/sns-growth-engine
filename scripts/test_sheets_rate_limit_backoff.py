@@ -118,11 +118,11 @@ ptq.append_row(client_mock, "queue", {"queue_id": "q1", "status": "WAITING_REVIE
 check("append_row が ws.row_values(1) を1回だけ呼ぶ", ws_append.row_values.call_count == 1)
 check("append_row が ws.append_row を呼ぶ", ws_append.append_row.called)
 
-# 8. update_row も _get_headers キャッシュを使う
+# 8. update_row も _get_headers キャッシュを使い、複数セルを batch_update でまとめる
 ws_update = MagicMock()
 ws_update.row_values.return_value = ["queue_id", "status", "error"]
 ws_update.find.return_value = MagicMock(row=2)
-ws_update.update_cell.return_value = None
+ws_update.batch_update.return_value = None
 clear_cache()
 
 client_mock2 = MagicMock()
@@ -130,7 +130,8 @@ client_mock2._ws.return_value = ws_update
 
 ptq.update_row(client_mock2, "queue", "queue_id", "q1", {"status": "POSTED"})
 check("update_row が ws.row_values(1) を1回だけ呼ぶ", ws_update.row_values.call_count == 1)
-check("update_row が ws.update_cell を呼ぶ", ws_update.update_cell.called)
+check("update_row が ws.batch_update を呼ぶ", ws_update.batch_update.called)
+check("update_row が ws.update_cell を呼ばない", not ws_update.update_cell.called)
 
 print(f"\n--- 結果 ---")
 print(f"PASS: {PASS_COUNT} / FAIL: {FAIL_COUNT}")

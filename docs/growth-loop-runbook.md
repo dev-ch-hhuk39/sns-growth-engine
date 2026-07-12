@@ -14,6 +14,8 @@ The July 11 text schedules were firing but failed because Sheets read/write quot
 
 The July 12 recovery also changed autonomous apply error handling: optional source collection / reference scoring failures are logged as `WARN_NON_BLOCKING` and no longer fail the whole scheduled run when safe fallback generation and final validation can continue. Workflow concurrency is scoped per workflow/account to avoid GitHub Actions pending-run cancellation.
 
+Posting persistence was also hardened: `process_threads_queue.py` retries Sheets append/find/update calls on quota errors and batches queue row updates. `posted_results` and queue status remain the critical persistence path; PDCA/log follow-up write failures are warnings, not post failures.
+
 Media posting requires `transcript_grounded=true`; this prevents duration-only or analysis-only candidates from becoming public video posts.
 
 ## 2026-07-11 Connected Production Loop
