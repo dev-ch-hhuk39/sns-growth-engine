@@ -1,5 +1,29 @@
 # Video Reference Runbook
 
+## 2026-07-12 Transcript-Grounded Media Growth
+
+Approved `liver_manager` video operation now has three separated schedules:
+
+- `Production Autopilot Aftercare` (JST 23:40): bounded discovery into `source_videos`.
+- `Media Transcription Production` (JST 00:10): approved individual video URL transcription into `video_transcripts`.
+- `Media Growth Production` (JST 09:20): one transcript-grounded approved video post at most.
+
+Transcription rules:
+
+- Only `owned`, `licensed`, or `approved_creator_clip` rows with `permission_status=approved` are eligible.
+- Only individual video URLs from `source_videos` are transcribed. Channel/account URLs are discovery sources, not direct transcription/download targets.
+- YouTube official/public captions are tried first via `youtube-transcript-api`.
+- If captions are unavailable, the workflow may use local `faster-whisper` only when `ALLOW_LOCAL_TRANSCRIPTION=true` and `ALLOW_VIDEO_DOWNLOAD=true` are scoped to the transcription step.
+- `ALLOW_TRANSCRIPTION_API=false` remains false; no external transcription API is enabled.
+- Transcript text is saved to `video_transcripts.transcript_text`, but logs only show counts/status/short redacted preview.
+
+Clip generation rules:
+
+- `run_media_growth_engine.py` reads `video_transcripts`.
+- A source video without DONE transcript becomes `TRANSCRIPT_PENDING` and does not produce READY clips.
+- READY/AUTO_APPROVED clip candidates must have `transcript_grounded=true` and `transcript_id`.
+- `run_media_production_pipeline.py` blocks old duration-only candidates with `transcript_grounding_required`.
+
 ## 2026-07-11 Approved Media Production
 
 Approved channel/account discovery is bounded by `max_videos_per_source_scan`, `max_new_videos_per_source_per_run`, and `max_total_new_videos_per_run`. Discovery uses metadata only and does not download media. It resolves individual canonical URLs and enriches duration metadata before clip planning. TikTok profile discovery remains bounded; it is never an unbounded profile scrape.

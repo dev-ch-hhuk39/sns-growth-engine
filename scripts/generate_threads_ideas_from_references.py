@@ -416,39 +416,42 @@ def _row_status(row: dict[str, Any]) -> str:
     return str(row.get("status") or row.get("ai_publish_recommendation") or "").strip().upper()
 
 
-def _update_existing_row(ws: Any, headers: list[str], row_number: int, row: dict[str, Any]) -> None:
-    for header in headers:
-        if header in row:
-            ws.update_cell(row_number, headers.index(header) + 1, str(row.get(header, "")))
-
-
 def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, Any]]) -> dict[str, int]:
     if not rows:
         return {"added": 0, "skipped": 0, "refreshed": 0}
+    from gspread.utils import rowcol_to_a1
+
     ws = client._ws(logical)
     headers = ws.row_values(1)
-    existing_rows = {str(r.get(key, "")): dict(r) for r in ws.get_all_records()}
+    existing_rows: dict[str, tuple[int, dict[str, Any]]] = {}
+    for row_number, existing in enumerate(ws.get_all_records(), start=2):
+        existing_rows[str(existing.get(key, ""))] = (row_number, dict(existing))
     added = skipped = refreshed = 0
+    update_ranges: list[dict[str, Any]] = []
+    append_values: list[list[str]] = []
     for row in rows:
         row_key = str(row.get(key, ""))
-        existing = existing_rows.get(row_key)
-        if existing:
+        existing_info = existing_rows.get(row_key)
+        if existing_info:
+            row_number, existing = existing_info
             if _row_status(existing) in LOCKED_GENERATION_STATUSES:
                 skipped += 1
                 continue
-            col = headers.index(key) + 1
-            cell = ws.find(row_key, in_column=col)
-            if cell is None:
-                skipped += 1
-                continue
             refreshed_row = {**existing, **row}
-            _update_existing_row(ws, headers, cell.row, refreshed_row)
-            existing_rows[row_key] = refreshed_row
+            update_ranges.append({
+                "range": f"{rowcol_to_a1(row_number, 1)}:{rowcol_to_a1(row_number, len(headers))}",
+                "values": [[str(refreshed_row.get(h, "")) for h in headers]],
+            })
+            existing_rows[row_key] = (row_number, refreshed_row)
             refreshed += 1
             continue
-        ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
-        existing_rows[row_key] = dict(row)
+        append_values.append([str(row.get(h, "")) for h in headers])
+        existing_rows[row_key] = (-1, dict(row))
         added += 1
+    if update_ranges:
+        ws.batch_update(update_ranges, value_input_option="USER_ENTERED")
+    if append_values:
+        ws.append_rows(append_values, value_input_option="USER_ENTERED")
     return {"added": added, "skipped": skipped, "refreshed": refreshed}
 
 

@@ -196,6 +196,25 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
                 'ALLOW_REAL_THREADS_VIDEO_POST: "true"',
             ])))
             return checks
+        if name == "media-transcription-production.yml":
+            checks.append((f"{name} [schedule] liver_manager only", 'ACCOUNT_ID: "liver_manager"' in text))
+            checks.append((f"{name} [schedule] daily transcription cron", 'cron: "10 15 * * *"' in text))
+            checks.append((f"{name} [schedule] dry-run first", "Dry-run transcription plan" in text))
+            checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
+            checks.append((f"{name} [schedule] schedule or confirm transcription gate", "github.event_name == 'schedule' || github.event.inputs.confirm_transcription == 'true'" in text))
+            checks.append((f"{name} [schedule] no post/cut/upload gates", all(flag in text for flag in [
+                'PUBLISH_ENABLED: "false"',
+                'ALLOW_REAL_THREADS_POST: "false"',
+                'ALLOW_REAL_X_POST: "false"',
+                'ALLOW_VIDEO_CUT: "false"',
+                'ALLOW_CLOUDINARY_UPLOAD: "false"',
+                'ALLOW_MEDIA_POSTS: "false"',
+                'ALLOW_REAL_THREADS_VIDEO_POST: "false"',
+                'ALLOW_TRANSCRIPTION_API: "false"',
+            ])))
+            checks.append((f"{name} [schedule] local transcription download scoped", 'ALLOW_VIDEO_DOWNLOAD: "true"' in text and 'ALLOW_LOCAL_TRANSCRIPTION: "true"' in text))
+            checks.append((f"{name} [schedule] bounded transcription", "--limit 3" in text))
+            return checks
         # ファイル全体で literal "true" フラグ無し。
         lower = text.lower()
         for flag in WATCHED_FLAGS:

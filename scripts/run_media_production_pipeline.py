@@ -114,6 +114,9 @@ def select_candidate(
         if status not in {"READY", "AUTO_APPROVED"}:
             reasons.append(f"{clip_id}:clip_not_ready")
             continue
+        if not _true(clip.get("transcript_grounded")):
+            reasons.append(f"{clip_id}:transcript_grounding_required")
+            continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")
             continue

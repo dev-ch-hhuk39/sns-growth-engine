@@ -1,5 +1,19 @@
 # Growth Loop Runbook
 
+## 2026-07-12 Production Automation Flow
+
+The live production flow is now split to avoid one failing subsystem stopping everything:
+
+1. Account-specific text workflows post safe `public_post_text` to Threads.
+2. Aftercare syncs source registry, metrics/PDCA, and discovers approved source videos.
+3. Media transcription turns approved individual `source_videos` into `video_transcripts`.
+4. Media growth creates only transcript-grounded clip candidates.
+5. Media production posts at most one approved video per day.
+
+The July 11 text schedules were firing but failed because Sheets read/write quota was exhausted by row-by-row generation updates and refill setup reads. Those paths now use batched writes and skip production setup initialization.
+
+Media posting requires `transcript_grounded=true`; this prevents duration-only or analysis-only candidates from becoming public video posts.
+
 ## 2026-07-11 Connected Production Loop
 
 The text-only schedule is unchanged and remains independent of media availability. Reference generation failure is recoverable through a validator-approved original-post fallback.

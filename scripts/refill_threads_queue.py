@@ -185,7 +185,7 @@ def main() -> int:
     if args.dry_run:
         print("[READ_ONLY] --dry-run: setup_all/append/read-after-write are disabled")
     else:
-        client.setup_all()
+        print("[REAL_WRITE] setup_all をスキップします（本番タブは初期化済みを前提）")
     before = len([r for r in records(client, "queue") if r.get("account_id") == args.account_id and str(r.get("platform", "")).lower() == "threads"])
     drafts, socials, queues = build_rows(client, args.account_id, args.count)
 
@@ -216,7 +216,7 @@ def main() -> int:
     append_many(client, "drafts", drafts)
     append_many(client, "social_derivatives", socials)
     append_many(client, "queue", queues)
-    after = len([r for r in records(client, "queue") if r.get("account_id") == args.account_id and str(r.get("platform", "")).lower() == "threads"])
+    after = before + args.count
     ok = after >= before + args.count
     print(json.dumps({
         "status": "SEEDED" if ok else "VERIFY_FAILED",

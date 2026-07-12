@@ -1,5 +1,27 @@
 # Autonomous Mode Runbook
 
+## 2026-07-12 Operational Recovery Notes
+
+If scheduled text-only posting appears stopped, check the latest account-specific workflow logs before changing schedules. The July 11 failures were caused by Sheets quota, not disabled cron:
+
+- `generate_threads_ideas_from_references.py` previously refreshed existing generated rows one cell at a time and hit Sheets write quota.
+- `refill_threads_queue.py` previously called `setup_all()` and performed read-after-write verification, which hit Sheets read quota under scheduled load.
+- The current implementation uses batched row updates/appends and skips production `setup_all()` in the refill fallback.
+
+For text-only schedules, inspect:
+
+- `health_summary.posted_count`
+- `health_summary.no_post_reason`
+- `autonomous_health.last_error_redacted`
+- `queue` READY/AUTO_READY rows
+- `posted_results.post_url`
+
+Media automation is separate:
+
+- `Media Transcription Production` runs at JST 00:10 and creates transcript-grounded clip candidates.
+- `Media Growth Production` runs at JST 09:20 and will only post media when `transcript_grounded=true`.
+- Text-only workflows do not require Cloudinary secrets; media workflow does.
+
 ## 2026-07-11 Production Schedules
 
 - Account-specific text schedules remain the primary public-post path. Each run posts at most one item and retains the account-specific daily cap.

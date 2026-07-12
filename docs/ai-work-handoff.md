@@ -1,5 +1,109 @@
 # AI Work Handoff
 
+## 2026-07-12 Codex Full Automation Recovery / Transcription Grounding
+
+### 本システムについて
+
+SNS Growth Engine v2 は、`night_scout` / `liver_manager` のtext-only Threads自動投稿、投稿後aftercare、許可済み`liver_manager`動画の発見、文字起こし、文字起こしに基づくclip候補、download/cut/Cloudinary/upload/Threads video postまでをGitHub Actionsで分離運用する。公開本文は必ず`public_post_text`のみ。X、beauty、未許可media、third_party_reference_only media、外部transcription API、learning_rules自動適用はブロック維持。
+
+### 現在のHEAD / branch
+
+- 作業開始HEAD: `ea340a7fec7090129ee0bda7dc8ef8b497da5610`
+- 作業ブランチ: `main`
+- 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
+- 直近原因: account別scheduled workflowsは発火していたが、`generate_threads_ideas_from_references.py` のrow-by-row `update_cell` と `refill_threads_queue.py` の毎回 `setup_all()` がSheets API 429を誘発し、Apply stepが失敗していた。
+
+### 変更ファイル一覧
+
+- `.github/workflows/media-transcription-production.yml`
+- `scripts/transcribe_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/media_growth_schemas.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/refill_threads_queue.py`
+- `scripts/test_all_workflows_safety_flags.py`
+- `scripts/test_transcribe_approved_source_videos.py`
+- `scripts/test_media_growth_requires_transcript_grounding.py`
+- `scripts/test_media_production_requires_grounded_clip.py`
+- `scripts/test_media_transcription_workflow.py`
+- `scripts/test_media_growth_apply_clip_candidates_plan.py`
+- `scripts/test_media_production_pipeline_safety.py`
+- `src/sheets_client.py`
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+- `docs/autonomous-mode-runbook.md`
+- `docs/growth-loop-runbook.md`
+- `docs/video-reference-runbook.md`
+
+### 実装内容
+
+- 自動投稿停止の主因だったSheets 429を修正。既存draft/queue更新は行単位 `batch_update` + `append_rows` に変更し、補充CLIは本番で `setup_all()` と追記後再読を行わない。
+- `Media Transcription Production` を追加。JST 00:10に、許可済み`source_videos`の個別動画URLだけを最大3本処理し、YouTube公式字幕を優先、必要時のみ `ALLOW_LOCAL_TRANSCRIPTION=true` + `ALLOW_VIDEO_DOWNLOAD=true` のstep-scoped gateでローカルWhisper文字起こしを行う。stdoutにtranscript本文は出さない。
+- `run_media_growth_engine.py` は `video_transcripts` を読み、実文字起こし済み動画だけを `transcript_grounded=true` のclip候補としてREADY/AUTO_APPROVED化する。文字起こしなしの動画は `TRANSCRIPT_PENDING` で止める。
+- `run_media_production_pipeline.py` は `transcript_grounded=true` のclip以外を本番投稿対象にしない。
+
+### 未完了事項 / 残WARN
+
+- ローカルCodex環境はGoogle OAuthへのDNS解決が制限されるため、Sheets実dry-runはActionsで確認する。
+- `faster-whisper` は専用workflow内でinstallする。初回はmodel downloadのため実行時間が長くなる可能性がある。
+- Cloudinary secretsはmedia production workflowでのみ必要。text-only workflowのhealth summaryでは未注入なのでmissing表示されてもtext-onlyには影響しない。
+- TikTok profileからの無制限展開はしない。discoveryはbounded、文字起こしは`source_videos`に入った個別video URLだけ。
+
+### スケール方針
+
+- text-only posting: account別schedule、1run最大1投稿、account別daily cap 5。
+- aftercare: source registry sync、metrics/PDCA、bounded source video discovery。
+- transcription: 1run最大3動画。既にDONEの`source_video_id`は再処理しない。
+- media post: 1日最大1本、`transcript_grounded=true`、approved rights、permission approved、media validator、final public validator、Cloudinary/Threads gates必須。
+
+### テスト結果
+
+- `test_transcribe_approved_source_videos.py`: PASS 4 / FAIL 0
+- `test_media_growth_requires_transcript_grounding.py`: PASS 5 / FAIL 0
+- `test_media_production_requires_grounded_clip.py`: PASS 2 / FAIL 0
+- `test_media_transcription_workflow.py`: PASS 9 / FAIL 0
+- `test_media_growth_engine_generates_clip_candidates.py`: PASS
+- `test_media_growth_apply_clip_candidates_plan.py`: PASS 10 / FAIL 0
+- `test_media_production_pipeline_safety.py`: PASS 11 / FAIL 0
+- `test_all_workflows_safety_flags.py`: PASS 220 / FAIL 0
+- `test_run_autonomous_loop_night_scout_dry_run.py`: PASS
+- `test_run_autonomous_loop_liver_manager_dry_run.py`: PASS
+- `test_public_post_never_contains_internal_terms.py`: PASS
+- `test_internal_terms_never_in_posted_text.py`: PASS
+- `py_compile`: PASS
+
+### dry-run / BLOCKED確認
+
+- `run_autonomous_loop.py --account-id night_scout --dry-run`: validator PASS、would_post=false。
+- `run_autonomous_loop.py --account-id liver_manager --dry-run`: validator PASS、would_post=false。
+- `transcribe_approved_source_videos.py --use-sheets --dry-run`: ローカルではsandbox DNS制限でGoogle OAuth接続不可。Actionsで確認する。
+- `run_media_production_pipeline.py`: transcript_grounding_required がないclipだけを対象にする。
+
+### 次に触ってよいファイル
+
+- Codex: `scripts/transcribe_approved_source_videos.py`, `scripts/run_media_growth_engine.py`, `scripts/run_media_production_pipeline.py`, `.github/workflows/media-transcription-production.yml`
+- Claude Code: docs/runbook、metrics/PDCA collector、health summary改善。ただし安全ゲート・public_post_text保証は弱めない。
+
+### 衝突しやすいファイル
+
+- `src/sheets_client.py`
+- `scripts/run_autonomous_loop.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/run_media_growth_engine.py`
+- `docs/ai-work-handoff.md`
+
+### 触らない方がいいファイル
+
+- `.env`, `data/`, `output/`, `.claude/plans/`
+- token/cookie/storage_state/secret実値
+- X/beauty投稿設定
+- 未許可mediaの権利設定
+
+### 次AIへの引き継ぎメモ
+
+まずActions上で `Media Transcription Production` をdispatchし、`video_transcripts` と grounded clip候補が保存されることを確認する。その後 `Media Growth Production` をdry-run、問題なければ1本だけ本番実行する。text-only schedule failureはSheets 429修正後の次runで `posted_count` / `no_post_reason` を確認すること。
+
 ## 2026-07-11 Codex Production Completion
 
 ### 本システムについて

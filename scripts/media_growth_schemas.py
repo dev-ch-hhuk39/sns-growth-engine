@@ -20,6 +20,7 @@ VIDEO_CLIP_CANDIDATE_FIELDS = [
     "source_video_id", "video_id", "canonical_video_url", "clip_index_in_video",
     "duplicate_clip_key", "overlap_group_id", "parent_video_duration_seconds",
     "transcript_signal_count", "can_create_multiple_clips", "selected_reason",
+    "transcript_grounded", "transcript_id",
     "public_post_text", "public_post_validator_status",
     "title", "start_seconds", "end_seconds", "duration_seconds",
     "transcript_excerpt", "hook_text", "reason", "expected_post_angle",
@@ -265,17 +266,26 @@ def build_clip_candidate_for_video(
     public_post_text: str = "",
     validator_status: str = "PASS",
     transcript_signal_count: int = 0,
+    transcript_grounded: bool = False,
+    transcript_id: str = "",
+    transcript_excerpt: str = "",
+    start_seconds: float | None = None,
+    end_seconds: float | None = None,
 ) -> dict[str, Any]:
     config = config or {}
     duration = float(source_video.get("duration_seconds") or 60)
     clip_duration_max = float(config.get("clip_duration_max_seconds", 45))
     clip_duration_min = float(config.get("clip_duration_min_seconds", 8))
     planned_duration = max(clip_duration_min, min(clip_duration_max, duration if duration < 25 else 25))
-    if duration < 25:
+    if start_seconds is not None and end_seconds is not None:
+        start = max(0.0, float(start_seconds))
+        end = min(duration, float(end_seconds)) if duration else float(end_seconds)
+    elif duration < 25:
         start = 0
+        end = min(duration, start + planned_duration)
     else:
         start = 10 + (index - 1) * int(planned_duration + 5)
-    end = min(duration, start + planned_duration)
+        end = min(duration, start + planned_duration)
     if end <= start:
         start = 0
         end = min(duration, planned_duration)
@@ -295,6 +305,8 @@ def build_clip_candidate_for_video(
         "overlap_group_id": f"og_{source_video.get('source_video_id', '')}_{index:02d}",
         "parent_video_duration_seconds": source_video.get("duration_seconds", ""),
         "transcript_signal_count": transcript_signal_count,
+        "transcript_grounded": transcript_grounded,
+        "transcript_id": transcript_id,
         "can_create_multiple_clips": clip_count_for_video(source_video, config, transcript_signal_count=transcript_signal_count) > 1,
         "selected_reason": "duration_and_hook_signal",
         "public_post_text": public_post_text,
@@ -305,8 +317,8 @@ def build_clip_candidate_for_video(
         "start_time": start,
         "end_time": end,
         "duration_seconds": round(end - start, 3),
-        "transcript_excerpt": "redacted_plan_only",
-        "hook_text": "配信で初見が入りやすくなる一言を切り出す",
+        "transcript_excerpt": redacted_preview(transcript_excerpt, 120) if transcript_grounded else "redacted_plan_only",
+        "hook_text": redacted_preview(transcript_excerpt, 60) if transcript_grounded else "配信で初見が入りやすくなる一言を切り出す",
         "reason": "video-level candidate with approved media rights",
         "expected_post_angle": "配信初心者が入りやすい空気を作る方法",
         "target_audience": "配信初心者 / ライバー候補",

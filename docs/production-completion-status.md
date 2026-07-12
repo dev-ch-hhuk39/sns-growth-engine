@@ -1,5 +1,34 @@
 # Production Completion Status
 
+## 2026-07-12 Full Automation Recovery / Transcript-Grounded Media
+
+Current production design is:
+
+- Text-only Threads schedules are ON for `night_scout` and `liver_manager`.
+- The recent "no automatic posting / Sheets not written" issue was not a disabled schedule. Both account-specific scheduled workflows were firing, but apply failed on Sheets API 429. The immediate causes were row-by-row `update_cell` writes in `generate_threads_ideas_from_references.py` and repeated `setup_all()`/read-after-write behavior in `refill_threads_queue.py`.
+- Text generation writes are now batched with row-level `batch_update` and `append_rows`. Refill now skips `setup_all()` in production and avoids post-write verification reads.
+- `Production Autopilot Aftercare` remains ON for bounded source registry sync, metrics/PDCA, and approved video discovery.
+- `Media Transcription Production` is now ON at JST 00:10. It transcribes only approved `liver_manager` `source_videos` with individual video URLs, max 3 per run. YouTube captions are preferred; local Whisper fallback is step-scoped and does not enable external transcription API.
+- `Media Growth Production` remains ON at JST 09:20, but production selection now requires `transcript_grounded=true`. Old duration-only clip candidates are blocked by `transcript_grounding_required`.
+
+What is automated now:
+
+- Text-only Threads posting through GitHub Actions.
+- Source registry sync and aftercare.
+- Approved source video discovery.
+- Approved individual source video transcription.
+- Transcript-grounded clip candidate generation.
+- One approved liver_manager video post per day through the media workflow, after transcript, rights, permission, validator, media validator, Cloudinary, Threads and daily-cap gates.
+
+What remains blocked by design:
+
+- X fetch/post.
+- beauty posting.
+- Unknown/reference-only/third-party media download/cut/upload/repost.
+- External transcription API (`ALLOW_TRANSCRIPTION_API=false`).
+- Unbounded TikTok profile scraping.
+- `learning_rules` auto-apply.
+
 ## 2026-07-11 Production Completion Audit
 
 The production path is now connected end to end for the two approved operating modes.

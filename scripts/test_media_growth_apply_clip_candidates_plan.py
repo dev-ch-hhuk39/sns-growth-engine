@@ -5,15 +5,37 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from discover_approved_source_videos import build_discovery_plan
 from run_media_growth_engine import build_media_growth_plan
 
-discovery = build_discovery_plan("liver_manager", apply=True, confirm_discovery=True, existing_source_videos=[])
+video = {
+    "source_video_id": "sv_src_lm_yt_user_001_abcdefghijk",
+    "source_id": "src_lm_yt_user_001",
+    "account_id": "liver_manager",
+    "platform": "youtube",
+    "source_type": "channel",
+    "source_url": "https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ",
+    "video_id": "abcdefghijk",
+    "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    "original_video_url": "https://www.youtube.com/watch?v=abcdefghijk",
+    "title": "real video metadata",
+    "duration_seconds": 60,
+    "rights_status": "approved_creator_clip",
+    "permission_status": "approved",
+    "discovery_status": "DISCOVERED",
+}
+transcript = {
+    "transcript_id": f"tr_{video['source_video_id']}",
+    "source_video_id": video["source_video_id"],
+    "transcription_status": "DONE",
+    "transcript_text": "配信で初見が入りやすくなるには、入室時の一言と話題の共有が大事です。",
+    "segments_json": '[{"start": 1, "end": 12, "text": "配信で初見が入りやすくなるには入室時の一言が大事です。"}]',
+}
 plan = build_media_growth_plan(
     "liver_manager",
     apply=True,
     confirm_media_growth=True,
-    existing_source_videos=discovery["new_videos"][:3],
+    existing_source_videos=[video],
+    existing_transcripts=[transcript],
 )
 checks = [
     ("media growth not blocked", plan["status"] != "BLOCKED"),
@@ -25,7 +47,7 @@ checks = [
     ("no real upload", plan["would_upload"] is False),
     ("no real video post", plan["would_post_video"] is False),
     ("schedule aftercare enabled", plan["media_plan"]["schedule_enabled"] is True),
-    ("public video auto off", plan["media_plan"]["media_public_post_auto_enabled"] is False),
+    ("public video auto enabled", plan["media_plan"]["media_public_post_auto_enabled"] is True),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

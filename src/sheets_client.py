@@ -293,10 +293,12 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     # 動画文字起こし結果。Cloudflare Whisper の出力を保存する。
     "video_transcripts": [
         "transcript_id", "account_id", "reference_post_id",
+        "source_video_id", "video_id", "source_id",
         "source_platform", "video_url",
         "transcription_provider", "transcription_status",
         "duration_seconds", "transcript_text", "segments_json",
         "language", "processed_minutes",
+        "transcript_hash", "chunk_count",
         "error", "created_at", "updated_at",
     ],
     # 動画クリップ候補。文字起こしから抽出した切り抜き候補を管理する。
@@ -325,6 +327,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Media Growth Engine production provenance / validator state.
         "source_video_id", "video_id", "canonical_video_url",
         "clip_candidate_id", "duplicate_clip_key", "reviewer_status",
+        "transcript_grounded", "transcript_id",
         "public_post_text", "public_post_validator_status",
         "start_seconds", "end_seconds", "aspect_ratio",
         "upload_status", "post_status", "storage_public_id",

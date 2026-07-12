@@ -39,12 +39,17 @@ def load_config() -> dict[str, Any]:
     return json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
 
 
-def load_source_videos_from_sheets() -> tuple[SheetsClient, list[dict[str, Any]]]:
+def load_source_videos_from_sheets() -> tuple[SheetsClient, list[dict[str, Any]], list[dict[str, Any]]]:
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     client._ensure_tab("source_videos", TAB_DEFINITIONS["source_videos"])
+    client._ensure_tab("video_transcripts", TAB_DEFINITIONS["video_transcripts"])
     client._ensure_tab("video_clip_candidates", TAB_DEFINITIONS["video_clip_candidates"])
-    return client, [dict(r) for r in client._ws("source_videos").get_all_records()]
+    return (
+        client,
+        [dict(r) for r in client._ws("source_videos").get_all_records()],
+        [dict(r) for r in client._ws("video_transcripts").get_all_records()],
+    )
 
 
 def _clip_row_for_sheets(row: dict[str, Any]) -> dict[str, Any]:
@@ -86,23 +91,42 @@ def _clip_row_for_sheets(row: dict[str, Any]) -> dict[str, Any]:
 def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
+    from gspread.utils import rowcol_to_a1
+
     ws = client._ws("video_clip_candidates")
     headers = ws.row_values(1)
-    existing = {str(r.get("clip_id") or r.get("clip_candidate_id", "")) for r in ws.get_all_records()}
+    existing: dict[str, tuple[int, dict[str, Any]]] = {}
+    for row_number, existing_row in enumerate(ws.get_all_records(), start=2):
+        existing[str(existing_row.get("clip_id") or existing_row.get("clip_candidate_id", ""))] = (row_number, dict(existing_row))
     to_add = []
+    to_update = []
     for row in rows:
         mapped = _clip_row_for_sheets(row)
         clip_id = str(mapped.get("clip_id", ""))
-        if clip_id and clip_id not in existing:
-            to_add.append(mapped)
-            existing.add(clip_id)
-    if not to_add:
+        if not clip_id:
+            continue
+        if clip_id in existing:
+            row_number, old = existing[clip_id]
+            old_grounded = str(old.get("transcript_grounded", "")).lower() in {"1", "true", "yes"}
+            new_grounded = str(mapped.get("transcript_grounded", "")).lower() in {"1", "true", "yes"}
+            if new_grounded and not old_grounded:
+                merged = {**old, **mapped}
+                to_update.append({
+                    "range": f"{rowcol_to_a1(row_number, 1)}:{rowcol_to_a1(row_number, len(headers))}",
+                    "values": [[str(merged.get(h, "")) for h in headers]],
+                })
+            continue
+        to_add.append(mapped)
+        existing[clip_id] = (-1, mapped)
+    if not to_add and not to_update:
         return 0
+    if to_update:
+        ws.batch_update(to_update, value_input_option="USER_ENTERED")
     ws.append_rows(
         [[str(row.get(h, "")) for h in headers] for row in to_add],
         value_input_option="USER_ENTERED",
-    )
-    return len(to_add)
+    ) if to_add else None
+    return len(to_add) + len(to_update)
 
 
 def is_channel_or_account_url(source: dict[str, Any]) -> bool:
@@ -134,6 +158,64 @@ def is_real_discovered_video(row: dict[str, Any]) -> bool:
     return bool(video_id)
 
 
+def _transcript_done(row: dict[str, Any]) -> bool:
+    return (
+        str(row.get("transcription_status", "")).upper() in {"DONE", "FETCHED", "LOCAL_WHISPER_DONE", "YOUTUBE_CAPTIONS_DONE"}
+        and bool(str(row.get("transcript_text", "")).strip())
+    )
+
+
+def _segments(row: dict[str, Any]) -> list[dict[str, Any]]:
+    raw = str(row.get("segments_json", "") or "[]")
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    rows = []
+    for item in data if isinstance(data, list) else []:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        try:
+            start = float(item.get("start", 0) or 0)
+            end = float(item.get("end", start) or start)
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            end = start + 3
+        rows.append({"start": start, "end": end, "text": text})
+    return sorted(rows, key=lambda r: float(r["start"]))
+
+
+def _clip_specs_from_transcript(video: dict[str, Any], transcript: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
+    segments = _segments(transcript)
+    if not segments:
+        return []
+    max_count = clip_count_for_video(video, config, transcript_signal_count=len(segments))
+    min_duration = float(config.get("clip_duration_min_seconds", 8))
+    max_duration = float(config.get("clip_duration_max_seconds", 45))
+    video_duration = float(video.get("duration_seconds") or segments[-1]["end"] or 0)
+    specs = []
+    anchors = [segments[min(len(segments) - 1, int(i * len(segments) / max_count))] for i in range(max_count)]
+    for anchor in anchors:
+        start = max(0.0, float(anchor["start"]) - 1.0)
+        end = min(video_duration or float(anchor["end"]) + max_duration, start + max_duration)
+        if end - start < min_duration:
+            end = min(video_duration or start + min_duration, start + min_duration)
+        excerpt_parts = [
+            seg["text"]
+            for seg in segments
+            if float(seg["start"]) < end and float(seg["end"]) > start
+        ]
+        excerpt = " ".join(excerpt_parts).strip()
+        if not excerpt:
+            excerpt = str(anchor["text"])
+        specs.append({"start": start, "end": end, "excerpt": excerpt})
+    return specs
+
+
 def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, Any]]:
     allowed_ids = set(config.get("allowed_source_ids", []))
     rows = []
@@ -153,6 +235,7 @@ def build_media_growth_plan(
     apply: bool = False,
     confirm_media_growth: bool = False,
     existing_source_videos: list[dict[str, Any]] | None = None,
+    existing_transcripts: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     config = load_config()
     selected = select_sources(account_id, config)
@@ -193,6 +276,12 @@ def build_media_growth_plan(
         })
 
     existing_source_videos = existing_source_videos if existing_source_videos is not None else load_existing_source_videos()
+    existing_transcripts = existing_transcripts or []
+    transcript_by_source_video = {
+        str(t.get("source_video_id", "")): t
+        for t in existing_transcripts
+        if _transcript_done(t)
+    }
     discovery_plan = build_discovery_plan(account_id, existing_source_videos=existing_source_videos)
     planned_source_videos = [row for row in existing_source_videos if is_real_discovered_video(row)]
     # Preserve deterministic mock candidates only when no registry was supplied at all.
@@ -205,6 +294,20 @@ def build_media_growth_plan(
             from media_growth_schemas import build_source_video  # local import keeps public API stable
             for i in range(1, min(int(config.get("max_new_videos_per_source_per_run", 10)), 3) + 1):
                 planned_source_videos.append(build_source_video(source, i))
+        transcript_by_source_video = {
+            str(video.get("source_video_id", "")): {
+                "transcript_id": f"tr_{video.get('source_video_id', '')}",
+                "source_video_id": video.get("source_video_id", ""),
+                "transcription_status": "DONE",
+                "transcript_text": "初見が入りやすい配信づくりでは、挨拶、話題の共有、コメントしやすい空気が大事です。",
+                "segments_json": json.dumps([
+                    {"start": 2, "end": 12, "text": "初見が入りやすい配信づくりでは挨拶が大事です。"},
+                    {"start": 15, "end": 28, "text": "今話している内容を共有するとコメントしやすくなります。"},
+                    {"start": 35, "end": 48, "text": "常連だけで固めず、入ってきた人が参加できる空気を作ります。"},
+                ], ensure_ascii=False),
+            }
+            for video in planned_source_videos
+        }
 
     source_by_id = {str(s.get("source_id", "")): s for s in selected}
     output = generate_reader_facing_post(account_id, index=1)
@@ -215,14 +318,20 @@ def build_media_growth_plan(
         source = source_by_id.get(str(source_video.get("source_id", "")))
         if not source:
             continue
+        transcript = transcript_by_source_video.get(str(source_video.get("source_video_id", "")))
+        if not transcript:
+            source_video["transcript_status"] = source_video.get("transcript_status") or "TRANSCRIPT_PENDING"
+            source_video["analysis_status"] = "TRANSCRIPT_PENDING"
+            continue
         duration = float(source_video.get("duration_seconds") or 0)
         if duration < float(config.get("clip_duration_min_seconds", 8)):
             source_video["skip_reason"] = "duration_metadata_required_or_too_short"
             source_video["analysis_status"] = "SKIPPED"
             continue
-        count = clip_count_for_video(source_video, config)
+        clip_specs = _clip_specs_from_transcript(source_video, transcript, config)
+        count = len(clip_specs)
         video_candidates = []
-        for i in range(1, count + 1):
+        for i, spec in enumerate(clip_specs, start=1):
             clip_output = generate_reader_facing_post(account_id, index=(video_index - 1) * 3 + i)
             clip_public_text = str(clip_output["public_post_text"])
             clip_validation = final_public_post_validator(clip_public_text, account_id)
@@ -233,6 +342,12 @@ def build_media_growth_plan(
                 config=config,
                 public_post_text=clip_public_text,
                 validator_status=clip_validation["status"],
+                transcript_signal_count=len(_segments(transcript)),
+                transcript_grounded=True,
+                transcript_id=str(transcript.get("transcript_id", "")),
+                transcript_excerpt=str(spec.get("excerpt", "")),
+                start_seconds=float(spec.get("start", 0)),
+                end_seconds=float(spec.get("end", 0)),
             )
             if any(clips_overlap(cand, old, config.get("clip_overlap_tolerance_seconds", 2)) for old in existing_clips):
                 cand["clip_status"] = "SKIPPED"
@@ -243,6 +358,7 @@ def build_media_growth_plan(
             if (
                 config.get("auto_approve_clip_candidates")
                 and clip_validation["status"] == "PASS"
+                and cand.get("transcript_grounded") is True
                 and float(cand.get("clip_score") or 0) >= float(config.get("min_auto_clip_score", 80))
                 and cand.get("rights_status") in set(config.get("allowed_rights_statuses", []))
                 and cand.get("permission_status") == "approved"
@@ -280,6 +396,7 @@ def build_media_growth_plan(
         "source_results": source_results,
         "source_videos_source": "existing_source_videos" if existing_source_videos else "discovery_plan",
         "source_video_count": len(planned_source_videos),
+        "transcript_grounded_source_video_count": len(transcript_by_source_video),
         "source_videos_preview": planned_source_videos[:5],
         "video_transcripts_schema": transcript_rows,
         "clip_candidate_count": len(clip_candidates),
@@ -307,13 +424,15 @@ def main() -> int:
     args = parser.parse_args()
     client = None
     existing = None
+    transcripts = None
     if args.use_sheets and (args.apply or args.dry_run):
-        client, existing = load_source_videos_from_sheets()
+        client, existing, transcripts = load_source_videos_from_sheets()
     plan = build_media_growth_plan(
         args.account_id,
         apply=args.apply,
         confirm_media_growth=args.confirm_media_growth,
         existing_source_videos=existing,
+        existing_transcripts=transcripts,
     )
     if args.apply and args.confirm_media_growth and args.use_sheets and client and plan["status"] != "BLOCKED":
         added = append_clip_candidates_to_sheets(client, plan.get("top_clip_candidates", []))
