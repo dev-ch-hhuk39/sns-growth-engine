@@ -24,6 +24,7 @@ from collect_video_references import build_video_reference, fetch_video_metadata
 from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
 from public_post_quality import account_rotation_order, final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
+from content_schedule import TEXT_POST_TYPES, slot_by_id  # noqa: E402
 
 CONFIG_FILE = ROOT / "config/autonomous_mode.json"
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
@@ -374,7 +375,12 @@ def posts_used_today(account_id: str, posted_rows: list[dict[str, Any]], *, now:
     return count
 
 
-def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None, rules: dict[str, Any] | None = None) -> dict[str, Any]:
+def build_autonomous_plan(
+    account_id: str,
+    config: dict[str, Any] | None = None,
+    rules: dict[str, Any] | None = None,
+    slot_id: str = "",
+) -> dict[str, Any]:
     config = config or load_autonomous_config()
     rules = rules or load_auto_approval_rules()
     gate = build_gate_summary(config, rules)
@@ -392,6 +398,12 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
     autonomous_sources = filter_autonomous_sources(pilot_plan, config)
 
     blocked_reasons: list[str] = []
+    resolved_slot_id = slot_id if not slot_id.startswith("manual_") else ""
+    content_slot = slot_by_id(account_id, resolved_slot_id) if resolved_slot_id and account_id != "all" else None
+    if resolved_slot_id and account_id != "all" and not content_slot:
+        blocked_reasons.append("unknown_content_slot")
+    if content_slot and content_slot.get("post_type") not in TEXT_POST_TYPES:
+        blocked_reasons.append("media_slot_must_use_media_workflow")
     if gate["kill_switch"]:
         blocked_reasons.append("kill_switch")
     if not gate["autonomous_mode_enabled"]:
@@ -466,7 +478,8 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
         "blocked_reasons": blocked_reasons,
     }
     plan_result["video_reference_analysis"] = build_video_reference_analysis(plan_result, config, fetch_metadata=False)
-    preview_output = generate_reader_facing_post(str(plan_result.get("selected_account") or "night_scout"), index=1)
+    slot_index = (sum(ord(char) for char in slot_id) % 20) + 1 if slot_id else 1
+    preview_output = generate_reader_facing_post(str(plan_result.get("selected_account") or "night_scout"), index=slot_index)
     preview_text = str(preview_output["public_post_text"])
     preview_validation = final_public_post_validator(preview_text, str(plan_result.get("selected_account") or ""))
     plan_result["public_post_preview"] = public_preview(preview_text)
@@ -474,6 +487,7 @@ def build_autonomous_plan(account_id: str, config: dict[str, Any] | None = None,
     plan_result["account_fit_check"] = preview_validation["account_fit_check"]["status"]
     plan_result["final_validator_result"] = preview_validation["status"]
     plan_result["would_post"] = False
+    plan_result["content_slot"] = content_slot or {"slot_id": slot_id or "unspecified", "post_type": "text_only_fallback"}
     return plan_result
 
 
@@ -611,11 +625,20 @@ def save_autonomous_health(plan: dict[str, Any], mode: str, health_summary: dict
 
 
 def source_ids_for_platform(plan: dict[str, Any], platform: str) -> list[str]:
+    registry = {str(row.get("source_id", "")): row for row in load_sources().get("sources", [])}
     ids: list[str] = []
     for rows in plan.get("selected_pilot_sources", {}).values():
         for row in rows:
             if str(row.get("source_platform", "")).lower() == platform:
-                ids.append(str(row.get("source_id", "")))
+                source_id = str(row.get("source_id", ""))
+                source = registry.get(source_id, {})
+                if platform == "threads" and not (
+                    is_true(source.get("fetch_enabled"))
+                    and not is_true(source.get("manual_only"))
+                    and is_true(source.get("reference_autopilot_enabled"))
+                ):
+                    continue
+                ids.append(source_id)
     return [i for i in ids if i]
 
 
@@ -644,6 +667,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         plan["selected_account"] = rotation.get("selected_account", accounts[0] if accounts else "")
         plan["skipped_account"] = rotation.get("skipped_accounts", [])
     threads_source_urls = source_urls_for_platform(plan, "threads")
+    threads_source_ids = source_ids_for_platform(plan, "threads")
 
     if dry:
         results.append({
@@ -660,8 +684,8 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             "would_post": False,
         })
         cmd = [sys.executable, "scripts/collect_source_posts.py", "--platform", "threads", "--account-id", args.account_id, "--dry-run"]
-        for url in threads_source_urls:
-            cmd += ["--source-url", url]
+        for source_id in threads_source_ids:
+            cmd += ["--source-id", source_id]
         results.append(_run(cmd))
         for account in accounts:
             results.append({
@@ -703,13 +727,10 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             results[-1]["warning_reason"] = warning_reason
             plan.setdefault("warnings", []).append(warning_reason)
 
-    video_urls = source_urls_for_platform(plan, "youtube") + source_urls_for_platform(plan, "tiktok")
-    if video_urls:
-        cmd = [sys.executable, "scripts/collect_video_references.py", "--account-id", "liver_manager", "--dry-run", "--fetch-metadata", "--fetch-transcript"]
-        for url in video_urls:
-            cmd += ["--url", url]
-        run_optional_step(cmd, warning_reason="video_reference_analysis_failed_non_blocking")
-    if threads_source_urls and plan["gate_summary"]["auto_source_fetch_enabled"]:
+    # Authorized media discovery/transcription has its own bounded preparation
+    # workflow.  Do not run a permanently dry-run video command here and then
+    # pretend that its output informed the text queue.
+    if threads_source_ids and plan["gate_summary"]["auto_source_fetch_enabled"]:
         cmd = [
             sys.executable,
             "scripts/collect_source_posts.py",
@@ -722,8 +743,8 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             "--use-sheets",
             "--fetch-real",
         ]
-        for url in threads_source_urls:
-            cmd += ["--source-url", url]
+        for source_id in threads_source_ids:
+            cmd += ["--source-id", source_id]
         run_optional_step(cmd, warning_reason="threads_source_collect_failed_fallback_generation_enabled")
     max_posts_per_run = max(1, int(plan["gate_summary"].get("max_posts_per_run", 1)))
     daily_post_cap = int(plan["gate_summary"].get("daily_post_cap_per_account", 1))
@@ -825,6 +846,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stop-before-post", action="store_true", help="apply score/generate/AUTO_READY only; skip process_threads_queue and never post")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-autonomous", action="store_true")
+    parser.add_argument("--slot-id", default="", help="canonical text content slot resolved by a scheduled workflow")
     return parser.parse_args()
 
 
@@ -832,7 +854,7 @@ def main() -> int:
     args = parse_args()
     config = load_autonomous_config()
     rules = load_auto_approval_rules()
-    plan = build_autonomous_plan(args.account_id, config, rules)
+    plan = build_autonomous_plan(args.account_id, config, rules, args.slot_id)
 
     if args.account_id in config.get("blocked_accounts", []):
         print(json.dumps({**plan, "status": "BLOCKED", "blocked_reasons": ["blocked_account"]}, ensure_ascii=False, indent=2))

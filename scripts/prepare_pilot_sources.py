@@ -47,7 +47,11 @@ def exclusion_reason(source: dict[str, Any], *, account_id: str, platform: str) 
         return "todo_placeholder"
     if not url:
         return "missing_real_url"
-    if is_true(source.get("manual_only")):
+    # Explicitly enabled Threads reference sources are safe, bounded
+    # collection candidates even when the historical registry labelled their
+    # acquisition method manual_url.
+    reference_autopilot = is_true(source.get("reference_autopilot_enabled"))
+    if is_true(source.get("manual_only")) and not reference_autopilot:
         return "manual_only_reference_source"
     if any(t == "beauty_account" for t in targets):
         return "beauty_excluded"

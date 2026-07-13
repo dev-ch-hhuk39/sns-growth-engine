@@ -340,3 +340,25 @@ python3 scripts/check_autonomous_health.py --account-id all --dry-run
 python3 scripts/discover_approved_source_videos.py --account-id liver_manager --dry-run
 python3 scripts/run_media_growth_engine.py --account-id liver_manager --dry-run
 ```
+
+## Canonical Content Slots (2026-07-13)
+
+`config/content_schedule.json` is the source of truth for daily content mix.
+The text worker accepts only text-capable slots; a media slot is owned by the
+media workflow so one account cannot double-post or consume its daily cap twice.
+
+| account | text slots (JST) | media slot (JST) |
+| --- | --- | --- |
+| night_scout | 14:00, 16:00, 18:00, 25:00 | 21:00 |
+| liver_manager | 10:00, 13:00, 16:00, 21:00 | 18:00 |
+
+Every publishing workflow starts 15 minutes before target and uses a 0-1800
+second jitter. `daily_post_cap_per_account=5`, `max_posts_per_run=1`, and
+`cooldown_minutes=90` remain account-scoped.
+
+Reference collection is bounded. Only sources with
+`reference_autopilot_enabled=true`, currently the user-provided
+`chiishunin_s` Threads account, are actually fetched by the autonomous text
+loop. A fetch failure is non-blocking because safe original posts can refill
+the queue; a collected reference selects a transformed reader-facing topic,
+not an internal analysis or a copy of the source.

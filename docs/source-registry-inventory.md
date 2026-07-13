@@ -191,3 +191,18 @@ Safety notes:
 - It must not be copied verbatim.
 - It must pass similarity and `final_public_post_validator`.
 - It is allowed for text reference collection only. X/beauty/media gates remain unchanged.
+
+## 2026-07-13 Role Normalization
+
+The registry now has an explicit `source_role` instead of relying on a mixture
+of `fetch_enabled`, `manual_only`, and media fields:
+
+- `approved_media`: 13 permission-evidenced liver_manager/night_scout sources.
+  They use `approved_creator_clip`, `media_policy=approved_gated`, and every
+  media action remains workflow/env-gated.
+- `reference_only`: all remaining sources, including every X, beauty, TODO,
+  and unapproved third-party source. These cannot enter the media pipeline.
+
+`reference_autopilot_enabled` is separate from media authorization. It is true
+only for the bounded `https://www.threads.com/@chiishunin_s` reference; X is
+still fetch-disabled and beauty remains inactive/fetch-disabled.

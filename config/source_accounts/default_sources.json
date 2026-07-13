@@ -69,7 +69,10 @@
       "review_notes": "X text reference only. 構成・フック参照のみ。実download/repost禁止。 | X reference-only manual_only (current phase, no posting/dev)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_001",
@@ -80,13 +83,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -103,13 +122,13 @@
       "active": true,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "reference_only",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -166,8 +185,10 @@
       "transcript_required": false,
       "video_required": true,
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_cand_001",
@@ -242,7 +263,10 @@
       "source_platform_alias": "youtube",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_note_cand_001",
@@ -316,7 +340,10 @@
       "copy_policy": "do_not_copy_body",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_001",
@@ -399,7 +426,10 @@
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
       "usage_scope": "future_reference_only",
-      "source_track": "beauty_future"
+      "source_track": "beauty_future",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_tt_cand_001",
@@ -479,7 +509,10 @@
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
       "usage_scope": "future_reference_only",
-      "source_track": "beauty_future"
+      "source_track": "beauty_future",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_x_cand_001",
@@ -554,7 +587,10 @@
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
       "usage_scope": "future_reference_only",
-      "source_track": "beauty_future"
+      "source_track": "beauty_future",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_query_001",
@@ -619,7 +655,10 @@
       "confirm_fetch_required": true,
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_x_cand_002",
@@ -692,7 +731,10 @@
       "collection_mode": "manual_only",
       "source_track": "x_manual_reference",
       "category": "nightlife_reference",
-      "canonical_url": "https://x.com/cabalounge"
+      "canonical_url": "https://x.com/cabalounge",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_x_cand_003",
@@ -767,7 +809,10 @@
       "category": "nightlife_reference",
       "post_url": "https://x.com/minatoku789/status/1996442283076735119",
       "canonical_url": "https://x.com/minatoku789/status/1996442283076735119",
-      "status_url": "https://x.com/minatoku789/status/1996442283076735119"
+      "status_url": "https://x.com/minatoku789/status/1996442283076735119",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_x_cand_004",
@@ -840,7 +885,10 @@
       "collection_mode": "manual_only",
       "source_track": "x_manual_reference",
       "category": "nightlife_reference",
-      "canonical_url": "https://x.com/amuxamudaily"
+      "canonical_url": "https://x.com/amuxamudaily",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_x_cand_005",
@@ -913,7 +961,10 @@
       "collection_mode": "manual_only",
       "source_track": "x_manual_reference",
       "category": "nightlife_reference",
-      "canonical_url": "https://x.com/1okukure_"
+      "canonical_url": "https://x.com/1okukure_",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_x_cand_006",
@@ -986,7 +1037,10 @@
       "collection_mode": "manual_only",
       "source_track": "x_manual_reference",
       "category": "nightlife_reference",
-      "canonical_url": "https://x.com/onigiriscout_0"
+      "canonical_url": "https://x.com/onigiriscout_0",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_x_cand_007",
@@ -1059,7 +1113,10 @@
       "collection_mode": "manual_only",
       "source_track": "x_manual_reference",
       "category": "nightlife_reference",
-      "canonical_url": "https://x.com/urarament"
+      "canonical_url": "https://x.com/urarament",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_x_cand_008",
@@ -1132,7 +1189,10 @@
       "collection_mode": "manual_only",
       "source_track": "x_manual_reference",
       "category": "nightlife_reference",
-      "canonical_url": "https://x.com/3j2c9q"
+      "canonical_url": "https://x.com/3j2c9q",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_x_cand_001",
@@ -1194,7 +1254,10 @@
       "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_x_cand_002",
@@ -1256,7 +1319,10 @@
       "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_shared_001",
@@ -1335,7 +1401,10 @@
       "collection_mode": "manual_only",
       "source_track": "night_scout_reference",
       "category": "night_work_scout",
-      "canonical_url": "https://www.threads.com/@kyaba_oohata"
+      "canonical_url": "https://www.threads.com/@kyaba_oohata",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_shared_002",
@@ -1406,7 +1475,10 @@
       "review_notes": "ユーザー共有済みThreads URL（回収）。スカウト/夜職系個人発信。構成・フック・投稿アイデア参照のみ。実download/repost禁止。manual_only（実fetchなし）。",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_shared_003",
@@ -1485,7 +1557,10 @@
       "collection_mode": "manual_only",
       "source_track": "night_scout_reference",
       "category": "night_work_scout",
-      "canonical_url": "https://www.threads.com/@chiikawan400"
+      "canonical_url": "https://www.threads.com/@chiikawan400",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_user_chiishunin_s",
@@ -1570,7 +1645,10 @@
       "updated_at": "2026-07-07T00:00:00+09:00",
       "review_notes": "User-provided night_scout Threads reference. Use for post text inspiration, hook/tone/topic analysis only. Do not download/reuse media.",
       "notes": "User-provided night_scout Threads reference. Use for post text inspiration, hook/tone/topic analysis only. Do not download/reuse media.",
-      "use_policy": "REFERENCE_ONLY"
+      "use_policy": "REFERENCE_ONLY",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": true,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_002",
@@ -1581,13 +1659,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -1604,13 +1698,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -1664,8 +1758,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_003",
@@ -1676,13 +1772,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -1699,13 +1811,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -1759,8 +1871,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_004",
@@ -1771,13 +1885,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -1794,13 +1924,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -1854,8 +1984,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_005",
@@ -1866,13 +1998,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -1889,13 +2037,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -1949,8 +2097,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_006",
@@ -1961,13 +2111,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -1984,13 +2150,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -2044,8 +2210,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_007",
@@ -2056,13 +2224,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -2079,13 +2263,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -2139,8 +2323,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_008",
@@ -2151,13 +2337,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -2174,13 +2376,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -2234,8 +2436,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_yt_cand_009",
@@ -2246,13 +2450,29 @@
       "source_type": "channel",
       "rights_status": "approved_creator_clip",
       "permission_status": "approved",
-      "permission_scope": ["download", "transcribe", "analyze", "cut", "subtitle", "upload", "repost_to_threads", "use_for_post_text", "pdca_analysis"],
+      "permission_scope": [
+        "download",
+        "transcribe",
+        "analyze",
+        "cut",
+        "subtitle",
+        "upload",
+        "repost_to_threads",
+        "use_for_post_text",
+        "pdca_analysis"
+      ],
       "permission_evidence_type": "user_asserted_permission",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
       "permission_approved_by": "user",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
-      "allowed_platforms_for_repost": ["threads"],
-      "prohibited_uses": ["x_post", "beauty_account", "third_party_resale"],
+      "allowed_platforms_for_repost": [
+        "threads"
+      ],
+      "prohibited_uses": [
+        "x_post",
+        "beauty_account",
+        "third_party_resale"
+      ],
       "media_pipeline_eligible": true,
       "clip_enabled": true,
       "transcript_enabled": true,
@@ -2269,13 +2489,13 @@
       "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
-      "allow_download": false,
-      "allow_cut": false,
-      "allow_upload": false,
+      "allow_download": "gated",
+      "allow_cut": "gated",
+      "allow_upload": "gated",
       "requires_local_login": false,
-      "rights_policy": "unknown",
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "rights_policy": "approved_creator_clip",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "pdca_enabled": false,
       "source_category": "video_reference",
       "source_categories": [
@@ -2329,8 +2549,10 @@
       "updated_at": "2026-06-16T08:36:54+09:00",
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
-      "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "can_reuse_media": true,
+      "usage_scope": "reference_only",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_cand_002",
@@ -2403,7 +2625,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_cand_003",
@@ -2476,7 +2701,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_cand_004",
@@ -2549,7 +2777,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_cand_005",
@@ -2622,7 +2853,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_cand_006",
@@ -2695,7 +2929,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_cand_007",
@@ -2768,7 +3005,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates. | video reference_only can_reuse_media=false (transcribe/clip-candidate only)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_yt_user_001",
@@ -2829,8 +3069,8 @@
         "beauty_account",
         "third_party_resale"
       ],
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "can_reuse_media": true,
       "use_policy": "REFERENCE_ONLY",
       "pdca_enabled": false,
@@ -2883,7 +3123,9 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-04T00:00:00+09:00",
       "updated_at": "2026-07-04T00:00:00+09:00",
-      "review_notes": "User-provided liver_manager reference. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Actual download/cut/upload/repost remains gated by env and confirm flags."
+      "review_notes": "User-provided liver_manager reference. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Actual download/cut/upload/repost remains gated by env and confirm flags.",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_tt_user_001",
@@ -2944,8 +3186,8 @@
         "beauty_account",
         "third_party_resale"
       ],
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "can_reuse_media": true,
       "use_policy": "REFERENCE_ONLY",
       "pdca_enabled": false,
@@ -2997,7 +3239,9 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-04T00:00:00+09:00",
       "updated_at": "2026-07-04T00:00:00+09:00",
-      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL."
+      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL.",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_tt_user_002",
@@ -3058,8 +3302,8 @@
         "beauty_account",
         "third_party_resale"
       ],
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "can_reuse_media": true,
       "use_policy": "REFERENCE_ONLY",
       "pdca_enabled": false,
@@ -3111,7 +3355,9 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-04T00:00:00+09:00",
       "updated_at": "2026-07-04T00:00:00+09:00",
-      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL."
+      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL.",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_tt_user_003",
@@ -3172,8 +3418,8 @@
         "beauty_account",
         "third_party_resale"
       ],
-      "reuse_policy": "reference_only",
-      "media_policy": "do_not_download",
+      "reuse_policy": "approved_creator_clip",
+      "media_policy": "approved_gated",
       "can_reuse_media": true,
       "use_policy": "REFERENCE_ONLY",
       "pdca_enabled": false,
@@ -3225,7 +3471,9 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-04T00:00:00+09:00",
       "updated_at": "2026-07-04T00:00:00+09:00",
-      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL."
+      "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL.",
+      "source_role": "approved_media",
+      "reference_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_note_cand_002",
@@ -3291,7 +3539,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_note_cand_003",
@@ -3357,7 +3608,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_note_cand_004",
@@ -3423,7 +3677,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_note_cand_005",
@@ -3489,7 +3746,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_lm_note_cand_006",
@@ -3555,7 +3815,10 @@
       "review_notes": "User-provided production source candidate. Real fetch/download/cut/upload/post require explicit confirm gates.",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only"
+      "usage_scope": "reference_only",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_002",
@@ -3637,7 +3900,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_003",
@@ -3719,7 +3985,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_004",
@@ -3801,7 +4070,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_005",
@@ -3883,7 +4155,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_006",
@@ -3965,7 +4240,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_007",
@@ -4047,7 +4325,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_008",
@@ -4129,7 +4410,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_009",
@@ -4211,7 +4495,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_yt_cand_010",
@@ -4293,7 +4580,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_tt_cand_002",
@@ -4369,7 +4659,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_tt_cand_003",
@@ -4445,7 +4738,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_tt_cand_004",
@@ -4521,7 +4817,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_tt_cand_005",
@@ -4597,7 +4896,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_tt_cand_006",
@@ -4673,7 +4975,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_tt_cand_007",
@@ -4749,7 +5054,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_x_cand_002",
@@ -4824,7 +5132,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_x_cand_003",
@@ -4899,7 +5210,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_x_cand_004",
@@ -4974,7 +5288,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_x_cand_005",
@@ -5049,7 +5366,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ba_x_cand_006",
@@ -5124,7 +5444,10 @@
       "source_track": "beauty_future",
       "beauty_account": "WAITING_REVIEW",
       "beauty_account_status": "WAITING_REVIEW",
-      "draft_only": true
+      "draft_only": true,
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_required_001",
@@ -5207,7 +5530,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-29T18:56:39+09:00",
       "updated_at": "2026-06-29T18:56:39+09:00",
-      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。"
+      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_required_002",
@@ -5290,7 +5616,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-29T18:56:39+09:00",
       "updated_at": "2026-06-29T18:56:39+09:00",
-      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。"
+      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_required_003",
@@ -5373,7 +5702,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-29T18:56:39+09:00",
       "updated_at": "2026-06-29T18:56:39+09:00",
-      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。"
+      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "src_ns_threads_required_004",
@@ -5456,7 +5788,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-06-29T18:56:39+09:00",
       "updated_at": "2026-06-29T18:56:39+09:00",
-      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。"
+      "review_notes": "ユーザー明示required source URL。night_scout用Threads参考source。構成・フック・投稿アイデア参照のみ。実fetch/download/repost禁止。manual_only。",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "youtube_night_scout_reference_todo",
@@ -5496,7 +5831,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-01T00:00:00+09:00",
       "updated_at": "2026-07-01T00:00:00+09:00",
-      "review_notes": "TODO placeholder. Human must provide a real YouTube video URL before dry-run. No fake URL, fetch, download, cut, upload, or repost."
+      "review_notes": "TODO placeholder. Human must provide a real YouTube video URL before dry-run. No fake URL, fetch, download, cut, upload, or repost.",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "youtube_liver_reference_todo",
@@ -5536,7 +5874,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-01T00:00:00+09:00",
       "updated_at": "2026-07-01T00:00:00+09:00",
-      "review_notes": "TODO placeholder. Human must provide a real YouTube video URL before dry-run. No fake URL, fetch, download, cut, upload, or repost."
+      "review_notes": "TODO placeholder. Human must provide a real YouTube video URL before dry-run. No fake URL, fetch, download, cut, upload, or repost.",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "tiktok_night_scout_reference_todo",
@@ -5576,7 +5917,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-01T00:00:00+09:00",
       "updated_at": "2026-07-01T00:00:00+09:00",
-      "review_notes": "TODO placeholder. Human must provide a real TikTok /video/ URL before dry-run. No fake URL, fetch, download, cut, upload, or repost."
+      "review_notes": "TODO placeholder. Human must provide a real TikTok /video/ URL before dry-run. No fake URL, fetch, download, cut, upload, or repost.",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "tiktok_liver_reference_todo",
@@ -5616,7 +5960,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-01T00:00:00+09:00",
       "updated_at": "2026-07-01T00:00:00+09:00",
-      "review_notes": "TODO placeholder. Human must provide a real TikTok /video/ URL before dry-run. No fake URL, fetch, download, cut, upload, or repost."
+      "review_notes": "TODO placeholder. Human must provide a real TikTok /video/ URL before dry-run. No fake URL, fetch, download, cut, upload, or repost.",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     },
     {
       "source_id": "owned_media_assets_todo",
@@ -5658,7 +6005,10 @@
       "auto_priority_change_allowed": false,
       "created_at": "2026-07-02T00:00:00+09:00",
       "updated_at": "2026-07-02T00:00:00+09:00",
-      "review_notes": "TODO placeholder for owned/licensed/approved_creator_clip media. Human must fill owner, permission evidence, rights_status, allowed uses, and local_file_ref/source_url before media ingestion."
+      "review_notes": "TODO placeholder for owned/licensed/approved_creator_clip media. Human must fill owner, permission evidence, rights_status, allowed uses, and local_file_ref/source_url before media ingestion.",
+      "source_role": "reference_only",
+      "reference_autopilot_enabled": false,
+      "media_autopilot_enabled": false
     }
   ],
   "_recovery_note": "過去にユーザーが共有済みのソースアカウントURL/選定ルールを回収し本登録。Threads3件(recovered) + production_sources.example.json 非query実URLを dedup マージ。現フェーズは fetch_enabled=false 維持。X=reference manual_only / beauty_future=inactive / TikTok・YouTube=reference_only(can_reuse_media=false)。公式メディア系は low_priority_media_official。"

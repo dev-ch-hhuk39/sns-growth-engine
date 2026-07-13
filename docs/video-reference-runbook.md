@@ -268,3 +268,26 @@ The production aftercare workflow is allowed to run the safe media planning laye
 - write `video_clip_candidates` rows with `public_post_text` preview and validator status
 
 It is not allowed to download, cut, upload, or post media. `third_party_reference_only`, `reference_only`, and `unknown` sources remain analysis-only and are not eligible for media pipeline records beyond safe reference planning.
+
+## Approved Media Preparation And Posting (2026-07-13)
+
+For the 13 user-approved liver_manager/night_scout sources,
+`source_role=approved_media`, `rights_status=approved_creator_clip`, and
+permission evidence are required together. The pipeline is deliberately split:
+
+1. Advance preparation performs bounded discovery, local transcript, topic
+   transformation, 9:16 cut, and Cloudinary upload. It ends in `MEDIA_READY`
+   and never posts.
+2. The account media slot can use only an uploaded, unused `MEDIA_READY` asset.
+   It never performs download, cut, upload, or transcription in the posting
+   window.
+
+No subtitles are burned into posted video: `subtitle_enabled=false` and the
+cut runner receives `burn_subtitles=false`. Video text is still mandatory and
+must pass `final_public_post_validator`; only `public_post_text` is passed to
+the Threads publisher.
+
+Night Scout uses an explainable subject gate. Male-scout talking-head,
+store-PR/recruiting cues, or missing female-subject evidence are analysis-only
+until an explicit subject review exists. Channel-level permission never proves
+that every individual video is appropriate.

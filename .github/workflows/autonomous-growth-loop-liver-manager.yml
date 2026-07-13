@@ -2,12 +2,12 @@ name: Autonomous Growth Loop Liver Manager
 
 on:
   schedule:
-    # liver_manager JST 10:00/13:00/16:00/18:00/21:00 targets.
+    # Text-only slots: JST 10:00/13:00/16:00/21:00.
+    # The 18:00 slot is owned by the approved-media workflow.
     # Cron starts 15 minutes before target; jitter sleeps 0-1800s.
     - cron: "45 0 * * *"
     - cron: "45 3 * * *"
     - cron: "45 6 * * *"
-    - cron: "45 8 * * *"
     - cron: "45 11 * * *"
   workflow_dispatch:
     inputs:
@@ -72,6 +72,18 @@ jobs:
           echo "account=$ACCOUNT_ID"
           date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
 
+      - name: Resolve canonical content slot
+        run: |
+          case "${{ github.event.schedule }}" in
+            "45 0 * * *") slot="lm_1000_original" ;;
+            "45 3 * * *") slot="lm_1300_reference" ;;
+            "45 6 * * *") slot="lm_1600_reference" ;;
+            "45 11 * * *") slot="lm_2100_pdca" ;;
+            *) slot="manual_text" ;;
+          esac
+          echo "CONTENT_SLOT_ID=$slot" >> "$GITHUB_ENV"
+          echo "content_slot=$slot"
+
       - name: Install dependencies
         run: pip install -r requirements.txt
 
@@ -86,7 +98,7 @@ jobs:
           PY
 
       - name: Dry-run autonomous plan
-        run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --dry-run
+        run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --dry-run
 
       - name: Guard autonomous confirm and kill switch
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true') && github.event.inputs.dry_run_only != 'true'
@@ -122,7 +134,8 @@ jobs:
           python3 scripts/run_autonomous_loop.py \
             --apply \
             --confirm-autonomous \
-            --account-id "$ACCOUNT_ID"
+            --account-id "$ACCOUNT_ID" \
+            --slot-id "$CONTENT_SLOT_ID"
 
       - name: Autonomous health summary
         if: always()

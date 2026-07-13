@@ -43,6 +43,17 @@ REQUIRED_ENV = (
     "PUBLISH_ENABLED",
     "ALLOW_REAL_THREADS_POST",
 )
+PREPARE_REQUIRED_ENV = (
+    "ALLOW_VIDEO_DOWNLOAD",
+    "ALLOW_VIDEO_CUT",
+    "ALLOW_CLOUDINARY_UPLOAD",
+)
+SAVED_MEDIA_POST_REQUIRED_ENV = (
+    "ALLOW_MEDIA_POSTS",
+    "ALLOW_REAL_THREADS_VIDEO_POST",
+    "PUBLISH_ENABLED",
+    "ALLOW_REAL_THREADS_POST",
+)
 
 
 def _true(value: Any) -> bool:
@@ -150,7 +161,62 @@ def select_candidate(
     return eligible[0][0], eligible[0][1], reasons
 
 
-def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None, account_id: str = "liver_manager") -> dict[str, Any]:
+def select_saved_media_candidate(
+    clips: list[dict[str, Any]],
+    source_videos: list[dict[str, Any]],
+    media_assets: list[dict[str, Any]],
+    posted_results: list[dict[str, Any]],
+    account_id: str,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
+    """Select one uploaded-but-never-posted approved asset for a timed slot."""
+    clips_by_id = {str(row.get("clip_candidate_id") or row.get("clip_id") or ""): row for row in clips}
+    videos_by_id = {str(row.get("source_video_id", "")): row for row in source_videos}
+    posted_clips = {str(row.get("clip_candidate_id", "")) for row in posted_results if row.get("clip_candidate_id")}
+    posted_assets = {str(row.get("media_asset_id", "") or row.get("media_id", "")) for row in posted_results}
+    reasons: list[str] = []
+    candidates: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+    for asset in media_assets:
+        media_id = str(asset.get("media_asset_id") or asset.get("media_id") or "")
+        clip_id = str(asset.get("clip_candidate_id") or asset.get("video_clip_id") or "")
+        clip = clips_by_id.get(clip_id)
+        source_video = videos_by_id.get(str((clip or {}).get("source_video_id") or asset.get("source_video_id") or ""))
+        if str(asset.get("account_id", "")) != account_id:
+            continue
+        if not clip or not source_video:
+            reasons.append(f"{media_id}:clip_or_source_video_missing")
+            continue
+        if media_id in posted_assets or clip_id in posted_clips:
+            reasons.append(f"{media_id}:already_posted")
+            continue
+        if str(asset.get("upload_status", "")).upper() != "UPLOADED" or not str(asset.get("storage_url") or asset.get("cloudinary_url") or ""):
+            reasons.append(f"{media_id}:not_uploaded")
+            continue
+        if str(asset.get("rights_status") or clip.get("rights_status") or "").lower() not in APPROVED_RIGHTS:
+            reasons.append(f"{media_id}:rights_blocked")
+            continue
+        if str(asset.get("permission_status") or clip.get("permission_status") or "").lower() != "approved":
+            reasons.append(f"{media_id}:permission_blocked")
+            continue
+        if final_public_post_validator(clip.get("public_post_text", ""), account_id)["status"] != "PASS":
+            reasons.append(f"{media_id}:public_post_validator_blocked")
+            continue
+        candidates.append((clip, source_video, asset))
+    if not candidates:
+        return None, None, None, reasons
+    candidates.sort(key=lambda row: str(row[2].get("uploaded_at") or row[2].get("created_at") or ""))
+    clip, source_video, asset = candidates[0]
+    return clip, source_video, asset, reasons
+
+
+def build_plan(
+    *,
+    apply: bool,
+    confirm: bool,
+    client: SheetsClient | None = None,
+    account_id: str = "liver_manager",
+    prepare_only: bool = False,
+    post_saved_media: bool = False,
+) -> dict[str, Any]:
     media_cfg = _load(MEDIA_CONFIG)
     autonomous_cfg = _load(AUTONOMOUS_CONFIG)
     blocked = []
@@ -163,7 +229,8 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
     if apply and not confirm:
         blocked.append("--apply requires --confirm-production-media")
     if apply:
-        blocked.extend(f"{name}=true required" for name in REQUIRED_ENV if not _true(os.environ.get(name)))
+        required_env = SAVED_MEDIA_POST_REQUIRED_ENV if post_saved_media else (PREPARE_REQUIRED_ENV if prepare_only else REQUIRED_ENV)
+        blocked.extend(f"{name}=true required" for name in required_env if not _true(os.environ.get(name)))
     if not client:
         return {
             "status": "BLOCKED" if blocked else "PLAN_ONLY",
@@ -175,11 +242,14 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
             "would_cut": False,
             "would_upload": False,
             "would_post_video": False,
+            "prepare_only": prepare_only,
+            "post_saved_media": post_saved_media,
             "blocked_reasons": blocked,
         }
 
     source_videos = _records(client, "source_videos")
     clips = _records(client, "video_clip_candidates")
+    media_assets = _records(client, "media_assets")
     posted = _records(client, "posted_results")
     today_posts = _today_posts(posted, account_id)
     daily_cap = int(autonomous_cfg.get("daily_post_cap_per_account", 5))
@@ -189,7 +259,13 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
         blocked.append("daily_post_cap_reached")
     if len(media_today) >= media_cap:
         blocked.append("media_daily_post_cap_reached")
-    clip, source_video, skipped = select_candidate(clips, source_videos, posted, account_id)
+    if post_saved_media:
+        clip, source_video, selected_asset, skipped = select_saved_media_candidate(
+            clips, source_videos, media_assets, posted, account_id,
+        )
+    else:
+        clip, source_video, skipped = select_candidate(clips, source_videos, posted, account_id)
+        selected_asset = None
     no_candidate = not clip or not source_video
     if no_candidate:
         blocked.append("no_eligible_media_candidate")
@@ -203,23 +279,101 @@ def build_plan(*, apply: bool, confirm: bool, client: SheetsClient | None = None
         "selected_source_video_id": str((source_video or {}).get("source_video_id") or ""),
         "selected_clip": clip or {},
         "selected_source_video": source_video or {},
+        "selected_media_asset": selected_asset or {},
+        "prepare_only": prepare_only,
+        "post_saved_media": post_saved_media,
         "public_post_preview": public_preview(text),
         "today_post_count": len(today_posts),
         "today_media_post_count": len(media_today),
         "daily_post_cap": daily_cap,
         "media_daily_post_cap": media_cap,
-        "would_download": bool(apply and confirm and not blocked),
-        "would_cut": bool(apply and confirm and not blocked),
-        "would_upload": bool(apply and confirm and not blocked),
-        "would_post_video": bool(apply and confirm and not blocked),
+        "would_download": bool(apply and confirm and not blocked and not post_saved_media),
+        "would_cut": bool(apply and confirm and not blocked and not post_saved_media),
+        "would_upload": bool(apply and confirm and not blocked and not post_saved_media),
+        "would_post_video": bool(apply and confirm and not blocked and not prepare_only),
         "blocked_reasons": blocked,
         "skipped_candidates": skipped[:20],
     }
 
 
+def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
+    """Publish a previously uploaded, approved clip without download/cut/upload."""
+    clip = dict(plan["selected_clip"])
+    source_video = dict(plan["selected_source_video"])
+    asset = dict(plan["selected_media_asset"])
+    clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+    source_video_id = str(source_video.get("source_video_id") or "")
+    account_id = str(plan["account_id"])
+    media_id = str(asset.get("media_asset_id") or asset.get("media_id") or "")
+    media_url = str(asset.get("storage_url") or asset.get("cloudinary_url") or "")
+    text = str(clip.get("public_post_text") or "")
+    validation = validate_media_post({
+        "rights_status": asset.get("rights_status") or clip.get("rights_status", ""),
+        "permission_status": asset.get("permission_status") or clip.get("permission_status", ""),
+        "media_url": media_url,
+        "media_asset_id": media_id,
+        "platform": "threads",
+        "account_id": account_id,
+        "media_type": "video",
+        "duration_seconds": asset.get("duration_seconds") or asset.get("duration", 0),
+        "aspect_ratio": asset.get("aspect_ratio", "9:16"),
+        "public_post_text": text,
+    })
+    if validation["status"] != "PASS":
+        client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", post_status="BLOCKED")
+        return {**plan, "status": "BLOCKED_MEDIA_VALIDATOR", "media_validation": validation}
+    queue_id = f"media_q_{clip_id}"
+    queue_row = {
+        "queue_id": queue_id,
+        "account_id": account_id,
+        "target_account_id": account_id,
+        "platform": "threads",
+        "priority": "1",
+        "status": "READY",
+        "auto_publish": "true",
+        "generation_mode": "approved_saved_media",
+        "media_asset_id": media_id,
+        "video_clip_id": clip_id,
+        "source_video_id": source_video_id,
+        "clip_candidate_id": clip_id,
+        "rights_status": asset.get("rights_status") or clip.get("rights_status", ""),
+        "permission_status": asset.get("permission_status") or clip.get("permission_status", ""),
+        "rights_review_required": "false",
+        "media_reuse_risk": "low",
+        "source_video_url": source_video.get("canonical_video_url", ""),
+        "public_post_text": text,
+        "validator_status": "PASS",
+        "internal_leak_status": "PASS",
+        "account_fit_status": "PASS",
+        "media_url": media_url,
+        "media_status": "UPLOADED",
+        "media_required": "true",
+        "duration_seconds": asset.get("duration_seconds") or asset.get("duration", ""),
+        "aspect_ratio": asset.get("aspect_ratio", "9:16"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    existing_queue_ids = {str(row.get("queue_id", "")) for row in _records(client, "queue")}
+    if queue_id not in existing_queue_ids:
+        _append(client, "queue", queue_row)
+    result = process_one(client, queue_row, dry_run=False, confirm_real_post=True)
+    final_status = str(result.get("status", ""))
+    client.update_video_clip_candidate(
+        clip_id,
+        post_status="POSTED" if final_status == "POSTED" else final_status,
+        reviewer_status="AUTO_APPROVED" if final_status == "POSTED" else "MEDIA_READY",
+        clip_status="POSTED" if final_status == "POSTED" else "MEDIA_READY",
+    )
+    if final_status == "POSTED":
+        client.save_source_video({**source_video, "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
+    return {**plan, "status": final_status, "queue_id": queue_id, "media_asset_id": media_id, "post_result": result,
+            "would_download": False, "would_cut": False, "would_upload": False, "would_post_video": False}
+
+
 def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     if plan.get("status") == "BLOCKED":
         return plan
+    if plan.get("post_saved_media"):
+        return execute_saved_media_post(plan, client)
     clip = dict(plan["selected_clip"])
     source_video = dict(plan["selected_source_video"])
     clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id"))
@@ -323,6 +477,31 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", cut_status="DONE", upload_status="UPLOADED", storage_url=media_url, post_status="BLOCKED")
         return {**plan, "status": "BLOCKED_MEDIA_VALIDATOR", "media_validation": validation}
 
+    if plan.get("prepare_only"):
+        client.update_video_clip_candidate(
+            clip_id,
+            cut_status="DONE",
+            local_clip_path=asset.get("local_path", ""),
+            clip_media_asset_id=media_id,
+            media_asset_id=media_id,
+            storage_url=media_url,
+            upload_status="UPLOADED",
+            post_status="MEDIA_READY",
+            reviewer_status="MEDIA_READY",
+            clip_status="MEDIA_READY",
+        )
+        client.save_source_video({**source_video, "download_status": "DOWNLOADED", "cut_status": "CUT", "upload_status": "UPLOADED", "post_status": "MEDIA_READY", "processed_at": datetime.now(timezone.utc).isoformat()})
+        return {
+            **plan,
+            "status": "MEDIA_READY",
+            "media_asset_id": media_id,
+            "queue_id": "",
+            "would_download": False,
+            "would_cut": False,
+            "would_upload": False,
+            "would_post_video": False,
+        }
+
     queue_id = f"media_q_{clip_id}"
     queue_row = {
         "queue_id": queue_id,
@@ -393,13 +572,25 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-production-media", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
+    parser.add_argument("--prepare-only", action="store_true", help="download/cut/upload one approved clip, but never post it")
+    parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
     args = parser.parse_args()
+    if args.prepare_only and args.post_saved_media:
+        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["prepare_only_and_post_saved_media_are_mutually_exclusive"]}, ensure_ascii=False))
+        return 1
 
     client = None
     if args.use_sheets:
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    plan = build_plan(account_id=args.account_id, apply=args.apply, confirm=args.confirm_production_media, client=client)
+    plan = build_plan(
+        account_id=args.account_id,
+        apply=args.apply,
+        confirm=args.confirm_production_media,
+        client=client,
+        prepare_only=args.prepare_only,
+        post_saved_media=args.post_saved_media,
+    )
     if args.apply and args.confirm_production_media and client and plan.get("status") not in {"BLOCKED", "NO_POST"}:
         plan = execute(plan, client)
     safe = {k: v for k, v in plan.items() if k not in {"selected_clip", "selected_source_video"}}

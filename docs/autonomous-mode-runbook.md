@@ -508,3 +508,22 @@ AUTO_READY output now includes:
 - `sample_rejected_public_post_preview`
 
 If references are empty or stale, safe original fallback candidates are generated as `WAITING_REVIEW`, then AUTO_READY promotes only validator-passing text-only candidates to `READY`. `final_public_post_validator` is not weakened; generation is responsible for producing reader-facing public copy.
+
+## Slot Ownership And Media Timing (2026-07-13)
+
+The previous five-text-slot table is superseded by `config/content_schedule.json`.
+Text owns four slots per account; an approved-media workflow owns the fifth so
+the account does not race itself or hit its 5-post daily cap early.
+
+- `night_scout`: text at 14:00/16:00/18:00/25:00; approved saved-media post at
+  21:00 JST.
+- `liver_manager`: text at 10:00/13:00/16:00/21:00; approved saved-media post
+  at 18:00 JST.
+- Preparation runs earlier and is never a posting workflow. It can only leave
+  an approved asset in `MEDIA_READY`; the posting workflow can only consume an
+  uploaded unused asset. Each scheduled post window uses 0-1800 seconds jitter.
+- Subtitle rendering is intentionally disabled. Never turn it on without a
+  user instruction and a separate tested style policy.
+
+Emergency stop remains `kill_switch=true` in `config/autonomous_mode.json`,
+then commit and push. It blocks both text and approved-media scheduled posting.

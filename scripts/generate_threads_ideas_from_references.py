@@ -42,7 +42,12 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from public_post_quality import final_public_post_validator, generate_reader_facing_post, reader_facing_template_count  # noqa: E402
+from public_post_quality import (  # noqa: E402
+    final_public_post_validator,
+    generate_grounded_reader_facing_post,
+    generate_reader_facing_post,
+    reader_facing_template_count,
+)
 
 CLI_NAME = "generate_threads_ideas_from_references"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
@@ -166,7 +171,11 @@ def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, An
     Reference details stay in internal generation metadata; public output must
     never mention source names, source platforms, scoring, or generation notes.
     """
-    output = generate_reader_facing_post(account_id, index=index)
+    output = generate_grounded_reader_facing_post(
+        account_id,
+        private_signal=_post_text(post),
+        index=index,
+    )
     body = str(output["public_post_text"])
     validation = final_public_post_validator(body, account_id)
     if validation["status"] != "PASS":

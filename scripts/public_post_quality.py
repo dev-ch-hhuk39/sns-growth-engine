@@ -522,6 +522,71 @@ def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, An
     )
 
 
+def _topic_from_signal(account_id: str, signal: str) -> str:
+    """Classify private reference/transcript content without quoting it publicly."""
+    text = str(signal or "")
+    if account_id == "night_scout":
+        mapping = [
+            (("時給", "条件", "罰金"), "conditions"),
+            (("ノルマ", "売上", "指名"), "pressure"),
+            (("客層", "雰囲気", "お店"), "fit"),
+            (("移籍", "辞め", "転職"), "transfer"),
+            (("副業", "出勤", "生活", "睡眠"), "balance"),
+        ]
+    else:
+        mapping = [
+            (("初見", "入室", "コメント"), "first_viewer"),
+            (("ギフト", "応援", "投げ銭"), "support"),
+            (("時間", "継続", "習慣"), "consistency"),
+            (("企画", "話題", "会話"), "conversation"),
+            (("事務所", "相談", "サポート"), "support_system"),
+        ]
+    for words, topic in mapping:
+        if any(word in text for word in words):
+            return topic
+    return "general"
+
+
+def generate_grounded_reader_facing_post(
+    account_id: str,
+    *,
+    private_signal: str,
+    index: int = 1,
+) -> dict[str, Any]:
+    """Transform a private signal into reader value without copying its wording.
+
+    The signal may be a transcript excerpt or a collected post. It only selects
+    a broad editorial topic; source identity, URL, raw text, and analysis never
+    enter ``public_post_text``.
+    """
+    topic = _topic_from_signal(account_id, private_signal)
+    if account_id == "night_scout":
+        variants = {
+            "conditions": "夜職の条件を見る時、時給だけで安心しない方がいい。\n\n手元に残る金額は、ノルマや罰金の扱い、出勤の無理、客層との相性でも変わる。\n\n数字が良く見えても、毎回しんどくなる条件なら長く続かない。\n\n入る前に確認したいことを並べて、自分に合う働き方かを落ち着いて見た方がいい。",
+            "pressure": "夜職で苦しくなった時、気合いが足りないと決めつけなくていい。\n\n売上や指名のプレッシャーが強い時は、やり方より先に環境が自分に合っているかを見直す方が大事。\n\n相談できる人がいるか。無理な出勤になっていないか。\n\n一人で抱え込まない形を作れる店の方が、結果的に続けやすい。",
+            "fit": "夜職で続けやすい店は、条件表だけでは決めにくい。\n\n客層、女の子同士の空気、出勤の相談のしやすさ。\n\nこのあたりが合わないと、時給が良くても毎回の出勤が重くなる。\n\n自分が無理をしすぎず働ける環境かまで見て選ぶ方が、あとで悩みにくい。",
+            "transfer": "移籍を考える時は、次の店を急いで探す前に今の悩みを言葉にした方がいい。\n\n客層なのか、出勤の圧なのか、相談しづらさなのか。\n\n理由が見えると、次に避けたい条件もはっきりする。\n\n移籍は我慢を増やすためじゃなく、自分に合う環境を選び直すためのもの。",
+            "balance": "夜職を副業で続けるなら、出勤できる日数より生活を壊さないことが大事。\n\n睡眠を削りすぎる。休む日がなくなる。本業まできつくなる。\n\nこの状態だと、どんな条件でも続きにくい。\n\n稼ぎ方と同じくらい、無理なく続けられるペースを先に決めた方がいい。",
+            "general": "夜職で迷った時は、今の不安を曖昧なままにしない方がいい。\n\n条件、客層、出勤、相談のしやすさ。\n\n何が一番気になっているかが見えると、選ぶ基準も変わる。\n\n焦って決めるより、自分が続けられる環境かを一度整理することが大事。",
+        }
+    else:
+        variants = {
+            "first_viewer": "配信で初見が残らない時は、面白さより入りやすさを見直した方がいい。\n\n入った人に気づけているか。今何を話しているか伝わるか。コメントしやすい空気があるか。\n\nこの入口があるだけで、初見は会話に参加しやすくなる。\n\n配信は盛り上げる前に、入ってきた人が居場所を作れるかが大事。",
+            "support": "配信で応援が増えない時ほど、お願いの強さより関係の作り方を見た方がいい。\n\nコメントを拾ってもらえる。話に入りやすい。また来たいと思える。\n\nこういう積み重ねがあると、応援したい気持ちは自然に育つ。\n\nまずは見ている人が安心して参加できる空気を作ることから。",
+            "consistency": "配信を続けられる人は、毎回気合いで頑張っているわけじゃない。\n\n無理のない時間帯。話しやすいテーマ。終わった後に振り返る小さな習慣。\n\nこの型があると、数字が揺れても続けやすい。\n\n伸ばす前に、続けられる形を作ることがいちばん大事。",
+            "conversation": "配信で話題が続かない時は、すごい話を用意しなくても大丈夫。\n\n初見でも答えやすい質問。今日あった小さな出来事。今話していることの共有。\n\n会話に入る入口があるだけで、コメントは増えやすい。\n\n配信は一人で話し切る場より、みんなで話せる余白を作る場。",
+            "support_system": "ライバーを始める時は、条件だけより相談できる環境かを見た方がいい。\n\n数字が落ちた時に何を見直すか。生活に合う配信の形をどう作るか。\n\n最初から全部できる人はいない。\n\n続け方を一緒に考えられる場所があると、迷った時に立て直しやすい。",
+            "general": "配信が伸びない時は、才能がないと決める前に入りやすさを見直してみてほしい。\n\n初見に気づけているか。コメントを拾えているか。次も来やすい空気を作れているか。\n\n小さな改善を続けられる人ほど、配信は少しずつ変わっていく。",
+        }
+    text = variants.get(topic, variants["general"])
+    return build_generation_output(
+        internal_analysis=f"private signal classified as {topic}; account={account_id}; index={index}",
+        public_post_text=text,
+        safety_notes="Topic transformed from private signal. Do not publish the signal, source, or analysis.",
+        blocked_reasons=[],
+    )
+
+
 def reader_facing_template_count(account_id: str) -> int:
     """Number of deterministic public templates available for fallback rotation."""
     return 12 if account_id == "liver_manager" else 15

@@ -290,6 +290,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "discovered_at", "last_seen_at", "processed_at", "skip_reason",
         "content_hash", "duplicate_key",
         "local_path", "downloaded_at",
+        "subject_policy_status", "subject_policy_reason",
     ],
     # 動画文字起こし結果。Cloudflare Whisper の出力を保存する。
     "video_transcripts": [

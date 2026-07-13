@@ -24,7 +24,12 @@ from media_growth_schemas import (  # noqa: E402
     clips_overlap,
     extract_video_id,
 )
-from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
+from public_post_quality import (  # noqa: E402
+    final_public_post_validator,
+    generate_grounded_reader_facing_post,
+    generate_reader_facing_post,
+    public_preview,
+)
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
@@ -185,6 +190,29 @@ def _transcript_done(row: dict[str, Any]) -> bool:
     )
 
 
+def night_subject_policy_check(source: dict[str, Any], video: dict[str, Any]) -> dict[str, str]:
+    """Conservative, explainable eligibility check for night_scout clip use.
+
+    We do not claim visual recognition. A video must either be explicitly
+    reviewed or its public metadata must contain a female-subject cue, and
+    clear scout-talking-head/store-recruiting metadata is blocked. Unknown is
+    analysis-only, which is safer than turning a source-level permission into a
+    blanket claim about every video on that channel.
+    """
+    if "night_scout" not in (source.get("target_account_ids") or [source.get("target_account_id")]):
+        return {"status": "PASS", "reason": "not_night_scout"}
+    if str(video.get("subject_review_status", "")).upper() == "APPROVED_FEMALE_SUBJECT":
+        return {"status": "PASS", "reason": "explicit_subject_review"}
+    text = " ".join(str(video.get(key, "")) for key in ("title", "description_preview", "description")).lower()
+    blocked = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
+    if any(token.lower() in text for token in blocked):
+        return {"status": "BLOCKED", "reason": "night_subject_policy_analysis_only"}
+    female_cues = ("キャバ嬢", "女の子", "女性", "嬢", "キャスト", "girl", "ladies")
+    if any(token.lower() in text for token in female_cues):
+        return {"status": "PASS", "reason": "metadata_female_subject_cue"}
+    return {"status": "BLOCKED", "reason": "night_subject_evidence_required"}
+
+
 def _segments(row: dict[str, Any]) -> list[dict[str, Any]]:
     raw = str(row.get("segments_json", "") or "[]")
     try:
@@ -340,6 +368,13 @@ def build_media_growth_plan(
         source = source_by_id.get(str(source_video.get("source_id", "")))
         if not source:
             continue
+        subject_check = night_subject_policy_check(source, source_video)
+        source_video["subject_policy_status"] = subject_check["status"]
+        source_video["subject_policy_reason"] = subject_check["reason"]
+        if subject_check["status"] != "PASS":
+            source_video["analysis_status"] = "ANALYSIS_ONLY"
+            source_video["skip_reason"] = subject_check["reason"]
+            continue
         transcript = transcript_by_source_video.get(str(source_video.get("source_video_id", "")))
         if not transcript:
             source_video["transcript_status"] = source_video.get("transcript_status") or "TRANSCRIPT_PENDING"
@@ -354,7 +389,13 @@ def build_media_growth_plan(
         count = len(clip_specs)
         video_candidates = []
         for i, spec in enumerate(clip_specs, start=1):
-            clip_output = generate_reader_facing_post(account_id, index=(video_index - 1) * 3 + i)
+            # The excerpt is private input only. The public body is a
+            # transformed reader-facing angle, never a transcript rewrite.
+            clip_output = generate_grounded_reader_facing_post(
+                account_id,
+                private_signal=str(spec.get("excerpt", "")),
+                index=(video_index - 1) * 3 + i,
+            )
             clip_public_text = str(clip_output["public_post_text"])
             clip_validation = final_public_post_validator(clip_public_text, account_id)
             cand = build_clip_candidate_for_video(

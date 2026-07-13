@@ -919,4 +919,25 @@ Remaining human/ops confirmation:
   - Beauty posting.
   - Unknown / reference-only / third-party media reuse.
   - Any media without approved rights and permission evidence.
-  - Any post text failing `final_public_post_validator`.
+- Any post text failing `final_public_post_validator`.
+
+## 2026-07-13 Canonical Slots And Subtitle-Free Media
+
+This section supersedes older statements that media scheduling is OFF.
+
+- Each account has five canonical daily slots in `config/content_schedule.json`.
+  `night_scout` uses text at 14:00/16:00/18:00/25:00 and approved media at
+  21:00. `liver_manager` uses text at 10:00/13:00/16:00/21:00 and approved
+  media at 18:00. Scheduled runs start 15 minutes before target and jitter
+  0-1800 seconds.
+- Media preparation runs ahead of the media post slot and stops at
+  `MEDIA_READY`; it cannot publish. The media slot consumes only an uploaded,
+  unused approved asset and never downloads, cuts, uploads, or transcribes.
+- Burned subtitles are disabled by user policy: `subtitle_enabled=false` and
+  the production cutter is always called with `burn_subtitles=false`.
+- `night_scout` requires explicit female-subject review or matching public
+  metadata. Unknown, male-scout, store-PR, and recruiting-like videos are
+  analysis-only and cannot create a clip/post candidate.
+- `source_role` is explicit: 13 permission-evidenced sources are
+  `approved_media`; all remaining sources are `reference_only`. X and beauty
+  remain blocked. Publishers receive `public_post_text` only.

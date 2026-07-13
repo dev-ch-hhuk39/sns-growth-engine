@@ -1,13 +1,13 @@
-name: Media Growth Production Night Scout
+name: Media Growth Asset Preparation Night Scout
 
 on:
   schedule:
-    # JST 12:20 daily. Runs before the first night_scout text posting window.
-    - cron: "20 3 * * *"
+    # JST 11:20 daily. This prepares an approved asset; it never posts.
+    - cron: "20 2 * * *"
   workflow_dispatch:
     inputs:
       confirm_production_media:
-        description: "Type true to run one approved night_scout media post"
+        description: "Type true to prepare one approved night_scout media asset"
         required: true
         default: "false"
       dry_run_only:
@@ -84,7 +84,7 @@ jobs:
           auto = json.loads(Path("config/autonomous_mode.json").read_text())
           if auto.get("kill_switch"):
               raise SystemExit("[BLOCKED] kill_switch=true")
-          required = ["download_enabled", "cut_enabled", "upload_enabled", "video_post_enabled", "media_public_post_auto_enabled"]
+          required = ["download_enabled", "cut_enabled", "upload_enabled"]
           missing = [key for key in required if not media.get(key)]
           if missing:
               raise SystemExit("[BLOCKED] media config disabled: " + ",".join(missing))
@@ -92,7 +92,7 @@ jobs:
               raise SystemExit("[BLOCKED] night_scout media account is disabled")
           print("[OK] approved media production config and kill switch")
           PY
-          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 THREADS_ACCESS_TOKEN_NIGHT_SCOUT THREADS_USER_ID_NIGHT_SCOUT CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
+          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
             if [ -z "${!name}" ]; then
               echo "[BLOCKED] required secret is missing: $name"
               exit 1
@@ -124,21 +124,22 @@ jobs:
           python3 scripts/run_media_growth_engine.py \
             --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-media-growth
 
-      - name: Run one approved media production post
+      - name: Prepare one approved media asset
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
         env:
-          PUBLISH_ENABLED: "true"
-          ALLOW_REAL_THREADS_POST: "true"
+          PUBLISH_ENABLED: "false"
+          ALLOW_REAL_THREADS_POST: "false"
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_VIDEO_CUT: "true"
           ALLOW_CLOUDINARY_UPLOAD: "true"
-          ALLOW_MEDIA_POSTS: "true"
-          ALLOW_REAL_THREADS_VIDEO_POST: "true"
+          ALLOW_MEDIA_POSTS: "false"
+          ALLOW_REAL_THREADS_VIDEO_POST: "false"
           ALLOW_REAL_X_POST: "false"
           ALLOW_TRANSCRIPTION_API: "false"
         run: |
           python3 scripts/run_media_production_pipeline.py \
-            --account-id "$ACCOUNT_ID" --apply --confirm-production-media --use-sheets
+            --account-id "$ACCOUNT_ID" --apply --confirm-production-media \
+            --prepare-only --use-sheets
 
       - name: Health summary
         if: always()

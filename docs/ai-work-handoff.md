@@ -4404,3 +4404,132 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - scheduled run後、Sheetsの`source_videos`, `video_transcripts`, `video_clip_candidates`, `media_assets`, `queue`, `posted_results`, `media_post_results`をaccount別に確認する。
 - Night ScoutのTikTokを自動対象にするには、実URLをsource registryへ追加して同じpermission evidenceと`media_autopilot_enabled=true`を設定する。現在のTODOは絶対に有効化しない。
 - `final_public_post_validator`とX/beauty blockは弱めない。
+
+## Codex handoff: intent-gap audit (2026-07-13)
+
+### 作業内容
+
+- ユーザー提供の「3種類のアカウント / reference / approved media / slot schedule」マニュアルを、HEAD `e9c92a14db4083b93aa9cf7c938d616095bce075` のコードとdry-runに照合した。
+- 監査のみ。外部fetch、Sheets書込み、download/cut/upload/postは実行していない。
+- 詳細: `docs/intent-gap-audit-2026-07-13.md`。
+
+### 重要な認識差
+
+- 添付マニュアル内の「mediaがOFF」は旧状態。最新configではLiver/Nightの許可済み13 sourceに対して、download/cut/upload/video post/media scheduleがON。
+- ただし通常の5 text slotへmedia typeを割り当てる機構は未実装。media workflowは追加の投稿試行で、daily cap=5/cooldown=90分と競合する。
+- reference実データから本文を作る接続、字幕burn-in、saved media再利用、measured metrics PDCA、Night media health監視は未完了または未検証。
+
+### 次に触ってよいファイル
+
+- `config/content_schedule.json`（新設候補）
+- `scripts/run_autonomous_loop.py`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/check_autonomous_health.py`
+- `src/sheets_client.py`
+
+### 次AIへの引き継ぎメモ
+
+- 次実装は既存runnerを作り直さず、post-slot orchestrationを中心に進める。mediaをtext scheduleの外側で追加投稿する現在設計は、ユーザーが望む投稿種別配分と一致しない。
+- `fetch_enabled`、`manual_only`、`media_autopilot_enabled`は別責務として保ち、単一フラグに戻さない。
+
+## Codex handoff: slot-based subtitle-free media operation (2026-07-13)
+
+### 現在のHEAD / 作業ブランチ
+
+- 開始HEAD: `e9c92a14db4083b93aa9cf7c938d616095bce075`。
+- ブランチ: `main`。
+- 完了commitはこのhandoff更新を含む最新`git rev-parse HEAD`。push後にorigin/main一致を確認する。
+
+### 本システム
+
+- `night_scout` と `liver_manager` のThreads投稿を、参照分析・安全な本文生成・キュー・publisher・結果/PDCAで運用する。
+- sourceは `reference_only` と `approved_media` を明示的に分離する。approved mediaだけが、bounded discovery -> local transcript -> topic transformation -> clip -> Cloudinary -> Threads media postへ進める。
+- 外部へ出せる本文は常に`public_post_text`のみ。内部分析、source URL/ID、queue/score、transcript、AIメモはfinal validatorで止める。
+
+### 今回の変更ファイル一覧
+
+- `.github/workflows/autonomous-growth-loop-night-scout.yml`
+- `.github/workflows/autonomous-growth-loop-liver-manager.yml`
+- `.github/workflows/media-growth-production.yml`
+- `.github/workflows/media-growth-production-night-scout.yml`
+- `config/media_growth_engine.json`
+- `config/source_accounts/default_sources.json`
+- `src/sheets_client.py`
+- `scripts/run_autonomous_loop.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/generate_threads_ideas_from_references.py`
+- `scripts/public_post_quality.py`
+- `scripts/prepare_pilot_sources.py`
+- `scripts/check_autonomous_health.py`
+- `scripts/media_growth_schemas.py`
+- `scripts/test_all_workflows_safety_flags.py` と既存schedule/media tests
+- `docs/production-completion-status.md`, `docs/growth-loop-runbook.md`, `docs/video-reference-runbook.md`, `docs/autonomous-mode-runbook.md`, `docs/source-registry-inventory.md`, `docs/intent-gap-audit-2026-07-13.md`
+
+### 追加ファイル一覧
+
+- `.github/workflows/media-growth-post-liver-manager.yml`
+- `.github/workflows/media-growth-post-night-scout.yml`
+- `config/content_schedule.json`
+- `scripts/content_schedule.py`
+- `scripts/normalize_source_registry_roles.py`
+- `scripts/test_content_schedule_media_handoff.py`
+- `scripts/test_grounded_public_post_generation.py`
+- `scripts/test_source_role_and_reference_autopilot.py`
+
+### 実行仕様 / スケール方針
+
+- 1 accountあたり1日5 slot。night text=14/16/18/25、night media=21。liver text=10/13/16/21、liver media=18（JST）。各slotは-15分起動後0-1800秒jitter。
+- `daily_post_cap_per_account=5`, `max_posts_per_run=1`, `cooldown_minutes=90`を維持。
+- mediaは先行準備workflowで1件を`MEDIA_READY`まで作る。投稿slotはuploaded/unused素材だけを投稿し、download/cut/upload/transcribeをしない。
+- discovery上限はscan=12、new/source=3、new total=12。video/clip/textのduplicateを止める。
+- 字幕burn-inはユーザー指示によりOFF。`subtitle_enabled=false`、cut runnerも`burn_subtitles=false`。
+
+### 未完了事項 / 残WARN
+
+- ローカル環境はSheets/GitHub APIのlive確認用credentials/connectivityを持たない。初回scheduled run後にSheetsの`autonomous_health`, `source_videos`, `video_clip_candidates`, `media_assets`, `queue`, `posted_results`を確認する。
+- Night Scoutはfemale subject evidenceまたは明示reviewがない動画をanalysis-onlyにする。これは誤った切り抜きを防ぐためで、候補が0なら正常な`NO_POST`になり得る。
+- metricsはPENDING/PARTIAL/MEASUREDを保持し、unknownを0にしない。learning rules auto-applyはOFFのまま。
+
+### 安全状態
+
+- X fetch/post=false、beauty active/fetch/post=false。
+- third_party/reference_only/unknownはmedia pipeline不可。
+- `kill_switch=true`でtext/media scheduled postが停止する。
+- secret/cookie/token/storage_state、`.env`, `data/`, `output/`, `.claude/plans/`をcommitしない。
+
+### テスト / dry-run
+
+- `test_all_workflows_safety_flags.py`: PASS 275 / FAIL 0。
+- `test_content_schedule_media_handoff.py`: PASS 6 / FAIL 0。
+- `test_grounded_public_post_generation.py`: PASS 6 / FAIL 0。
+- `test_source_role_and_reference_autopilot.py`: PASS 4 / FAIL 0。
+- `test_media_growth_night_scout_account.py`: PASS 8 / FAIL 0。
+- `test_media_production_pipeline_safety.py`: PASS 11 / FAIL 0。
+- `check_autonomous_health.py --account-id all --dry-run`: PASS。local secret presenceはfalse（値を読まない仕様）。
+- `run_media_production_pipeline.py --prepare-only --dry-run` と `--post-saved-media --dry-run`: PLAN_ONLY、実download/cut/upload/post=false。
+
+### 次に触ってよいファイル
+
+- `config/content_schedule.json`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/check_autonomous_health.py`
+- `.github/workflows/media-growth-*.yml`
+- `docs/*runbook.md`
+
+### 衝突しやすいファイル
+
+- `docs/ai-work-handoff.md`
+- `config/source_accounts/default_sources.json`
+- `config/media_growth_engine.json`
+- `scripts/run_autonomous_loop.py`
+- `scripts/run_media_production_pipeline.py`
+
+### 触らない方がよいファイル / 次AIメモ
+
+- `.env`, `data/`, `output/`, `.claude/plans/`, secret/cookie/token/storage-state類は触らない。
+- 投稿本文validatorを弱めない。source role、reference fetch、media permissionは別の責務として維持する。
+- scheduled runがNO_POSTなら失敗と決めつけず、`autonomous_health.no_post_reason`とcandidate/asset状態を確認する。live runの結果があるまで、外部投稿/metrics成功をdocsで断言しない。

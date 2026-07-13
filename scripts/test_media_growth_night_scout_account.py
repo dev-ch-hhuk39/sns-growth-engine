@@ -5,15 +5,35 @@ from run_media_growth_engine import build_media_growth_plan
 
 def main() -> int:
     discovery = build_discovery_plan("night_scout")
+    # Placeholder discovery rows have no evidence about who appears in the
+    # video, so they are analysis-only. A real discovered row with an explicit
+    # female-subject metadata cue may create candidates.
     growth = build_media_growth_plan("night_scout")
+    safe_growth = build_media_growth_plan(
+        "night_scout",
+        existing_source_videos=[{
+            "source_video_id": "sv_ns_safe", "source_id": "src_ns_yt_cand_001",
+            "account_id": "night_scout", "platform": "youtube",
+            "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk",
+            "title": "キャバ嬢の働き方", "description_preview": "女の子が店選びを考える動画",
+            "duration_seconds": 50, "rights_status": "approved_creator_clip",
+            "permission_status": "approved", "discovery_status": "DISCOVERED",
+        }],
+        existing_transcripts=[{
+            "source_video_id": "sv_ns_safe", "transcript_id": "tr_ns_safe",
+            "transcription_status": "DONE", "transcript_text": "客層と出勤の相談を先に整理すると続けやすいです。",
+            "segments_json": '[{"start": 1, "end": 15, "text": "客層と出勤の相談を先に整理すると続けやすいです。"}, {"start": 20, "end": 40, "text": "女の子が無理なく働ける条件を見ます。"}]',
+        }],
+    )
     checks = [
         ("night discovery selects authorized sources", len(discovery["selected_sources"]) == 9),
         ("night discovery is bounded", discovery["limits"]["max_total_new_videos_per_run"] == 12),
         ("night growth plan is valid", growth["status"] == "PLAN_ONLY"),
-        ("night growth creates candidates", growth["clip_candidate_count"] > 0),
-        ("night candidate metadata is night-specific", all("配信初心者" not in row.get("target_audience", "") for row in growth["top_clip_candidates"])),
-        ("night public text passes validator", growth["final_public_post_validator"] == "PASS"),
-        ("dry-run never performs external media actions", not any(growth[key] for key in ("would_download", "would_cut", "would_upload", "would_post_video"))),
+        ("unknown night subject stays analysis only", growth["clip_candidate_count"] == 0),
+        ("female-subject metadata creates candidates", safe_growth["clip_candidate_count"] > 0),
+        ("night candidate metadata is night-specific", all("配信初心者" not in row.get("target_audience", "") for row in safe_growth["top_clip_candidates"])),
+        ("night public text passes validator", safe_growth["final_public_post_validator"] == "PASS"),
+        ("dry-run never performs external media actions", not any(safe_growth[key] for key in ("would_download", "would_cut", "would_upload", "would_post_video"))),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
