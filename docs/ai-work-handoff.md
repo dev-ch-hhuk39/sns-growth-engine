@@ -4489,6 +4489,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 ### 未完了事項 / 残WARN
 
+- 機能実装commit: `5bf15d042253de3d17b9aa339659fcad8aa5ae77`。`git push origin main`は2026-07-13にDNSの`Could not resolve host: github.com`で未完了。ネットワーク復旧後、同じnon-force pushを再実行し、`origin/main`一致を確認する。
 - ローカル環境はSheets/GitHub APIのlive確認用credentials/connectivityを持たない。初回scheduled run後にSheetsの`autonomous_health`, `source_videos`, `video_clip_candidates`, `media_assets`, `queue`, `posted_results`を確認する。
 - Night Scoutはfemale subject evidenceまたは明示reviewがない動画をanalysis-onlyにする。これは誤った切り抜きを防ぐためで、候補が0なら正常な`NO_POST`になり得る。
 - metricsはPENDING/PARTIAL/MEASUREDを保持し、unknownを0にしない。learning rules auto-applyはOFFのまま。
