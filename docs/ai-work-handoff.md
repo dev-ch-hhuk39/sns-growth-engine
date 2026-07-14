@@ -30,6 +30,7 @@ SNS Growth Engine v2 は、`night_scout` と `liver_manager` のaccount別Thread
 - `media_post_results`、`media_metrics`、`clip_performance`を正式なSheets tab schemaへ追加。approved media postが成功した場合、clip/asset/resultを同じIDで保存し、未取得metricsは空欄の`PENDING`として開始する。字幕は`none`であり、videoへのburn-inは行わない。
 - media PDCA保存はclip candidate IDで冪等化した。投稿そのものが成功済みの場合にPDCA保存が失敗しても、投稿結果を失敗扱いへ戻さない。
 - dry-run Actions `29302032285`（night）と`29302033460`（liver）は`b631b7f`で成功。実投稿・実download・実cut・実uploadは行っていない。
+- 最新main `06b9de6`でもdry-runを再実行。night run `29302470128`、liver run `29302470111` はともにsuccessで、dry-run/health summaryのみ実行、Guard・Apply・Threads投稿はskipされた。
 
 ### 現行Sheets観測 / 未完了事項
 
