@@ -8,6 +8,8 @@ The account schedules were running; the observed production stop was Sheets API 
 
 Read-only health snapshots also showed that media PDCA tabs (`media_post_results`, `media_metrics`, `clip_performance`) are absent and `media_assets` has no saved asset. Text-only recovery does not depend on those tabs. Media publishing must remain staged until the schemas exist and an approved asset has completed the gated pipeline.
 
+The media PDCA tabs are now part of `TAB_DEFINITIONS` and are created idempotently when the approved media-post runner needs them. A successful video post saves its clip/source/asset/result join keys to all three tabs, starts metrics as blank `PENDING` values, and records `subtitle_style=none`. This does not enable X, beauty, unapproved media, or subtitle rendering.
+
 ## 2026-07-12 Approved Media Automation Expansion
 
 The user explicitly reconfirmed permission for the configured media source URLs to be downloaded, transcribed, analysed, clipped, stored in Cloudinary, and reposted with a newly written Threads caption. The permission is recorded source-by-source as `approved_creator_clip`, `permission_status=approved`, and `media_autopilot_enabled=true`; it is not inferred for unregistered URLs.

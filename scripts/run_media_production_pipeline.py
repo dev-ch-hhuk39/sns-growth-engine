@@ -24,7 +24,7 @@ from config_loader import get_config  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
-from media_growth_schemas import extract_video_id  # noqa: E402
+from media_growth_schemas import build_media_pdca_records, extract_video_id  # noqa: E402
 from process_threads_queue import process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -74,6 +74,79 @@ def _append(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     ws = client._ws(logical)
     headers = ws.row_values(1)
     ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+
+
+def _save_media_pdca_records(
+    client: SheetsClient,
+    *,
+    clip: dict[str, Any],
+    source_video: dict[str, Any],
+    media_asset_id: str,
+    post_result: dict[str, Any],
+) -> dict[str, int]:
+    """Persist one media-post baseline without fabricating metrics.
+
+    The normal publisher already saves `posted_results`. These media-specific
+    records provide the join keys needed by later metrics/clip analysis, while
+    intentionally leaving metric values blank and PENDING until collected.
+    """
+    clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+    result_id = str(post_result.get("result_id") or "")
+    created = datetime.now(timezone.utc).isoformat()
+    records = build_media_pdca_records(clip, media_asset_id)
+    media_result_id = f"mpr_{clip_id}"
+    records["media_post_results"].update({
+        "media_post_result_id": media_result_id,
+        "result_id": result_id,
+        "queue_id": post_result.get("queue_id", ""),
+        "source_video_id": source_video.get("source_video_id", ""),
+        "external_post_id": post_result.get("external_post_id", ""),
+        "post_url": post_result.get("post_url", ""),
+        "posted_text": clip.get("public_post_text", ""),
+        "status": "POSTED",
+        "metrics_status": "PENDING",
+        "posted_at": created,
+        "updated_at": created,
+        "notes": "Metrics remain blank until a collector reports them.",
+    })
+    records["media_metrics"].update({
+        "media_metrics_id": f"mm_{clip_id}",
+        "media_post_result_id": media_result_id,
+        "result_id": result_id,
+        "account_id": clip.get("account_id", ""),
+        "platform": "threads",
+        "media_asset_id": media_asset_id,
+        "post_url": post_result.get("post_url", ""),
+        "metrics_status": "PENDING",
+        "source": "pending_collection",
+        "confidence": "",
+        "error_reason": "",
+        "collected_at": "",
+        "created_at": created,
+        "updated_at": created,
+    })
+    records["clip_performance"].update({
+        "clip_performance_id": f"cp_{clip_id}",
+        "media_post_result_id": media_result_id,
+        "result_id": result_id,
+        "account_id": clip.get("account_id", ""),
+        "platform": "threads",
+        "source_video_id": source_video.get("source_video_id", ""),
+        "media_asset_id": media_asset_id,
+        "status": "PENDING_METRICS",
+        "posted_at": created,
+        "updated_at": created,
+        "notes": "No subtitle burn-in; clip performance awaits measured metrics.",
+    })
+
+    saved = 0
+    for logical, row in ((name, records[name]) for name in ("media_post_results", "media_metrics", "clip_performance")):
+        existing = _records(client, logical)
+        if any(str(item.get("clip_candidate_id", "")) == clip_id for item in existing):
+            continue
+        _append(client, logical, row)
+        saved += 1
+    return {"saved": saved, "skipped": 3 - saved}
 
 
 def _parse_time(value: Any) -> datetime | None:
@@ -365,7 +438,20 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
     )
     if final_status == "POSTED":
         client.save_source_video({**source_video, "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
+        try:
+            media_pdca = _save_media_pdca_records(
+                client,
+                clip=clip,
+                source_video=source_video,
+                media_asset_id=media_id,
+                post_result=result,
+            )
+        except Exception as exc:
+            media_pdca = {"saved": 0, "skipped": 3, "warning": f"media_pdca_save_failed:{type(exc).__name__}"}
+    else:
+        media_pdca = {"saved": 0, "skipped": 3}
     return {**plan, "status": final_status, "queue_id": queue_id, "media_asset_id": media_id, "post_result": result,
+            "media_pdca": media_pdca,
             "would_download": False, "would_cut": False, "would_upload": False, "would_post_video": False}
 
 
@@ -552,12 +638,25 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     )
     if final_status == "POSTED":
         client.save_source_video({**source_video, "download_status": "DOWNLOADED", "cut_status": "CUT", "upload_status": "UPLOADED", "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
+        try:
+            media_pdca = _save_media_pdca_records(
+                client,
+                clip=clip,
+                source_video=source_video,
+                media_asset_id=media_id,
+                post_result=result,
+            )
+        except Exception as exc:
+            media_pdca = {"saved": 0, "skipped": 3, "warning": f"media_pdca_save_failed:{type(exc).__name__}"}
+    else:
+        media_pdca = {"saved": 0, "skipped": 3}
     return {
         **plan,
         "status": final_status,
         "queue_id": queue_id,
         "media_asset_id": media_id,
         "post_result": result,
+        "media_pdca": media_pdca,
         "would_download": False,
         "would_cut": False,
         "would_upload": False,

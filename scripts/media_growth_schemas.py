@@ -437,7 +437,7 @@ def build_media_pdca_records(clip: dict[str, Any], media_asset_id: str = "") -> 
             "clip_candidate_id": clip.get("clip_candidate_id", ""),
             "hook_type": clip.get("hook_text", ""),
             "clip_duration": clip.get("duration_seconds", ""),
-            "subtitle_style": "burn_in_optional",
+            "subtitle_style": "none",
             "created_at": created,
         },
         "prompt_improvement_suggestions": {

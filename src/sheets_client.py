@@ -463,6 +463,26 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "best_content_type", "best_er",
         "created_at", "notes",
     ],
+    # Media postごとの結果・未取得metrics・clip別成績。値が未取得のmetricは空欄/PENDINGで保持する。
+    "media_post_results": [
+        "media_post_result_id", "result_id", "queue_id", "account_id", "platform",
+        "source_video_id", "clip_candidate_id", "media_asset_id",
+        "post_url", "external_post_id", "posted_text", "status", "metrics_status",
+        "posted_at", "created_at", "updated_at", "notes",
+    ],
+    "media_metrics": [
+        "media_metrics_id", "media_post_result_id", "result_id", "account_id", "platform",
+        "clip_candidate_id", "media_asset_id", "post_url", "metrics_status",
+        "views", "likes", "comments", "saves", "shares", "follows", "profile_clicks",
+        "line_adds", "retention_proxy", "source", "confidence", "error_reason",
+        "collected_at", "created_at", "updated_at",
+    ],
+    "clip_performance": [
+        "clip_performance_id", "media_post_result_id", "result_id", "account_id", "platform",
+        "source_video_id", "clip_candidate_id", "media_asset_id", "status",
+        "hook_type", "clip_duration", "subtitle_style", "posted_at", "created_at", "updated_at",
+        "notes",
+    ],
     # Autonomous Growth Loop の各run診断。投稿0でも原因をSheets上で追えるようにする。
     "autonomous_health": [
         "run_id", "workflow_name", "account_id", "mode", "event_name",
@@ -505,6 +525,9 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "media_ingestion_runs":           "メディア取込履歴",
     "end_to_end_preflight_runs":      "投稿前チェック履歴",
     "pdca_runs":                      "PDCA実行履歴",
+    "media_post_results":             "メディア投稿結果",
+    "media_metrics":                  "メディア計測",
+    "clip_performance":               "クリップ成績",
     "autonomous_health":              "自動運用ヘルス",
 }
 

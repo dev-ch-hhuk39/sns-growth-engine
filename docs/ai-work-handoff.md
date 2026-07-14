@@ -27,6 +27,8 @@ SNS Growth Engine v2 は、`night_scout` と `liver_manager` のaccount別Thread
 
 - `SheetsClient.bulk_update_queue_items()`を追加。queue全体を一度だけ読み、queue IDから行番号を作り、READY昇格とreject理由を`batch_update`で一括保存する。候補ごとの`ws.find()`を廃止し、429 retryと400セル単位のバッチ分割を使う。
 - `auto_approve_queue.py`は安全候補をREADYへ昇格しつつ、非採用候補の理由保存も同一バッチで行う。投稿対象になるのは従来どおりREADY化された安全候補だけ。
+- `media_post_results`、`media_metrics`、`clip_performance`を正式なSheets tab schemaへ追加。approved media postが成功した場合、clip/asset/resultを同じIDで保存し、未取得metricsは空欄の`PENDING`として開始する。字幕は`none`であり、videoへのburn-inは行わない。
+- media PDCA保存はclip candidate IDで冪等化した。投稿そのものが成功済みの場合にPDCA保存が失敗しても、投稿結果を失敗扱いへ戻さない。
 - dry-run Actions `29302032285`（night）と`29302033460`（liver）は`b631b7f`で成功。実投稿・実download・実cut・実uploadは行っていない。
 
 ### 現行Sheets観測 / 未完了事項
@@ -51,6 +53,10 @@ SNS Growth Engine v2 は、`night_scout` と `liver_manager` のaccount別Thread
 - `test_sheets_rate_limit_backoff.py`: PASS 15 / FAIL 0
 - `test_auto_approve_queue_logs_reason.py`: PASS 1 / FAIL 0
 - `test_all_workflows_safety_flags.py`: PASS 275 / FAIL 0
+- `test_media_pdca_tabs_schema.py`: PASS 9 / FAIL 0
+- `test_media_production_saves_pdca_after_post.py`: PASS 5 / FAIL 0
+- `test_media_production_pipeline_safety.py`: PASS 11 / FAIL 0
+- `test_media_queue_schema_complete.py`: PASS 3 / FAIL 0
 - `py_compile` / `git diff --check`: PASS
 
 ### 次AIへの引き継ぎメモ
