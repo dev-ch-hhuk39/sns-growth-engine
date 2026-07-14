@@ -4542,7 +4542,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - branch: `main`。
 - このhandoff更新前のlocal HEAD: `29f0fdbf7d11b4e492c8dd273412dcc6232715ec`。
 - `origin/main`: `e9c92a14db4083b93aa9cf7c938d616095bce075`。localのslot/media実装と今回の診断修正はpush待ち。
-- Recovery commit: `6c6a23a2c1df21a88a5c25dcd2f2bd2f2e775905` (`fix: expose autonomous runtime failures and preserve aftercare`)。
+- Recovery implementation commit: `a83950b9b5e92534e7ff04668ed8b360021f0fab` (`fix: expose autonomous runtime failures and preserve aftercare`)。
 - `git push origin main` was retried after the commit and failed before authentication with `Could not resolve host: github.com`; no remote branch was changed and no force-push was attempted.
 
 ### 本システムと今回の修正
