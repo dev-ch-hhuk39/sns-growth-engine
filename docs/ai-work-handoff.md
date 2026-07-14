@@ -1,5 +1,65 @@
 # AI Work Handoff
 
+## 2026-07-14 Codex Sheets Quota Recovery Follow-up
+
+### 本システムについて
+
+SNS Growth Engine v2 は、`night_scout` と `liver_manager` のaccount別Threads text-only schedule、投稿後のmetrics/PDCA、許可記録済み動画のbounded discoveryからmedia postまでを分離して運用する。公開に渡せる本文は常に`public_post_text`のみで、X、beauty、未許可media、内部分析、`learning_rules`の自動適用は引き続きブロックする。
+
+### 現在のHEAD / branch
+
+- 修正開始HEAD: `b631b7f9a2ac6ff2cfb235501f3147269b5fe8ca`
+- 作業ブランチ: `main`
+- 作業ディレクトリ: `/Users/hayatoa/claudecodeプロジェクトディレクトリ/dev/SNS自動投稿システム/v2`
+- GitHub Actionsの実測: scheduleは起動していた。run `29270982366` は`auto_approve_queue.py`のqueue行ごとの`ws.find()`でSheets read quota 429となり、READY化前に停止していた。
+
+### 今回の変更ファイル一覧
+
+- `src/sheets_client.py`
+- `scripts/auto_approve_queue.py`
+- `scripts/test_auto_approve_queue_apply_ready_only_safe_items.py`
+- `scripts/test_auto_approve_queue_batches_sheets_updates.py`（追加）
+- `scripts/test_sheets_bulk_update_queue_items.py`（追加）
+- `docs/ai-work-handoff.md`
+- `docs/production-completion-status.md`
+
+### 実装内容
+
+- `SheetsClient.bulk_update_queue_items()`を追加。queue全体を一度だけ読み、queue IDから行番号を作り、READY昇格とreject理由を`batch_update`で一括保存する。候補ごとの`ws.find()`を廃止し、429 retryと400セル単位のバッチ分割を使う。
+- `auto_approve_queue.py`は安全候補をREADYへ昇格しつつ、非採用候補の理由保存も同一バッチで行う。投稿対象になるのは従来どおりREADY化された安全候補だけ。
+- dry-run Actions `29302032285`（night）と`29302033460`（liver）は`b631b7f`で成功。実投稿・実download・実cut・実uploadは行っていない。
+
+### 現行Sheets観測 / 未完了事項
+
+- read-only health snapshotではnight queue 52件（WAITING_REVIEW 36件）、liver queue 31件（WAITING_REVIEW 18件）で、READY化の停止が本番の主因だった。
+- `metric_snapshots`は未取得を示す`UNAVAILABLE`であり、0として扱ってはいけない。
+- `media_assets`は0件。`media_post_results`、`media_metrics`、`clip_performance`タブは未作成だった。text-only復旧とは独立して、media実運用をONにする前にschema作成とCloudinary/Threads実接続を段階検証する必要がある。
+- 参照sourceのdry-runでは`src_ns_threads_user_chiishunin_s`がnight_scoutの選択対象になった。dry-runは外部fetchを実行しないため、実収集の可否は次のscheduled runでredacted summaryを観測する。
+
+### スケール方針 / 残WARN
+
+- 同時slotでも、queueの更新は一括read + bounded batch writeにする。行ごとのfind/readを新規runnerに追加しない。
+- text-onlyのscheduleはON、media scheduleは権利・asset・schemaが揃った対象だけで段階的に使う。X/beautyは禁止を維持する。
+- 次scheduled runで`ready_count`、`processed_count`、`posted_count`、`no_post_reason`、redacted Sheets 429有無を確認する。再度429なら待機時間だけを増やさず、呼び出し箇所とread/write数を再計測する。
+
+### テスト結果
+
+- `test_auto_approve_queue_apply_ready_only_safe_items.py`: PASS 4 / FAIL 0
+- `test_auto_approve_queue_batches_sheets_updates.py`: PASS 5 / FAIL 0
+- `test_sheets_bulk_update_queue_items.py`: PASS 6 / FAIL 0
+- `test_sheets_client_update_queue_item_batched.py`: PASS 6 / FAIL 0
+- `test_sheets_rate_limit_backoff.py`: PASS 15 / FAIL 0
+- `test_auto_approve_queue_logs_reason.py`: PASS 1 / FAIL 0
+- `test_all_workflows_safety_flags.py`: PASS 275 / FAIL 0
+- `py_compile` / `git diff --check`: PASS
+
+### 次AIへの引き継ぎメモ
+
+1. 次のaccount別scheduled runのhealth summaryで、AUTO_READYが429なしにREADYを作り、workerがprocessまで到達することを確認する。
+2. `posted_results`、`queue`、`autonomous_health`は読取専用で観測し、未取得metricsを捏造しない。
+3. mediaの実行前に不足している3タブを既存schemaの追加のみで作成し、approved assetが実際に1件保存されるまでmedia post scheduleを広げない。
+4. 次に触ってよいファイル: `src/sheets_client.py`、`scripts/auto_approve_queue.py`、`scripts/check_autonomous_health.py`、media schema/setup runnerとrunbook。触らない方がよいもの: `.env`、`data/`、`output/`、`.claude/plans/`、secrets/cookies、X/beauty設定。
+
 ## 2026-07-12 Codex Full Automation Recovery / Transcription Grounding / Workflow Cancellation Fix
 
 ### 本システムについて

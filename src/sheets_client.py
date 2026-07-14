@@ -1446,6 +1446,57 @@ class SheetsClient:
             raise KeyError(f"queue_id={queue_id!r} が queue タブに見つかりません")
         self._batch_update_fields(ws, headers, cell.row, fields, label=f"queue:{queue_id}")
 
+    def bulk_update_queue_items(self, updates: list[tuple[str, dict[str, Any]]]) -> int:
+        """Update many queue rows with bounded Sheets calls.
+
+        AUTO_READY evaluates a whole WAITING_REVIEW batch. Looking up each
+        queue_id with ``ws.find`` exhausts the per-user Sheets read quota under
+        scheduled concurrent account runs, so read the grid once and batch the
+        field updates. Unknown queue ids are ignored deliberately: a queue can
+        legitimately be deleted by an operator between planning and apply.
+        """
+        if self.dry_run:
+            print(f"[dry-run] bulk_update_queue_items: count={len(updates)}")
+            return len(updates)
+        if not updates:
+            return 0
+        ws = self._ws("queue")
+        values = self._call_with_rate_limit_retry("get_all_values:queue", ws.get_all_values)
+        if not values:
+            return 0
+        headers = values[0]
+        if "queue_id" not in headers:
+            raise KeyError("queue タブに queue_id 列がありません")
+        queue_id_column = headers.index("queue_id")
+        row_by_queue_id = {
+            str(row[queue_id_column]).strip(): index
+            for index, row in enumerate(values[1:], start=2)
+            if len(row) > queue_id_column and str(row[queue_id_column]).strip()
+        }
+        ranges: list[dict[str, Any]] = []
+        updated = 0
+        for queue_id, fields in updates:
+            row = row_by_queue_id.get(str(queue_id))
+            if not row:
+                continue
+            updated += 1
+            for field, value in fields.items():
+                if field not in headers:
+                    continue
+                col = headers.index(field) + 1
+                ranges.append({
+                    "range": f"{self._col_letter(col)}{row}",
+                    "values": [[str(value)]],
+                })
+        # Keep each request comfortably below the Sheets batch payload limit.
+        for offset in range(0, len(ranges), 400):
+            chunk = ranges[offset:offset + 400]
+            self._call_with_rate_limit_retry(
+                f"batch_update:queue:auto_ready:{offset // 400 + 1}",
+                lambda chunk=chunk: ws.batch_update(chunk, value_input_option="USER_ENTERED"),
+            )
+        return updated
+
     def get_prompt_templates(
         self,
         account_id: str | None = None,

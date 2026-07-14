@@ -408,30 +408,31 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
     ready = [r for r in plan["results"] if r["status"] == "APPROVABLE"]
     updated: list[str] = []
     at = now_iso()
+    bulk_updates: list[tuple[str, dict[str, Any]]] = []
     for r in ready:
         qid = str(r["queue_id"])
         reason = f"AUTO_READY quality={r['quality_score']} safety={r['safety_score']} risk={r['risk_score']}"
-        client.update_queue_item(
-            qid,
-            status=READY_STATUS,
-            auto_ready_by=AUTO_READY_BY,
-            auto_ready_reason=reason,
-            auto_ready_score=str(r["score_total"]),
-            auto_ready_at=at,
-            quality_score=str(r["quality_score"]),
-            safety_score=str(r["safety_score"]),
-            risk_score=str(r["risk_score"]),
-            validator_status=str(r.get("final_public_post_validator", "")),
-            internal_leak_status="PASS" if int(r.get("internal_leak_score", 100)) == 0 else "BLOCKED",
-            account_fit_status="PASS" if int(r.get("account_fit_score", 0)) >= 80 else "WARN",
-            public_post_quality_score=str(r.get("public_post_quality_score", "")),
-            reader_value_score=str(r.get("reader_value_score", "")),
-            naturalness_score=str(r.get("naturalness_score", "")),
-            cta_pressure_score=str(r.get("cta_pressure_score", "")),
-            rejected_reason="",
-            blocked_reason="",
-            updated_at=at,
-        )
+        fields = {
+            "status": READY_STATUS,
+            "auto_ready_by": AUTO_READY_BY,
+            "auto_ready_reason": reason,
+            "auto_ready_score": str(r["score_total"]),
+            "auto_ready_at": at,
+            "quality_score": str(r["quality_score"]),
+            "safety_score": str(r["safety_score"]),
+            "risk_score": str(r["risk_score"]),
+            "validator_status": str(r.get("final_public_post_validator", "")),
+            "internal_leak_status": "PASS" if int(r.get("internal_leak_score", 100)) == 0 else "BLOCKED",
+            "account_fit_status": "PASS" if int(r.get("account_fit_score", 0)) >= 80 else "WARN",
+            "public_post_quality_score": str(r.get("public_post_quality_score", "")),
+            "reader_value_score": str(r.get("reader_value_score", "")),
+            "naturalness_score": str(r.get("naturalness_score", "")),
+            "cta_pressure_score": str(r.get("cta_pressure_score", "")),
+            "rejected_reason": "",
+            "blocked_reason": "",
+            "updated_at": at,
+        }
+        bulk_updates.append((qid, fields))
         client.log(
             operation="queue_approved",
             status="OK",
@@ -448,21 +449,26 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
         if not qid:
             continue
         reason = ",".join(str(x) for x in r.get("reasons", []))[:500]
-        client.update_queue_item(
-            qid,
-            validator_status=str(r.get("final_public_post_validator", "")),
-            internal_leak_status="PASS" if int(r.get("internal_leak_score", 100)) == 0 else "BLOCKED",
-            account_fit_status="PASS" if int(r.get("account_fit_score", 0)) >= 80 else "WARN",
-            quality_score=str(r.get("quality_score", "")),
-            safety_score=str(r.get("safety_score", "")),
-            risk_score=str(r.get("risk_score", "")),
-            public_post_quality_score=str(r.get("public_post_quality_score", "")),
-            reader_value_score=str(r.get("reader_value_score", "")),
-            naturalness_score=str(r.get("naturalness_score", "")),
-            cta_pressure_score=str(r.get("cta_pressure_score", "")),
-            rejected_reason=reason,
-            updated_at=at,
-        )
+        fields = {
+            "validator_status": str(r.get("final_public_post_validator", "")),
+            "internal_leak_status": "PASS" if int(r.get("internal_leak_score", 100)) == 0 else "BLOCKED",
+            "account_fit_status": "PASS" if int(r.get("account_fit_score", 0)) >= 80 else "WARN",
+            "quality_score": str(r.get("quality_score", "")),
+            "safety_score": str(r.get("safety_score", "")),
+            "risk_score": str(r.get("risk_score", "")),
+            "public_post_quality_score": str(r.get("public_post_quality_score", "")),
+            "reader_value_score": str(r.get("reader_value_score", "")),
+            "naturalness_score": str(r.get("naturalness_score", "")),
+            "cta_pressure_score": str(r.get("cta_pressure_score", "")),
+            "rejected_reason": reason,
+            "updated_at": at,
+        }
+        bulk_updates.append((qid, fields))
+    if hasattr(client, "bulk_update_queue_items"):
+        client.bulk_update_queue_items(bulk_updates)
+    else:
+        for queue_id, fields in bulk_updates:
+            client.update_queue_item(queue_id, **fields)
     return {"updated_count": len(updated), "updated_queue_ids": updated}
 
 

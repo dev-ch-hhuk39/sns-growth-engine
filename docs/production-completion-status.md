@@ -1,5 +1,13 @@
 # Production Completion Status
 
+## 2026-07-14 Queue Promotion Quota Recovery
+
+The account schedules were running; the observed production stop was Sheets API read quota exhaustion during AUTO_READY. The old promotion path performed a `find()` for each queue candidate, so scheduled account runs could exhaust the per-user read quota before any safe candidate reached `READY`.
+
+`auto_approve_queue.py` now persists one evaluated batch through `SheetsClient.bulk_update_queue_items()`: one queue grid read, queue-ID-to-row mapping, bounded `batch_update` calls, and existing 429 retry behavior. This preserves the final public-post validator and only promotes safe candidates to `READY`; rejected candidates merely receive diagnostic fields. The next scheduled runs should be checked for `ready_count`, `processed_count`, `posted_count`, and a meaningful `no_post_reason`.
+
+Read-only health snapshots also showed that media PDCA tabs (`media_post_results`, `media_metrics`, `clip_performance`) are absent and `media_assets` has no saved asset. Text-only recovery does not depend on those tabs. Media publishing must remain staged until the schemas exist and an approved asset has completed the gated pipeline.
+
 ## 2026-07-12 Approved Media Automation Expansion
 
 The user explicitly reconfirmed permission for the configured media source URLs to be downloaded, transcribed, analysed, clipped, stored in Cloudinary, and reposted with a newly written Threads caption. The permission is recorded source-by-source as `approved_creator_clip`, `permission_status=approved`, and `media_autopilot_enabled=true`; it is not inferred for unregistered URLs.
