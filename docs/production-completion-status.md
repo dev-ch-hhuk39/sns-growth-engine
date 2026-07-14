@@ -941,3 +941,18 @@ This section supersedes older statements that media scheduling is OFF.
 - `source_role` is explicit: 13 permission-evidenced sources are
   `approved_media`; all remaining sources are `reference_only`. X and beauty
   remain blocked. Publishers receive `public_post_text` only.
+
+## 2026-07-14 Runtime Observability Recovery
+
+- Scheduled workflows are firing. The latest inspected text workflows reached
+  their apply step and failed there, so the issue is not an absent cron.
+- `check_autonomous_health.py --use-sheets` now reads operational count/status
+  summaries only: queue, results, metrics, PDCA, reference/video/clip/media,
+  logs, and earlier health rows. It never initializes Sheets, writes rows,
+  prints post bodies, or exposes credentials.
+- Text and approved-media workflow summaries run this read-only snapshot. The
+  next run can identify `NO_READY_QUEUE`, validation/duplicate blocks, caps,
+  schema gaps, and missing media stages from one place.
+- A metrics adapter returning PARTIAL/UNAVAILABLE no longer stops aftercare
+  before source-registry sync and PDCA candidate generation. Unknown metrics
+  remain unknown rather than being fabricated as zero.

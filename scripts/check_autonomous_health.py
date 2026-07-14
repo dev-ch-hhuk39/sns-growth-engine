@@ -107,7 +107,56 @@ def _schema_sanity() -> dict[str, Any]:
     }
 
 
-def build_health(account_id: str) -> dict[str, Any]:
+def _compact_status_counts(rows: list[dict[str, Any]], *, account_id: str, status_key: str = "status") -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        if account_id != "all" and str(row.get("account_id", "")) != account_id:
+            continue
+        status = str(row.get(status_key, "") or "BLANK").strip().upper()
+        counts[status] = counts.get(status, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _sheets_runtime_snapshot(account_id: str) -> dict[str, Any]:
+    """Read operational counts without setup, writes, secret values, or post text."""
+    try:
+        from config_loader import get_config
+        from sheets_client import SheetsClient
+
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=True)
+        tabs = (
+            "queue", "posted_results", "metric_snapshots", "pdca_runs",
+            "prompt_improvement_suggestions", "source_account_posts",
+            "reference_post_scores", "source_videos", "video_transcripts",
+            "video_clip_candidates", "media_assets", "media_post_results",
+            "media_metrics", "clip_performance", "autonomous_health", "logs",
+        )
+        result: dict[str, Any] = {"status": "READ_OK", "tabs": {}, "errors": []}
+        for logical in tabs:
+            try:
+                rows = [dict(row) for row in client._ws(logical).get_all_records()]
+            except Exception as exc:
+                result["tabs"][logical] = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+                continue
+            scoped = [row for row in rows if account_id == "all" or str(row.get("account_id", "")) == account_id]
+            tab = {"status": "READ_OK", "row_count": len(scoped)}
+            if logical in {"queue", "posted_results", "source_videos", "video_clip_candidates", "media_assets", "media_post_results"}:
+                tab["status_counts"] = _compact_status_counts(scoped, account_id="all")
+            if logical == "metric_snapshots":
+                tab["metrics_status_counts"] = _compact_status_counts(scoped, account_id="all", status_key="metrics_status")
+            if logical == "autonomous_health":
+                tab["apply_status_counts"] = _compact_status_counts(scoped, account_id="all", status_key="apply_status")
+                tab["no_post_reason_counts"] = _compact_status_counts(scoped, account_id="all", status_key="no_post_reason")
+            if logical == "logs":
+                tab["level_counts"] = _compact_status_counts(scoped, account_id="all", status_key="level")
+            result["tabs"][logical] = tab
+        return result
+    except Exception as exc:
+        return {"status": "UNAVAILABLE", "reason": type(exc).__name__}
+
+
+def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]:
     config = _json(ROOT / "config/autonomous_mode.json")
     media_config = _json(ROOT / "config/media_growth_engine.json")
     workflow_results: dict[str, Any] = {}
@@ -167,6 +216,12 @@ def build_health(account_id: str) -> dict[str, Any]:
     if schema["missing_required_columns"]:
         problems.append("schema_missing_required_columns")
 
+    sheets_runtime = _sheets_runtime_snapshot(account_id) if use_sheets else {
+        "status": "NOT_CHECKED", "reason": "pass_--use-sheets_for_read_only_runtime_counts"
+    }
+    if use_sheets and sheets_runtime.get("status") != "READ_OK":
+        problems.append("sheets_runtime_read_unavailable")
+
     return {
         "status": "PASS" if not problems else "WARN",
         "account_id": account_id,
@@ -190,8 +245,7 @@ def build_health(account_id: str) -> dict[str, Any]:
         },
         "sheets_schema_expected": schema,
         "source_registry": source,
-        "queue_status_counts": {"status": "NOT_CHECKED_DRY_RUN_NO_SHEETS_READ"},
-        "posted_results_recent_status": {"status": "NOT_CHECKED_DRY_RUN_NO_SHEETS_READ"},
+        "sheets_runtime": sheets_runtime,
         "validator_sanity": {"final_public_post_validator": "EXPECTED_IN_RUNNER_AND_WORKER"},
         "media_schedule": {
             "text_only_schedule_on": True,
@@ -222,8 +276,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="read-only autonomous health check")
     parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--use-sheets", action="store_true", help="read operational tab counts only; never write or initialize Sheets")
     args = parser.parse_args()
-    result = build_health(args.account_id)
+    result = build_health(args.account_id, use_sheets=args.use_sheets)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["status"] in {"PASS", "WARN"} else 1
 

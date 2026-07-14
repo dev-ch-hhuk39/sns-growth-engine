@@ -141,7 +141,11 @@ def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: 
             reason = "platform_mismatch"
         elif not is_true(src.get("fetch_enabled", False)):
             reason = "fetch_enabled_false"
-        elif is_true(src.get("manual_only", False)) or str(src.get("collection_method", "")).lower() in {"manual_url", "manual_json"}:
+        # A source can retain its historical manual_url provenance while being
+        # explicitly and narrowly enabled for the autonomous Threads collector.
+        # Do not make that override implicit: both fetch_enabled and the
+        # dedicated reference_autopilot_enabled flag are required.
+        elif (is_true(src.get("manual_only", False)) or str(src.get("collection_method", "")).lower() in {"manual_url", "manual_json"}) and not is_true(src.get("reference_autopilot_enabled", False)):
             reason = "manual_only"
         elif src_platform == "x" and not include_x:
             reason = "x_disabled_by_default"

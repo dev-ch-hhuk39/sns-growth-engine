@@ -4534,3 +4534,40 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - `.env`, `data/`, `output/`, `.claude/plans/`, secret/cookie/token/storage-state類は触らない。
 - 投稿本文validatorを弱めない。source role、reference fetch、media permissionは別の責務として維持する。
 - scheduled runがNO_POSTなら失敗と決めつけず、`autonomous_health.no_post_reason`とcandidate/asset状態を確認する。live runの結果があるまで、外部投稿/metrics成功をdocsで断言しない。
+
+## Codex handoff: operational recovery diagnostics (2026-07-14)
+
+### 現在のHEAD / branch
+
+- branch: `main`。
+- このhandoff更新前のlocal HEAD: `29f0fdbf7d11b4e492c8dd273412dcc6232715ec`。
+- `origin/main`: `e9c92a14db4083b93aa9cf7c938d616095bce075`。localのslot/media実装と今回の診断修正はpush待ち。
+- Recovery commit: `6c6a23a2c1df21a88a5c25dcd2f2bd2f2e775905` (`fix: expose autonomous runtime failures and preserve aftercare`)。
+- `git push origin main` was retried after the commit and failed before authentication with `Could not resolve host: github.com`; no remote branch was changed and no force-push was attempted.
+
+### 本システムと今回の修正
+
+- 目的は、`night_scout` / `liver_manager`のThreads text投稿、許可済み動画の発見・分析・切り抜き・Cloudinary保存・media投稿、投稿後metrics/PDCAを安全に連携すること。
+- GitHubのscheduled runは起動している。最新確認のNight Scout/Liver Manager runはともに`Apply autonomous Threads loop`でfailureだった。cron未起動ではなくapply段の停止である。
+- `fetch_enabled=true`かつ`reference_autopilot_enabled=true`のThreads sourceは、由来として`manual_url`を保持していてもbounded collectorの対象にした。他のmanual sourceは従来どおり除外する。
+- `check_autonomous_health.py --use-sheets`を追加。queue、posted_results、metric_snapshots、pdca_runs、source/video/clip/media、logs、autonomous_healthを**読み取り専用**で件数・status別に出す。本文・URL・secretは出さず、tab作成/書込み/投稿もしない。
+- text/media workflowの最後にこのruntime snapshotを実行する。metricsがPARTIAL/UNAVAILABLEでもaftercare全体を止めず、registry syncとPDCA候補生成を継続する。
+
+### 変更ファイル / 追加ファイル
+
+- 更新: `.github/workflows/autonomous-growth-loop-*.yml`, `.github/workflows/media-growth-*.yml`, `.github/workflows/production-autopilot-aftercare.yml`, `scripts/collect_source_posts.py`, `scripts/check_autonomous_health.py`, `docs/production-completion-status.md`, 本ファイル。
+- 追加: `scripts/test_reference_autopilot_manual_url_override.py`, `scripts/test_autonomous_health_runtime_snapshot.py`, `scripts/test_aftercare_metrics_failure_continues.py`。
+
+### テスト / dry-run / WARN
+
+- PASS: reference override 2件、read-only health 5件、aftercare continuity 3件、source role 4件、workflow safety 275件、`py_compile`、`git diff --check`。
+- local `check_autonomous_health.py --use-sheets`ではSheets/Threads/Cloudinary credential presenceのみtrueを確認し、値は未表示。Google readは`TransportError`でUNAVAILABLEだった。これはlocal通信層のWARNであり、空Sheetとは断定しない。
+- 次のGitHub Actions runのfinal health summaryが本番Sheetsの唯一の正しいruntime観測になる。
+
+### 未完了事項 / スケール方針 / 次AIメモ
+
+- 最優先はpending commitsのnon-force pushと、最初のscheduled runでqueue/posted_results/PDCA/media stageを確認すること。`NO_READY_QUEUE`、validator block、daily cap、schema不足、media asset不足をhealth summaryで判定する。
+- media progressionは`DISCOVERED -> transcript/clip -> MEDIA_READY -> UPLOADED -> posted_results`。段がない場合は`NO_POST`で止まり、未許可mediaを使わない。
+- `learning_rules.auto_apply=false`、X fetch/post=false、beauty active/fetch/post=false、source priority自動変更なしを維持。
+- 次に触ってよい: `scripts/run_autonomous_loop.py`, `scripts/check_autonomous_health.py`, `scripts/run_media_production_pipeline.py`, `scripts/discover_approved_source_videos.py`, media/text workflows。
+- 触らない: `.env`, `data/`, `output/`, `.claude/plans/`, secret/token/cookie/storage-state類。衝突しやすい: handoff、source registry、media config、Sheets schema、autonomous runner。

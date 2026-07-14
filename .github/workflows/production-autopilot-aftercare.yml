@@ -94,6 +94,10 @@ jobs:
       - name: Apply metrics snapshots
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |
+          # Metrics may legitimately be PARTIAL/UNAVAILABLE before a platform
+          # exposes public numbers. Record the result, then continue to the
+          # PDCA and registry steps instead of making the whole aftercare fail.
+          set +e
           python3 scripts/collect_threads_metrics.py \
             --account-id all \
             --source browser \
@@ -101,6 +105,9 @@ jobs:
             --apply \
             --confirm-metrics \
             --use-sheets
+          metrics_exit=$?
+          echo "metrics_snapshot_exit=$metrics_exit" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
 
       - name: Sync source registry and Sheets schema
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
@@ -145,4 +152,4 @@ jobs:
 
       - name: Health summary
         if: always()
-        run: python3 scripts/check_autonomous_health.py --account-id all --dry-run
+        run: python3 scripts/check_autonomous_health.py --account-id all --dry-run --use-sheets

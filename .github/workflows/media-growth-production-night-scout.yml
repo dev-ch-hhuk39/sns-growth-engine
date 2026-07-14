@@ -143,4 +143,4 @@ jobs:
 
       - name: Health summary
         if: always()
-        run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run
+        run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

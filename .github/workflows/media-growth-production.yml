@@ -184,4 +184,4 @@ jobs:
 
       - name: Health summary
         if: always()
-        run: python3 scripts/check_autonomous_health.py --account-id liver_manager --dry-run
+        run: python3 scripts/check_autonomous_health.py --account-id liver_manager --dry-run --use-sheets
