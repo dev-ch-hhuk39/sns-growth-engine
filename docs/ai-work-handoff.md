@@ -4645,8 +4645,9 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 - System: account-scoped Threads text automation plus permission-gated direct
   media and generated-clip media. X and `beauty_account` stay blocked.
-- Base HEAD: `4278aa6a8cb8e818f853e4ed2e513b685eb8f8ab`; current implementation
-  commit: `e26817e` on `main` (the final pushed hash is verified below).
+- Base HEAD: `4278aa6a8cb8e818f853e4ed2e513b685eb8f8ab`; the current
+  implementation is committed on `main` and its pushed hash is verified in the
+  final run report.
 - Critical root cause verified from Actions logs: scheduled text jobs failed
   before planning because ignored `config/content_schedule.json` was absent in
   Actions. It is now intentionally tracked.
