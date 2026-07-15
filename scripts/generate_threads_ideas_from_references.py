@@ -189,6 +189,10 @@ def build_generation_rows(
     posts: list[dict[str, Any]],
     scores: list[dict[str, Any]],
     top_n: int,
+    slot_id: str = "",
+    post_type: str = "reference_text",
+    theme: str = "",
+    schedule_date_jst: str = "",
 ) -> dict[str, list[dict[str, Any]]]:
     posts_by_id = {str(p.get("post_id", "")): p for p in posts}
     usable_scores = [
@@ -231,7 +235,7 @@ def build_generation_rows(
             "source_refs": ref_id,
             "status": CANDIDATE_STATUS,
             "generation_model": CLI_NAME,
-            "generation_mode": "reference_score_to_threads",
+            "generation_mode": post_type,
             "media_strategy": "none",
             "imitation_risk": "low",
             "media_reuse_risk": "not_applicable",
@@ -289,6 +293,7 @@ def build_generation_rows(
             "source_id": post.get("source_id", ""),
             "source_url": post.get("post_url", ""),
             "generated_by": CLI_NAME,
+            "slot_id": slot_id, "theme": theme, "schedule_date_jst": schedule_date_jst,
             "validator_status": "PENDING",
             "internal_leak_status": "",
             "account_fit_status": "",
@@ -302,16 +307,18 @@ def build_generation_rows(
     return {"drafts": drafts, "social_derivatives": derivatives, "queue": queues}
 
 
-def _fallback_template_index(offset: int, account_id: str) -> int:
+def _fallback_template_index(offset: int, account_id: str, *, slot_id: str = "", schedule_date_jst: str = "", history: list[str] | None = None, reason: str = "") -> int:
     """Rotate safe original templates across daily runs without source data."""
     jst = timezone(timedelta(hours=9))
     now = datetime.now(timezone.utc).astimezone(jst)
     count = max(1, reader_facing_template_count(account_id))
-    slot = now.hour * 4 + (now.minute // 15)
-    return ((now.timetuple().tm_yday * 11 + slot + offset) % count) + 1
+    date_seed = schedule_date_jst or now.strftime("%Y-%m-%d")
+    history_seed = sum(sum(map(ord, text[:120])) for text in (history or [])[-30:])
+    seed = sum(map(ord, f"{account_id}|{slot_id}|{date_seed}|{reason}")) + history_seed
+    return ((seed + offset * 7) % count) + 1
 
 
-def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, list[dict[str, Any]]]:
+def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str = "", post_type: str = "original_text", theme: str = "", schedule_date_jst: str = "", history: list[str] | None = None, fallback_reason: str = "reference_unavailable") -> dict[str, list[dict[str, Any]]]:
     """Build safe reader-facing original candidates when reference data is empty.
 
     This is the production recovery path for scheduled autonomous posting: it
@@ -324,11 +331,11 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
     derivatives: list[dict[str, Any]] = []
     queues: list[dict[str, Any]] = []
     for i in range(1, max(1, top_n) + 1):
-        variant_index = _fallback_template_index(i, account_id)
+        variant_index = _fallback_template_index(i, account_id, slot_id=slot_id, schedule_date_jst=schedule_date_jst, history=history, reason=fallback_reason)
         output = generate_reader_facing_post(account_id, index=variant_index)
         body = str(output["public_post_text"])
         validation = final_public_post_validator(body, account_id)
-        if validation["status"] != "PASS":
+        if validation["status"] != "PASS" or any(original_text_similarity_guard(old, body)["status"] == "BLOCKED" for old in (history or [])[-30:]):
             continue
         stable = _safe_id(f"{account_id}_fallback_{stamp}_{i}")
         draft_id = f"idea_{stable}"
@@ -346,7 +353,7 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
             "source_refs": "",
             "status": CANDIDATE_STATUS,
             "generation_model": CLI_NAME,
-            "generation_mode": "safe_original_fallback_threads",
+            "generation_mode": post_type,
             "media_strategy": "none",
             "imitation_risk": "low",
             "media_reuse_risk": "not_applicable",
@@ -390,7 +397,7 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
             "created_at": created,
             "processed_at": "",
             "auto_publish": "false",
-            "generation_mode": "safe_original_fallback_threads",
+            "generation_mode": post_type,
             "confidence_level": "medium",
             "ai_publish_recommendation": CANDIDATE_STATUS,
             "media_asset_id": "",
@@ -404,6 +411,9 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int) -> dict[str, 
             "source_id": "",
             "source_url": "",
             "generated_by": CLI_NAME,
+            "slot_id": slot_id,
+            "theme": theme,
+            "schedule_date_jst": schedule_date_jst,
             "validator_status": validation["status"],
             "internal_leak_status": validation["internal_leak_check"]["status"],
             "account_fit_status": validation["account_fit_check"]["status"],
@@ -464,7 +474,7 @@ def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, An
     return {"added": added, "skipped": skipped, "refreshed": refreshed}
 
 
-def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dict[str, Any]:
+def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_id: str = "", post_type: str = "reference_text", theme: str = "", schedule_date_jst: str = "") -> dict[str, Any]:
     from config_loader import get_config
     from sheets_client import SheetsClient
 
@@ -472,11 +482,19 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dic
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     posts = [dict(r) for r in client._ws("source_account_posts").get_all_records() if str(r.get("account_id", "")) == account_id]
     scores = [dict(r) for r in client._ws("reference_post_scores").get_all_records() if str(r.get("account_id", "")) == account_id]
-    rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n)
-    fallback_used = False
-    if not rows["queue"]:
-        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n)
-        fallback_used = True
+    history = [str(row.get("posted_text", "")) for row in client._ws("posted_results").get_all_records() if str(row.get("account_id", "")) == account_id]
+    metric_rows = [dict(row) for logical in ("metric_snapshots", "media_metrics") for row in client._ws(logical).get_all_records() if str(row.get("account_id", "")) == account_id]
+    measured = [row for row in metric_rows if str(row.get("metrics_status", "")).upper() == "MEASURED"]
+    fallback_used = post_type == "original_text" or (post_type == "pdca_text" and not measured)
+    if post_type == "original_text":
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history, fallback_reason="original_text_slot")
+    elif post_type == "pdca_text" and not measured:
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text" if post_type != "reference_text" else post_type, theme=theme, schedule_date_jst=schedule_date_jst, history=history)
+    else:
+        rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n, slot_id=slot_id, post_type=post_type, theme=theme, schedule_date_jst=schedule_date_jst)
+        if not rows["queue"]:
+            rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history)
+            fallback_used = True
     summary = {
         "status": "PLAN_ONLY",
         "account_id": account_id,
@@ -488,6 +506,11 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dic
         "queue_ids": [r["queue_id"] for r in rows["queue"]],
         "worker_selectable": False,
         "real_post_possible_now": False,
+        "slot_id": slot_id,
+        "post_type": post_type,
+        "theme": theme,
+        "measured_metric_count": len(measured),
+        "pdca_fallback_to_original": post_type == "pdca_text" and not measured,
     }
     if not apply:
         return summary
@@ -502,7 +525,7 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool) -> dic
     fallback_topup_used = False
     fallback_ops: dict[str, dict[str, int]] = {}
     if queue_writes == 0:
-        fallback_rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n)
+        fallback_rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history)
         fallback_topup_used = bool(fallback_rows["queue"])
         fallback_ops = {
             "drafts": _append_missing(client, "drafts", "draft_id", fallback_rows["drafts"]),
@@ -586,6 +609,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="explicit PLAN_ONLY mode (default unless --apply)")
     parser.add_argument("--apply", action="store_true", help="run delegate (needs --confirm-generate)")
     parser.add_argument("--confirm-generate", action="store_true")
+    parser.add_argument("--slot-id", default="")
+    parser.add_argument("--post-type", default="reference_text", choices=["original_text", "reference_text", "pdca_text"])
+    parser.add_argument("--theme", default="")
+    parser.add_argument("--schedule-date-jst", default="")
     return parser.parse_args()
 
 
@@ -596,13 +623,13 @@ def main() -> int:
     if plan["status"] == "BLOCKED":
         return 1
     if plan["status"] == "PLAN_ONLY" and args.dry_run and plan["source"] == "references":
-        result = run_reference_generation(plan["account_id"], args.top_n, apply=False)
+        result = run_reference_generation(plan["account_id"], args.top_n, apply=False, slot_id=args.slot_id, post_type=args.post_type, theme=args.theme, schedule_date_jst=args.schedule_date_jst)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     if plan["status"] != "WILL_RUN":
         return 0
     if plan["source"] == "references":
-        result = run_reference_generation(plan["account_id"], args.top_n, apply=True)
+        result = run_reference_generation(plan["account_id"], args.top_n, apply=True, slot_id=args.slot_id, post_type=args.post_type, theme=args.theme, schedule_date_jst=args.schedule_date_jst)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["status"] in {"GENERATED", "NO_DATA"} else 1
     # Clip generation remains delegated; it does not post.

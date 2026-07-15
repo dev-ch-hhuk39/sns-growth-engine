@@ -4691,3 +4691,32 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   step with a GitHub billing/spending-limit annotation. No post, fetch,
   download, upload, or Sheets write occurred. Restore Actions billing or raise
   its spending limit, then rerun the two dry-runs before relying on schedule.
+
+## 2026-07-15 Slot Engine Completion Work (Pending E2E)
+
+- Added `media_permissions` Sheets tab. It is the single user-operated ledger
+  for direct reuse; revoked/expired rows are ignored and clip authorization
+  never becomes direct reuse automatically.
+- Text generation now receives `slot_id`, `post_type`, `theme`, and JST date.
+  The normal text runner persists an apply result to `content_slot_runs`.
+  Fallback selection includes date, reason, and bounded variants; it retries
+  a duplicate with up to three distinct variants.
+- `original_text` is source-independent. `reference_text` uses references when
+  available and falls back safely when not. `pdca_text` checks for `MEASURED`
+  metrics and falls back to original text when metrics are PENDING,
+  UNAVAILABLE, or absent; it must not claim a PDCA result in that state.
+- Media primary failures that occur before a confirmed Threads post now invoke
+  the named safe text fallback. `POSTED_SAVE_FAILED` deliberately does not
+  fallback because a post may already exist.
+- Added `content-slot-recovery.yml`, which runs every 30 minutes, considers
+  only slots more than 20 minutes overdue, and is capped at one recovery post
+  per account/run. It keeps all X/media download/cut/upload gates false.
+- Added [operator-one-page.md](operator-one-page.md) for the Sheet-only
+  operating view and focused regression tests for schedule agreement, slot
+  context, permission boundaries, and executable backfill.
+- Remaining uncompleted production proof: Actions billing still blocks all
+  jobs before startup; no new real post URL exists. Direct source discovery,
+  media download, Cloudinary upload, image/carousel transport, and generated
+  clip E2E require an explicit ledger row plus an actual permitted source post
+  or individual video asset. Do not call them complete until linked URLs and
+  Sheet rows are observed.

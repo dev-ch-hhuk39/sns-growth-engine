@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -46,9 +47,21 @@ def main() -> int:
     cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     accounts = ["night_scout", "liver_manager"] if args.account_id == "all" else [args.account_id]
     plans = {account: missing_slots(client, account) for account in accounts}
-    print(json.dumps({"status": "PLAN_ONLY", "aftercare_threshold_minutes": 20, "missing_slots": plans, "would_post": False}, ensure_ascii=False, indent=2))
-    # Publishing a late slot remains deliberately explicit: the aftercare
-    # workflow reports it; a future gated worker can call the regular fallback.
+    result: dict[str, Any] = {"status": "PLAN_ONLY", "aftercare_threshold_minutes": 20, "missing_slots": plans, "would_post": False, "backfills": []}
+    if not args.apply:
+        print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
+    if str(os.environ.get("PUBLISH_ENABLED", "")).lower() not in {"1", "true", "yes"} or str(os.environ.get("ALLOW_REAL_THREADS_POST", "")).lower() not in {"1", "true", "yes"}:
+        print(json.dumps({**result, "status": "BLOCKED", "reason": "Threads publishing gates are required"}, ensure_ascii=False, indent=2)); return 1
+    from run_slot_text_fallback import build_plan, execute
+    # One late post per account/run; the fallback runner re-checks idempotency.
+    for account, slots in plans.items():
+        if not slots:
+            continue
+        slot = slots[-1]
+        fallback = execute(build_plan(account, slot["slot_id"], "missed_slot_aftercare", apply=True), client)
+        result["backfills"].append({"account_id": account, "slot_id": slot["slot_id"], "result": fallback.get("status", "FAILED")})
+    result["status"] = "BACKFILLED" if any(row["result"] == "POSTED" for row in result["backfills"]) else "NO_POST"
+    print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 

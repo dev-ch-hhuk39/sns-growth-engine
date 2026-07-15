@@ -451,6 +451,15 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
         "created_at", "updated_at",
     ],
+    # User-operated permission ledger. Code never infers a direct-reuse grant.
+    "media_permissions": [
+        "permission_id", "source_id", "source_url", "account_id", "usage_mode",
+        "allow_download", "allow_cloudinary_storage", "allow_original_repost",
+        "allow_transcription", "allow_analysis", "allow_cut", "allow_clip_repost",
+        "allow_new_caption", "allow_edit", "attribution_required", "attribution_text",
+        "evidence_type", "evidence_reference", "approved_by", "approved_at", "expires_at",
+        "revoked", "revoked_at", "notes", "updated_at",
+    ],
     # source collection計画記録
     "source_collection_plans": [
         "plan_id", "account_id", "source_id",
@@ -549,6 +558,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "source_account_posts":           "収集済み投稿",
     "source_posts":                   "参照元投稿",
     "source_post_media":              "参照元投稿メディア",
+    "media_permissions":              "メディア利用許可",
     "source_collection_plans":        "収集計画",
     "media_ingestion_runs":           "メディア取込履歴",
     "end_to_end_preflight_runs":      "投稿前チェック履歴",

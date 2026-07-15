@@ -24,7 +24,7 @@ from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import build_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
-from media_source_policy import decision  # noqa: E402
+from media_source_policy import DIRECT_SCOPE, decision  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -47,10 +47,26 @@ def _source_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
     return {str(row.get("source_id", "")): row for row in rows if row.get("source_id")}
 
 
+def _permission_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
+    """Read user-entered rights; revoked/expired rows are never usable."""
+    rows = _records(client, "media_permissions")
+    result: dict[str, dict[str, Any]] = {}
+    now = datetime.now(timezone.utc).isoformat()
+    for row in rows:
+        source_id = str(row.get("source_id", ""))
+        if not source_id or _true(row.get("revoked")):
+            continue
+        if str(row.get("expires_at", "")) and str(row["expires_at"]) < now:
+            continue
+        result[source_id] = row
+    return result
+
+
 def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     """Select one unused uploaded video with an explicit source-post linkage."""
     posts = {str(row.get("source_post_id", "")): row for row in _records(client, "source_posts")}
     sources = _source_map(client)
+    permissions = _permission_map(client)
     posted = _records(client, "posted_results")
     used_assets = {str(row.get("media_asset_id", "")) for row in posted}
     reasons: list[str] = []
@@ -64,7 +80,14 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         if str(post.get("target_account_id", "")) != account_id:
             continue
         source = sources.get(str(post.get("source_id", "")), {})
+        permission = permissions.get(str(post.get("source_id", "")), {})
         policy_fields = {key: post.get(key) or source.get(key, "") for key in ("rights_status", "permission_status", "permission_scope")}
+        # The ledger has precedence and must explicitly allow every action.
+        if permission:
+            direct_allowed = all(_true(permission.get(key)) for key in ("allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption"))
+            source = {**source, "media_usage_mode": permission.get("usage_mode", "blocked")}
+            policy_fields["permission_status"] = "approved" if direct_allowed else "denied"
+            policy_fields["permission_scope"] = list(DIRECT_SCOPE) if direct_allowed else []
         policy = decision({**source, **policy_fields}, "direct_media")
         if not policy["allowed"]:
             reasons.append(f"{post_id}:{policy['reason']}")
@@ -158,9 +181,9 @@ def main() -> int:
     plan = build_plan(args.account_id, args.slot_id, client, apply=args.apply)
     if args.apply and client and plan.get("status") == "WILL_APPLY":
         plan = execute(plan, client)
-    elif args.apply and client and plan.get("status") == "NO_POST" and args.fallback_to_text:
+    if args.apply and client and plan.get("status") in {"NO_POST", "FAILED", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"} and args.fallback_to_text:
         from run_slot_text_fallback import build_plan as fallback_plan, execute as fallback_execute
-        fallback = fallback_execute(fallback_plan(args.account_id, args.slot_id, "direct_reference_media_unavailable", apply=True), client)
+        fallback = fallback_execute(fallback_plan(args.account_id, args.slot_id, f"direct_reference_media_primary_{str(plan.get('status')).lower()}", apply=True), client)
         plan = {**plan, "status": fallback.get("status", "FAILED"), "fallback": fallback}
     safe = {key: value for key, value in plan.items() if key not in {"source_post", "source_post_media", "public_post_text"}}
     print(json.dumps(safe, ensure_ascii=False, indent=2))

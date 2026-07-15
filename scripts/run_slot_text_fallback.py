@@ -11,7 +11,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -33,11 +33,13 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
-def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool) -> dict[str, Any]:
+def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attempt: int = 1) -> dict[str, Any]:
     slot = slot_by_id(account_id, slot_id)
     if not slot:
         return {"status": "BLOCKED", "blocked_reasons": ["unknown_content_slot"]}
-    index = (sum(ord(char) for char in slot_id) % 20) + 1
+    jst = timezone(timedelta(hours=9))
+    schedule_date = datetime.now(jst).strftime("%Y-%m-%d")
+    index = ((sum(ord(char) for char in f"{account_id}|{slot_id}|{schedule_date}|{reason}") + attempt * 7) % 20) + 1
     text = generate_reader_facing_post(account_id, index=index)
     validation = final_public_post_validator(text, account_id)
     return {
@@ -48,6 +50,8 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool) -> di
         "actual_post_type": "reference_text" if slot["post_type"] in {"direct_reference_media", "generated_clip_media"} else "original_text",
         "fallback_level": 3 if slot["post_type"] in {"direct_reference_media", "generated_clip_media"} else 1,
         "fallback_reason": reason,
+        "schedule_date_jst": schedule_date,
+        "variant_attempt": attempt,
         "public_post_text": text,
         "public_post_preview": public_preview(text),
         "final_public_post_validator": validation["status"],
@@ -64,7 +68,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         return {**plan, "status": "SKIPPED", "reason": "slot_already_posted", "would_post": False}
     started = build_slot_run(account_id, slot_id, status="RUNNING", actual_post_type=plan["actual_post_type"], fallback_level=int(plan["fallback_level"]), no_post_reason=plan["fallback_reason"])
     upsert_slot_run(client, started)
-    queue_id = f"slot_fallback_{started['schedule_date_jst'].replace('-', '')}_{account_id}_{slot_id}"
+    queue_id = f"slot_fallback_{started['schedule_date_jst'].replace('-', '')}_{account_id}_{slot_id}_{plan['variant_attempt']}"
     queue = {
         "queue_id": queue_id,
         "account_id": account_id,
@@ -84,6 +88,10 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     }
     append_row(client, "queue", queue)
     result = process_one(client, queue, dry_run=False, confirm_real_post=True)
+    # A duplicate is recoverable: produce up to three daily/history-varying
+    # variants instead of leaving a scheduled slot empty.
+    if str(result.get("status", "")) == "DUPLICATE_BLOCKED" and int(plan["variant_attempt"]) < 3:
+        return execute(build_plan(account_id, slot_id, plan["fallback_reason"], apply=True, attempt=int(plan["variant_attempt"]) + 1), client)
     posted = str(result.get("status", "")) == "POSTED"
     completed = build_slot_run(
         account_id,

@@ -986,3 +986,17 @@ This section supersedes older statements that media scheduling is OFF.
   because of account billing/spending-limit status. Schedules cannot execute
   until the repository owner restores Actions billing; neither run performed
   any external operation.
+
+## 2026-07-15 Slot Context, Permission Ledger, And Recovery
+
+- Normal text slots now pass their canonical type/theme/date into generation
+  and save an outcome to `content_slot_runs` after queue processing.
+- `media_permissions` is the operator-facing direct-reuse ledger. The system
+  denies a direct asset without active evidence, even if the source can create
+  generated clips. Text/clip/direct fallbacks remain public-text-only.
+- `content-slot-recovery.yml` attempts at most one safe backfill per account
+  after a slot is more than 20 minutes overdue. It is gated by kill switch,
+  standard Threads publishing gates, idempotency, cap, and cooldown checks.
+- This is implementation completion, not E2E completion: GitHub Actions
+  billing and missing permitted individual assets still prevent proof of direct
+  download/upload/post, carousel support, and generated clip posting.

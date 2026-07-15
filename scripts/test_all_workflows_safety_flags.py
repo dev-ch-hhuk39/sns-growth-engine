@@ -191,6 +191,12 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             checks.append((f"{name} [schedule] scoped media posting gates", all(flag in text for flag in ['PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"', 'ALLOW_MEDIA_POSTS: "true"', 'ALLOW_REAL_THREADS_VIDEO_POST: "true"'])))
             checks.append((f"{name} [schedule] no download/cut/upload", all(flag in text for flag in ['ALLOW_VIDEO_DOWNLOAD: "false"', 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"'])))
             return checks
+        if name == "content-slot-recovery.yml":
+            checks.append((f"{name} [schedule] 30-minute recovery cron", 'cron: "0,30 * * * *"' in text))
+            checks.append((f"{name} [schedule] dry-run and explicit backfill worker", "--dry-run" in text and "--confirm-backfill" in text))
+            checks.append((f"{name} [schedule] scoped text gates", all(flag in text for flag in ['PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"'])))
+            checks.append((f"{name} [schedule] X/media remain blocked", all(flag in text for flag in ['ALLOW_REAL_X_POST: "false"', 'ALLOW_VIDEO_DOWNLOAD: "false"', 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"'])))
+            return checks
         if name in {"media-growth-production.yml", "media-growth-production-night-scout.yml"}:
             account_id = "liver_manager" if name == "media-growth-production.yml" else "night_scout"
             cron = 'cron: "20 22 * * *"' if name == "media-growth-production.yml" else 'cron: "20 2 * * *"'

@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_threads_ideas_from_references import original_text_similarity_guard  # noqa: E402
+from content_slot_runs import build_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
 from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
 from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
@@ -624,6 +625,27 @@ def save_autonomous_health(plan: dict[str, Any], mode: str, health_summary: dict
         return {"status": "WARN", "reason": f"autonomous_health_save_failed:{type(exc).__name__}"}
 
 
+def save_text_slot_result(plan: dict[str, Any], results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Persist the outcome of each normal text slot without weakening posting gates."""
+    slot = dict(plan.get("content_slot") or {})
+    account = str(plan.get("selected_account") or plan.get("account_id") or "")
+    if not slot.get("slot_id") or slot.get("post_type") not in TEXT_POST_TYPES or not account:
+        return {"status": "SKIPPED", "reason": "not_a_text_slot"}
+    try:
+        from config_loader import get_config
+        from sheets_client import SheetsClient
+        cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        if existing_slot_status(client, account, str(slot["slot_id"])) in {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}:
+            return {"status": "SKIPPED", "reason": "slot_already_posted"}
+        worker = next((row for row in reversed(results) if "process_threads_queue.py" in str(row.get("cmd", ""))), {})
+        output = str(worker.get("stdout_tail", ""))
+        posted = '"status": "POSTED"' in output
+        row = build_slot_run(account, str(slot["slot_id"]), status="POSTED_PRIMARY" if posted else "FAILED", actual_post_type=str(slot["post_type"]), fallback_level=0, no_post_reason="" if posted else (infer_no_post_reason(worker) or "text_slot_worker_no_post"))
+        return upsert_slot_run(client, row)
+    except Exception as exc:
+        return {"status": "WARN", "reason": f"content_slot_run_save_failed:{type(exc).__name__}"}
+
+
 def source_ids_for_platform(plan: dict[str, Any], platform: str) -> list[str]:
     registry = {str(row.get("source_id", "")): row for row in load_sources().get("sources", [])}
     ids: list[str] = []
@@ -668,6 +690,8 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         plan["skipped_account"] = rotation.get("skipped_accounts", [])
     threads_source_urls = source_urls_for_platform(plan, "threads")
     threads_source_ids = source_ids_for_platform(plan, "threads")
+    slot = dict(plan.get("content_slot") or {})
+    slot_args = ["--slot-id", str(slot.get("slot_id", "")), "--post-type", str(slot.get("post_type", "original_text")), "--theme", str(slot.get("theme", "")), "--schedule-date-jst", datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")]
 
     if dry:
         results.append({
@@ -695,7 +719,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
                 "note": "Skipped in autonomous dry-run to avoid Sheets/API access; apply mode runs the gated CLI.",
             })
             results.append({
-                "cmd": f"scripts/generate_threads_ideas_from_references.py --account-id {account} --dry-run",
+                "cmd": f"scripts/generate_threads_ideas_from_references.py --account-id {account} --slot-id {slot.get('slot_id', '')} --post-type {slot.get('post_type', 'original_text')} --theme {slot.get('theme', '')} --dry-run",
                 "returncode": 0,
                 "status": "PLAN_ONLY",
                 "note": "Skipped in autonomous dry-run to avoid Sheets/API access; apply mode runs the gated CLI.",
@@ -784,6 +808,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             account,
             "--apply",
             "--confirm-generate",
+            *slot_args,
         ])
         results.append(generation_result)
         if generation_result.get("returncode") != 0:
@@ -898,8 +923,9 @@ def main() -> int:
     if failed_results:
         status = "PARTIAL" if mode == "apply" else "PLAN_ONLY_WITH_WARN"
     health_summary = summarize_autonomous_results(args.account_id, mode, results)
+    text_slot_save = save_text_slot_result(plan, results) if mode == "apply" else {"status": "SKIPPED", "reason": "not_apply_mode"}
     health_save = save_autonomous_health(plan, mode, health_summary, results)
-    print(json.dumps({**plan, "mode": mode, "status": status, "results": results, "health_summary": health_summary, "autonomous_health_save": health_save}, ensure_ascii=False, indent=2))
+    print(json.dumps({**plan, "mode": mode, "status": status, "results": results, "health_summary": health_summary, "content_slot_run": text_slot_save, "autonomous_health_save": health_save}, ensure_ascii=False, indent=2))
     return 1 if mode == "apply" and failed_results else 0
 
 

@@ -731,12 +731,12 @@ def main() -> int:
             plan["slot_id"] = args.slot_id
     if args.apply and args.confirm_production_media and client and plan.get("status") not in {"BLOCKED", "NO_POST"}:
         plan = execute(plan, client)
-    elif args.apply and args.confirm_production_media and client and args.fallback_to_text and plan.get("status") == "NO_POST":
+    if args.apply and args.confirm_production_media and client and args.fallback_to_text and plan.get("status") in {"NO_POST", "FAILED_DOWNLOAD", "FAILED_CUT", "FAILED_UPLOAD", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"}:
         from run_slot_text_fallback import build_plan as build_fallback_plan, execute as execute_fallback
         if not args.slot_id:
             plan = {**plan, "status": "BLOCKED", "blocked_reasons": ["--fallback-to-text requires --slot-id"]}
         else:
-            fallback_plan = build_fallback_plan(args.account_id, args.slot_id, "generated_clip_media_unavailable", apply=True)
+            fallback_plan = build_fallback_plan(args.account_id, args.slot_id, f"generated_clip_media_primary_{str(plan.get('status')).lower()}", apply=True)
             fallback = execute_fallback(fallback_plan, client)
             plan = {**plan, "status": fallback.get("status", "FAILED"), "fallback": fallback, "actual_post_type": fallback_plan.get("actual_post_type", "")}
     safe = {k: v for k, v in plan.items() if k not in {"selected_clip", "selected_source_video"}}
