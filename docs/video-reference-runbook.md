@@ -291,3 +291,13 @@ Night Scout uses an explainable subject gate. Male-scout talking-head,
 store-PR/recruiting cues, or missing female-subject evidence are analysis-only
 until an explicit subject review exists. Channel-level permission never proves
 that every individual video is appropriate.
+
+## Direct Reference Media
+
+`source_posts` and `source_post_media` preserve the original post-to-asset
+link. `run_direct_reference_media_pipeline.py` requires explicit
+`direct_media_reuse` mode plus download/store/repost/new-caption permission
+scope; `approved_creator_clip` alone is insufficient. The public caption is a
+new `public_post_text`, never the source post body. Current Threads transport
+is video-only; a multi-image/carousel candidate is blocked with an explicit
+reason until carousel publishing is implemented, never reduced silently.

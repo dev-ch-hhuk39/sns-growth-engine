@@ -27,15 +27,19 @@ WORKFLOWS = {
     "media_prepare_night_scout": ROOT / ".github/workflows/media-growth-production-night-scout.yml",
     "media_post_liver_manager": ROOT / ".github/workflows/media-growth-post-liver-manager.yml",
     "media_post_night_scout": ROOT / ".github/workflows/media-growth-post-night-scout.yml",
+    "direct_media_liver_manager": ROOT / ".github/workflows/direct-reference-media-liver-manager.yml",
+    "direct_media_night_scout": ROOT / ".github/workflows/direct-reference-media-night-scout.yml",
 }
 
 EXPECTED_CRONS = {
-    "night_scout": {"45 4 * * *", "45 6 * * *", "45 8 * * *", "45 15 * * *"},
-    "liver_manager": {"45 0 * * *", "45 3 * * *", "45 6 * * *", "45 11 * * *"},
+    "night_scout": {"45 4 * * *", "45 6 * * *", "45 15 * * *"},
+    "liver_manager": {"45 0 * * *", "45 3 * * *", "45 11 * * *"},
     "media_prepare_liver_manager": {"20 22 * * *"},
     "media_prepare_night_scout": {"20 2 * * *"},
     "media_post_liver_manager": {"45 8 * * *"},
     "media_post_night_scout": {"45 11 * * *"},
+    "direct_media_liver_manager": {"45 6 * * *"},
+    "direct_media_night_scout": {"45 8 * * *"},
 }
 
 
@@ -174,7 +178,7 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
             "has_dry_run_only_dispatch": "dry_run_only:" in text,
             "dry_run_only_skips_apply": "dry_run_only != 'true'" in text,
             "has_jitter": "random.randint(0, 1800)" in text,
-            "has_apply_step": "--confirm-autonomous" in text or "--confirm-production-media" in text,
+            "has_apply_step": any(flag in text for flag in ("--confirm-autonomous", "--confirm-production-media", "--confirm-direct-media")),
             "apply_env_scoped": 'PUBLISH_ENABLED: "true"' in text and 'ALLOW_REAL_THREADS_POST: "true"' in text,
             "x_post_false": 'ALLOW_REAL_X_POST: "false"' in text,
             "media_disabled": all(flag in text for flag in [
@@ -251,7 +255,7 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
             "text_only_schedule_on": True,
             "media_schedule_on": bool(media_config.get("media_schedule_enabled")) and all(
                 workflow_results.get(key, {}).get("has_schedule", False)
-                for key in ("media_prepare_liver_manager", "media_prepare_night_scout", "media_post_liver_manager", "media_post_night_scout")
+                for key in ("media_prepare_liver_manager", "media_prepare_night_scout", "media_post_liver_manager", "media_post_night_scout", "direct_media_liver_manager", "direct_media_night_scout")
             ),
             "media_growth_engine_enabled": bool(media_config.get("media_growth_engine_enabled")),
             "source_video_discovery_apply_enabled": bool(media_config.get("source_video_discovery_apply_enabled")),

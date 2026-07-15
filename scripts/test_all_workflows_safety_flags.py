@@ -166,9 +166,9 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
     if has_schedule:
         if name in {"autonomous-growth-loop-night-scout.yml", "autonomous-growth-loop-liver-manager.yml"}:
             if name == "autonomous-growth-loop-night-scout.yml":
-                expected = ['cron: "45 4 * * *"', 'cron: "45 6 * * *"', 'cron: "45 8 * * *"', 'cron: "45 15 * * *"']
+                expected = ['cron: "45 4 * * *"', 'cron: "45 6 * * *"', 'cron: "45 15 * * *"']
             else:
-                expected = ['cron: "45 0 * * *"', 'cron: "45 3 * * *"', 'cron: "45 6 * * *"', 'cron: "45 11 * * *"']
+                expected = ['cron: "45 0 * * *"', 'cron: "45 3 * * *"', 'cron: "45 11 * * *"']
             checks.append((f"{name} [schedule] account slots cron", all(slot in text for slot in expected)))
             checks.append((f"{name} [schedule] dry-run step exists", "Dry-run autonomous plan" in text))
             checks.append((f"{name} [schedule] jitter exists", "random.randint(0, 1800)" in text and "time.sleep(delay)" in text))
@@ -181,6 +181,15 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
                 'ALLOW_CLOUDINARY_UPLOAD: "false"',
                 'ALLOW_TRANSCRIPTION_API: "false"',
             ])))
+            return checks
+        if name in {"direct-reference-media-liver-manager.yml", "direct-reference-media-night-scout.yml"}:
+            account_id = "liver_manager" if "liver" in name else "night_scout"
+            cron = 'cron: "45 6 * * *"' if account_id == "liver_manager" else 'cron: "45 8 * * *"'
+            checks.append((f"{name} [schedule] fixed direct-media account", f"ACCOUNT_ID: {account_id}" in text))
+            checks.append((f"{name} [schedule] direct-media slot cron", cron in text))
+            checks.append((f"{name} [schedule] dry run, jitter, and fallback", "Dry-run direct media plan" in text and "random.randint(0,1800)" in text and "--fallback-to-text" in text))
+            checks.append((f"{name} [schedule] scoped media posting gates", all(flag in text for flag in ['PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"', 'ALLOW_MEDIA_POSTS: "true"', 'ALLOW_REAL_THREADS_VIDEO_POST: "true"'])))
+            checks.append((f"{name} [schedule] no download/cut/upload", all(flag in text for flag in ['ALLOW_VIDEO_DOWNLOAD: "false"', 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"'])))
             return checks
         if name in {"media-growth-production.yml", "media-growth-production-night-scout.yml"}:
             account_id = "liver_manager" if name == "media-growth-production.yml" else "night_scout"

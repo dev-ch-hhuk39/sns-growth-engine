@@ -50,13 +50,13 @@ def test_scheduled_workflows_exist() -> None:
 
 def test_night_scout_workflow_schedule_enabled() -> None:
     text = read(NS_WF)
-    for cron in ['"45 4 * * *"', '"45 6 * * *"', '"45 8 * * *"', '"45 11 * * *"', '"45 15 * * *"']:
+    for cron in ['"45 4 * * *"', '"45 6 * * *"', '"45 15 * * *"']:
         assert cron in text
 
 
 def test_liver_manager_workflow_schedule_enabled() -> None:
     text = read(LM_WF)
-    for cron in ['"45 0 * * *"', '"45 3 * * *"', '"45 6 * * *"', '"45 8 * * *"', '"45 11 * * *"']:
+    for cron in ['"45 0 * * *"', '"45 3 * * *"', '"45 11 * * *"']:
         assert cron in text
 
 

@@ -4638,3 +4638,50 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - `learning_rules.auto_apply=false`、X fetch/post=false、beauty active/fetch/post=false、source priority自動変更なしを維持。
 - 次に触ってよい: `scripts/run_autonomous_loop.py`, `scripts/check_autonomous_health.py`, `scripts/run_media_production_pipeline.py`, `scripts/discover_approved_source_videos.py`, media/text workflows。
 - 触らない: `.env`, `data/`, `output/`, `.claude/plans/`, secret/token/cookie/storage-state類。衝突しやすい: handoff、source registry、media config、Sheets schema、autonomous runner。
+
+## 2026-07-15 Five-Slot Production Recovery
+
+### System / HEAD / Branch
+
+- System: account-scoped Threads text automation plus permission-gated direct
+  media and generated-clip media. X and `beauty_account` stay blocked.
+- Base HEAD: `4278aa6a8cb8e818f853e4ed2e513b685eb8f8ab`; current implementation
+  commit: `e26817e` on `main` (the final pushed hash is verified below).
+- Critical root cause verified from Actions logs: scheduled text jobs failed
+  before planning because ignored `config/content_schedule.json` was absent in
+  Actions. It is now intentionally tracked.
+
+### Changes / Tests / Runtime
+
+- Added: `config/content_schedule.json`, `config/media_source_usage_modes.json`,
+  `scripts/content_slot_runs.py`, `scripts/run_slot_text_fallback.py`,
+  `scripts/run_direct_reference_media_pipeline.py`,
+  `scripts/backfill_missed_content_slots.py`, two direct-media workflows, and
+  focused contract tests.
+- Updated: `.gitignore`, Sheets tab schema, text/media workflows, media
+  production runner, media config, health check, runbooks, and this handoff.
+- PASS locally: content schedule contract, direct permission boundary,
+  workflow schedule/gate/jitter tests, `py_compile`, and `git diff --check`.
+  Text dry-runs show `public_post_preview`, internal-leak PASS, and
+  `would_post=false`.
+- `content_slot_runs` records expected/actual type, fallback level, queue,
+  result, media/source linkage, URL, and redacted failure reason. The
+  aftercare CLI detects slots overdue by 20 minutes; it is read-only pending a
+  separately credentialed late-post policy.
+
+### Production State / WARN / Next AI
+
+- Formal schedule: night 14 reference, 16 original, 18 direct, 21 clip, 25
+  PDCA; liver 10 original, 13 reference, 16 direct, 18 clip, 21 PDCA. Every
+  worker has 0-1800 second jitter; account cap=5, media cap=2.
+- `saved_media_post_fallback=text_only_fallback` is now connected to the clip
+  post workflow. Direct media has the same safe fallback.
+- Remaining WARN: no `direct_media_reuse` permission-evidenced source post or
+  uploaded asset is present, so direct-media E2E is correctly unavailable;
+  generated clip E2E still needs an eligible individual video/asset. Carousel
+  transport is deliberately blocked rather than dropping images. Metrics stay
+  `UNAVAILABLE`/`PARTIAL` until collected, never synthetic zero.
+- Safe next files: direct source discovery/ingestion and carousel publisher
+  only after explicit scope evidence; `backfill_missed_content_slots.py` when
+  defining an approved late-post credential policy. Avoid `.env`, data/output,
+  secrets, and weakening validators or source permission policy.

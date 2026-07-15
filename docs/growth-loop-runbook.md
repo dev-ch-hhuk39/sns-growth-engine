@@ -341,20 +341,22 @@ python3 scripts/discover_approved_source_videos.py --account-id liver_manager --
 python3 scripts/run_media_growth_engine.py --account-id liver_manager --dry-run
 ```
 
-## Canonical Content Slots (2026-07-13)
+## Canonical Content Slots (2026-07-15)
 
 `config/content_schedule.json` is the source of truth for daily content mix.
 The text worker accepts only text-capable slots; a media slot is owned by the
 media workflow so one account cannot double-post or consume its daily cap twice.
 
-| account | text slots (JST) | media slot (JST) |
+| account | text slots (JST) | direct media | generated clip |
 | --- | --- | --- |
-| night_scout | 14:00, 16:00, 18:00, 25:00 | 21:00 |
-| liver_manager | 10:00, 13:00, 16:00, 21:00 | 18:00 |
+| night_scout | 14:00 reference, 16:00 original, 25:00 PDCA | 18:00 | 21:00 |
+| liver_manager | 10:00 original, 13:00 reference, 21:00 PDCA | 16:00 | 18:00 |
 
 Every publishing workflow starts 15 minutes before target and uses a 0-1800
 second jitter. `daily_post_cap_per_account=5`, `max_posts_per_run=1`, and
-`cooldown_minutes=90` remain account-scoped.
+`cooldown_minutes=90` remain account-scoped. `media_daily_post_cap=2` permits
+the two formal media types. A media miss falls through to transformed reference
+text then original text; it is recorded rather than silently skipped.
 
 Reference collection is bounded. Only sources with
 `reference_autopilot_enabled=true`, currently the user-provided

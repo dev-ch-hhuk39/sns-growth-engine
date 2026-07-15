@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "allowed_usage_modes": [
+    "text_reference_only",
+    "direct_media_reuse",
+    "clip_source",
+    "direct_and_clip",
+    "blocked"
+  ],
+  "source_modes": {
+    "src_lm_yt_user_001": "clip_source",
+    "src_lm_tt_user_001": "clip_source",
+    "src_lm_tt_user_002": "clip_source",
+    "src_lm_tt_user_003": "clip_source",
+    "src_ns_yt_cand_001": "clip_source",
+    "src_ns_yt_cand_002": "clip_source",
+    "src_ns_yt_cand_003": "clip_source",
+    "src_ns_yt_cand_004": "clip_source",
+    "src_ns_yt_cand_005": "clip_source",
+    "src_ns_yt_cand_006": "clip_source",
+    "src_ns_yt_cand_007": "clip_source",
+    "src_ns_yt_cand_008": "clip_source",
+    "src_ns_yt_cand_009": "clip_source"
+  },
+  "notes": "Approved account/channel URLs currently have clip permission. No source is implicitly granted direct_media_reuse; add an explicit source-level evidence record before original post media is downloaded or reposted."
+}

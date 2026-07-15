@@ -44,11 +44,16 @@
   "media_public_post_auto_enabled": true,
   "auto_approve_clip_candidates": true,
   "min_auto_clip_score": 80,
-  "media_daily_post_cap": 1,
+  "media_daily_post_cap": 2,
   "media_prepare_before_post_minutes": 120,
   "saved_media_post_enabled": true,
   "saved_media_post_requires_uploaded_unused_asset": true,
   "saved_media_post_fallback": "text_only_fallback",
+  "direct_reference_media_enabled": true,
+  "asset_inventory_targets": {
+    "night_scout": {"direct_reference_media": 3, "generated_clip_media": 3},
+    "liver_manager": {"direct_reference_media": 3, "generated_clip_media": 3}
+  },
   "auto_save_discovered_videos": true,
   "auto_save_clip_candidates": true,
   "allowed_source_types_for_discovery": ["channel", "account"],

@@ -73,6 +73,8 @@ output/
 !tsconfig.json
 !x_pipeline_config.example.json
 !config/reference_sources.example.json
+!config/content_schedule.json
+!config/media_source_usage_modes.json
 !tests/fixtures/*.json
 !fixtures/*.json
 !.mcp.json

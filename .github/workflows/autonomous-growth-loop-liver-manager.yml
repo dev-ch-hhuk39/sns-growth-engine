@@ -2,12 +2,11 @@ name: Autonomous Growth Loop Liver Manager
 
 on:
   schedule:
-    # Text-only slots: JST 10:00/13:00/16:00/21:00.
-    # The 18:00 slot is owned by the approved-media workflow.
+    # Text-only slots: JST 10:00/13:00/21:00.
+    # 16:00 is direct-reference media and 18:00 is generated clip media.
     # Cron starts 15 minutes before target; jitter sleeps 0-1800s.
     - cron: "45 0 * * *"
     - cron: "45 3 * * *"
-    - cron: "45 6 * * *"
     - cron: "45 11 * * *"
   workflow_dispatch:
     inputs:
@@ -77,7 +76,6 @@ jobs:
           case "${{ github.event.schedule }}" in
             "45 0 * * *") slot="lm_1000_original" ;;
             "45 3 * * *") slot="lm_1300_reference" ;;
-            "45 6 * * *") slot="lm_1600_reference" ;;
             "45 11 * * *") slot="lm_2100_pdca" ;;
             *) slot="manual_text" ;;
           esac

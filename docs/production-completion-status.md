@@ -968,3 +968,16 @@ This section supersedes older statements that media scheduling is OFF.
 - A metrics adapter returning PARTIAL/UNAVAILABLE no longer stops aftercare
   before source-registry sync and PDCA candidate generation. Unknown metrics
   remain unknown rather than being fabricated as zero.
+
+## 2026-07-15 Reliable Five-Slot Recovery
+
+- The scheduled Actions failure was caused by `config/content_schedule.json`
+  being ignored and therefore absent from the checked-out workflow repository.
+  It is now a tracked production configuration file.
+- Five named slots per account are formalized with `content_slot_runs`. Text,
+  direct-reference media, and generated clips have explicit owners and media
+  misses use the safe text fallback.
+- Direct media remains **blocked in production until source-level direct reuse
+  evidence is entered**. The runner and schema exist, but no clip-only approval
+  is silently promoted to direct media reuse. Generated clips remain gated by
+  their existing permission, environment, and confirmation checks.

@@ -206,3 +206,12 @@ of `fetch_enabled`, `manual_only`, and media fields:
 `reference_autopilot_enabled` is separate from media authorization. It is true
 only for the bounded `https://www.threads.com/@chiishunin_s` reference; X is
 still fetch-disabled and beauty remains inactive/fetch-disabled.
+
+## Direct Reuse Permission Boundary
+
+The registry has a separate `media_usage_mode` policy. Existing approved video
+sources are `clip_source`; this authorizes generated clips only. A source must
+be explicitly changed to `direct_media_reuse` or `direct_and_clip` with
+`download_original_media`, `store_in_cloudinary`, `repost_original_media`, and
+`generate_new_caption` evidence before a source post's original media can be
+stored or reposted. Unknown and reference-only sources never cross this line.

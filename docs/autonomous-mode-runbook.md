@@ -509,16 +509,22 @@ AUTO_READY output now includes:
 
 If references are empty or stale, safe original fallback candidates are generated as `WAITING_REVIEW`, then AUTO_READY promotes only validator-passing text-only candidates to `READY`. `final_public_post_validator` is not weakened; generation is responsible for producing reader-facing public copy.
 
-## Slot Ownership And Media Timing (2026-07-13)
+## Slot Ownership And Media Timing (2026-07-15)
 
 The previous five-text-slot table is superseded by `config/content_schedule.json`.
-Text owns four slots per account; an approved-media workflow owns the fifth so
-the account does not race itself or hit its 5-post daily cap early.
+Text, direct-reference media, and generated-clip media have separate owners.
+This avoids a media preparation failure turning into an empty scheduled slot.
 
-- `night_scout`: text at 14:00/16:00/18:00/25:00; approved saved-media post at
+- `night_scout`: `reference_text` 14:00, `original_text` 16:00,
+  `direct_reference_media` 18:00, `generated_clip_media` 21:00, `pdca_text`
+  25:00 JST.
+- `liver_manager`: `original_text` 10:00, `reference_text` 13:00,
+  `direct_reference_media` 16:00, `generated_clip_media` 18:00, `pdca_text`
   21:00 JST.
-- `liver_manager`: text at 10:00/13:00/16:00/21:00; approved saved-media post
-  at 18:00 JST.
+- Direct and clip workflows use their named slot's text fallback when no
+  eligible asset exists, and write `content_slot_runs` as `POSTED_FALLBACK`.
+  A direct asset is permitted only with explicit `direct_media_reuse` scope;
+  clip permission alone never grants original-media reuse.
 - Preparation runs earlier and is never a posting workflow. It can only leave
   an approved asset in `MEDIA_READY`; the posting workflow can only consume an
   uploaded unused asset. Each scheduled post window uses 0-1800 seconds jitter.

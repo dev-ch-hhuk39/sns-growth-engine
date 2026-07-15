@@ -21,6 +21,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
+from content_schedule import slot_by_id  # noqa: E402
+from content_slot_runs import build_slot_run, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
@@ -74,6 +76,28 @@ def _append(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     ws = client._ws(logical)
     headers = ws.row_values(1)
     ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+
+
+def _record_media_slot_result(plan: dict[str, Any], client: SheetsClient, result: dict[str, Any]) -> dict[str, Any]:
+    slot_id = str(plan.get("slot_id", ""))
+    if not slot_id:
+        return {"status": "SKIPPED", "reason": "slot_id_not_provided"}
+    posted = str(result.get("status", "")) == "POSTED"
+    row = build_slot_run(
+        str(plan["account_id"]),
+        slot_id,
+        status="POSTED_PRIMARY" if posted else "FAILED",
+        actual_post_type="generated_clip_media",
+        fallback_level=0,
+        no_post_reason="" if posted else str(result.get("reason", result.get("status", "media_post_failed"))),
+        queue_id=result.get("queue_id", ""),
+        result_id=result.get("result_id", ""),
+        post_url=result.get("post_url", ""),
+        media_asset_id=result.get("media_asset_id", ""),
+        source_video_id=plan.get("selected_source_video_id", ""),
+        actual_posted_at=datetime.now(timezone.utc).isoformat() if posted else "",
+    )
+    return upsert_slot_run(client, row)
 
 
 def _save_media_pdca_records(
@@ -289,6 +313,7 @@ def build_plan(
     account_id: str = "liver_manager",
     prepare_only: bool = False,
     post_saved_media: bool = False,
+    slot_id: str = "",
 ) -> dict[str, Any]:
     media_cfg = _load(MEDIA_CONFIG)
     autonomous_cfg = _load(AUTONOMOUS_CONFIG)
@@ -317,6 +342,7 @@ def build_plan(
             "would_post_video": False,
             "prepare_only": prepare_only,
             "post_saved_media": post_saved_media,
+            "slot_id": slot_id,
             "blocked_reasons": blocked,
         }
 
@@ -355,6 +381,7 @@ def build_plan(
         "selected_media_asset": selected_asset or {},
         "prepare_only": prepare_only,
         "post_saved_media": post_saved_media,
+        "slot_id": slot_id,
         "public_post_preview": public_preview(text),
         "today_post_count": len(today_posts),
         "today_media_post_count": len(media_today),
@@ -450,8 +477,9 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
             media_pdca = {"saved": 0, "skipped": 3, "warning": f"media_pdca_save_failed:{type(exc).__name__}"}
     else:
         media_pdca = {"saved": 0, "skipped": 3}
+    slot_record = _record_media_slot_result(plan, client, {**result, "media_asset_id": media_id})
     return {**plan, "status": final_status, "queue_id": queue_id, "media_asset_id": media_id, "post_result": result,
-            "media_pdca": media_pdca,
+            "media_pdca": media_pdca, "content_slot_run": slot_record,
             "would_download": False, "would_cut": False, "would_upload": False, "would_post_video": False}
 
 
@@ -650,6 +678,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
             media_pdca = {"saved": 0, "skipped": 3, "warning": f"media_pdca_save_failed:{type(exc).__name__}"}
     else:
         media_pdca = {"saved": 0, "skipped": 3}
+    slot_record = _record_media_slot_result(plan, client, {**result, "media_asset_id": media_id})
     return {
         **plan,
         "status": final_status,
@@ -657,6 +686,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "media_asset_id": media_id,
         "post_result": result,
         "media_pdca": media_pdca,
+        "content_slot_run": slot_record,
         "would_download": False,
         "would_cut": False,
         "would_upload": False,
@@ -673,6 +703,8 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--prepare-only", action="store_true", help="download/cut/upload one approved clip, but never post it")
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
+    parser.add_argument("--slot-id", default="", help="canonical generated_clip_media slot for idempotency and reporting")
+    parser.add_argument("--fallback-to-text", action="store_true", help="use the named slot's safe text fallback when no media asset is ready")
     args = parser.parse_args()
     if args.prepare_only and args.post_saved_media:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["prepare_only_and_post_saved_media_are_mutually_exclusive"]}, ensure_ascii=False))
@@ -689,9 +721,24 @@ def main() -> int:
         client=client,
         prepare_only=args.prepare_only,
         post_saved_media=args.post_saved_media,
+        slot_id=args.slot_id,
     )
+    if args.slot_id:
+        slot = slot_by_id(args.account_id, args.slot_id)
+        if not slot or slot.get("post_type") != "generated_clip_media":
+            plan = {**plan, "status": "BLOCKED", "blocked_reasons": ["slot_id must be a generated_clip_media slot"]}
+        else:
+            plan["slot_id"] = args.slot_id
     if args.apply and args.confirm_production_media and client and plan.get("status") not in {"BLOCKED", "NO_POST"}:
         plan = execute(plan, client)
+    elif args.apply and args.confirm_production_media and client and args.fallback_to_text and plan.get("status") == "NO_POST":
+        from run_slot_text_fallback import build_plan as build_fallback_plan, execute as execute_fallback
+        if not args.slot_id:
+            plan = {**plan, "status": "BLOCKED", "blocked_reasons": ["--fallback-to-text requires --slot-id"]}
+        else:
+            fallback_plan = build_fallback_plan(args.account_id, args.slot_id, "generated_clip_media_unavailable", apply=True)
+            fallback = execute_fallback(fallback_plan, client)
+            plan = {**plan, "status": fallback.get("status", "FAILED"), "fallback": fallback, "actual_post_type": fallback_plan.get("actual_post_type", "")}
     safe = {k: v for k, v in plan.items() if k not in {"selected_clip", "selected_source_video"}}
     print(json.dumps(safe, ensure_ascii=False, indent=2))
     return 1 if str(plan.get("status", "")).startswith(("FAILED", "BLOCKED")) else 0

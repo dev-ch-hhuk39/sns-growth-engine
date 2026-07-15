@@ -434,6 +434,23 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_status",             # unknown / reference_only（既定）。許諾未確認は流用不可。
         "can_reuse_media",           # 第三者メディア流用可否。既定 false（許諾なしは流用禁止）。
     ],
+    # 許可済み参照元の「投稿単位」registry。source_videoとは別に元本文と付属mediaを同一IDで保持する。
+    "source_posts": [
+        "source_post_id", "source_id", "source_account_id", "target_account_id",
+        "platform", "canonical_post_url", "external_post_id", "original_post_text",
+        "published_at", "discovered_at", "media_count", "media_type",
+        "rights_status", "permission_status", "permission_scope", "attribution_policy",
+        "direct_media_reuse_allowed", "collection_status", "processing_status", "content_hash",
+        "retry_count", "last_error", "created_at", "updated_at",
+    ],
+    # source_postsの付属media。source_post_idを唯一の親として保持し、本文/素材の取り違えを禁止する。
+    "source_post_media": [
+        "source_post_media_id", "source_post_id", "media_index", "original_media_url",
+        "media_type", "mime_type", "width", "height", "duration_seconds", "content_hash",
+        "download_status", "cloudinary_status", "cloudinary_public_id", "storage_url",
+        "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
+        "created_at", "updated_at",
+    ],
     # source collection計画記録
     "source_collection_plans": [
         "plan_id", "account_id", "source_id",
@@ -491,6 +508,15 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "processed_count", "posted_count", "blocked_count",
         "no_post_reason", "apply_status", "last_error_redacted", "created_at",
     ],
+    # 各予定枠の実行・fallback・補完を1行で追跡する。slot/date/accountで冪等。
+    "content_slot_runs": [
+        "slot_run_id", "schedule_date_jst", "account_id", "slot_id",
+        "scheduled_target_at", "allowed_window_start", "allowed_window_end",
+        "actual_started_at", "actual_posted_at", "expected_post_type", "actual_post_type",
+        "fallback_level", "status", "queue_id", "result_id", "post_url", "media_asset_id",
+        "source_post_id", "source_video_id", "no_post_reason", "last_error_redacted",
+        "created_at", "updated_at",
+    ],
 }
 
 TAB_DISPLAY_NAMES: dict[str, str] = {
@@ -521,6 +547,8 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "content_mix_plans":              "投稿配分計画",
     "source_accounts":                "収集元アカウント",
     "source_account_posts":           "収集済み投稿",
+    "source_posts":                   "参照元投稿",
+    "source_post_media":              "参照元投稿メディア",
     "source_collection_plans":        "収集計画",
     "media_ingestion_runs":           "メディア取込履歴",
     "end_to_end_preflight_runs":      "投稿前チェック履歴",
@@ -529,6 +557,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "media_metrics":                  "メディア計測",
     "clip_performance":               "クリップ成績",
     "autonomous_health":              "自動運用ヘルス",
+    "content_slot_runs":              "投稿枠実行履歴",
 }
 
 SCOPES = [
