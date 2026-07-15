@@ -4686,3 +4686,8 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   only after explicit scope evidence; `backfill_missed_content_slots.py` when
   defining an approved late-post credential policy. Avoid `.env`, data/output,
   secrets, and weakening validators or source permission policy.
+- Production blocker observed after push: GitHub Actions dry-runs
+  `29382188177` (night) and `29382189714` (liver) were rejected before any
+  step with a GitHub billing/spending-limit annotation. No post, fetch,
+  download, upload, or Sheets write occurred. Restore Actions billing or raise
+  its spending limit, then rerun the two dry-runs before relying on schedule.

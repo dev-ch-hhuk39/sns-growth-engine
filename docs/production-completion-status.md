@@ -981,3 +981,8 @@ This section supersedes older statements that media scheduling is OFF.
   evidence is entered**. The runner and schema exist, but no clip-only approval
   is silently promoted to direct media reuse. Generated clips remain gated by
   their existing permission, environment, and confirmation checks.
+- GitHub Actions runs `29382188177` and `29382189714` were dispatched after
+  this change as no-post dry-runs, but GitHub rejected both before job startup
+  because of account billing/spending-limit status. Schedules cannot execute
+  until the repository owner restores Actions billing; neither run performed
+  any external operation.
