@@ -120,7 +120,8 @@ def upsert_slot_run(client: Any, row: dict[str, Any]) -> dict[str, Any]:
 def existing_slot_status(client: Any, account_id: str, slot_id: str, at: datetime | None = None) -> str:
     expected = slot_run_id(account_id, slot_id, at)
     try:
-        rows = client._ws("content_slot_runs").get_all_records()
+        from sheets_client import TAB_DEFINITIONS
+        rows = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"]).get_all_records()
     except Exception:
         return ""
     for row in rows:
@@ -147,7 +148,8 @@ def claim_slot_run(
     local = (at or now_jst()).astimezone(JST)
     expected = slot_run_id(account_id, slot_id, local)
     try:
-        rows = client._ws("content_slot_runs").get_all_records()
+        from sheets_client import TAB_DEFINITIONS
+        rows = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"]).get_all_records()
     except Exception as exc:
         return {"status": "BLOCKED", "reason": f"slot_claim_read_failed:{type(exc).__name__}", "slot_run_id": expected}
     for existing in rows:

@@ -26,7 +26,14 @@ def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, A
     try:
         import yt_dlp
         opts = {"quiet": True, "skip_download": True, "extract_flat": True, "playlistend": limit}
-        info = yt_dlp.YoutubeDL(opts).extract_info(str(source.get("source_url", "")), download=False)
+        source_url = str(source.get("source_url", "")).rstrip("/")
+        platform = str(source.get("source_platform") or source.get("platform") or "").lower()
+        # A channel landing page exposes /videos, /streams and /shorts as
+        # pseudo-entries.  Ask for the videos feed and later accept only an
+        # individual canonical video URL; account URLs are never ingestible.
+        if platform == "youtube" and "/channel/" in source_url and not source_url.endswith("/videos"):
+            source_url = f"{source_url}/videos"
+        info = yt_dlp.YoutubeDL(opts).extract_info(source_url, download=False)
     except Exception as exc:
         return [], f"metadata_discovery_failed:{type(exc).__name__}"
     entries = info.get("entries") if isinstance(info, dict) else None
@@ -36,8 +43,14 @@ def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, A
         if not isinstance(item, dict): continue
         raw_url = str(item.get("webpage_url") or item.get("url") or "")
         if not raw_url.startswith("http"): continue
+        platform = str(source.get("source_platform") or source.get("platform") or "").lower()
+        canonical_url = canonical(raw_url)
+        if platform == "youtube" and not ("/watch" in canonical_url or "/shorts/" in canonical_url):
+            continue
+        if platform == "tiktok" and "/video/" not in canonical_url:
+            continue
         video_id = str(item.get("id") or hashlib.sha256(canonical(raw_url).encode()).hexdigest()[:16])
-        result.append({"external_post_id": video_id, "canonical_post_url": canonical(raw_url), "original_post_text": str(item.get("description") or ""), "published_at": str(item.get("upload_date") or ""), "media_count": "1", "media_type": "video"})
+        result.append({"external_post_id": video_id, "canonical_post_url": canonical_url, "original_post_text": str(item.get("description") or ""), "published_at": str(item.get("upload_date") or ""), "media_count": "1", "media_type": "video"})
     return result, "PASS"
 
 

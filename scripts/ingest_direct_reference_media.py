@@ -114,6 +114,12 @@ def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
             continue
         if str(media.get("download_status", "")).upper() in {"FAILED", "BLOCKED"}:
             continue
+        url = str(media.get("canonical_post_url") or media.get("original_media_url") or "")
+        platform = str(post.get("platform", "")).lower()
+        if platform == "youtube" and not ("/watch" in url or "/shorts/" in url):
+            continue
+        if platform == "tiktok" and "/video/" not in url:
+            continue
         media_id = str(media.get("source_post_media_id", ""))
         if media_id:
             pending.append((str(media.get("created_at", "")), media_id))
@@ -180,6 +186,14 @@ def main() -> int:
         print(json.dumps({**plan, "status": "INGESTED", "content_hash": digest_text, "media_asset_id": asset_id, "would_download": False, "would_upload": False}, ensure_ascii=False, indent=2)); return 0
     except Exception as exc:
         local_path.unlink(missing_ok=True)
+        try:
+            update_media_row(client, source_post_media_id, {
+                "download_status": "FAILED", "cloudinary_status": "FAILED",
+                "last_error": f"ingest_failed:{type(exc).__name__}",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception:
+            pass
         print(json.dumps({**plan, "status": "FAILED", "reason": f"ingest_failed:{type(exc).__name__}"}, ensure_ascii=False, indent=2)); return 1
 
 if __name__ == "__main__": raise SystemExit(main())
