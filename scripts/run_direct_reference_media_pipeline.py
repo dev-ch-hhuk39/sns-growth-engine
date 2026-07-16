@@ -38,7 +38,11 @@ def _true(value: Any) -> bool:
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
-    return [dict(row) for row in client._ws(logical).get_all_records()]
+    rows = client._call_with_rate_limit_retry(
+        f"get_all_records:{logical}",
+        lambda: client._ws(logical).get_all_records(),
+    )
+    return [dict(row) for row in rows]
 
 
 def _source_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
@@ -109,6 +113,14 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         if media_type not in {"video", "image"}:
             reasons.append(f"{post_id}:unsupported_media_type")
             continue
+        if media_type == "video":
+            try:
+                duration = float(media.get("duration_seconds") or 0)
+            except (TypeError, ValueError):
+                duration = 0
+            if not 8 <= duration <= 45:
+                reasons.append(f"{post_id}:duration_out_of_range")
+                continue
         selected = (post, media, source)
         break
     return (*selected, reasons) if selected else (None, None, None, reasons)
@@ -185,7 +197,7 @@ def main() -> int:
     plan = build_plan(args.account_id, args.slot_id, client, apply=args.apply)
     if args.apply and client and plan.get("status") == "WILL_APPLY":
         plan = execute(plan, client)
-    if args.apply and client and plan.get("status") in {"NO_POST", "FAILED", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"} and args.fallback_to_text:
+    if args.apply and client and plan.get("status") in {"NO_POST", "FAILED", "BLOCKED", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"} and args.fallback_to_text:
         from run_slot_text_fallback import build_plan as fallback_plan, execute as fallback_execute
         fallback = fallback_execute(fallback_plan(args.account_id, args.slot_id, f"direct_reference_media_primary_{str(plan.get('status')).lower()}", apply=True), client)
         plan = {**plan, "status": fallback.get("status", "FAILED"), "fallback": fallback}

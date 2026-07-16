@@ -684,16 +684,25 @@ class SheetsClient:
         except gspread.exceptions.WorksheetNotFound:
             print(f"  [create] タブ '{display_name}' を作成します")
             if not self.dry_run:
-                ws = self._sh.add_worksheet(title=display_name, rows=1000, cols=len(headers) + 10)
+                ws = self._call_with_rate_limit_retry(
+                    f"add_worksheet:{name}",
+                    lambda: self._sh.add_worksheet(title=display_name, rows=1000, cols=len(headers) + 10),
+                )
                 self._ws_cache[display_name] = ws
                 if display_name != name:
                     self._ws_cache[name] = ws
-                ws.update([headers], "A1")
+                self._call_with_rate_limit_retry(
+                    f"write_headers:{name}",
+                    lambda: ws.update([headers], "A1"),
+                )
             else:
                 print(f"  [dry-run] タブ '{display_name}' 作成をスキップ")
             return ws if not self.dry_run else None  # type: ignore[return-value]
 
-        existing = ws.row_values(1)
+        existing = self._call_with_rate_limit_retry(
+            f"read_headers:{name}",
+            lambda: ws.row_values(1),
+        )
         missing = [h for h in headers if h not in existing]
         if missing:
             print(f"  [update] タブ '{display_name}' にカラムを追加: {missing}")
@@ -704,12 +713,18 @@ class SheetsClient:
                 if required_cols > current_cols:
                     new_cols = max(required_cols + 10, current_cols + 20)
                     print(f"  [resize] タブ '{display_name}' 列数を {current_cols} → {new_cols} に拡張")
-                    ws.resize(rows=ws.row_count, cols=new_cols)
+                    self._call_with_rate_limit_retry(
+                        f"resize:{name}",
+                        lambda: ws.resize(rows=ws.row_count, cols=new_cols),
+                    )
                 col_letter = _col_letter(next_col)
-                ws.update(
-                    [[h] for h in missing],
-                    f"{col_letter}1",
-                    major_dimension="COLUMNS",
+                self._call_with_rate_limit_retry(
+                    f"append_headers:{name}",
+                    lambda: ws.update(
+                        [[h] for h in missing],
+                        f"{col_letter}1",
+                        major_dimension="COLUMNS",
+                    ),
                 )
         else:
             print(f"  [ok] タブ '{display_name}' のヘッダーは最新です")

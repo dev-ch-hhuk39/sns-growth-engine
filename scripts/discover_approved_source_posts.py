@@ -11,6 +11,7 @@ import argparse, hashlib, json, sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]; sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 from config_loader import get_config
@@ -19,7 +20,13 @@ from sheets_client import TAB_DEFINITIONS, SheetsClient
 
 
 def canonical(url: str) -> str:
-    return str(url).split("?", 1)[0].rstrip("/")
+    """Drop tracking parameters without collapsing YouTube's video identity."""
+    parsed = urlsplit(str(url).strip())
+    host = parsed.netloc.lower()
+    query = []
+    if "youtube.com" in host and parsed.path == "/watch":
+        query = [(key, value) for key, value in parse_qsl(parsed.query) if key == "v" and value]
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), urlencode(query), ""))
 
 
 def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, Any]], str]:
