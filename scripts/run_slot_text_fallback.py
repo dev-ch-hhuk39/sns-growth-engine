@@ -21,7 +21,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
-from content_slot_runs import build_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
+from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
@@ -38,7 +38,7 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
     if not slot:
         return {"status": "BLOCKED", "blocked_reasons": ["unknown_content_slot"]}
     jst = timezone(timedelta(hours=9))
-    schedule_date = datetime.now(jst).strftime("%Y-%m-%d")
+    schedule_date = business_date(datetime.now(jst))
     index = ((sum(ord(char) for char in f"{account_id}|{slot_id}|{schedule_date}|{reason}") + attempt * 7) % 20) + 1
     text = generate_reader_facing_post(account_id, index=index)
     validation = final_public_post_validator(text, account_id)
@@ -63,10 +63,10 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
 def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     account_id = str(plan["account_id"])
     slot_id = str(plan["slot_id"])
-    previous_status = existing_slot_status(client, account_id, slot_id)
-    if previous_status in POSTED_SLOT_STATUSES:
-        return {**plan, "status": "SKIPPED", "reason": "slot_already_posted", "would_post": False}
-    started = build_slot_run(account_id, slot_id, status="RUNNING", actual_post_type=plan["actual_post_type"], fallback_level=int(plan["fallback_level"]), no_post_reason=plan["fallback_reason"])
+    claim = claim_slot_run(client, account_id, slot_id)
+    if claim.get("status") != "CLAIMED":
+        return {**plan, "status": "SKIPPED", "reason": claim.get("reason", "slot_not_claimed"), "would_post": False}
+    started = build_slot_run(account_id, slot_id, status="RUNNING", actual_post_type=plan["actual_post_type"], fallback_level=int(plan["fallback_level"]), no_post_reason=plan["fallback_reason"], claim_status="CLAIMED", publish_attempt_id=claim.get("slot_run_id", ""))
     upsert_slot_run(client, started)
     queue_id = f"slot_fallback_{started['schedule_date_jst'].replace('-', '')}_{account_id}_{slot_id}_{plan['variant_attempt']}"
     queue = {

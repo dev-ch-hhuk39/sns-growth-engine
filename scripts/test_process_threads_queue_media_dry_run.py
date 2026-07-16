@@ -42,7 +42,7 @@ def main() -> int:
     mod = _load()
     checks: list[tuple[str, bool]] = []
 
-    drafts = [{"draft_id": "d1", "body_md": "深夜にこっそり読むやつ\n\n今日の一歩は小さくていい。"}]
+    drafts = [{"draft_id": "d1", "body_md": "夜職で店を選ぶ時、時給だけで決める子はけっこう危ない。\n\n時給が高くても、客層や出勤ペース、相談しやすさが自分に合わないと続かない。\n\n大事なのは、条件が良い店より自分が無理なく続けられる店を選ぶこと。入る前に一度、譲れない条件を整理してみよう。"}]
     client = _FakeClient({"social_derivatives": [], "drafts": drafts, "posted_results": []})
 
     # 1. media無し queue → DRY_RUN, media_planned=False, 既存挙動

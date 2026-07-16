@@ -14,8 +14,21 @@ def now_jst() -> datetime:
     return datetime.now(JST)
 
 
+def business_date(at: datetime | None = None) -> str:
+    """Return the JST operational date, which rolls over at 04:00.
+
+    The 25:00 slot executes at 01:00 on the following calendar day but belongs
+    to the prior business date.  Every caller should use this resolver instead
+    of deriving a date from a wall-clock hour.
+    """
+    local = (at or now_jst()).astimezone(JST)
+    if local.hour < 4:
+        local -= timedelta(days=1)
+    return local.strftime("%Y-%m-%d")
+
+
 def slot_run_id(account_id: str, slot_id: str, at: datetime | None = None) -> str:
-    date = (at or now_jst()).astimezone(JST).strftime("%Y%m%d")
+    date = business_date(at).replace("-", "")
     return f"slot_{date}_{account_id}_{slot_id}"
 
 
@@ -34,19 +47,17 @@ def build_slot_run(
     slot = slot_by_id(account_id, slot_id)
     if not slot:
         raise ValueError(f"unknown content slot: {account_id}/{slot_id}")
-    target_date = local.date()
+    schedule_date = datetime.fromisoformat(business_date(local)).date()
+    target_date = schedule_date
     target_hour, target_minute = map(int, str(slot["target_jst"]).split(":"))
     if target_hour >= 24:
         target_hour -= 24
-        # The scheduled 25:00 worker starts at 00:45 on the actual calendar
-        # day. Only a daytime/manual invocation refers to the following day.
-        if local.hour >= 12:
-            target_date += timedelta(days=1)
+        target_date += timedelta(days=1)
     target = datetime(target_date.year, target_date.month, target_date.day, target_hour, target_minute, tzinfo=JST)
     created = local.isoformat()
     row = {
         "slot_run_id": slot_run_id(account_id, slot_id, local),
-        "schedule_date_jst": local.strftime("%Y-%m-%d"),
+        "schedule_date_jst": business_date(local),
         "account_id": account_id,
         "slot_id": slot_id,
         "scheduled_target_at": target.isoformat(),
@@ -66,6 +77,12 @@ def build_slot_run(
         "source_video_id": "",
         "no_post_reason": no_post_reason,
         "last_error_redacted": "",
+        "idempotency_key": slot_run_id(account_id, slot_id, local),
+        "claim_status": "",
+        "lease_expires_at": "",
+        "publish_attempt_id": "",
+        "actual_generation_mode": "",
+        "metrics_result_id": "",
         "created_at": created,
         "updated_at": created,
     }
@@ -110,6 +127,50 @@ def existing_slot_status(client: Any, account_id: str, slot_id: str, at: datetim
         if str(row.get("slot_run_id", "")) == expected:
             return str(row.get("status", ""))
     return ""
+
+
+def claim_slot_run(
+    client: Any,
+    account_id: str,
+    slot_id: str,
+    *,
+    at: datetime | None = None,
+    lease_minutes: int = 45,
+) -> dict[str, Any]:
+    """Claim a business-date slot or return a safe duplicate/lease outcome.
+
+    Sheets has no compare-and-swap primitive, so the deterministic row is
+    written before any publisher call and is rechecked by every workflow. This
+    prevents normal concurrent runners from publishing the same slot twice;
+    expired claims are intentionally recoverable.
+    """
+    local = (at or now_jst()).astimezone(JST)
+    expected = slot_run_id(account_id, slot_id, local)
+    try:
+        rows = client._ws("content_slot_runs").get_all_records()
+    except Exception as exc:
+        return {"status": "BLOCKED", "reason": f"slot_claim_read_failed:{type(exc).__name__}", "slot_run_id": expected}
+    for existing in rows:
+        if str(existing.get("slot_run_id", "")) != expected:
+            continue
+        status = str(existing.get("status", ""))
+        if status in {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED", "POSTED"}:
+            return {"status": "SKIPPED", "reason": "slot_already_posted", "slot_run_id": expected}
+        expiry = str(existing.get("lease_expires_at", ""))
+        if str(existing.get("claim_status", "")) == "CLAIMED" and expiry:
+            try:
+                if datetime.fromisoformat(expiry).astimezone(JST) > local:
+                    return {"status": "SKIPPED", "reason": "slot_lease_active", "slot_run_id": expected}
+            except ValueError:
+                return {"status": "SKIPPED", "reason": "slot_lease_invalid", "slot_run_id": expected}
+    row = build_slot_run(account_id, slot_id, status="CLAIMED", now=local)
+    row.update({
+        "claim_status": "CLAIMED",
+        "lease_expires_at": (local + timedelta(minutes=lease_minutes)).isoformat(),
+        "publish_attempt_id": f"attempt_{local.strftime('%Y%m%dT%H%M%S')}",
+    })
+    saved = upsert_slot_run(client, row)
+    return {"status": "CLAIMED" if saved.get("status") in {"CREATED", "UPDATED"} else "BLOCKED", "slot_run_id": expected, "save": saved}
 
 
 def _column_letter(column: int) -> str:

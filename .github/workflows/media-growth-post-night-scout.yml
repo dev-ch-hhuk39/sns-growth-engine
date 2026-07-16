@@ -20,7 +20,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: sns-growth-media-post-night-scout-${{ github.ref }}
+  group: sns-growth-production-night-scout-${{ github.ref }}
   cancel-in-progress: false
 
 env:

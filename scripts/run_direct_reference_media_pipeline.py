@@ -26,7 +26,7 @@ from content_slot_runs import build_slot_run, existing_slot_status, upsert_slot_
 from media_post_validator import validate_media_post  # noqa: E402
 from media_source_policy import DIRECT_SCOPE, decision  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
-from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
+from public_post_quality import final_public_post_validator, generate_grounded_reader_facing_post, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
@@ -99,11 +99,9 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         if str(media.get("cloudinary_status", "")).upper() != "UPLOADED" or not str(media.get("storage_url", "")):
             reasons.append(f"{post_id}:media_not_uploaded")
             continue
-        # Threads video is the only direct-media transport currently enabled.
-        # Multi-image/carousel is recorded as unsupported rather than silently
-        # dropping all but the first original asset.
-        if str(media.get("media_type", "")).lower() != "video":
-            reasons.append(f"{post_id}:carousel_or_image_transport_not_enabled")
+        media_type = str(media.get("media_type", "")).lower()
+        if media_type not in {"video", "image"}:
+            reasons.append(f"{post_id}:unsupported_media_type")
             continue
         selected = (post, media, source)
         break
@@ -121,14 +119,14 @@ def build_plan(account_id: str, slot_id: str, client: SheetsClient | None, *, ap
         return {"status": "NO_POST", "account_id": account_id, "slot_id": slot_id, "would_post": False, "blocked_reasons": reasons[:30]}
     # Never expose original_post_text publicly. The account-specific generator
     # is intentionally based on a fresh reader-facing angle.
-    text = generate_reader_facing_post(account_id, index=(sum(map(ord, str(post["source_post_id"]))) % 20) + 1)
+    text = str(generate_grounded_reader_facing_post(account_id, private_signal=str(post.get("original_post_text", "")), index=(sum(map(ord, str(post["source_post_id"]))) % 20) + 1)["public_post_text"])
     validation = final_public_post_validator(text, account_id)
     asset_id = str(media.get("media_asset_id") or media.get("source_post_media_id") or "")
     validator = validate_media_post({
         "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "media_url": media.get("storage_url", ""), "media_asset_id": asset_id, "platform": "threads",
-        "account_id": account_id, "media_type": "video", "duration_seconds": media.get("duration_seconds", 0),
-        "aspect_ratio": "9:16", "public_post_text": text,
+        "account_id": account_id, "media_type": str(media.get("media_type", "video")), "duration_seconds": media.get("duration_seconds", 0),
+        "aspect_ratio": str(media.get("aspect_ratio", "9:16")), "public_post_text": text,
     })
     return {
         "status": "WILL_APPLY" if apply and validation["status"] == "PASS" and validator["status"] == "PASS" else "PLAN_ONLY" if validation["status"] == "PASS" and validator["status"] == "PASS" else "BLOCKED",
@@ -149,8 +147,8 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "queue_id": queue_id, "account_id": plan["account_id"], "target_account_id": plan["account_id"], "platform": "threads",
         "priority": "1", "status": "READY", "auto_publish": "true", "generation_mode": "direct_reference_media",
         "source_post_id": post["source_post_id"], "media_asset_id": plan["media_asset_id"], "media_url": media["storage_url"],
-        "media_status": "UPLOADED", "media_required": "true", "media_type": "video", "duration_seconds": media.get("duration_seconds", ""),
-        "aspect_ratio": "9:16", "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
+        "media_status": "UPLOADED", "media_required": "true", "media_type": media.get("media_type", "video"), "duration_seconds": media.get("duration_seconds", ""),
+        "aspect_ratio": media.get("aspect_ratio", "9:16"), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "public_post_text": plan["public_post_text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }

@@ -1,5 +1,23 @@
 # AI Work Handoff
 
+## Codex private-production audit and slot-engine continuation (2026-07-16)
+
+- Current HEAD at audit start: `c71aa62ef42837a12ef797cd240009e433862cf2` on `main`; origin matched and worktree was clean.
+- Publication verdict: **DO_NOT_PUBLICIZE**. The repository contains material competitive operational IP, active local credential files (ignored/untracked), a historical secret-pattern finding, no LICENSE/NOTICE, and unverified redistribution rights. Keep GitHub private.
+- Runner decision: GitHub-hosted Actions are not a production runner while every scheduled run is rejected before steps by the account billing/Actions limit. Prefer a private self-hosted runner labelled `self-hosted,sns-growth`; Mac launchd is the fallback. Do not report an end-to-end post as complete until a new post URL is recorded.
+- Changes in this continuation:
+  - `content_slot_runs` now has a 04:00 JST business-date resolver, deterministic idempotency key, lease/claim fields, and structured posting provenance.
+  - text/direct/clip/recovery paths share deterministic slot identity; account-specific workflows use shared per-account concurrency groups.
+  - owner-attested active non-X/non-beauty sources can be seeded into `media_permissions` by `scripts/seed_owner_attested_media_permissions.py`; revoked rows remain untouched.
+  - bounded direct source discovery and gated download/Cloudinary ingestion now have real apply paths. Dry-run performs no network, download, upload, or post.
+  - direct-media captions use private source signals only and publish only a validator-safe `public_post_text`; image transport is supported, mixed carousel remains text-fallback-only until the official Threads transport is implemented.
+- Remaining external blockers/WARN:
+  - no self-hosted runner registered; GitHub-hosted Actions fail before job steps.
+  - actual source discovery, media ingest, Cloudinary upload, and Threads posting were not run in this change.
+  - Gitleaks fixed `v8.30.1` checksum verified: ignored local `.env`/service-account file and one historical generic-key pattern require owner rotation review. TruffleHog `v3.95.9` binary checksum did not match its release checksum, so it was not executed.
+- Next safe files for Codex: `scripts/content_slot_runs.py`, `scripts/run_autonomous_loop.py`, `scripts/discover_approved_source_posts.py`, `scripts/ingest_direct_reference_media.py`, `scripts/run_media_production_pipeline.py`, `scripts/check_media_inventory.py`, runner runbook/docs.
+- Avoid touching: `.env`, local service-account JSON, `data/`, `output/`, browser profiles/cookies, GitHub secret values, X/beauty paths.
+
 ## 2026-07-14 Codex Sheets Quota Recovery Follow-up
 
 ### 本システムについて

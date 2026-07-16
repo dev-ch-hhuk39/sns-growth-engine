@@ -8,19 +8,19 @@
     "blocked"
   ],
   "source_modes": {
-    "src_lm_yt_user_001": "clip_source",
-    "src_lm_tt_user_001": "clip_source",
-    "src_lm_tt_user_002": "clip_source",
-    "src_lm_tt_user_003": "clip_source",
-    "src_ns_yt_cand_001": "clip_source",
-    "src_ns_yt_cand_002": "clip_source",
-    "src_ns_yt_cand_003": "clip_source",
-    "src_ns_yt_cand_004": "clip_source",
-    "src_ns_yt_cand_005": "clip_source",
-    "src_ns_yt_cand_006": "clip_source",
-    "src_ns_yt_cand_007": "clip_source",
-    "src_ns_yt_cand_008": "clip_source",
-    "src_ns_yt_cand_009": "clip_source"
+    "src_lm_yt_user_001": "direct_and_clip",
+    "src_lm_tt_user_001": "direct_and_clip",
+    "src_lm_tt_user_002": "direct_and_clip",
+    "src_lm_tt_user_003": "direct_and_clip",
+    "src_ns_yt_cand_001": "direct_and_clip",
+    "src_ns_yt_cand_002": "direct_and_clip",
+    "src_ns_yt_cand_003": "direct_and_clip",
+    "src_ns_yt_cand_004": "direct_and_clip",
+    "src_ns_yt_cand_005": "direct_and_clip",
+    "src_ns_yt_cand_006": "direct_and_clip",
+    "src_ns_yt_cand_007": "direct_and_clip",
+    "src_ns_yt_cand_008": "direct_and_clip",
+    "src_ns_yt_cand_009": "direct_and_clip"
   },
-  "notes": "Approved account/channel URLs currently have clip permission. No source is implicitly granted direct_media_reuse; add an explicit source-level evidence record before original post media is downloaded or reposted."
+  "notes": "Owner-attested sources are eligible for direct original reuse and generated clips only when the matching media_permissions ledger row is active, unrevoked, and approved."
 }

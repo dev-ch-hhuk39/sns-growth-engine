@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts")); sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
 from content_schedule import load_content_schedule  # noqa: E402
-from content_slot_runs import existing_slot_status  # noqa: E402
+from content_slot_runs import business_date, existing_slot_status  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
@@ -23,16 +23,18 @@ POSTED = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
 
 def missing_slots(client: SheetsClient, account_id: str, now: datetime | None = None) -> list[dict[str, Any]]:
     local = (now or datetime.now(JST)).astimezone(JST)
+    operational_day = datetime.fromisoformat(business_date(local)).date()
     result = []
     for slot in load_content_schedule()["accounts"].get(account_id, []):
-        hour, minute = map(int, slot["target_jst"].split(":")); hour %= 24
-        target = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        configured_hour, minute = map(int, slot["target_jst"].split(":"))
+        target_day = operational_day + timedelta(days=1 if configured_hour >= 24 else 0)
+        target = datetime(target_day.year, target_day.month, target_day.day, configured_hour % 24, minute, tzinfo=JST)
         if target > local - timedelta(minutes=20):
             continue
-        status = existing_slot_status(client, account_id, slot["slot_id"])
+        status = existing_slot_status(client, account_id, slot["slot_id"], local)
         if status not in POSTED:
             result.append({"slot_id": slot["slot_id"], "expected_post_type": slot["post_type"], "status": status or "MISSING", "target_jst": target.isoformat()})
-    return result
+    return sorted(result, key=lambda row: row["target_jst"])
 
 
 def main() -> int:
@@ -57,7 +59,7 @@ def main() -> int:
     for account, slots in plans.items():
         if not slots:
             continue
-        slot = slots[-1]
+        slot = slots[0]
         fallback = execute(build_plan(account, slot["slot_id"], "missed_slot_aftercare", apply=True), client)
         result["backfills"].append({"account_id": account, "slot_id": slot["slot_id"], "result": fallback.get("status", "FAILED")})
     result["status"] = "BACKFILLED" if any(row["result"] == "POSTED" for row in result["backfills"]) else "NO_POST"

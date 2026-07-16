@@ -20,7 +20,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: sns-growth-media-post-liver-manager-${{ github.ref }}
+  group: sns-growth-production-liver-manager-${{ github.ref }}
   cancel-in-progress: false
 
 env:

@@ -524,7 +524,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "actual_started_at", "actual_posted_at", "expected_post_type", "actual_post_type",
         "fallback_level", "status", "queue_id", "result_id", "post_url", "media_asset_id",
         "source_post_id", "source_video_id", "no_post_reason", "last_error_redacted",
-        "created_at", "updated_at",
+        "idempotency_key", "claim_status", "lease_expires_at", "publish_attempt_id",
+        "actual_generation_mode", "metrics_result_id", "created_at", "updated_at",
     ],
 }
 

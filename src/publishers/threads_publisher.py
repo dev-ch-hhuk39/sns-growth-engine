@@ -53,7 +53,7 @@ def _create_container(
         "access_token": access_token,
     }
     if media_url:
-        payload["video_url"] = media_url
+        payload["video_url" if media_type == "VIDEO" else "image_url"] = media_url
     resp = requests.post(url, data=payload, timeout=30)
     resp.raise_for_status()
     data = resp.json()
@@ -135,6 +135,7 @@ class ThreadsPublisher(BasePublisher):
         queue_item: dict,
         dry_run: bool = True,
         media_url: str | None = None,
+        media_type: str = "VIDEO",
     ) -> PublishResult:
         account_id = account.get("account_id", "")
         queue_id = queue_item.get("queue_id", "")
@@ -158,7 +159,7 @@ class ThreadsPublisher(BasePublisher):
                     f" queue_id={queue_id}"
                 )
                 if has_media:
-                    message += f" | media=VIDEO media_url={media_url} (DRY_RUN_PLAN_ONLY)"
+                    message += f" | media={media_type} media_url={media_url} (DRY_RUN_PLAN_ONLY)"
             return PublishResult(
                 platform="threads",
                 success=success,
@@ -172,7 +173,7 @@ class ThreadsPublisher(BasePublisher):
         if has_media:
             allow_media = os.environ.get("ALLOW_MEDIA_POSTS", "false").strip().lower() in ("1", "true", "yes")
             allow_video = os.environ.get("ALLOW_REAL_THREADS_VIDEO_POST", "false").strip().lower() in ("1", "true", "yes")
-            if not (allow_media and allow_video):
+            if not allow_media or (media_type == "VIDEO" and not allow_video):
                 return PublishResult(
                     platform="threads",
                     success=False,
@@ -258,8 +259,8 @@ class ThreadsPublisher(BasePublisher):
 
         # ---- 実投稿: 2ステップ ----
         try:
-            container_id = _create_container(user_id, access_token, text, media_type="VIDEO" if has_media else "TEXT", media_url=media_url)
-            if has_media:
+            container_id = _create_container(user_id, access_token, text, media_type=media_type if has_media else "TEXT", media_url=media_url)
+            if has_media and media_type == "VIDEO":
                 _wait_for_video_container(container_id, access_token)
             else:
                 time.sleep(1)

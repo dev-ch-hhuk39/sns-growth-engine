@@ -35,11 +35,12 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         reasons.append("account_not_media_enabled")
     if account_id == "beauty_account" or platform == "x":
         reasons.append("x_or_beauty_blocked")
-    if str(plan.get("media_type", "video")).lower() != "video":
-        reasons.append("media_type_not_video")
-    if not (8 <= duration <= 45):
+    media_type = str(plan.get("media_type", "video")).lower()
+    if media_type not in {"video", "image"}:
+        reasons.append("media_type_not_supported")
+    if media_type == "video" and not (8 <= duration <= 45):
         reasons.append("duration_out_of_range")
-    if aspect != "9:16":
+    if media_type == "video" and aspect != "9:16":
         reasons.append("aspect_ratio_not_9_16")
     if text_result["status"] != "PASS":
         reasons.append("public_post_validator_blocked")

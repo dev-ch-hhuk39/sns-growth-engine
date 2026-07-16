@@ -92,11 +92,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -188,7 +195,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_lm_yt_cand_001",
@@ -1668,11 +1677,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -1761,7 +1777,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_ns_yt_cand_003",
@@ -1781,11 +1799,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -1874,7 +1899,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_ns_yt_cand_004",
@@ -1894,11 +1921,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -1987,7 +2021,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_ns_yt_cand_005",
@@ -2007,11 +2043,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -2100,7 +2143,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_ns_yt_cand_006",
@@ -2120,11 +2165,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -2213,7 +2265,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_ns_yt_cand_007",
@@ -2233,11 +2287,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -2326,7 +2387,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_ns_yt_cand_008",
@@ -2346,11 +2409,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -2439,7 +2509,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_ns_yt_cand_009",
@@ -2459,11 +2531,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-12T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -2552,7 +2631,9 @@
       "can_reuse_media": true,
       "usage_scope": "reference_only",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_lm_yt_cand_002",
@@ -3055,11 +3136,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -3125,7 +3213,9 @@
       "updated_at": "2026-07-04T00:00:00+09:00",
       "review_notes": "User-provided liver_manager reference. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Actual download/cut/upload/repost remains gated by env and confirm flags.",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_lm_tt_user_001",
@@ -3172,11 +3262,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -3241,7 +3338,9 @@
       "updated_at": "2026-07-04T00:00:00+09:00",
       "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL.",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_lm_tt_user_002",
@@ -3288,11 +3387,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -3357,7 +3463,9 @@
       "updated_at": "2026-07-04T00:00:00+09:00",
       "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL.",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_lm_tt_user_003",
@@ -3404,11 +3512,18 @@
         "upload",
         "repost_to_threads",
         "use_for_post_text",
-        "pdca_analysis"
+        "pdca_analysis",
+        "download_original_media",
+        "store_in_cloudinary",
+        "repost_original_media",
+        "generate_new_caption",
+        "download_video",
+        "analyse",
+        "repost_clip"
       ],
-      "permission_evidence_type": "user_asserted_permission",
+      "permission_evidence_type": "owner_attestation",
       "permission_evidence_note": "User explicitly reconfirmed permission for automated media use, Cloudinary storage, and Threads reposting in this ChatGPT conversation on 2026-07-12.",
-      "permission_approved_by": "user",
+      "permission_approved_by": "Chadult株式会社",
       "permission_approved_at": "2026-07-04T00:00:00+09:00",
       "allowed_platforms_for_repost": [
         "threads"
@@ -3473,7 +3588,9 @@
       "updated_at": "2026-07-04T00:00:00+09:00",
       "review_notes": "User-provided liver_manager TikTok reference account. URL query parameters removed. Permission is user-asserted for approved creator clip workflow. Account URL only; do not expand/profile scrape automatically. Actual download/cut/upload/repost remains gated and requires individual video URL.",
       "source_role": "approved_media",
-      "reference_autopilot_enabled": false
+      "reference_autopilot_enabled": false,
+      "media_usage_mode": "direct_and_clip",
+      "permission_evidence_reference": "global_owner_attestation_v1"
     },
     {
       "source_id": "src_lm_note_cand_002",

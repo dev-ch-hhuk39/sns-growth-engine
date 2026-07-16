@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_threads_ideas_from_references import original_text_similarity_guard  # noqa: E402
-from content_slot_runs import build_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
+from content_slot_runs import build_slot_run, claim_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
 from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
 from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
@@ -494,15 +494,44 @@ def build_autonomous_plan(
 
 def _run(cmd: list[str], *, env: dict[str, str] | None = None) -> dict[str, Any]:
     p = subprocess.run(cmd, cwd=str(ROOT), env=env, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    return {
+    result = {
         "cmd": " ".join(cmd),
         "returncode": p.returncode,
         "stdout_tail": p.stdout[-1600:],
         "stderr_tail": p.stderr[-1600:],
     }
+    result["payload"] = _last_json_object(p.stdout)
+    return result
+
+
+def _last_json_object(text: str) -> dict[str, Any]:
+    """Extract the final structured CLI result without brittle token checks."""
+    try:
+        value = json.loads(text.strip())
+        if isinstance(value, dict):
+            return value
+    except (ValueError, json.JSONDecodeError):
+        pass
+    decoder = json.JSONDecoder()
+    found: dict[str, Any] = {}
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text[index:])
+        except (ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(value, dict) and (not found or "status" in value):
+            found = value
+    return found
 
 
 def infer_no_post_reason(result: dict[str, Any]) -> str:
+    payload = result.get("payload") or {}
+    if str(payload.get("status", "")) == "POSTED":
+        return ""
+    if payload.get("reason"):
+        return str(payload["reason"])
     text = f"{result.get('stdout_tail', '')}\n{result.get('stderr_tail', '')}"
     if '"status": "POSTED"' in text:
         return ""
@@ -532,7 +561,7 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
         r for r in results
         if "auto_approve_queue.py" in str(r.get("cmd", "")) and r.get("status") != "PLAN_ONLY"
     ]
-    posted_count = sum(1 for r in process_results if '"status": "POSTED"' in str(r.get("stdout_tail", "")))
+    posted_count = sum(1 for r in process_results if str((r.get("payload") or {}).get("status", "")) == "POSTED")
     blocked_count = sum(
         1 for r in process_results
         if any(token in str(r.get("stdout_tail", "")) for token in ("BLOCKED", "BLOCKED_INTERNAL_LEAK", "DUPLICATE_BLOCKED"))
@@ -550,20 +579,11 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
     approved_count = 0
     rejected_count = 0
     for r in results:
-        text = str(r.get("stdout_tail", ""))
-        try:
-            decoder = json.JSONDecoder()
-            for idx, char in enumerate(text):
-                if char != "{":
-                    continue
-                obj, _ = decoder.raw_decode(text[idx:])
-                ready_count += int(obj.get("updated_count", 0))
-                checked_count += int(obj.get("checked_count", obj.get("evaluated_count", 0)) or 0)
-                approved_count += int(obj.get("approved_count", obj.get("approvable_count", 0)) or 0)
-                rejected_count += int(obj.get("rejected_count", 0) or 0)
-                break
-        except Exception:
-            pass
+        obj = r.get("payload") or {}
+        ready_count += int(obj.get("updated_count", 0) or 0)
+        checked_count += int(obj.get("checked_count", obj.get("evaluated_count", 0)) or 0)
+        approved_count += int(obj.get("approved_count", obj.get("approvable_count", 0)) or 0)
+        rejected_count += int(obj.get("rejected_count", 0) or 0)
     return {
         "account_id": account_id,
         "mode": mode,
@@ -638,9 +658,9 @@ def save_text_slot_result(plan: dict[str, Any], results: list[dict[str, Any]]) -
         if existing_slot_status(client, account, str(slot["slot_id"])) in {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}:
             return {"status": "SKIPPED", "reason": "slot_already_posted"}
         worker = next((row for row in reversed(results) if "process_threads_queue.py" in str(row.get("cmd", ""))), {})
-        output = str(worker.get("stdout_tail", ""))
-        posted = '"status": "POSTED"' in output
-        row = build_slot_run(account, str(slot["slot_id"]), status="POSTED_PRIMARY" if posted else "FAILED", actual_post_type=str(slot["post_type"]), fallback_level=0, no_post_reason="" if posted else (infer_no_post_reason(worker) or "text_slot_worker_no_post"))
+        payload = worker.get("payload") or {}
+        posted = str(payload.get("status", "")) == "POSTED"
+        row = build_slot_run(account, str(slot["slot_id"]), status="POSTED_PRIMARY" if posted else "FAILED", actual_post_type=str(slot["post_type"]), fallback_level=0, queue_id=payload.get("queue_id", ""), result_id=payload.get("result_id", ""), post_url=payload.get("post_url", ""), actual_posted_at=payload.get("posted_at", "") if posted else "", no_post_reason="" if posted else (infer_no_post_reason(worker) or "text_slot_worker_no_post"))
         return upsert_slot_run(client, row)
     except Exception as exc:
         return {"status": "WARN", "reason": f"content_slot_run_save_failed:{type(exc).__name__}"}
@@ -914,6 +934,22 @@ def main() -> int:
         if verify.get("returncode") != 0:
             plan["verify_result"] = verify
             plan.setdefault("warnings", []).append("sheets_verify_failed_non_blocking_runner_will_validate")
+        else:
+            try:
+                from config_loader import get_config
+                from sheets_client import SheetsClient
+                cfg = get_config()
+                claim_client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+                slot = plan.get("content_slot") or {}
+                if slot.get("slot_id") and args.account_id != "all":
+                    claim = claim_slot_run(claim_client, args.account_id, str(slot["slot_id"]))
+                    plan["slot_claim"] = claim
+                    if claim.get("status") != "CLAIMED":
+                        print(json.dumps({**plan, "mode": mode, "status": "NO_POST", "would_post": False}, ensure_ascii=False, indent=2))
+                        return 0
+            except Exception as exc:
+                print(json.dumps({**plan, "mode": mode, "status": "BLOCKED", "blocked_reasons": [f"slot_claim_failed:{type(exc).__name__}"]}, ensure_ascii=False, indent=2))
+                return 1
     results = build_results(args, plan)
     failed_results = [
         r for r in results

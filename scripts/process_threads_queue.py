@@ -208,6 +208,7 @@ def resolve_queue_media(queue_row: dict[str, Any]) -> dict[str, Any]:
         "media_required": media_required,
         "media_usable": media_usable,
         "effective_media_url": media_url if media_usable else "",
+        "media_type": str(queue_row.get("media_type", "video")).lower(),
         "block_reason": block_reason,
     }
 
@@ -478,6 +479,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=True,
         media_url=media["effective_media_url"] or None,
+        media_type="IMAGE" if media["media_type"] == "image" else "VIDEO",
     )
     if not dry_result.success:
         if not dry_run:
@@ -509,7 +511,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     if media["effective_media_url"]:
         allow_media = is_true(os.environ.get("ALLOW_MEDIA_POSTS", "false"))
         allow_video_post = is_true(os.environ.get("ALLOW_REAL_THREADS_VIDEO_POST", "false"))
-        if not (allow_media and allow_video_post):
+        if not allow_media or (media["media_type"] == "video" and not allow_video_post):
             log_event(client, account_id, "SAFETY_STOP_MEDIA_GATE", "media付き投稿には ALLOW_MEDIA_POSTS=true と ALLOW_REAL_THREADS_VIDEO_POST=true が必要", {"queue_id": queue_id, "media_asset_id": media["media_asset_id"]})
             return {
                 "status": "SAFETY_STOP_MEDIA_GATE",
@@ -524,7 +526,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "media_asset_id": media["media_asset_id"],
             "platform": "threads",
             "account_id": account_id,
-            "media_type": "video",
+            "media_type": media["media_type"],
             "duration_seconds": queue_row.get("duration_seconds", "0"),
             "aspect_ratio": queue_row.get("aspect_ratio", ""),
             "public_post_text": text,
@@ -553,6 +555,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=False,
         media_url=media["effective_media_url"] or None,
+        media_type="IMAGE" if media["media_type"] == "image" else "VIDEO",
     )
     if not result.success:
         update_row(client, "queue", "queue_id", queue_id, {
