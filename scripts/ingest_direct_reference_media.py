@@ -105,7 +105,7 @@ def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
         str(row.get("source_post_id", "")): row
         for row in client._ws("source_posts").get_all_records()
     }
-    pending: list[tuple[str, str]] = []
+    pending: list[tuple[int, str, str]] = []
     for media in client._ws("source_post_media").get_all_records():
         post = posts.get(str(media.get("source_post_id", "")))
         if not post or str(post.get("target_account_id", "")) != account_id:
@@ -122,8 +122,12 @@ def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
             continue
         media_id = str(media.get("source_post_media_id", ""))
         if media_id:
-            pending.append((str(media.get("created_at", "")), media_id))
-    return sorted(pending)[0][1] if pending else ""
+            # Prefer short-form individual videos for a bounded direct-media
+            # slot. They are normally much smaller than a channel long-form
+            # upload and still fall back to the same permitted source set.
+            platform_priority = 0 if platform == "tiktok" else 1
+            pending.append((platform_priority, str(media.get("created_at", "")), media_id))
+    return sorted(pending)[0][2] if pending else ""
 
 
 def main() -> int:
