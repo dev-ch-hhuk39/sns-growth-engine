@@ -71,10 +71,11 @@ jobs:
           pip install -r requirements.txt
           pip install faster-whisper
 
-      - name: Install ffmpeg
+      - name: Verify runner media tools
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
+          command -v ffmpeg
+          command -v ffprobe
+          ffmpeg -version | head -n 1
 
       - name: Guard rights, kill switch, config, and secrets
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
