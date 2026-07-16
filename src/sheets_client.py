@@ -447,7 +447,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     "source_post_media": [
         "source_post_media_id", "source_post_id", "media_index", "original_media_url",
         "canonical_post_url", "acquisition_method", "thumbnail_url",
-        "media_type", "mime_type", "width", "height", "duration_seconds", "content_hash",
+        "media_type", "mime_type", "width", "height", "aspect_ratio", "duration_seconds", "content_hash",
         "download_status", "cloudinary_status", "cloudinary_public_id", "storage_url",
         "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
         "media_asset_id", "created_at", "updated_at",

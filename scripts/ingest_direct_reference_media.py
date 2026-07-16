@@ -16,11 +16,13 @@ def truthy(v: Any) -> bool: return str(v or "").lower() in {"1", "true", "yes"}
 
 def record(client: SheetsClient, logical: str, key: str, value: str) -> dict[str, Any] | None:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
-    return next((dict(row) for row in client._ws(logical).get_all_records() if str(row.get(key, "")) == value), None)
+    rows = client._call_with_rate_limit_retry(f"get_all_records:{logical}", lambda: client._ws(logical).get_all_records())
+    return next((dict(row) for row in rows if str(row.get(key, "")) == value), None)
 
 def permission_ok(client: SheetsClient, source_id: str) -> bool:
     client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
-    for row in client._ws("media_permissions").get_all_records():
+    rows = client._call_with_rate_limit_retry("get_all_records:media_permissions", lambda: client._ws("media_permissions").get_all_records())
+    for row in rows:
         if str(row.get("source_id", "")) == source_id and not truthy(row.get("revoked")):
             return all(truthy(row.get(key)) for key in ("allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption"))
     return False
@@ -89,18 +91,26 @@ def download_with_ytdlp(url: str, path: Path) -> None:
             actual.replace(path)
 
 def update_media_row(client: SheetsClient, source_post_media_id: str, fields: dict[str, Any]) -> None:
-    ws = client._ws("source_post_media"); headers = ws.row_values(1)
-    row_number = next((i for i, row in enumerate(ws.get_all_records(), start=2) if str(row.get("source_post_media_id", "")) == source_post_media_id), 0)
+    ws = client._ws("source_post_media")
+    headers = client._call_with_rate_limit_retry("read_headers:source_post_media", lambda: ws.row_values(1))
+    rows = client._call_with_rate_limit_retry("get_all_records:source_post_media", lambda: ws.get_all_records())
+    row_number = next((i for i, row in enumerate(rows, start=2) if str(row.get("source_post_media_id", "")) == source_post_media_id), 0)
     if not row_number: raise RuntimeError("source_post_media_row_missing")
     updates = [{"range": f"{col_letter(headers.index(key) + 1)}{row_number}", "values": [[str(value)]]} for key, value in fields.items() if key in headers]
-    if updates: ws.batch_update(updates, value_input_option="USER_ENTERED")
+    if updates:
+        client._call_with_rate_limit_retry(
+            "batch_update:source_post_media",
+            lambda: ws.batch_update(updates, value_input_option="USER_ENTERED"),
+        )
 
 def upsert_media_asset(client: SheetsClient, post: dict[str, Any], media: dict[str, Any], *, storage_url: str, public_id: str, digest: str, mime: str, local_path: Path) -> str:
-    asset_id = f"ma_{digest[:24]}"; ws = client._ensure_tab("media_assets", TAB_DEFINITIONS["media_assets"]); headers = ws.row_values(1)
-    if any(str(row.get("media_id", "")) == asset_id for row in ws.get_all_records()): return asset_id
+    asset_id = f"ma_{digest[:24]}"; ws = client._ensure_tab("media_assets", TAB_DEFINITIONS["media_assets"])
+    headers = client._call_with_rate_limit_retry("read_headers:media_assets", lambda: ws.row_values(1))
+    rows = client._call_with_rate_limit_retry("get_all_records:media_assets", lambda: ws.get_all_records())
+    if any(str(row.get("media_id", "")) == asset_id for row in rows): return asset_id
     now = datetime.now(timezone.utc).isoformat()
-    row = {"media_id": asset_id, "account_id": post.get("target_account_id", ""), "reference_post_id": post.get("source_post_id", ""), "source_platform": post.get("platform", ""), "source_post_url": post.get("canonical_post_url", ""), "original_media_url": media.get("original_media_url", ""), "storage_provider": "cloudinary", "storage_url": storage_url, "cloudinary_public_id": public_id, "media_type": media.get("media_type", ""), "mime_type": mime, "reuse_status": "APPROVED", "media_reuse_risk": "low", "downloaded_at": now, "uploaded_at": now, "used_count": "0", "local_path": str(local_path), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""), "allow_download": "true", "allow_upload": "true", "upload_status": "UPLOADED"}
-    ws.append_row([str(row.get(header, "")) for header in headers], value_input_option="USER_ENTERED"); return asset_id
+    row = {"media_id": asset_id, "account_id": post.get("target_account_id", ""), "reference_post_id": post.get("source_post_id", ""), "source_platform": post.get("platform", ""), "source_post_url": post.get("canonical_post_url", ""), "original_media_url": media.get("original_media_url", ""), "storage_provider": "cloudinary", "storage_url": storage_url, "cloudinary_public_id": public_id, "media_type": media.get("media_type", ""), "mime_type": mime, "width": media.get("width", ""), "height": media.get("height", ""), "aspect_ratio": media.get("aspect_ratio", ""), "duration_seconds": media.get("duration_seconds", ""), "reuse_status": "APPROVED", "media_reuse_risk": "low", "downloaded_at": now, "uploaded_at": now, "used_count": "0", "local_path": str(local_path), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""), "allow_download": "true", "allow_upload": "true", "upload_status": "UPLOADED"}
+    client._call_with_rate_limit_retry("append_row:media_assets", lambda: ws.append_row([str(row.get(header, "")) for header in headers], value_input_option="USER_ENTERED")); return asset_id
 
 def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
     """Return one deterministic pending asset for the requested account.

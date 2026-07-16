@@ -66,6 +66,18 @@ def _permission_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
     return result
 
 
+def _vertical_aspect(media: dict[str, Any]) -> str:
+    """Use persisted dimensions when an older row lacks its derived ratio."""
+    ratio = str(media.get("aspect_ratio", "")).strip()
+    if ratio:
+        return ratio
+    try:
+        width, height = int(float(media.get("width") or 0)), int(float(media.get("height") or 0))
+    except (TypeError, ValueError):
+        return ""
+    return "9:16" if width and height and height > width else ""
+
+
 def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     """Select one unused uploaded video with an explicit source-post linkage."""
     posts = {str(row.get("source_post_id", "")): row for row in _records(client, "source_posts")}
@@ -101,7 +113,8 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
             reasons.append(f"{post_id}:{policy['reason']}")
             continue
         matching_asset = assets_by_post.get(post_id, {})
-        media = {**matching_asset, **media} if matching_asset else media
+        if matching_asset:
+            media = {**media, **{key: value for key, value in matching_asset.items() if str(value or "").strip()}}
         asset_id = str(media.get("media_asset_id") or media.get("media_id") or media.get("source_post_media_id") or "")
         if asset_id in used_assets or str(media.get("reuse_status", "")).upper() == "POSTED":
             reasons.append(f"{post_id}:already_posted")
@@ -121,6 +134,10 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
             if not 8 <= duration <= 45:
                 reasons.append(f"{post_id}:duration_out_of_range")
                 continue
+            if _vertical_aspect(media) != "9:16":
+                reasons.append(f"{post_id}:aspect_ratio_not_9_16")
+                continue
+            media["aspect_ratio"] = "9:16"
         selected = (post, media, source)
         break
     return (*selected, reasons) if selected else (None, None, None, reasons)
@@ -201,7 +218,17 @@ def main() -> int:
         from run_slot_text_fallback import build_plan as fallback_plan, execute as fallback_execute
         fallback = fallback_execute(fallback_plan(args.account_id, args.slot_id, f"direct_reference_media_primary_{str(plan.get('status')).lower()}", apply=True), client)
         plan = {**plan, "status": fallback.get("status", "FAILED"), "fallback": fallback}
-    safe = {key: value for key, value in plan.items() if key not in {"source_post", "source_post_media", "public_post_text"}}
+    def safe_output(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: safe_output(item)
+                for key, item in value.items()
+                if key not in {"source_post", "source_post_media", "public_post_text", "internal_analysis", "safety_notes"}
+            }
+        if isinstance(value, list):
+            return [safe_output(item) for item in value]
+        return value
+    safe = safe_output(plan)
     print(json.dumps(safe, ensure_ascii=False, indent=2))
     return 1 if str(plan.get("status", "")).startswith(("FAILED", "BLOCKED")) else 0
 
