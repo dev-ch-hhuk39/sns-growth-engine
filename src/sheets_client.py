@@ -587,9 +587,26 @@ class SheetsClient:
         self.sheet_id = sheet_id
         self.dry_run = dry_run
         self._gc = _auth(sa_dict)
-        self._sh = self._gc.open_by_key(sheet_id)
+        # Opening the spreadsheet is itself a Sheets read and was the one
+        # remaining path that could fail immediately during a short quota
+        # burst, before the instance-level retry helper was available.
+        self._sh = self._open_with_rate_limit_retry(sheet_id)
         self._ws_cache: dict[str, gspread.Worksheet] = {}
         self._ws_cache_loaded = False
+
+    def _open_with_rate_limit_retry(self, sheet_id: str):
+        delays = [0, 5, 15, 30]
+        for attempt, delay in enumerate(delays):
+            if delay:
+                print(f"[RATE_LIMIT] Sheets 429 during open_by_key; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+                time.sleep(delay)
+            try:
+                return self._gc.open_by_key(sheet_id)
+            except Exception as exc:
+                message = str(exc).lower()
+                if ("429" in message or "quota" in message) and attempt < len(delays) - 1:
+                    continue
+                raise
 
     # ---------------------------------------------------------------- #
     # セットアップ

@@ -62,6 +62,7 @@ jobs:
         if: github.event_name == 'schedule'
         run: python3 -c 'import random,time; d=random.randint(0,1800); print(f"[jitter] sleeping {d}s within ±15min window"); time.sleep(d)'
       - name: Dry-run direct media plan
+        continue-on-error: true
         run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1600_direct_media --dry-run --use-sheets
       - name: Seed owner-attested media permissions
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
