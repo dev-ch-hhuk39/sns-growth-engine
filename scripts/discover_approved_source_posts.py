@@ -69,6 +69,22 @@ def source_post_row(source: dict[str, Any], item: dict[str, Any]) -> dict[str, s
         "retry_count": "0", "last_error": "", "created_at": now, "updated_at": now}
 
 
+def source_post_media_row(post: dict[str, str]) -> dict[str, str]:
+    """Create a durable asset plan, never an expiring extractor stream URL."""
+    now = datetime.now(timezone.utc).isoformat()
+    post_id = post["source_post_id"]
+    media_type = str(post.get("media_type") or "video").lower()
+    return {
+        "source_post_media_id": f"spm_{post_id}_0", "source_post_id": post_id, "media_index": "0",
+        "original_media_url": post["canonical_post_url"], "canonical_post_url": post["canonical_post_url"],
+        "acquisition_method": "yt_dlp_resolve_on_ingest", "thumbnail_url": "", "media_type": media_type,
+        "mime_type": "", "width": "", "height": "", "duration_seconds": "", "content_hash": "",
+        "download_status": "PENDING", "cloudinary_status": "PENDING", "cloudinary_public_id": "", "storage_url": "",
+        "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
+        "reuse_status": "APPROVED", "retry_count": "0", "last_error": "", "created_at": now, "updated_at": now,
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="bounded discovery for approved direct-media source posts")
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
@@ -94,9 +110,14 @@ def main() -> int:
     result["network_fetch"] = True
     cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False); ws = client._ensure_tab("source_posts", TAB_DEFINITIONS["source_posts"]); headers = ws.row_values(1)
     existing = {str(row.get("canonical_post_url", "")) for row in ws.get_all_records()}; saved = 0
+    media_ws = client._ensure_tab("source_post_media", TAB_DEFINITIONS["source_post_media"]); media_headers = media_ws.row_values(1)
+    existing_media = {str(row.get("source_post_media_id", "")) for row in media_ws.get_all_records()}; media_saved = 0
     for row in deduped.values():
-        if row["canonical_post_url"] in existing: continue
-        ws.append_row([row.get(header, "") for header in headers], value_input_option="USER_ENTERED"); saved += 1
-    print(json.dumps({**result, "status": "APPLIED", "saved_source_posts": saved}, ensure_ascii=False, indent=2)); return 0
+        if row["canonical_post_url"] not in existing:
+            ws.append_row([row.get(header, "") for header in headers], value_input_option="USER_ENTERED"); saved += 1
+        media_row = source_post_media_row(row)
+        if media_row["source_post_media_id"] not in existing_media:
+            media_ws.append_row([media_row.get(header, "") for header in media_headers], value_input_option="USER_ENTERED"); media_saved += 1
+    print(json.dumps({**result, "status": "APPLIED", "saved_source_posts": saved, "saved_source_post_media": media_saved}, ensure_ascii=False, indent=2)); return 0
 
 if __name__ == "__main__": raise SystemExit(main())

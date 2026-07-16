@@ -31,7 +31,7 @@ env:
 jobs:
   source-fetch-dry-run:
     name: Source Fetch Dry-Run (${{ github.event.inputs.account_id || 'night_scout' }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, sns-growth, production]
     timeout-minutes: 15
 
     env:
@@ -42,6 +42,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:

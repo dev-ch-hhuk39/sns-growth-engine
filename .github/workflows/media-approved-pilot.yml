@@ -42,7 +42,7 @@ env:
 jobs:
   media-pilot:
     name: Media Pilot [${{ github.event.inputs.mode }}] ${{ github.event.inputs.source_id }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, sns-growth, production]
     timeout-minutes: 30
 
     # beauty_account は不可
@@ -67,6 +67,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:

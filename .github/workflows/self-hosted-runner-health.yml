@@ -1,0 +1,52 @@
+name: Self-hosted Runner Health
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: sns-growth-runner-health-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  health:
+    runs-on: [self-hosted, linux, x64, sns-growth, production]
+    timeout-minutes: 15
+    env:
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
+      THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Runner and dependency health
+        run: |
+          echo "runner=${RUNNER_NAME:-unknown}"
+          uname -a
+          df -h / | awk 'NR==2 {print "disk_available=" $4}'
+          free -m | awk 'NR==2 {print "memory_mb=" $2}'
+          python3 --version
+          ffmpeg -version | head -1
+          /var/lib/sns-growth-engine/venv/bin/yt-dlp --version
+      - name: Repository dependency health
+        run: |
+          python3 -m venv .runner-venv
+          .runner-venv/bin/pip install -r requirements.txt >/dev/null
+          .runner-venv/bin/python -c 'import cloudinary, gspread; print("requirements_import=ok")'
+          rm -rf .runner-venv
+      - name: Credential presence only
+        run: |
+          for name in GCP_SA_JSON_BASE64 SA_JSON_BASE64 SPREADSHEET_ID SNS_MASTER_SHEET_ID THREADS_ACCESS_TOKEN_NIGHT_SCOUT THREADS_ACCESS_TOKEN_LIVER_MANAGER CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
+            eval "value=\${$name:-}"
+            if [ -n "$value" ]; then echo "$name=present"; else echo "$name=missing"; fi
+          done

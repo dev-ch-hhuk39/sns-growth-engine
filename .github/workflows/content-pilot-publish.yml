@@ -49,7 +49,7 @@ env:
 jobs:
   pilot-publish:
     name: Pilot Publish (${{ github.event.inputs.account_id }} / ${{ github.event.inputs.platform }})
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, sns-growth, production]
     timeout-minutes: 15
 
     env:
@@ -77,6 +77,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:

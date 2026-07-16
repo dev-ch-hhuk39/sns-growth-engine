@@ -33,7 +33,7 @@ permissions:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, sns-growth, production]
     env:
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
@@ -47,6 +47,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5

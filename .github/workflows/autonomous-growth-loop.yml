@@ -41,7 +41,7 @@ env:
 jobs:
   autonomous-growth-loop:
     name: Manual rules-based Threads autonomous loop
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, sns-growth, production]
     timeout-minutes: 25
 
     env:
@@ -57,6 +57,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
