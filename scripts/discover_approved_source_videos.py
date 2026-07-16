@@ -53,30 +53,50 @@ def load_existing_source_videos_from_sheets() -> tuple[SheetsClient, list[dict[s
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     client._ensure_tab("source_videos", TAB_DEFINITIONS["source_videos"])
-    return client, [dict(r) for r in client._ws("source_videos").get_all_records()]
+    rows = client._call_with_rate_limit_retry(
+        "get_all_records:source_videos:discovery",
+        lambda: client._ws("source_videos").get_all_records(),
+    )
+    return client, [dict(r) for r in rows]
 
 
 def append_source_videos_to_sheets(client: SheetsClient, rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
     ws = client._ws("source_videos")
-    headers = ws.row_values(1)
-    existing = [dict(r) for r in ws.get_all_records()]
+    headers = client._call_with_rate_limit_retry(
+        "row_values:source_videos:discovery",
+        lambda: ws.row_values(1),
+    )
+    existing = [
+        dict(r)
+        for r in client._call_with_rate_limit_retry(
+            "get_all_records:source_videos:discovery_append",
+            lambda: ws.get_all_records(),
+        )
+    ]
     to_add = [row for row in rows if not is_duplicate_source_video(row, existing)]
     if not to_add:
         return 0
-    ws.append_rows(
-        [[str(row.get(h, "")) for h in headers] for row in to_add],
-        value_input_option="USER_ENTERED",
+    client._call_with_rate_limit_retry(
+        "append_rows:source_videos:discovery",
+        lambda: ws.append_rows(
+            [[str(row.get(h, "")) for h in headers] for row in to_add],
+            value_input_option="USER_ENTERED",
+        ),
     )
     return len(to_add)
 
 
 def permission_ok(source: dict[str, Any]) -> bool:
+    evidence_type = str(source.get("permission_evidence_type", ""))
+    if evidence_type == "owner_attestation" and str(source.get("permission_evidence_reference", "")) != "global_owner_attestation_v1":
+        return False
     return (
         source.get("permission_status") == "approved"
-        and bool(source.get("permission_evidence_type"))
+        and bool(evidence_type)
         and bool(source.get("permission_evidence_note"))
+        and bool(source.get("permission_approved_by"))
     )
 
 
@@ -86,6 +106,9 @@ def select_discovery_sources(account_id: str, config: dict[str, Any]) -> list[di
     rows = []
     for source in load_sources():
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
+        active = source.get("active") is True or str(source.get("active", "")).lower() == "true"
+        if not active:
+            continue
         if account_id != "all" and account_id not in targets:
             continue
         if source.get("source_id") not in allowed_ids:

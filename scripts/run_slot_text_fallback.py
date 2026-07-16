@@ -21,10 +21,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
-from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
+from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
-from sheets_client import SheetsClient  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
 
@@ -63,6 +63,15 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
 def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     account_id = str(plan["account_id"])
     slot_id = str(plan["slot_id"])
+    client._ensure_tab("posted_results", TAB_DEFINITIONS["posted_results"])
+    posted_rows = client._call_with_rate_limit_retry(
+        "get_all_records:posted_results:slot_fallback",
+        lambda: client._ws("posted_results").get_all_records(),
+    )
+    autonomous = json.loads((ROOT / "config/autonomous_mode.json").read_text(encoding="utf-8"))
+    daily_cap = int(autonomous.get("daily_post_cap_per_account", 5))
+    if posts_used_in_business_date(account_id, [dict(row) for row in posted_rows]) >= daily_cap:
+        return {**plan, "status": "SKIPPED", "reason": "daily_post_cap_reached", "would_post": False}
     claim = claim_slot_run(client, account_id, slot_id)
     if claim.get("status") != "CLAIMED":
         return {**plan, "status": "SKIPPED", "reason": claim.get("reason", "slot_not_claimed"), "would_post": False}

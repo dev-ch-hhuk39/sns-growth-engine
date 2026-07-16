@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -60,8 +61,20 @@ def load_sheets() -> SheetsClient:
 
 def load_rows(client: SheetsClient) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return (
-        [dict(r) for r in client._ws("source_videos").get_all_records()],
-        [dict(r) for r in client._ws("video_transcripts").get_all_records()],
+        [
+            dict(r)
+            for r in client._call_with_rate_limit_retry(
+                "get_all_records:source_videos:transcription",
+                lambda: client._ws("source_videos").get_all_records(),
+            )
+        ],
+        [
+            dict(r)
+            for r in client._call_with_rate_limit_retry(
+                "get_all_records:video_transcripts:transcription",
+                lambda: client._ws("video_transcripts").get_all_records(),
+            )
+        ],
     )
 
 
@@ -254,6 +267,7 @@ def build_unavailable_row(video: dict[str, Any], status: str, error: str) -> dic
 
 
 def transcribe_one(video: dict[str, Any], *, model_size: str, allow_local_whisper: bool) -> tuple[dict[str, Any], dict[str, Any]]:
+    started = time.monotonic()
     platform = str(video.get("platform", "")).lower()
     url = str(video.get("canonical_video_url") or "")
     video_id = extract_video_id(url, platform)
@@ -270,6 +284,7 @@ def transcribe_one(video: dict[str, Any], *, model_size: str, allow_local_whispe
             "language": result.get("language", ""),
             "chunk_count": len(result.get("segments") or []),
             "preview": redacted_preview(str(result.get("text", "")), 80),
+            "processing_seconds": round(time.monotonic() - started, 3),
         }
     status = str(result.get("status") or "UNAVAILABLE")
     return build_unavailable_row(video, status, str(result.get("error", ""))), {
@@ -279,6 +294,7 @@ def transcribe_one(video: dict[str, Any], *, model_size: str, allow_local_whispe
         "language": "",
         "chunk_count": 0,
         "preview": "",
+        "processing_seconds": round(time.monotonic() - started, 3),
     }
 
 
@@ -357,6 +373,7 @@ def main() -> int:
         "skipped_count": len(skipped),
         "selected_source_video_ids": [v.get("source_video_id", "") for v in selected],
         "transcription_results": summaries,
+        "whisper_processing_seconds": round(sum(float(row.get("processing_seconds") or 0) for row in summaries), 3),
         "transcript_text_logged": False,
         "would_save_transcripts": bool(args.apply and args.confirm_transcribe and args.use_sheets),
         "save_result": save_result,

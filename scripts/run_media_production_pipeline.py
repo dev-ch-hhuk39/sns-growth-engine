@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
-from content_slot_runs import build_slot_run, upsert_slot_run  # noqa: E402
+from content_slot_runs import business_date, build_slot_run, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
@@ -68,14 +68,23 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
-    return [dict(row) for row in client._ws(logical).get_all_records()]
+    operation = lambda: client._ws(logical).get_all_records()
+    retry = getattr(client, "_call_with_rate_limit_retry", None)
+    rows = retry(f"get_all_records:{logical}:media_production", operation) if retry else operation()
+    return [dict(row) for row in rows]
 
 
 def _append(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     ws = client._ws(logical)
-    headers = ws.row_values(1)
-    ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+    retry = getattr(client, "_call_with_rate_limit_retry", None)
+    read_headers = lambda: ws.row_values(1)
+    headers = retry(f"row_values:{logical}:media_production", read_headers) if retry else read_headers()
+    append = lambda: ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+    if retry:
+        retry(f"append_row:{logical}:media_production", append)
+    else:
+        append()
 
 
 def _record_media_slot_result(plan: dict[str, Any], client: SheetsClient, result: dict[str, Any]) -> dict[str, Any]:
@@ -185,13 +194,15 @@ def _parse_time(value: Any) -> datetime | None:
 
 
 def _today_posts(rows: list[dict[str, Any]], account_id: str) -> list[dict[str, Any]]:
-    today = datetime.now(JST).date()
+    if posts_used_in_business_date(account_id, rows) == 0:
+        return []
+    target = business_date(datetime.now(JST))
     result = []
     for row in rows:
         if str(row.get("account_id", "")) != account_id or str(row.get("status", "")).upper() != "POSTED":
             continue
         posted = _parse_time(row.get("posted_at"))
-        if posted and posted.astimezone(JST).date() == today:
+        if posted and business_date(posted) == target:
             result.append(row)
     return result
 
@@ -318,6 +329,22 @@ def build_plan(
     media_cfg = _load(MEDIA_CONFIG)
     autonomous_cfg = _load(AUTONOMOUS_CONFIG)
     blocked = []
+    if _true(os.environ.get("FORCE_TEXT_ONLY_FALLBACK")):
+        return {
+            "status": "NO_POST",
+            "account_id": account_id,
+            "apply": apply,
+            "selected_clip_candidate_id": "",
+            "public_post_preview": "",
+            "would_download": False,
+            "would_cut": False,
+            "would_upload": False,
+            "would_post_video": False,
+            "prepare_only": prepare_only,
+            "post_saved_media": post_saved_media,
+            "slot_id": slot_id,
+            "blocked_reasons": ["resource_budget_text_only"],
+        }
     if autonomous_cfg.get("kill_switch"):
         blocked.append("kill_switch=true")
     if not media_cfg.get("media_public_post_auto_enabled"):

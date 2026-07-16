@@ -52,8 +52,20 @@ def load_source_videos_from_sheets() -> tuple[SheetsClient, list[dict[str, Any]]
     client._ensure_tab("video_clip_candidates", TAB_DEFINITIONS["video_clip_candidates"])
     return (
         client,
-        [dict(r) for r in client._ws("source_videos").get_all_records()],
-        [dict(r) for r in client._ws("video_transcripts").get_all_records()],
+        [
+            dict(r)
+            for r in client._call_with_rate_limit_retry(
+                "get_all_records:source_videos:media_growth",
+                lambda: client._ws("source_videos").get_all_records(),
+            )
+        ],
+        [
+            dict(r)
+            for r in client._call_with_rate_limit_retry(
+                "get_all_records:video_transcripts:media_growth",
+                lambda: client._ws("video_transcripts").get_all_records(),
+            )
+        ],
     )
 
 
@@ -99,9 +111,16 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
     from gspread.utils import rowcol_to_a1
 
     ws = client._ws("video_clip_candidates")
-    headers = ws.row_values(1)
+    headers = client._call_with_rate_limit_retry(
+        "row_values:video_clip_candidates:media_growth",
+        lambda: ws.row_values(1),
+    )
     existing: dict[str, tuple[int, dict[str, Any]]] = {}
-    for row_number, existing_row in enumerate(ws.get_all_records(), start=2):
+    existing_rows = client._call_with_rate_limit_retry(
+        "get_all_records:video_clip_candidates:media_growth",
+        lambda: ws.get_all_records(),
+    )
+    for row_number, existing_row in enumerate(existing_rows, start=2):
         existing[str(existing_row.get("clip_id") or existing_row.get("clip_candidate_id", ""))] = (row_number, dict(existing_row))
     to_add = []
     to_update = []
@@ -146,11 +165,18 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
     if not to_add and not to_update:
         return 0
     if to_update:
-        ws.batch_update(to_update, value_input_option="USER_ENTERED")
-    ws.append_rows(
-        [[str(row.get(h, "")) for h in headers] for row in to_add],
-        value_input_option="USER_ENTERED",
-    ) if to_add else None
+        client._call_with_rate_limit_retry(
+            "batch_update:video_clip_candidates:media_growth",
+            lambda: ws.batch_update(to_update, value_input_option="USER_ENTERED"),
+        )
+    if to_add:
+        client._call_with_rate_limit_retry(
+            "append_rows:video_clip_candidates:media_growth",
+            lambda: ws.append_rows(
+                [[str(row.get(h, "")) for h in headers] for row in to_add],
+                value_input_option="USER_ENTERED",
+            ),
+        )
     return len(to_add) + len(to_update)
 
 
@@ -161,11 +187,14 @@ def is_channel_or_account_url(source: dict[str, Any]) -> bool:
 
 
 def permission_ok(source: dict[str, Any]) -> bool:
+    evidence_type = str(source.get("permission_evidence_type", ""))
+    if evidence_type == "owner_attestation" and str(source.get("permission_evidence_reference", "")) != "global_owner_attestation_v1":
+        return False
     return (
         source.get("permission_status") == "approved"
-        and bool(source.get("permission_evidence_type"))
+        and bool(evidence_type)
         and bool(source.get("permission_evidence_note"))
-        and source.get("permission_approved_by") == "user"
+        and bool(source.get("permission_approved_by"))
     )
 
 
@@ -270,6 +299,8 @@ def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, An
     for source in load_sources():
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
         if account_id not in targets:
+            continue
+        if not source.get("active"):
             continue
         if source.get("source_id") not in allowed_ids:
             continue

@@ -510,6 +510,13 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "hook_type", "clip_duration", "subtitle_style", "posted_at", "created_at", "updated_at",
         "notes",
     ],
+    "resource_usage": [
+        "resource_usage_id", "checked_at", "runner_name", "status", "media_allowed",
+        "disk_total_bytes", "disk_used_bytes", "disk_free_bytes", "disk_used_percent",
+        "temp_bytes", "stored_media_count", "failed_retry_count", "whisper_processing_seconds",
+        "cloudinary_usage_percent", "cloudinary_status", "gemini_status", "gemini_request_count", "gemini_error_count",
+        "preparation_stop_reason", "text_only_reason", "notes",
+    ],
     # Autonomous Growth Loop の各run診断。投稿0でも原因をSheets上で追えるようにする。
     "autonomous_health": [
         "run_id", "workflow_name", "account_id", "mode", "event_name",
@@ -567,6 +574,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "pdca_runs":                      "PDCA実行履歴",
     "media_post_results":             "メディア投稿結果",
     "media_metrics":                  "メディア計測",
+    "resource_usage":                 "リソース使用量",
     "clip_performance":               "クリップ成績",
     "autonomous_health":              "自動運用ヘルス",
     "content_slot_runs":              "投稿枠実行履歴",
@@ -1089,7 +1097,10 @@ class SheetsClient:
     ) -> list[dict]:
         """video_transcripts タブから条件に一致する行を返す。"""
         ws = self._ws("video_transcripts")
-        rows = ws.get_all_records()
+        rows = self._call_with_rate_limit_retry(
+            "get_all_records:video_transcripts",
+            lambda: ws.get_all_records(),
+        )
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
         if reference_post_id:
@@ -1103,7 +1114,11 @@ class SheetsClient:
     def find_video_transcript_by_reference_post_id(self, reference_post_id: str) -> dict | None:
         """reference_post_id に一致する video_transcript を返す。なければ None。"""
         ws = self._ws("video_transcripts")
-        for row in ws.get_all_records():
+        rows = self._call_with_rate_limit_retry(
+            "get_all_records:video_transcripts:find_reference",
+            lambda: ws.get_all_records(),
+        )
+        for row in rows:
             if str(row.get("reference_post_id", "")) == str(reference_post_id):
                 return dict(row)
         return None
@@ -1111,7 +1126,11 @@ class SheetsClient:
     def find_video_transcript_by_id(self, transcript_id: str) -> dict | None:
         """transcript_id に一致する video_transcript を返す。なければ None。"""
         ws = self._ws("video_transcripts")
-        for row in ws.get_all_records():
+        rows = self._call_with_rate_limit_retry(
+            "get_all_records:video_transcripts:find_id",
+            lambda: ws.get_all_records(),
+        )
+        for row in rows:
             if str(row.get("transcript_id", "")) == str(transcript_id):
                 return dict(row)
         return None
@@ -1123,17 +1142,29 @@ class SheetsClient:
             return False
         transcript_id = str(transcript.get("transcript_id", ""))
         ws = self._ws("video_transcripts")
-        headers = ws.row_values(1)
+        headers = self._call_with_rate_limit_retry(
+            "row_values:video_transcripts",
+            lambda: ws.row_values(1),
+        )
         row_data = [str(transcript.get(h, "")) for h in headers]
         if transcript_id:
             existing = self.find_video_transcript_by_id(transcript_id)
             if existing:
                 col_id = headers.index("transcript_id") + 1
-                cell = ws.find(transcript_id, in_column=col_id)
+                cell = self._call_with_rate_limit_retry(
+                    "find:video_transcripts",
+                    lambda: ws.find(transcript_id, in_column=col_id),
+                )
                 if cell:
-                    ws.update([row_data], f"A{cell.row}")
+                    self._call_with_rate_limit_retry(
+                        "update:video_transcripts",
+                        lambda: ws.update([row_data], f"A{cell.row}"),
+                    )
                     return True
-        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        self._call_with_rate_limit_retry(
+            "append_row:video_transcripts",
+            lambda: ws.append_row(row_data, value_input_option="USER_ENTERED"),
+        )
         return True
 
     def update_video_transcript(self, transcript_id: str, **fields: Any) -> bool:
@@ -1142,16 +1173,20 @@ class SheetsClient:
             print(f"[dry-run] update_video_transcript: transcript_id={transcript_id!r} fields={fields}")
             return False
         ws = self._ws("video_transcripts")
-        headers = ws.row_values(1)
+        headers = self._call_with_rate_limit_retry(
+            "row_values:video_transcripts:update",
+            lambda: ws.row_values(1),
+        )
         col_id = headers.index("transcript_id") + 1 if "transcript_id" in headers else None
         if col_id is None:
             return False
-        cell = ws.find(transcript_id, in_column=col_id)
+        cell = self._call_with_rate_limit_retry(
+            "find:video_transcripts:update",
+            lambda: ws.find(transcript_id, in_column=col_id),
+        )
         if cell is None:
             return False
-        for field, value in fields.items():
-            if field in headers:
-                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+        self._batch_update_fields(ws, headers, cell.row, fields, label=f"video_transcripts:{transcript_id}")
         return True
 
     # ---------------------------------------------------------------- #
@@ -1167,7 +1202,10 @@ class SheetsClient:
     ) -> list[dict]:
         """source_videos タブから条件に一致する行を返す。"""
         ws = self._ws("source_videos")
-        rows = ws.get_all_records()
+        rows = self._call_with_rate_limit_retry(
+            "get_all_records:source_videos",
+            lambda: ws.get_all_records(),
+        )
         if account_id:
             rows = [r for r in rows if str(r.get("account_id", "")) == str(account_id)]
         if source_id:
@@ -1181,7 +1219,11 @@ class SheetsClient:
     def find_source_video_by_id(self, source_video_id: str) -> dict | None:
         """source_video_id に一致する source_video を返す。なければ None。"""
         ws = self._ws("source_videos")
-        for row in ws.get_all_records():
+        rows = self._call_with_rate_limit_retry(
+            "get_all_records:source_videos:find_id",
+            lambda: ws.get_all_records(),
+        )
+        for row in rows:
             if str(row.get("source_video_id", "")) == str(source_video_id):
                 return dict(row)
         return None
@@ -1193,17 +1235,29 @@ class SheetsClient:
             return False
         source_video_id = str(source_video.get("source_video_id", ""))
         ws = self._ws("source_videos")
-        headers = ws.row_values(1)
+        headers = self._call_with_rate_limit_retry(
+            "row_values:source_videos",
+            lambda: ws.row_values(1),
+        )
         row_data = [str(source_video.get(h, "")) for h in headers]
         if source_video_id:
             existing = self.find_source_video_by_id(source_video_id)
             if existing:
                 col_id = headers.index("source_video_id") + 1
-                cell = ws.find(source_video_id, in_column=col_id)
+                cell = self._call_with_rate_limit_retry(
+                    "find:source_videos",
+                    lambda: ws.find(source_video_id, in_column=col_id),
+                )
                 if cell:
-                    ws.update([row_data], f"A{cell.row}")
+                    self._call_with_rate_limit_retry(
+                        "update:source_videos",
+                        lambda: ws.update([row_data], f"A{cell.row}"),
+                    )
                     return True
-        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        self._call_with_rate_limit_retry(
+            "append_row:source_videos",
+            lambda: ws.append_row(row_data, value_input_option="USER_ENTERED"),
+        )
         return True
 
     def save_source_videos(self, source_videos: list[dict[str, Any]]) -> dict[str, int]:
@@ -1236,7 +1290,10 @@ class SheetsClient:
     ) -> list[dict]:
         """video_clip_candidates タブから条件に一致する行を返す。"""
         ws = self._ws("video_clip_candidates")
-        rows = ws.get_all_records()
+        rows = self._call_with_rate_limit_retry(
+            "get_all_records:video_clip_candidates",
+            lambda: ws.get_all_records(),
+        )
         if account_id:
             rows = [r for r in rows if r.get("account_id") == account_id]
         if reference_post_id:
@@ -1252,7 +1309,11 @@ class SheetsClient:
     def find_video_clip_candidate_by_clip_id(self, clip_id: str) -> dict | None:
         """clip_id に一致する video_clip_candidate を返す。なければ None。"""
         ws = self._ws("video_clip_candidates")
-        for row in ws.get_all_records():
+        rows = self._call_with_rate_limit_retry(
+            "get_all_records:video_clip_candidates:find_id",
+            lambda: ws.get_all_records(),
+        )
+        for row in rows:
             if str(row.get("clip_id", "")) == str(clip_id):
                 return dict(row)
         return None
@@ -1264,17 +1325,29 @@ class SheetsClient:
             return False
         clip_id = str(clip.get("clip_id", ""))
         ws = self._ws("video_clip_candidates")
-        headers = ws.row_values(1)
+        headers = self._call_with_rate_limit_retry(
+            "row_values:video_clip_candidates",
+            lambda: ws.row_values(1),
+        )
         row_data = [str(clip.get(h, "")) for h in headers]
         if clip_id:
             existing = self.find_video_clip_candidate_by_clip_id(clip_id)
             if existing:
                 col_id = headers.index("clip_id") + 1
-                cell = ws.find(clip_id, in_column=col_id)
+                cell = self._call_with_rate_limit_retry(
+                    "find:video_clip_candidates",
+                    lambda: ws.find(clip_id, in_column=col_id),
+                )
                 if cell:
-                    ws.update([row_data], f"A{cell.row}")
+                    self._call_with_rate_limit_retry(
+                        "update:video_clip_candidates",
+                        lambda: ws.update([row_data], f"A{cell.row}"),
+                    )
                     return True
-        ws.append_row(row_data, value_input_option="USER_ENTERED")
+        self._call_with_rate_limit_retry(
+            "append_row:video_clip_candidates",
+            lambda: ws.append_row(row_data, value_input_option="USER_ENTERED"),
+        )
         return True
 
     def update_video_clip_candidate(self, clip_id: str, **fields: Any) -> bool:
@@ -1283,16 +1356,20 @@ class SheetsClient:
             print(f"[dry-run] update_video_clip_candidate: clip_id={clip_id!r} fields={fields}")
             return False
         ws = self._ws("video_clip_candidates")
-        headers = ws.row_values(1)
+        headers = self._call_with_rate_limit_retry(
+            "row_values:video_clip_candidates:update",
+            lambda: ws.row_values(1),
+        )
         col_id = headers.index("clip_id") + 1 if "clip_id" in headers else None
         if col_id is None:
             return False
-        cell = ws.find(clip_id, in_column=col_id)
+        cell = self._call_with_rate_limit_retry(
+            "find:video_clip_candidates:update",
+            lambda: ws.find(clip_id, in_column=col_id),
+        )
         if cell is None:
             return False
-        for field, value in fields.items():
-            if field in headers:
-                ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+        self._batch_update_fields(ws, headers, cell.row, fields, label=f"video_clip_candidates:{clip_id}")
         return True
 
     # ---------------------------------------------------------------- #

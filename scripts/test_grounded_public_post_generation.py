@@ -18,6 +18,10 @@ def main() -> int:
             (f"{account} validator passes", validation["status"] == "PASS"),
             (f"{account} public text differs from private signal", output["public_post_text"] not in signal),
             (f"{account} internal text stays structured", bool(output["internal_analysis"]) and bool(output["safety_notes"])),
+            (f"{account} grounding summary exists", bool(output.get("grounding_summary", {}).get("concepts"))),
+            (f"{account} transformation summary exists", bool(output.get("transformation_summary"))),
+            (f"{account} source similarity is safe", float(output.get("similarity_score", 1)) <= 0.45),
+            (f"{account} validator result persisted", output.get("validator_result") == "PASS"),
         ])
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

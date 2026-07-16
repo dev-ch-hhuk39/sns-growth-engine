@@ -67,6 +67,8 @@ def plan_sources(account_id: str) -> tuple[list[dict[str, Any]], list[dict[str, 
     for source in data:
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
         if account_id not in targets: continue
+        if not (source.get("active") is True or str(source.get("active", "")).lower() == "true"):
+            continue
         check = decision(source, "direct_media")
         if not check["allowed"]:
             blocked.append({"source_id": str(source.get("source_id", "")), "reason": check["reason"]}); continue
@@ -129,20 +131,25 @@ def main() -> int:
     if not args.apply:
         print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
     result["network_fetch"] = True
-    cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False); ws = client._ensure_tab("source_posts", TAB_DEFINITIONS["source_posts"]); headers = ws.row_values(1)
-    existing = {str(row.get("canonical_post_url", "")) for row in ws.get_all_records()}; saved = 0
-    media_ws = client._ensure_tab("source_post_media", TAB_DEFINITIONS["source_post_media"]); media_headers = media_ws.row_values(1)
-    existing_media_rows = {str(row.get("source_post_media_id", "")): row for row in media_ws.get_all_records()}; media_saved = 0
+    cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False); ws = client._ensure_tab("source_posts", TAB_DEFINITIONS["source_posts"])
+    headers = client._call_with_rate_limit_retry("row_values:source_posts:discovery", lambda: ws.row_values(1))
+    source_rows = client._call_with_rate_limit_retry("get_all_records:source_posts:discovery", lambda: ws.get_all_records())
+    existing = {str(row.get("canonical_post_url", "")) for row in source_rows}; saved = 0
+    media_ws = client._ensure_tab("source_post_media", TAB_DEFINITIONS["source_post_media"])
+    media_headers = client._call_with_rate_limit_retry("row_values:source_post_media:discovery", lambda: media_ws.row_values(1))
+    media_existing_list = client._call_with_rate_limit_retry("get_all_records:source_post_media:discovery", lambda: media_ws.get_all_records())
+    existing_media_rows = {str(row.get("source_post_media_id", "")): (index, row) for index, row in enumerate(media_existing_list, start=2)}; media_saved = 0
     for row in deduped.values():
         if row["canonical_post_url"] not in existing:
-            ws.append_row([row.get(header, "") for header in headers], value_input_option="USER_ENTERED"); saved += 1
+            client._call_with_rate_limit_retry("append_row:source_posts:discovery", lambda row=row: ws.append_row([row.get(header, "") for header in headers], value_input_option="USER_ENTERED")); saved += 1
         media_row = source_post_media_row(row)
-        existing_media = existing_media_rows.get(media_row["source_post_media_id"])
+        existing_entry = existing_media_rows.get(media_row["source_post_media_id"])
+        existing_media = existing_entry[1] if existing_entry else None
         if not existing_media:
-            media_ws.append_row([media_row.get(header, "") for header in media_headers], value_input_option="USER_ENTERED"); media_saved += 1
+            client._call_with_rate_limit_retry("append_row:source_post_media:discovery", lambda media_row=media_row: media_ws.append_row([media_row.get(header, "") for header in media_headers], value_input_option="USER_ENTERED")); media_saved += 1
         elif media_row.get("duration_seconds") and not str(existing_media.get("duration_seconds", "")):
-            row_number = next(i for i, item in enumerate(media_ws.get_all_records(), start=2) if str(item.get("source_post_media_id", "")) == media_row["source_post_media_id"])
-            media_ws.update_cell(row_number, media_headers.index("duration_seconds") + 1, media_row["duration_seconds"])
+            row_number = existing_entry[0]
+            client._batch_update_fields(media_ws, media_headers, row_number, {"duration_seconds": media_row["duration_seconds"]}, label=f"source_post_media:{media_row['source_post_media_id']}")
     print(json.dumps({**result, "status": "APPLIED", "saved_source_posts": saved, "saved_source_post_media": media_saved}, ensure_ascii=False, indent=2)); return 0
 
 if __name__ == "__main__": raise SystemExit(main())

@@ -46,6 +46,9 @@ jobs:
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
       THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,6 +74,11 @@ jobs:
           PY
       - name: Dry-run saved media plan
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --post-saved-media --fallback-to-text --dry-run --use-sheets
+      - name: Check free-tier media budget
+        id: media_budget
+        continue-on-error: true
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce
       - name: Guard media post and kill switch
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |
@@ -98,6 +106,7 @@ jobs:
           ALLOW_VIDEO_CUT: "false"
           ALLOW_CLOUDINARY_UPLOAD: "false"
           ALLOW_TRANSCRIPTION_API: "false"
+          FORCE_TEXT_ONLY_FALLBACK: ${{ steps.media_budget.outcome != 'success' }}
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --post-saved-media --fallback-to-text --apply --confirm-production-media --use-sheets
       - name: Health summary
         if: always()

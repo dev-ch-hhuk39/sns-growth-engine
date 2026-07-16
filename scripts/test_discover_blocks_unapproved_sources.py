@@ -6,8 +6,9 @@ def main() -> int:
     d.load_sources = lambda: [{
         "source_id": "src_lm_yt_user_001", "target_account_id": "liver_manager",
         "source_platform": "youtube", "source_type": "channel", "source_url": "https://youtube.com/channel/x",
+        "active": True, "media_autopilot_enabled": True,
         "rights_status": "unknown", "permission_status": "approved",
-        "permission_evidence_type": "user_asserted_permission", "permission_evidence_note": "ok",
+        "permission_evidence_type": "user_asserted_permission", "permission_evidence_note": "ok", "permission_approved_by": "user",
     }]
     try:
         p = d.build_discovery_plan("liver_manager")

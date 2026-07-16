@@ -147,6 +147,14 @@ def build_plan(account_id: str, slot_id: str, client: SheetsClient | None, *, ap
     slot = slot_by_id(account_id, slot_id)
     if not slot or slot.get("post_type") != "direct_reference_media":
         return {"status": "BLOCKED", "blocked_reasons": ["slot_id must be a direct_reference_media slot"]}
+    if _true(os.environ.get("FORCE_TEXT_ONLY_FALLBACK")):
+        return {
+            "status": "NO_POST",
+            "account_id": account_id,
+            "slot_id": slot_id,
+            "would_post": False,
+            "blocked_reasons": ["resource_budget_text_only"],
+        }
     if not client:
         return {"status": "PLAN_ONLY", "account_id": account_id, "slot_id": slot_id, "would_post": False, "blocked_reasons": []}
     post, media, _source, reasons = select_direct_candidate(client, account_id)
@@ -154,7 +162,24 @@ def build_plan(account_id: str, slot_id: str, client: SheetsClient | None, *, ap
         return {"status": "NO_POST", "account_id": account_id, "slot_id": slot_id, "would_post": False, "blocked_reasons": reasons[:30]}
     # Never expose original_post_text publicly. The account-specific generator
     # is intentionally based on a fresh reader-facing angle.
-    text = str(generate_grounded_reader_facing_post(account_id, private_signal=str(post.get("original_post_text", "")), index=(sum(map(ord, str(post["source_post_id"]))) % 20) + 1)["public_post_text"])
+    recent_posts = [
+        str(row.get("posted_text", ""))
+        for row in _records(client, "posted_results")
+        if str(row.get("account_id", "")) == account_id
+    ][-30:]
+    grounded = generate_grounded_reader_facing_post(
+        account_id,
+        private_signal=str(post.get("original_post_text", "")),
+        media_metadata={
+            "media_type": media.get("media_type", ""),
+            "duration_seconds": media.get("duration_seconds", ""),
+            "aspect_ratio": media.get("aspect_ratio", ""),
+        },
+        slot_theme=str(slot.get("theme", "")),
+        recent_posts=recent_posts,
+        index=(sum(map(ord, str(post["source_post_id"]))) % 20) + 1,
+    )
+    text = str(grounded["public_post_text"])
     validation = final_public_post_validator(text, account_id)
     asset_id = str(media.get("media_asset_id") or media.get("source_post_media_id") or "")
     validator = validate_media_post({
@@ -168,6 +193,10 @@ def build_plan(account_id: str, slot_id: str, client: SheetsClient | None, *, ap
         "account_id": account_id, "slot_id": slot_id, "source_post": post, "source_post_media": media,
         "source_post_id": post["source_post_id"], "media_asset_id": asset_id, "public_post_text": text,
         "public_post_preview": public_preview(text), "final_public_post_validator": validation["status"],
+        "grounding_summary": grounded.get("grounding_summary", {}),
+        "transformation_summary": grounded.get("transformation_summary", ""),
+        "similarity_score": grounded.get("similarity_score", 1.0),
+        "recent_post_similarity_score": grounded.get("recent_post_similarity_score", 1.0),
         "media_validator": validator["status"], "would_post": bool(apply and validator["status"] == "PASS"),
         "blocked_reasons": validation.get("blocked_reasons", []) + validator.get("blocked_reasons", []),
     }

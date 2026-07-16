@@ -20,7 +20,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: sns-growth-production-${{ github.workflow }}-${{ github.ref }}
+  group: sns-growth-production-liver-manager-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -103,8 +103,14 @@ jobs:
       - name: Dry-run media production plan
         run: python3 scripts/run_media_production_pipeline.py --account-id liver_manager --dry-run --use-sheets
 
-      - name: Discover approved source videos
+      - name: Check free-tier media budget
+        id: media_budget
+        continue-on-error: true
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce
+
+      - name: Discover approved source videos
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           PUBLISH_ENABLED: "false"
           ALLOW_REAL_THREADS_POST: "false"
@@ -124,7 +130,7 @@ jobs:
             --confirm-discovery
 
       - name: Transcribe approved source videos
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_LOCAL_TRANSCRIPTION: "true"
@@ -147,7 +153,7 @@ jobs:
             --model-size tiny
 
       - name: Generate transcript-grounded clip candidates
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           PUBLISH_ENABLED: "false"
           ALLOW_REAL_THREADS_POST: "false"
@@ -166,7 +172,7 @@ jobs:
             --confirm-media-growth
 
       - name: Prepare one approved media asset
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           PUBLISH_ENABLED: "false"
           ALLOW_REAL_THREADS_POST: "false"
@@ -184,6 +190,10 @@ jobs:
             --confirm-production-media \
             --prepare-only \
             --use-sheets
+
+      - name: Clean expired transient media
+        if: always()
+        run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
 
       - name: Health summary
         if: always()

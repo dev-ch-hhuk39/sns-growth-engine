@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from generate_threads_ideas_from_references import original_text_similarity_guard  # noqa: E402
-from content_slot_runs import build_slot_run, claim_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
+from content_slot_runs import build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
 from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
@@ -178,8 +178,8 @@ def filter_autonomous_sources(plan: dict[str, Any], config: dict[str, Any]) -> d
                 reasons.append("platform_blocked_for_fetch")
             if row.get("source_id", "").endswith("_todo"):
                 reasons.append("todo_placeholder")
-            if row.get("media_pipeline_eligible_after_apply"):
-                reasons.append("media_pipeline_blocked_initially")
+            # Media permission never excludes a source from text-only analysis.
+            # This plan still hard-codes every media action to false below.
             if reasons:
                 excluded.append({"source_id": str(row.get("source_id", "")), "reason": ",".join(reasons)})
                 continue
@@ -355,25 +355,8 @@ def load_posted_results_for_rotation() -> list[dict[str, Any]]:
 
 
 def posts_used_today(account_id: str, posted_rows: list[dict[str, Any]], *, now: datetime | None = None) -> int:
-    """Count today's posted Threads rows for an account using JST day boundary."""
-    jst = timezone(timedelta(hours=9))
-    today = (now or datetime.now(timezone.utc)).astimezone(jst).date()
-    count = 0
-    for row in posted_rows:
-        if str(row.get("account_id", "")) != account_id:
-            continue
-        if str(row.get("platform", "")).lower() not in {"", "threads"}:
-            continue
-        if str(row.get("status", "")).upper() not in {"POSTED", "RECOVERED", ""}:
-            continue
-        raw = str(row.get("posted_at") or row.get("created_at") or row.get("collected_at") or "")
-        try:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        if dt.astimezone(jst).date() == today:
-            count += 1
-    return count
+    """Count posts in the current 04:00-JST business date."""
+    return posts_used_in_business_date(account_id, posted_rows, now)
 
 
 def build_autonomous_plan(

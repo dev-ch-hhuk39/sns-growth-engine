@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts")); sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
 from content_schedule import load_content_schedule  # noqa: E402
-from content_slot_runs import business_date, existing_slot_status  # noqa: E402
+from content_slot_runs import business_date, existing_slot_row  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
@@ -31,7 +31,15 @@ def missing_slots(client: SheetsClient, account_id: str, now: datetime | None = 
         target = datetime(target_day.year, target_day.month, target_day.day, configured_hour % 24, minute, tzinfo=JST)
         if target > local - timedelta(minutes=20):
             continue
-        status = existing_slot_status(client, account_id, slot["slot_id"], local)
+        existing = existing_slot_row(client, account_id, slot["slot_id"], local) or {}
+        status = str(existing.get("status", ""))
+        expiry = str(existing.get("lease_expires_at", ""))
+        if str(existing.get("claim_status", "")) == "CLAIMED" and expiry:
+            try:
+                if datetime.fromisoformat(expiry).astimezone(JST) > local:
+                    continue
+            except ValueError:
+                continue
         if status not in POSTED:
             result.append({"slot_id": slot["slot_id"], "expected_post_type": slot["post_type"], "status": status or "MISSING", "target_jst": target.isoformat()})
     return sorted(result, key=lambda row: row["target_jst"])

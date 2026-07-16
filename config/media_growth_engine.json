@@ -10,6 +10,7 @@
     "src_lm_tt_user_001",
     "src_lm_tt_user_002",
     "src_lm_tt_user_003",
+    "src_lm_yt_cand_001",
     "src_ns_yt_cand_001",
     "src_ns_yt_cand_002",
     "src_ns_yt_cand_003",
@@ -86,5 +87,14 @@
     "BLOCKED"
   ],
   "discovery_default_status": "DISCOVERED",
+  "resource_limits": {
+    "disk_prepare_stop_percent": 80,
+    "disk_text_only_percent": 90,
+    "cloudinary_text_only_percent": 85,
+    "failed_media_retention_days": 7,
+    "processed_asset_audit_days": 30,
+    "transient_media_retention_hours": 24,
+    "max_failed_retries_per_run": 5
+  },
   "dry_run_default": true
 }

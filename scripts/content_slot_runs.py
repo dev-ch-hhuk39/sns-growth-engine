@@ -32,6 +32,27 @@ def slot_run_id(account_id: str, slot_id: str, at: datetime | None = None) -> st
     return f"slot_{date}_{account_id}_{slot_id}"
 
 
+def posts_used_in_business_date(account_id: str, rows: list[dict[str, Any]], at: datetime | None = None) -> int:
+    """Count posted Threads rows using the same 04:00 JST boundary as slots."""
+    target = business_date(at)
+    count = 0
+    for row in rows:
+        if str(row.get("account_id", "")) != account_id:
+            continue
+        if str(row.get("platform", "")).lower() not in {"", "threads"}:
+            continue
+        if str(row.get("status", "")).upper() not in {"", "POSTED", "RECOVERED"}:
+            continue
+        raw = str(row.get("posted_at") or row.get("created_at") or row.get("collected_at") or "")
+        try:
+            posted = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if business_date(posted) == target:
+            count += 1
+    return count
+
+
 def build_slot_run(
     account_id: str,
     slot_id: str,
@@ -117,17 +138,26 @@ def upsert_slot_run(client: Any, row: dict[str, Any]) -> dict[str, Any]:
     return {"status": "CREATED", "slot_run_id": row["slot_run_id"]}
 
 
-def existing_slot_status(client: Any, account_id: str, slot_id: str, at: datetime | None = None) -> str:
+def existing_slot_row(client: Any, account_id: str, slot_id: str, at: datetime | None = None) -> dict[str, Any] | None:
     expected = slot_run_id(account_id, slot_id, at)
     try:
         from sheets_client import TAB_DEFINITIONS
-        rows = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"]).get_all_records()
+        ws = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"])
+        rows = client._call_with_rate_limit_retry(
+            "get_all_records:content_slot_runs:existing",
+            lambda: ws.get_all_records(),
+        )
     except Exception:
-        return ""
+        return None
     for row in rows:
         if str(row.get("slot_run_id", "")) == expected:
-            return str(row.get("status", ""))
-    return ""
+            return dict(row)
+    return None
+
+
+def existing_slot_status(client: Any, account_id: str, slot_id: str, at: datetime | None = None) -> str:
+    row = existing_slot_row(client, account_id, slot_id, at)
+    return str((row or {}).get("status", ""))
 
 
 def claim_slot_run(
@@ -149,7 +179,11 @@ def claim_slot_run(
     expected = slot_run_id(account_id, slot_id, local)
     try:
         from sheets_client import TAB_DEFINITIONS
-        rows = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"]).get_all_records()
+        ws = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"])
+        rows = client._call_with_rate_limit_retry(
+            "get_all_records:content_slot_runs:claim",
+            lambda: ws.get_all_records(),
+        )
     except Exception as exc:
         return {"status": "BLOCKED", "reason": f"slot_claim_read_failed:{type(exc).__name__}", "slot_run_id": expected}
     for existing in rows:

@@ -20,6 +20,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config
 from sheets_client import TAB_DEFINITIONS, SheetsClient
 
+MEDIA_CAPABLE_PLATFORMS = {"threads", "youtube", "tiktok"}
+
 
 def truthy(value: Any) -> bool:
     return value is True or str(value or "").lower() in {"1", "true", "yes"}
@@ -31,7 +33,11 @@ def eligible_sources() -> list[dict[str, Any]]:
     for source in sources:
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
-        if not truthy(source.get("active")) or platform == "x" or "beauty_account" in targets:
+        if (
+            not truthy(source.get("active"))
+            or platform not in MEDIA_CAPABLE_PLATFORMS
+            or "beauty_account" in targets
+        ):
             continue
         result.append(source)
     return result
@@ -70,18 +76,52 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
     cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     ws = client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
-    headers = ws.row_values(1)
-    existing = {str(row.get("source_id", "")): row for row in ws.get_all_records()}
-    writes = 0
+    headers = client._call_with_rate_limit_retry(
+        "row_values:media_permissions:owner_seed",
+        lambda: ws.row_values(1),
+    )
+    existing_rows = client._call_with_rate_limit_retry(
+        "get_all_records:media_permissions:owner_seed",
+        lambda: ws.get_all_records(),
+    )
+    existing = {
+        str(row.get("source_id", "")): (row_number, dict(row))
+        for row_number, row in enumerate(existing_rows, start=2)
+    }
+    writes = updates = revoked_skips = 0
     for row in rows:
-        previous = existing.get(row["source_id"])
+        previous_entry = existing.get(row["source_id"])
+        previous = previous_entry[1] if previous_entry else None
         if previous and truthy(previous.get("revoked")):
+            revoked_skips += 1
             continue
-        if previous:
+        if previous_entry:
+            row_number = previous_entry[0]
+            client._call_with_rate_limit_retry(
+                f"update:media_permissions:{row['source_id']}",
+                lambda row_number=row_number, row=row: ws.update(
+                    [[str(row.get(header, "")) for header in headers]],
+                    f"A{row_number}",
+                ),
+            )
+            updates += 1
             continue
-        ws.append_row([row.get(header, "") for header in headers], value_input_option="USER_ENTERED")
+        client._call_with_rate_limit_retry(
+            f"append_row:media_permissions:{row['source_id']}",
+            lambda row=row: ws.append_row(
+                [row.get(header, "") for header in headers],
+                value_input_option="USER_ENTERED",
+            ),
+        )
         writes += 1
-    print(json.dumps({**result, "status": "APPLIED", "written": writes, "existing_or_revoked_skipped": len(rows) - writes}, ensure_ascii=False, indent=2))
+    print(json.dumps({
+        **result,
+        "status": "APPLIED",
+        "written": writes,
+        "updated": updates,
+        "revoked_skipped": revoked_skips,
+        "non_media_platforms_excluded": True,
+    }, ensure_ascii=False, indent=2))
     return 0
 
 

@@ -28,6 +28,10 @@ def permission_ok(client: SheetsClient, source_id: str) -> bool:
     return False
 
 ALLOWLIST = {"youtube.com", "www.youtube.com", "youtu.be", "tiktok.com", "www.tiktok.com", "res.cloudinary.com"}
+STREAM_HOST_SUFFIXES = {
+    "googlevideo.com", "tiktokcdn.com", "tiktokcdn-us.com", "byteoversea.com",
+    "ibytedtos.com", "akamaized.net", "muscdn.com",
+}
 
 def col_letter(index: int) -> str:
     result = ""
@@ -35,12 +39,13 @@ def col_letter(index: int) -> str:
         index, remainder = divmod(index - 1, 26); result = chr(65 + remainder) + result
     return result
 
-def safe_https_url(url: str) -> bool:
+def safe_https_url(url: str, *, stream_url: bool = False) -> bool:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.hostname:
         return False
     host = parsed.hostname.lower()
-    if host not in ALLOWLIST and not any(host.endswith("." + allowed) for allowed in ALLOWLIST):
+    allowed = (STREAM_HOST_SUFFIXES | ALLOWLIST) if stream_url else ALLOWLIST
+    if host not in allowed and not any(host.endswith("." + item) for item in allowed):
         return False
     try:
         addresses = {item[4][0] for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)}
@@ -69,6 +74,16 @@ def probe_video(path: Path) -> dict[str, str]:
 
 def download_with_ytdlp(url: str, path: Path) -> None:
     import yt_dlp
+    def guard_resolved_stream(info: dict[str, Any]) -> None:
+        resolved = str(info.get("url") or "")
+        if resolved and not safe_https_url(resolved, stream_url=True):
+            raise RuntimeError("resolved_media_url_blocked")
+
+    def progress_guard(status: dict[str, Any]) -> None:
+        info = status.get("info_dict") if isinstance(status, dict) else None
+        if isinstance(info, dict):
+            guard_resolved_stream(info)
+
     opts = {
         "quiet": True,
         "noplaylist": True,
@@ -78,8 +93,16 @@ def download_with_ytdlp(url: str, path: Path) -> None:
         "retries": 2,
         "socket_timeout": 45,
         "max_filesize": 300 * 1024 * 1024,
+        "progress_hooks": [progress_guard],
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
+        planned = ydl.extract_info(url, download=False)
+        if not isinstance(planned, dict):
+            raise RuntimeError("yt_dlp_metadata_missing")
+        requested = planned.get("requested_formats") or planned.get("requested_downloads") or [planned]
+        for item in requested:
+            if isinstance(item, dict):
+                guard_resolved_stream(item)
         info = ydl.extract_info(url, download=True)
         actual = Path(ydl.prepare_filename(info))
         if not actual.exists():
@@ -110,7 +133,11 @@ def upsert_media_asset(client: SheetsClient, post: dict[str, Any], media: dict[s
     if any(str(row.get("media_id", "")) == asset_id for row in rows): return asset_id
     now = datetime.now(timezone.utc).isoformat()
     row = {"media_id": asset_id, "account_id": post.get("target_account_id", ""), "reference_post_id": post.get("source_post_id", ""), "source_platform": post.get("platform", ""), "source_post_url": post.get("canonical_post_url", ""), "original_media_url": media.get("original_media_url", ""), "storage_provider": "cloudinary", "storage_url": storage_url, "cloudinary_public_id": public_id, "media_type": media.get("media_type", ""), "mime_type": mime, "width": media.get("width", ""), "height": media.get("height", ""), "aspect_ratio": media.get("aspect_ratio", ""), "duration_seconds": media.get("duration_seconds", ""), "reuse_status": "APPROVED", "media_reuse_risk": "low", "downloaded_at": now, "uploaded_at": now, "used_count": "0", "local_path": str(local_path), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""), "allow_download": "true", "allow_upload": "true", "upload_status": "UPLOADED"}
-    client._call_with_rate_limit_retry("append_row:media_assets", lambda: ws.append_row([str(row.get(header, "")) for header in headers], value_input_option="USER_ENTERED")); return asset_id
+    client._call_with_rate_limit_retry("append_row:media_assets", lambda: ws.append_row([str(row.get(header, "")) for header in headers], value_input_option="USER_ENTERED"))
+    verified = client._call_with_rate_limit_retry("get_all_records:media_assets:verify", lambda: ws.get_all_records())
+    if not any(str(item.get("media_id", "")) == asset_id for item in verified):
+        raise RuntimeError("media_asset_read_after_write_failed")
+    return asset_id
 
 def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
     """Return one deterministic pending asset for the requested account.
@@ -204,6 +231,9 @@ def main() -> int:
         details = probe_video(local_path) if media_type == "video" else {}
         asset_id = upsert_media_asset(client, post, {**media, **details}, storage_url=storage_url, public_id=public_id, digest=digest_text, mime=mime, local_path=local_path)
         update_media_row(client, source_post_media_id, {"download_status": "DOWNLOADED", "cloudinary_status": "UPLOADED", "cloudinary_public_id": public_id, "storage_url": storage_url, "content_hash": digest_text, "mime_type": mime, "media_asset_id": asset_id, "last_error": "", "updated_at": datetime.now(timezone.utc).isoformat(), **details})
+        verified_media = record(client, "source_post_media", "source_post_media_id", source_post_media_id)
+        if not verified_media or str(verified_media.get("media_asset_id", "")) != asset_id or str(verified_media.get("cloudinary_status", "")).upper() != "UPLOADED":
+            raise RuntimeError("source_post_media_read_after_write_failed")
         local_path.unlink(missing_ok=True)
         print(json.dumps({**plan, "status": "INGESTED", "content_hash": digest_text, "media_asset_id": asset_id, "would_download": False, "would_upload": False}, ensure_ascii=False, indent=2)); return 0
     except Exception as exc:
