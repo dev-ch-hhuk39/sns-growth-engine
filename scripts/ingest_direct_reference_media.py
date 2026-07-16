@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Download and Cloudinary-ingest one explicitly permitted source-post asset."""
 from __future__ import annotations
-import argparse, hashlib, ipaddress, json, mimetypes, os, socket, sys
+import argparse, hashlib, ipaddress, json, mimetypes, os, socket, subprocess, sys
 from urllib.parse import urlparse
 from datetime import datetime, timezone
 from pathlib import Path
@@ -57,6 +57,13 @@ def magic_mime(path: Path) -> str:
     if head[4:8] == b"ftyp": return "video/mp4"
     if head.startswith(b"RIFF") and head[8:12] == b"WEBP": return "image/webp"
     return ""
+
+def probe_video(path: Path) -> dict[str, str]:
+    result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, timeout=30, check=True)
+    data = json.loads(result.stdout); stream = next((item for item in data.get("streams", []) if item.get("width")), {})
+    width, height = stream.get("width", ""), stream.get("height", "")
+    duration = float(data.get("format", {}).get("duration") or 0)
+    return {"duration_seconds": f"{duration:.2f}", "width": str(width), "height": str(height), "aspect_ratio": "9:16" if width and height and int(height) > int(width) else ""}
 
 def download_with_ytdlp(url: str, path: Path) -> None:
     import yt_dlp
@@ -184,8 +191,9 @@ def main() -> int:
         uploaded = cloudinary.uploader.upload(str(local_path), resource_type="video" if media_type == "video" else "image", public_id=f"sns-growth/direct/{digest_text}", overwrite=False)
         storage_url = str(uploaded.get("secure_url", "")); public_id = str(uploaded.get("public_id", ""))
         if not storage_url.startswith("https://res.cloudinary.com/"): raise RuntimeError("cloudinary_secure_url_missing")
-        asset_id = upsert_media_asset(client, post, media, storage_url=storage_url, public_id=public_id, digest=digest_text, mime=mime, local_path=local_path)
-        update_media_row(client, source_post_media_id, {"download_status": "DOWNLOADED", "cloudinary_status": "UPLOADED", "cloudinary_public_id": public_id, "storage_url": storage_url, "content_hash": digest_text, "mime_type": mime, "last_error": "", "updated_at": datetime.now(timezone.utc).isoformat()})
+        details = probe_video(local_path) if media_type == "video" else {}
+        asset_id = upsert_media_asset(client, post, {**media, **details}, storage_url=storage_url, public_id=public_id, digest=digest_text, mime=mime, local_path=local_path)
+        update_media_row(client, source_post_media_id, {"download_status": "DOWNLOADED", "cloudinary_status": "UPLOADED", "cloudinary_public_id": public_id, "storage_url": storage_url, "content_hash": digest_text, "mime_type": mime, "media_asset_id": asset_id, "last_error": "", "updated_at": datetime.now(timezone.utc).isoformat(), **details})
         local_path.unlink(missing_ok=True)
         print(json.dumps({**plan, "status": "INGESTED", "content_hash": digest_text, "media_asset_id": asset_id, "would_download": False, "would_upload": False}, ensure_ascii=False, indent=2)); return 0
     except Exception as exc:

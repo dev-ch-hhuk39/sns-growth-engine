@@ -450,7 +450,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "media_type", "mime_type", "width", "height", "duration_seconds", "content_hash",
         "download_status", "cloudinary_status", "cloudinary_public_id", "storage_url",
         "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
-        "created_at", "updated_at",
+        "media_asset_id", "created_at", "updated_at",
     ],
     # User-operated permission ledger. Code never infers a direct-reuse grant.
     "media_permissions": [

@@ -50,7 +50,7 @@ def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, A
         if platform == "tiktok" and "/video/" not in canonical_url:
             continue
         video_id = str(item.get("id") or hashlib.sha256(canonical(raw_url).encode()).hexdigest()[:16])
-        result.append({"external_post_id": video_id, "canonical_post_url": canonical_url, "original_post_text": str(item.get("description") or ""), "published_at": str(item.get("upload_date") or ""), "media_count": "1", "media_type": "video"})
+        result.append({"external_post_id": video_id, "canonical_post_url": canonical_url, "original_post_text": str(item.get("description") or ""), "published_at": str(item.get("upload_date") or ""), "media_count": "1", "media_type": "video", "duration_seconds": str(item.get("duration") or "")})
     return result, "PASS"
 
 
@@ -76,6 +76,7 @@ def source_post_row(source: dict[str, Any], item: dict[str, Any]) -> dict[str, s
         "canonical_post_url": item["canonical_post_url"], "external_post_id": external,
         "original_post_text": item.get("original_post_text", ""), "published_at": item.get("published_at", ""),
         "discovered_at": now, "media_count": item.get("media_count", "0"), "media_type": item.get("media_type", ""),
+        "duration_seconds": item.get("duration_seconds", ""),
         "rights_status": str(source.get("rights_status", "approved_creator_clip")), "permission_status": "approved",
         "permission_scope": "owner_attestation", "attribution_policy": "internal_ledger", "direct_media_reuse_allowed": "true",
         "collection_status": "DISCOVERED", "processing_status": "PENDING", "content_hash": hashlib.sha256(str(item.get("original_post_text", "")).encode()).hexdigest(),
@@ -91,7 +92,7 @@ def source_post_media_row(post: dict[str, str]) -> dict[str, str]:
         "source_post_media_id": f"spm_{post_id}_0", "source_post_id": post_id, "media_index": "0",
         "original_media_url": post["canonical_post_url"], "canonical_post_url": post["canonical_post_url"],
         "acquisition_method": "yt_dlp_resolve_on_ingest", "thumbnail_url": "", "media_type": media_type,
-        "mime_type": "", "width": "", "height": "", "duration_seconds": "", "content_hash": "",
+        "mime_type": "", "width": "", "height": "", "duration_seconds": post.get("duration_seconds", ""), "content_hash": "",
         "download_status": "PENDING", "cloudinary_status": "PENDING", "cloudinary_public_id": "", "storage_url": "",
         "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "reuse_status": "APPROVED", "retry_count": "0", "last_error": "", "created_at": now, "updated_at": now,
@@ -124,13 +125,17 @@ def main() -> int:
     cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False); ws = client._ensure_tab("source_posts", TAB_DEFINITIONS["source_posts"]); headers = ws.row_values(1)
     existing = {str(row.get("canonical_post_url", "")) for row in ws.get_all_records()}; saved = 0
     media_ws = client._ensure_tab("source_post_media", TAB_DEFINITIONS["source_post_media"]); media_headers = media_ws.row_values(1)
-    existing_media = {str(row.get("source_post_media_id", "")) for row in media_ws.get_all_records()}; media_saved = 0
+    existing_media_rows = {str(row.get("source_post_media_id", "")): row for row in media_ws.get_all_records()}; media_saved = 0
     for row in deduped.values():
         if row["canonical_post_url"] not in existing:
             ws.append_row([row.get(header, "") for header in headers], value_input_option="USER_ENTERED"); saved += 1
         media_row = source_post_media_row(row)
-        if media_row["source_post_media_id"] not in existing_media:
+        existing_media = existing_media_rows.get(media_row["source_post_media_id"])
+        if not existing_media:
             media_ws.append_row([media_row.get(header, "") for header in media_headers], value_input_option="USER_ENTERED"); media_saved += 1
+        elif media_row.get("duration_seconds") and not str(existing_media.get("duration_seconds", "")):
+            row_number = next(i for i, item in enumerate(media_ws.get_all_records(), start=2) if str(item.get("source_post_media_id", "")) == media_row["source_post_media_id"])
+            media_ws.update_cell(row_number, media_headers.index("duration_seconds") + 1, media_row["duration_seconds"])
     print(json.dumps({**result, "status": "APPLIED", "saved_source_posts": saved, "saved_source_post_media": media_saved}, ensure_ascii=False, indent=2)); return 0
 
 if __name__ == "__main__": raise SystemExit(main())

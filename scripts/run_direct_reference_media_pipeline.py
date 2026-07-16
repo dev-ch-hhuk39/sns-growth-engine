@@ -68,6 +68,10 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
     sources = _source_map(client)
     permissions = _permission_map(client)
     posted = _records(client, "posted_results")
+    assets_by_post = {
+        str(row.get("reference_post_id", "")): row
+        for row in _records(client, "media_assets")
+    }
     used_assets = {str(row.get("media_asset_id", "")) for row in posted}
     reasons: list[str] = []
     selected: tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None = None
@@ -92,7 +96,9 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         if not policy["allowed"]:
             reasons.append(f"{post_id}:{policy['reason']}")
             continue
-        asset_id = str(media.get("media_asset_id") or media.get("source_post_media_id") or "")
+        matching_asset = assets_by_post.get(post_id, {})
+        media = {**matching_asset, **media} if matching_asset else media
+        asset_id = str(media.get("media_asset_id") or media.get("media_id") or media.get("source_post_media_id") or "")
         if asset_id in used_assets or str(media.get("reuse_status", "")).upper() == "POSTED":
             reasons.append(f"{post_id}:already_posted")
             continue
