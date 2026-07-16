@@ -43,6 +43,9 @@ jobs:
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,6 +63,18 @@ jobs:
         run: python3 -c 'import random,time; d=random.randint(0,1800); print(f"[jitter] sleeping {d}s within ±15min window"); time.sleep(d)'
       - name: Dry-run direct media plan
         run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_1800_direct_media --dry-run --use-sheets
+      - name: Seed owner-attested media permissions
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: python3 scripts/seed_owner_attested_media_permissions.py --apply --confirm-owner-attestation
+      - name: Discover bounded approved source posts
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: python3 scripts/discover_approved_source_posts.py --account-id "$ACCOUNT_ID" --max-posts 3 --apply --confirm-discovery
+      - name: Ingest one approved source-post media asset
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        env:
+          ALLOW_VIDEO_DOWNLOAD: "true"
+          ALLOW_CLOUDINARY_UPLOAD: "true"
+        run: python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --apply --confirm-ingest
       - name: Apply direct media or text fallback
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
         env:
@@ -67,6 +82,8 @@ jobs:
           ALLOW_REAL_THREADS_POST: "true"
           ALLOW_REAL_THREADS_VIDEO_POST: "true"
           ALLOW_MEDIA_POSTS: "true"
+          ALLOW_VIDEO_DOWNLOAD: "false"
+          ALLOW_CLOUDINARY_UPLOAD: "false"
         run: |
           python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_1800_direct_media --apply --confirm-direct-media --fallback-to-text --use-sheets
       - if: always()
