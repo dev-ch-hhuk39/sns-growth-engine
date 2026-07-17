@@ -132,9 +132,11 @@ def _sheets_runtime_snapshot(account_id: str) -> dict[str, Any]:
         tabs = (
             "queue", "posted_results", "metric_snapshots", "pdca_runs",
             "prompt_improvement_suggestions", "source_account_posts",
-            "reference_post_scores", "source_videos", "video_transcripts",
+            "reference_post_scores", "media_permissions", "source_posts",
+            "source_post_media", "source_videos", "video_transcripts",
             "video_clip_candidates", "media_assets", "media_post_results",
-            "media_metrics", "clip_performance", "autonomous_health", "logs",
+            "media_metrics", "clip_performance", "content_slot_runs",
+            "resource_usage", "autonomous_health", "logs",
         )
         result: dict[str, Any] = {"status": "READ_OK", "tabs": {}, "errors": []}
         for logical in tabs:
@@ -145,7 +147,7 @@ def _sheets_runtime_snapshot(account_id: str) -> dict[str, Any]:
                 continue
             scoped = [row for row in rows if account_id == "all" or str(row.get("account_id", "")) == account_id]
             tab = {"status": "READ_OK", "row_count": len(scoped)}
-            if logical in {"queue", "posted_results", "source_videos", "video_clip_candidates", "media_assets", "media_post_results"}:
+            if logical in {"queue", "posted_results", "source_videos", "video_clip_candidates", "media_assets", "media_post_results", "content_slot_runs"}:
                 tab["status_counts"] = _compact_status_counts(scoped, account_id="all")
             if logical == "metric_snapshots":
                 tab["metrics_status_counts"] = _compact_status_counts(scoped, account_id="all", status_key="metrics_status")
