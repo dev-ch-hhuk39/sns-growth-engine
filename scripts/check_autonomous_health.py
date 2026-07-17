@@ -121,6 +121,31 @@ def _compact_status_counts(rows: list[dict[str, Any]], *, account_id: str, statu
     return dict(sorted(counts.items()))
 
 
+def _account_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        account = str(row.get("account_id") or row.get("target_account_id") or "BLANK").strip()
+        counts[account] = counts.get(account, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _media_asset_inventory(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    generated = [row for row in rows if row.get("video_clip_id") or row.get("clip_candidate_id")]
+    direct = [row for row in rows if not (row.get("video_clip_id") or row.get("clip_candidate_id"))]
+    uploaded = [
+        row for row in rows
+        if str(row.get("upload_status", "")).upper() == "UPLOADED" and bool(row.get("storage_url"))
+    ]
+    return {
+        "account_counts": _account_counts(rows),
+        "generated_clip_asset_count": len(generated),
+        "generated_clip_account_counts": _account_counts(generated),
+        "direct_reference_asset_count": len(direct),
+        "direct_reference_account_counts": _account_counts(direct),
+        "uploaded_asset_count": len(uploaded),
+    }
+
+
 def _scope_runtime_rows(logical: str, rows: list[dict[str, Any]], account_id: str) -> list[dict[str, Any]]:
     if account_id == "all" or logical in {"source_post_media", "resource_usage"}:
         return rows
@@ -157,6 +182,8 @@ def _sheets_runtime_snapshot(account_id: str) -> dict[str, Any]:
             tab = {"status": "READ_OK", "row_count": len(scoped)}
             if logical in {"queue", "posted_results", "source_videos", "video_clip_candidates", "media_assets", "media_post_results", "content_slot_runs"}:
                 tab["status_counts"] = _compact_status_counts(scoped, account_id="all")
+            if logical == "media_assets":
+                tab.update(_media_asset_inventory(scoped))
             if logical == "metric_snapshots":
                 tab["metrics_status_counts"] = _compact_status_counts(scoped, account_id="all", status_key="metrics_status")
             if logical == "autonomous_health":
