@@ -29,7 +29,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Runner and dependency health
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Runner baseline health
         run: |
           echo "runner=${RUNNER_NAME:-unknown}"
           uname -a
@@ -37,16 +40,20 @@ jobs:
           free -m | awk 'NR==2 {print "memory_mb=" $2}'
           python3 --version
           ffmpeg -version | head -1
-          /var/lib/sns-growth-engine/venv/bin/yt-dlp --version
       - name: Repository dependency health
         run: |
           python3 -m venv .runner-venv
           .runner-venv/bin/pip install -r requirements.txt >/dev/null
+          .runner-venv/bin/python -m yt_dlp --version
           .runner-venv/bin/python -c 'import cloudinary, gspread; print("requirements_import=ok")'
-          rm -rf .runner-venv
       - name: Credential presence only
         run: |
           for name in GCP_SA_JSON_BASE64 SA_JSON_BASE64 SPREADSHEET_ID SNS_MASTER_SHEET_ID THREADS_ACCESS_TOKEN_NIGHT_SCOUT THREADS_ACCESS_TOKEN_LIVER_MANAGER CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
             eval "value=\${$name:-}"
             if [ -n "$value" ]; then echo "$name=present"; else echo "$name=missing"; fi
           done
+      - name: Read-only production health summary
+        run: .runner-venv/bin/python scripts/check_autonomous_health.py --account-id all --dry-run --use-sheets
+      - name: Cleanup health environment
+        if: always()
+        run: rm -rf .runner-venv
