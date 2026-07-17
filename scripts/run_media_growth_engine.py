@@ -201,7 +201,10 @@ def permission_ok(source: dict[str, Any]) -> bool:
 def is_real_discovered_video(row: dict[str, Any]) -> bool:
     if str(row.get("discovery_status", "")).upper() == "PLANNED_ONLY":
         return False
-    if "video candidate" in str(row.get("title", "")).lower() or str(row.get("description_preview", "")) == "candidate metadata only":
+    # Flat channel discovery often has a real title/video id but no public
+    # description. The placeholder description alone must not turn that real
+    # video back into a synthetic plan row.
+    if "video candidate" in str(row.get("title", "")).lower():
         return False
     platform = str(row.get("platform", "")).lower()
     video_id = extract_video_id(str(row.get("canonical_video_url", "")), platform)
@@ -364,7 +367,12 @@ def build_media_growth_plan(
         if _transcript_done(t)
     }
     discovery_plan = build_discovery_plan(account_id, existing_source_videos=existing_source_videos)
-    planned_source_videos = [row for row in existing_source_videos if is_real_discovered_video(row)]
+    planned_source_videos = [
+        row
+        for row in existing_source_videos
+        if (account_id == "all" or str(row.get("account_id", "")) == account_id)
+        and is_real_discovered_video(row)
+    ]
     # Preserve deterministic mock candidates only when no registry was supplied at all.
     if not existing_source_videos:
         planned_source_videos = []

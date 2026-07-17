@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-from discover_approved_source_videos import build_discovery_plan
+from discover_approved_source_videos import build_discovery_plan, load_sources
 from run_media_growth_engine import build_media_growth_plan
 
 
 def main() -> int:
     discovery = build_discovery_plan("night_scout")
+    expected_active_sources = {
+        row["source_id"]
+        for row in load_sources()
+        if row.get("active") is True
+        and "night_scout" in (row.get("target_account_ids") or [row.get("target_account_id")])
+        and row.get("media_autopilot_enabled") is True
+    }
     # Placeholder discovery rows have no evidence about who appears in the
     # video, so they are analysis-only. A real discovered row with an explicit
     # female-subject metadata cue may create candidates.
@@ -26,7 +33,7 @@ def main() -> int:
         }],
     )
     checks = [
-        ("night discovery selects authorized sources", len(discovery["selected_sources"]) == 9),
+        ("night discovery selects active authorized sources", {row["source_id"] for row in discovery["selected_sources"]} == expected_active_sources),
         ("night discovery is bounded", discovery["limits"]["max_total_new_videos_per_run"] == 12),
         ("night growth plan is valid", growth["status"] == "PLAN_ONLY"),
         ("unknown night subject stays analysis only", growth["clip_candidate_count"] == 0),
