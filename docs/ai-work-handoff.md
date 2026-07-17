@@ -88,6 +88,7 @@ SNS Growth Engine v2 はprivate GitHub repositoryのscheduleをXserver VPS上の
 - Low-memory transcription、active source/video ID、real discovery、grounding、media preparation dedupe/cap、Sheets retry、PDCA idempotency、slot idempotency、health inventory/health workflowの対象テストはすべてPASS。
 - `py_compile`、`git diff --check`: PASS。
 - dry-run inventory runs: liver `29548936624`, night `29548978662`, both success。外部download/cut/upload/post stepはskip。
+- 最終docs HEADでのaccount workflow dry-run: liver `29549669034`, night `29549716690`, both success。`dry_run_only=true` / `confirm_autonomous=false`でguard/apply/postはskip、self-hosted runnerのplanとSheets healthのみ実行。
 - confirm/envなしのdownload/cut/upload/postは既存safety testでBLOCKを維持。
 - 今回の追加資産準備は投稿gateがfalseのprepare-onlyで実施。手動の追加Threads投稿は行っていない。
 

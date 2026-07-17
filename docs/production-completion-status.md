@@ -18,6 +18,7 @@ Status: **production operational for text, direct media, generated clips, fallba
 - Video output is 9:16 and **does not burn subtitles**. Publisher input remains `public_post_text` only.
 - X and beauty stay blocked. Unknown/reference-only/revoked media stays blocked. External transcription API and automatic learning-rule changes stay disabled.
 - Current WARNs: Threads metrics are UNAVAILABLE rather than zero; Node 20 action deprecation annotation; historical failed/running slot/log rows remain auditable. Current health reports `problems=[]`.
+- Current-HEAD account workflow proof: liver dry-run `29549669034` and night dry-run `29549716690` both succeeded on the production self-hosted runner; apply/post steps were explicitly skipped.
 
 Older dated sections below are retained as implementation history. Statements such as "media schedule OFF", "runner missing", or "real media not executed" are no longer current.
 
