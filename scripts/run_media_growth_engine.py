@@ -145,9 +145,14 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
             )
             if should_refresh:
                 merged = {**old, **mapped}
-                if str(old.get("post_status", "")).upper() == "POSTED":
+                old_clip_status = str(old.get("clip_status", "")).upper()
+                old_reviewer_status = str(old.get("reviewer_status", "")).upper()
+                old_post_status = str(old.get("post_status", "")).upper()
+                if old_post_status == "POSTED" or old_clip_status in {"MEDIA_READY", "POSTED"}:
                     merged["post_status"] = old.get("post_status", "")
                     merged["clip_status"] = old.get("clip_status", "")
+                    merged["reviewer_status"] = old.get("reviewer_status", "")
+                elif old_reviewer_status == "MEDIA_READY":
                     merged["reviewer_status"] = old.get("reviewer_status", "")
                 if str(old.get("cut_status", "")).upper() in {"DONE", "CUT"}:
                     merged["cut_status"] = old.get("cut_status", "")
@@ -155,6 +160,8 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
                 if str(old.get("upload_status", "")).upper() == "UPLOADED":
                     merged["upload_status"] = old.get("upload_status", "")
                     merged["storage_url"] = old.get("storage_url", "")
+                    merged["media_asset_id"] = old.get("media_asset_id", "")
+                    merged["clip_media_asset_id"] = old.get("clip_media_asset_id", "")
                 to_update.append({
                     "range": f"{rowcol_to_a1(row_number, 1)}:{rowcol_to_a1(row_number, len(headers))}",
                     "values": [[str(merged.get(h, "")) for h in headers]],

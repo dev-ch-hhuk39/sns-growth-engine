@@ -213,9 +213,19 @@ def select_candidate(
     source_videos: list[dict[str, Any]],
     posted_results: list[dict[str, Any]],
     account_id: str = "liver_manager",
+    media_assets: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     sources = {str(row.get("source_video_id", "")): row for row in source_videos}
     posted_clip_ids = {str(row.get("clip_candidate_id", "")) for row in posted_results if row.get("clip_candidate_id")}
+    prepared_clip_ids = {
+        str(row.get("clip_candidate_id") or row.get("video_clip_id") or "")
+        for row in (media_assets or [])
+        if (row.get("clip_candidate_id") or row.get("video_clip_id"))
+        and (
+            str(row.get("upload_status", "")).upper() == "UPLOADED"
+            or bool(row.get("storage_url") or row.get("cloudinary_url"))
+        )
+    }
     reasons: list[str] = []
     eligible = []
     for clip in clips:
@@ -244,6 +254,14 @@ def select_candidate(
             continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")
+            continue
+        if (
+            clip_id in prepared_clip_ids
+            or str(clip.get("cut_status", "")).upper() in {"CUT", "DONE"}
+            or str(clip.get("upload_status", "")).upper() == "UPLOADED"
+            or bool(clip.get("media_asset_id") or clip.get("clip_media_asset_id") or clip.get("storage_url"))
+        ):
+            reasons.append(f"{clip_id}:already_prepared")
             continue
         if not is_individual_video_url(url):
             reasons.append(f"{clip_id}:individual_video_url_required")
@@ -391,7 +409,9 @@ def build_plan(
             clips, source_videos, media_assets, posted, account_id,
         )
     else:
-        clip, source_video, skipped = select_candidate(clips, source_videos, posted, account_id)
+        clip, source_video, skipped = select_candidate(
+            clips, source_videos, posted, account_id, media_assets,
+        )
         selected_asset = None
     no_candidate = not clip or not source_video
     if no_candidate:
