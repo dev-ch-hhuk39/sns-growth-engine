@@ -22,6 +22,8 @@ checks = [(f"health reads {name}", f'"{name}"' in source) for name in required]
 checks.extend([
     ("health remains dry-run", '"dry_run": True' in source),
     ("health never sets up Sheets", "setup_all" not in source),
+    ("source posts scope by target account", 'logical == "source_posts"' in source and 'target_account_id' in source),
+    ("parentless media and resource usage remain globally countable", '"source_post_media", "resource_usage"' in source),
 ])
 for name, ok in checks:
     print(f"  {'PASS' if ok else 'FAIL'} {name}")

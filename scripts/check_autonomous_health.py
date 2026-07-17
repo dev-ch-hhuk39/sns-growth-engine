@@ -121,6 +121,14 @@ def _compact_status_counts(rows: list[dict[str, Any]], *, account_id: str, statu
     return dict(sorted(counts.items()))
 
 
+def _scope_runtime_rows(logical: str, rows: list[dict[str, Any]], account_id: str) -> list[dict[str, Any]]:
+    if account_id == "all" or logical in {"source_post_media", "resource_usage"}:
+        return rows
+    if logical == "source_posts":
+        return [row for row in rows if str(row.get("target_account_id", "")) == account_id]
+    return [row for row in rows if str(row.get("account_id", "")) == account_id]
+
+
 def _sheets_runtime_snapshot(account_id: str) -> dict[str, Any]:
     """Read operational counts without setup, writes, secret values, or post text."""
     try:
@@ -145,7 +153,7 @@ def _sheets_runtime_snapshot(account_id: str) -> dict[str, Any]:
             except Exception as exc:
                 result["tabs"][logical] = {"status": "UNAVAILABLE", "reason": type(exc).__name__}
                 continue
-            scoped = [row for row in rows if account_id == "all" or str(row.get("account_id", "")) == account_id]
+            scoped = _scope_runtime_rows(logical, rows, account_id)
             tab = {"status": "READ_OK", "row_count": len(scoped)}
             if logical in {"queue", "posted_results", "source_videos", "video_clip_candidates", "media_assets", "media_post_results", "content_slot_runs"}:
                 tab["status_counts"] = _compact_status_counts(scoped, account_id="all")
