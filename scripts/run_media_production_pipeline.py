@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
-from content_slot_runs import business_date, build_slot_run, posts_used_in_business_date, upsert_slot_run  # noqa: E402
+from content_slot_runs import business_date, build_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
@@ -36,6 +36,7 @@ MEDIA_CONFIG = ROOT / "config/media_growth_engine.json"
 AUTONOMOUS_CONFIG = ROOT / "config/autonomous_mode.json"
 JST = timezone(timedelta(hours=9))
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
+POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED", "POSTED"}
 REQUIRED_ENV = (
     "ALLOW_VIDEO_DOWNLOAD",
     "ALLOW_VIDEO_CUT",
@@ -513,6 +514,9 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
 def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     if plan.get("status") == "BLOCKED":
         return plan
+    slot_id = str(plan.get("slot_id", ""))
+    if slot_id and existing_slot_status(client, str(plan["account_id"]), slot_id) in POSTED_SLOT_STATUSES:
+        return {**plan, "status": "SKIPPED", "reason": "slot_already_posted", "would_post_video": False}
     if plan.get("post_saved_media"):
         return execute_saved_media_post(plan, client)
     clip = dict(plan["selected_clip"])

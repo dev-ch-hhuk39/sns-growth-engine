@@ -46,6 +46,7 @@
   "auto_approve_clip_candidates": true,
   "min_auto_clip_score": 80,
   "media_daily_post_cap": 2,
+  "direct_media_daily_post_cap": 1,
   "media_prepare_before_post_minutes": 120,
   "saved_media_post_enabled": true,
   "saved_media_post_requires_uploaded_unused_asset": true,

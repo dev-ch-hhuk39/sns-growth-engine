@@ -129,7 +129,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Autonomous text/media posting provenance and validator state.
         "source_id", "source_url", "generation_mode", "validator_status",
         "media_asset_id", "media_url", "media_status",
-        "source_video_id", "clip_candidate_id",
+        "source_post_id", "source_video_id", "clip_candidate_id",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -196,7 +196,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rejected_reason", "blocked_reason",
         "updated_at", "posted_at", "post_url", "result_id",
         # Media Growth Engine provenance. Text-only rows leave these blank.
-        "source_video_id", "clip_candidate_id",
+        "source_post_id", "source_video_id", "clip_candidate_id",
         "media_url", "media_status", "media_required",
         "duration_seconds", "aspect_ratio",
     ],
