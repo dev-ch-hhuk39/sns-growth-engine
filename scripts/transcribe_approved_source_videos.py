@@ -34,6 +34,7 @@ from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DONE_STATUSES = {"DONE", "FETCHED", "LOCAL_WHISPER_DONE", "YOUTUBE_CAPTIONS_DONE"}
+SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 NIGHT_FEMALE_SUBJECT_CUES = ("キャバ嬢", "女の子", "女性", "嬢", "キャスト", "girl", "ladies")
 NIGHT_ANALYSIS_ONLY_CUES = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
 
@@ -67,6 +68,18 @@ def night_metadata_clip_eligible(video: dict[str, Any]) -> tuple[bool, str]:
 def transcript_id_for(video: dict[str, Any]) -> str:
     safe = re.sub(r"[^A-Za-z0-9_]+", "_", str(video.get("source_video_id", "unknown")))[:120]
     return f"tr_{safe}"
+
+
+def load_active_media_source_ids(account_id: str) -> set[str]:
+    payload = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
+    rows = payload.get("sources", []) if isinstance(payload, dict) else []
+    return {
+        str(row.get("source_id", ""))
+        for row in rows
+        if row.get("active") is True
+        and row.get("media_autopilot_enabled") is True
+        and (account_id == "all" or account_id in (row.get("target_account_ids") or [row.get("target_account_id")]))
+    }
 
 
 def load_sheets() -> SheetsClient:
@@ -143,6 +156,7 @@ def eligible_videos(
     *,
     account_id: str,
     limit: int,
+    allowed_source_ids: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     existing_done = {
         str(row.get("source_video_id", ""))
@@ -160,6 +174,8 @@ def eligible_videos(
         reasons: list[str] = []
         if account_id != "all" and str(row.get("account_id", "")) != account_id:
             reasons.append("account_not_targeted")
+        if allowed_source_ids is not None and str(row.get("source_id", "")) not in allowed_source_ids:
+            reasons.append("source_not_active_for_media_autopilot")
         if rights not in APPROVED_RIGHTS or not rights_allows_media_use(rights):
             reasons.append("rights_not_approved")
         if permission != "approved":
@@ -168,8 +184,13 @@ def eligible_videos(
             reasons.append("platform_not_supported")
         if not is_individual_video_url(url):
             reasons.append("individual_video_url_required")
-        if not extract_video_id(url, platform):
+        video_id = extract_video_id(url, platform)
+        if not video_id:
             reasons.append("video_id_missing")
+        elif platform == "youtube" and len(video_id) != 11:
+            reasons.append("youtube_individual_video_id_required")
+        elif platform == "tiktok" and not video_id.isdigit():
+            reasons.append("tiktok_individual_video_id_required")
         subject_eligible, subject_reason = night_metadata_clip_eligible(row)
         if not subject_eligible:
             reasons.append(subject_reason)
@@ -473,7 +494,13 @@ def main() -> int:
     source_videos, transcripts = load_rows(client) if client else ([], [])
     if client:
         source_videos = attach_approved_storage_inputs(source_videos, load_media_assets(client))
-    selected, skipped = eligible_videos(source_videos, transcripts, account_id=args.account_id, limit=args.limit)
+    selected, skipped = eligible_videos(
+        source_videos,
+        transcripts,
+        account_id=args.account_id,
+        limit=args.limit,
+        allowed_source_ids=load_active_media_source_ids(args.account_id),
+    )
     transcript_rows = []
     source_updates = []
     summaries = []

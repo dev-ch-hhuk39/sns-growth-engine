@@ -180,7 +180,13 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
         if len(rows) >= min(scan_limit, per_source_limit):
             break
         video_url = _entry_video_url(source, entry)
-        if not video_url or not extract_video_id(video_url, str(source.get("source_platform", ""))):
+        platform = str(source.get("source_platform", ""))
+        video_id = extract_video_id(video_url, platform)
+        if not video_url or not video_id:
+            continue
+        if platform == "youtube" and len(video_id) != 11:
+            continue
+        if platform == "tiktok" and not video_id.isdigit():
             continue
         metadata = dict(entry)
         if not metadata.get("duration"):

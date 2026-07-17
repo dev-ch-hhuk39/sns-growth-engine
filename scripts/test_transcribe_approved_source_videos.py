@@ -29,6 +29,19 @@ selected_after_done, skipped_after_done = eligible_videos(
     limit=3,
 )
 bad, bad_skipped = eligible_videos([{**video, "rights_status": "third_party_reference_only"}], [], account_id="liver_manager", limit=3)
+inactive, inactive_skipped = eligible_videos(
+    [{**video, "source_id": "inactive_source"}],
+    [],
+    account_id="liver_manager",
+    limit=3,
+    allowed_source_ids={"active_source"},
+)
+bad_youtube_id, bad_youtube_id_skipped = eligible_videos(
+    [{**video, "video_id": "UC0123456789012345678901", "canonical_video_url": "https://www.youtube.com/watch?v=UC0123456789012345678901"}],
+    [],
+    account_id="liver_manager",
+    limit=3,
+)
 night_good = {**video, "source_video_id": "sv_ns_good", "account_id": "night_scout", "title": "キャバ嬢の店選び"}
 night_bad = {**video, "source_video_id": "sv_ns_bad", "account_id": "night_scout", "title": "男性スカウトが語る求人"}
 night_unknown = {**video, "source_video_id": "sv_ns_unknown", "account_id": "night_scout", "title": "HOSTCALL episode"}
@@ -42,6 +55,8 @@ checks = [
     ("transcript id stable", transcript_id_for(video) == "tr_sv_lm_1"),
     ("already transcribed skipped", not selected_after_done and "already_transcribed" in skipped_after_done[0]["reason"]),
     ("third party blocked", not bad and "rights_not_approved" in bad_skipped[0]["reason"]),
+    ("inactive source blocked", not inactive and "source_not_active_for_media_autopilot" in inactive_skipped[0]["reason"]),
+    ("youtube channel id blocked as video", not bad_youtube_id and "youtube_individual_video_id_required" in bad_youtube_id_skipped[0]["reason"]),
     ("night female subject metadata accepted", night_metadata_clip_eligible(night_good)[0]),
     ("night male scout metadata blocked", not night_metadata_clip_eligible(night_bad)[0]),
     ("night unknown subject metadata blocked", not night_metadata_clip_eligible(night_unknown)[0]),
