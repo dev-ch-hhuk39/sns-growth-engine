@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import rights_allows_media_use  # noqa: E402
-from discover_approved_source_videos import build_discovery_plan, load_existing_source_videos  # noqa: E402
+from discover_approved_source_videos import load_existing_source_videos  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from media_growth_schemas import (  # noqa: E402
     build_clip_candidate_for_video,
@@ -373,37 +373,12 @@ def build_media_growth_plan(
         for t in existing_transcripts
         if _transcript_done(t)
     }
-    discovery_plan = build_discovery_plan(account_id, existing_source_videos=existing_source_videos)
     planned_source_videos = [
         row
         for row in existing_source_videos
         if (account_id == "all" or str(row.get("account_id", "")) == account_id)
         and is_real_discovered_video(row)
     ]
-    # Preserve deterministic mock candidates only when no registry was supplied at all.
-    if not existing_source_videos:
-        planned_source_videos = []
-        for result in discovery_plan.get("source_results", []):
-            source = next((s for s in selected if s.get("source_id") == result.get("source_id")), None)
-            if not source or result.get("blocked_reasons"):
-                continue
-            from media_growth_schemas import build_source_video  # local import keeps public API stable
-            for i in range(1, min(int(config.get("max_new_videos_per_source_per_run", 10)), 3) + 1):
-                planned_source_videos.append(build_source_video(source, i))
-        transcript_by_source_video = {
-            str(video.get("source_video_id", "")): {
-                "transcript_id": f"tr_{video.get('source_video_id', '')}",
-                "source_video_id": video.get("source_video_id", ""),
-                "transcription_status": "DONE",
-                "transcript_text": "初見が入りやすい配信づくりでは、挨拶、話題の共有、コメントしやすい空気が大事です。",
-                "segments_json": json.dumps([
-                    {"start": 2, "end": 12, "text": "初見が入りやすい配信づくりでは挨拶が大事です。"},
-                    {"start": 15, "end": 28, "text": "今話している内容を共有するとコメントしやすくなります。"},
-                    {"start": 35, "end": 48, "text": "常連だけで固めず、入ってきた人が参加できる空気を作ります。"},
-                ], ensure_ascii=False),
-            }
-            for video in planned_source_videos
-        }
 
     source_by_id = {str(s.get("source_id", "")): s for s in selected}
     output = generate_reader_facing_post(account_id, index=1)
@@ -503,7 +478,7 @@ def build_media_growth_plan(
         "rights_check": "PASS" if all(r["rights_check"] == "PASS" for r in source_results) else "BLOCKED",
         "permission_evidence": "PASS" if all(r["permission_evidence"] == "PASS" for r in source_results) else "BLOCKED",
         "source_results": source_results,
-        "source_videos_source": "existing_source_videos" if existing_source_videos else "discovery_plan",
+        "source_videos_source": "existing_source_videos" if existing_source_videos else "none_discover_first",
         "source_video_count": len(planned_source_videos),
         "transcript_grounded_source_video_count": len(transcript_by_source_video),
         "source_videos_preview": planned_source_videos[:5],

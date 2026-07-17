@@ -199,6 +199,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_post_id", "source_video_id", "clip_candidate_id",
         "media_url", "media_status", "media_required",
         "duration_seconds", "aspect_ratio",
+        # A direct source post may be a carousel.  These lists must all share
+        # the same source_post_id and are never used to mix different posts.
+        "media_asset_ids_json", "media_urls_json", "media_types_json",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -439,8 +442,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     # 許可済み参照元の「投稿単位」registry。source_videoとは別に元本文と付属mediaを同一IDで保持する。
     "source_posts": [
         "source_post_id", "source_id", "source_account_id", "target_account_id",
-        "platform", "canonical_post_url", "external_post_id", "original_post_text",
+        "platform", "profile_url", "canonical_post_url", "external_post_id", "original_post_text",
         "published_at", "discovered_at", "media_count", "media_type",
+        "author_name", "author_handle", "media_items_json", "engagement_json",
+        "collection_backend", "backend_version",
         "rights_status", "permission_status", "permission_scope", "attribution_policy",
         "direct_media_reuse_allowed", "collection_status", "processing_status", "content_hash",
         "retry_count", "last_error", "created_at", "updated_at",
@@ -448,11 +453,31 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     # source_postsの付属media。source_post_idを唯一の親として保持し、本文/素材の取り違えを禁止する。
     "source_post_media": [
         "source_post_media_id", "source_post_id", "media_index", "original_media_url",
-        "canonical_post_url", "acquisition_method", "thumbnail_url",
+        "canonical_post_url", "acquisition_method", "resolver_backend", "thumbnail_url",
         "media_type", "mime_type", "width", "height", "aspect_ratio", "duration_seconds", "content_hash",
         "download_status", "cloudinary_status", "cloudinary_public_id", "storage_url",
         "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
         "media_asset_id", "created_at", "updated_at",
+    ],
+    # Acquisition routing observability. These rows contain no browser state,
+    # source text, media URLs, tokens or session material.
+    "backend_health": [
+        "backend_health_id", "backend_name", "platform", "capability", "status",
+        "last_success_at", "last_failure_at", "consecutive_failures", "cooldown_until",
+        "average_duration_ms", "failure_reason", "selected_as_primary", "updated_at",
+    ],
+    "backend_routing_history": [
+        "routing_event_id", "source_id", "platform", "capability", "primary_backend",
+        "selected_backend", "fallback_used", "shadow_backend_counts", "status",
+        "reason", "created_at",
+    ],
+    "trend_signals": [
+        "trend_signal_id", "account_id", "platform", "topic", "signal_summary",
+        "source_count", "window_days", "collection_backend", "status", "created_at", "updated_at",
+    ],
+    "source_candidates": [
+        "source_candidate_id", "candidate_url", "platform", "discovery_backend", "reason",
+        "status", "created_at", "updated_at",
     ],
     # User-operated permission ledger. Code never infers a direct-reuse grant.
     "media_permissions": [
@@ -569,6 +594,10 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "source_account_posts":           "収集済み投稿",
     "source_posts":                   "参照元投稿",
     "source_post_media":              "参照元投稿メディア",
+    "backend_health":                 "取得バックエンドヘルス",
+    "backend_routing_history":        "取得バックエンド履歴",
+    "trend_signals":                  "トレンドシグナル",
+    "source_candidates":              "収集候補",
     "media_permissions":              "メディア利用許可",
     "source_collection_plans":        "収集計画",
     "media_ingestion_runs":           "メディア取込履歴",

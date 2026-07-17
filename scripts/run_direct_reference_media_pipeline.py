@@ -108,20 +108,21 @@ def _vertical_aspect(media: dict[str, Any]) -> str:
 
 
 def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
-    """Select one unused uploaded video with an explicit source-post linkage."""
+    """Select one complete source post; never combine media across parents."""
     posts = {str(row.get("source_post_id", "")): row for row in _records(client, "source_posts")}
     sources = _source_map(client)
     permissions = _permission_map(client)
     posted = _records(client, "posted_results")
-    assets_by_post = {
-        str(row.get("reference_post_id", "")): row
-        for row in _records(client, "media_assets")
-    }
+    assets_by_post: dict[str, list[dict[str, Any]]] = {}
+    for asset in _records(client, "media_assets"):
+        assets_by_post.setdefault(str(asset.get("reference_post_id", "")), []).append(asset)
+    media_by_post: dict[str, list[dict[str, Any]]] = {}
+    for row in _records(client, "source_post_media"):
+        media_by_post.setdefault(str(row.get("source_post_id", "")), []).append(row)
     used_assets = {str(row.get("media_asset_id", "")) for row in posted}
     reasons: list[str] = []
     selected: tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None = None
-    for media in _records(client, "source_post_media"):
-        post_id = str(media.get("source_post_id", ""))
+    for post_id, media_rows in sorted(media_by_post.items()):
         post = posts.get(post_id)
         if not post:
             reasons.append("source_post_link_missing")
@@ -141,33 +142,42 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         if not policy["allowed"]:
             reasons.append(f"{post_id}:{policy['reason']}")
             continue
-        matching_asset = assets_by_post.get(post_id, {})
-        if matching_asset:
-            media = {**media, **{key: value for key, value in matching_asset.items() if str(value or "").strip()}}
-        asset_id = str(media.get("media_asset_id") or media.get("media_id") or media.get("source_post_media_id") or "")
-        if asset_id in used_assets or str(media.get("reuse_status", "")).upper() == "POSTED":
-            reasons.append(f"{post_id}:already_posted")
+        resolved: list[dict[str, Any]] = []
+        incomplete = False
+        for media in sorted(media_rows, key=lambda row: int(str(row.get("media_index", "0") or "0"))):
+            asset = next((row for row in assets_by_post.get(post_id, []) if str(row.get("original_media_url", "")) == str(media.get("original_media_url", ""))), {})
+            merged = {**media, **{key: value for key, value in asset.items() if str(value or "").strip()}}
+            asset_id = str(merged.get("media_asset_id") or merged.get("media_id") or merged.get("source_post_media_id") or "")
+            if asset_id in used_assets or str(merged.get("reuse_status", "")).upper() == "POSTED":
+                incomplete = True
+                reasons.append(f"{post_id}:already_posted")
+                break
+            if str(merged.get("cloudinary_status", "")).upper() != "UPLOADED" or not str(merged.get("storage_url", "")):
+                incomplete = True
+                reasons.append(f"{post_id}:carousel_media_not_uploaded")
+                break
+            media_type = str(merged.get("media_type", "")).lower()
+            if media_type not in {"video", "image"}:
+                incomplete = True
+                reasons.append(f"{post_id}:unsupported_media_type")
+                break
+            if media_type == "video":
+                try:
+                    duration = float(merged.get("duration_seconds") or 0)
+                except (TypeError, ValueError):
+                    duration = 0
+                if not 8 <= duration <= 45 or _vertical_aspect(merged) != "9:16":
+                    incomplete = True
+                    reasons.append(f"{post_id}:video_media_not_postable")
+                    break
+                merged["aspect_ratio"] = "9:16"
+            resolved.append(merged)
+        if incomplete or not resolved:
             continue
-        if str(media.get("cloudinary_status", "")).upper() != "UPLOADED" or not str(media.get("storage_url", "")):
-            reasons.append(f"{post_id}:media_not_uploaded")
-            continue
-        media_type = str(media.get("media_type", "")).lower()
-        if media_type not in {"video", "image"}:
-            reasons.append(f"{post_id}:unsupported_media_type")
-            continue
-        if media_type == "video":
-            try:
-                duration = float(media.get("duration_seconds") or 0)
-            except (TypeError, ValueError):
-                duration = 0
-            if not 8 <= duration <= 45:
-                reasons.append(f"{post_id}:duration_out_of_range")
-                continue
-            if _vertical_aspect(media) != "9:16":
-                reasons.append(f"{post_id}:aspect_ratio_not_9_16")
-                continue
-            media["aspect_ratio"] = "9:16"
-        selected = (post, media, source)
+        # A mixed carousel can be supported only by an explicit official API
+        # gate later in the publisher.  Keep its parent intact either way.
+        primary = {**resolved[0], "carousel_media": resolved}
+        selected = (post, primary, source)
         break
     return (*selected, reasons) if selected else (None, None, None, reasons)
 
@@ -228,6 +238,10 @@ def build_plan(
     )
     text = str(grounded["public_post_text"])
     validation = final_public_post_validator(text, account_id)
+    carousel_media = list(media.get("carousel_media") or [media])
+    carousel_urls = [str(item.get("storage_url", "")) for item in carousel_media]
+    carousel_asset_ids = [str(item.get("media_asset_id") or item.get("media_id") or item.get("source_post_media_id") or "") for item in carousel_media]
+    carousel_types = [str(item.get("media_type", "")).lower() for item in carousel_media]
     asset_id = str(media.get("media_asset_id") or media.get("source_post_media_id") or "")
     validator = validate_media_post({
         "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
@@ -239,6 +253,7 @@ def build_plan(
         "status": "WILL_APPLY" if apply and validation["status"] == "PASS" and validator["status"] == "PASS" else "PLAN_ONLY" if validation["status"] == "PASS" and validator["status"] == "PASS" else "BLOCKED",
         "account_id": account_id, "slot_id": slot_id, "manual_e2e_proof": manual_e2e_proof, "source_post": post, "source_post_media": media,
         "source_post_id": post["source_post_id"], "media_asset_id": asset_id, "public_post_text": text,
+        "media_asset_ids": carousel_asset_ids, "media_urls": carousel_urls, "media_types": carousel_types,
         "today_post_count": len(today_posts), "today_direct_media_post_count": len(direct_today),
         "daily_post_cap": daily_cap, "direct_media_daily_post_cap": direct_cap,
         "public_post_preview": public_preview(text), "final_public_post_validator": validation["status"],
@@ -261,6 +276,9 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "priority": "1", "status": "READY", "auto_publish": "true", "generation_mode": "direct_reference_media",
         "source_post_id": post["source_post_id"], "source_id": post.get("source_id", ""), "source_url": post.get("post_url", ""),
         "media_asset_id": plan["media_asset_id"], "media_url": media["storage_url"],
+        "media_asset_ids_json": json.dumps(plan.get("media_asset_ids", [])),
+        "media_urls_json": json.dumps(plan.get("media_urls", [])),
+        "media_types_json": json.dumps(plan.get("media_types", [])),
         "media_status": "UPLOADED", "media_required": "true", "media_type": media.get("media_type", "video"), "duration_seconds": media.get("duration_seconds", ""),
         "aspect_ratio": media.get("aspect_ratio", "9:16"), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "public_post_text": plan["public_post_text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",

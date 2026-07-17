@@ -63,6 +63,44 @@ def _create_container(
     return container_id
 
 
+def _create_carousel_container(
+    user_id: str,
+    access_token: str,
+    text: str,
+    media_urls: list[str],
+    media_types: list[str],
+) -> str:
+    """Create official Threads carousel children, then their parent container."""
+    import requests
+
+    children: list[str] = []
+    for media_url, media_type in zip(media_urls, media_types):
+        payload = {
+            "media_type": media_type,
+            "is_carousel_item": "true",
+            "access_token": access_token,
+            "video_url" if media_type == "VIDEO" else "image_url": media_url,
+        }
+        response = requests.post(f"{THREADS_API_BASE}/{user_id}/threads", data=payload, timeout=30)
+        response.raise_for_status()
+        child = str(response.json().get("id") or "")
+        if not child:
+            raise RuntimeError("Threads carousel child container missing id")
+        if media_type == "VIDEO":
+            _wait_for_video_container(child, access_token)
+        children.append(child)
+    response = requests.post(
+        f"{THREADS_API_BASE}/{user_id}/threads",
+        data={"media_type": "CAROUSEL", "text": text, "children": ",".join(children), "access_token": access_token},
+        timeout=30,
+    )
+    response.raise_for_status()
+    container_id = str(response.json().get("id") or "")
+    if not container_id:
+        raise RuntimeError("Threads carousel parent container missing id")
+    return container_id
+
+
 def _publish_container(
     user_id: str,
     access_token: str,
@@ -136,11 +174,21 @@ class ThreadsPublisher(BasePublisher):
         dry_run: bool = True,
         media_url: str | None = None,
         media_type: str = "VIDEO",
+        media_urls: list[str] | None = None,
+        media_types: list[str] | None = None,
     ) -> PublishResult:
         account_id = account.get("account_id", "")
         queue_id = queue_item.get("queue_id", "")
         derivative_id = derivative.get("derivative_id", "")
-        has_media = bool(media_url and media_url.strip())
+        urls = [str(item).strip() for item in (media_urls or []) if str(item).strip()]
+        types = [str(item).upper() for item in (media_types or [])]
+        if not urls and media_url and media_url.strip():
+            urls, types = [media_url.strip()], [media_type.upper()]
+        if len(types) != len(urls):
+            types = [media_type.upper()] * len(urls)
+        has_media = bool(urls)
+        carousel = len(urls) > 1
+        mixed_carousel = carousel and len(set(types)) > 1
 
         # ---- dry_run=True: 検証のみ ----
         if dry_run:
@@ -159,7 +207,7 @@ class ThreadsPublisher(BasePublisher):
                     f" queue_id={queue_id}"
                 )
                 if has_media:
-                    message += f" | media={media_type} media_url={media_url} (DRY_RUN_PLAN_ONLY)"
+                    message += f" | media_count={len(urls)} media_types={','.join(types)} (DRY_RUN_PLAN_ONLY)"
             return PublishResult(
                 platform="threads",
                 success=success,
@@ -173,14 +221,15 @@ class ThreadsPublisher(BasePublisher):
         if has_media:
             allow_media = os.environ.get("ALLOW_MEDIA_POSTS", "false").strip().lower() in ("1", "true", "yes")
             allow_video = os.environ.get("ALLOW_REAL_THREADS_VIDEO_POST", "false").strip().lower() in ("1", "true", "yes")
-            if not allow_media or (media_type == "VIDEO" and not allow_video):
+            allow_carousel = os.environ.get("ALLOW_THREADS_CAROUSEL", "false").strip().lower() in ("1", "true", "yes")
+            allow_mixed = os.environ.get("ALLOW_THREADS_MIXED_CAROUSEL", "false").strip().lower() in ("1", "true", "yes")
+            if not allow_media or ("VIDEO" in types and not allow_video) or (carousel and not allow_carousel) or (mixed_carousel and not allow_mixed):
                 return PublishResult(
                     platform="threads",
                     success=False,
                     dry_run=False,
                     message=(
-                        "SAFETY_STOP: media付き実投稿には ALLOW_MEDIA_POSTS=true と "
-                        "ALLOW_REAL_THREADS_VIDEO_POST=true が必要です。"
+                        "SAFETY_STOP: media投稿には media/video/carousel の明示gateが必要です。"
                         f" (account={account_id} queue_id={queue_id})"
                     ),
                 )
@@ -259,8 +308,11 @@ class ThreadsPublisher(BasePublisher):
 
         # ---- 実投稿: 2ステップ ----
         try:
-            container_id = _create_container(user_id, access_token, text, media_type=media_type if has_media else "TEXT", media_url=media_url)
-            if has_media and media_type == "VIDEO":
+            if carousel:
+                container_id = _create_carousel_container(user_id, access_token, text, urls, types)
+            else:
+                container_id = _create_container(user_id, access_token, text, media_type=types[0] if has_media else "TEXT", media_url=urls[0] if has_media else None)
+            if has_media and not carousel and types[0] == "VIDEO":
                 _wait_for_video_container(container_id, access_token)
             else:
                 time.sleep(1)

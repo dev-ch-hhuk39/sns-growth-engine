@@ -21,7 +21,15 @@
     "src_ns_yt_cand_006": "direct_and_clip",
     "src_ns_yt_cand_007": "direct_and_clip",
     "src_ns_yt_cand_008": "direct_and_clip",
-    "src_ns_yt_cand_009": "direct_and_clip"
+    "src_ns_yt_cand_009": "direct_and_clip",
+    "src_ns_threads_shared_001": "direct_media_reuse",
+    "src_ns_threads_shared_002": "direct_media_reuse",
+    "src_ns_threads_shared_003": "direct_media_reuse",
+    "src_ns_threads_user_chiishunin_s": "direct_media_reuse",
+    "src_ns_threads_required_001": "direct_media_reuse",
+    "src_ns_threads_required_002": "direct_media_reuse",
+    "src_ns_threads_required_003": "direct_media_reuse",
+    "src_ns_threads_required_004": "direct_media_reuse"
   },
   "notes": "Owner-attested sources are eligible for direct original reuse and generated clips only when the matching media_permissions ledger row is active, unrevoked, and approved."
 }

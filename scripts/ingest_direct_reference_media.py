@@ -2,6 +2,8 @@
 """Download and Cloudinary-ingest one explicitly permitted source-post asset."""
 from __future__ import annotations
 import argparse, hashlib, ipaddress, json, mimetypes, os, socket, subprocess, sys
+from urllib.error import HTTPError
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.parse import urlparse
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,7 +32,7 @@ def permission_ok(client: SheetsClient, source_id: str) -> bool:
 ALLOWLIST = {"youtube.com", "www.youtube.com", "youtu.be", "tiktok.com", "www.tiktok.com", "res.cloudinary.com"}
 STREAM_HOST_SUFFIXES = {
     "googlevideo.com", "tiktokcdn.com", "tiktokcdn-us.com", "byteoversea.com",
-    "ibytedtos.com", "akamaized.net", "muscdn.com",
+    "ibytedtos.com", "akamaized.net", "muscdn.com", "cdninstagram.com", "fbcdn.net",
 }
 
 def col_letter(index: int) -> str:
@@ -56,6 +58,48 @@ def safe_https_url(url: str, *, stream_url: bool = False) -> bool:
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
             return False
     return True
+
+
+class _CheckedRedirect(HTTPRedirectHandler):
+    """Follow only bounded HTTPS redirects that pass the same SSRF guard."""
+
+    def redirect_request(self, req: Request, fp: Any, code: int, msg: str, headers: Any, newurl: str) -> Request | None:
+        if not safe_https_url(newurl, stream_url=True):
+            raise RuntimeError("redirect_media_url_blocked")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def download_direct_https_media(url: str, path: Path, *, media_type: str) -> None:
+    """Download a resolved public image/video URL without extractor cookies.
+
+    Threads OpenGraph media URLs are already direct CDN objects.  Routing them
+    through yt-dlp loses carousel identity and can require an unsupported post
+    extractor, so direct files use this constrained path instead.
+    """
+    if not safe_https_url(url, stream_url=True):
+        raise RuntimeError("direct_media_url_blocked")
+    limit = 300 * 1024 * 1024 if media_type == "video" else 20 * 1024 * 1024
+    temporary = path.with_suffix(path.suffix + ".part")
+    request = Request(url, headers={"User-Agent": "SNSGrowthEngine/1.0 media-ingest"})
+    opener = build_opener(_CheckedRedirect())
+    try:
+        with opener.open(request, timeout=45) as response, temporary.open("wb") as handle:
+            declared = int(response.headers.get("Content-Length") or "0")
+            if declared and declared > limit:
+                raise RuntimeError("media_size_limit_exceeded")
+            written = 0
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > limit:
+                    raise RuntimeError("media_size_limit_exceeded")
+                handle.write(chunk)
+        temporary.replace(path)
+    except Exception:
+        temporary.unlink(missing_ok=True)
+        raise
 
 def magic_mime(path: Path) -> str:
     head = path.read_bytes()[:32]
@@ -158,11 +202,13 @@ def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
             continue
         if str(media.get("download_status", "")).upper() in {"FAILED", "BLOCKED"}:
             continue
-        url = str(media.get("canonical_post_url") or media.get("original_media_url") or "")
+        url = str(media.get("original_media_url") or media.get("canonical_post_url") or "")
         platform = str(post.get("platform", "")).lower()
         if platform == "youtube" and not ("/watch" in url or "/shorts/" in url):
             continue
         if platform == "tiktok" and "/video/" not in url:
+            continue
+        if platform == "threads" and not safe_https_url(url, stream_url=True):
             continue
         media_id = str(media.get("source_post_media_id", ""))
         if media_id:
@@ -201,15 +247,20 @@ def main() -> int:
     post = record(client, "source_posts", "source_post_id", str(media.get("source_post_id", "")))
     if not post or not permission_ok(client, str(post.get("source_id", ""))):
         print(json.dumps({"status": "BLOCKED", "reason": "active_direct_media_permission_missing"})); return 1
-    url = str(media.get("canonical_post_url") or media.get("original_media_url", "")); media_type = str(media.get("media_type", "")).lower()
-    if media_type not in {"image", "video"} or not safe_https_url(url):
+    url = str(media.get("original_media_url") or media.get("canonical_post_url", "")); media_type = str(media.get("media_type", "")).lower()
+    if media_type not in {"image", "video"} or not safe_https_url(url, stream_url=True):
         print(json.dumps({"status": "BLOCKED", "reason": "unsupported_or_non_https_media"})); return 1
     plan = {"status": "PLAN_ONLY", "source_post_media_id": source_post_media_id, "source_post_id": post["source_post_id"], "media_type": media_type, "would_download": True, "would_upload": True, "storage_target": f"output/direct_media/{source_post_media_id}"}
     target_dir = ROOT / "output" / "direct_media"; target_dir.mkdir(parents=True, exist_ok=True)
     suffix = ".mp4" if media_type == "video" else ".jpg"
     local_path = target_dir / f"{source_post_media_id}{suffix}"
     try:
-        download_with_ytdlp(url, local_path)
+        platform = str(post.get("platform", "")).lower()
+        is_direct_cdn = url != str(media.get("canonical_post_url", "")) or platform == "threads"
+        if is_direct_cdn:
+            download_direct_https_media(url, local_path, media_type=media_type)
+        else:
+            download_with_ytdlp(url, local_path)
         size_limit = 300 * 1024 * 1024 if media_type == "video" else 20 * 1024 * 1024
         if not local_path.exists() or local_path.stat().st_size > size_limit: raise RuntimeError("media_size_limit_exceeded")
         digest = hashlib.sha256();

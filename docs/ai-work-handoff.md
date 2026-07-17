@@ -1,5 +1,19 @@
 # AI Work Handoff
 
+## 2026-07-17 Codex multi-backend acquisition integration
+
+- Start HEAD / `origin/main`: `70f3dbda0b337e8724bcefd4186a444854ba2ae1`; branch: `main`.
+- Added public source routing: `yt-dlp` is YouTube/TikTok PRIMARY; Threads is cookie-free public Playwright PRIMARY with public HTTP FALLBACK and a circuit breaker.
+- `source_posts` is the parent record and `source_post_media` is its ordered child list. Parent mismatch is rejected before save, queue creation, upload, or post.
+- Owner-attested active Threads sources now use `direct_media_reuse`; approved YouTube/TikTok sources retain direct + clip scopes. `media_permissions` remains canonical and revoked records are never changed.
+- Added: `src/acquisition/*`, `scripts/acquire_approved_source_posts.py`, `scripts/generate_local_trend_signals.py`, `docs/source-backend-decision.md`, adapter/policy tests.
+- Updated: direct-media workflows, Sheets schemas, direct ingest/selection, Threads publisher/queue worker, permissions seed, modes, Media Growth Engine dry-run, and this handoff.
+- Tests PASS: primary/fallback, circuit breaker, normalized parent invariant, public Threads carousel parsing, direct-only permission split, Threads CDN policy, old source-post handoff, queue media dry-run, workflow safety (336/0), rights policy, `py_compile`, JSON validation, `git diff --check`.
+- Dry-run: 14 approved active non-X/non-beauty sources selected with no network. The local trend aggregator and owner-attestation seed are PLAN_ONLY. Media Growth reports `none_discover_first` and creates no fabricated candidates when no real `source_videos` exist.
+- Remaining WARN: the new public Threads acquisition/carousel route is unit tested but needs the next self-hosted scheduled canary for live provider evidence. No live fetch/download/upload/post was done in this change. Agent-Reach/last30days remain optional analysis-only shadows; no external paid service is required.
+- Next AI may touch: `scripts/acquire_approved_source_posts.py`, `src/acquisition/*`, `scripts/ingest_direct_reference_media.py`, `scripts/run_direct_reference_media_pipeline.py`, `src/publishers/threads_publisher.py`, related workflows/docs/tests.
+- Avoid: `.env*`, `data/`, `output/`, runner/service files, secret/cookie/storage-state files, historic Sheets data, and X/beauty workflows. Read `backend_health`, `backend_routing_history`, source/media/queue/slot Sheets tabs before any live change.
+
 ## 2026-07-17 Codex production completion handoff (supersedes older status sections)
 
 ### 本システムについて / 現在地

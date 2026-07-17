@@ -192,23 +192,36 @@ def resolve_queue_media(queue_row: dict[str, Any]) -> dict[str, Any]:
     """
     media_asset_id = str(queue_row.get("media_asset_id", "")).strip()
     media_url = str(queue_row.get("media_url", "")).strip()
+    def json_list(name: str) -> list[str]:
+        try:
+            value = json.loads(str(queue_row.get(name, "") or "[]"))
+            return [str(item).strip() for item in value if str(item).strip()] if isinstance(value, list) else []
+        except (TypeError, json.JSONDecodeError):
+            return []
+    media_urls = json_list("media_urls_json") or ([media_url] if media_url else [])
+    media_asset_ids = json_list("media_asset_ids_json") or ([media_asset_id] if media_asset_id else [])
+    media_types = [item.lower() for item in json_list("media_types_json")]
     media_status = str(queue_row.get("media_status", "")).strip().upper()
     media_required = is_true(queue_row.get("media_required", "false"))
     status_ok = media_status in MEDIA_OK_STATUSES
-    media_usable = bool(media_url) and status_ok
+    media_usable = bool(media_urls) and status_ok
     block_reason = ""
     if media_required and not media_usable:
         block_reason = "MEDIA_REQUIRED_MISSING"
     return {
         "media_asset_id": media_asset_id,
+        "media_asset_ids": media_asset_ids,
         "media_url": media_url,
+        "media_urls": media_urls,
         "media_status": media_status,
         "source_video_id": queue_row.get("source_video_id", ""),
         "clip_candidate_id": queue_row.get("clip_candidate_id", queue_row.get("video_clip_id", "")),
         "media_required": media_required,
         "media_usable": media_usable,
-        "effective_media_url": media_url if media_usable else "",
-        "media_type": str(queue_row.get("media_type", "video")).lower(),
+        "effective_media_url": media_urls[0] if media_usable else "",
+        "effective_media_urls": media_urls if media_usable else [],
+        "media_type": (media_types[0] if media_types else str(queue_row.get("media_type", "video")).lower()),
+        "media_types": media_types or [str(queue_row.get("media_type", "video")).lower()] * len(media_urls),
         "block_reason": block_reason,
     }
 
@@ -483,6 +496,8 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         dry_run=True,
         media_url=media["effective_media_url"] or None,
         media_type="IMAGE" if media["media_type"] == "image" else "VIDEO",
+        media_urls=media["effective_media_urls"],
+        media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )
     if not dry_result.success:
         if not dry_run:
@@ -559,6 +574,8 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         dry_run=False,
         media_url=media["effective_media_url"] or None,
         media_type="IMAGE" if media["media_type"] == "image" else "VIDEO",
+        media_urls=media["effective_media_urls"],
+        media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )
     if not result.success:
         update_row(client, "queue", "queue_id", queue_id, {

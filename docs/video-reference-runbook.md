@@ -308,6 +308,19 @@ that every individual video is appropriate.
 
 ## Direct Reference Media
 
+Source acquisition is routed through `scripts/acquire_approved_source_posts.py`.
+It writes only normalized source-post parents and ordered media children; it
+does not download, upload, or publish. Live acquisition requires `--apply
+--confirm-acquisition`, an active non-revoked `media_permissions` grant, and
+the scoped workflow gate. Threads public discovery is cookie-free Playwright
+with public HTTP fallback. No scrape evasion, saved browser state, or private
+API is used.
+
+Only real discovered `source_videos` plus completed transcript records produce
+clip candidates. Empty registries deliberately return `none_discover_first`;
+dry-run never creates placeholder video IDs or transcript text. Subtitle burn-in
+remains disabled.
+
 `source_posts` and `source_post_media` preserve the original post-to-asset
 link. `run_direct_reference_media_pipeline.py` requires explicit
 `direct_media_reuse` mode plus download/store/repost/new-caption permission

@@ -1,5 +1,21 @@
 # Production Completion Status
 
+## Acquisition integration update - 2026-07-17
+
+The established text/direct-media/generated-clip production paths remain in
+place. New source acquisition is explicit and observable: active approved
+Threads sources use a public, cookie-free PRIMARY/FALLBACK adapter pair, while
+approved YouTube/TikTok discovery remains `yt-dlp`. Each source post and its
+ordered media children share one `source_post_id`, preventing cross-post
+caption/media mixing.
+
+Homogeneous carousels have an official Threads container route, gated by
+`ALLOW_THREADS_CAROUSEL` only in the direct-media apply step. Mixed carousels
+stay text-fallback-only because their gate is false. This update ran no live
+provider action. The next self-hosted canary must verify acquisition and
+carousel transport. Media Growth dry-runs no longer fabricate videos,
+transcripts, or candidates when discovery has not saved real `source_videos`.
+
 ## Current production state - 2026-07-17 (supersedes older historical status text)
 
 Status: **production operational for text, direct media, generated clips, fallback, recovery, Sheets and PDCA evidence**.
