@@ -400,10 +400,14 @@ def build_plan(
     daily_cap = int(autonomous_cfg.get("daily_post_cap_per_account", 5))
     media_cap = int(media_cfg.get("media_daily_post_cap", 1))
     media_today = [row for row in today_posts if _true(row.get("media_used"))]
-    if len(today_posts) >= daily_cap:
-        blocked.append("daily_post_cap_reached")
-    if len(media_today) >= media_cap:
-        blocked.append("media_daily_post_cap_reached")
+    # Asset preparation does not publish anything. Post caps belong to the
+    # posting path and must not prevent the inventory builder from preparing
+    # the next approved clip for a future slot.
+    if not prepare_only:
+        if len(today_posts) >= daily_cap:
+            blocked.append("daily_post_cap_reached")
+        if len(media_today) >= media_cap:
+            blocked.append("media_daily_post_cap_reached")
     if post_saved_media:
         clip, source_video, selected_asset, skipped = select_saved_media_candidate(
             clips, source_videos, media_assets, posted, account_id,
