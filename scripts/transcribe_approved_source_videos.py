@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -54,7 +55,7 @@ def transcript_id_for(video: dict[str, Any]) -> str:
 def load_sheets() -> SheetsClient:
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    for logical in ("source_videos", "video_transcripts"):
+    for logical in ("source_videos", "video_transcripts", "media_assets"):
         client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     return client
 
@@ -76,6 +77,47 @@ def load_rows(client: SheetsClient) -> tuple[list[dict[str, Any]], list[dict[str
             )
         ],
     )
+
+
+def load_media_assets(client: SheetsClient) -> list[dict[str, Any]]:
+    return [
+        dict(row)
+        for row in client._call_with_rate_limit_retry(
+            "get_all_records:media_assets:transcription",
+            lambda: client._ws("media_assets").get_all_records(),
+        )
+    ]
+
+
+def _canonical_match_url(value: Any) -> str:
+    parts = urlsplit(str(value or "").strip())
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), "", ""))
+
+
+def attach_approved_storage_inputs(source_videos: list[dict[str, Any]], assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_source_url: dict[str, dict[str, Any]] = {}
+    for asset in assets:
+        if str(asset.get("upload_status", "")).upper() != "UPLOADED":
+            continue
+        if str(asset.get("rights_status", "")).lower() not in APPROVED_RIGHTS:
+            continue
+        if str(asset.get("permission_status", "")).lower() != "approved":
+            continue
+        storage_url = str(asset.get("storage_url") or asset.get("cloudinary_url") or "")
+        if urlsplit(storage_url).scheme != "https" or "cloudinary.com" not in urlsplit(storage_url).netloc.lower():
+            continue
+        source_url = _canonical_match_url(asset.get("source_post_url") or asset.get("original_media_url"))
+        if source_url:
+            by_source_url[source_url] = asset
+    enriched = []
+    for video in source_videos:
+        row = dict(video)
+        asset = by_source_url.get(_canonical_match_url(row.get("canonical_video_url")))
+        if asset and str(asset.get("account_id", "")) == str(row.get("account_id", "")):
+            row["approved_storage_url"] = str(asset.get("storage_url") or asset.get("cloudinary_url") or "")
+            row["approved_storage_media_asset_id"] = str(asset.get("media_id") or asset.get("media_asset_id") or "")
+        enriched.append(row)
+    return enriched
 
 
 def eligible_videos(
@@ -118,9 +160,10 @@ def eligible_videos(
             continue
         candidates.append(row)
     candidates.sort(key=lambda row: (
+        0 if row.get("approved_storage_url") else 1,
         0 if str(row.get("discovery_status", "")).upper() == "REAL_DISCOVERY" else 1,
+        0 if str(row.get("published_at", "")).strip() else 1,
         0 if str(row.get("platform", "")).lower() == "tiktok" else 1,
-        str(row.get("published_at", "")),
         str(row.get("source_video_id", "")),
     ))
     return candidates[:limit], skipped
@@ -274,12 +317,13 @@ def transcribe_one(video: dict[str, Any], *, model_size: str, allow_local_whispe
     started = time.monotonic()
     platform = str(video.get("platform", "")).lower()
     url = str(video.get("canonical_video_url") or "")
+    transcription_input_url = str(video.get("approved_storage_url") or url)
     video_id = extract_video_id(url, platform)
     result: dict[str, Any] = {"ok": False, "status": "UNAVAILABLE", "error": ""}
     if platform == "youtube" and video_id:
         result = fetch_youtube_captions(video_id)
     if not result.get("ok") and allow_local_whisper:
-        result = transcribe_with_local_whisper(url, model_size=model_size)
+        result = transcribe_with_local_whisper(transcription_input_url, model_size=model_size)
     if result.get("ok"):
         return build_transcript_row(video, result), {
             "source_video_id": video.get("source_video_id", ""),
@@ -344,6 +388,8 @@ def main() -> int:
 
     client = load_sheets() if args.use_sheets else None
     source_videos, transcripts = load_rows(client) if client else ([], [])
+    if client:
+        source_videos = attach_approved_storage_inputs(source_videos, load_media_assets(client))
     selected, skipped = eligible_videos(source_videos, transcripts, account_id=args.account_id, limit=args.limit)
     transcript_rows = []
     source_updates = []
@@ -365,6 +411,8 @@ def main() -> int:
             "analysis_status": "TRANSCRIBED" if row["transcription_status"] == "DONE" else "TRANSCRIPT_UNAVAILABLE",
             "processed_at": now_iso(),
             "skip_reason": row.get("error", ""),
+            "approved_storage_url": video.get("approved_storage_url", ""),
+            "approved_storage_media_asset_id": video.get("approved_storage_media_asset_id", ""),
         })
         summaries.append(summary)
     save_result = {"transcripts_saved": 0, "source_videos_updated": 0, "failed": 0}

@@ -32,6 +32,11 @@ def is_individual_video_url(url: str) -> bool:
     return False
 
 
+def is_approved_storage_url(url: str) -> bool:
+    parts = urlsplit(str(url or ""))
+    return parts.scheme == "https" and parts.netloc.lower().endswith("cloudinary.com") and bool(parts.path)
+
+
 def _resolve_source_video(args: argparse.Namespace) -> dict:
     injected = getattr(args, "source_video_row", None)
     if isinstance(injected, dict):
@@ -46,7 +51,9 @@ def _resolve_source_video(args: argparse.Namespace) -> dict:
 
 def build_download_plan(args: argparse.Namespace) -> dict:
     source_video = _resolve_source_video(args)
-    source_url = source_video.get("canonical_video_url") or args.source_url
+    canonical_source_url = source_video.get("canonical_video_url") or args.source_url
+    approved_storage_url = source_video.get("approved_storage_url") or ""
+    source_url = approved_storage_url or canonical_source_url
     rights_status = source_video.get("rights_status") or args.rights_status
     decision = build_rights_decision(rights_status, action="download")
     allow_env = os.environ.get("ALLOW_VIDEO_DOWNLOAD", "").lower() == "true"
@@ -55,8 +62,10 @@ def build_download_plan(args: argparse.Namespace) -> dict:
         blocked.append("source_video_id_not_found")
     if not decision.allowed:
         blocked.append(decision.reason)
-    if not is_individual_video_url(source_url):
+    if not is_individual_video_url(canonical_source_url):
         blocked.append("individual_video_url_required")
+    if approved_storage_url and not is_approved_storage_url(approved_storage_url):
+        blocked.append("approved_storage_url_invalid")
     if str(source_video.get("download_status", "")).upper() == "DOWNLOADED":
         local_path = str(source_video.get("local_path", ""))
         if local_path and Path(local_path).exists():
