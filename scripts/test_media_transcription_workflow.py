@@ -18,7 +18,7 @@ checks = [
         'PUBLISH_ENABLED: "false"',
         'ALLOW_REAL_THREADS_POST: "false"',
     ])),
-    ("bounded limit", "--limit 3" in wf),
+    ("bounded limit", "--limit 1" in wf),
     ("clip generation after transcription", "run_media_growth_engine.py" in wf and "--confirm-media-growth" in wf),
 ]
 failed = [name for name, ok in checks if not ok]

@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -33,6 +34,8 @@ from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DONE_STATUSES = {"DONE", "FETCHED", "LOCAL_WHISPER_DONE", "YOUTUBE_CAPTIONS_DONE"}
+NIGHT_FEMALE_SUBJECT_CUES = ("キャバ嬢", "女の子", "女性", "嬢", "キャスト", "girl", "ladies")
+NIGHT_ANALYSIS_ONLY_CUES = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
 
 
 def now_iso() -> str:
@@ -45,6 +48,20 @@ def sha256_text(text: str) -> str:
 
 def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
+
+
+def night_metadata_clip_eligible(video: dict[str, Any]) -> tuple[bool, str]:
+    """Pre-filter expensive transcription using the conservative clip policy."""
+    if str(video.get("account_id", "")) != "night_scout":
+        return True, "not_night_scout"
+    if str(video.get("subject_review_status", "")).upper() == "APPROVED_FEMALE_SUBJECT":
+        return True, "explicit_subject_review"
+    text = " ".join(str(video.get(key, "")) for key in ("title", "description_preview", "description")).lower()
+    if any(token.lower() in text for token in NIGHT_ANALYSIS_ONLY_CUES):
+        return False, "night_subject_policy_analysis_only"
+    if any(token.lower() in text for token in NIGHT_FEMALE_SUBJECT_CUES):
+        return True, "metadata_female_subject_cue"
+    return False, "night_subject_evidence_required"
 
 
 def transcript_id_for(video: dict[str, Any]) -> str:
@@ -153,6 +170,9 @@ def eligible_videos(
             reasons.append("individual_video_url_required")
         if not extract_video_id(url, platform):
             reasons.append("video_id_missing")
+        subject_eligible, subject_reason = night_metadata_clip_eligible(row)
+        if not subject_eligible:
+            reasons.append(subject_reason)
         if source_video_id in existing_done:
             reasons.append("already_transcribed")
         if reasons:
@@ -207,12 +227,32 @@ def fetch_youtube_captions(video_id: str) -> dict[str, Any]:
         return {"ok": False, "status": "YOUTUBE_CAPTIONS_UNAVAILABLE", "error": type(exc).__name__}
 
 
-def transcribe_with_local_whisper(video_url: str, *, model_size: str) -> dict[str, Any]:
+def _normalize_audio_for_whisper(source: Path, target: Path, *, max_audio_seconds: int) -> None:
+    command = [
+        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(source), "-vn", "-ac", "1", "-ar", "16000",
+        "-t", str(max_audio_seconds), "-c:a", "flac", str(target),
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, timeout=max_audio_seconds + 180, check=False)
+    if completed.returncode != 0 or not target.exists() or target.stat().st_size == 0:
+        raise RuntimeError("audio_normalization_failed")
+
+
+def transcribe_with_local_whisper(
+    video_url: str,
+    *,
+    model_size: str,
+    max_audio_seconds: int,
+    cpu_threads: int,
+) -> dict[str, Any]:
     if not _true(os.environ.get("ALLOW_LOCAL_TRANSCRIPTION", "false")):
         return {"ok": False, "status": "ALLOW_LOCAL_TRANSCRIPTION_REQUIRED", "error": ""}
     if not _true(os.environ.get("ALLOW_VIDEO_DOWNLOAD", "false")):
         return {"ok": False, "status": "ALLOW_VIDEO_DOWNLOAD_REQUIRED_FOR_TRANSCRIPTION", "error": ""}
     try:
+        os.environ.setdefault("OMP_NUM_THREADS", str(cpu_threads))
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", str(cpu_threads))
+        os.environ.setdefault("MKL_NUM_THREADS", str(cpu_threads))
         import yt_dlp  # type: ignore[import]
         from faster_whisper import WhisperModel  # type: ignore[import]
     except Exception as exc:  # noqa: BLE001
@@ -226,6 +266,7 @@ def transcribe_with_local_whisper(video_url: str, *, model_size: str) -> dict[st
             "no_warnings": True,
             "noplaylist": True,
             "socket_timeout": 30,
+            "noprogress": True,
         }
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -234,8 +275,23 @@ def transcribe_with_local_whisper(video_url: str, *, model_size: str) -> dict[st
             audio = files[0] if files else None
             if audio is None:
                 raise RuntimeError("audio_download_missing")
-            model = WhisperModel(model_size, device="cpu", compute_type="int8")
-            segments_iter, info = model.transcribe(str(audio), vad_filter=True)
+            normalized_audio = Path(tmp) / "whisper-input.flac"
+            _normalize_audio_for_whisper(audio, normalized_audio, max_audio_seconds=max_audio_seconds)
+            if audio != normalized_audio:
+                audio.unlink(missing_ok=True)
+            model = WhisperModel(
+                model_size,
+                device="cpu",
+                compute_type="int8",
+                cpu_threads=cpu_threads,
+                num_workers=1,
+            )
+            segments_iter, info = model.transcribe(
+                str(normalized_audio),
+                beam_size=1,
+                vad_filter=True,
+                condition_on_previous_text=False,
+            )
             segments = []
             texts = []
             for seg in segments_iter:
@@ -255,6 +311,8 @@ def transcribe_with_local_whisper(video_url: str, *, model_size: str) -> dict[st
                 "language": str(getattr(info, "language", "") or "unknown"),
                 "text": full_text,
                 "segments": segments,
+                "processed_duration_seconds": max((float(seg["end"]) for seg in segments), default=0.0),
+                "max_audio_seconds": max_audio_seconds,
             }
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "status": "LOCAL_WHISPER_FAILED", "error": type(exc).__name__}
@@ -264,6 +322,9 @@ def build_transcript_row(video: dict[str, Any], result: dict[str, Any]) -> dict[
     text = str(result.get("text", ""))
     segments = result.get("segments") or []
     duration = str(video.get("duration_seconds") or "")
+    processed_duration = float(result.get("processed_duration_seconds") or duration or 0)
+    original_duration = float(duration or 0)
+    is_partial = bool(original_duration and processed_duration + 1 < original_duration)
     return {
         "transcript_id": transcript_id_for(video),
         "account_id": video.get("account_id", ""),
@@ -279,7 +340,9 @@ def build_transcript_row(video: dict[str, Any], result: dict[str, Any]) -> dict[
         "transcript_text": text,
         "segments_json": json.dumps(segments, ensure_ascii=False),
         "language": result.get("language", ""),
-        "processed_minutes": round((float(duration or 0) or 0) / 60, 3) if duration else "",
+        "processed_minutes": round(processed_duration / 60, 3) if processed_duration else "",
+        "transcription_scope": "PARTIAL" if is_partial else "FULL",
+        "processed_duration_seconds": round(processed_duration, 3) if processed_duration else "",
         "transcript_hash": sha256_text(text),
         "chunk_count": len(segments) or max(1, len(text) // 500 + 1),
         "error": "",
@@ -313,7 +376,14 @@ def build_unavailable_row(video: dict[str, Any], status: str, error: str) -> dic
     }
 
 
-def transcribe_one(video: dict[str, Any], *, model_size: str, allow_local_whisper: bool) -> tuple[dict[str, Any], dict[str, Any]]:
+def transcribe_one(
+    video: dict[str, Any],
+    *,
+    model_size: str,
+    allow_local_whisper: bool,
+    max_audio_seconds: int,
+    cpu_threads: int,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     started = time.monotonic()
     platform = str(video.get("platform", "")).lower()
     url = str(video.get("canonical_video_url") or "")
@@ -323,9 +393,15 @@ def transcribe_one(video: dict[str, Any], *, model_size: str, allow_local_whispe
     if platform == "youtube" and video_id:
         result = fetch_youtube_captions(video_id)
     if not result.get("ok") and allow_local_whisper:
-        result = transcribe_with_local_whisper(transcription_input_url, model_size=model_size)
+        result = transcribe_with_local_whisper(
+            transcription_input_url,
+            model_size=model_size,
+            max_audio_seconds=max_audio_seconds,
+            cpu_threads=cpu_threads,
+        )
     if result.get("ok"):
-        return build_transcript_row(video, result), {
+        transcript_row = build_transcript_row(video, result)
+        return transcript_row, {
             "source_video_id": video.get("source_video_id", ""),
             "status": "DONE",
             "provider": result.get("provider", ""),
@@ -333,6 +409,7 @@ def transcribe_one(video: dict[str, Any], *, model_size: str, allow_local_whispe
             "chunk_count": len(result.get("segments") or []),
             "preview": redacted_preview(str(result.get("text", "")), 80),
             "processing_seconds": round(time.monotonic() - started, 3),
+            "transcription_scope": transcript_row.get("transcription_scope", ""),
         }
     status = str(result.get("status") or "UNAVAILABLE")
     return build_unavailable_row(video, status, str(result.get("error", ""))), {
@@ -368,6 +445,8 @@ def main() -> int:
     parser.add_argument("--account-id", default="liver_manager", choices=["all", "liver_manager", "night_scout"])
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument("--model-size", default="tiny")
+    parser.add_argument("--max-audio-seconds", type=int, default=900)
+    parser.add_argument("--cpu-threads", type=int, default=1)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--apply", action="store_true")
@@ -382,6 +461,10 @@ def main() -> int:
         blocked.append("--apply requires --use-sheets")
     if args.limit < 1 or args.limit > 5:
         blocked.append("--limit must be 1..5")
+    if args.max_audio_seconds < 60 or args.max_audio_seconds > 3600:
+        blocked.append("--max-audio-seconds must be 60..3600")
+    if args.cpu_threads < 1 or args.cpu_threads > 2:
+        blocked.append("--cpu-threads must be 1..2")
     if blocked:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": blocked}, ensure_ascii=False, indent=2))
         return 1
@@ -403,7 +486,13 @@ def main() -> int:
                 "preview": "",
             })
             continue
-        row, summary = transcribe_one(video, model_size=args.model_size, allow_local_whisper=args.allow_local_whisper)
+        row, summary = transcribe_one(
+            video,
+            model_size=args.model_size,
+            allow_local_whisper=args.allow_local_whisper,
+            max_audio_seconds=args.max_audio_seconds,
+            cpu_threads=args.cpu_threads,
+        )
         transcript_rows.append(row)
         source_updates.append({
             **video,
@@ -426,6 +515,8 @@ def main() -> int:
         "selected_source_video_ids": [v.get("source_video_id", "") for v in selected],
         "transcription_results": summaries,
         "whisper_processing_seconds": round(sum(float(row.get("processing_seconds") or 0) for row in summaries), 3),
+        "max_audio_seconds_per_video": args.max_audio_seconds,
+        "local_whisper_cpu_threads": args.cpu_threads,
         "transcript_text_logged": False,
         "would_save_transcripts": bool(args.apply and args.confirm_transcribe and args.use_sheets),
         "save_result": save_result,

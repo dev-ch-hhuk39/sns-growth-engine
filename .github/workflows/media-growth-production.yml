@@ -149,8 +149,10 @@ jobs:
             --apply \
             --confirm-transcribe \
             --allow-local-whisper \
-            --limit 3 \
-            --model-size tiny
+            --limit 1 \
+            --model-size tiny \
+            --max-audio-seconds 900 \
+            --cpu-threads 1
 
       - name: Generate transcript-grounded clip candidates
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'

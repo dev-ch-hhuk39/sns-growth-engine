@@ -247,7 +247,7 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
                 'ALLOW_TRANSCRIPTION_API: "false"',
             ])))
             checks.append((f"{name} [schedule] local transcription download scoped", 'ALLOW_VIDEO_DOWNLOAD: "true"' in text and 'ALLOW_LOCAL_TRANSCRIPTION: "true"' in text))
-            checks.append((f"{name} [schedule] bounded transcription", "--limit 3" in text))
+            checks.append((f"{name} [schedule] bounded transcription", "--limit 1" in text))
             return checks
         # ファイル全体で literal "true" フラグ無し。
         lower = text.lower()

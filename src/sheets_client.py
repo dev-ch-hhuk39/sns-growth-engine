@@ -301,6 +301,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "transcription_provider", "transcription_status",
         "duration_seconds", "transcript_text", "segments_json",
         "language", "processed_minutes",
+        "transcription_scope", "processed_duration_seconds",
         "transcript_hash", "chunk_count",
         "error", "created_at", "updated_at",
     ],
