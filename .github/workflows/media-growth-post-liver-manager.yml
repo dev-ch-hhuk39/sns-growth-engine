@@ -78,7 +78,7 @@ jobs:
         id: media_budget
         continue-on-error: true
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
-        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce --purpose post
       - name: Guard media post and kill switch
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |

@@ -90,7 +90,7 @@ def eligible_videos(
         for row in transcripts
         if str(row.get("transcription_status", "")).upper() in DONE_STATUSES and str(row.get("transcript_text", "")).strip()
     }
-    selected: list[dict[str, Any]] = []
+    candidates: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for row in source_videos:
         source_video_id = str(row.get("source_video_id", ""))
@@ -116,10 +116,14 @@ def eligible_videos(
         if reasons:
             skipped.append({"source_video_id": source_video_id, "reason": ",".join(reasons)})
             continue
-        selected.append(row)
-        if len(selected) >= limit:
-            break
-    return selected, skipped
+        candidates.append(row)
+    candidates.sort(key=lambda row: (
+        0 if str(row.get("discovery_status", "")).upper() == "REAL_DISCOVERY" else 1,
+        0 if str(row.get("platform", "")).lower() == "tiktok" else 1,
+        str(row.get("published_at", "")),
+        str(row.get("source_video_id", "")),
+    ))
+    return candidates[:limit], skipped
 
 
 def fetch_youtube_captions(video_id: str) -> dict[str, Any]:

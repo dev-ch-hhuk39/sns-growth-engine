@@ -68,7 +68,12 @@ jobs:
         id: media_budget
         continue-on-error: true
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
-        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce --purpose post
+      - name: Check media preparation budget
+        id: preparation_budget
+        continue-on-error: true
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --enforce --purpose prepare
       - name: Seed owner-attested media permissions
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         run: python3 scripts/seed_owner_attested_media_permissions.py --apply --confirm-owner-attestation
@@ -77,7 +82,7 @@ jobs:
         continue-on-error: true
         run: python3 scripts/discover_approved_source_posts.py --account-id "$ACCOUNT_ID" --max-posts 3 --apply --confirm-discovery
       - name: Ingest one approved source-post media asset
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.preparation_budget.outcome == 'success'
         continue-on-error: true
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"

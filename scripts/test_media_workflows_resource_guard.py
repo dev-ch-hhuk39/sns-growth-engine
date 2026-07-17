@@ -14,6 +14,8 @@ texts = {name: (root / ".github/workflows" / name).read_text(encoding="utf-8") f
 checks = [
     ("all media workflows run budget guard", all("check_media_resource_budget.py" in text for text in texts.values())),
     ("all posting workflows force fallback", all("FORCE_TEXT_ONLY_FALLBACK" in texts[name] for name in workflow_names[2:])),
+    ("saved media posting uses post budget", all("--purpose post" in texts[name] for name in workflow_names[2:])),
+    ("direct ingest has separate preparation budget", all("steps.preparation_budget.outcome == 'success'" in texts[name] for name in workflow_names[4:])),
     ("preparation skips when budget fails", all("steps.media_budget.outcome == 'success'" in texts[name] for name in workflow_names[:2])),
     ("night preparation never sudo installs", "sudo apt-get" not in texts["media-growth-production-night-scout.yml"]),
     ("cleanup is bounded workflow step", all("cleanup_media_workspace.py" in texts[name] for name in (workflow_names[0], workflow_names[1], workflow_names[4], workflow_names[5]))),

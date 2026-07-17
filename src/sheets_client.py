@@ -511,7 +511,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "notes",
     ],
     "resource_usage": [
-        "resource_usage_id", "checked_at", "runner_name", "status", "media_allowed",
+        "resource_usage_id", "checked_at", "runner_name", "status", "media_allowed", "preparation_allowed", "media_post_allowed",
         "disk_total_bytes", "disk_used_bytes", "disk_free_bytes", "disk_used_percent",
         "temp_bytes", "stored_media_count", "failed_retry_count", "whisper_processing_seconds",
         "cloudinary_usage_percent", "cloudinary_status", "gemini_status", "gemini_request_count", "gemini_error_count",

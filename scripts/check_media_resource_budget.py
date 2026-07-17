@@ -96,7 +96,9 @@ def build_report(
         "checked_at": now,
         "runner_name": os.environ.get("RUNNER_NAME", socket.gethostname()),
         "status": status,
-        "media_allowed": status == "PASS",
+        "media_allowed": status != "TEXT_ONLY",
+        "preparation_allowed": status == "PASS",
+        "media_post_allowed": status != "TEXT_ONLY",
         "disk_total_bytes": int(disk.total),
         "disk_used_bytes": int(disk.used),
         "disk_free_bytes": int(disk.free),
@@ -155,6 +157,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-resource-usage", action="store_true")
     parser.add_argument("--enforce", action="store_true")
+    parser.add_argument("--purpose", choices=["prepare", "post"], default="prepare")
     args = parser.parse_args()
     if args.apply and not args.confirm_resource_usage:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-resource-usage"}))
@@ -173,7 +176,12 @@ def main() -> int:
     else:
         report["saved_to_sheets"] = False
     print(json.dumps(report, ensure_ascii=False, indent=2))
-    return 2 if args.enforce and report["status"] != "PASS" else 0
+    blocked_for_purpose = (
+        not report["preparation_allowed"]
+        if args.purpose == "prepare"
+        else not report["media_post_allowed"]
+    )
+    return 2 if args.enforce and blocked_for_purpose else 0
 
 
 if __name__ == "__main__":
