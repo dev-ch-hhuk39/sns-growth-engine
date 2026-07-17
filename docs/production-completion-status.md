@@ -1,5 +1,26 @@
 # Production Completion Status
 
+## Current production state - 2026-07-17 (supersedes older historical status text)
+
+Status: **production operational for text, direct media, generated clips, fallback, recovery, Sheets and PDCA evidence**.
+
+- Private repository and Xserver self-hosted runner `sns-growth-xserver` are active. Production workflows use `[self-hosted, linux, x64, sns-growth, production]`; GitHub-hosted billing minutes are not used by these jobs.
+- Runner health `29549159011`: success. 30GB disk available, 1957MB RAM, Python 3.11 workflow runtime, ffmpeg, yt-dlp, requirements, credentials-presence and read-only Sheets health passed.
+- Real Threads evidence:
+  - text: `https://www.threads.com/@ran.liver_pro/post/Da1ts-2j7xO`
+  - direct media: `https://www.threads.com/@ran.liver_pro/post/Da39nq9AeWA`
+  - generated clip: `https://www.threads.com/@ran.liver_pro/post/Da39TRljUQA`
+  - deliberate media failure -> text fallback: `https://www.threads.com/@ran.liver_pro/post/Da1xVebD0du`
+- Sheets read-only evidence: source posts 25, source-post media 24, source videos 69, transcripts 16, clip candidates 20, uploaded media assets 12, posted results 33, PDCA runs 29.
+- Generated clip inventory is 3/account. Direct-reference media inventory is `night_scout=1`, `liver_manager=5`. All 12 assets have uploaded Cloudinary storage URLs.
+- Text, direct media, generated clip and 30-minute recovery schedules are ON. Each account keeps the formal five slots and 04:00 JST business date. Media preparation is separate from posting.
+- Local Whisper is bounded for the 2GB VPS: one video/run, max 900 seconds, tiny/int8, one CPU thread. Long media records a PARTIAL scope; unknown text/metrics are never fabricated.
+- Video output is 9:16 and **does not burn subtitles**. Publisher input remains `public_post_text` only.
+- X and beauty stay blocked. Unknown/reference-only/revoked media stays blocked. External transcription API and automatic learning-rule changes stay disabled.
+- Current WARNs: Threads metrics are UNAVAILABLE rather than zero; Node 20 action deprecation annotation; historical failed/running slot/log rows remain auditable. Current health reports `problems=[]`.
+
+Older dated sections below are retained as implementation history. Statements such as "media schedule OFF", "runner missing", or "real media not executed" are no longer current.
+
 ## 2026-07-14 Queue Promotion Quota Recovery
 
 The account schedules were running; the observed production stop was Sheets API read quota exhaustion during AUTO_READY. The old promotion path performed a `find()` for each queue candidate, so scheduled account runs could exhaust the per-user read quota before any safe candidate reached `READY`.

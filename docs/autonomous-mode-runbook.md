@@ -1,5 +1,20 @@
 # Autonomous Mode Runbook
 
+## Current production operation - 2026-07-17
+
+- Production runs on private-repository self-hosted runner `sns-growth-xserver`; account text, direct media, generated clip, aftercare and 30-minute recovery schedules are enabled.
+- Five slots/account/day and 04:00 JST business-date rules are authoritative in `config/content_schedule.json`. A 0-1800 second jitter is applied before a scheduled post.
+- `night_scout`: 14:00 reference text, 16:00 original text, 18:00 direct media, 21:00 generated clip, 25:00 PDCA text.
+- `liver_manager`: 10:00 original text, 13:00 reference text, 16:00 direct media, 18:00 generated clip, 21:00 PDCA text.
+- Primary media failure uses text fallback after slot reconciliation. `content_slot_runs` claim/lease and `posted_results` must be checked before any retry.
+- Publisher input is only `public_post_text`; final public validator and account/media validators remain mandatory.
+- Current inventory: 3 generated clip assets/account, plus one night and five liver direct-reference assets, all uploaded to Cloudinary.
+- Emergency stop: set `config/autonomous_mode.json` `kill_switch=true` and push to `main`. Do not disable validators or edit credentials.
+- Read-only health: run `Self-hosted Runner Health` or inspect `check_autonomous_health.py --account-id all --dry-run --use-sheets` in Actions. Latest proof run: `29549159011` success.
+- X, beauty, unapproved/revoked media, external transcription API and learning-rule auto-apply remain blocked.
+
+Older dated sections below are retained as history; any "media disabled/OFF" statement there is superseded by this section.
+
 ## 2026-07-12 Operational Recovery Notes
 
 If scheduled text-only posting appears stopped, check the latest account-specific workflow logs before changing schedules. The July 11 failures were caused by Sheets quota, not disabled cron:

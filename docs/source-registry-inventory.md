@@ -1,5 +1,15 @@
 # Source Registry Inventory
 
+## 2026-07-17 Current Production Inventory
+
+The source of truth is `config/source_accounts/default_sources.json`: 73 rows total. Fourteen owner-attested media sources are currently approved and explicitly allow-listed by `config/media_growth_engine.json` (`night_scout=9`, `liver_manager=5`). Permission evidence, approved rights, account targeting, revocation checks and bounded discovery remain mandatory; approval never authorizes X or beauty use.
+
+Five rows have `fetch_enabled=true` for the separate bounded text/reference collection path. This flag alone does not permit media download, cutting, Cloudinary upload or reposting. Media execution additionally requires `media_autopilot_enabled`, approved permission evidence, the media-engine allow-list, a real individual-video record and step-scoped environment/confirm gates.
+
+Current Sheets evidence: `source_posts=25`, `source_post_media=24`, `source_videos=69`, `video_transcripts=16`, `video_clip_candidates=20`, and `media_assets=12`. Uploaded generated-clip inventory is three per account; direct-reference inventory is one for Night Scout and five for Liver Manager. Discovery is bounded and subtitle burn-in is disabled.
+
+The dated snapshot and generated table below are retained for audit history. Their 68-row, 13-source and all-disabled counts are not the current production totals.
+
 ## 2026-07-12 Approved Media Automation Update
 
 This inventory's historical table below is a review snapshot. The current source-of-truth is `config/source_accounts/default_sources.json` and now has 73 rows.

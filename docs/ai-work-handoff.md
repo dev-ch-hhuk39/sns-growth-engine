@@ -1,5 +1,128 @@
 # AI Work Handoff
 
+## 2026-07-17 Codex production completion handoff (supersedes older status sections)
+
+### 本システムについて / 現在地
+
+SNS Growth Engine v2 はprivate GitHub repositoryのscheduleをXserver VPS上のself-hosted runnerで動かし、`night_scout`と`liver_manager`のThreads投稿を運用する。5 slot/account/day、04:00 JST business-date、0-1800秒jitter、20分超過slotの30分間隔recoveryを使う。公開本文は`public_post_text`だけで、X、beauty、未許可media、内部分析、外部transcription API、learning ruleの自動適用はブロックする。
+
+本番経路は次の3系統に分離済み。
+
+1. text: reader-facing生成 -> validator -> READY -> Threads -> `posted_results` -> metrics/PDCA。
+2. direct media: approved source post discovery -> `source_posts` / `source_post_media` -> gated ingest -> Cloudinary -> caption validator -> Threads。失敗時はtext fallback。
+3. generated clip: bounded video discovery -> individual video -> local faster-whisper -> transcript-grounded 1-3 clips -> ffmpeg 9:16（字幕なし）-> Cloudinary -> media validator -> Threads。準備と投稿slotは分離。
+
+### HEAD / branch / repository / runner
+
+- この更新前のimplementation HEAD: `37c71d8bad6d8ae97c8da24a7667320b5425f473`。branchは`main`、同時点の`origin/main`と一致。
+- このhandoffを含む最終HEADは`git rev-parse HEAD`で確認し、最終報告にも記載する。
+- Repositoryは`dev-ch-hhuk39/sns-growth-engine`、visibilityはprivate維持。history rewrite、force-push、public化なし。
+- Runner: `sns-growth-xserver`、labels=`self-hosted,linux,x64,sns-growth,production`。実runでonlineを確認。
+- Health run `29549159011`: success。disk available 30GB、memory 1957MB、Python 3.11 workflow runtime、ffmpeg/yt-dlp/requirements import、credential presence、Sheets read-only healthがPASS。
+- systemd runner serviceは`Restart=always`, `RestartSec=10s`, `OOMPolicy=stop`。一度のWhisper OOM後に復旧し、自動再起動overrideを実機へ反映済み。
+
+### 本番E2E証拠
+
+- text post: `https://www.threads.com/@ran.liver_pro/post/Da1ts-2j7xO`
+- deliberate media failure -> text fallback: `https://www.threads.com/@ran.liver_pro/post/Da1xVebD0du`
+- generated clip post: `https://www.threads.com/@ran.liver_pro/post/Da39TRljUQA`
+- direct media post: `https://www.threads.com/@ran.liver_pro/post/Da39nq9AeWA`
+- generated clip asset inventory:
+  - `night_scout`: 3 uploaded assets (`...8Xmkojfw90Q_01` / `_02` / `_03`)
+  - `liver_manager`: 3 uploaded assets（うち実投稿証拠1件）
+- direct media inventory: `night_scout=1`, `liver_manager=5`。全12 media assetsは`upload_status=UPLOADED`かつCloudinary `storage_url`あり。
+- Asset preparation success runs: night `29547740250`, `29548243407`, `29548301795`; liver `29545057137`, `29548525788`, `29548662407`。
+
+### Sheets実測（health run `29549159011`、本文/URL/secret非表示）
+
+- `queue=117`（READY 20 / WAITING_REVIEW 55 / POSTED 30 / duplicate blocked 8等）
+- `posted_results=33`（POSTED 30 / RECOVERED 2）
+- `source_posts=25`, `source_post_media=24`
+- `source_videos=69`, `video_transcripts=16`, `video_clip_candidates=20`
+- `media_assets=12`（generated clip 6、direct 6、uploaded 12）
+- `media_post_results=1`, `media_metrics=1`, `clip_performance=1`
+- `pdca_runs=29`, `prompt_improvement_suggestions=29`
+- `metric_snapshots=118`は全件`UNAVAILABLE`。取得不能値を0として捏造していない。
+
+### 今回の変更ファイル一覧
+
+- `.github/workflows/media-growth-production-night-scout.yml`
+- `.github/workflows/media-growth-production.yml`
+- `.github/workflows/media-transcription-production.yml`
+- `.github/workflows/self-hosted-runner-health.yml`
+- `config/media_growth_engine.json`
+- `src/sheets_client.py`
+- `scripts/transcribe_approved_source_videos.py`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/run_media_growth_engine.py`
+- `scripts/run_media_production_pipeline.py`
+- `scripts/check_autonomous_health.py`
+- `scripts/test_all_workflows_safety_flags.py`
+- `scripts/test_transcribe_approved_source_videos.py`
+- `scripts/test_local_whisper_low_memory_policy.py`
+- `scripts/test_media_transcription_workflow.py`
+- `scripts/test_real_discovered_video_with_missing_description.py`
+- `scripts/test_discovery_rejects_channel_ids_as_videos.py`
+- `scripts/test_media_growth_night_scout_account.py`
+- `scripts/test_media_preparation_skips_existing_asset.py`（追加）
+- `scripts/test_media_preparation_ignores_post_caps.py`（追加）
+- `scripts/test_autonomous_health_media_inventory_counts.py`（追加）
+- `scripts/test_self_hosted_runner_health_workflow.py`（追加）
+- production/runbook docs（本更新）
+
+### 修正内容 / safety gate
+
+- 2GB VPS向けにWhisperを`tiny + int8 + cpu_threads=1 + max 900秒 + 1 video/run`へ制限。音声をmono 16k FLACへ変換し、長尺は`PARTIAL`として処理範囲を保存する。
+- Night Scoutはfemale-subject evidenceがないmetadataを高コスト文字起こし前に除外。
+- channel IDやplanned-only rowをindividual videoとして扱わず、activeかつ`media_autopilot_enabled` sourceだけをtranscription対象にした。
+- 実discoveryでdescriptionが欠けてもreal video ID/title/statusがあれば候補として受理。
+- 保存済みclip assetを再選択せず次候補へ進む。再生成時も`MEDIA_READY`、cut/upload status、asset IDをREADYへ巻き戻さない。
+- `prepare_only`は投稿を行わないためdaily/media post capの対象外。実投稿pathのcapは維持。
+- disk 80%以上でmedia preparation停止、90%以上でtext-only。Docker active image/container/volumeを残したままbuild cacheだけをpruneし、約80%から約49%へ回復。
+- 字幕burn-inは常にOFF。`public_post_text`のみpublisherへ渡す。X/beautyはfalse。
+
+### 全テスト / dry-run / BLOCKED結果
+
+- Workflow safety: PASS 336 / FAIL 0。
+- Production self-hosted workflow: PASS 66 / FAIL 0。
+- Low-memory transcription、active source/video ID、real discovery、grounding、media preparation dedupe/cap、Sheets retry、PDCA idempotency、slot idempotency、health inventory/health workflowの対象テストはすべてPASS。
+- `py_compile`、`git diff --check`: PASS。
+- dry-run inventory runs: liver `29548936624`, night `29548978662`, both success。外部download/cut/upload/post stepはskip。
+- confirm/envなしのdownload/cut/upload/postは既存safety testでBLOCKを維持。
+- 今回の追加資産準備は投稿gateがfalseのprepare-onlyで実施。手動の追加Threads投稿は行っていない。
+
+### 未完了事項 / 残WARN
+
+- Threads metrics adapterは現在取得不能のため118 snapshotsが`UNAVAILABLE`。0へ変換せず、後続PDCAは取得可能データだけを使う。
+- Actionsの`actions/checkout@v4` / `setup-python@v5`にNode 20 deprecation WARNが出る。GitHub側移行通知であり現runはNode 24強制実行でsuccess。
+- `content_slot_runs`に過去の`RUNNING=1`と`FAILED=1`が残る。30分recovery/lease expiryで再判定し、履歴行は削除しない。
+- `logs`のERROR件数は過去障害を含む累積値。healthの現在`problems=[]`と最新run conclusionを優先する。
+- 実metricsが得られるまで、performanceに基づく最適化精度は限定的。`learning_rules.auto_apply=false`は維持。
+
+### スケール方針 / 次タスク
+
+- 2GB runnerではtranscriptionを常に1 video/run、900秒上限、CPU 1 threadで直列化する。並列数を増やさない。
+- 各account generated clip inventoryを最低3件で維持し、投稿済みclip/asset/video/textをdedupeする。
+- Cloudinary/disk/resource usageを各prepare前に検査し、閾値超過時はtext fallbackへ落とす。
+- metrics取得が復旧したら`UNAVAILABLE -> PARTIAL/MEASURED`を実値のみで更新し、PDCA suggestionはWAITING_REVIEWのまま評価する。
+- 次scheduled runではslot type、selected asset、validator PASS、posted URL、Sheets save、resource budgetを確認する。
+
+### 次に触ってよいファイル
+
+- Claude Code: `scripts/collect_threads_metrics.py`, `scripts/check_autonomous_health.py`, `docs/*runbook.md`, metrics/PDCA tests。
+- Codex: `scripts/transcribe_approved_source_videos.py`, `scripts/run_media_growth_engine.py`, `scripts/run_media_production_pipeline.py`, media workflows/tests。
+- 両AIとも変更前に`git fetch origin`、`git status --short`、最新handoffを確認する。
+
+### 衝突しやすい / 触らない方がよいファイル
+
+- 衝突しやすい: `docs/ai-work-handoff.md`, `config/media_growth_engine.json`, `src/sheets_client.py`, `scripts/run_media_growth_engine.py`, `scripts/run_media_production_pipeline.py`, `.github/workflows/media-growth-*.yml`。
+- 触らない: `.env`, `data/`, `output/`, `.claude/plans/`, secret/token/cookie/storage_state、runner registration token、GitHub history。
+- `default_sources.json`のrights/active/media flagsはowner attestation/revocationルールを確認せず変更しない。`revoked=true`を上書きしない。
+
+### 次AIへの引き継ぎメモ
+
+最新health run `29549159011`を基準にする。古い文書内の「media schedule OFF」「runnerなし」「実download/cut/upload未実行」は履歴であり、現在状態ではない。障害時は投稿を再実行する前に`content_slot_runs`のclaim/leaseと`posted_results`を照合し、二重投稿を防ぐ。metrics不明値は空欄/UNAVAILABLEのままにする。
+
 ## Codex private-production audit and slot-engine continuation (2026-07-16)
 
 - Current HEAD at audit start: `c71aa62ef42837a12ef797cd240009e433862cf2` on `main`; origin matched and worktree was clean.

@@ -1,5 +1,22 @@
 # Growth Loop Runbook
 
+## Current production loop - 2026-07-17
+
+The production loop is no longer dry-run-only. It runs on the self-hosted VPS with three independent public paths: text, approved direct media, and transcript-grounded generated clips. All paths save posting evidence to Sheets and feed bounded PDCA records; unavailable metrics remain unknown rather than zero.
+
+1. account-specific slot workflow claims the canonical slot.
+2. source/reference data and recent posts are read with bounded retries.
+3. reader-facing `public_post_text` is generated and validated.
+4. direct/clip slot uses a pre-uploaded approved Cloudinary asset; a media miss becomes text fallback.
+5. Threads result is reconciled, then queue/result/slot/PDCA evidence is saved idempotently.
+6. every 30 minutes recovery claims at most one overdue slot/account.
+
+Generated media preparation runs before its post slot: bounded discovery -> local Whisper (1 video/run, max 900 seconds) -> 1-3 non-overlapping transcript-grounded clips -> subtitle-free 9:16 ffmpeg cut -> Cloudinary -> `MEDIA_READY`. Preparation does not consume a posting cap and never posts. The posting workflow never downloads/cuts/transcribes.
+
+Latest read-only evidence: queue 117, posted results 33, source videos 69, transcripts 16, clip candidates 20, uploaded media assets 12, PDCA runs 29. Generated clip inventory is 3 for each account.
+
+Older sections describing AUTOPOST/media schedules as OFF are historical and superseded here.
+
 ## 2026-07-12 Production Automation Flow
 
 The live production flow is now split to avoid one failing subsystem stopping everything:

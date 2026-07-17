@@ -1,5 +1,19 @@
 # Video Reference Runbook
 
+## Current approved media operation - 2026-07-17
+
+- Approved `night_scout` and `liver_manager` sources are discovered with strict per-source/run limits; channel/account URLs are discovery roots, while download/transcription/cut always use a real individual video URL.
+- Active source + `media_autopilot_enabled` + approved permission evidence are required. Channel IDs, planned-only rows, invalid video IDs, revoked sources and reference-only sources cannot enter execution.
+- Local transcription is optimized for the 1957MB runner: tiny/int8, one video/run, one CPU thread, mono 16k FLAC, max 900 seconds. A long video is saved as PARTIAL with processed duration instead of exhausting memory.
+- Night Scout performs subject-policy prefilter before local transcription. Female-subject evidence is required for clip use.
+- Transcript-grounded candidates produce 1-3 non-overlapping 8-45 second clips/video. Production uses 9:16 ffmpeg output and **no subtitle burn-in**.
+- Prepared candidates are deduped against `media_assets`; rerunning generation preserves `MEDIA_READY`, cut/upload state and asset IDs. Preparation ignores post caps because it cannot publish.
+- Current uploaded generated-clip inventory: `night_scout=3`, `liver_manager=3`. Direct media inventory: `night_scout=1`, `liver_manager=5`.
+- Generated clip and direct media posting schedules are enabled. Their posting steps use only existing uploaded assets and keep all real gates step-scoped. Failure falls back to safe text.
+- External transcription API remains false. X, beauty, unknown/reference-only media and revoked permission remain blocked.
+
+Older sections below are historical; statements that TikTok/liver URLs are TODO-only or that media scheduling is OFF are superseded by this section.
+
 ## 2026-07-12 Transcript-Grounded Media Growth
 
 Approved video operation now has account-separated schedules:
