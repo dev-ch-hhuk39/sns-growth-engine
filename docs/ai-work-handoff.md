@@ -1,5 +1,118 @@
 # AI Work Handoff
 
+## 2026-07-18 Codex live canary recovery completion
+
+### 本システムについて / 現在の本番状態
+
+SNS Growth Engine v2 は private repository の GitHub Actions を Xserver
+self-hosted runner (`sns-growth-xserver`) で実行し、`night_scout` と
+`liver_manager` の Threads text / approved direct media / approved generated
+clip を、Sheets の provenance・queue・posted results・PDCA 記録へ接続する。
+X と beauty は block を維持し、公開入力は常に `public_post_text` のみ。
+
+### 現在 HEAD / 作業ブランチ
+
+- この最終 handoff 更新前 HEAD: `406e674a618e41bd94f05a774bc679c7921e104e`。
+- branch: `main`。最終 docs commit/push 後は `git rev-parse HEAD` と
+  `origin/main` が一致することを確認する。
+
+### 今回の実測結果
+
+- Runner: online / `self-hosted, linux, x64, sns-growth, production`。
+- Night Scout text canary `29640254453`: **POSTED**。
+  `https://www.threads.com/@kyaba_consul_mizu/post/Da7jN3rjxHG`
+- Liver Manager text canary `29641005508`: **POSTED**。
+  `https://www.threads.com/@ran.liver_pro/post/Da7ld83D3cM`
+- Liver Manager approved direct-media canary `29637471702`: **POSTED**。
+  `https://www.threads.com/@ran.liver_pro/post/Da7bG0YFDEl`
+  Cloudinary secure URL は `media_assets` に保存済み（ログ上は意図的に
+  cloud name を redacted）。
+- Liver Manager approved TikTok generated-clip canary `29640229610`:
+  **POSTED**。
+  `https://www.threads.com/@ran.liver_pro/post/Da7idhbjUX4`
+- `29640233813` は GitHub schedule の大幅遅延で指定枠外になったため、
+  投稿前に cancel した。枠外投稿はしなかった。
+
+### 変更ファイル一覧 / 追加ファイル一覧
+
+- Updated: account text/direct/media posting workflows,
+  `src/sheets_client.py`, `scripts/process_threads_queue.py`,
+  `scripts/run_slot_text_fallback.py`, `scripts/run_autonomous_loop.py`,
+  `scripts/public_post_quality.py`, production docs。
+- Added: `scripts/check_schedule_window.py`,
+  `scripts/test_schedule_window_blocks_delayed_runs.py`,
+  `scripts/test_autonomous_health_counts_slot_fallback_post.py`,
+  `scripts/test_production_workflows_checkout_trigger_sha.py`。
+
+### 修正内容
+
+- 古い Sheets queue の空 `public_post_text` fallback を通常候補より後ろへ
+  回し、empty row が安全な新規候補を妨げないようにした。
+- AUTO_READY が全候補を重複 reject した場合、canonical slot の安全な
+  text fallback を実行する。fallback 投稿も `autonomous_health` では
+  `POSTED` と集計する。
+- Night/Liver とも reader-facing template を25本に拡張し、全件で
+  final validator PASS を確認した。
+- 429 では 0/10/30/60 秒で再試行し、非本質的な `logs` 保存失敗は
+  publish/duplicate result を覆さない。
+- self-hosted runner は workflow の `${{ github.sha }}` を明示 checkout
+  し、stale workspace を実行しない。実際に古い checkout を検知し、
+  正しい revision が検証済みである。
+- scheduled posting は target JST ±15分外なら apply しない。manual
+  canary はこの時刻 guard を通らず、確認目的でのみ即時実行できる。
+
+### テスト結果 / dry-run / BLOCKED
+
+- `test_all_workflows_safety_flags.py`: PASS 340 / FAIL 0。
+- schedule-window、runner-SHA、fallback-health、fallback contract、legacy
+  empty queue、template inventory、internal-term、`py_compile`、
+  `git diff --check`: PASS。
+- confirm/env なしの post/download/cut/upload は既存 safety gate で BLOCK。
+- X fetch/post、beauty post、unknown/reference-only media、internal analysis
+  の公開混入は block 維持。
+
+### 残 WARN / 未完了事項
+
+- GitHub-hosted scheduler は遅延し得る。新しい window guard は枠外投稿を
+  防ぐ一方、遅延 run を skip する。`content-slot-recovery` と
+  VPS-native systemd timer の二重化を次の運用強化として優先する。
+- Google Sheets は read quota 429 を返し得る。最新 liver canary は
+  retry 後に成功。health/log telemetry の累積 ERROR/NO_POST は過去履歴を
+  含むため、最新 workflow conclusion と slot/post result を優先する。
+- Threads metrics は `UNAVAILABLE` のまま保持し、0を捏造しない。
+- TikTok/YouTube の全アカウントを無制限取得することはしない。approved
+  source・上限・rights/permission evidence・media validator を通るものだけ
+  prepare/post 対象。
+
+### スケール方針 / タスク
+
+- 2GB VPS: browser/transcription/ffmpeg/media preparation は各1並列、
+  disk 80% で preparation 停止、90% で text-only。posted slot は最優先。
+- direct media / generated clip は各 account 最低3 READY 在庫、text は最低
+  10件を目標にし、同一 source post/video/clip/text は再投稿しない。
+- next task: Xserver に systemd timer を導入して、JST slot を runner
+  待ちではなく VPS clock で開始し、GitHub schedule 遅延を吸収する。
+
+### 次に触ってよいファイル / 触らない方がよいファイル
+
+- Claude Code: `scripts/check_autonomous_health.py`,
+  `scripts/content_slot_recovery.py` 相当、metrics/PDCA tests、runbooks。
+- Codex: account workflows、`scripts/run_slot_text_fallback.py`,
+  `scripts/process_threads_queue.py`, Sheets quota tests、VPS timer deploy files。
+- 衝突しやすい: `docs/ai-work-handoff.md`, `src/sheets_client.py`,
+  `scripts/run_autonomous_loop.py`, `config/content_schedule.json`, account
+  workflows。
+- 触らない: `.env*`, `data/`, `output/`, `.claude/plans/`, secrets/tokens,
+  cookies/storage state、historical Sheets records、X/beauty paths。
+
+### 次 AI への引き継ぎメモ
+
+投稿を再試行する前に `content_slot_runs`、`posted_results`、queue を照合する。
+特に `29641005508` は current text path の live proof、`29637471702` は
+direct media、`29640229610` は TikTok generated clip の live proof である。
+Cloudinary URL は Sheets `media_assets` に存在するが、secret/credentialや
+runner stateは出力しない。schedule の枠外 run を無理に投稿させないこと。
+
 ## 2026-07-18 Codex production recovery and direct-media compatibility
 
 - Start HEAD / `origin/main`: `7c9d14eb1752845ab6e13918f83c2bd871f1375a`; branch: `main`.

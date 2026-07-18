@@ -1,5 +1,20 @@
 # Production Completion Status
 
+## 2026-07-18 Live recovery update
+
+Current operational evidence is now live, not dry-run only:
+
+- Night Scout text: [Da7jN3rjxHG](https://www.threads.com/@kyaba_consul_mizu/post/Da7jN3rjxHG)
+- Liver Manager text: [Da7ld83D3cM](https://www.threads.com/@ran.liver_pro/post/Da7ld83D3cM)
+- Liver Manager direct approved media: [Da7bG0YFDEl](https://www.threads.com/@ran.liver_pro/post/Da7bG0YFDEl)
+- Liver Manager TikTok generated clip: [Da7idhbjUX4](https://www.threads.com/@ran.liver_pro/post/Da7idhbjUX4)
+
+The direct asset's Cloudinary secure URL and provenance are saved in Sheets;
+the run log deliberately redacts the cloud name. The self-hosted workflow now
+pins its dispatched commit SHA, retries Sheets 429 through a minute boundary,
+and skips delayed scheduled runs outside the configured JST +/-15-minute
+window. X and beauty remain blocked.
+
 ## Autonomous recovery update - 2026-07-18
 
 The scheduled account workflows were active; the immediate production failure
