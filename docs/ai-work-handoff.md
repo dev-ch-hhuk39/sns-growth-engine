@@ -1,5 +1,54 @@
 # AI Work Handoff
 
+## 2026-07-18 Codex production recovery and direct-media compatibility
+
+- Start HEAD / `origin/main`: `7c9d14eb1752845ab6e13918f83c2bd871f1375a`; branch: `main`.
+- GitHub Actions audit found both account schedules firing. Their apply steps
+  stopped at `process_threads_queue.py` with `EMPTY_TEXT`, not because cron,
+  Threads credentials, X, beauty, or the final public validator blocked them.
+  Existing Sheets `queue` headers could omit `public_post_text`; the named
+  fallback appended a row but the critical public field was silently absent.
+- Fixed `run_slot_text_fallback.py` to migrate `queue` and `posted_results`
+  headers before writing. The normal worker already reads only
+  `public_post_text` first and keeps its final validator immediately before
+  publishing.
+- Fixed direct-reference media semantics: approved original video may retain
+  its own aspect ratio and may be up to 300 seconds. Generated clips remain
+  strictly 8-45 seconds and 9:16. The direct-origin flag is carried into the
+  queue worker; this does not loosen rights, permission, platform, account,
+  media URL, or public-text checks.
+- Direct source-plan reads are cached for each invocation to reduce Sheets
+  quota use. Account workflow health summaries are non-blocking telemetry,
+  so an exhausted telemetry read cannot overturn a successful post result.
+- Added a slot-free `manual_e2e_proof` dispatch route to the Night Scout direct
+  workflow, matching Liver Manager. It never claims a scheduled slot and
+  never prepares/downloads/cuts/uploads media.
+- Updated files: `.github/workflows/autonomous-growth-loop-night-scout.yml`,
+  `.github/workflows/autonomous-growth-loop-liver-manager.yml`,
+  `.github/workflows/direct-reference-media-night-scout.yml`,
+  `scripts/media_post_validator.py`,
+  `scripts/process_threads_queue.py`,
+  `scripts/run_direct_reference_media_pipeline.py`,
+  `scripts/run_slot_text_fallback.py`,
+  `scripts/test_direct_reference_media_keeps_original_geometry.py`,
+  `scripts/test_manual_media_e2e_proof_safety.py`, and these docs.
+- Tests before the next VPS canary: targeted direct-validator, manual-E2E,
+  fallback-contract, queue-media, internal-term, Threads-only, safety-flag
+  tests, `py_compile`, and `git diff --check` all PASS.
+- Current residual WARN: historical `posted_save_failed` and `EMPTY_TEXT`
+  rows remain preserved for audit; Threads metrics are `UNAVAILABLE`, never
+  fabricated as zero; Google Sheets 429 remains possible during bursts but is
+  now reduced and non-critical health telemetry cannot fail a completed post.
+- Safe next files: Direct workflows, `run_slot_text_fallback.py`,
+  `run_direct_reference_media_pipeline.py`, `process_threads_queue.py`, and
+  focused Sheets quota tests. Do not touch `.env*`, `data/`, `output/`,
+  secrets/cookies/storage state, historical Sheets rows, or X/beauty paths.
+- Next AI handoff: push this recovery, dispatch one slot-free direct-media
+  proof per account and one text workflow proof per account on the Xserver
+  self-hosted runner, then record only returned post URLs/IDs and redacted
+  status evidence. Never retry an uncertain post before checking
+  `posted_results` and `content_slot_runs`.
+
 ## 2026-07-17 Codex multi-backend acquisition integration
 
 - Start HEAD / `origin/main`: `70f3dbda0b337e8724bcefd4186a444854ba2ae1`; branch: `main`.

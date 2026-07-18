@@ -13,6 +13,10 @@ on:
       dry_run_only:
         required: false
         default: "false"
+      manual_e2e_proof:
+        description: "One-time workflow_dispatch proof without claiming the scheduled slot"
+        required: false
+        default: "false"
 
 permissions:
   contents: read
@@ -63,7 +67,12 @@ jobs:
         run: python3 -c 'import random,time; d=random.randint(0,1800); print(f"[jitter] sleeping {d}s within ±15min window"); time.sleep(d)'
       - name: Dry-run direct media plan
         continue-on-error: true
+        if: github.event.inputs.manual_e2e_proof != 'true'
         run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_1800_direct_media --dry-run --use-sheets
+      - name: Dry-run manual direct-media E2E proof
+        continue-on-error: true
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.manual_e2e_proof == 'true'
+        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --manual-e2e-proof --dry-run --use-sheets
       - name: Check free-tier media budget
         id: media_budget
         continue-on-error: true
@@ -75,21 +84,21 @@ jobs:
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
         run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --enforce --purpose prepare
       - name: Seed owner-attested media permissions
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true'
         run: python3 scripts/seed_owner_attested_media_permissions.py --apply --confirm-owner-attestation
       - name: Acquire bounded approved source posts
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true'
         continue-on-error: true
         run: python3 scripts/acquire_approved_source_posts.py --account-id "$ACCOUNT_ID" --max-posts 3 --apply --confirm-acquisition
       - name: Ingest one approved source-post media asset
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.preparation_budget.outcome == 'success'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.preparation_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true'
         continue-on-error: true
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_CLOUDINARY_UPLOAD: "true"
         run: python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --apply --confirm-ingest
       - name: Apply direct media or text fallback
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && github.event.inputs.manual_e2e_proof != 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -102,6 +111,20 @@ jobs:
           FORCE_TEXT_ONLY_FALLBACK: ${{ steps.media_budget.outcome != 'success' }}
         run: |
           python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_1800_direct_media --apply --confirm-direct-media --fallback-to-text --use-sheets
+      - name: Apply one manual direct-media E2E proof
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.manual_e2e_proof == 'true' && github.event.inputs.dry_run_only != 'true'
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+          ALLOW_REAL_THREADS_VIDEO_POST: "true"
+          ALLOW_MEDIA_POSTS: "true"
+          ALLOW_THREADS_CAROUSEL: "true"
+          ALLOW_THREADS_MIXED_CAROUSEL: "false"
+          ALLOW_VIDEO_DOWNLOAD: "false"
+          ALLOW_CLOUDINARY_UPLOAD: "false"
+          ALLOW_REAL_X_POST: "false"
+          FORCE_TEXT_ONLY_FALLBACK: ${{ steps.media_budget.outcome != 'success' }}
+        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --manual-e2e-proof --apply --confirm-direct-media --use-sheets
       - if: always()
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets
       - name: Clean expired transient media

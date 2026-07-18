@@ -1,5 +1,23 @@
 # Autonomous Mode Runbook
 
+## Recovery note - 2026-07-18
+
+If an account workflow reports `EMPTY_TEXT`, do not rerun it blindly. Check
+the corresponding `queue` row and the Sheet header for `public_post_text`.
+The fallback runner now ensures that column before it creates a `READY` row;
+the queue worker publishes only that field and runs the final public validator
+again immediately before Threads. A `429` in the final health-summary step is
+telemetry-only; inspect `posted_results`, `content_slot_runs`, and the
+workflow's apply summary to decide whether a post actually happened.
+
+For a slot-free direct-media proof, use either `Direct Reference Media Night
+Scout` or `Direct Reference Media Liver Manager` with
+`confirm_direct_media=true`, `manual_e2e_proof=true`, and
+`dry_run_only=false`. This is capped to one eligible, rights-approved source
+post, does not claim a scheduled slot, and does not perform media preparation.
+Never rerun after an uncertain result until `posted_results` and
+`content_slot_runs` show no post URL or external ID.
+
 ## Current production operation - 2026-07-17
 
 - Production runs on private-repository self-hosted runner `sns-growth-xserver`; account text, direct media, generated clip, aftercare and 30-minute recovery schedules are enabled.

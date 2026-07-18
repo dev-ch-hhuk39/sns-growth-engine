@@ -10,6 +10,7 @@ from typing import Any
 from public_post_quality import final_public_post_validator
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
+DIRECT_REFERENCE_MAX_VIDEO_SECONDS = 300
 
 
 def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
@@ -21,6 +22,7 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     text_result = final_public_post_validator(text, account_id)
     duration = float(plan.get("duration_seconds") or 0)
     aspect = str(plan.get("aspect_ratio", ""))
+    media_origin = str(plan.get("media_origin", "generated_clip")).strip().lower()
     if rights not in APPROVED_RIGHTS:
         reasons.append("rights_status_not_approved")
     if plan.get("permission_status") != "approved":
@@ -38,10 +40,21 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     media_type = str(plan.get("media_type", "video")).lower()
     if media_type not in {"video", "image"}:
         reasons.append("media_type_not_supported")
-    if media_type == "video" and not (8 <= duration <= 45):
-        reasons.append("duration_out_of_range")
-    if media_type == "video" and aspect != "9:16":
-        reasons.append("aspect_ratio_not_9_16")
+    if media_type == "video":
+        if media_origin == "direct_reference":
+            # Original media and generated clips are different products.  The
+            # clip constraints belong only to the generated-clip path; a
+            # permitted original Threads/YouTube/TikTok video may be a normal
+            # landscape or square post.  Keep a bounded duration ceiling so
+            # we never accidentally hand an unbounded long-form asset to the
+            # publishing worker.
+            if duration <= 0 or duration > DIRECT_REFERENCE_MAX_VIDEO_SECONDS:
+                reasons.append("direct_reference_duration_out_of_range")
+        else:
+            if not 8 <= duration <= 45:
+                reasons.append("duration_out_of_range")
+            if aspect != "9:16":
+                reasons.append("aspect_ratio_not_9_16")
     if text_result["status"] != "PASS":
         reasons.append("public_post_validator_blocked")
     return {

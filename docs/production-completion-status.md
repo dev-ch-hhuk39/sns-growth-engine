@@ -1,5 +1,28 @@
 # Production Completion Status
 
+## Autonomous recovery update - 2026-07-18
+
+The scheduled account workflows were active; the immediate production failure
+was a queue-data contract issue. The fallback runner could append a `READY`
+row to an older Sheet whose queue header did not yet contain
+`public_post_text`. The worker correctly refuses an empty public body, so the
+apply step reported `EMPTY_TEXT` and no Threads post was attempted.
+
+The fallback now idempotently ensures the `queue` and `posted_results` schema
+before it writes. `public_post_text` remains the only value supplied to the
+publisher. Direct-reference originals are now validated separately from
+generated clips: approved original videos may preserve their source geometry
+and be up to 300 seconds, while generated clips remain 8-45 seconds at 9:16.
+Rights, permission evidence, no-X/no-beauty, Cloudinary URL, duplicate, and
+final public-post validation are unchanged.
+
+The next required operational proof is one Xserver self-hosted manual
+dispatch per account. It is limited to one selected item, checks the current
+Sheets slot/post records before publishing, and must record a returned
+Threads URL before being classified as successful. Sheets 429 can still occur
+under a burst; direct-plan reads are now invocation-cached and health-summary
+telemetry is non-blocking.
+
 ## Acquisition integration update - 2026-07-17
 
 The established text/direct-media/generated-clip production paths remain in

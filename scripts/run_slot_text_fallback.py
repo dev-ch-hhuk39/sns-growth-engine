@@ -63,6 +63,10 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
 def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     account_id = str(plan["account_id"])
     slot_id = str(plan["slot_id"])
+    # Existing production sheets may predate public_post_text.  Migrate the
+    # two tables before appending so the worker receives the only publishable
+    # field rather than a silently truncated fallback row.
+    client._ensure_tab("queue", TAB_DEFINITIONS["queue"])
     client._ensure_tab("posted_results", TAB_DEFINITIONS["posted_results"])
     posted_rows = client._call_with_rate_limit_retry(
         "get_all_records:posted_results:slot_fallback",

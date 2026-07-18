@@ -39,12 +39,29 @@ def _true(value: Any) -> bool:
 
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
+    # A direct-media plan reads several related tabs more than once.  Keep an
+    # invocation-scoped snapshot to avoid spending Sheets quota on duplicate
+    # reads during a scheduled run.  Write paths explicitly invalidate their
+    # affected table below.
+    cache = getattr(client, "_direct_media_records_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(client, "_direct_media_records_cache", cache)
+    if logical in cache:
+        return [dict(row) for row in cache[logical]]
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     rows = client._call_with_rate_limit_retry(
         f"get_all_records:{logical}",
         lambda: client._ws(logical).get_all_records(),
     )
-    return [dict(row) for row in rows]
+    cache[logical] = [dict(row) for row in rows]
+    return [dict(row) for row in cache[logical]]
+
+
+def _invalidate_records(client: SheetsClient, *logical_names: str) -> None:
+    cache = getattr(client, "_direct_media_records_cache", {})
+    for logical in logical_names:
+        cache.pop(logical, None)
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -93,18 +110,6 @@ def _permission_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
             continue
         result[source_id] = row
     return result
-
-
-def _vertical_aspect(media: dict[str, Any]) -> str:
-    """Use persisted dimensions when an older row lacks its derived ratio."""
-    ratio = str(media.get("aspect_ratio", "")).strip()
-    if ratio:
-        return ratio
-    try:
-        width, height = int(float(media.get("width") or 0)), int(float(media.get("height") or 0))
-    except (TypeError, ValueError):
-        return ""
-    return "9:16" if width and height and height > width else ""
 
 
 def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
@@ -166,11 +171,13 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
                     duration = float(merged.get("duration_seconds") or 0)
                 except (TypeError, ValueError):
                     duration = 0
-                if not 8 <= duration <= 45 or _vertical_aspect(merged) != "9:16":
+                # Direct-reference media is the approved original asset, not
+                # a generated 9:16 clip.  The strict 8-45s/9:16 validator is
+                # intentionally reserved for the clip-production workflow.
+                if duration <= 0 or duration > 300:
                     incomplete = True
                     reasons.append(f"{post_id}:video_media_not_postable")
                     break
-                merged["aspect_ratio"] = "9:16"
             resolved.append(merged)
         if incomplete or not resolved:
             continue
@@ -247,7 +254,8 @@ def build_plan(
         "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "media_url": media.get("storage_url", ""), "media_asset_id": asset_id, "platform": "threads",
         "account_id": account_id, "media_type": str(media.get("media_type", "video")), "duration_seconds": media.get("duration_seconds", 0),
-        "aspect_ratio": str(media.get("aspect_ratio", "9:16")), "public_post_text": text,
+        "aspect_ratio": str(media.get("aspect_ratio", "")), "public_post_text": text,
+        "media_origin": "direct_reference",
     })
     return {
         "status": "WILL_APPLY" if apply and validation["status"] == "PASS" and validator["status"] == "PASS" else "PLAN_ONLY" if validation["status"] == "PASS" and validator["status"] == "PASS" else "BLOCKED",
@@ -280,12 +288,13 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "media_urls_json": json.dumps(plan.get("media_urls", [])),
         "media_types_json": json.dumps(plan.get("media_types", [])),
         "media_status": "UPLOADED", "media_required": "true", "media_type": media.get("media_type", "video"), "duration_seconds": media.get("duration_seconds", ""),
-        "aspect_ratio": media.get("aspect_ratio", "9:16"), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
+        "aspect_ratio": media.get("aspect_ratio", ""), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "public_post_text": plan["public_post_text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     if queue_id not in {str(row.get("queue_id", "")) for row in _records(client, "queue")}:
         append_row(client, "queue", queue)
+        _invalidate_records(client, "queue")
     result = process_one(client, queue, dry_run=False, confirm_real_post=True)
     posted = str(result.get("status", "")) == "POSTED"
     if plan.get("slot_id"):

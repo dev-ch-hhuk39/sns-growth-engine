@@ -548,6 +548,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "duration_seconds": queue_row.get("duration_seconds", "0"),
             "aspect_ratio": queue_row.get("aspect_ratio", ""),
             "public_post_text": text,
+            "media_origin": "direct_reference" if str(queue_row.get("generation_mode", "")) == "direct_reference_media" else "generated_clip",
         })
         if media_validation["status"] != "PASS":
             log_event(client, account_id, "SAFETY_STOP_MEDIA_VALIDATOR", "media validator blocked post", {"queue_id": queue_id, "blocked_reasons": media_validation["blocked_reasons"]})

@@ -139,4 +139,5 @@ jobs:
 
       - name: Autonomous health summary
         if: always()
+        continue-on-error: true
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets
