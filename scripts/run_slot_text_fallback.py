@@ -23,10 +23,11 @@ from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
-from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
+from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview, reader_facing_template_count  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
+MAX_FALLBACK_VARIANTS = 5
 
 
 def _true(value: Any) -> bool:
@@ -39,7 +40,8 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
         return {"status": "BLOCKED", "blocked_reasons": ["unknown_content_slot"]}
     jst = timezone(timedelta(hours=9))
     schedule_date = business_date(datetime.now(jst))
-    index = ((sum(ord(char) for char in f"{account_id}|{slot_id}|{schedule_date}|{reason}") + attempt * 7) % 20) + 1
+    template_count = max(1, reader_facing_template_count(account_id))
+    index = ((sum(ord(char) for char in f"{account_id}|{slot_id}|{schedule_date}|{reason}") + attempt * 7) % template_count) + 1
     text = generate_reader_facing_post(account_id, index=index)
     validation = final_public_post_validator(text, account_id)
     return {
@@ -101,9 +103,9 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     }
     append_row(client, "queue", queue)
     result = process_one(client, queue, dry_run=False, confirm_real_post=True)
-    # A duplicate is recoverable: produce up to three daily/history-varying
+    # A duplicate is recoverable: produce bounded daily/history-varying
     # variants instead of leaving a scheduled slot empty.
-    if str(result.get("status", "")) == "DUPLICATE_BLOCKED" and int(plan["variant_attempt"]) < 3:
+    if str(result.get("status", "")) == "DUPLICATE_BLOCKED" and int(plan["variant_attempt"]) < MAX_FALLBACK_VARIANTS:
         return execute(build_plan(account_id, slot_id, plan["fallback_reason"], apply=True, attempt=int(plan["variant_attempt"]) + 1), client)
     posted = str(result.get("status", "")) == "POSTED"
     completed = build_slot_run(
