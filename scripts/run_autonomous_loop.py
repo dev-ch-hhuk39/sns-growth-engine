@@ -536,20 +536,23 @@ def infer_no_post_reason(result: dict[str, Any]) -> str:
 
 
 def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[str, Any]]) -> dict[str, Any]:
-    process_results = [
+    post_results = [
         r for r in results
-        if "process_threads_queue.py" in str(r.get("cmd", "")) and r.get("status") != "PLAN_ONLY"
+        if (
+            "process_threads_queue.py" in str(r.get("cmd", ""))
+            or "run_slot_text_fallback.py" in str(r.get("cmd", ""))
+        ) and r.get("status") != "PLAN_ONLY"
     ]
     auto_ready_results = [
         r for r in results
         if "auto_approve_queue.py" in str(r.get("cmd", "")) and r.get("status") != "PLAN_ONLY"
     ]
-    posted_count = sum(1 for r in process_results if str((r.get("payload") or {}).get("status", "")) == "POSTED")
+    posted_count = sum(1 for r in post_results if str((r.get("payload") or {}).get("status", "")) == "POSTED")
     blocked_count = sum(
-        1 for r in process_results
+        1 for r in post_results
         if any(token in str(r.get("stdout_tail", "")) for token in ("BLOCKED", "BLOCKED_INTERNAL_LEAK", "DUPLICATE_BLOCKED"))
     )
-    no_post_reasons = [infer_no_post_reason(r) for r in process_results]
+    no_post_reasons = [infer_no_post_reason(r) for r in post_results]
     no_post_reasons = [r for r in no_post_reasons if r]
     def _auto_ready_rejected_all(result: dict[str, Any]) -> bool:
         text = str(result.get("stdout_tail", ""))
@@ -574,14 +577,14 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
         "checked_count": checked_count,
         "approved_count": approved_count,
         "rejected_count": rejected_count,
-        "processed_count": len(process_results),
+        "processed_count": len(post_results),
         "posted_count": posted_count,
         "blocked_count": blocked_count,
         "no_post_reason": "" if posted_count else (
             "AUTO_READY_REJECTED_ALL" if auto_ready_rejected_all
             else (no_post_reasons[0] if no_post_reasons else "NO_PROCESS_STEP")
         ),
-        "apply_status": "POSTED" if posted_count else ("NO_POST" if process_results else "NOT_PROCESSED"),
+        "apply_status": "POSTED" if posted_count else ("NO_POST" if post_results else "NOT_PROCESSED"),
     }
 
 

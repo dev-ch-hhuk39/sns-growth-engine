@@ -62,8 +62,12 @@ jobs:
           echo "event=${{ github.event_name }}"
           date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
       - run: pip install -r requirements.txt
-      - name: Schedule jitter
+      - name: Enforce scheduled posting window
+        id: schedule_window
         if: github.event_name == 'schedule'
+        run: python3 scripts/check_schedule_window.py --slot-id ns_1800_direct_media --write-github-output
+      - name: Schedule jitter
+        if: github.event_name == 'schedule' && steps.schedule_window.outputs.in_window == 'true'
         run: python3 -c 'import random,time; d=random.randint(0,1800); print(f"[jitter] sleeping {d}s within ±15min window"); time.sleep(d)'
       - name: Dry-run direct media plan
         continue-on-error: true
@@ -76,29 +80,29 @@ jobs:
       - name: Check free-tier media budget
         id: media_budget
         continue-on-error: true
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
         run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce --purpose post
       - name: Check media preparation budget
         id: preparation_budget
         continue-on-error: true
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
         run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --enforce --purpose prepare
       - name: Seed owner-attested media permissions
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
         run: python3 scripts/seed_owner_attested_media_permissions.py --apply --confirm-owner-attestation
       - name: Acquire bounded approved source posts
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
         continue-on-error: true
         run: python3 scripts/acquire_approved_source_posts.py --account-id "$ACCOUNT_ID" --max-posts 3 --apply --confirm-acquisition
       - name: Ingest one approved source-post media asset
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.preparation_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.preparation_budget.outcome == 'success' && github.event.inputs.manual_e2e_proof != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
         continue-on-error: true
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_CLOUDINARY_UPLOAD: "true"
         run: python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --apply --confirm-ingest
       - name: Apply direct media or text fallback
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && github.event.inputs.manual_e2e_proof != 'true'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_direct_media == 'true') && github.event.inputs.dry_run_only != 'true' && github.event.inputs.manual_e2e_proof != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
