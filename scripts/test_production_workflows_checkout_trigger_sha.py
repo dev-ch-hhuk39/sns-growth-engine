@@ -17,7 +17,11 @@ def main() -> int:
     failures = 0
     for workflow in WORKFLOWS:
         text = (ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8")
-        ok = "Verify triggering revision" in text and 'git checkout --detach "$GITHUB_SHA"' in text
+        ok = (
+            "Verify triggering revision" in text
+            and "ref: ${{ github.sha }}" in text
+            and 'git checkout --detach "$GITHUB_SHA"' in text
+        )
         failures += not ok
         print(f"  {'PASS' if ok else 'FAIL'} {workflow} pins the triggering SHA")
     print(f"PASS: {len(WORKFLOWS) - failures} / FAIL: {failures}")
