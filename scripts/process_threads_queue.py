@@ -80,7 +80,7 @@ def _get_headers(ws) -> list[str]:
     ws_id = id(ws)
     if ws_id in _headers_cache:
         return _headers_cache[ws_id]
-    delays = [0, 5, 15, 30]
+    delays = [0, 10, 30, 60]
     for attempt, delay in enumerate(delays):
         if delay > 0:
             print(f"[RATE_LIMIT] Sheets 429; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
@@ -107,7 +107,7 @@ def _col_letter(col: int) -> str:
 
 
 def _call_with_rate_limit_retry(label: str, fn):
-    delays = [0, 5, 15, 30]
+    delays = [0, 10, 30, 60]
     for attempt, delay in enumerate(delays):
         if delay > 0:
             print(f"[RATE_LIMIT] Sheets 429 during {label}; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
