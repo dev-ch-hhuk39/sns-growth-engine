@@ -776,6 +776,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
     max_posts_per_run = max(1, int(plan["gate_summary"].get("max_posts_per_run", 1)))
     daily_post_cap = int(plan["gate_summary"].get("daily_post_cap_per_account", 1))
     post_candidate_accounts = []
+    posted_by_slot_fallback: set[str] = set()
     for account in accounts:
         used_today = posts_used_today(account, posted_rows_for_caps) if posted_rows_for_caps else 0
         plan.setdefault("daily_cap_state", {}).setdefault(account, {})["posts_used_today"] = used_today
@@ -829,8 +830,34 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             generation_result["returncode"] = 0
             generation_result["status"] = "RECOVERED_SAFE_ORIGINAL_FALLBACK"
             generation_result["recovery_reason"] = "reference_generation_failed"
-        if not run_step([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"]):
+        approval = _run([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"])
+        results.append(approval)
+        if approval.get("returncode") != 0:
             return results
+        # A canonical scheduled slot must not silently become a NO_POST just
+        # because every retained queue candidate is stale or near-duplicate.
+        # The dedicated fallback has its own claim, daily-cap, duplicate, and
+        # final-public-validator checks, and posts at most one item.
+        approval_payload = approval.get("payload") or {}
+        if int(approval_payload.get("updated_count", 0) or 0) == 0 and slot.get("slot_id") and slot.get("post_type") in TEXT_POST_TYPES:
+            fallback_env = dict(os.environ)
+            fallback_env.setdefault("PUBLISH_ENABLED", "true")
+            fallback_env.setdefault("ALLOW_REAL_THREADS_POST", "true")
+            fallback = _run([
+                sys.executable,
+                "scripts/run_slot_text_fallback.py",
+                "--account-id", account,
+                "--slot-id", str(slot["slot_id"]),
+                "--reason", "auto_ready_rejected_all",
+                "--apply",
+                "--confirm-slot-fallback",
+                "--use-sheets",
+            ], env=fallback_env)
+            results.append(fallback)
+            if fallback.get("returncode") != 0:
+                return results
+            if str((fallback.get("payload") or {}).get("status", "")) == "POSTED":
+                posted_by_slot_fallback.add(account)
     if getattr(args, "stop_before_post", False):
         results.append({
             "cmd": "scripts/process_threads_queue.py --stop-before-post",
@@ -847,6 +874,14 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         env.setdefault("ALLOW_REAL_X_POST", "false")
         remaining_posts = max_posts_per_run
         for account in accounts:
+            if account in posted_by_slot_fallback:
+                results.append({
+                    "cmd": f"scripts/process_threads_queue.py --account-id {account} --confirm-real-post --max-posts 1",
+                    "returncode": 0,
+                    "status": "SKIPPED",
+                    "reason": "canonical_slot_fallback_already_posted",
+                })
+                continue
             if remaining_posts <= 0:
                 results.append({
                     "cmd": f"scripts/process_threads_queue.py --account-id {account} --confirm-real-post --max-posts 1",

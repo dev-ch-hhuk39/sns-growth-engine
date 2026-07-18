@@ -22,6 +22,10 @@ on:
         description: "Run dry-run and health summary only; never apply/post"
         required: false
         default: "false"
+      slot_id:
+        description: "Canonical text slot for a manual proof"
+        required: false
+        default: "lm_1000_original"
 
 permissions:
   contents: read
@@ -74,13 +78,19 @@ jobs:
           date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
 
       - name: Resolve canonical content slot
+        env:
+          MANUAL_SLOT_ID: ${{ github.event.inputs.slot_id }}
         run: |
-          case "${{ github.event.schedule }}" in
-            "45 0 * * *") slot="lm_1000_original" ;;
-            "45 3 * * *") slot="lm_1300_reference" ;;
-            "45 11 * * *") slot="lm_2100_pdca" ;;
-            *) slot="manual_text" ;;
-          esac
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$MANUAL_SLOT_ID" ]; then
+            slot="$MANUAL_SLOT_ID"
+          else
+            case "${{ github.event.schedule }}" in
+              "45 0 * * *") slot="lm_1000_original" ;;
+              "45 3 * * *") slot="lm_1300_reference" ;;
+              "45 11 * * *") slot="lm_2100_pdca" ;;
+              *) slot="manual_text" ;;
+            esac
+          fi
           echo "CONTENT_SLOT_ID=$slot" >> "$GITHUB_ENV"
           echo "content_slot=$slot"
 
