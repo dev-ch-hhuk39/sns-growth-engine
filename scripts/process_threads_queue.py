@@ -302,16 +302,21 @@ def select_candidates(client: SheetsClient, account_id: str | None, max_posts: i
 
 
 def log_event(client: SheetsClient, account_id: str, status: str, message: str, details: dict[str, Any] | None = None) -> None:
-    append_row(client, "logs", {
-        "log_id": f"threads_queue_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",
-        "timestamp": now_iso(),
-        "account_id": account_id,
-        "operation": "process_threads_queue",
-        "level": "INFO" if status in {"DRY_RUN", "POSTED", "SKIPPED"} else "ERROR",
-        "status": status,
-        "message": message,
-        "details": json.dumps(details or {}, ensure_ascii=False),
-    })
+    # Audit telemetry must never prevent a completed duplicate check or a
+    # real publish from returning its durable result when Sheets is rate-limited.
+    try:
+        append_row(client, "logs", {
+            "log_id": f"threads_queue_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}",
+            "timestamp": now_iso(),
+            "account_id": account_id,
+            "operation": "process_threads_queue",
+            "level": "INFO" if status in {"DRY_RUN", "POSTED", "SKIPPED"} else "ERROR",
+            "status": status,
+            "message": message,
+            "details": json.dumps(details or {}, ensure_ascii=False),
+        })
+    except Exception as exc:
+        print(f"[WARN] noncritical log save skipped: {type(exc).__name__}")
 
 
 def save_pdca_initial(client: SheetsClient, queue_row: dict[str, Any], result_id: str) -> None:

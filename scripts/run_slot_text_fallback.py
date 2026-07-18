@@ -62,27 +62,28 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
     }
 
 
-def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
+def execute(plan: dict[str, Any], client: SheetsClient, *, started: dict[str, Any] | None = None) -> dict[str, Any]:
     account_id = str(plan["account_id"])
     slot_id = str(plan["slot_id"])
     # Existing production sheets may predate public_post_text.  Migrate the
     # two tables before appending so the worker receives the only publishable
     # field rather than a silently truncated fallback row.
-    client._ensure_tab("queue", TAB_DEFINITIONS["queue"])
-    client._ensure_tab("posted_results", TAB_DEFINITIONS["posted_results"])
-    posted_rows = client._call_with_rate_limit_retry(
-        "get_all_records:posted_results:slot_fallback",
-        lambda: client._ws("posted_results").get_all_records(),
-    )
-    autonomous = json.loads((ROOT / "config/autonomous_mode.json").read_text(encoding="utf-8"))
-    daily_cap = int(autonomous.get("daily_post_cap_per_account", 5))
-    if posts_used_in_business_date(account_id, [dict(row) for row in posted_rows]) >= daily_cap:
-        return {**plan, "status": "SKIPPED", "reason": "daily_post_cap_reached", "would_post": False}
-    claim = claim_slot_run(client, account_id, slot_id)
-    if claim.get("status") != "CLAIMED":
-        return {**plan, "status": "SKIPPED", "reason": claim.get("reason", "slot_not_claimed"), "would_post": False}
-    started = build_slot_run(account_id, slot_id, status="RUNNING", actual_post_type=plan["actual_post_type"], fallback_level=int(plan["fallback_level"]), no_post_reason=plan["fallback_reason"], claim_status="CLAIMED", publish_attempt_id=claim.get("slot_run_id", ""))
-    upsert_slot_run(client, started)
+    if started is None:
+        client._ensure_tab("queue", TAB_DEFINITIONS["queue"])
+        client._ensure_tab("posted_results", TAB_DEFINITIONS["posted_results"])
+        posted_rows = client._call_with_rate_limit_retry(
+            "get_all_records:posted_results:slot_fallback",
+            lambda: client._ws("posted_results").get_all_records(),
+        )
+        autonomous = json.loads((ROOT / "config/autonomous_mode.json").read_text(encoding="utf-8"))
+        daily_cap = int(autonomous.get("daily_post_cap_per_account", 5))
+        if posts_used_in_business_date(account_id, [dict(row) for row in posted_rows]) >= daily_cap:
+            return {**plan, "status": "SKIPPED", "reason": "daily_post_cap_reached", "would_post": False}
+        claim = claim_slot_run(client, account_id, slot_id)
+        if claim.get("status") != "CLAIMED":
+            return {**plan, "status": "SKIPPED", "reason": claim.get("reason", "slot_not_claimed"), "would_post": False}
+        started = build_slot_run(account_id, slot_id, status="RUNNING", actual_post_type=plan["actual_post_type"], fallback_level=int(plan["fallback_level"]), no_post_reason=plan["fallback_reason"], claim_status="CLAIMED", publish_attempt_id=claim.get("slot_run_id", ""))
+        upsert_slot_run(client, started)
     queue_id = f"slot_fallback_{started['schedule_date_jst'].replace('-', '')}_{account_id}_{slot_id}_{plan['variant_attempt']}"
     queue = {
         "queue_id": queue_id,
@@ -106,7 +107,11 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     # A duplicate is recoverable: produce bounded daily/history-varying
     # variants instead of leaving a scheduled slot empty.
     if str(result.get("status", "")) == "DUPLICATE_BLOCKED" and int(plan["variant_attempt"]) < MAX_FALLBACK_VARIANTS:
-        return execute(build_plan(account_id, slot_id, plan["fallback_reason"], apply=True, attempt=int(plan["variant_attempt"]) + 1), client)
+        return execute(
+            build_plan(account_id, slot_id, plan["fallback_reason"], apply=True, attempt=int(plan["variant_attempt"]) + 1),
+            client,
+            started=started,
+        )
     posted = str(result.get("status", "")) == "POSTED"
     completed = build_slot_run(
         account_id,
