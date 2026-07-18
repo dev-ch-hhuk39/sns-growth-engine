@@ -48,7 +48,12 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
             # landscape or square post.  Keep a bounded duration ceiling so
             # we never accidentally hand an unbounded long-form asset to the
             # publishing worker.
-            if duration <= 0 or duration > DIRECT_REFERENCE_MAX_VIDEO_SECONDS:
+            # Cloudinary validates the uploaded file type before this path.
+            # Older imported records can lack a persisted duration; that is
+            # not evidence that the approved original is unsafe. Reject an
+            # explicitly known oversized original, but let the Threads API
+            # validate an otherwise approved video with missing metadata.
+            if duration > DIRECT_REFERENCE_MAX_VIDEO_SECONDS:
                 reasons.append("direct_reference_duration_out_of_range")
         else:
             if not 8 <= duration <= 45:

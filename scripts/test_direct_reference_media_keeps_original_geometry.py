@@ -31,10 +31,24 @@ def main() -> int:
         "media_origin": "generated_clip",
         "public_post_text": GOOD_TEXT,
     })
+    unknown_duration = validate_media_post({
+        "rights_status": "approved_creator_clip",
+        "permission_status": "approved",
+        "media_url": "https://res.cloudinary.example/original-without-duration.mp4",
+        "media_asset_id": "asset-direct-unknown-duration",
+        "platform": "threads",
+        "account_id": "liver_manager",
+        "media_type": "video",
+        "duration_seconds": "",
+        "aspect_ratio": "",
+        "media_origin": "direct_reference",
+        "public_post_text": GOOD_TEXT,
+    })
     checks = [
         ("approved original media permits supported landscape geometry", direct["status"] == "PASS"),
         ("generated clip keeps strict duration guard", "duration_out_of_range" in generated["blocked_reasons"]),
         ("generated clip keeps strict aspect guard", "aspect_ratio_not_9_16" in generated["blocked_reasons"]),
+        ("approved original may proceed when old metadata lacks duration", unknown_duration["status"] == "PASS"),
     ]
     for name, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'} {name}")

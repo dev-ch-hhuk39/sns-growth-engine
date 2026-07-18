@@ -174,7 +174,7 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
                 # Direct-reference media is the approved original asset, not
                 # a generated 9:16 clip.  The strict 8-45s/9:16 validator is
                 # intentionally reserved for the clip-production workflow.
-                if duration <= 0 or duration > 300:
+                if duration > 300:
                     incomplete = True
                     reasons.append(f"{post_id}:video_media_not_postable")
                     break
