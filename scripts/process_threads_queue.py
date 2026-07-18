@@ -286,15 +286,16 @@ def select_candidates(client: SheetsClient, account_id: str | None, max_posts: i
         # exposed public_post_text.  Preserve it for audit, but do not let an
         # inevitably-empty legacy row starve a newly generated safe candidate.
         generation_mode = str(row.get("generation_mode", ""))
+        queue_id = str(row.get("queue_id", ""))
         missing_legacy_public_text = (
-            generation_mode.startswith("slot_fallback_")
+            (generation_mode.startswith("slot_fallback_") or queue_id.startswith("slot_fallback_"))
             and not str(row.get("public_post_text", "")).strip()
         )
         try:
             priority = int(str(row.get("priority", "999") or "999"))
         except ValueError:
             priority = 999
-        return (1 if missing_legacy_public_text else 0, priority, str(row.get("queue_id", "")))
+        return (1 if missing_legacy_public_text else 0, priority, queue_id)
 
     candidates.sort(key=sort_key)
     return candidates[:max_posts]

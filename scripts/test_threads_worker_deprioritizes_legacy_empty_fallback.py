@@ -12,12 +12,14 @@ class FakeWorksheet:
     def get_all_records(self):
         return [
             {
-                "queue_id": "legacy-empty",
+                "queue_id": "slot_fallback_night_scout_legacy-empty",
                 "account_id": "night_scout",
                 "platform": "threads",
                 "priority": "1",
                 "status": "READY",
-                "generation_mode": "slot_fallback_original_text",
+                # Older Sheet headers did not retain generation_mode, so the
+                # queue id is the durable fallback marker.
+                "generation_mode": "",
                 "public_post_text": "",
             },
             {
