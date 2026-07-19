@@ -17,7 +17,9 @@ for path in WORKFLOWS:
     data = yaml.safe_load(raw) or {}
     for job_name, job in (data.get("jobs") or {}).items():
         checks.append((f"{path.name}:{job_name}:github-hosted", job.get("runs-on") == RUNNER))
-    checks.append((f"{path.name}:no untrusted trigger", all(term not in raw for term in ("pull_request:", "pull_request_target:", "repository_dispatch:", "issue_comment:", "workflow_run:"))))
+    forbidden_triggers = ("pull_request_target:", "repository_dispatch:", "issue_comment:", "workflow_run:")
+    safe_pr_ci = path.name == "ci.yml" and "pull_request:" in raw and "secrets." not in raw
+    checks.append((f"{path.name}:no untrusted production trigger", all(term not in raw for term in forbidden_triggers) and ("pull_request:" not in raw or safe_pr_ci)))
     if "actions/checkout@" in raw:
         checks.append((f"{path.name}:checkout credentials disabled", "persist-credentials: false" in raw))
     checks.append((f"{path.name}:no idle runner delay", "time.sleep" not in raw and "random.randint" not in raw))

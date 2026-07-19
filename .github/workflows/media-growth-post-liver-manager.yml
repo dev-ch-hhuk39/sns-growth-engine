@@ -50,9 +50,6 @@ jobs:
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
       THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
-      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
-      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
-      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -72,9 +69,9 @@ jobs:
           date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Enforce scheduled posting window
-        id: schedule_window
+      - name: Diagnose schedule delay
         if: github.event_name == 'schedule'
+        continue-on-error: true
         run: python3 scripts/check_schedule_window.py --slot-id lm_1800_clip_media --write-github-output
       - name: Dry-run saved media plan
         if: github.event.inputs.manual_e2e_proof != 'true'
@@ -85,10 +82,10 @@ jobs:
       - name: Check free-tier media budget
         id: media_budget
         continue-on-error: true
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
-        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce --purpose post
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --apply --confirm-resource-usage --enforce --purpose post
       - name: Guard media post and kill switch
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -103,7 +100,7 @@ jobs:
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Post one saved approved media asset
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true' && github.event.inputs.manual_e2e_proof != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true' && github.event.inputs.manual_e2e_proof != 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"

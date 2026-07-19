@@ -47,6 +47,11 @@ def media(post_id: str) -> dict:
         "cloudinary_status": "UPLOADED",
         "rights_status": "approved_creator_clip",
         "permission_status": "approved",
+        "media_understanding": {
+            "status": "PASS",
+            "visual_summary": "店選びの判断項目をまとめた画像",
+            "visible_text": "客層 出勤ペース ノルマ 相談しやすさ",
+        },
     }
 
 

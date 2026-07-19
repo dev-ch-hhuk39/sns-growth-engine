@@ -27,7 +27,8 @@ VIDEO_CLIP_CANDIDATE_FIELDS = [
     "target_audience", "score", "rights_status", "permission_status",
     "cut_status", "upload_status", "post_status", "reviewer_status", "created_at",
     "hook_strength", "emotional_pull", "educational_value", "creator_relevance",
-    "liver_manager_fit", "risk_score", "rights_score", "clip_score",
+    "liver_manager_fit", "comment_signal_count", "comment_reaction_score",
+    "risk_score", "rights_score", "clip_score",
 ]
 
 SOURCE_VIDEO_FIELDS = [
@@ -35,6 +36,7 @@ SOURCE_VIDEO_FIELDS = [
     "source_url", "video_id", "canonical_video_url", "original_video_url",
     "title", "description_preview", "author_handle", "published_at",
     "duration_seconds", "view_count", "like_count", "comment_count",
+    "comments_json", "comment_count_collected",
     "transcript_status", "analysis_status", "clip_candidate_count",
     "download_status", "cut_status", "upload_status", "post_status",
     "rights_status", "permission_status", "discovery_status",
@@ -167,6 +169,8 @@ def build_source_video(
         "view_count": "",
         "like_count": "",
         "comment_count": "",
+        "comments_json": "[]",
+        "comment_count_collected": "0",
         "transcript_status": "TRANSCRIPT_PLANNED",
         "analysis_status": "PENDING",
         "clip_candidate_count": 0,
@@ -209,18 +213,41 @@ def build_transcript_row(source: dict[str, Any], *, status: str, title: str = ""
     }
 
 
-def score_clip_candidate(source: dict[str, Any], *, has_transcript: bool = False) -> dict[str, int]:
+def score_clip_candidate(
+    source: dict[str, Any],
+    *,
+    has_transcript: bool = False,
+    transcript_excerpt: str = "",
+    semantic_score: float = 0.0,
+    comment_signal_count: int = 0,
+) -> dict[str, int]:
     rights_score = 20 if source.get("rights_status") in {"owned", "licensed", "approved_creator_clip"} else 0
+    excerpt = str(transcript_excerpt or "")
+    account_id = str(source.get("target_account_id") or (source.get("target_account_ids") or [""])[0])
+    hook_markers = ("なぜ", "実は", "大事", "ポイント", "理由", "注意", "失敗", "違い", "？", "?")
+    learning_markers = ("まず", "確認", "選", "変え", "比べ", "コツ", "方法", "ので", "ため")
+    account_terms = (
+        ("夜職", "店", "時給", "ノルマ", "客層", "出勤", "移籍", "キャバ")
+        if account_id == "night_scout"
+        else ("配信", "初見", "コメント", "リスナー", "ギフト", "事務所", "ライバー")
+    )
+    hook_strength = min(20, 7 + int(min(max(semantic_score, 0.0), 5.0) * 2) + sum(2 for term in hook_markers if term in excerpt))
+    educational = min(20, (8 if has_transcript else 3) + sum(2 for term in learning_markers if term in excerpt))
+    relevance = min(18, 4 + sum(3 for term in account_terms if term in excerpt))
+    reaction = min(10, max(0, int(comment_signal_count)) * 2)
+    emotional = min(12, 5 + sum(2 for term in ("不安", "悩", "驚", "共感", "しんど", "嬉し", "怖") if term in excerpt))
     base = {
-        "hook_strength": 14,
-        "emotional_pull": 12,
-        "educational_value": 14 if has_transcript else 10,
-        "creator_relevance": 14,
-        "liver_manager_fit": 18,
+        "hook_strength": hook_strength,
+        "emotional_pull": emotional,
+        "educational_value": educational,
+        "creator_relevance": relevance,
+        "liver_manager_fit": relevance,
+        "comment_signal_count": max(0, int(comment_signal_count)),
+        "comment_reaction_score": reaction,
         "risk_score": 4,
         "rights_score": rights_score,
     }
-    base["clip_score"] = min(100, base["hook_strength"] + base["emotional_pull"] + base["educational_value"] + base["creator_relevance"] + base["liver_manager_fit"] + base["rights_score"] - base["risk_score"])
+    base["clip_score"] = min(100, base["hook_strength"] + base["emotional_pull"] + base["educational_value"] + base["creator_relevance"] + base["comment_reaction_score"] + base["rights_score"] - base["risk_score"])
     return base
 
 
@@ -289,6 +316,8 @@ def build_clip_candidate_for_video(
     transcript_excerpt: str = "",
     start_seconds: float | None = None,
     end_seconds: float | None = None,
+    semantic_score: float = 0.0,
+    comment_signal_count: int = 0,
 ) -> dict[str, Any]:
     config = config or {}
     duration = float(source_video.get("duration_seconds") or 60)
@@ -307,7 +336,13 @@ def build_clip_candidate_for_video(
     if end <= start:
         start = 0
         end = min(duration, planned_duration)
-    scores = score_clip_candidate(source, has_transcript=bool(transcript_signal_count))
+    scores = score_clip_candidate(
+        source,
+        has_transcript=bool(transcript_signal_count),
+        transcript_excerpt=transcript_excerpt,
+        semantic_score=semantic_score,
+        comment_signal_count=comment_signal_count,
+    )
     account_id = str(source_video.get("account_id") or source.get("target_account_id") or (source.get("target_account_ids") or ["liver_manager"])[0])
     context = account_media_context(account_id)
     row = {

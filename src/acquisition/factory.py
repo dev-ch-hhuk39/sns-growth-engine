@@ -13,6 +13,7 @@ from .enrichment import (
     YtDlpPostDetailProvider,
 )
 from .threads_public import ThreadsPublicHttpAdapter, ThreadsPublicProfileAdapter
+from .tiktok_public import TikTokPublicProfileAdapter
 from .ytdlp import YtDlpProfilePostAdapter
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,6 +27,7 @@ def build_router() -> AdapterRouter:
     config = load_routing_config()
     adapters = {
         "yt_dlp": YtDlpProfilePostAdapter(),
+        "tiktok_public_playwright": TikTokPublicProfileAdapter(),
         "threads_public_playwright": ThreadsPublicProfileAdapter(),
         "threads_public_http": ThreadsPublicHttpAdapter(),
     }

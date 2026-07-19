@@ -10,11 +10,12 @@ def main() -> int:
     ok = (
         "Jobs start just after the target" in night
         and "Jobs start just after the target" in liver
-        and "Enforce scheduled posting window" in night
-        and "Enforce scheduled posting window" in liver
+        and "Diagnose schedule delay" in night
+        and "Diagnose schedule delay" in liver
+        and "steps.schedule_window.outputs.in_window" not in night + liver
         and "time.sleep" not in night + liver
     )
-    print(f"  {'PASS' if ok else 'FAIL'} JST target windows are bounded without idle delay")
+    print(f"  {'PASS' if ok else 'FAIL'} JST cron slots are canonical and delayed events remain dispatchable")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1
 

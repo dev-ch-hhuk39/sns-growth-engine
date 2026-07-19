@@ -4,8 +4,8 @@ name: Video Reference Dry-Run
 # 実download・実切り抜き(ffmpeg)・実文字起こしAPI・実Cloudinary upload は一切行わない。
 # 新標準CLI が PLAN_ONLY のままガードどおり停止することを確認する。
 on:
-  schedule:
-    - cron: "0 3 * * 1"  # UTC 03:00 月曜 = JST 12:00 月曜
+  # Manual diagnostic only. Account-specific clip preparation owns recurring
+  # discovery, transcript planning and semantic candidate creation.
   workflow_dispatch:
     inputs:
       account_id:

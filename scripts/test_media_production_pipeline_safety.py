@@ -48,11 +48,11 @@ clips = [
 ]
 selected, selected_video, _ = select_candidate(clips, source_videos, [])
 checks.extend([
-    selected["clip_candidate_id"] == "clip_yt_1",
-    selected_video["source_video_id"] == "sv_yt",
+    selected["clip_candidate_id"] == "clip_tt",
+    selected_video["source_video_id"] == "sv_tt",
     is_real_discovered_video({"discovery_status": "PLANNED_ONLY", "platform": "youtube", "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk"}) is False,
 ])
-next_selected, _, _ = select_candidate(clips, source_videos, [{"clip_candidate_id": "clip_yt_1"}])
-checks.append(next_selected["clip_candidate_id"] == "clip_yt_2")
+next_selected, _, _ = select_candidate(clips, source_videos, [{"clip_candidate_id": "clip_tt"}])
+checks.append(next_selected["clip_candidate_id"] == "clip_yt_1")
 print(f"PASS: {sum(checks)} / FAIL: {len(checks)-sum(checks)}")
 raise SystemExit(0 if all(checks) else 1)

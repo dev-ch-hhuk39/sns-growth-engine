@@ -8,6 +8,7 @@ APIなし方針: X API実呼び出しは禁止。Agent-Reachのlocal browserを�
 from __future__ import annotations
 
 import json
+import hashlib
 import subprocess
 import tempfile
 import os
@@ -29,12 +30,12 @@ def _check_agent_reach() -> bool:
 
 
 class AgentReachFetcher(BaseFetcher):
-    """Agent-Reach CLI を通じてX/YouTubeの情報を取得する。
+    """Use Agent-Reach's real WebChannel as a bounded research fallback.
 
-    使い方:
-      1. Agent-Reach をインストール（npm install -g agent-reach 等）
-      2. local browser login / cookie 設定
-      3. --fetch --confirm-fetch で実行
+    Agent-Reach is an installer/doctor, not a profile-post scraper. Production
+    profile discovery therefore uses the dedicated acquisition adapters. This
+    adapter only invokes the upstream ``WebChannel.read`` API after doctor is
+    available; it never invents a nonexistent ``agent-reach fetch`` command.
     """
 
     adapter_name = "agent_reach"
@@ -79,6 +80,9 @@ class AgentReachFetcher(BaseFetcher):
                 source,
                 "--confirm-fetch が指定されていません。実取得をブロックします。",
             )
+
+        if platform == "x":
+            return self._blocked(source, "X network fetch is disabled; Agent-Reach is research-only.")
 
         if not _check_agent_reach():
             return self._not_installed(
@@ -138,26 +142,25 @@ class AgentReachFetcher(BaseFetcher):
     def _run_agent_reach(
         self, url: str, platform: str, max_items: int
     ) -> list[dict]:
-        cmd = [
-            "agent-reach",
-            "fetch",
-            "--url", url,
-            "--platform", platform,
-            "--limit", str(max_items),
-            "--output", "json",
-        ]
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=120,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr[:300] or "Agent-Reach failed")
-
         try:
-            data = json.loads(result.stdout)
-            if isinstance(data, list):
-                return data
-            if isinstance(data, dict):
-                return data.get("items", data.get("results", [data]))
-            return []
-        except json.JSONDecodeError:
-            raise RuntimeError(f"JSON parse error: {result.stdout[:200]}")
+            from agent_reach.channels.web import WebChannel
+        except ImportError as exc:
+            raise RuntimeError("agent_reach_python_package_unavailable") from exc
+        markdown = WebChannel().read(url)
+        text = str(markdown or "").strip()
+        if not text:
+            raise RuntimeError("agent_reach_web_channel_empty")
+        digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+        return [{
+            "item_type": "web_page_reference",
+            "post_id": f"agent_reach_{digest}",
+            "post_url": url,
+            "title": text.splitlines()[0].lstrip("# ")[:240],
+            "text": text[:20000],
+            "description": "Bounded Agent-Reach WebChannel research snapshot.",
+            "raw_payload_compact": {
+                "platform_hint": platform,
+                "character_count": len(text),
+                "truncated": len(text) > 20000,
+            },
+        }][:max(1, min(max_items, 1))]

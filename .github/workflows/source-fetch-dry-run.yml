@@ -4,8 +4,8 @@ name: Source Fetch Dry-Run
 # 実ダウンロード・実切り抜き・実アップロードは一切行わない。
 # plan_only / do_not_download ガードが正常動作することを確認する。
 on:
-  schedule:
-    - cron: "0 2 * * 1"  # UTC 02:00 月曜 = JST 11:00 月曜
+  # Manual diagnostic only. OSS Source Research and Account Acquisition own
+  # recurring provider checks and bounded collection.
   workflow_dispatch:
     inputs:
       account_id:

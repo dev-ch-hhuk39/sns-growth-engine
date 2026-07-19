@@ -74,12 +74,13 @@ def test_scheduled_workflows_apply_on_schedule() -> None:
 
 
 def test_scheduled_workflows_have_jitter() -> None:
-    """Legacy entrypoint: production workflows must not idle on a runner."""
+    """Legacy entrypoint: delayed schedules remain dispatchable without idle sleep."""
     for wf in (NS_WF, LM_WF):
         text = read(wf)
         assert "random.randint" not in text
         assert "time.sleep" not in text
-        assert "Enforce scheduled posting window" in text
+        assert "Diagnose schedule delay" in text
+        assert "check_schedule_window.py" in text
 
 
 def test_workflow_permissions_declared() -> None:

@@ -20,7 +20,7 @@ checks = [
     ("weekly and manual triggers", "workflow_dispatch:" in text and "schedule:" in text),
     ("ephemeral GitHub-hosted runner", job.get("runs-on") == "ubuntu-latest"),
     ("checkout credentials disabled", any(step.get("with", {}).get("persist-credentials") is False for step in steps)),
-    ("python 3.11 selected", any(step.get("with", {}).get("python-version") == "3.11" for step in steps)),
+    ("Python 3.12 selected for last30days", any(step.get("with", {}).get("python-version") == "3.12" for step in steps)),
     ("exact OSS requirements installed", "requirements-oss.txt" in runs),
     ("Agent Reach doctor runs", "agent-reach doctor" in runs),
     ("last30days preflight runs", "last30days.py\" --preflight" in runs),

@@ -1,9 +1,8 @@
 name: Media Transcription Production
 
 on:
-  schedule:
-    # JST 00:10 daily, after aftercare discovery and before media production.
-    - cron: "10 15 * * *"
+  # Manual diagnostic only. Scheduled transcription and candidate generation
+  # are owned by Media Growth Asset Preparation Liver Manager.
   workflow_dispatch:
     inputs:
       confirm_transcription:

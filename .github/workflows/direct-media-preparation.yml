@@ -1,0 +1,109 @@
+name: Direct Media Preparation
+
+on:
+  schedule:
+    - cron: "20 0 * * *"
+  workflow_dispatch:
+    inputs:
+      confirm_preparation:
+        description: "Type true to ingest and READY one approved direct-media item per account"
+        required: true
+        default: "false"
+
+permissions:
+  contents: read
+  models: read
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_LOCAL_TRANSCRIPTION: "false"
+
+jobs:
+  prepare-direct-media:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - account_id: night_scout
+            slot_id: ns_1800_direct_media
+          - account_id: liver_manager
+            slot_id: lm_1600_direct_media
+    concurrency:
+      group: sns-growth-direct-preparation-${{ matrix.account_id }}
+      cancel-in-progress: false
+    env:
+      ACCOUNT_ID: ${{ matrix.account_id }}
+      CONTENT_SLOT_ID: ${{ matrix.slot_id }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_MODELS_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-media-runtime.txt
+      - name: Install preparation dependencies
+        run: python3 -m pip install --requirement requirements-media-runtime.txt
+      - name: Install bounded OCR runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends tesseract-ocr tesseract-ocr-jpn
+          command -v ffmpeg
+          command -v ffprobe
+          command -v tesseract
+      - name: Dry-run direct preparation plan
+        run: |
+          python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --dry-run
+          python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --dry-run --use-sheets
+      - name: Check free-tier preparation budget
+        id: preparation_budget
+        continue-on-error: true
+        if: github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true'
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce --purpose prepare
+      - name: Guard direct preparation
+        if: github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true'
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          if json.loads(Path("config/autonomous_mode.json").read_text()).get("kill_switch"):
+              raise SystemExit("[BLOCKED] kill_switch=true")
+          print("[OK] direct preparation enabled; publishing remains false")
+          PY
+          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
+            if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
+          done
+      - name: Ingest one approved source-post media bundle
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
+        env:
+          ALLOW_VIDEO_DOWNLOAD: "true"
+          ALLOW_CLOUDINARY_UPLOAD: "true"
+          ALLOW_LOCAL_TRANSCRIPTION: "true"
+          ALLOW_TRANSCRIPTION_API: "false"
+        run: python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --max-assets 10 --apply --confirm-ingest
+      - name: Persist validator-approved READY inventory
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
+        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-direct-media --use-sheets
+      - name: Clean expired transient media
+        if: always()
+        run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup

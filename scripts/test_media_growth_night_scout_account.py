@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from discover_approved_source_videos import build_discovery_plan, load_sources
+from media_growth_test_fixtures import fixture_caption_service
 from run_media_growth_engine import build_media_growth_plan
 
 
@@ -31,6 +32,7 @@ def main() -> int:
             "transcription_status": "DONE", "transcript_text": "客層と出勤の相談を先に整理すると続けやすいです。",
             "segments_json": '[{"start": 1, "end": 15, "text": "客層と出勤の相談を先に整理すると続けやすいです。"}, {"start": 20, "end": 40, "text": "女の子が無理なく働ける条件を見ます。"}]',
         }],
+        caption_service=fixture_caption_service(),
     )
     checks = [
         ("night discovery selects active authorized sources", {row["source_id"] for row in discovery["selected_sources"]} == expected_active_sources),

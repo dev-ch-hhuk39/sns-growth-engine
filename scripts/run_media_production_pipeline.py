@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
-from content_slot_runs import business_date, build_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
+from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
@@ -151,7 +151,7 @@ def _record_media_slot_result(plan: dict[str, Any], client: SheetsClient, result
     slot_id = str(plan.get("slot_id", ""))
     if not slot_id:
         return {"status": "SKIPPED", "reason": "slot_id_not_provided"}
-    posted = str(result.get("status", "")) == "POSTED"
+    posted = str(result.get("status", "")) in {"POSTED", "POSTED_SAVE_FAILED"}
     row = build_slot_run(
         str(plan["account_id"]),
         slot_id,
@@ -349,8 +349,21 @@ def select_candidate(
         eligible.append((clip, source_video))
     if not eligible:
         return None, None, reasons
+    source_usage: dict[str, int] = {}
+    platform_usage: dict[str, int] = {}
+    for row in posted_results:
+        if str(row.get("account_id", "")) != account_id or str(row.get("status", "")).upper() != "POSTED":
+            continue
+        source_video = sources.get(str(row.get("source_video_id", "")), {})
+        source_id = str(source_video.get("source_id", ""))
+        platform = str(source_video.get("platform", "")).lower()
+        if source_id:
+            source_usage[source_id] = source_usage.get(source_id, 0) + 1
+        if platform:
+            platform_usage[platform] = platform_usage.get(platform, 0) + 1
     eligible.sort(key=lambda pair: (
-        0 if str(pair[1].get("platform", "")).lower() == "youtube" else 1,
+        source_usage.get(str(pair[1].get("source_id", "")), 0),
+        platform_usage.get(str(pair[1].get("platform", "")).lower(), 0),
         -float(pair[0].get("confidence_score") or pair[0].get("clip_score") or 0),
         str(pair[0].get("clip_id", "")),
     ))
@@ -563,6 +576,16 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
             "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
         }
+    slot_id = str(plan.get("slot_id", ""))
+    if slot_id:
+        claim = claim_slot_run(client, account_id, slot_id)
+        if claim.get("status") != "CLAIMED":
+            return {
+                **plan,
+                "status": "SKIPPED",
+                "reason": claim.get("reason", "slot_not_claimed"),
+                "would_post_video": False,
+            }
     queue_id = f"media_q_{clip_id}"
     queue_row = {
         "queue_id": queue_id,
@@ -573,6 +596,8 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "status": "READY",
         "auto_publish": "true",
         "generation_mode": "approved_saved_media",
+        "slot_id": slot_id,
+        "business_date_jst": business_date(),
         "media_asset_id": media_id,
         "video_clip_id": clip_id,
         "source_video_id": source_video_id,
@@ -593,6 +618,8 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "media_url": media_url,
         "media_status": "UPLOADED",
         "media_required": "true",
+        "media_type": "video",
+        "media_origin": "generated_clip",
         "duration_seconds": asset.get("duration_seconds") or asset.get("duration", ""),
         "aspect_ratio": asset.get("aspect_ratio", "9:16"),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -603,7 +630,8 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
     result = process_one(client, queue_row, dry_run=False, confirm_real_post=True)
     final_status = str(result.get("status", ""))
     failure_state: dict[str, Any] | None = None
-    if final_status == "POSTED":
+    externally_posted = final_status in {"POSTED", "POSTED_SAVE_FAILED"}
+    if externally_posted:
         _clear_clip_failure(client, clip)
     else:
         failure_state = _record_clip_failure(
@@ -615,11 +643,11 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
     retry_status = "QUARANTINED" if failure_state and is_quarantined(failure_state) else "VERIFY_REQUIRED"
     client.update_video_clip_candidate(
         clip_id,
-        post_status="POSTED" if final_status == "POSTED" else final_status,
-        reviewer_status="AUTO_APPROVED" if final_status == "POSTED" else retry_status,
-        clip_status="POSTED" if final_status == "POSTED" else retry_status,
+        post_status="POSTED" if externally_posted else final_status,
+        reviewer_status="AUTO_APPROVED" if externally_posted else retry_status,
+        clip_status="POSTED" if externally_posted else retry_status,
     )
-    if final_status == "POSTED":
+    if externally_posted:
         client.save_source_video({**source_video, "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
         try:
             media_pdca = _save_media_pdca_records(

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -199,6 +202,113 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
     return len(to_add) + len(to_update)
 
 
+def append_clip_evidence_to_sheets(
+    client: SheetsClient,
+    rows: list[dict[str, Any]],
+    source_videos: list[dict[str, Any]],
+) -> int:
+    """Persist redacted understanding/alignment evidence once per clip."""
+    videos = {str(row.get("source_video_id", "")): row for row in source_videos}
+    now = datetime.now(timezone.utc).isoformat()
+    saved = 0
+    specs = (
+        ("content_understanding_runs", "understanding_id"),
+        ("semantic_alignment_runs", "alignment_id"),
+    )
+    existing: dict[str, set[str]] = {}
+    for logical, id_field in specs:
+        ws = client._ensure_tab(logical, TAB_DEFINITIONS[logical])
+        existing[logical] = {
+            str(row.get(id_field, ""))
+            for row in client._call_with_rate_limit_retry(
+                f"get_all_records:{logical}:clip_evidence",
+                lambda ws=ws: ws.get_all_records(),
+            )
+        }
+    for clip in rows:
+        clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+        if not clip_id:
+            continue
+        source_video_id = str(clip.get("source_video_id", ""))
+        source_video = videos.get(source_video_id, {})
+        public_text = str(clip.get("public_post_text", ""))
+        understanding = {
+            "understanding_id": f"cu_clip_{clip_id}",
+            "source_id": clip.get("source_id", ""),
+            "source_post_id": "",
+            "source_video_id": source_video_id,
+            "account_id": clip.get("account_id", ""),
+            "platform": clip.get("platform", ""),
+            "main_claims_json": clip.get("main_claims_json", "[]"),
+            "topic": clip.get("analysis_topic", ""),
+            "audience": clip.get("analysis_audience", ""),
+            "core_topic": clip.get("analysis_core_topic") or clip.get("analysis_topic", ""),
+            "main_claim": clip.get("analysis_main_claim", ""),
+            "hook": clip.get("analysis_hook", ""),
+            "supporting_points_json": clip.get("analysis_supporting_points_json", "[]"),
+            "concrete_example": clip.get("analysis_concrete_example", ""),
+            "conclusion": clip.get("analysis_conclusion", ""),
+            "intended_audience": clip.get("analysis_intended_audience") or clip.get("analysis_audience", ""),
+            "media_role": clip.get("analysis_media_role", ""),
+            "factual_constraints_json": clip.get("analysis_factual_constraints_json", "[]"),
+            "prohibited_inferences_json": clip.get("analysis_prohibited_inferences_json", "[]"),
+            "comment_signal_count": source_video.get("comment_count_collected") or source_video.get("comment_count", "0"),
+            "media_item_count": "1",
+            "provider_name": clip.get("caption_provider", ""),
+            "provider_version": clip.get("caption_provider_version", ""),
+            "status": clip.get("content_understanding_status", "BLOCKED"),
+            "content_hash": clip.get("source_content_hash") or source_video.get("content_hash", ""),
+            "created_at": now,
+            "updated_at": now,
+        }
+        alignment = {
+            "alignment_id": f"sa_clip_{clip_id}",
+            "source_id": clip.get("source_id", ""),
+            "source_post_id": "",
+            "source_video_id": source_video_id,
+            "clip_candidate_id": clip_id,
+            "queue_id": "",
+            "account_id": clip.get("account_id", ""),
+            "platform": clip.get("platform", ""),
+            "caption_provider": clip.get("caption_provider", ""),
+            "caption_provider_version": clip.get("caption_provider_version", ""),
+            "status": clip.get("alignment_status", "BLOCKED"),
+            "final_alignment_score": clip.get("final_alignment_score", ""),
+            "main_claim_coverage": clip.get("main_claim_coverage", ""),
+            "unsupported_claim_count": clip.get("unsupported_claim_count", ""),
+            "source_copy_similarity": clip.get("source_copy_similarity", ""),
+            "recent_post_similarity": clip.get("recent_post_similarity", ""),
+            "claim_support_json": clip.get("claim_support_json", "[]"),
+            "blocked_reasons": json.dumps(clip.get("blocked_reasons", []), ensure_ascii=False),
+            "source_content_hash": clip.get("source_content_hash") or source_video.get("content_hash", ""),
+            "public_post_hash": hashlib.sha256(public_text.encode("utf-8")).hexdigest() if public_text else "",
+            "created_at": now,
+            "updated_at": now,
+        }
+        for logical, id_field, evidence in (
+            ("content_understanding_runs", "understanding_id", understanding),
+            ("semantic_alignment_runs", "alignment_id", alignment),
+        ):
+            evidence_id = str(evidence[id_field])
+            if evidence_id in existing[logical]:
+                continue
+            ws = client._ws(logical)
+            headers = client._call_with_rate_limit_retry(
+                f"row_values:{logical}:clip_evidence",
+                lambda ws=ws: ws.row_values(1),
+            )
+            client._call_with_rate_limit_retry(
+                f"append_row:{logical}:clip_evidence",
+                lambda ws=ws, headers=headers, evidence=evidence: ws.append_row(
+                    [str(evidence.get(header, "")) for header in headers],
+                    value_input_option="USER_ENTERED",
+                ),
+            )
+            existing[logical].add(evidence_id)
+            saved += 1
+    return saved
+
+
 def is_channel_or_account_url(source: dict[str, Any]) -> bool:
     source_type = str(source.get("source_type", "")).lower()
     url = str(source.get("source_url", ""))
@@ -302,6 +412,27 @@ def _clip_specs_from_transcript(video: dict[str, Any], transcript: dict[str, Any
         max_seconds=float(config.get("clip_duration_max_seconds", 45)),
         overlap_tolerance_seconds=float(config.get("clip_overlap_tolerance_seconds", 2)),
     )
+
+
+def _comment_signal_count(video: dict[str, Any], excerpt: str) -> int:
+    raw = video.get("comments_json") or "[]"
+    try:
+        comments = json.loads(raw) if isinstance(raw, str) else raw
+    except json.JSONDecodeError:
+        comments = []
+    if not isinstance(comments, list):
+        return 0
+    meaningful = {
+        token
+        for token in re.findall(r"[一-龥ぁ-んァ-ンA-Za-z0-9]{2,}", str(excerpt or ""))
+        if len(token) >= 2
+    }
+    count = 0
+    for row in comments[:20]:
+        text = str(row.get("text", "") if isinstance(row, dict) else row)
+        if any(token in text for token in meaningful) or "?" in text or "？" in text:
+            count += 1
+    return count
 
 
 def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -460,8 +591,11 @@ def build_media_growth_plan(
                 transcript_excerpt=str(spec.get("excerpt", "")),
                 start_seconds=float(spec.get("start", 0)),
                 end_seconds=float(spec.get("end", 0)),
+                semantic_score=float(spec.get("semantic_score", 0) or 0),
+                comment_signal_count=_comment_signal_count(source_video, str(spec.get("excerpt", ""))),
             )
             alignment = clip_output.get("semantic_alignment", {})
+            internal_analysis = clip_output.get("internal_analysis") if isinstance(clip_output.get("internal_analysis"), dict) else {}
             cand.update({
                 "caption_provider": clip_output.get("provider_name", ""),
                 "caption_provider_version": clip_output.get("provider_version", ""),
@@ -472,6 +606,21 @@ def build_media_growth_plan(
                 "source_copy_similarity": alignment.get("source_copy_similarity", 1),
                 "recent_post_similarity": alignment.get("recent_post_similarity", 1),
                 "claim_support_json": json.dumps(clip_output.get("claim_support", []), ensure_ascii=False),
+                "content_understanding_status": clip_output.get("status", "BLOCKED"),
+                "main_claims_json": json.dumps(internal_analysis.get("main_claims", []), ensure_ascii=False),
+                "analysis_topic": internal_analysis.get("topic", ""),
+                "analysis_audience": internal_analysis.get("audience", ""),
+                "analysis_core_topic": internal_analysis.get("core_topic") or internal_analysis.get("topic", ""),
+                "analysis_main_claim": internal_analysis.get("main_claim", ""),
+                "analysis_hook": internal_analysis.get("hook", ""),
+                "analysis_supporting_points_json": json.dumps(internal_analysis.get("supporting_points", []), ensure_ascii=False),
+                "analysis_concrete_example": internal_analysis.get("concrete_example", ""),
+                "analysis_conclusion": internal_analysis.get("conclusion", ""),
+                "analysis_intended_audience": internal_analysis.get("intended_audience") or internal_analysis.get("audience", ""),
+                "analysis_media_role": internal_analysis.get("media_role", ""),
+                "analysis_factual_constraints_json": json.dumps(internal_analysis.get("factual_constraints", []), ensure_ascii=False),
+                "analysis_prohibited_inferences_json": json.dumps(internal_analysis.get("prohibited_inferences", []), ensure_ascii=False),
+                "source_content_hash": bundle.content_hash,
                 "failure_signature": "" if clip_output.get("status") == "PASS" else "caption_or_alignment_blocked",
                 "selected_reason": spec.get("selected_reason", "semantic_window"),
                 "semantic_segment_score": spec.get("semantic_score", ""),
@@ -529,10 +678,48 @@ def build_media_growth_plan(
         "source_videos_source": "existing_source_videos" if existing_source_videos else "none_discover_first",
         "source_video_count": len(planned_source_videos),
         "transcript_grounded_source_video_count": len(transcript_by_source_video),
-        "source_videos_preview": planned_source_videos[:5],
-        "video_transcripts_schema": transcript_rows,
+        "source_videos_preview": [
+            {
+                "source_video_id": row.get("source_video_id", ""),
+                "source_id": row.get("source_id", ""),
+                "platform": row.get("platform", ""),
+                "video_id": row.get("video_id", ""),
+                "transcript_status": row.get("transcript_status", ""),
+                "analysis_status": row.get("analysis_status", ""),
+            }
+            for row in planned_source_videos[:5]
+        ],
+        "video_transcripts_schema": [
+            {
+                "transcript_id": row.get("transcript_id", ""),
+                "source_video_id": row.get("source_video_id", ""),
+                "transcript_status": row.get("transcript_status", ""),
+                "transcript_language": row.get("transcript_language", ""),
+                "chunk_count": row.get("chunk_count", ""),
+            }
+            for row in transcript_rows
+        ],
         "clip_candidate_count": len(clip_candidates),
-        "top_clip_candidates": clip_candidates[:5],
+        "top_clip_candidates": [
+            {
+                "clip_candidate_id": row.get("clip_candidate_id", ""),
+                "source_video_id": row.get("source_video_id", ""),
+                "start_seconds": row.get("start_seconds", ""),
+                "end_seconds": row.get("end_seconds", ""),
+                "clip_score": row.get("clip_score", ""),
+                "clip_status": row.get("clip_status", ""),
+                "target_audience": row.get("target_audience", ""),
+                "transcript_grounded": row.get("transcript_grounded", False),
+                "transcript_id": row.get("transcript_id", ""),
+                "public_post_validator_status": row.get("public_post_validator_status", ""),
+                "caption_provider": row.get("caption_provider", ""),
+                "alignment_status": row.get("alignment_status", ""),
+                "final_alignment_score": row.get("final_alignment_score", ""),
+                "unsupported_claim_count": row.get("unsupported_claim_count", ""),
+            }
+            for row in clip_candidates[:5]
+        ],
+        "_clip_candidates_for_save": clip_candidates,
         "media_post_queue_preview": media_post_queue_preview,
         "public_post_preview": public_preview(public_text),
         "final_public_post_validator": validation["status"],
@@ -567,11 +754,15 @@ def main() -> int:
         existing_transcripts=transcripts,
     )
     if args.apply and args.confirm_media_growth and args.use_sheets and client and plan["status"] != "BLOCKED":
-        added = append_clip_candidates_to_sheets(client, plan.get("top_clip_candidates", []))
+        candidates_for_save = plan.get("_clip_candidates_for_save", [])
+        added = append_clip_candidates_to_sheets(client, candidates_for_save)
+        evidence_saved = append_clip_evidence_to_sheets(client, candidates_for_save, existing or [])
         plan["saved_clip_candidate_count"] = added
+        plan["saved_clip_evidence_count"] = evidence_saved
         plan["clip_candidate_save_status"] = "SAVED" if added else "NO_NEW_ROWS"
     elif args.apply and args.confirm_media_growth and not args.use_sheets and plan["status"] != "BLOCKED":
         plan["clip_candidate_save_status"] = "SKIPPED_USE_SHEETS_REQUIRED"
+    plan.pop("_clip_candidates_for_save", None)
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     return 1 if plan["status"] == "BLOCKED" and args.apply else 0
 

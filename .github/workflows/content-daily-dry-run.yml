@@ -4,8 +4,8 @@ name: Content Daily Dry-Run
 # 実投稿・実ダウンロード・実アップロードは一切行わない。
 # Sheets verify + queue worker dry-run + refill dry-run + publisher dry-run のみ。
 on:
-  schedule:
-    - cron: "0 1 * * *"  # UTC 01:00 = JST 10:00
+  # Manual diagnostic only. CI and the production health summary own recurring
+  # validation so this legacy workflow does not consume a daily runner slot.
   workflow_dispatch:
     inputs:
       account_id:

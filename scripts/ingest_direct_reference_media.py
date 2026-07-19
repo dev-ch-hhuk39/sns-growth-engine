@@ -11,6 +11,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]; sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from config_loader import get_config
+from media.direct_content_understanding import analyze_local_media
 from sheets_client import TAB_DEFINITIONS, SheetsClient
 
 
@@ -183,6 +184,75 @@ def upsert_media_asset(client: SheetsClient, post: dict[str, Any], media: dict[s
         raise RuntimeError("media_asset_read_after_write_failed")
     return asset_id
 
+
+def upsert_media_understanding(
+    client: SheetsClient,
+    post: dict[str, Any],
+    media: dict[str, Any],
+    analysis: dict[str, Any],
+    *,
+    content_hash: str,
+) -> str:
+    understanding_id = f"smu_{media.get('source_post_media_id', '')}"
+    logical = "source_media_understanding"
+    ws = client._ensure_tab(logical, TAB_DEFINITIONS[logical])
+    headers = client._call_with_rate_limit_retry(f"read_headers:{logical}", lambda: ws.row_values(1))
+    rows = client._call_with_rate_limit_retry(f"get_all_records:{logical}", lambda: ws.get_all_records())
+    now = datetime.now(timezone.utc).isoformat()
+    row = {
+        "understanding_id": understanding_id,
+        "source_post_media_id": media.get("source_post_media_id", ""),
+        "source_post_id": post.get("source_post_id", ""),
+        "source_id": post.get("source_id", ""),
+        "account_id": post.get("target_account_id", ""),
+        "platform": post.get("platform", ""),
+        "media_type": media.get("media_type", ""),
+        "status": analysis.get("status", "BLOCKED"),
+        "provider_name": analysis.get("provider", ""),
+        "visual_summary": analysis.get("visual_summary", ""),
+        "visible_text": analysis.get("visible_text", ""),
+        "main_claims_json": analysis.get("main_claims_json", "[]"),
+        "safety_flags_json": analysis.get("safety_flags_json", "[]"),
+        "ocr_text": analysis.get("ocr_text", ""),
+        "ocr_hash": analysis.get("ocr_hash", ""),
+        "transcript_text": analysis.get("transcript_text", ""),
+        "transcript_hash": analysis.get("transcript_hash", ""),
+        "transcription_provider": analysis.get("transcription_provider", ""),
+        "transcript_status": analysis.get("transcript_status", ""),
+        "representative_frame_timestamps_json": analysis.get("representative_frame_timestamps_json", "[]"),
+        "representative_frame_count": analysis.get("representative_frame_count", "0"),
+        "content_hash": content_hash,
+        "blocked_reason": analysis.get("blocked_reason", ""),
+        "created_at": now,
+        "updated_at": now,
+    }
+    existing_number = next(
+        (index for index, item in enumerate(rows, start=2) if str(item.get("understanding_id", "")) == understanding_id),
+        0,
+    )
+    values = [str(row.get(header, "")) for header in headers]
+    if existing_number:
+        client._call_with_rate_limit_retry(
+            f"update:{logical}",
+            lambda: ws.batch_update(
+                [{"range": f"A{existing_number}:{col_letter(len(headers))}{existing_number}", "values": [values]}],
+                value_input_option="USER_ENTERED",
+            ),
+        )
+    else:
+        client._call_with_rate_limit_retry(
+            f"append:{logical}",
+            lambda: ws.append_row(values, value_input_option="USER_ENTERED"),
+        )
+    verified = client._call_with_rate_limit_retry(f"verify:{logical}", lambda: ws.get_all_records())
+    if not any(
+        str(item.get("understanding_id", "")) == understanding_id
+        and str(item.get("content_hash", "")) == content_hash
+        for item in verified
+    ):
+        raise RuntimeError("source_media_understanding_read_after_write_failed")
+    return understanding_id
+
 def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
     """Return one deterministic pending asset for the requested account.
 
@@ -220,10 +290,177 @@ def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
     return sorted(pending)[0][2] if pending else ""
 
 
+def source_post_media_bundle(client: SheetsClient, source_post_id: str) -> list[dict[str, Any]]:
+    """Return the complete source-post media bundle in its original order."""
+    rows = [
+        dict(row)
+        for row in client._ws("source_post_media").get_all_records()
+        if str(row.get("source_post_id", "")) == source_post_id
+    ]
+    return sorted(
+        rows,
+        key=lambda row: (
+            int(str(row.get("media_index", "0") or "0")),
+            str(row.get("source_post_media_id", "")),
+        ),
+    )
+
+
+def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]) -> dict[str, Any]:
+    source_post_media_id = str(media.get("source_post_media_id", ""))
+    existing_understanding = record(client, "source_media_understanding", "source_post_media_id", source_post_media_id)
+    already_uploaded = str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and bool(str(media.get("storage_url", "")))
+    if (
+        already_uploaded
+        and str((existing_understanding or {}).get("status", "")).upper() == "PASS"
+    ):
+        return {
+            "status": "ALREADY_INGESTED",
+            "source_post_media_id": source_post_media_id,
+            "media_asset_id": str(media.get("media_asset_id", "")),
+            "media_index": str(media.get("media_index", "")),
+        }
+    url = str(media.get("original_media_url") or media.get("canonical_post_url", ""))
+    media_type = str(media.get("media_type", "")).lower()
+    if media_type not in {"image", "video"} or not safe_https_url(url, stream_url=True):
+        return {"status": "BLOCKED", "source_post_media_id": source_post_media_id, "reason": "unsupported_or_non_https_media"}
+
+    target_dir = ROOT / "output" / "direct_media"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    suffix = ".mp4" if media_type == "video" else ".jpg"
+    local_path = target_dir / f"{source_post_media_id}{suffix}"
+    try:
+        platform = str(post.get("platform", "")).lower()
+        is_direct_cdn = url != str(media.get("canonical_post_url", "")) or platform == "threads"
+        if is_direct_cdn:
+            download_direct_https_media(url, local_path, media_type=media_type)
+        else:
+            download_with_ytdlp(url, local_path)
+        size_limit = 300 * 1024 * 1024 if media_type == "video" else 20 * 1024 * 1024
+        if not local_path.exists() or local_path.stat().st_size > size_limit:
+            raise RuntimeError("media_size_limit_exceeded")
+        digest = hashlib.sha256()
+        with local_path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        digest_text = digest.hexdigest()
+        mime = magic_mime(local_path)
+        if not mime or not mime.startswith(media_type + "/"):
+            raise RuntimeError("magic_bytes_or_mime_mismatch")
+        details = probe_video(local_path) if media_type == "video" else {}
+        analysis = analyze_local_media(
+            local_path,
+            media_type=media_type,
+            duration_seconds=float(details.get("duration_seconds") or media.get("duration_seconds") or 0),
+        )
+        understanding_id = upsert_media_understanding(
+            client,
+            post,
+            media,
+            analysis,
+            content_hash=digest_text,
+        )
+        update_media_row(client, source_post_media_id, {
+            "understanding_status": analysis.get("status", "BLOCKED"),
+            "visual_summary": analysis.get("visual_summary", ""),
+            "visible_text": analysis.get("visible_text", ""),
+            "ocr_hash": analysis.get("ocr_hash", ""),
+            "transcript_hash": analysis.get("transcript_hash", ""),
+            "representative_frame_count": analysis.get("representative_frame_count", "0"),
+            "understanding_id": understanding_id,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        if analysis.get("status") != "PASS":
+            raise RuntimeError("media_content_understanding_blocked")
+        import cloudinary
+        import cloudinary.uploader
+
+        cloudinary.config(
+            cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
+            api_key=os.environ.get("CLOUDINARY_API_KEY", ""),
+            api_secret=os.environ.get("CLOUDINARY_API_SECRET", ""),
+            secure=True,
+        )
+        uploaded = cloudinary.uploader.upload(
+            str(local_path),
+            resource_type="video" if media_type == "video" else "image",
+            public_id=f"sns-growth/direct/{digest_text}",
+            overwrite=False,
+        )
+        storage_url = str(uploaded.get("secure_url", ""))
+        public_id = str(uploaded.get("public_id", ""))
+        if not storage_url.startswith("https://res.cloudinary.com/"):
+            raise RuntimeError("cloudinary_secure_url_missing")
+        asset_id = upsert_media_asset(
+            client,
+            post,
+            {**media, **details},
+            storage_url=storage_url,
+            public_id=public_id,
+            digest=digest_text,
+            mime=mime,
+            local_path=local_path,
+        )
+        update_media_row(
+            client,
+            source_post_media_id,
+            {
+                "download_status": "DOWNLOADED",
+                "cloudinary_status": "UPLOADED",
+                "cloudinary_public_id": public_id,
+                "storage_url": storage_url,
+                "content_hash": digest_text,
+                "mime_type": mime,
+                "media_asset_id": asset_id,
+                "understanding_status": "PASS",
+                "understanding_id": understanding_id,
+                "last_error": "",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                **details,
+            },
+        )
+        verified = record(client, "source_post_media", "source_post_media_id", source_post_media_id)
+        if not verified or str(verified.get("media_asset_id", "")) != asset_id or str(verified.get("cloudinary_status", "")).upper() != "UPLOADED":
+            raise RuntimeError("source_post_media_read_after_write_failed")
+        return {
+            "status": "INGESTED",
+            "source_post_media_id": source_post_media_id,
+            "media_asset_id": asset_id,
+            "media_index": str(media.get("media_index", "")),
+            "content_hash": digest_text,
+            "understanding_status": "PASS",
+            "understanding_provider": analysis.get("provider", ""),
+        }
+    except Exception as exc:
+        try:
+            update_media_row(
+                client,
+                source_post_media_id,
+                {
+                    "download_status": "FAILED",
+                    "cloudinary_status": "UPLOADED" if already_uploaded else "FAILED",
+                    "last_error": f"ingest_failed:{type(exc).__name__}",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        except Exception:
+            pass
+        return {
+            "status": "FAILED",
+            "source_post_media_id": source_post_media_id,
+            "media_index": str(media.get("media_index", "")),
+            "reason": f"ingest_failed:{type(exc).__name__}",
+        }
+    finally:
+        local_path.unlink(missing_ok=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ingest one permissioned direct source-post media asset")
     parser.add_argument("--source-post-media-id", default="")
+    parser.add_argument("--source-post-id", default="", help="ingest the complete ordered media bundle for one source post")
     parser.add_argument("--account-id", choices=["night_scout", "liver_manager"], default="")
+    parser.add_argument("--max-assets", type=int, default=10, help="hard cap for one source-post bundle")
     parser.add_argument("--dry-run", action="store_true"); parser.add_argument("--apply", action="store_true"); parser.add_argument("--confirm-ingest", action="store_true")
     args = parser.parse_args()
     if args.apply and not args.confirm_ingest:
@@ -238,7 +475,15 @@ def main() -> int:
     cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     client._ensure_tab("source_posts", TAB_DEFINITIONS["source_posts"])
     client._ensure_tab("source_post_media", TAB_DEFINITIONS["source_post_media"])
-    source_post_media_id = args.source_post_media_id or select_pending_media_id(client, args.account_id)
+    source_post_media_id = args.source_post_media_id
+    source_post_id = args.source_post_id
+    if source_post_id and source_post_media_id:
+        print(json.dumps({"status": "BLOCKED", "reason": "choose_source_post_id_or_source_post_media_id"})); return 1
+    if source_post_id:
+        bundle = source_post_media_bundle(client, source_post_id)
+        source_post_media_id = str((bundle[0] if bundle else {}).get("source_post_media_id", ""))
+    elif not source_post_media_id:
+        source_post_media_id = select_pending_media_id(client, args.account_id)
     if not source_post_media_id:
         print(json.dumps({"status": "NO_PENDING_MEDIA", "reason": "no_pending_source_post_media_for_account"})); return 0
     media = record(client, "source_post_media", "source_post_media_id", source_post_media_id)
@@ -247,56 +492,25 @@ def main() -> int:
     post = record(client, "source_posts", "source_post_id", str(media.get("source_post_id", "")))
     if not post or not permission_ok(client, str(post.get("source_id", ""))):
         print(json.dumps({"status": "BLOCKED", "reason": "active_direct_media_permission_missing"})); return 1
-    url = str(media.get("original_media_url") or media.get("canonical_post_url", "")); media_type = str(media.get("media_type", "")).lower()
-    if media_type not in {"image", "video"} or not safe_https_url(url, stream_url=True):
-        print(json.dumps({"status": "BLOCKED", "reason": "unsupported_or_non_https_media"})); return 1
-    plan = {"status": "PLAN_ONLY", "source_post_media_id": source_post_media_id, "source_post_id": post["source_post_id"], "media_type": media_type, "would_download": True, "would_upload": True, "storage_target": f"output/direct_media/{source_post_media_id}"}
-    target_dir = ROOT / "output" / "direct_media"; target_dir.mkdir(parents=True, exist_ok=True)
-    suffix = ".mp4" if media_type == "video" else ".jpg"
-    local_path = target_dir / f"{source_post_media_id}{suffix}"
-    try:
-        platform = str(post.get("platform", "")).lower()
-        is_direct_cdn = url != str(media.get("canonical_post_url", "")) or platform == "threads"
-        if is_direct_cdn:
-            download_direct_https_media(url, local_path, media_type=media_type)
-        else:
-            download_with_ytdlp(url, local_path)
-        size_limit = 300 * 1024 * 1024 if media_type == "video" else 20 * 1024 * 1024
-        if not local_path.exists() or local_path.stat().st_size > size_limit: raise RuntimeError("media_size_limit_exceeded")
-        digest = hashlib.sha256();
-        with local_path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""): digest.update(chunk)
-        digest_text = digest.hexdigest(); mime = magic_mime(local_path)
-        if not mime or not mime.startswith(media_type + "/"): raise RuntimeError("magic_bytes_or_mime_mismatch")
-        import cloudinary
-        import cloudinary.uploader
-        cloudinary.config(
-            cloud_name=os.environ.get("CLOUDINARY_CLOUD_NAME", ""),
-            api_key=os.environ.get("CLOUDINARY_API_KEY", ""),
-            api_secret=os.environ.get("CLOUDINARY_API_SECRET", ""),
-            secure=True,
-        )
-        uploaded = cloudinary.uploader.upload(str(local_path), resource_type="video" if media_type == "video" else "image", public_id=f"sns-growth/direct/{digest_text}", overwrite=False)
-        storage_url = str(uploaded.get("secure_url", "")); public_id = str(uploaded.get("public_id", ""))
-        if not storage_url.startswith("https://res.cloudinary.com/"): raise RuntimeError("cloudinary_secure_url_missing")
-        details = probe_video(local_path) if media_type == "video" else {}
-        asset_id = upsert_media_asset(client, post, {**media, **details}, storage_url=storage_url, public_id=public_id, digest=digest_text, mime=mime, local_path=local_path)
-        update_media_row(client, source_post_media_id, {"download_status": "DOWNLOADED", "cloudinary_status": "UPLOADED", "cloudinary_public_id": public_id, "storage_url": storage_url, "content_hash": digest_text, "mime_type": mime, "media_asset_id": asset_id, "last_error": "", "updated_at": datetime.now(timezone.utc).isoformat(), **details})
-        verified_media = record(client, "source_post_media", "source_post_media_id", source_post_media_id)
-        if not verified_media or str(verified_media.get("media_asset_id", "")) != asset_id or str(verified_media.get("cloudinary_status", "")).upper() != "UPLOADED":
-            raise RuntimeError("source_post_media_read_after_write_failed")
-        local_path.unlink(missing_ok=True)
-        print(json.dumps({**plan, "status": "INGESTED", "content_hash": digest_text, "media_asset_id": asset_id, "would_download": False, "would_upload": False}, ensure_ascii=False, indent=2)); return 0
-    except Exception as exc:
-        local_path.unlink(missing_ok=True)
-        try:
-            update_media_row(client, source_post_media_id, {
-                "download_status": "FAILED", "cloudinary_status": "FAILED",
-                "last_error": f"ingest_failed:{type(exc).__name__}",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
-        except Exception:
-            pass
-        print(json.dumps({**plan, "status": "FAILED", "reason": f"ingest_failed:{type(exc).__name__}"}, ensure_ascii=False, indent=2)); return 1
+    bundle = [media] if args.source_post_media_id else source_post_media_bundle(client, str(post["source_post_id"]))
+    if not bundle:
+        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_empty"})); return 1
+    if args.max_assets < 1 or len(bundle) > args.max_assets:
+        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_exceeds_cap", "asset_count": len(bundle), "max_assets": args.max_assets})); return 1
+    results = [ingest_one(client, post, item) for item in bundle]
+    failed = [row for row in results if row.get("status") not in {"INGESTED", "ALREADY_INGESTED"}]
+    status = "INGESTED_BUNDLE" if not failed else "PARTIAL_FAILED" if len(failed) < len(results) else "FAILED"
+    output = {
+        "status": status,
+        "source_post_id": post["source_post_id"],
+        "asset_count": len(results),
+        "ingested_count": len(results) - len(failed),
+        "failed_count": len(failed),
+        "ordered_assets": results,
+        "would_download": False,
+        "would_upload": False,
+    }
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    return 0 if not failed else 1
 
 if __name__ == "__main__": raise SystemExit(main())

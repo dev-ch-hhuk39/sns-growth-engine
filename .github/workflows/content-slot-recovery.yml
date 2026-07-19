@@ -56,6 +56,15 @@ jobs:
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
+          ALLOW_MEDIA_POSTS: "true"
+          ALLOW_REAL_THREADS_VIDEO_POST: "true"
+          ALLOW_THREADS_CAROUSEL: "true"
+          ALLOW_THREADS_MIXED_CAROUSEL: "false"
+          ALLOW_REAL_X_POST: "false"
+          ALLOW_VIDEO_DOWNLOAD: "false"
+          ALLOW_VIDEO_CUT: "false"
+          ALLOW_CLOUDINARY_UPLOAD: "false"
+          ALLOW_TRANSCRIPTION_API: "false"
         run: |
           python3 - <<'PY'
           import json

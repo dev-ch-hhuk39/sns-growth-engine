@@ -76,6 +76,7 @@ output/
 !config/content_schedule.json
 !config/media_source_usage_modes.json
 !config/goal_acceptance.json
+!config/research_topics.json
 !docs/goal-status.json
 !docs/library-capability-matrix.json
 !docs/runtime-health.json

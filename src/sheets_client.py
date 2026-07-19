@@ -201,7 +201,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "updated_at", "posted_at", "post_url", "result_id",
         # Media Growth Engine provenance. Text-only rows leave these blank.
         "source_post_id", "source_video_id", "clip_candidate_id",
-        "media_url", "media_status", "media_required",
+        "slot_id", "business_date_jst",
+        "media_url", "media_status", "media_required", "media_type", "media_origin",
         "duration_seconds", "aspect_ratio",
         # A direct source post may be a carousel.  These lists must all share
         # the same source_post_id and are never used to mix different posts.
@@ -295,6 +296,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_url", "video_id", "canonical_video_url", "original_video_url",
         "title", "description_preview", "author_handle", "published_at",
         "duration_seconds", "view_count", "like_count", "comment_count",
+        "comments_json", "comment_count_collected",
         "transcript_status", "analysis_status", "clip_candidate_count",
         "download_status", "cut_status", "upload_status", "post_status",
         "rights_status", "permission_status", "discovery_status",
@@ -350,6 +352,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
         "source_copy_similarity", "recent_post_similarity", "claim_support_json",
         "semantic_segment_score", "selected_reason",
+        "comment_signal_count", "comment_reaction_score",
         "retry_count", "last_error", "last_attempt_at",
         "failure_signature", "same_failure_count", "quarantined_at", "quarantine_reason",
     ],
@@ -467,6 +470,15 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "failure_signature", "same_failure_count", "last_attempt_at",
         "quarantined_at", "quarantine_reason",
     ],
+    "source_media_understanding": [
+        "understanding_id", "source_post_media_id", "source_post_id", "source_id",
+        "account_id", "platform", "media_type", "status", "provider_name",
+        "visual_summary", "visible_text", "main_claims_json", "safety_flags_json",
+        "ocr_text", "ocr_hash", "transcript_text", "transcript_hash",
+        "transcription_provider", "transcript_status",
+        "representative_frame_timestamps_json", "representative_frame_count",
+        "content_hash", "blocked_reason", "created_at", "updated_at",
+    ],
     # source_postsの付属media。source_post_idを唯一の親として保持し、本文/素材の取り違えを禁止する。
     "source_post_media": [
         "source_post_media_id", "source_post_id", "media_index", "original_media_url",
@@ -476,7 +488,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
         "media_asset_id", "created_at", "updated_at",
         "failure_signature", "same_failure_count", "last_attempt_at",
-        "quarantined_at", "quarantine_reason",
+        "quarantined_at", "quarantine_reason", "understanding_status",
+        "visual_summary", "visible_text", "ocr_hash", "transcript_hash",
+        "representative_frame_count", "understanding_id",
     ],
     # Acquisition routing observability. These rows contain no browser state,
     # source text, media URLs, tokens or session material.
@@ -498,6 +512,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     "content_understanding_runs": [
         "understanding_id", "source_id", "source_post_id", "source_video_id",
         "account_id", "platform", "main_claims_json", "topic", "audience",
+        "core_topic", "main_claim", "hook", "supporting_points_json",
+        "concrete_example", "conclusion", "intended_audience", "media_role",
+        "factual_constraints_json", "prohibited_inferences_json",
         "comment_signal_count", "media_item_count", "provider_name", "provider_version",
         "status", "content_hash", "created_at", "updated_at",
     ],
@@ -519,8 +536,16 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_count", "window_days", "collection_backend", "status", "created_at", "updated_at",
     ],
     "source_candidates": [
-        "source_candidate_id", "candidate_url", "platform", "discovery_backend", "reason",
+        "source_candidate_id", "account_id", "candidate_url", "platform", "discovery_backend", "reason",
         "status", "created_at", "updated_at",
+    ],
+    "topic_opportunities": [
+        "topic_opportunity_id", "account_id", "topic", "summary", "source_count",
+        "window_days", "research_backend", "status", "created_at", "updated_at",
+    ],
+    "content_angles": [
+        "content_angle_id", "account_id", "topic", "angle", "evidence_summary",
+        "research_backend", "status", "created_at", "updated_at",
     ],
     # User-operated permission ledger. Code never infers a direct-reuse grant.
     "media_permissions": [
@@ -637,6 +662,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "source_account_posts":           "収集済み投稿",
     "source_posts":                   "参照元投稿",
     "source_post_media":              "参照元投稿メディア",
+    "source_media_understanding":      "参照メディア理解",
     "backend_health":                 "取得バックエンドヘルス",
     "backend_routing_history":        "取得バックエンド履歴",
     "provider_runs":                  "Provider実行履歴",
@@ -645,6 +671,8 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "quarantined_items":              "隔離対象",
     "trend_signals":                  "トレンドシグナル",
     "source_candidates":              "収集候補",
+    "topic_opportunities":            "トピック機会",
+    "content_angles":                 "投稿切り口",
     "media_permissions":              "メディア利用許可",
     "source_collection_plans":        "収集計画",
     "media_ingestion_runs":           "メディア取込履歴",

@@ -36,7 +36,7 @@ env:
 
 jobs:
   aftercare:
-    name: Metrics / PDCA / Media discovery aftercare
+    name: Metrics / PDCA / Schema / Health aftercare
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -90,8 +90,6 @@ jobs:
       - name: Dry-run aftercare plan
         run: |
           python3 scripts/collect_threads_metrics.py --account-id all --source unavailable --dry-run
-          python3 scripts/discover_approved_source_videos.py --account-id liver_manager --dry-run
-          python3 scripts/run_media_growth_engine.py --account-id liver_manager --dry-run
 
       - name: Apply metrics snapshots
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
@@ -136,21 +134,6 @@ jobs:
             --apply \
             --confirm-generate \
             --use-sheets || true
-
-      - name: Apply approved media discovery and clip candidates
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
-        run: |
-          python3 scripts/discover_approved_source_videos.py \
-            --account-id liver_manager \
-            --fetch-real \
-            --apply \
-            --confirm-discovery \
-            --use-sheets
-          python3 scripts/run_media_growth_engine.py \
-            --account-id liver_manager \
-            --apply \
-            --confirm-media-growth \
-            --use-sheets
 
       - name: Health summary
         if: always()

@@ -88,7 +88,9 @@ class GitHubModelsGroundedProvider:
             "出力はJSONオブジェクトのみ。元投稿名、URL、source、reference、metadata、transcript、AI、内部処理語を公開文に書かない。"
             "数値・事実・経験を捏造しない。元文の長いコピーを避け、1投稿1テーマ、80〜500文字の自然な読者向け文章にする。"
             "public_post_textの各実質的主張をclaim_supportへ列挙し、source_evidenceは入力中の根拠文を短く正確に引用する。"
-            "JSON keys: internal_analysis{main_claims,topic,audience}, public_post_text, claim_support[{caption_claim,source_evidence}], safety_notes, blocked_reasons。"
+            "internal_analysisにはcore_topic, main_claim, hook, supporting_points, concrete_example, conclusion, "
+            "intended_audience, media_role, factual_constraints, prohibited_inferences, main_claimsを必ず含める。"
+            "JSON keys: internal_analysis, public_post_text, claim_support[{caption_claim,source_evidence}], safety_notes, blocked_reasons。"
         )
         user_prompt = json.dumps({
             "account_rules": rules,
@@ -213,11 +215,12 @@ class SourceGroundedCaptionService:
     generation_provider: Any
     alignment_provider: Any = None
     fallback_provider: Any = None
+    allow_deterministic_fallback: bool = False
 
     def __post_init__(self) -> None:
         if self.alignment_provider is None:
             self.alignment_provider = LocalSemanticAlignmentProvider()
-        if self.fallback_provider is None:
+        if self.fallback_provider is None and self.allow_deterministic_fallback:
             self.fallback_provider = DeterministicGroundedProvider()
 
     def generate(

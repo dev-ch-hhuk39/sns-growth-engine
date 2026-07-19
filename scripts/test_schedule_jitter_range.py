@@ -9,10 +9,11 @@ def main() -> int:
     ok = all(
         "random.randint" not in text
         and "time.sleep" not in text
-        and "Enforce scheduled posting window" in text
+        and "Diagnose schedule delay" in text
+        and "steps.schedule_window.outputs.in_window" not in text
         for text in texts
     )
-    print(f"  {'PASS' if ok else 'FAIL'} schedules use bounded windows without idle jitter")
+    print(f"  {'PASS' if ok else 'FAIL'} schedules avoid idle jitter and tolerate GitHub delivery delay")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1
 

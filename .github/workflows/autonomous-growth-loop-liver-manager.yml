@@ -97,16 +97,16 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Enforce scheduled posting window
-        id: schedule_window
+      - name: Diagnose schedule delay
         if: github.event_name == 'schedule'
+        continue-on-error: true
         run: python3 scripts/check_schedule_window.py --slot-id "$CONTENT_SLOT_ID" --write-github-output
 
       - name: Dry-run autonomous plan
         run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --dry-run
 
       - name: Guard autonomous confirm and kill switch
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true') && github.event.inputs.dry_run_only != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -126,7 +126,7 @@ jobs:
           fi
 
       - name: Apply autonomous Threads loop
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true') && github.event.inputs.dry_run_only != 'true' && (github.event_name != 'schedule' || steps.schedule_window.outputs.in_window == 'true')
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true') && github.event.inputs.dry_run_only != 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
