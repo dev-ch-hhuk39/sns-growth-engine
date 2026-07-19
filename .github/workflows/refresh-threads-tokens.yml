@@ -34,6 +34,7 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    environment: production
     env:
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
@@ -75,10 +76,18 @@ jobs:
         env:
           _GH_TOKEN_SET: ${{ secrets.GH_SECRET_WRITE_TOKEN != '' }}
         run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY_RUN=true: GitHub Secret更新権限の確認をスキップ"
+            exit 0
+          fi
           if [ "$_GH_TOKEN_SET" != "true" ]; then
             echo "READY_WITH_MISSING_GH_SECRET_WRITE_TOKEN: GH_SECRET_WRITE_TOKEN が GitHub Secrets に設定されていません。"
             echo "  Settings → Secrets and variables → Actions → GH_SECRET_WRITE_TOKEN を追加してください。"
             echo "  必要なスコープ: secrets:write"
+            exit 1
+          fi
+          if ! command -v gh >/dev/null 2>&1; then
+            echo "ERROR: GitHub CLI is unavailable on this runner; secret update was not attempted."
             exit 1
           fi
           echo "GH_SECRET_WRITE_TOKEN: SET"

@@ -39,6 +39,7 @@ jobs:
   auto-ready:
     name: AUTO_READY without posting
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 20
 
     env:

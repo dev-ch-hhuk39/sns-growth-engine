@@ -50,6 +50,7 @@ jobs:
   pilot-publish:
     name: Pilot Publish (${{ github.event.inputs.account_id }} / ${{ github.event.inputs.platform }})
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 15
 
     env:

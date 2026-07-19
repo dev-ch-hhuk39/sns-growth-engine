@@ -1,0 +1,4 @@
+# False positive: a historical Git commit SHA documented in the AI handoff.
+# This fingerprint is exact; every other current or historical finding fails.
+5b605d1585e6c4e8afec869e547a21040d749993:docs/ai-work-handoff.md:generic-api-key:200
+docs/ai-work-handoff.md:generic-api-key:1824

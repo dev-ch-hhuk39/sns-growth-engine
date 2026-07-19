@@ -60,6 +60,7 @@ def _save_token(account_id: str, data: dict) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(p, "w") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    p.chmod(0o600)
     print(f"  保存先: {p}")
 
 
@@ -67,12 +68,6 @@ def _get_current_token(account_id: str) -> str | None:
     """現在のトークンを取得する（resolver 経由）。値は返すが表示しない。"""
     token = resolve_credentials(account_id).get("access_token", "")
     return token or None
-
-
-def _mask(token: str) -> str:
-    if len(token) <= 8:
-        return "***"
-    return token[:4] + "..." + token[-4:]
 
 
 def refresh(account_id: str, dry_run: bool) -> None:
@@ -92,11 +87,11 @@ def refresh(account_id: str, dry_run: bool) -> None:
     if stored:
         expires_at = stored.get("expires_at")
         refreshed_at = stored.get("refreshed_at")
-        print(f"  現在のトークン: {_mask(current_token)}")
+        print("  現在のトークン: SET（値は非表示）")
         print(f"  最終リフレッシュ: {refreshed_at}")
         print(f"  期限: {expires_at}")
     else:
-        print(f"  現在のトークン: {_mask(current_token)}")
+        print("  現在のトークン: SET（値は非表示）")
         print(f"  ストアファイル: 未作成（初回リフレッシュ）")
 
     if dry_run:
@@ -112,16 +107,15 @@ def refresh(account_id: str, dry_run: bool) -> None:
     resp = requests.get(THREADS_REFRESH_URL, params=params, timeout=30)
     try:
         resp.raise_for_status()
-    except requests.HTTPError as e:
-        print(f"ERROR: リフレッシュAPIエラー: {resp.status_code} {resp.text}")
-        raise SystemExit(1) from e
+    except requests.HTTPError:
+        print(f"ERROR: リフレッシュAPIエラー: HTTP {resp.status_code}（本文は非表示）")
+        raise SystemExit(1)
 
     data = resp.json()
     new_token = data.get("access_token")
-    expires_in = data.get("token_type")  # Threads API はtoken_typeのみ返す場合あり
 
     if not new_token:
-        print(f"ERROR: レスポンスに access_token がありません: {data}")
+        print("ERROR: リフレッシュAPIレスポンスに access_token がありません（本文は非表示）")
         sys.exit(1)
 
     now = datetime.now(JST)
@@ -134,7 +128,7 @@ def refresh(account_id: str, dry_run: bool) -> None:
         "account_id": account_id,
     }
     _save_token(account_id, store_data)
-    print(f"  新しいトークン: {_mask(new_token)}")
+    print("  新しいトークン: RECEIVED_AND_STORED（値は非表示）")
     print(f"  期限: {expires_at}")
     print(f"\n[OK] アカウント '{account_id}' のトークンリフレッシュが完了しました。")
     print(f"     次回リフレッシュ推奨: {(now + timedelta(days=45)).strftime('%Y-%m-%d')}")
@@ -148,7 +142,7 @@ def show_status(account_id: str) -> None:
         return
 
     stored = _load_token(account_id)
-    print(f"  token: {_mask(token)}")
+    print("  token: SET（値は非表示）")
     if stored:
         expires_at_str = stored.get("expires_at", "")
         if expires_at_str:

@@ -44,6 +44,7 @@ jobs:
   autonomous-growth-loop-liver-manager:
     name: Liver Manager scheduled Threads autonomous loop
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 60
 
     env:

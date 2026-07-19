@@ -39,6 +39,7 @@ env:
 jobs:
   media-growth-production:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 60
     env:
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}

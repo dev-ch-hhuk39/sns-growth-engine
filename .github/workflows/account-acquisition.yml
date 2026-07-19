@@ -31,6 +31,7 @@ env:
 jobs:
   account-acquisition:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 35
     env:
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}

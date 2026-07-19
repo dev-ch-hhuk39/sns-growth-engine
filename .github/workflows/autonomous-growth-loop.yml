@@ -42,6 +42,7 @@ jobs:
   autonomous-growth-loop:
     name: Manual rules-based Threads autonomous loop
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 25
 
     env:

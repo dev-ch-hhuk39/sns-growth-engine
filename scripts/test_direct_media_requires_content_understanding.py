@@ -36,11 +36,15 @@ asset = {
 }
 permission = {
     "source_id": "src_1",
+    "rights_status": "approved_creator_clip",
+    "permission_status": "approved",
     "allow_download": "true",
     "allow_cloudinary_storage": "true",
     "allow_original_repost": "true",
     "allow_new_caption": "true",
     "usage_mode": "direct_media_reuse",
+    "evidence_type": "owner_attestation",
+    "evidence_reference": "test_owner_attestation",
     "revoked": "false",
 }
 records = {

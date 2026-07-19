@@ -42,6 +42,7 @@ env:
 jobs:
   post-saved-approved-media:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 45
     env:
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}

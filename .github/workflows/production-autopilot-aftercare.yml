@@ -38,6 +38,7 @@ jobs:
   aftercare:
     name: Metrics / PDCA / Schema / Health aftercare
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 45
 
     env:

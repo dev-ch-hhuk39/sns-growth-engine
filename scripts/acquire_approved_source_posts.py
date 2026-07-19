@@ -80,13 +80,28 @@ def ledger_permission(client: SheetsClient, source_id: str) -> dict[str, Any] | 
         "get_all_records:media_permissions:acquisition",
         lambda: client._ws("media_permissions").get_all_records(),
     )
+    now = datetime.now(timezone.utc)
     for row in rows:
         if str(row.get("source_id", "")) != source_id or truthy(row.get("revoked")):
+            continue
+        expires_at = str(row.get("expires_at", "")).strip()
+        if expires_at:
+            try:
+                expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                expiry = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
+            if expiry <= now:
+                continue
+        if not str(row.get("evidence_type", "")).strip() or not str(row.get("evidence_reference", "")).strip():
             continue
         if all(truthy(row.get(name)) for name in (
             "allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption",
         )):
-            return dict(row)
+            normalized = dict(row)
+            normalized["rights_status"] = str(row.get("rights_status") or "approved_creator_clip")
+            normalized["permission_status"] = "approved"
+            return normalized
     return None
 
 
@@ -221,8 +236,8 @@ def enrich_posts(
                 "view_count": post.engagement.get("view_count", ""),
                 "like_count": post.engagement.get("like_count", ""),
                 "comment_count": post.engagement.get("comment_count", ""),
-                "rights_status": str(source.get("rights_status") or source.get("rights_policy") or "unknown"),
-                "permission_status": "approved",
+                "rights_status": str(permission.get("rights_status") or "approved_creator_clip"),
+                "permission_status": str(permission.get("permission_status") or "approved"),
                 "content_hash": post.content_hash,
             })
             source_videos.append(source_video)
@@ -352,8 +367,8 @@ def run(account_id: str, platform_filter: str, max_posts: int, *, apply: bool, s
             transcript_rows.extend(transcripts)
             provider_run_rows.extend(provider_events)
             policy_by_source[str(source["source_id"])] = {
-                "rights_status": str(source.get("rights_status") or source.get("rights_policy") or "unknown"),
-                "permission_status": "approved",
+                "rights_status": str(permission.get("rights_status") or "approved_creator_clip"),
+                "permission_status": str(permission.get("permission_status") or "approved"),
             }
             item = {**base, "status": "PASS", "selected_backend": routed.backend_name,
                     "fallback_used": routed.fallback_used, "post_count": len(valid),

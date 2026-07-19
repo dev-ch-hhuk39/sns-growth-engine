@@ -258,11 +258,10 @@ def duplicate_reason(
             and str(posted.get("account_id", "")) == account_id
             and str(posted.get("platform", "")).lower() == "threads"
             and str(posted.get("posted_text", "")).strip() == text.strip()
-            and str(posted.get("media_asset_id", "")).strip() == media_asset_id
             and text.strip()
         )
         if same_text:
-            return "same text/account/platform/media already POSTED"
+            return "same text/account/platform already POSTED"
     return ""
 
 

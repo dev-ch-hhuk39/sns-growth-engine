@@ -43,10 +43,27 @@ def main() -> int:
             [{"account_id": "night_scout", "platform": "threads", "status": "POSTED", "posted_text": text}],
             "same text",
         ),
+        (
+            "same text with different media duplicate",
+            [{
+                "account_id": "night_scout",
+                "platform": "threads",
+                "status": "POSTED",
+                "posted_text": text,
+                "media_asset_id": "asset-already-posted",
+            }],
+            "same text",
+        ),
     ]
     checks = []
     for name, posted_rows, expected in cases:
-        reason = mod.duplicate_reason(queue_row=base_queue, social=social, text=text, posted_rows=posted_rows)
+        reason = mod.duplicate_reason(
+            queue_row=base_queue,
+            social=social,
+            text=text,
+            posted_rows=posted_rows,
+            media_asset_id="asset-new",
+        )
         checks.append((name, expected in reason))
     checks.append((
         "different platform ignored",

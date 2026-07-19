@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """process_one の dry-run で media が計画表示されること、media無し挙動が不変なこと、
-duplicate guard が media_asset_id を考慮することを検証する（Sheets 書き込みなし・credentials不要）。
+duplicate guard がメディア違いでも同文の再投稿を防ぐことを検証する
+（Sheets 書き込みなし・credentials不要）。
 """
 from __future__ import annotations
 
@@ -78,7 +79,7 @@ def main() -> int:
     )
     checks.append(("同text+同media は重複検出", bool(dup)))
 
-    # 5. duplicate guard: 同テキストでも media_asset_id が異なれば重複ではない
+    # 5. duplicate guard: media_asset_id が異なっても同文は再投稿しない
     dup2 = mod.duplicate_reason(
         queue_row={"queue_id": "qY", "account_id": "night_scout", "platform": "threads"},
         social=None, text="同じ投稿文",
@@ -86,7 +87,7 @@ def main() -> int:
                       "posted_text": "同じ投稿文", "media_asset_id": "maD"}],
         media_asset_id="maOTHER",
     )
-    checks.append(("同textでもmedia違いは非重複", dup2 == ""))
+    checks.append(("同textはmedia違いでも重複", bool(dup2)))
 
     # 6. media無し同士（両方空）は従来通り重複検出（後方互換）
     dup3 = mod.duplicate_reason(

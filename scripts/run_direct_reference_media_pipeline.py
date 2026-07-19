@@ -119,7 +119,12 @@ def _permission_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
             continue
         if str(row.get("expires_at", "")) and str(row["expires_at"]) < now:
             continue
-        result[source_id] = row
+        if not str(row.get("evidence_type", "")).strip() or not str(row.get("evidence_reference", "")).strip():
+            continue
+        normalized = dict(row)
+        normalized["rights_status"] = str(row.get("rights_status") or "approved_creator_clip")
+        normalized["permission_status"] = "approved"
+        result[source_id] = normalized
     return result
 
 
@@ -175,6 +180,7 @@ def select_direct_candidates(
         if permission:
             direct_allowed = all(_true(permission.get(key)) for key in ("allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption"))
             source = {**source, "media_usage_mode": permission.get("usage_mode", "blocked")}
+            policy_fields["rights_status"] = permission.get("rights_status", "approved_creator_clip")
             policy_fields["permission_status"] = "approved" if direct_allowed else "denied"
             policy_fields["permission_scope"] = list(DIRECT_SCOPE) if direct_allowed else []
         policy = decision({**source, **policy_fields}, "direct_media")

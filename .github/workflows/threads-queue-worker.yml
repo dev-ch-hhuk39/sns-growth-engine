@@ -51,6 +51,7 @@ jobs:
   threads-queue-worker:
     name: Threads Queue Worker (${{ github.event.inputs.account_id }} / ${{ github.event.inputs.mode }})
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 20
 
     env:

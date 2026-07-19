@@ -32,6 +32,7 @@ env:
 jobs:
   recover-missed-slots:
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 25
     env:
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}

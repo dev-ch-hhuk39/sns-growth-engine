@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 import time
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -550,6 +551,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     # User-operated permission ledger. Code never infers a direct-reuse grant.
     "media_permissions": [
         "permission_id", "source_id", "source_url", "account_id", "usage_mode",
+        "rights_status", "permission_status",
         "allow_download", "allow_cloudinary_storage", "allow_original_repost",
         "allow_transcription", "allow_analysis", "allow_cut", "allow_clip_repost",
         "allow_new_caption", "allow_edit", "attribution_required", "attribution_text",
@@ -692,6 +694,41 @@ SCOPES = [
 ]
 
 
+_TRANSIENT_SHEETS_HTTP_STATUSES = {500, 502, 503, 504}
+
+
+def _sheets_retry_reason(exc: Exception) -> str | None:
+    """Classify retryable Sheets failures without returning response content."""
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    try:
+        status_code = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        status_code = None
+
+    message = str(exc).lower()
+    if status_code == 429 or "quota" in message or re.search(r"\b429\b", message):
+        return "rate_limit"
+    if status_code in _TRANSIENT_SHEETS_HTTP_STATUSES:
+        return f"transient_http_{status_code}"
+
+    for candidate in sorted(_TRANSIENT_SHEETS_HTTP_STATUSES):
+        if re.search(rf"\b{candidate}\b", message):
+            return f"transient_http_{candidate}"
+    if any(
+        marker in message
+        for marker in (
+            "internal error",
+            "backend error",
+            "service unavailable",
+            "temporarily unavailable",
+            "gateway timeout",
+        )
+    ):
+        return "transient_server_error"
+    return None
+
+
 # ------------------------------------------------------------------ #
 # SheetsClient
 # ------------------------------------------------------------------ #
@@ -712,13 +749,17 @@ class SheetsClient:
         delays = [0, 10, 30, 60]
         for attempt, delay in enumerate(delays):
             if delay:
-                print(f"[RATE_LIMIT] Sheets 429 during open_by_key; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+                print(
+                    f"[SHEETS_RETRY] retrying open_by_key after {delay}s "
+                    f"(attempt {attempt + 1}/{len(delays)})"
+                )
                 time.sleep(delay)
             try:
                 return self._gc.open_by_key(sheet_id)
             except Exception as exc:
-                message = str(exc).lower()
-                if ("429" in message or "quota" in message) and attempt < len(delays) - 1:
+                reason = _sheets_retry_reason(exc)
+                if reason and attempt < len(delays) - 1:
+                    print(f"[SHEETS_RETRY] open_by_key failed with {reason}; response body suppressed")
                     continue
                 raise
 
@@ -753,19 +794,23 @@ class SheetsClient:
         )
 
     def _call_with_rate_limit_retry(self, label: str, fn):
-        """Sheets 429/quota を短い指数バックオフで吸収する。secret値は出さない。"""
+        """Sheets 429/quota と一時的な 5xx を限定バックオフで吸収する。"""
         # A per-minute quota can still be exhausted after 50 seconds.  The
         # final retry crosses that boundary instead of abandoning a safe run.
         delays = [0, 10, 30, 60]
         for attempt, delay in enumerate(delays):
             if delay > 0:
-                print(f"[RATE_LIMIT] Sheets 429 during {label}; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+                print(
+                    f"[SHEETS_RETRY] retrying {label} after {delay}s "
+                    f"(attempt {attempt + 1}/{len(delays)})"
+                )
                 time.sleep(delay)
             try:
                 return fn()
             except Exception as exc:
-                msg = str(exc).lower()
-                if ("429" in msg or "quota" in msg) and attempt < len(delays) - 1:
+                reason = _sheets_retry_reason(exc)
+                if reason and attempt < len(delays) - 1:
+                    print(f"[SHEETS_RETRY] {label} failed with {reason}; response body suppressed")
                     continue
                 raise
 
@@ -787,9 +832,19 @@ class SheetsClient:
                     "values": [[str(value)]],
                 })
         if update_ranges:
+            # gspread Worksheet.batch_update mutates each range by prefixing
+            # the worksheet title. A retry must receive a fresh payload or
+            # titles accumulate ("Sheet"!"Sheet"!A1) and the API returns 400.
+            def _batch_update_once():
+                fresh_ranges = [
+                    {"range": item["range"], "values": [list(row) for row in item["values"]]}
+                    for item in update_ranges
+                ]
+                return ws.batch_update(fresh_ranges, value_input_option="USER_ENTERED")
+
             self._call_with_rate_limit_retry(
                 f"batch_update:{label}",
-                lambda: ws.batch_update(update_ranges, value_input_option="USER_ENTERED"),
+                _batch_update_once,
             )
 
     def _ensure_tab(self, name: str, headers: list[str]) -> gspread.Worksheet:

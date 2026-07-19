@@ -4,10 +4,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 text = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 checks = [
+    ("lint", "Ruff lint" in text and "ruff check" in text),
+    ("type check", "Mypy type check" in text and "mypy" in text),
     ("unit and integration runner", "run_repository_tests.py" in text),
     ("syntax check", "compileall" in text),
     ("secret full history", "fetch-depth: 0" in text and "gitleaks/gitleaks-action@e0c47f" in text),
     ("dependency audit", "pypa/gh-action-pip-audit@1220774" in text),
+    ("CI dependencies audited", "requirements-ci.txt" in text),
     ("license audit", "test_external_library_registry.py" in text and "test_library_capability_matrix_complete.py" in text),
     ("workflow security", "test_all_workflows_safety_flags.py" in text),
     ("fork PR receives no production secrets", "secrets." not in text and "pull_request_target" not in text),
