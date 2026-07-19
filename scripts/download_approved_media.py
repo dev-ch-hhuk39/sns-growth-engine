@@ -116,6 +116,7 @@ def execute_download(plan: dict) -> dict:
         "no_warnings": True,
         "noplaylist": True,
         "socket_timeout": 30,
+        "js_runtimes": {"node": {}},
     }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:

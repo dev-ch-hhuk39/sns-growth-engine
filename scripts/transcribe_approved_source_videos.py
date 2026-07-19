@@ -288,6 +288,7 @@ def transcribe_with_local_whisper(
             "noplaylist": True,
             "socket_timeout": 30,
             "noprogress": True,
+            "js_runtimes": {"node": {}},
         }
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:

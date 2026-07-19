@@ -50,14 +50,21 @@ def _asset_from_clip_candidate(args: argparse.Namespace) -> dict[str, Any] | Non
     }
 
 
+def _already_uploaded(asset: dict[str, Any]) -> bool:
+    url = str(asset.get("cloudinary_url") or asset.get("storage_url") or "").strip()
+    return str(asset.get("upload_status", "")).upper() == "UPLOADED" and url.startswith("https://")
+
+
 def build_upload_plan(args: argparse.Namespace, assets: list[dict[str, Any]]) -> dict[str, Any]:
-    missing_local = [a for a in assets if not a.get("local_path")]
+    already_uploaded = [a for a in assets if _already_uploaded(a)]
+    pending_assets = [a for a in assets if not _already_uploaded(a)]
+    missing_local = [a for a in pending_assets if not a.get("local_path")]
     third_party = [
         a for a in assets
         if not rights_allows_media_use(a.get("rights_status", "third_party_reference_only"))
     ]
     result = plan_cloudinary_uploads(
-        assets,
+        pending_assets,
         upload=args.upload,
         confirm_upload=args.confirm_upload,
         dry_run=args.dry_run,
@@ -73,8 +80,12 @@ def build_upload_plan(args: argparse.Namespace, assets: list[dict[str, Any]]) ->
         result["blocked_reasons"] = list(dict.fromkeys([*result.get("blocked_reasons", []), *extra_blocked]))
         result["status"] = "BLOCKED"
         result["third_party_count"] = len(third_party)
+    elif already_uploaded and not pending_assets:
+        result["status"] = "ALREADY_UPLOADED"
     result["adapter_status"] = {"cloudinary": "installed" if importlib.util.find_spec("cloudinary") else "not_installed"}
-    result["assets"] = assets
+    result["assets"] = pending_assets
+    result["already_uploaded_assets"] = already_uploaded
+    result["already_uploaded_count"] = len(already_uploaded)
     return result
 
 
@@ -95,7 +106,8 @@ def execute_cloudinary_uploads(plan: dict[str, Any]) -> dict[str, Any]:
         )
         if not all(os.environ.get(k) for k in ("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET")):
             return {**plan, "status": "FAILED", "blocked_reasons": ["cloudinary_credentials_missing"]}
-        uploaded = []
+        uploaded = list(plan.get("already_uploaded_assets", []))
+        newly_uploaded = 0
         for asset in plan.get("assets", []):
             media_id = str(asset.get("media_asset_id") or Path(str(asset.get("local_path", ""))).stem)
             response = cloudinary.uploader.upload(
@@ -116,7 +128,15 @@ def execute_cloudinary_uploads(plan: dict[str, Any]) -> dict[str, Any]:
                 "cloudinary_public_id": str(response.get("public_id") or ""),
                 "upload_status": "UPLOADED",
             })
-        return {**plan, "status": "UPLOADED", "uploaded_count": len(uploaded), "uploaded_assets": uploaded, "blocked_reasons": []}
+            newly_uploaded += 1
+        return {
+            **plan,
+            "status": "UPLOADED",
+            "uploaded_count": len(uploaded),
+            "newly_uploaded_count": newly_uploaded,
+            "uploaded_assets": uploaded,
+            "blocked_reasons": [],
+        }
     except Exception as exc:  # noqa: BLE001
         return {**plan, "status": "FAILED", "uploaded_count": 0, "blocked_reasons": [f"{type(exc).__name__}: cloudinary_upload_failed"]}
 
@@ -156,11 +176,12 @@ def main() -> int:
         "adapter_status": result.get("adapter_status", {}),
         "blocked_reasons": result.get("blocked_reasons", []),
         "uploaded_count": result.get("uploaded_count", 0),
+        "already_uploaded_count": result.get("already_uploaded_count", 0),
         "media_asset_ids": [a.get("media_asset_id", "") for a in result.get("uploaded_assets", [])],
     }, ensure_ascii=False))
     if args.upload and not args.confirm_upload:
         return 1
-    return 0 if result["status"] in {"DRY_RUN", "BLOCKED", "READY", "UPLOADED"} else 1
+    return 0 if result["status"] in {"DRY_RUN", "BLOCKED", "READY", "UPLOADED", "ALREADY_UPLOADED"} else 1
 
 
 if __name__ == "__main__":

@@ -139,6 +139,7 @@ def download_with_ytdlp(url: str, path: Path) -> None:
         "socket_timeout": 45,
         "max_filesize": 300 * 1024 * 1024,
         "progress_hooks": [progress_guard],
+        "js_runtimes": {"node": {}},
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         planned = ydl.extract_info(url, download=False)

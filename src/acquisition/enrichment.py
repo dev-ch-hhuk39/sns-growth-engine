@@ -210,7 +210,13 @@ class YtDlpPostDetailProvider:
         try:
             import yt_dlp
 
-            options = {"quiet": True, "skip_download": True, "noplaylist": True, "writesubtitles": False}
+            options = {
+                "quiet": True,
+                "skip_download": True,
+                "noplaylist": True,
+                "writesubtitles": False,
+                "js_runtimes": {"node": {}},
+            }
             info = yt_dlp.YoutubeDL(options).extract_info(post.canonical_post_url, download=False)
             if not isinstance(info, dict):
                 return ProviderResult(self.provider_name, self.provider_version, "FAILED", reason="metadata_response_invalid")

@@ -220,6 +220,7 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
         "no_warnings": True,
         "ignoreerrors": True,
         "socket_timeout": 20,
+        "js_runtimes": {"node": {}},
     }
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -252,6 +253,7 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
                 "no_warnings": True,
                 "noplaylist": True,
                 "socket_timeout": 20,
+                "js_runtimes": {"node": {}},
             }
             try:
                 with yt_dlp.YoutubeDL(detail_opts) as detail_ydl:

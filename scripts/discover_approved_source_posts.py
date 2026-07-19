@@ -32,7 +32,13 @@ def canonical(url: str) -> str:
 def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, Any]], str]:
     try:
         import yt_dlp
-        opts = {"quiet": True, "skip_download": True, "extract_flat": True, "playlistend": limit}
+        opts = {
+            "quiet": True,
+            "skip_download": True,
+            "extract_flat": True,
+            "playlistend": limit,
+            "js_runtimes": {"node": {}},
+        }
         source_url = str(source.get("source_url", "")).rstrip("/")
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
         # A channel landing page exposes /videos, /streams and /shorts as

@@ -141,6 +141,7 @@ def download_video(
         "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": False,
+        "js_runtimes": {"node": {}},
     }
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

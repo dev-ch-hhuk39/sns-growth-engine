@@ -82,6 +82,7 @@ def fetch_ytdlp_metadata(url: str) -> dict[str, Any]:
             "retries": 1,
             "fragment_retries": 1,
             "extract_flat": False,
+            "js_runtimes": {"node": {}},
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)

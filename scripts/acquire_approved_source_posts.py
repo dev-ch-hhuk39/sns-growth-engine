@@ -25,6 +25,7 @@ from config_loader import get_config
 from media_source_policy import media_usage_mode
 from media_growth_schemas import build_source_video
 from sheets_client import TAB_DEFINITIONS, SheetsClient
+from transcription.sheets_limits import bounded_cell, normalize_transcript_row
 
 MEDIA_PLATFORMS = {"threads", "youtube", "tiktok"}
 BLOCKED_ACCOUNTS = {"beauty_account"}
@@ -119,7 +120,10 @@ def _headers(client: SheetsClient, logical: str) -> tuple[Any, list[str], list[d
 def _append(client: SheetsClient, ws: Any, headers: list[str], row: dict[str, Any], label: str) -> None:
     client._call_with_rate_limit_retry(
         label,
-        lambda: ws.append_row([str(row.get(header, "")) for header in headers], value_input_option="USER_ENTERED"),
+        lambda: ws.append_row(
+            [bounded_cell(row.get(header, "")) for header in headers],
+            value_input_option="USER_ENTERED",
+        ),
     )
 
 
@@ -247,7 +251,7 @@ def enrich_posts(
                 event["source_video_id"] = source_video["source_video_id"]
                 provider_runs.append(event)
                 payload = transcript.data or {}
-                transcripts.append({
+                transcripts.append(normalize_transcript_row({
                     "transcript_id": f"tr_{source_video['source_video_id']}",
                     "account_id": post.target_account_id,
                     "reference_post_id": post.source_post_id,
@@ -270,7 +274,7 @@ def enrich_posts(
                     "error": "" if transcript.ok else transcript.reason,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
-                })
+                }))
         enriched.append(post)
     return enriched, source_videos, transcripts, provider_runs
 

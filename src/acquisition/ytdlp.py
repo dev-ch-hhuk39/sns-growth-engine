@@ -24,7 +24,13 @@ class YtDlpProfilePostAdapter:
         source_url = str(source.get("canonical_url") or source.get("source_url") or "").rstrip("/")
         if platform == "youtube" and "/channel/" in source_url and not source_url.endswith("/videos"):
             source_url = f"{source_url}/videos"
-        options = {"quiet": True, "skip_download": True, "extract_flat": True, "playlistend": max(1, min(limit, 20))}
+        options = {
+            "quiet": True,
+            "skip_download": True,
+            "extract_flat": True,
+            "playlistend": max(1, min(limit, 20)),
+            "js_runtimes": {"node": {}},
+        }
         try:
             info = yt_dlp.YoutubeDL(options).extract_info(source_url, download=False)
         except Exception as exc:
