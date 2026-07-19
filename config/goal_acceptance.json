@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "passing_status": "PASS",
+  "failing_statuses": [
+    "FAIL",
+    "BLOCKED",
+    "UNVERIFIED",
+    "NOT_IMPLEMENTED",
+    "MOCK_ONLY",
+    "DRY_RUN_ONLY",
+    "TEXT_FALLBACK_ONLY",
+    "EVIDENCE_MISSING",
+    "WRONG_MEDIA",
+    "CAPTION_MISMATCH"
+  ],
+  "criteria": [
+    {"id": "repository_public", "category": "infrastructure", "requires": ["repository_url", "visibility_checked_at"]},
+    {"id": "secret_history_scan", "category": "infrastructure", "requires": ["scanner", "scan_scope", "run_at"]},
+    {"id": "production_secrets_private", "category": "infrastructure", "requires": ["secret_names_only", "environment_protection"]},
+    {"id": "github_hosted_only", "category": "infrastructure", "requires": ["workflow_scan", "runner_label"]},
+    {"id": "no_vps_or_self_hosted_dependency", "category": "infrastructure", "requires": ["workflow_scan", "dependency_scan"]},
+    {"id": "working_tree_clean", "category": "infrastructure", "requires": ["head", "checked_at"]},
+    {"id": "origin_main_matches", "category": "infrastructure", "requires": ["head", "origin_main"]},
+
+    {"id": "agent_reach_integrated", "category": "libraries", "requires": ["pinned_version", "doctor_result", "adapter"]},
+    {"id": "last30days_integrated", "category": "libraries", "requires": ["pinned_version", "smoke_result", "adapter"]},
+    {"id": "youtube_backends_integrated", "category": "libraries", "requires": ["yt_dlp", "transcript_api", "comment_downloader"]},
+    {"id": "tiktok_multiple_backends_integrated", "category": "libraries", "requires": ["primary", "fallback", "bounded_limit"]},
+    {"id": "threads_multiple_backends_integrated", "category": "libraries", "requires": ["primary", "fallback", "live_result"]},
+    {"id": "web_fallback_integrated", "category": "libraries", "requires": ["provider", "smoke_result"]},
+    {"id": "library_capability_matrix_complete", "category": "libraries", "requires": ["matrix_path", "license_audit", "version_pins"]},
+
+    {"id": "night_account_url_discovery", "category": "night_scout", "requires": ["source_account_url", "source_post_url", "source_post_id"]},
+    {"id": "night_source_bundle", "category": "night_scout", "requires": ["original_text_hash", "media_asset_id", "parent_integrity"]},
+    {"id": "night_direct_media_post", "category": "night_scout", "requires": ["threads_permalink", "cloudinary_url", "media_type", "verified_at"]},
+    {"id": "night_generated_clip_post", "category": "night_scout", "requires": ["threads_permalink", "cloudinary_url", "clip_candidate_id", "verified_at"]},
+    {"id": "night_caption_alignment", "category": "night_scout", "requires": ["final_alignment_score", "unsupported_claim_count", "verification_result"]},
+
+    {"id": "liver_account_url_discovery", "category": "liver_manager", "requires": ["source_account_url", "source_post_url", "source_post_id"]},
+    {"id": "liver_source_bundle", "category": "liver_manager", "requires": ["original_text_hash", "media_asset_id", "parent_integrity"]},
+    {"id": "liver_direct_media_post", "category": "liver_manager", "requires": ["threads_permalink", "cloudinary_url", "media_type", "verified_at"]},
+    {"id": "liver_generated_clip_post", "category": "liver_manager", "requires": ["threads_permalink", "cloudinary_url", "clip_candidate_id", "verified_at"]},
+    {"id": "liver_caption_alignment", "category": "liver_manager", "requires": ["final_alignment_score", "unsupported_claim_count", "verification_result"]},
+
+    {"id": "permission_single_authority", "category": "reliability", "requires": ["authority", "contradiction_check"]},
+    {"id": "backend_failover", "category": "reliability", "requires": ["test", "routing_evidence"]},
+    {"id": "asset_quarantine", "category": "reliability", "requires": ["test", "quarantine_evidence"]},
+    {"id": "next_candidate_selection", "category": "reliability", "requires": ["test", "selection_evidence"]},
+    {"id": "schedule_delay_recovery", "category": "reliability", "requires": ["test", "run_id"]},
+    {"id": "slot_idempotency", "category": "reliability", "requires": ["test", "slot_evidence"]},
+    {"id": "sheets_evidence", "category": "reliability", "requires": ["verification_run", "failed_checks"]},
+    {"id": "cloudinary_idempotency", "category": "reliability", "requires": ["test", "asset_evidence"]},
+    {"id": "text_fallback", "category": "reliability", "requires": ["test", "fallback_evidence"]},
+    {"id": "text_pipeline_regression_free", "category": "reliability", "requires": ["night_result", "liver_result"]},
+    {"id": "all_required_tests_pass", "category": "reliability", "requires": ["test_count", "failed_count", "run_at"]}
+  ]
+}

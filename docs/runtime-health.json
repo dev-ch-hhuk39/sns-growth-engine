@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-07-19T03:30:00+09:00",
+  "head": "f89f6ed44bc2a00930f04601d5700230e25949d3",
+  "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3",
+  "repository_visibility": "PRIVATE",
+  "workflow_files": 22,
+  "self_hosted_workflow_references": 22,
+  "workflow_sleep_references": 7,
+  "production_runner": "sns-growth-xserver",
+  "sheets_verification": {
+    "passed": 54,
+    "failed": 7,
+    "failed_checks": [
+      "posted_metrics_status_allowed",
+      "posted_media_used_false",
+      "posted_duplicate_text_absent",
+      "media_no_unapproved_upload",
+      "media_uploaded_only_if_approved",
+      "generated_candidates_not_ready_by_default",
+      "tiktok_youtube_reference_only"
+    ],
+    "warnings": ["posted_save_failed_count=2"]
+  },
+  "latest_observed_failure": {
+    "run_id": "29668544577",
+    "workflow": "Autopilot AUTO_READY Pilot",
+    "reason": "full Sheets verifier exited 1 before AUTO_READY because seven legacy/production consistency checks failed"
+  },
+  "credentials_presence": {
+    "sheets": "SET",
+    "threads_night_scout": "SET",
+    "threads_liver_manager": "SET",
+    "cloudinary": "SET"
+  },
+  "secret_values_logged": false
+}
