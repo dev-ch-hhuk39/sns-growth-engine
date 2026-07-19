@@ -229,7 +229,8 @@ class ThreadsPublisher(BasePublisher):
                     success=False,
                     dry_run=False,
                     message=(
-                        "SAFETY_STOP: media投稿には media/video/carousel の明示gateが必要です。"
+                        "SAFETY_STOP: media投稿には ALLOW_MEDIA_POSTS / "
+                        "ALLOW_REAL_THREADS_VIDEO_POST / ALLOW_THREADS_CAROUSEL の明示gateが必要です。"
                         f" (account={account_id} queue_id={queue_id})"
                     ),
                 )

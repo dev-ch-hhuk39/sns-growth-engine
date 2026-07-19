@@ -14,8 +14,13 @@ spec.loader.exec_module(mod)
 def main() -> int:
     cfg = json.loads((ROOT / "config/autonomous_mode.json").read_text(encoding="utf-8"))
     plan = mod.build_autonomous_plan("all", cfg)
-    media_rows = [row for rows in plan["selected_pilot_sources"].values() for row in rows if row.get("media_pipeline_eligible_after_apply")]
-    ok = cfg.get("allow_third_party_media") is False and not media_rows and plan["safety"]["third_party_media"] is False
+    selected = [row for rows in plan["selected_pilot_sources"].values() for row in rows]
+    unauthorized = [
+        row for row in selected
+        if row.get("media_pipeline_eligible_after_apply")
+        and row.get("rights_status") not in {"owned", "licensed", "approved_creator_clip"}
+    ]
+    ok = cfg.get("allow_third_party_media") is False and not unauthorized and plan["safety"]["third_party_media"] is False
     print(f"  {'PASS' if ok else 'FAIL'} third-party media blocked")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1

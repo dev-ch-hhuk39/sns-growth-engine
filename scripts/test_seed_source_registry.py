@@ -74,17 +74,20 @@ def test_x_sources_manual_only():
 
 
 def test_video_sources_reference_only():
-    acc, _, _, _ = _acc()
+    acc, _, _, raw_by_id = _acc()
     vids = [r for r in acc if r["source_platform"] in ("tiktok", "youtube")]
     assert vids
     for r in vids:
-        assert r["reuse_policy"] == "reference_only", r["source_id"]
-        assert r["media_policy"] == "do_not_download", r["source_id"]
-        assert r["allow_download"] == "false" and r["allow_cut"] == "false" and r["allow_upload"] == "false"
-        assert r["use_policy"] == "REFERENCE_ONLY", r["source_id"]
-        if r.get("rights_policy") == "approved_creator_clip":
+        raw = raw_by_id[r["source_id"]]
+        if raw.get("rights_status") in {"owned", "licensed", "approved_creator_clip"}:
+            assert raw.get("permission_status") == "approved", r["source_id"]
+            assert r["reuse_policy"] == "approved_creator_clip", r["source_id"]
+            assert r["media_policy"] == "approved_gated", r["source_id"]
+            assert r["allow_download"] == "gated" and r["allow_cut"] == "gated" and r["allow_upload"] == "gated"
             assert r["can_reuse_media"] == "true", r["source_id"]
         else:
+            assert r["reuse_policy"] == "reference_only", r["source_id"]
+            assert r["allow_download"] == "false" and r["allow_cut"] == "false" and r["allow_upload"] == "false"
             assert r["can_reuse_media"] == "false", r["source_id"]
 
 

@@ -14,6 +14,12 @@ result = validate_media_post({
     "duration_seconds": 20,
     "aspect_ratio": "9:16",
     "public_post_text": TEXT,
+    "alignment_status": "PASS",
+    "final_alignment_score": 0.91,
+    "main_claim_coverage": 1.0,
+    "unsupported_claim_count": 0,
+    "source_copy_similarity": 0.3,
+    "recent_post_similarity": 0.2,
 })
 ok = result["status"] == "PASS"
 print(f"  {'PASS' if ok else 'FAIL'} night_scout approved media post passes validator")

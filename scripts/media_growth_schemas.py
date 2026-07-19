@@ -363,7 +363,8 @@ def build_clip_candidate(source: dict[str, Any], index: int = 1, *, has_transcri
     scores = score_clip_candidate(source, has_transcript=has_transcript)
     account_id = str(source.get("target_account_id") or (source.get("target_account_ids") or ["liver_manager"])[0])
     context = account_media_context(account_id)
-    row = {
+    row = dict.fromkeys(VIDEO_CLIP_CANDIDATE_FIELDS, "")
+    row.update({
         "clip_candidate_id": f"clipcand_{source.get('source_id', 'unknown')}_{index:02d}",
         "source_id": source.get("source_id", ""),
         "account_id": account_id,
@@ -388,7 +389,8 @@ def build_clip_candidate(source: dict[str, Any], index: int = 1, *, has_transcri
         "reviewer_status": "WAITING_REVIEW",
         "created_at": now_iso(),
         **scores,
-    }
+    })
+    row["duplicate_clip_key"] = duplicate_clip_key(row)
     return row
 
 
@@ -405,6 +407,15 @@ def build_media_post_queue_item(clip: dict[str, Any], media_asset_id: str = "") 
         "public_post_text": clip.get("public_post_text", ""),
         "text": clip.get("public_post_text", ""),
         "validator_status": clip.get("public_post_validator_status", ""),
+        "caption_provider": clip.get("caption_provider", ""),
+        "caption_provider_version": clip.get("caption_provider_version", ""),
+        "alignment_status": clip.get("alignment_status", ""),
+        "final_alignment_score": clip.get("final_alignment_score", ""),
+        "main_claim_coverage": clip.get("main_claim_coverage", ""),
+        "unsupported_claim_count": clip.get("unsupported_claim_count", ""),
+        "source_copy_similarity": clip.get("source_copy_similarity", ""),
+        "recent_post_similarity": clip.get("recent_post_similarity", ""),
+        "claim_support_json": clip.get("claim_support_json", ""),
         "created_at": now_iso(),
     }
 

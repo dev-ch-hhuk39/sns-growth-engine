@@ -133,7 +133,10 @@ def test_production_sources_no_immediate_download():
     failed = []
     for s in sources:
         if s.get("allow_download") or s.get("allow_cut") or s.get("allow_upload"):
-            if s.get("rights_policy") not in ("approved_media", "own_media"):
+            if (
+                s.get("rights_policy") not in ("approved_media", "own_media", "approved_creator_clip", "licensed")
+                or s.get("permission_status") != "approved"
+            ):
                 failed.append(s["source_id"])
     assert not failed, f"rights_policy 未確定でdownload/cut/upload が有効なソース: {failed}"
     print(f"  [PASS] 全ソースで rights_policy 未確定のdownload/cut/uploadなし")

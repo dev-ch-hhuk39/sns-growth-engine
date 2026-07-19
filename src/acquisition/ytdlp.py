@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from .contracts import ProviderResult
 from .models import NormalizedMediaItem, NormalizedSourcePost, canonical_url, external_post_id, stable_content_hash, utc_now
 from .router import BackendFailure
 
@@ -78,3 +79,22 @@ class YtDlpProfilePostAdapter:
                 discovered_at=utc_now(),
             ))
         return result
+
+    def discover_profile(self, source: dict[str, Any], *, limit: int) -> ProviderResult[list[NormalizedSourcePost]]:
+        try:
+            posts = self.acquire(source, limit=limit)
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "PASS" if posts else "PARTIAL",
+                data=posts,
+                reason="" if posts else "no_videos_discovered",
+            )
+        except Exception as exc:
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "FAILED",
+                reason=f"{type(exc).__name__}:profile_discovery_failed",
+                retryable=True,
+            )

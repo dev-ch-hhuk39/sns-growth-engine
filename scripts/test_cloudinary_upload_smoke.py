@@ -154,9 +154,9 @@ def run_smoke_upload(
         return False
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(description="Cloudinary 小規模アップロードスモークテスト")
-    parser.add_argument("--file", required=True, help="テスト対象ファイルパス")
+    parser.add_argument("--file", default="", help="テスト対象ファイルパス（実upload時は必須）")
     parser.add_argument("--upload", action="store_true", help="実アップロードフラグ（--confirm-upload も必要）")
     parser.add_argument("--confirm-upload", action="store_true", help="実アップロード確認フラグ")
     args = parser.parse_args()
@@ -165,31 +165,42 @@ def main() -> None:
     print("  test_cloudinary_upload_smoke.py - Cloudinaryスモークテスト（Phase 2.32）")
     print("=" * 60)
 
+    if args.upload != args.confirm_upload:
+        print("[RESULT] BLOCKED: --upload と --confirm-upload は必ず同時に指定してください")
+        return 1
+
     real_upload = args.upload and args.confirm_upload
     if real_upload:
         allow_env = os.environ.get("ALLOW_CLOUDINARY_UPLOAD", "false").lower()
         if allow_env != "true":
             print(f"[ERROR] ALLOW_CLOUDINARY_UPLOAD=false のため実アップロード不可")
             print("  → 実テスト時は環境変数を設定してください（テスト後は false に戻す）")
-            sys.exit(1)
+            return 1
         print("[INFO] 実アップロードモード（3重ガード解除済み）")
     else:
         print("[INFO] dry-run モード（実アップロードなし）")
-        if args.upload and not args.confirm_upload:
-            print("[WARN] --confirm-upload が指定されていないため dry-run で実行します")
+
+    check_safety_guard()
+    if not args.file:
+        if real_upload:
+            print("[RESULT] BLOCKED: 実uploadには --file が必要です")
+            return 1
+        print("[RESULT] UNAVAILABLE: --file 未指定。実uploadは行わず安全に終了します")
+        return 0
 
     cred_ok = check_credentials()
     file_ok = check_file(args.file)
-    check_safety_guard()
 
     if not cred_ok:
-        print("\n[RESULT] FAIL: 認証情報が不足しています")
-        print("  → python scripts/test_cloudinary_credentials.py で確認してください")
-        sys.exit(1)
+        if real_upload:
+            print("\n[RESULT] FAIL: 実uploadに必要な認証情報が不足しています")
+            return 1
+        print("\n[RESULT] UNAVAILABLE: optional Cloudinary credentials are not configured; no upload was made")
+        return 0
 
     if not file_ok:
         print("\n[RESULT] FAIL: ファイルの確認に失敗しました")
-        sys.exit(1)
+        return 1
 
     ok = run_smoke_upload(args.file, dry_run=not real_upload)
 
@@ -199,7 +210,7 @@ def main() -> None:
     print("\n" + "=" * 60)
     if fail_count > 0:
         print("[RESULT] FAIL: エラーがあります")
-        sys.exit(1)
+        return 1
     elif warn_count > 0:
         print("[RESULT] WARN: 警告があります。確認してください。")
     else:
@@ -214,7 +225,8 @@ def main() -> None:
                 f"  python scripts/test_cloudinary_upload_smoke.py \\\n"
                 f"  --file {args.file} --upload --confirm-upload"
             )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

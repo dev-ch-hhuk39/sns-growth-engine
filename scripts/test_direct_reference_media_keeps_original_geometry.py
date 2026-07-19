@@ -3,6 +3,15 @@
 from media_post_validator import validate_media_post
 from test_media_post_validator_requires_approved_rights import GOOD_TEXT
 
+ALIGNMENT = {
+    "alignment_status": "PASS",
+    "final_alignment_score": 0.9,
+    "main_claim_coverage": 1.0,
+    "unsupported_claim_count": 0,
+    "source_copy_similarity": 0.25,
+    "recent_post_similarity": 0.2,
+}
+
 
 def main() -> int:
     direct = validate_media_post({
@@ -17,6 +26,7 @@ def main() -> int:
         "aspect_ratio": "16:9",
         "media_origin": "direct_reference",
         "public_post_text": GOOD_TEXT,
+        **ALIGNMENT,
     })
     generated = validate_media_post({
         "rights_status": "approved_creator_clip",
@@ -30,6 +40,7 @@ def main() -> int:
         "aspect_ratio": "16:9",
         "media_origin": "generated_clip",
         "public_post_text": GOOD_TEXT,
+        **ALIGNMENT,
     })
     unknown_duration = validate_media_post({
         "rights_status": "approved_creator_clip",
@@ -43,6 +54,7 @@ def main() -> int:
         "aspect_ratio": "",
         "media_origin": "direct_reference",
         "public_post_text": GOOD_TEXT,
+        **ALIGNMENT,
     })
     checks = [
         ("approved original media permits supported landscape geometry", direct["status"] == "PASS"),

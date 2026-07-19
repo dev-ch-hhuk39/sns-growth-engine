@@ -13,6 +13,9 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import rights_allows_media_use  # noqa: E402
+from acquisition.models import SourceMediaItem, SourcePostBundle, stable_content_hash  # noqa: E402
+from generation.source_grounded_caption import GitHubModelsGroundedProvider, SourceGroundedCaptionService  # noqa: E402
+from video.semantic_clip_planner import plan_semantic_clips  # noqa: E402
 from discover_approved_source_videos import load_existing_source_videos  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from media_growth_schemas import (  # noqa: E402
@@ -101,6 +104,15 @@ def _clip_row_for_sheets(row: dict[str, Any]) -> dict[str, Any]:
         "aspect_ratio": "9:16",
         "upload_status": row.get("upload_status", "NOT_UPLOADED"),
         "post_status": row.get("post_status", "NOT_POSTED"),
+        "caption_provider": row.get("caption_provider", ""),
+        "caption_provider_version": row.get("caption_provider_version", ""),
+        "alignment_status": row.get("alignment_status", ""),
+        "final_alignment_score": row.get("final_alignment_score", ""),
+        "main_claim_coverage": row.get("main_claim_coverage", ""),
+        "unsupported_claim_count": row.get("unsupported_claim_count", ""),
+        "source_copy_similarity": row.get("source_copy_similarity", ""),
+        "recent_post_similarity": row.get("recent_post_similarity", ""),
+        "claim_support_json": row.get("claim_support_json", ""),
         "notes": "Auto-saved by run_media_growth_engine; production execution remains rights/env gated.",
     }
 
@@ -281,26 +293,15 @@ def _clip_specs_from_transcript(video: dict[str, Any], transcript: dict[str, Any
     if not segments:
         return []
     max_count = clip_count_for_video(video, config, transcript_signal_count=len(segments))
-    min_duration = float(config.get("clip_duration_min_seconds", 8))
-    max_duration = float(config.get("clip_duration_max_seconds", 45))
     video_duration = float(video.get("duration_seconds") or segments[-1]["end"] or 0)
-    specs = []
-    anchors = [segments[min(len(segments) - 1, int(i * len(segments) / max_count))] for i in range(max_count)]
-    for anchor in anchors:
-        start = max(0.0, float(anchor["start"]) - 1.0)
-        end = min(video_duration or float(anchor["end"]) + max_duration, start + max_duration)
-        if end - start < min_duration:
-            end = min(video_duration or start + min_duration, start + min_duration)
-        excerpt_parts = [
-            seg["text"]
-            for seg in segments
-            if float(seg["start"]) < end and float(seg["end"]) > start
-        ]
-        excerpt = " ".join(excerpt_parts).strip()
-        if not excerpt:
-            excerpt = str(anchor["text"])
-        specs.append({"start": start, "end": end, "excerpt": excerpt})
-    return specs
+    return plan_semantic_clips(
+        segments,
+        video_duration=video_duration,
+        max_candidates=max_count,
+        min_seconds=float(config.get("clip_duration_min_seconds", 8)),
+        max_seconds=float(config.get("clip_duration_max_seconds", 45)),
+        overlap_tolerance_seconds=float(config.get("clip_overlap_tolerance_seconds", 2)),
+    )
 
 
 def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -327,6 +328,7 @@ def build_media_growth_plan(
     confirm_media_growth: bool = False,
     existing_source_videos: list[dict[str, Any]] | None = None,
     existing_transcripts: list[dict[str, Any]] | None = None,
+    caption_service: SourceGroundedCaptionService | None = None,
 ) -> dict[str, Any]:
     config = load_config()
     selected = select_sources(account_id, config)
@@ -381,9 +383,9 @@ def build_media_growth_plan(
     ]
 
     source_by_id = {str(s.get("source_id", "")): s for s in selected}
-    output = generate_reader_facing_post(account_id, index=1)
-    public_text = str(output["public_post_text"])
-    validation = final_public_post_validator(public_text, account_id)
+    caption_service = caption_service or SourceGroundedCaptionService(GitHubModelsGroundedProvider())
+    public_text = ""
+    validation = {"status": "BLOCKED", "blocked_reasons": ["no_grounded_clip_caption"]}
     existing_clips: list[dict[str, Any]] = []
     for video_index, source_video in enumerate(planned_source_videos, start=1):
         source = source_by_id.get(str(source_video.get("source_id", "")))
@@ -410,14 +412,40 @@ def build_media_growth_plan(
         count = len(clip_specs)
         video_candidates = []
         for i, spec in enumerate(clip_specs, start=1):
-            # The excerpt is private input only. The public body is a
-            # transformed reader-facing angle, never a transcript rewrite.
-            clip_output = generate_grounded_reader_facing_post(
-                account_id,
-                private_signal=str(spec.get("excerpt", "")),
-                index=(video_index - 1) * 3 + i,
+            source_video_id = str(source_video.get("source_video_id", ""))
+            video_url = str(source_video.get("canonical_video_url", ""))
+            media = SourceMediaItem(
+                source_post_media_id=f"spm_{source_video_id}_0",
+                source_post_id=source_video_id,
+                media_index=0,
+                media_type="video",
+                canonical_post_url=video_url,
+                original_media_url=video_url,
+                resolver_backend=str(source_video.get("collection_backend", "source_videos")),
+                duration_seconds=str(source_video.get("duration_seconds", "")),
             )
-            clip_public_text = str(clip_output["public_post_text"])
+            bundle = SourcePostBundle(
+                source_post_id=source_video_id,
+                source_id=str(source_video.get("source_id", "")),
+                target_account_id=account_id,
+                platform=str(source_video.get("platform", "")),
+                profile_url=str(source_video.get("source_url", "")),
+                canonical_post_url=video_url,
+                external_post_id=str(source_video.get("video_id", "")),
+                original_post_text="\n".join(filter(None, [
+                    str(source_video.get("title", "")),
+                    str(source_video.get("description_preview", "")),
+                ])),
+                published_at=str(source_video.get("published_at", "")),
+                media_items=(media,),
+                content_hash=str(source_video.get("content_hash", "")) or stable_content_hash(str(spec.get("excerpt", "")), [video_url]),
+            )
+            clip_output = caption_service.generate(
+                bundle,
+                account_id=account_id,
+                transcript_excerpt=str(spec.get("excerpt", "")),
+            )
+            clip_public_text = str(clip_output.get("public_post_text", ""))
             clip_validation = final_public_post_validator(clip_public_text, account_id)
             cand = build_clip_candidate_for_video(
                 source,
@@ -433,6 +461,21 @@ def build_media_growth_plan(
                 start_seconds=float(spec.get("start", 0)),
                 end_seconds=float(spec.get("end", 0)),
             )
+            alignment = clip_output.get("semantic_alignment", {})
+            cand.update({
+                "caption_provider": clip_output.get("provider_name", ""),
+                "caption_provider_version": clip_output.get("provider_version", ""),
+                "alignment_status": alignment.get("status", "BLOCKED"),
+                "final_alignment_score": alignment.get("final_alignment_score", 0),
+                "main_claim_coverage": alignment.get("main_claim_coverage", 0),
+                "unsupported_claim_count": alignment.get("unsupported_claim_count", 1),
+                "source_copy_similarity": alignment.get("source_copy_similarity", 1),
+                "recent_post_similarity": alignment.get("recent_post_similarity", 1),
+                "claim_support_json": json.dumps(clip_output.get("claim_support", []), ensure_ascii=False),
+                "failure_signature": "" if clip_output.get("status") == "PASS" else "caption_or_alignment_blocked",
+                "selected_reason": spec.get("selected_reason", "semantic_window"),
+                "semantic_segment_score": spec.get("semantic_score", ""),
+            })
             if any(clips_overlap(cand, old, config.get("clip_overlap_tolerance_seconds", 2)) for old in existing_clips):
                 cand["clip_status"] = "SKIPPED"
                 cand["reviewer_status"] = "SKIPPED"
@@ -442,6 +485,8 @@ def build_media_growth_plan(
             if (
                 config.get("auto_approve_clip_candidates")
                 and clip_validation["status"] == "PASS"
+                and clip_output.get("status") == "PASS"
+                and alignment.get("status") == "PASS"
                 and cand.get("transcript_grounded") is True
                 and float(cand.get("clip_score") or 0) >= float(config.get("min_auto_clip_score", 80))
                 and cand.get("rights_status") in set(config.get("allowed_rights_statuses", []))
@@ -451,6 +496,9 @@ def build_media_growth_plan(
                 cand["clip_status"] = "READY"
             video_candidates.append(cand)
             clip_candidates.append(cand)
+            if not public_text and clip_output.get("status") == "PASS":
+                public_text = clip_public_text
+                validation = clip_validation
         source_video["clip_candidate_count"] = len(video_candidates)
         source_video["analysis_status"] = "ANALYZED"
         source_video["discovery_status"] = "CLIP_CANDIDATES_READY" if video_candidates else source_video.get("discovery_status", "DISCOVERED")
@@ -469,7 +517,7 @@ def build_media_growth_plan(
         "media_public_post_auto_enabled": bool(config.get("media_public_post_auto_enabled", False)),
     }
     pdca_records = build_media_pdca_records(clip_candidates[0]) if clip_candidates else {}
-    if validation["status"] != "PASS":
+    if planned_source_videos and validation["status"] != "PASS":
         blocked.append("public_post_validator_blocked")
     return {
         "status": "PLAN_ONLY" if not blocked else "BLOCKED",

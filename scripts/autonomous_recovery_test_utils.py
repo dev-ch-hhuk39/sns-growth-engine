@@ -50,13 +50,13 @@ def test_scheduled_workflows_exist() -> None:
 
 def test_night_scout_workflow_schedule_enabled() -> None:
     text = read(NS_WF)
-    for cron in ['"45 4 * * *"', '"45 6 * * *"', '"45 15 * * *"']:
+    for cron in ['"2 5 * * *"', '"2 7 * * *"', '"2 16 * * *"']:
         assert cron in text
 
 
 def test_liver_manager_workflow_schedule_enabled() -> None:
     text = read(LM_WF)
-    for cron in ['"45 0 * * *"', '"45 3 * * *"', '"45 11 * * *"']:
+    for cron in ['"4 1 * * *"', '"4 4 * * *"', '"4 12 * * *"']:
         assert cron in text
 
 
@@ -74,10 +74,12 @@ def test_scheduled_workflows_apply_on_schedule() -> None:
 
 
 def test_scheduled_workflows_have_jitter() -> None:
+    """Legacy entrypoint: production workflows must not idle on a runner."""
     for wf in (NS_WF, LM_WF):
         text = read(wf)
-        assert "random.randint(0, 1800)" in text
-        assert "Schedule jitter" in text
+        assert "random.randint" not in text
+        assert "time.sleep" not in text
+        assert "Enforce scheduled posting window" in text
 
 
 def test_workflow_permissions_declared() -> None:
@@ -757,11 +759,14 @@ def test_pdca_pending_after_post() -> None:
 def test_media_growth_roadmap_off_by_default() -> None:
     media = media_config()
     cfg = config()
-    assert media["source_video_discovery_apply_enabled"] is False
-    assert media["download_enabled"] is False
-    assert media["cut_enabled"] is False
-    assert media["upload_enabled"] is False
-    assert media["video_post_enabled"] is False
+    assert media["source_video_discovery_apply_enabled"] is True
+    assert media["download_enabled"] is True
+    assert media["cut_enabled"] is True
+    assert media["upload_enabled"] is True
+    assert media["video_post_enabled"] is True
+    assert media["require_permission_evidence"] is True
+    # Text-only autonomous runner remains unable to opt into media. Media uses
+    # its own account-specific workflows and explicit environment gates.
     assert cfg["allow_media_posts"] is False
 
 

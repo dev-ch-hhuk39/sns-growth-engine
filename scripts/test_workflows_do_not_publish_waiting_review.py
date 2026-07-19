@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
-"""test_workflows_do_not_publish_waiting_review.py — GitHub Actions が WAITING_REVIEW を投稿しない／
-定時実行は dry-run のみ／queue worker の実投稿フラグ既定が false であることを固定する。"""
+"""Scheduled production may publish READY rows, but never WAITING_REVIEW.
+
+Production gates must be scoped to explicit posting steps while workflow-level
+defaults remain false. X posting is forbidden in every scheduled workflow.
+"""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -37,14 +40,34 @@ for name, src in workflows.items():
     no_wr_publish = "--status WAITING_REVIEW" not in src and "--status PLANNED" not in src
     check(f"{name}: worker の eligibility を上書きしない", no_status_override and no_wr_publish)
 
-# 2. 定時実行(schedule)を持つ workflow は publish 確定フラグを含まない（dry-run のみ）
+# 2. 定時実行で実投稿を許すのは明示した本番workflowだけ。
+production_scheduled = {
+    "autonomous-growth-loop-night-scout.yml",
+    "autonomous-growth-loop-liver-manager.yml",
+    "content-slot-recovery.yml",
+    "direct-reference-media-night-scout.yml",
+    "direct-reference-media-liver-manager.yml",
+    "media-growth-post-night-scout.yml",
+    "media-growth-post-liver-manager.yml",
+}
+actual_scheduled_publishers: set[str] = set()
 for name, src in workflows.items():
     if "schedule:" not in src:
         continue
-    has_publish_confirm = any(tok in src for tok in PUBLISH_CONFIRM_TOKENS)
-    static_publish_true = 'PUBLISH_ENABLED: "true"' in src or 'ALLOW_REAL_THREADS_POST: "true"' in src
-    check(f"{name}: 定時実行は実投稿確定フラグを持たない", not has_publish_confirm)
-    check(f"{name}: 定時実行は実投稿フラグを静的 true にしない", not static_publish_true)
+    publish_true = 'PUBLISH_ENABLED: "true"' in src or 'ALLOW_REAL_THREADS_POST: "true"' in src
+    if publish_true:
+        actual_scheduled_publishers.add(name)
+        check(f"{name}: 許可済み本番workflow", name in production_scheduled)
+        check(f"{name}: workflow既定PUBLISHはfalse", 'PUBLISH_ENABLED: "false"' in src)
+        check(f"{name}: workflow既定Threads実投稿はfalse", 'ALLOW_REAL_THREADS_POST: "false"' in src)
+        check(f"{name}: X実投稿はfalse固定", 'ALLOW_REAL_X_POST: "false"' in src and 'ALLOW_REAL_X_POST: "true"' not in src)
+        first_plan = src.find("--dry-run")
+        first_publish = min(
+            pos for pos in (src.find('PUBLISH_ENABLED: "true"'), src.find('ALLOW_REAL_THREADS_POST: "true"'))
+            if pos >= 0
+        )
+        check(f"{name}: dry-runがpublish gateより先", 0 <= first_plan < first_publish)
+check("scheduled publisher集合が明示allowlistと一致", actual_scheduled_publishers == production_scheduled)
 
 # 3. queue worker workflow のトップレベル既定フラグが false
 worker = workflows.get("threads-queue-worker.yml", "")

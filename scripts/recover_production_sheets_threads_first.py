@@ -586,8 +586,22 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
         is_x = platform == "x"
         blocked = is_beauty
         active = "false" if blocked or is_x else str(bool(src.get("active", False))).lower()
-        fetch_enabled = "false"
+        fetch_enabled = str(
+            not blocked
+            and not is_x
+            and bool(src.get("active", False))
+            and bool(src.get("fetch_enabled", False))
+            and bool(src.get("allow_network_fetch", False))
+        ).lower()
         rights_policy = "reference_only" if is_beauty else src.get("rights_policy", "reference_only")
+        rights_status = "reference_only" if is_beauty else str(src.get("rights_status") or rights_policy)
+        media_approved = (
+            rights_status in {"owned", "licensed", "approved_creator_clip", "approved_media", "own_media"}
+            and str(src.get("permission_status", "")).lower() == "approved"
+        )
+        def _action_gate(field: str) -> str:
+            requested = str(src.get(field, "false")).strip().lower() in {"1", "true", "yes", "gated"}
+            return "gated" if media_approved and requested and not blocked and not is_x else "false"
         reuse_policy = src.get("reuse_policy", "reference_only")
         media_policy = src.get("media_policy", "do_not_download")
         review_status = "BLOCKED_BEAUTY_ACCOUNT" if is_beauty else src.get("review_status", "WAITING_REVIEW")
@@ -601,7 +615,7 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
         note_bits = [
             str(src.get("notes", "")),
             "auto_priority_change_allowed=false",
-            "download/cut/upload=false",
+            "download/cut/upload=require runtime gates" if media_approved else "download/cut/upload=false",
         ]
         if is_x:
             note_bits.append("X posting disabled; source is reference-only")
@@ -631,9 +645,9 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
             "candidate_status": "BLOCKED_BEAUTY_ACCOUNT" if is_beauty else src.get("candidate_status", "candidate"),
             "fetch_enabled": fetch_enabled,
             "allow_network_fetch": str(bool(src.get("allow_network_fetch", True))).lower(),
-            "allow_download": "false",
-            "allow_cut": "false",
-            "allow_upload": "false",
+            "allow_download": _action_gate("allow_download"),
+            "allow_cut": _action_gate("allow_cut"),
+            "allow_upload": _action_gate("allow_upload"),
             "auto_priority_change_allowed": "false",
             "review_status": review_status,
             "default_queue_status": default_queue_status,
@@ -674,9 +688,9 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
                 "rights_policy": common["rights_policy"],
                 "reuse_policy": common["reuse_policy"],
                 "media_policy": common["media_policy"],
-                "allow_download": "false",
-                "allow_cut": "false",
-                "allow_upload": "false",
+                "allow_download": common["allow_download"],
+                "allow_cut": common["allow_cut"],
+                "allow_upload": common["allow_upload"],
                 "auto_priority_change_allowed": "false",
                 "blocked": str(blocked).lower(),
                 "review_status": common["review_status"],
@@ -1123,9 +1137,23 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     _x_reg = [r for r in _reg_acc if r["source_platform"] == "x"]
     _x_manual_only = all(r["active"] == "false" and r["fetch_enabled"] == "false" for r in _x_reg)
     _vid_reg = [r for r in _reg_acc if r["source_platform"] in ("tiktok", "youtube")]
-    _vid_reference_only = all(
-        r.get("reuse_policy") == "reference_only" and r.get("media_policy") == "do_not_download"
-        and r["allow_download"] == "false" and r["allow_cut"] == "false" and r["allow_upload"] == "false"
+    _approved_rights = {"owned", "licensed", "approved_creator_clip", "approved_media", "own_media"}
+    _vid_rights_classified = all(
+        (
+            _reg_by_id.get(r["source_id"], {}).get("rights_status") in _approved_rights
+            and _reg_by_id.get(r["source_id"], {}).get("permission_status") == "approved"
+            and r["allow_download"] == "gated"
+            and r["allow_cut"] == "gated"
+            and r["allow_upload"] == "gated"
+            and r["can_reuse_media"] == "true"
+        )
+        or (
+            _reg_by_id.get(r["source_id"], {}).get("rights_status") not in _approved_rights
+            and r["allow_download"] == "false"
+            and r["allow_cut"] == "false"
+            and r["allow_upload"] == "false"
+            and r["can_reuse_media"] == "false"
+        )
         for r in _vid_reg
     )
     _beauty_reg = [r for r in _reg_acc if _reg_by_id.get(r["source_id"], {}).get("future_track") == "beauty_future"]
@@ -1147,7 +1175,11 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     )
     _waiting = [r for r in _reg_acc if not str(r.get("source_url", "")).strip()]
     _waiting_not_fetchable = all(r["fetch_enabled"] == "false" for r in _waiting)
-    _third_party_not_reusable = all(r["allow_upload"] == "false" and r["allow_cut"] == "false" for r in _reg_acc)
+    _third_party_not_reusable = all(
+        r["allow_download"] == "false" and r["allow_upload"] == "false" and r["allow_cut"] == "false"
+        for r in _reg_acc
+        if _reg_by_id.get(r["source_id"], {}).get("rights_status") not in _approved_rights
+    )
     _priority_valid = all(_priority_in_range(s.get("priority")) for s in _reg)
 
     checks = {
@@ -1228,12 +1260,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "source_registry_has_required_categories": _has_required_cats,
         "source_urls_are_deduped": _urls_deduped,
         "x_sources_manual_only_current_phase": _x_manual_only,
-        "tiktok_youtube_reference_only": _vid_reference_only,
+        "video_sources_rights_classified": _vid_rights_classified,
         "beauty_future_inactive": _beauty_inactive,
         "beauty_target_account_id_preserved": _beauty_target_safe,
         "beauty_reference_only_safety": _beauty_reference_only,
         "waiting_url_input_not_fetchable": _waiting_not_fetchable,
-        "third_party_media_not_reusable_by_default": _third_party_not_reusable,
+        "unapproved_media_not_reusable_by_default": _third_party_not_reusable,
         "source_priority_valid_range": _priority_valid,
     }
     return {

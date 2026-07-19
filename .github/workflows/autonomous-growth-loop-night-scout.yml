@@ -2,22 +2,17 @@ name: Autonomous Growth Loop Night Scout
 
 on:
   schedule:
-    # Text-only slots: JST 14:00/16:00/25:00.
+    # Text-only slots: JST 14:00/16:00/25:00. Jobs start just after the target.
     # 18:00 is direct-reference media and 21:00 is generated clip media.
-    # Cron starts 15 minutes before target; jitter sleeps 0-1800s.
-    - cron: "45 4 * * *"
-    - cron: "45 6 * * *"
-    - cron: "45 15 * * *"
+    - cron: "2 5 * * *"
+    - cron: "2 7 * * *"
+    - cron: "2 16 * * *"
   workflow_dispatch:
     inputs:
       confirm_autonomous:
         description: "Type true to run night_scout autonomous Threads loop"
         required: true
         default: "false"
-      skip_jitter:
-        description: "Skip schedule jitter for manual dispatch"
-        required: false
-        default: "true"
       dry_run_only:
         description: "Run dry-run and health summary only; never apply/post"
         required: false
@@ -48,7 +43,7 @@ env:
 jobs:
   autonomous-growth-loop-night-scout:
     name: Night Scout scheduled Threads autonomous loop
-    runs-on: [self-hosted, linux, x64, sns-growth, production]
+    runs-on: ubuntu-latest
     timeout-minutes: 60
 
     env:
@@ -62,7 +57,7 @@ jobs:
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
@@ -71,7 +66,7 @@ jobs:
           git checkout --detach "$GITHUB_SHA"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
 
@@ -90,9 +85,9 @@ jobs:
             slot="$MANUAL_SLOT_ID"
           else
             case "${{ github.event.schedule }}" in
-              "45 4 * * *") slot="ns_1400_reference" ;;
-              "45 6 * * *") slot="ns_1600_original" ;;
-              "45 15 * * *") slot="ns_2500_pdca" ;;
+              "2 5 * * *") slot="ns_1400_reference" ;;
+              "2 7 * * *") slot="ns_1600_original" ;;
+              "2 16 * * *") slot="ns_2500_pdca" ;;
               *) slot="manual_text" ;;
             esac
           fi
@@ -106,16 +101,6 @@ jobs:
         id: schedule_window
         if: github.event_name == 'schedule'
         run: python3 scripts/check_schedule_window.py --slot-id "$CONTENT_SLOT_ID" --write-github-output
-
-      - name: Schedule jitter
-        if: github.event_name == 'schedule' && steps.schedule_window.outputs.in_window == 'true'
-        run: |
-          python3 - <<'PY'
-          import random, time
-          delay = random.randint(0, 1800)
-          print(f"[jitter] sleeping {delay}s within ±15min window")
-          time.sleep(delay)
-          PY
 
       - name: Dry-run autonomous plan
         run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --dry-run

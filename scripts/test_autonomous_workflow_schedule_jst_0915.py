@@ -7,12 +7,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
-    text = (ROOT / ".github/workflows/autonomous-growth-loop.yml").read_text(encoding="utf-8")
+    night = (ROOT / ".github/workflows/autonomous-growth-loop-night-scout.yml").read_text(encoding="utf-8")
+    liver = (ROOT / ".github/workflows/autonomous-growth-loop-liver-manager.yml").read_text(encoding="utf-8")
     docs = (ROOT / "docs/autonomous-mode-runbook.md").read_text(encoding="utf-8")
     checks = [
-        ("cron is jst 0915", 'cron: "15 0 * * *"' in text),
-        ("jst comment exists", "JST 09:15 daily" in text),
-        ("docs mention jst 0915", "JST 09:15" in docs),
+        ("night fixed UTC slots", all(cron in night for cron in ('cron: "2 5 * * *"', 'cron: "2 7 * * *"', 'cron: "2 16 * * *"'))),
+        ("liver fixed UTC slots", all(cron in liver for cron in ('cron: "4 1 * * *"', 'cron: "4 4 * * *"', 'cron: "4 12 * * *"'))),
+        ("docs mention account schedules", "night_scout" in docs and "liver_manager" in docs),
         ("docs mention daily", "daily" in docs.lower() or "毎日" in docs),
     ]
     failed = [name for name, ok in checks if not ok]

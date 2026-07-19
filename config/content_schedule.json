@@ -1,23 +1,23 @@
 {
   "schema_version": 2,
   "timezone": "Asia/Tokyo",
-  "jitter_seconds": {"minimum": 0, "maximum": 1800},
+  "jitter_seconds": {"minimum": 0, "maximum": 0},
   "daily_post_cap_per_account": 5,
   "cooldown_minutes": 90,
   "accounts": {
     "night_scout": [
-      {"slot_id": "ns_1400_reference", "target_jst": "14:00", "cron_utc": "45 4 * * *", "post_type": "reference_text", "fallback_chain": ["original_text"], "theme": "shop_selection"},
-      {"slot_id": "ns_1600_original", "target_jst": "16:00", "cron_utc": "45 6 * * *", "post_type": "original_text", "fallback_chain": [], "theme": "work_conditions"},
-      {"slot_id": "ns_1800_direct_media", "target_jst": "18:00", "cron_utc": "45 8 * * *", "post_type": "direct_reference_media", "fallback_chain": ["saved_direct_reference_media", "reference_text", "original_text"], "theme": "transfer_and_fit"},
-      {"slot_id": "ns_2100_clip_media", "target_jst": "21:00", "cron_utc": "45 11 * * *", "post_type": "generated_clip_media", "fallback_chain": ["saved_generated_clip_media", "reference_text", "original_text"], "theme": "night_work_decision"},
-      {"slot_id": "ns_2500_pdca", "target_jst": "25:00", "cron_utc": "45 15 * * *", "post_type": "pdca_text", "fallback_chain": ["original_text"], "theme": "future_options"}
+      {"slot_id": "ns_1400_reference", "target_jst": "14:00", "cron_utc": "2 5 * * *", "post_type": "reference_text", "fallback_chain": ["original_text"], "theme": "shop_selection"},
+      {"slot_id": "ns_1600_original", "target_jst": "16:00", "cron_utc": "2 7 * * *", "post_type": "original_text", "fallback_chain": [], "theme": "work_conditions"},
+      {"slot_id": "ns_1800_direct_media", "target_jst": "18:00", "cron_utc": "2 9 * * *", "post_type": "direct_reference_media", "fallback_chain": ["saved_direct_reference_media", "reference_text", "original_text"], "theme": "transfer_and_fit"},
+      {"slot_id": "ns_2100_clip_media", "target_jst": "21:00", "cron_utc": "2 12 * * *", "post_type": "generated_clip_media", "fallback_chain": ["saved_generated_clip_media", "reference_text", "original_text"], "theme": "night_work_decision"},
+      {"slot_id": "ns_2500_pdca", "target_jst": "25:00", "cron_utc": "2 16 * * *", "post_type": "pdca_text", "fallback_chain": ["original_text"], "theme": "future_options"}
     ],
     "liver_manager": [
-      {"slot_id": "lm_1000_original", "target_jst": "10:00", "cron_utc": "45 0 * * *", "post_type": "original_text", "fallback_chain": [], "theme": "beginner_anxiety"},
-      {"slot_id": "lm_1300_reference", "target_jst": "13:00", "cron_utc": "45 3 * * *", "post_type": "reference_text", "fallback_chain": ["original_text"], "theme": "first_viewer_experience"},
-      {"slot_id": "lm_1600_direct_media", "target_jst": "16:00", "cron_utc": "45 6 * * *", "post_type": "direct_reference_media", "fallback_chain": ["saved_direct_reference_media", "reference_text", "original_text"], "theme": "consistent_streaming"},
-      {"slot_id": "lm_1800_clip_media", "target_jst": "18:00", "cron_utc": "45 8 * * *", "post_type": "generated_clip_media", "fallback_chain": ["saved_generated_clip_media", "reference_text", "original_text"], "theme": "viewer_participation"},
-      {"slot_id": "lm_2100_pdca", "target_jst": "21:00", "cron_utc": "45 11 * * *", "post_type": "pdca_text", "fallback_chain": ["original_text"], "theme": "sustainable_growth"}
+      {"slot_id": "lm_1000_original", "target_jst": "10:00", "cron_utc": "4 1 * * *", "post_type": "original_text", "fallback_chain": [], "theme": "beginner_anxiety"},
+      {"slot_id": "lm_1300_reference", "target_jst": "13:00", "cron_utc": "4 4 * * *", "post_type": "reference_text", "fallback_chain": ["original_text"], "theme": "first_viewer_experience"},
+      {"slot_id": "lm_1600_direct_media", "target_jst": "16:00", "cron_utc": "4 7 * * *", "post_type": "direct_reference_media", "fallback_chain": ["saved_direct_reference_media", "reference_text", "original_text"], "theme": "consistent_streaming"},
+      {"slot_id": "lm_1800_clip_media", "target_jst": "18:00", "cron_utc": "4 9 * * *", "post_type": "generated_clip_media", "fallback_chain": ["saved_generated_clip_media", "reference_text", "original_text"], "theme": "viewer_participation"},
+      {"slot_id": "lm_2100_pdca", "target_jst": "21:00", "cron_utc": "4 12 * * *", "post_type": "pdca_text", "fallback_chain": ["original_text"], "theme": "sustainable_growth"}
     ]
   }
 }

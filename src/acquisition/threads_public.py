@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.parse import urljoin
 
+from .contracts import ProviderResult
 from .models import NormalizedMediaItem, NormalizedSourcePost, canonical_url, external_post_id, stable_content_hash, utc_now
 from .router import BackendFailure
 
@@ -143,6 +144,19 @@ class ThreadsPublicProfileAdapter:
         if not posts:
             raise BackendFailure("threads_post_detail_unavailable")
         return posts
+
+    def discover_profile(self, source: dict[str, Any], *, limit: int) -> ProviderResult[list[NormalizedSourcePost]]:
+        try:
+            posts = self.acquire(source, limit=limit)
+            return ProviderResult(self.backend_name, self.backend_version, "PASS", data=posts)
+        except Exception as exc:
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "FAILED",
+                reason=f"{type(exc).__name__}:threads_profile_discovery_failed",
+                retryable=True,
+            )
 
 
 class ThreadsPublicHttpAdapter(ThreadsPublicProfileAdapter):

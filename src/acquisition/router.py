@@ -78,7 +78,13 @@ class AdapterRouter:
                 errors.append(f"{backend_name}:not_registered")
                 continue
             try:
-                posts = adapter.acquire(source, limit=limit)
+                if hasattr(adapter, "discover_profile"):
+                    provider_result = adapter.discover_profile(source, limit=limit)
+                    if not provider_result.ok:
+                        raise BackendFailure(provider_result.reason or provider_result.status)
+                    posts = provider_result.data or []
+                else:
+                    posts = adapter.acquire(source, limit=limit)
                 self._pass(backend_name)
                 result = RouteResult(
                     backend_name=backend_name,

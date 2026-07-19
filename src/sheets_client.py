@@ -130,6 +130,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_id", "source_url", "generation_mode", "validator_status",
         "media_asset_id", "media_url", "media_status",
         "source_post_id", "source_video_id", "clip_candidate_id",
+        "caption_provider", "caption_provider_version", "alignment_status",
+        "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
+        "source_copy_similarity", "recent_post_similarity", "source_content_hash",
+        "verification_status", "verification_checked_at",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -202,6 +206,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # A direct source post may be a carousel.  These lists must all share
         # the same source_post_id and are never used to mix different posts.
         "media_asset_ids_json", "media_urls_json", "media_types_json",
+        "caption_provider", "caption_provider_version",
+        "alignment_status", "final_alignment_score", "main_claim_coverage",
+        "unsupported_claim_count", "source_copy_similarity", "recent_post_similarity",
+        "claim_support_json", "content_hash", "failure_signature",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -334,10 +342,16 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Media Growth Engine production provenance / validator state.
         "source_video_id", "video_id", "canonical_video_url",
         "clip_candidate_id", "duplicate_clip_key", "reviewer_status",
-        "transcript_grounded", "transcript_id",
+        "transcript_grounded",
         "public_post_text", "public_post_validator_status",
         "start_seconds", "end_seconds", "aspect_ratio",
         "upload_status", "post_status", "storage_public_id",
+        "caption_provider", "caption_provider_version", "alignment_status",
+        "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
+        "source_copy_similarity", "recent_post_similarity", "claim_support_json",
+        "semantic_segment_score", "selected_reason",
+        "retry_count", "last_error", "last_attempt_at",
+        "failure_signature", "same_failure_count", "quarantined_at", "quarantine_reason",
     ],
     # 文字起こし日次実行記録。120分/日の上限管理に使う。
     "transcription_runs": [
@@ -449,6 +463,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_status", "permission_status", "permission_scope", "attribution_policy",
         "direct_media_reuse_allowed", "collection_status", "processing_status", "content_hash",
         "retry_count", "last_error", "created_at", "updated_at",
+        "comments_json", "comment_count_collected", "detail_status",
+        "failure_signature", "same_failure_count", "last_attempt_at",
+        "quarantined_at", "quarantine_reason",
     ],
     # source_postsの付属media。source_post_idを唯一の親として保持し、本文/素材の取り違えを禁止する。
     "source_post_media": [
@@ -458,6 +475,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "download_status", "cloudinary_status", "cloudinary_public_id", "storage_url",
         "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
         "media_asset_id", "created_at", "updated_at",
+        "failure_signature", "same_failure_count", "last_attempt_at",
+        "quarantined_at", "quarantine_reason",
     ],
     # Acquisition routing observability. These rows contain no browser state,
     # source text, media URLs, tokens or session material.
@@ -470,6 +489,30 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "routing_event_id", "source_id", "platform", "capability", "primary_backend",
         "selected_backend", "fallback_used", "shadow_backend_counts", "status",
         "reason", "created_at",
+    ],
+    "provider_runs": [
+        "provider_run_id", "source_id", "source_post_id", "source_video_id",
+        "platform", "capability", "provider_name", "provider_version",
+        "status", "reason", "retryable", "duration_ms", "attempt_count", "created_at",
+    ],
+    "content_understanding_runs": [
+        "understanding_id", "source_id", "source_post_id", "source_video_id",
+        "account_id", "platform", "main_claims_json", "topic", "audience",
+        "comment_signal_count", "media_item_count", "provider_name", "provider_version",
+        "status", "content_hash", "created_at", "updated_at",
+    ],
+    "semantic_alignment_runs": [
+        "alignment_id", "source_id", "source_post_id", "source_video_id",
+        "clip_candidate_id", "queue_id", "account_id", "platform",
+        "caption_provider", "caption_provider_version", "status",
+        "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
+        "source_copy_similarity", "recent_post_similarity", "claim_support_json",
+        "blocked_reasons", "source_content_hash", "public_post_hash", "created_at", "updated_at",
+    ],
+    "quarantined_items": [
+        "quarantine_id", "entity_type", "entity_id", "source_id", "account_id",
+        "failure_signature", "same_failure_count", "status", "first_failed_at",
+        "last_failed_at", "quarantined_at", "resolution_status", "notes",
     ],
     "trend_signals": [
         "trend_signal_id", "account_id", "platform", "topic", "signal_summary",
@@ -596,6 +639,10 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "source_post_media":              "参照元投稿メディア",
     "backend_health":                 "取得バックエンドヘルス",
     "backend_routing_history":        "取得バックエンド履歴",
+    "provider_runs":                  "Provider実行履歴",
+    "content_understanding_runs":     "内容理解履歴",
+    "semantic_alignment_runs":        "意味整合履歴",
+    "quarantined_items":              "隔離対象",
     "trend_signals":                  "トレンドシグナル",
     "source_candidates":              "収集候補",
     "media_permissions":              "メディア利用許可",

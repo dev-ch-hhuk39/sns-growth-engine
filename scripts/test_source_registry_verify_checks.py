@@ -28,12 +28,12 @@ CHECK_NAMES = [
     "source_registry_has_required_categories",
     "source_urls_are_deduped",
     "x_sources_manual_only_current_phase",
-    "tiktok_youtube_reference_only",
+    "video_sources_rights_classified",
     "beauty_future_inactive",
     "beauty_target_account_id_preserved",
     "beauty_reference_only_safety",
     "waiting_url_input_not_fetchable",
-    "third_party_media_not_reusable_by_default",
+    "unapproved_media_not_reusable_by_default",
     "source_priority_valid_range",
 ]
 
@@ -69,8 +69,16 @@ def test_x_manual_only():
 def test_tiktok_youtube_reference_only():
     vids = [r for r in ACC if r["source_platform"] in ("tiktok", "youtube")]
     assert vids
-    assert all(r["reuse_policy"] == "reference_only" and r["media_policy"] == "do_not_download" for r in vids)
-    assert all(r["allow_download"] == "false" and r["allow_cut"] == "false" and r["allow_upload"] == "false" for r in vids)
+    approved = {"owned", "licensed", "approved_creator_clip"}
+    for row in vids:
+        raw = BY_ID[row["source_id"]]
+        if raw.get("rights_status") in approved:
+            assert raw.get("permission_status") == "approved"
+            assert row["allow_download"] == "gated" and row["allow_cut"] == "gated" and row["allow_upload"] == "gated"
+            assert row["can_reuse_media"] == "true"
+        else:
+            assert row["allow_download"] == "false" and row["allow_cut"] == "false" and row["allow_upload"] == "false"
+            assert row["can_reuse_media"] == "false"
 
 
 def test_beauty_future_inactive():
@@ -100,7 +108,9 @@ def test_waiting_url_input_not_fetchable():
 
 
 def test_third_party_media_not_reusable():
-    assert all(r["allow_upload"] == "false" and r["allow_cut"] == "false" for r in ACC)
+    approved = {"owned", "licensed", "approved_creator_clip"}
+    rows = [r for r in ACC if BY_ID[r["source_id"]].get("rights_status") not in approved]
+    assert all(r["allow_download"] == "false" and r["allow_upload"] == "false" and r["allow_cut"] == "false" for r in rows)
 
 
 def test_priority_valid_range():

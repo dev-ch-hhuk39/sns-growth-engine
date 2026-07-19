@@ -108,6 +108,22 @@ class XPublisher(BasePublisher):
                 ),
             )
 
+        # X publishing is outside the active production scope. Keep a third,
+        # independent feature gate so credentials present in a local .env can
+        # never turn this legacy path into a network call accidentally.
+        x_publisher_enabled = os.environ.get("X_PUBLISHER_ENABLED", "false").strip().lower()
+        if x_publisher_enabled not in ("1", "true", "yes"):
+            return PublishResult(
+                platform="x",
+                success=False,
+                dry_run=False,
+                message=(
+                    "SAFETY_STOP: X_PUBLISHER_ENABLED=false です。"
+                    " 現在の本番運用はThreads専用です。"
+                    f" (queue_id={queue_id})"
+                ),
+            )
+
         # ---- テキスト検証 ----
         if not text.strip():
             return PublishResult(

@@ -14,6 +14,7 @@ test_cloudflare_transcription_credentials.py - Cloudflare 文字起こし認証�
 """
 from __future__ import annotations
 
+import argparse
 import os
 import sys
 
@@ -37,6 +38,14 @@ SAFETY_VARS = {
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Cloudflare transcription credential presence check")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="return non-zero when optional Cloudflare credentials are unavailable",
+    )
+    args = parser.parse_args()
+
     print("=" * 60)
     print("  Cloudflare 文字起こし認証情報確認")
     print("=" * 60)
@@ -49,8 +58,7 @@ def main() -> int:
     for var in REQUIRED_VARS:
         val = os.environ.get(var, "")
         if val:
-            masked = val[:4] + "****" + val[-2:] if len(val) > 8 else "****"
-            print(f"  [OK]    {var}: {masked}")
+            print(f"  [OK]    {var}: set (value hidden)")
         else:
             print(f"  [MISS]  {var}: 未設定")
             issues += 1
@@ -78,11 +86,11 @@ def main() -> int:
         print("  認証情報チェック: OK")
         print("  次のステップ: test_cloudflare_transcription_smoke.py")
     else:
-        print(f"  認証情報チェック: {issues} 件の問題")
-        print("  .env に必要な変数を設定してください")
+        print(f"  認証情報チェック: UNAVAILABLE ({issues} 件未設定)")
+        print("  任意providerは無効です。実APIは呼び出していません。")
         print("  参考: docs/cloudflare-transcription-setup.md")
 
-    return 0 if issues == 0 else 1
+    return 0 if issues == 0 or not args.strict else 1
 
 
 if __name__ == "__main__":

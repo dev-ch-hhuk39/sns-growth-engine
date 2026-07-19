@@ -9,7 +9,7 @@ blocked = c.build_plan(argparse.Namespace(input_path="", rights_status="third_pa
 plan = c.build_plan(argparse.Namespace(input_path="", rights_status="owned", dry_run=True, cut=False, confirm_cut=False, vertical=False, burn_subtitles=False))
 checks = [
     ("third party blocked", blocked["status"] == "BLOCKED"),
-    ("rights reason", any("rights_status" in r for r in blocked["blocked_reasons"])),
+    ("rights reason", any("reference-only" in r for r in blocked["blocked_reasons"])),
     ("plan only no cut", plan["status"] == "PLAN_ONLY"),
     ("adapter status", "ffmpeg_cli" in plan["adapter_status"]),
 ]

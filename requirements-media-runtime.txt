@@ -1,0 +1,3 @@
+-r requirements-acquisition.txt
+faster-whisper==1.2.1
+python-magic==0.4.27

@@ -9,6 +9,7 @@ direct-media permission scope are plans only, even when clip permission exists.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -27,6 +28,16 @@ from media_post_validator import validate_media_post  # noqa: E402
 from media_source_policy import DIRECT_SCOPE, decision  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, generate_grounded_reader_facing_post, public_preview  # noqa: E402
+from generation.source_grounded_caption import (  # noqa: E402
+    GitHubModelsGroundedProvider,
+    SourceGroundedCaptionService,
+    build_source_post_bundle,
+)
+from acquisition.reliability import (  # noqa: E402
+    build_quarantine_record,
+    is_quarantined,
+    register_failure,
+)
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
@@ -112,8 +123,11 @@ def _permission_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
     return result
 
 
-def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
-    """Select one complete source post; never combine media across parents."""
+def select_direct_candidates(
+    client: SheetsClient,
+    account_id: str,
+) -> tuple[list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]], list[str]]:
+    """Return complete parent-preserving candidates in deterministic order."""
     posts = {str(row.get("source_post_id", "")): row for row in _records(client, "source_posts")}
     sources = _source_map(client)
     permissions = _permission_map(client)
@@ -126,13 +140,16 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         media_by_post.setdefault(str(row.get("source_post_id", "")), []).append(row)
     used_assets = {str(row.get("media_asset_id", "")) for row in posted}
     reasons: list[str] = []
-    selected: tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None = None
+    candidates: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
     for post_id, media_rows in sorted(media_by_post.items()):
         post = posts.get(post_id)
         if not post:
             reasons.append("source_post_link_missing")
             continue
         if str(post.get("target_account_id", "")) != account_id:
+            continue
+        if is_quarantined(post):
+            reasons.append(f"{post_id}:source_post_quarantined")
             continue
         source = sources.get(str(post.get("source_id", "")), {})
         permission = permissions.get(str(post.get("source_id", "")), {})
@@ -150,6 +167,10 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         resolved: list[dict[str, Any]] = []
         incomplete = False
         for media in sorted(media_rows, key=lambda row: int(str(row.get("media_index", "0") or "0"))):
+            if is_quarantined(media):
+                incomplete = True
+                reasons.append(f"{post_id}:media_quarantined")
+                break
             asset = next((row for row in assets_by_post.get(post_id, []) if str(row.get("original_media_url", "")) == str(media.get("original_media_url", ""))), {})
             merged = {**media, **{key: value for key, value in asset.items() if str(value or "").strip()}}
             asset_id = str(merged.get("media_asset_id") or merged.get("media_id") or merged.get("source_post_media_id") or "")
@@ -184,9 +205,127 @@ def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict
         # A mixed carousel can be supported only by an explicit official API
         # gate later in the publisher.  Keep its parent intact either way.
         primary = {**resolved[0], "carousel_media": resolved}
-        selected = (post, primary, source)
-        break
-    return (*selected, reasons) if selected else (None, None, None, reasons)
+        candidates.append((post, primary, source))
+    return candidates, reasons
+
+
+def select_direct_candidate(client: SheetsClient, account_id: str) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
+    """Compatibility wrapper returning the first complete candidate."""
+    candidates, reasons = select_direct_candidates(client, account_id)
+    return (*candidates[0], reasons) if candidates else (None, None, None, reasons)
+
+
+def _update_record(
+    client: SheetsClient,
+    logical: str,
+    id_field: str,
+    id_value: str,
+    fields: dict[str, Any],
+) -> bool:
+    client._ensure_tab(logical, TAB_DEFINITIONS[logical])
+    ws = client._ws(logical)
+    headers = client._call_with_rate_limit_retry(
+        f"row_values:{logical}:reliability", lambda: ws.row_values(1)
+    )
+    if id_field not in headers:
+        return False
+    cell = client._call_with_rate_limit_retry(
+        f"find:{logical}:{id_value}:reliability",
+        lambda: ws.find(id_value, in_column=headers.index(id_field) + 1),
+    )
+    if not cell:
+        return False
+    client._batch_update_fields(ws, headers, cell.row, fields, label=f"{logical}:{id_value}:reliability")
+    _invalidate_records(client, logical)
+    return True
+
+
+def _record_candidate_failure(
+    client: SheetsClient,
+    *,
+    post: dict[str, Any],
+    media: dict[str, Any],
+    account_id: str,
+    reason: str,
+) -> dict[str, Any]:
+    entity_id = str(media.get("source_post_media_id") or media.get("media_asset_id") or post.get("source_post_id") or "")
+    state = register_failure(media, reason)
+    _update_record(
+        client,
+        "source_post_media",
+        "source_post_media_id",
+        str(media.get("source_post_media_id", "")),
+        {key: state.get(key, "") for key in (
+            "retry_count", "last_error", "failure_signature", "same_failure_count",
+            "last_attempt_at", "quarantined_at", "quarantine_reason",
+        )},
+    )
+    if is_quarantined(state):
+        row = build_quarantine_record(
+            state,
+            entity_type="source_post_media",
+            entity_id=entity_id,
+            source_id=str(post.get("source_id", "")),
+            account_id=account_id,
+        )
+        existing = {str(item.get("quarantine_id", "")) for item in _records(client, "quarantined_items")}
+        if row["quarantine_id"] not in existing:
+            append_row(client, "quarantined_items", row)
+            _invalidate_records(client, "quarantined_items")
+    return state
+
+
+def _record_caption_attempt(
+    client: SheetsClient,
+    *,
+    post: dict[str, Any],
+    account_id: str,
+    grounded: dict[str, Any],
+) -> None:
+    now = datetime.now(timezone.utc)
+    suffix = str(int(now.timestamp() * 1_000_000))
+    analysis = grounded.get("internal_analysis") if isinstance(grounded.get("internal_analysis"), dict) else {}
+    alignment = grounded.get("semantic_alignment") if isinstance(grounded.get("semantic_alignment"), dict) else {}
+    public_text = str(grounded.get("public_post_text", ""))
+    append_row(client, "content_understanding_runs", {
+        "understanding_id": f"cu_{post.get('source_post_id', '')}_{suffix}",
+        "source_id": post.get("source_id", ""),
+        "source_post_id": post.get("source_post_id", ""),
+        "account_id": account_id,
+        "platform": "threads",
+        "main_claims_json": json.dumps(analysis.get("main_claims", []), ensure_ascii=False),
+        "topic": analysis.get("topic", ""),
+        "audience": analysis.get("audience", ""),
+        "comment_signal_count": post.get("comment_count_collected", "0"),
+        "media_item_count": len(post.get("media_items", []) or []),
+        "provider_name": grounded.get("provider_name", ""),
+        "provider_version": grounded.get("provider_version", ""),
+        "status": grounded.get("status", "BLOCKED"),
+        "content_hash": post.get("content_hash", ""),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    })
+    append_row(client, "semantic_alignment_runs", {
+        "alignment_id": f"sa_{post.get('source_post_id', '')}_{suffix}",
+        "source_id": post.get("source_id", ""),
+        "source_post_id": post.get("source_post_id", ""),
+        "account_id": account_id,
+        "platform": "threads",
+        "caption_provider": grounded.get("provider_name", ""),
+        "caption_provider_version": grounded.get("provider_version", ""),
+        "status": alignment.get("status", "BLOCKED"),
+        "final_alignment_score": alignment.get("final_alignment_score", ""),
+        "main_claim_coverage": alignment.get("main_claim_coverage", ""),
+        "unsupported_claim_count": alignment.get("unsupported_claim_count", ""),
+        "source_copy_similarity": alignment.get("source_copy_similarity", ""),
+        "recent_post_similarity": alignment.get("recent_post_similarity", ""),
+        "claim_support_json": json.dumps(grounded.get("claim_support", []), ensure_ascii=False),
+        "blocked_reasons": json.dumps(grounded.get("blocked_reasons", []), ensure_ascii=False),
+        "source_content_hash": post.get("content_hash", ""),
+        "public_post_hash": hashlib.sha256(public_text.encode("utf-8")).hexdigest() if public_text else "",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    })
 
 
 def build_plan(
@@ -196,6 +335,7 @@ def build_plan(
     *,
     apply: bool,
     manual_e2e_proof: bool = False,
+    caption_service: SourceGroundedCaptionService | None = None,
 ) -> dict[str, Any]:
     if manual_e2e_proof and slot_id:
         return {"status": "BLOCKED", "blocked_reasons": ["manual_e2e_proof must not claim a scheduled slot"]}
@@ -221,56 +361,90 @@ def build_plan(
         return {"status": "NO_POST", "account_id": account_id, "slot_id": slot_id, "manual_e2e_proof": manual_e2e_proof, "would_post": False, "today_post_count": len(today_posts), "blocked_reasons": ["daily_post_cap_reached"]}
     if len(direct_today) >= direct_cap:
         return {"status": "NO_POST", "account_id": account_id, "slot_id": slot_id, "manual_e2e_proof": manual_e2e_proof, "would_post": False, "today_direct_media_post_count": len(direct_today), "blocked_reasons": ["direct_media_daily_post_cap_reached"]}
-    post, media, _source, reasons = select_direct_candidate(client, account_id)
-    if not post or not media:
+    candidates, reasons = select_direct_candidates(client, account_id)
+    if not candidates:
         return {"status": "NO_POST", "account_id": account_id, "slot_id": slot_id, "would_post": False, "blocked_reasons": reasons[:30]}
-    # Never expose original_post_text publicly. The account-specific generator
-    # is intentionally based on a fresh reader-facing angle.
     recent_posts = [
         str(row.get("posted_text", ""))
         for row in posted_rows
         if str(row.get("account_id", "")) == account_id
     ][-30:]
-    grounded = generate_grounded_reader_facing_post(
-        account_id,
-        private_signal=str(post.get("original_post_text", "")),
-        media_metadata={
-            "media_type": media.get("media_type", ""),
-            "duration_seconds": media.get("duration_seconds", ""),
-            "aspect_ratio": media.get("aspect_ratio", ""),
-        },
-        slot_theme=str(slot.get("theme", "")),
-        recent_posts=recent_posts,
-        index=(sum(map(ord, str(post["source_post_id"]))) % 20) + 1,
-    )
-    text = str(grounded["public_post_text"])
-    validation = final_public_post_validator(text, account_id)
-    carousel_media = list(media.get("carousel_media") or [media])
-    carousel_urls = [str(item.get("storage_url", "")) for item in carousel_media]
-    carousel_asset_ids = [str(item.get("media_asset_id") or item.get("media_id") or item.get("source_post_media_id") or "") for item in carousel_media]
-    carousel_types = [str(item.get("media_type", "")).lower() for item in carousel_media]
-    asset_id = str(media.get("media_asset_id") or media.get("source_post_media_id") or "")
-    validator = validate_media_post({
-        "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
-        "media_url": media.get("storage_url", ""), "media_asset_id": asset_id, "platform": "threads",
-        "account_id": account_id, "media_type": str(media.get("media_type", "video")), "duration_seconds": media.get("duration_seconds", 0),
-        "aspect_ratio": str(media.get("aspect_ratio", "")), "public_post_text": text,
-        "media_origin": "direct_reference",
-    })
+    caption_service = caption_service or SourceGroundedCaptionService(GitHubModelsGroundedProvider())
+    attempted: list[dict[str, Any]] = []
+    for post, media, _source in candidates:
+        # Never expose original_post_text publicly. A source-specific provider
+        # maps every public claim back to this exact source_post_id.
+        carousel_media = list(media.get("carousel_media") or [media])
+        bundle = build_source_post_bundle(post, carousel_media)
+        grounded = caption_service.generate(bundle, account_id=account_id, recent_posts=recent_posts)
+        text = str(grounded.get("public_post_text", ""))
+        validation = final_public_post_validator(text, account_id)
+        alignment = grounded.get("semantic_alignment", {})
+        carousel_urls = [str(item.get("storage_url", "")) for item in carousel_media]
+        carousel_asset_ids = [str(item.get("media_asset_id") or item.get("media_id") or item.get("source_post_media_id") or "") for item in carousel_media]
+        carousel_types = [str(item.get("media_type", "")).lower() for item in carousel_media]
+        asset_id = str(media.get("media_asset_id") or media.get("source_post_media_id") or "")
+        validator = validate_media_post({
+            "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
+            "media_url": media.get("storage_url", ""), "media_asset_id": asset_id, "platform": "threads",
+            "account_id": account_id, "media_type": str(media.get("media_type", "video")), "duration_seconds": media.get("duration_seconds", 0),
+            "aspect_ratio": str(media.get("aspect_ratio", "")), "public_post_text": text,
+            "media_origin": "direct_reference",
+            "alignment_status": alignment.get("status", "BLOCKED"),
+            "final_alignment_score": alignment.get("final_alignment_score", 0),
+            "main_claim_coverage": alignment.get("main_claim_coverage", 0),
+            "unsupported_claim_count": alignment.get("unsupported_claim_count", 1),
+            "source_copy_similarity": alignment.get("source_copy_similarity", 1),
+            "recent_post_similarity": alignment.get("recent_post_similarity", 1),
+        })
+        ready = grounded.get("status") == "PASS" and validation["status"] == "PASS" and validator["status"] == "PASS"
+        blocked_reasons = (
+            list(grounded.get("blocked_reasons", []))
+            + list(validation.get("blocked_reasons", []))
+            + list(validator.get("blocked_reasons", []))
+        )
+        if apply:
+            _record_caption_attempt(client, post=post, account_id=account_id, grounded=grounded)
+        if ready:
+            return {
+                "status": "WILL_APPLY" if apply else "PLAN_ONLY",
+                "account_id": account_id, "slot_id": slot_id, "manual_e2e_proof": manual_e2e_proof, "source_post": post, "source_post_media": media,
+                "source_post_id": post["source_post_id"], "media_asset_id": asset_id, "public_post_text": text,
+                "media_asset_ids": carousel_asset_ids, "media_urls": carousel_urls, "media_types": carousel_types,
+                "today_post_count": len(today_posts), "today_direct_media_post_count": len(direct_today),
+                "daily_post_cap": daily_cap, "direct_media_daily_post_cap": direct_cap,
+                "public_post_preview": public_preview(text), "final_public_post_validator": validation["status"],
+                "internal_analysis": grounded.get("internal_analysis", {}),
+                "claim_support": grounded.get("claim_support", []),
+                "caption_provider": grounded.get("provider_name", ""),
+                "caption_provider_version": grounded.get("provider_version", ""),
+                "semantic_alignment": alignment,
+                "media_validator": validator["status"], "would_post": bool(apply),
+                "candidate_attempt_count": len(attempted) + 1,
+                "skipped_candidate_attempts": attempted,
+                "blocked_reasons": [],
+            }
+        failure_reason = "|".join(sorted(set(str(reason) for reason in blocked_reasons if reason))) or "caption_or_alignment_blocked"
+        state = _record_candidate_failure(
+            client, post=post, media=media, account_id=account_id, reason=failure_reason,
+        ) if apply else register_failure(media, failure_reason)
+        attempted.append({
+            "source_post_id": post.get("source_post_id", ""),
+            "media_asset_id": asset_id,
+            "failure_signature": state.get("failure_signature", ""),
+            "same_failure_count": state.get("same_failure_count", "0"),
+            "quarantined": is_quarantined(state),
+            "blocked_reasons": blocked_reasons[:10],
+        })
     return {
-        "status": "WILL_APPLY" if apply and validation["status"] == "PASS" and validator["status"] == "PASS" else "PLAN_ONLY" if validation["status"] == "PASS" and validator["status"] == "PASS" else "BLOCKED",
-        "account_id": account_id, "slot_id": slot_id, "manual_e2e_proof": manual_e2e_proof, "source_post": post, "source_post_media": media,
-        "source_post_id": post["source_post_id"], "media_asset_id": asset_id, "public_post_text": text,
-        "media_asset_ids": carousel_asset_ids, "media_urls": carousel_urls, "media_types": carousel_types,
-        "today_post_count": len(today_posts), "today_direct_media_post_count": len(direct_today),
-        "daily_post_cap": daily_cap, "direct_media_daily_post_cap": direct_cap,
-        "public_post_preview": public_preview(text), "final_public_post_validator": validation["status"],
-        "grounding_summary": grounded.get("grounding_summary", {}),
-        "transformation_summary": grounded.get("transformation_summary", ""),
-        "similarity_score": grounded.get("similarity_score", 1.0),
-        "recent_post_similarity_score": grounded.get("recent_post_similarity_score", 1.0),
-        "media_validator": validator["status"], "would_post": bool(apply and validator["status"] == "PASS"),
-        "blocked_reasons": validation.get("blocked_reasons", []) + validator.get("blocked_reasons", []),
+        "status": "BLOCKED",
+        "account_id": account_id,
+        "slot_id": slot_id,
+        "manual_e2e_proof": manual_e2e_proof,
+        "would_post": False,
+        "candidate_attempt_count": len(attempted),
+        "skipped_candidate_attempts": attempted,
+        "blocked_reasons": (reasons + [reason for row in attempted for reason in row.get("blocked_reasons", [])])[:30],
     }
 
 
@@ -290,6 +464,16 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "media_status": "UPLOADED", "media_required": "true", "media_type": media.get("media_type", "video"), "duration_seconds": media.get("duration_seconds", ""),
         "aspect_ratio": media.get("aspect_ratio", ""), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "public_post_text": plan["public_post_text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
+        "caption_provider": plan.get("caption_provider", ""),
+        "caption_provider_version": plan.get("caption_provider_version", ""),
+        "alignment_status": plan.get("semantic_alignment", {}).get("status", "BLOCKED"),
+        "final_alignment_score": plan.get("semantic_alignment", {}).get("final_alignment_score", ""),
+        "main_claim_coverage": plan.get("semantic_alignment", {}).get("main_claim_coverage", ""),
+        "unsupported_claim_count": plan.get("semantic_alignment", {}).get("unsupported_claim_count", ""),
+        "source_copy_similarity": plan.get("semantic_alignment", {}).get("source_copy_similarity", ""),
+        "recent_post_similarity": plan.get("semantic_alignment", {}).get("recent_post_similarity", ""),
+        "claim_support_json": json.dumps(plan.get("claim_support", []), ensure_ascii=False),
+        "content_hash": post.get("content_hash", ""),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     if queue_id not in {str(row.get("queue_id", "")) for row in _records(client, "queue")}:

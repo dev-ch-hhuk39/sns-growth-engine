@@ -241,6 +241,10 @@ def main() -> int:
     if args.source_id:
         wanted = set(args.source_id)
         sources = [s for s in sources if str(s.get("source_id", "")) in wanted]
+    if args.source_url:
+        # An explicit URL is a bounded one-off target, not an instruction to
+        # combine that target with every enabled registry source.
+        sources = []
     for i, url in enumerate(args.source_url, 1):
         sources.append({
             "source_id": f"local_threads_source_{i}",

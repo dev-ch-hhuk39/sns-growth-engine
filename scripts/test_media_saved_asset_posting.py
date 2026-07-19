@@ -8,7 +8,7 @@ from run_media_production_pipeline import select_saved_media_candidate
 def main() -> int:
     text = "配信を続けるには、最初から完璧に話すより初見が入りやすい空気を作る方が大事。今何の話をしているか伝えて、コメントしやすい一言を置く。この積み重ねが次も来やすい配信につながる。"
     videos = [{"source_video_id": "sv1", "account_id": "liver_manager", "platform": "youtube"}]
-    clips = [{"clip_candidate_id": "clip1", "source_video_id": "sv1", "rights_status": "approved_creator_clip", "permission_status": "approved", "public_post_text": text}]
+    clips = [{"clip_candidate_id": "clip1", "source_video_id": "sv1", "rights_status": "approved_creator_clip", "permission_status": "approved", "alignment_status": "PASS", "public_post_text": text}]
     assets = [{"media_id": "asset1", "video_clip_id": "clip1", "account_id": "liver_manager", "upload_status": "UPLOADED", "storage_url": "https://media.example.invalid/asset1.mp4", "rights_status": "approved_creator_clip", "permission_status": "approved"}]
     clip, video, asset, reasons = select_saved_media_candidate(clips, videos, assets, [], "liver_manager")
     skipped_clip, _, _, skipped_reasons = select_saved_media_candidate(clips, videos, assets, [{"clip_candidate_id": "clip1"}], "liver_manager")

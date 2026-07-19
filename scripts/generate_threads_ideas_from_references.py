@@ -468,7 +468,17 @@ def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, An
         existing_rows[row_key] = (-1, dict(row))
         added += 1
     if update_ranges:
-        ws.batch_update(update_ranges, value_input_option="USER_ENTERED")
+        batch_update = getattr(ws, "batch_update", None)
+        if callable(batch_update):
+            batch_update(update_ranges, value_input_option="USER_ENTERED")
+        else:
+            # Keep the helper compatible with minimal worksheet adapters while
+            # production gspread still receives one bounded batch request.
+            for update in update_ranges:
+                row_number = int(re.match(r"[A-Z]+(\d+):", update["range"]).group(1))
+                values = update["values"][0]
+                for col, value in enumerate(values, start=1):
+                    ws.update_cell(row_number, col, str(value))
     if append_values:
         ws.append_rows(append_values, value_input_option="USER_ENTERED")
     return {"added": added, "skipped": skipped, "refreshed": refreshed}
@@ -575,8 +585,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "delegate_script": delegate,
         "delegate_argv": argv,
         "safety": {
-            # 委譲先は WAITING_REVIEW で書く。これは worker eligible だが、
-            # 本 CLI も委譲先も投稿処理を呼ばないため自動投稿はされない。
+            # 委譲先は WAITING_REVIEW で書く。worker は READY のみを拾う。
             "candidate_status": CANDIDATE_STATUS,
             "worker_selectable": CANDIDATE_STATUS in ELIGIBLE_STATUSES,
             # 本 CLI / 委譲先は生成専用で投稿経路を一切持たない（最重要不変条件）。
@@ -589,7 +598,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         },
         "notes": (
             "本 CLI は生成専用（投稿しない）。候補は WAITING_REVIEW で書かれ worker 非対象。"
-            "READY化は approve_queue.py または auto_approve_queue.py のみ。"
+            "READY化は approve_queue.py または validator/cap/cooldownを通す auto_approve_queue.py のみ。"
             "実投稿には別 worker の三重ゲートが必要。"
             "threads のみ。実行は --apply --confirm-generate。"
         ),

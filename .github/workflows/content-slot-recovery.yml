@@ -31,7 +31,7 @@ env:
 
 jobs:
   recover-missed-slots:
-    runs-on: [self-hosted, linux, x64, sns-growth, production]
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
@@ -43,10 +43,10 @@ jobs:
       THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.11"}
       - run: pip install -r requirements.txt
       - name: Dry-run missed-slot scan

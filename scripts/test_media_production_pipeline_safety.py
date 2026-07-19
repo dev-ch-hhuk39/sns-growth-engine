@@ -42,9 +42,9 @@ source_videos = [
     },
 ]
 clips = [
-    {"clip_candidate_id": "clip_tt", "source_video_id": "sv_tt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "clip_score": 99, "transcript_grounded": "true"},
-    {"clip_candidate_id": "clip_yt_1", "source_video_id": "sv_yt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "clip_score": 90, "transcript_grounded": "true"},
-    {"clip_candidate_id": "clip_yt_2", "source_video_id": "sv_yt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "clip_score": 89, "transcript_grounded": "true"},
+    {"clip_candidate_id": "clip_tt", "source_video_id": "sv_tt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "clip_score": 99, "transcript_grounded": "true", "alignment_status": "PASS"},
+    {"clip_candidate_id": "clip_yt_1", "source_video_id": "sv_yt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "clip_score": 90, "transcript_grounded": "true", "alignment_status": "PASS"},
+    {"clip_candidate_id": "clip_yt_2", "source_video_id": "sv_yt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "clip_score": 89, "transcript_grounded": "true", "alignment_status": "PASS"},
 ]
 selected, selected_video, _ = select_candidate(clips, source_videos, [])
 checks.extend([

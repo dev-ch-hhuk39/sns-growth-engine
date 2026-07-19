@@ -63,7 +63,13 @@ def main() -> int:
     checks.append(("required+ATTACHED+url→非block", rqm({"media_required": "true", "media_url": "https://x/a.png", "media_status": "ATTACHED"})["block_reason"] == ""))
     checks.append(("required無し→非block", rqm({"media_url": ""})["block_reason"] == ""))
 
-    drafts = [{"draft_id": "d1", "body_md": "本文テキスト"}]
+    drafts = [{
+        "draft_id": "d1",
+        "body_md": (
+            "夜職で店を選ぶときは、時給だけで決めると続けにくくなることがあります。\n\n"
+            "客層や出勤ペース、相談のしやすさまで確認して、自分が無理なく続けられる環境かを整理することが大切です。"
+        ),
+    }]
     client = _FakeClient({"social_derivatives": [], "drafts": drafts, "posted_results": [], "logs": []})
 
     # process_one: media_required=true・url無し → DRY_RUN_BLOCKED（dry-run）
