@@ -1,5 +1,53 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex Work Package 3 integrity-repair checkpoint
+
+### Current state
+
+- `main` was merged through PR #3 and is synchronized with `origin/main` at
+  `ffa5ddef40b824a2f932e7f60e138672bc490464` before this checkpoint branch.
+- Repository visibility is public. `production` is a protected Environment;
+  secret names remain repository-managed and were inspected by name only.
+- CI run `29883163439` passed `tests`, `dependency-audit`, and
+  `secret-history-scan`.
+
+### Verified operational finding
+
+- `Content Daily Dry-Run` run `29883365575` did not reach any publisher step.
+  The read-only Sheets verifier stopped at `62/63` because one historical
+  duplicate `queue_id` exists. Credentials were present; no post, download,
+  cut, upload, transcript call, or source acquisition occurred.
+- Historical media-evidence and duplicate-post warnings remain audit markers,
+  not evidence for new Goal canaries.
+
+### Pending change
+
+- Added manual-only `.github/workflows/production-integrity-reconcile.yml`.
+  It only runs `reconcile_production_integrity.py`, requires both an explicit
+  Actions confirmation and Sheets credentials, keeps every publish/media gate
+  false, retains duplicate rows under audit-safe IDs, and verifies Sheets after
+  the update.
+- Added `scripts/test_production_integrity_reconcile_workflow.py`.
+- Local PASS: reconcile unit contract 8/8, reconcile-workflow contract 7/7,
+  workflow safety 368/368, `git diff --check`.
+
+### Next actions
+
+1. Merge this small workflow change through CI, dispatch it with
+   `confirm_reconcile=true`, then require a 63/63 read-only verifier result.
+2. Re-run both account dry-runs. Continue with bounded source/provider checks
+   only after the queue integrity gate is clean.
+3. Do not claim Goal completion: final media canaries, current-final-main
+   evidence, and a valid liver-manager third-party Threads source are still
+   outstanding.
+
+### Safe ownership boundaries
+
+- Safe next files: `scripts/reconcile_production_integrity.py`, the new
+  reconcile workflow, verifier tests, and Goal evidence docs.
+- Do not edit `.env`, `data/`, `output/`, `.claude/plans/`, any secret/token/
+  cookie/storage-state file, or weaken X/beauty/media-rights/public-text gates.
+
 ## 2026-07-22 Codex Goal Work Package 1 checkpoint
 
 ### 本システムについて
