@@ -131,6 +131,7 @@ jobs:
 
       - name: Generate transcript-grounded clip candidates
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        timeout-minutes: 5
         run: |
           python3 scripts/run_media_growth_engine.py \
             --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-media-growth

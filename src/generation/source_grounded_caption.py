@@ -216,6 +216,7 @@ class SourceGroundedCaptionService:
     alignment_provider: Any = None
     fallback_provider: Any = None
     allow_deterministic_fallback: bool = False
+    retry_primary_on_alignment_failure: bool = True
 
     def __post_init__(self) -> None:
         if self.alignment_provider is None:
@@ -287,7 +288,7 @@ class SourceGroundedCaptionService:
         # bounded fallback is considered; this keeps provider variance from
         # needlessly consuming a media candidate.
         primary_attempt_count = 1
-        if blocked or alignment.status != "PASS":
+        if self.retry_primary_on_alignment_failure and (blocked or alignment.status != "PASS"):
             primary_retry = self.generation_provider.generate(
                 post,
                 account_id=account_id,

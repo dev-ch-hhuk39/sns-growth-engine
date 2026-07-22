@@ -17,7 +17,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import rights_allows_media_use  # noqa: E402
 from acquisition.models import SourceMediaItem, SourcePostBundle, stable_content_hash  # noqa: E402
-from generation.source_grounded_caption import GitHubModelsGroundedProvider, SourceGroundedCaptionService  # noqa: E402
+from generation.source_grounded_caption import (  # noqa: E402
+    DeterministicGroundedProvider,
+    GitHubModelsGroundedProvider,
+    SourceGroundedCaptionService,
+)
 from video.semantic_clip_planner import plan_semantic_clips  # noqa: E402
 from discover_approved_source_videos import load_existing_source_videos  # noqa: E402
 from config_loader import get_config  # noqa: E402
@@ -514,7 +518,17 @@ def build_media_growth_plan(
     ]
 
     source_by_id = {str(s.get("source_id", "")): s for s in selected}
-    caption_service = caption_service or SourceGroundedCaptionService(GitHubModelsGroundedProvider())
+    # One transcript may produce several clip windows. Bound remote generation
+    # to one attempt per video so a preparation workflow remains finite.
+    remote_caption_timeout = int(config.get("remote_caption_timeout_seconds", 25))
+    remote_caption_limit = max(0, int(config.get("max_remote_caption_generations_per_video", 1)))
+    uses_default_caption_service = caption_service is None
+    caption_service = caption_service or SourceGroundedCaptionService(
+        GitHubModelsGroundedProvider(timeout_seconds=remote_caption_timeout),
+        fallback_provider=DeterministicGroundedProvider(),
+        retry_primary_on_alignment_failure=False,
+    )
+    deterministic_caption_service = SourceGroundedCaptionService(DeterministicGroundedProvider())
     public_text = ""
     validation = {"status": "BLOCKED", "blocked_reasons": ["no_grounded_clip_caption"]}
     existing_clips: list[dict[str, Any]] = []
@@ -571,7 +585,12 @@ def build_media_growth_plan(
                 media_items=(media,),
                 content_hash=str(source_video.get("content_hash", "")) or stable_content_hash(str(spec.get("excerpt", "")), [video_url]),
             )
-            clip_output = caption_service.generate(
+            active_caption_service = (
+                caption_service
+                if not uses_default_caption_service or i <= remote_caption_limit
+                else deterministic_caption_service
+            )
+            clip_output = active_caption_service.generate(
                 bundle,
                 account_id=account_id,
                 transcript_excerpt=str(spec.get("excerpt", "")),
@@ -724,6 +743,11 @@ def build_media_growth_plan(
         "public_post_preview": public_preview(public_text),
         "final_public_post_validator": validation["status"],
         "media_plan": media_plan,
+        "caption_generation_budget": {
+            "max_remote_caption_generations_per_video": remote_caption_limit,
+            "remote_caption_timeout_seconds": remote_caption_timeout,
+            "remaining_candidates_use": "deterministic_grounded_fallback",
+        },
         "would_download": False,
         "would_cut": False,
         "would_upload": False,

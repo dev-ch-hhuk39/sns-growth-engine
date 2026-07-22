@@ -1,5 +1,44 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex WP-C bounded media caption generation
+
+### 本システムについて / 変更ファイル一覧
+
+SNS Growth Engine v2 は、`public_post_text` だけを公開境界へ渡し、許可済み
+media の discovery / transcript / clip candidate / upload / Threads 投稿を別々の
+gate で扱う。今回の対象は投稿ではなく、Liver media preparation の候補生成時間を
+有限にする修正である。
+
+- branch: `fix/bound-media-caption-generation`
+- baseline `main` / `origin/main`: `8c820073efc44a9c0c19a89fde22564efe34b4c0`
+- Updated: `src/generation/source_grounded_caption.py`,
+  `scripts/run_media_growth_engine.py`, `config/media_growth_engine.json`,
+  media growth/transcription workflow YAMLs, `docs/ai-work-handoff.md`.
+- Added: `scripts/test_media_growth_caption_generation_bounded.py`.
+
+### 実装内容 / テスト結果
+
+- Run `29892271688` は ffmpeg / discovery / transcription までは成功したが、
+  `Generate transcript-grounded clip candidates` が複数windowごとの外部モデル
+  呼出と再試行で長時間化したため、投稿・download・cut・upload前に cancel した。
+- media runner は動画ごとの外部caption生成を最大1回、timeout 25秒に制限する。
+  追加clip windowは同一の厳格なsemantic/public validatorを通す
+  deterministic grounded fallback を使う。通常text投稿のprimary retryは維持する。
+- 各workflowの候補生成stepには5分の上限を追加した。publish gateはすべてfalseの
+  ままであり、これらの変更は投稿を有効化しない。
+- PASS: bounded caption test、primary retry regression、media candidate plan、
+  public preview、`py_compile`、`git diff --check`。full suite / CI はPRで再確認する。
+
+### 未完了事項 / 残 WARN / 次AIへの引き継ぎ
+
+- この修正をPR/CI経由でmainへ反映後、post-free Liver preparation を再実行し、
+  candidate stepが有限時間で終了することを確認する。Nightも同じ順序で行う。
+- real Threads post、X、beauty、media schedule、secret/cookie、`.env`、`data/`、
+  `output/` は今回の対象外。media canaryは在庫・証跡を確認してから別gateで行う。
+- 次に触ってよい: media caption runner、media preparation workflow、対応tests。
+  触らない: public validator、rights/permission gate、production posting workflowの
+  gate値を弱める変更。
+
 ## 2026-07-22 Codex WP3 data-integrity contracts
 
 ### 本システムについて
