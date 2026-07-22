@@ -115,6 +115,7 @@ jobs:
 
       - name: Generate transcript-grounded clip candidates
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_transcription == 'true') && github.event.inputs.dry_run_only != 'true'
+        timeout-minutes: 5
         env:
           PUBLISH_ENABLED: "false"
           ALLOW_REAL_THREADS_POST: "false"
