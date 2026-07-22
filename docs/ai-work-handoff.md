@@ -91,6 +91,18 @@ Cloudinary media asset、slot 実行記録、PDCA 証跡を結ぶ基盤である
   schedule/media workflow tests, and this handoff. No download, cut, upload,
   Cloudinary action, or Threads post was performed.
 
+## 2026-07-22 Codex WP-C runner dependency repair
+
+- Manual, post-free Liver media preparation run `29892073904` stopped at
+  `Verify runner media tools`: the hosted runner did not provide `ffmpeg` or
+  `ffprobe`. All discovery/transcription/cut/upload/post steps were skipped.
+- The two account-specific preparation workflows now install only the
+  `ffmpeg` package before verification, then retain the existing explicit
+  confirmation, resource budget, permission, and publish-disabled gates.
+- Updated: both media preparation workflows and focused workflow tests. No
+  media source, Cloudinary object, or Threads post was changed by the failed
+  run.
+
 ## 2026-07-22 Final production residual audit (design only)
 
 - Baseline: `main` / `origin/main` `3e05812a514b95827b99dc20736951c02269c6e6`.

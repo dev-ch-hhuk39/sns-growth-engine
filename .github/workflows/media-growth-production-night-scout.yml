@@ -67,7 +67,10 @@ jobs:
           date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
 
       - name: Install dependencies
-        run: python3 -m pip install --requirement requirements-media-runtime.txt
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          python3 -m pip install --requirement requirements-media-runtime.txt
 
       - name: Verify runner media tools
         run: |

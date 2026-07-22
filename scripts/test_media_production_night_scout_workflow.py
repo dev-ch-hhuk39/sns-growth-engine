@@ -9,6 +9,7 @@ checks = [
     ("workflow discovers, transcribes, and generates candidates", all(value in workflow for value in ("discover_approved_source_videos.py", "transcribe_approved_source_videos.py", "run_media_growth_engine.py"))),
     ("preparation gates are scoped", all(value in workflow for value in ('ALLOW_VIDEO_DOWNLOAD: "true"', 'ALLOW_VIDEO_CUT: "true"', 'ALLOW_CLOUDINARY_UPLOAD: "true"', '--prepare-only', 'ALLOW_MEDIA_POSTS: "false"', 'ALLOW_REAL_THREADS_VIDEO_POST: "false"'))),
     ("x and transcription api stay disabled", 'ALLOW_REAL_X_POST: "false"' in workflow and 'ALLOW_TRANSCRIPTION_API: "false"' in workflow),
+    ("ffmpeg is installed before verification", "apt-get install --yes --no-install-recommends ffmpeg" in workflow),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
