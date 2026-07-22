@@ -70,6 +70,7 @@
   "allow_multiple_clips_per_video": true,
   "max_clip_candidates_per_video": 3,
   "max_remote_caption_generations_per_video": 1,
+  "max_remote_caption_generations_per_run": 1,
   "remote_caption_timeout_seconds": 25,
   "min_clip_candidates_per_video": 1,
   "clip_overlap_policy": "block_overlapping_ranges",
