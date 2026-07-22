@@ -34,6 +34,8 @@ gate で扱う。今回の対象は投稿ではなく、Liver media preparation 
 - Night post-free preparation `29893626598` は候補生成を12秒で終えたが、strict semantic
   alignmentが公開候補をrejectした。validatorは維持し、`NO_ELIGIBLE_CANDIDATE` を
   正常なno-work結果として扱う。configuration / rights gate の `BLOCKED` と混同しない。
+- 修正後のNight post-free preparation canary `29893929836` は成功。候補生成19秒、
+  asset preparation、health summaryまで成功し、publish / Threads post gateはfalseのまま。
 - 各workflowの候補生成stepには5分の上限を追加した。publish gateはすべてfalseの
   ままであり、これらの変更は投稿を有効化しない。
 - PASS: bounded caption test、primary retry regression、media candidate plan、
