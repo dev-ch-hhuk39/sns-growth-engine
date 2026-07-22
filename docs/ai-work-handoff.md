@@ -56,6 +56,17 @@
   media operation gates remain false unless the existing explicit confirmation
   path is used.
 
+### Permission-ledger hardening
+
+- Direct-media dry-run then reached the real policy gate: both account plans
+  are `NO_POST` because `media_content_understanding` has not yet been created.
+  That is expected before gated ingestion, and no media action occurred.
+- Before any permission write, the owner-attestation seeder was narrowed: an
+  apply now requires explicit `--source-id` values and accepts only sources
+  already marked `owned`, `licensed`, or `approved_creator_clip` with
+  `permission_status=approved`. Reference-only Threads sources cannot be
+  mass-upgraded by the seed command.
+
 ### Next actions
 
 1. Merge this small workflow change through CI, dispatch it with
