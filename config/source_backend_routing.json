@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "notes": "One PRIMARY backend is invoked for each capability. FALLBACK is used only after PRIMARY failure. Analysis-only tools never download, upload, or publish.",
+  "routes": {
+    "threads.profile_posts": {
+      "primary": "threads_public_playwright",
+      "fallbacks": ["threads_public_http"],
+      "shadow": [],
+      "cooldown_seconds": 900
+    },
+    "threads.post_detail": {
+      "primary": "threads_public_playwright",
+      "fallbacks": ["threads_public_http"],
+      "shadow": [],
+      "cooldown_seconds": 900
+    },
+    "tiktok.profile_posts": {
+      "primary": "yt_dlp",
+      "fallbacks": ["tiktok_public_playwright"],
+      "shadow": [],
+      "cooldown_seconds": 900
+    },
+    "youtube.channel_videos": {
+      "primary": "yt_dlp",
+      "fallbacks": [],
+      "shadow": [],
+      "cooldown_seconds": 900
+    },
+    "youtube.transcript": {
+      "primary": "youtube_transcript_api",
+      "fallbacks": ["yt_dlp_subtitles", "local_faster_whisper"],
+      "shadow": [],
+      "cooldown_seconds": 1800
+    },
+    "youtube.comments": {
+      "primary": "youtube_comment_downloader",
+      "fallbacks": [],
+      "shadow": [],
+      "cooldown_seconds": 1800
+    },
+    "threads.comments": {
+      "primary": "threads_public_comments",
+      "fallbacks": [
+        "vdite_threads_scraper"
+      ],
+      "shadow": [],
+      "cooldown_seconds": 1800
+    },
+    "video.post_detail": {
+      "primary": "yt_dlp_post_detail",
+      "fallbacks": [],
+      "shadow": [],
+      "cooldown_seconds": 900
+    },
+    "content.understanding": {
+      "primary": "github_models",
+      "fallbacks": [],
+      "shadow": [],
+      "cooldown_seconds": 300
+    },
+    "content.caption": {
+      "primary": "github_models",
+      "fallbacks": [],
+      "shadow": [],
+      "cooldown_seconds": 300
+    },
+    "content.semantic_alignment": {
+      "primary": "local_semantic_alignment",
+      "fallbacks": [
+        "sentence_transformers_multilingual"
+      ],
+      "shadow": [],
+      "cooldown_seconds": 300
+    },
+    "research.trends": {
+      "primary": "local_trend_aggregator",
+      "fallbacks": [],
+      "shadow": ["agent_reach", "last30days_skill"],
+      "cooldown_seconds": 3600
+    }
+  },
+  "backend_roles": {
+    "yt_dlp": "PRIMARY",
+    "tiktok_public_playwright": "FALLBACK",
+    "threads_public_playwright": "PRIMARY",
+    "threads_public_http": "FALLBACK",
+    "youtube_transcript_api": "PRIMARY",
+    "youtube_comment_downloader": "PRIMARY",
+    "threads_public_comments": "PRIMARY",
+    "yt_dlp_post_detail": "PRIMARY",
+    "github_models": "PRIMARY",
+    "local_semantic_alignment": "PRIMARY",
+    "sentence_transformers_multilingual": "OPTIONAL_FALLBACK",
+    "yt_dlp_subtitles": "FALLBACK",
+    "local_faster_whisper": "FALLBACK",
+    "local_trend_aggregator": "PRIMARY",
+    "agent_reach": "ANALYSIS_ONLY",
+    "last30days_skill": "ANALYSIS_ONLY",
+    "firecrawl": "OPTIONAL_FALLBACK",
+    "hasdata": "AUDIT_ONLY_NO_LICENSE",
+    "zeeshan_threads_scraper": "ANALYSIS_ONLY",
+    "vdite_threads_scraper": "OPTIONAL_FALLBACK_UPSTREAM_HEALTH_REQUIRED",
+    "galihkjaya_threadscraper": "ANALYSIS_ONLY"
+  },
+  "limits": {
+    "threads_profile_posts_per_source": 5,
+    "youtube_tiktok_posts_per_source": 10,
+    "playwright_processes": 1,
+    "source_requests_serial": true
+  }
+}
