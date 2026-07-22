@@ -45,10 +45,6 @@ production_scheduled = {
     "autonomous-growth-loop-night-scout.yml",
     "autonomous-growth-loop-liver-manager.yml",
     "content-slot-recovery.yml",
-    "direct-reference-media-night-scout.yml",
-    "direct-reference-media-liver-manager.yml",
-    "media-growth-post-night-scout.yml",
-    "media-growth-post-liver-manager.yml",
 }
 actual_scheduled_publishers: set[str] = set()
 for name, src in workflows.items():

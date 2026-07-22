@@ -1,9 +1,7 @@
 name: Media Growth Post Liver Manager
 
 on:
-  schedule:
-    # JST 18:00; start just after the target with no idle delay.
-    - cron: "4 9 * * *"
+  # Canary gate: media publishing is dispatch-only until all four canaries pass.
   workflow_dispatch:
     inputs:
       confirm_media_post:

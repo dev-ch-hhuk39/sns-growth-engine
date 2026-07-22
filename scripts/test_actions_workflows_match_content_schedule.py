@@ -10,8 +10,14 @@ checks = {
     "liver_manager": ("autonomous-growth-loop-liver-manager.yml", "direct-reference-media-liver-manager.yml", "media-growth-post-liver-manager.yml"),
 }
 for account, files in checks.items():
-    text = "\n".join((ROOT / ".github/workflows" / name).read_text() for name in files)
+    texts = {name: (ROOT / ".github/workflows" / name).read_text() for name in files}
+    text = "\n".join(texts.values())
+    autonomous = texts[files[0]]
+    media = "\n".join(texts[name] for name in files[1:])
     for slot in schedule[account]:
-        assert f'cron: "{slot["cron_utc"]}"' in text, (account, slot["slot_id"], "cron missing")
-        assert slot["slot_id"] in text or slot["post_type"] in {"original_text", "reference_text", "pdca_text"}, (account, slot["slot_id"], "slot mapping missing")
+        if slot["post_type"] in {"direct_reference_media", "generated_clip_media"}:
+            assert slot["slot_id"] in media, (account, slot["slot_id"], "manual media mapping missing")
+            assert f'cron: "{slot["cron_utc"]}"' not in media, (account, slot["slot_id"], "media schedule must stay off before canaries")
+        else:
+            assert f'cron: "{slot["cron_utc"]}"' in autonomous, (account, slot["slot_id"], "text cron missing")
 print("PASS test_actions_workflows_match_content_schedule.py")

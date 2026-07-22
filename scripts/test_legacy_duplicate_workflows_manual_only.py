@@ -31,8 +31,8 @@ checks = [
         all("workflow_dispatch:" in read(name) and "schedule:" not in read(name) for name in legacy_manual_only),
     ),
     (
-        "one scheduled clip preparation per account",
-        all("schedule:" in text and "--prepare-only" in text for text in clip_preparations),
+        "clip preparation is dispatch-only before canaries",
+        all("schedule:" not in text and "workflow_dispatch:" in text and "--prepare-only" in text for text in clip_preparations),
     ),
     (
         "clip dispatchers have no Cloudinary write credentials",

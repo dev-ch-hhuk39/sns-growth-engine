@@ -48,8 +48,8 @@ checks = [
     ("no real cut", plan["would_cut"] is False),
     ("no real upload", plan["would_upload"] is False),
     ("no real video post", plan["would_post_video"] is False),
-    ("schedule aftercare enabled", plan["media_plan"]["schedule_enabled"] is True),
-    ("public video auto enabled", plan["media_plan"]["media_public_post_auto_enabled"] is True),
+    ("media feature configuration remains enabled", plan["media_plan"]["schedule_enabled"] is True),
+    ("public video capability remains enabled for confirmed canaries", plan["media_plan"]["media_public_post_auto_enabled"] is True),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

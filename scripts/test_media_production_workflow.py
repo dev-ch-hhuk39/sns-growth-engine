@@ -4,7 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 wf = (ROOT / ".github/workflows/media-growth-production.yml").read_text()
 checks = [
-    'cron: "20 22 * * *"' in wf,
+    'schedule:' not in wf and "Canary gate" in wf,
     'ACCOUNT_ID: "liver_manager"' in wf,
     "confirm_production_media" in wf,
     "kill_switch" in wf,

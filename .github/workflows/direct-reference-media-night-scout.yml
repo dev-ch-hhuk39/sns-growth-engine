@@ -1,10 +1,7 @@
 name: Direct Reference Media Night Scout
 
 on:
-  schedule:
-    # JST 18:00. GitHub may deliver a scheduled event late; slot idempotency,
-    # not runner wall-clock time, prevents duplicates.
-    - cron: "2 9 * * *"
+  # Canary gate: prepared direct-media dispatch is manual until evidence is complete.
   workflow_dispatch:
     inputs:
       confirm_direct_media:
