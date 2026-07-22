@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "mandatory_paid_service_allowed": false,
+    "exact_revision_required": true,
+    "github_actions_runner": "ubuntu-latest",
+    "optional_heavy_status": "OPTIONAL_UNAVAILABLE_ON_FREE_STANDARD_RUNNER"
+  },
+  "libraries": [
+    {
+      "id": "agent_reach",
+      "repository": "https://github.com/Panniantong/Agent-Reach",
+      "revision": "1494c2ab239e7355a77e7cceaf3271453a1f34b5",
+      "license": "MIT",
+      "role": "analysis_only_source_research",
+      "install": "requirements-oss.txt",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "last30days_skill",
+      "repository": "https://github.com/mvanhorn/last30days-skill",
+      "revision": "249c7a4c040558a903d6838dee31012980d4946d",
+      "license": "MIT",
+      "role": "analysis_only_trend_research",
+      "install": "checkout_exact_revision_in_source_research_job",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "yt_dlp",
+      "repository": "https://github.com/yt-dlp/yt-dlp",
+      "revision": "aefce1eea4d0b6bab1ec2bd3beff09bff91a39c8",
+      "license": "Unlicense",
+      "role": "production_profile_discovery_and_approved_media_resolution",
+      "install": "requirements.txt",
+      "required_for_core_posting": true
+    },
+    {
+      "id": "tiktok_to_ytdlp",
+      "repository": "https://github.com/dinoosauro/tiktok-to-ytdlp",
+      "revision": "1f3e7389b6c1a50cd223d5dadae5fdd89506d7b1",
+      "license": "MIT",
+      "role": "audited_url_handoff_pattern_only",
+      "install": "not_installed_browser_userscript",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "youtube_transcript_api",
+      "repository": "https://github.com/jdepoix/youtube-transcript-api",
+      "revision": "72d79711ec4db95262660029b4d63298b0820502",
+      "license": "MIT",
+      "role": "production_official_caption_transcript_provider",
+      "install": "requirements.txt",
+      "required_for_core_posting": true
+    },
+    {
+      "id": "youtube_comment_downloader",
+      "repository": "https://github.com/egbertbouman/youtube-comment-downloader",
+      "revision": "33801514996387fa245d4b32b7ca2183fe21fddf",
+      "license": "MIT",
+      "role": "production_public_comment_provider",
+      "install": "requirements-oss.txt",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "faster_whisper",
+      "repository": "https://github.com/SYSTRAN/faster-whisper",
+      "revision": "ed9a06cd89a93e47838f564998a6c09b655d7f43",
+      "license": "MIT",
+      "role": "bounded_fallback_transcript_for_approved_media",
+      "install": "requirements-media.txt",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "ffmpeg",
+      "repository": "https://github.com/FFmpeg/FFmpeg",
+      "revision": "system_package_pinned_by_ubuntu_image",
+      "license": "LGPL-2.1-or-later",
+      "role": "production_clip_execution",
+      "install": "ubuntu_package_and_version_health_check",
+      "required_for_core_posting": true
+    },
+    {
+      "id": "threads_scraper_vdite",
+      "repository": "https://github.com/vdite/threads-scraper",
+      "revision": "feed562e321673693cb477651ec75c816b5e0eac",
+      "license": "MIT",
+      "role": "optional_no_login_post_comment_fallback",
+      "install": "disabled_when_upstream_unavailable",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "threads_scraper_zeeshan",
+      "repository": "https://github.com/Zeeshanahmad4/Threads-Scraper",
+      "revision": "a6ae79156df2b8a4ee56b8dfb1343101a2641b86",
+      "license": "MIT_LICENSE_TEXT_NOASSERTION_METADATA",
+      "role": "shadow_profile_discovery_only",
+      "install": "disabled_pending_library_health_pass",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "threads_comment_scraper_galihkjaya",
+      "repository": "https://github.com/galihkjaya/threadscraper",
+      "revision": "2bde447ebbdfabe45198e6267929e60930a9eebc",
+      "license": "MIT",
+      "role": "optional_comment_trend_provider",
+      "install": "disabled_requires_browser_session_bootstrap",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "hasdata_tiktok",
+      "repository": "https://github.com/HasData/tiktok-scraper",
+      "revision": "865204123ab5bf1a07f1da4905da99eae0c4a9d3",
+      "license": "NO_LICENSE_DETECTED",
+      "role": "capability_audit_only_no_code_copied",
+      "install": "not_installed",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "firecrawl",
+      "repository": "https://github.com/firecrawl/firecrawl",
+      "revision": "47f321f1e147d283f9b679311f9396f740d4c30d",
+      "license": "AGPL-3.0",
+      "role": "optional_web_enrichment_fallback",
+      "install": "external_endpoint_optional_no_paid_requirement",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "moneyprinterturbo",
+      "repository": "https://github.com/harry0703/MoneyPrinterTurbo",
+      "revision": "d5f31da9a2eb63c96addd66e17e5b8042ed010d4",
+      "license": "MIT",
+      "role": "optional_generation_research",
+      "install": "OPTIONAL_UNAVAILABLE_ON_FREE_STANDARD_RUNNER",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "vimax",
+      "repository": "https://github.com/HKUDS/ViMax",
+      "revision": "0cf9f71f668ea7ca44e6bcf3fdf7ca7432adee49",
+      "license": "MIT",
+      "role": "optional_generation_research",
+      "install": "OPTIONAL_UNAVAILABLE_ON_FREE_STANDARD_RUNNER",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "voxcpm",
+      "repository": "https://github.com/OpenBMB/VoxCPM",
+      "revision": "616d3d3e630a9c96c2853250eef91b0f39dcd5fa",
+      "license": "Apache-2.0",
+      "role": "optional_generation_research",
+      "install": "OPTIONAL_UNAVAILABLE_ON_FREE_STANDARD_RUNNER",
+      "required_for_core_posting": false
+    },
+    {
+      "id": "liveportrait",
+      "repository": "https://github.com/KlingAIResearch/LivePortrait",
+      "revision": "9b294b3d0536135442ea73cb01e6cb3ca7029dd3",
+      "license": "MIT",
+      "role": "optional_generation_research",
+      "install": "OPTIONAL_UNAVAILABLE_ON_FREE_STANDARD_RUNNER",
+      "required_for_core_posting": false
+    }
+  ]
+}

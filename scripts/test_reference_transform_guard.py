@@ -42,7 +42,10 @@ if os.path.exists(queue_path):
         check(f"候補 '{c['title'][:20]}...' が初回投稿テキストの丸コピーでない", first_post not in text)
     check("Threads 次投稿 queue に 3件以上ある", len(q.get("candidates", [])) >= 3)
 else:
-    check("threads_night_scout_next_queue.json が存在する (WARN)", False)
+    # data/ is deliberately untracked. Its absence in clean CI must not hide
+    # the registry-level transform guard or turn a safety test into a fixture
+    # availability failure.
+    print("  [WARN] threads_night_scout_next_queue.json is untracked; queue copy check skipped")
 
 # 3. source_intake_schema の require_transform ルール
 for s in sources:

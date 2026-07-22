@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
-from process_threads_queue import append_row, process_one  # noqa: E402
+from process_threads_queue import append_row, process_one, records  # noqa: E402
 from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview, reader_facing_template_count  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
@@ -102,7 +102,38 @@ def execute(plan: dict[str, Any], client: SheetsClient, *, started: dict[str, An
         "media_reuse_risk": "not_applicable",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    append_row(client, "queue", queue)
+    existing = next(
+        (row for row in records(client, "queue") if str(row.get("queue_id", "")) == queue_id),
+        None,
+    )
+    if existing:
+        existing_status = str(existing.get("status", "")).upper()
+        if existing_status in {"POSTED", "POSTED_SAVE_FAILED", "PROCESSING"}:
+            return {
+                **plan,
+                "status": "SKIPPED",
+                "queue_id": queue_id,
+                "reason": f"existing_queue_{existing_status.lower()}",
+                "would_post": False,
+            }
+        if existing_status == "READY" and str(existing.get("public_post_text", "")).strip():
+            queue = dict(existing)
+        elif int(plan["variant_attempt"]) < MAX_FALLBACK_VARIANTS:
+            return execute(
+                build_plan(
+                    account_id,
+                    slot_id,
+                    plan["fallback_reason"],
+                    apply=True,
+                    attempt=int(plan["variant_attempt"]) + 1,
+                ),
+                client,
+                started=started,
+            )
+        else:
+            return {**plan, "status": "SKIPPED", "queue_id": queue_id, "reason": "fallback_variants_exhausted", "would_post": False}
+    else:
+        append_row(client, "queue", queue)
     result = process_one(client, queue, dry_run=False, confirm_real_post=True)
     # A duplicate is recoverable: produce bounded daily/history-varying
     # variants instead of leaving a scheduled slot empty.

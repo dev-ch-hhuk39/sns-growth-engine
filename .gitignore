@@ -75,6 +75,14 @@ output/
 !config/reference_sources.example.json
 !config/content_schedule.json
 !config/media_source_usage_modes.json
+!config/goal_acceptance.json
+!config/content_mix/default_mix.json
+!config/external_libraries.json
+!config/source_backend_routing.json
+!config/research_topics.json
+!docs/goal-status.json
+!docs/library-capability-matrix.json
+!docs/runtime-health.json
 !tests/fixtures/*.json
 !fixtures/*.json
 !.mcp.json

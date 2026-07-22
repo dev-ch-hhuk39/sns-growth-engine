@@ -7,13 +7,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> int:
-    workflow = (ROOT / ".github/workflows/autonomous-growth-loop.yml").read_text(encoding="utf-8")
+    manual = (ROOT / ".github/workflows/autonomous-growth-loop.yml").read_text(encoding="utf-8")
+    night = (ROOT / ".github/workflows/autonomous-growth-loop-night-scout.yml").read_text(encoding="utf-8")
+    liver = (ROOT / ".github/workflows/autonomous-growth-loop-liver-manager.yml").read_text(encoding="utf-8")
     docs = (ROOT / "docs/autonomous-mode-runbook.md").read_text(encoding="utf-8")
     checks = [
-        ("schedule enabled after first apply", "schedule:" in workflow),
-        ("schedule active", 'cron: "15 0 * * *"' in workflow),
+        ("manual workflow stays dispatch only", "schedule:" not in manual and "workflow_dispatch:" in manual),
+        ("account schedules active", "schedule:" in night and "schedule:" in liver),
         ("first apply success documented", "first Actions apply succeeded" in docs or "初回Actions apply成功済み" in docs),
-        ("cron documented", 'cron: "15 0 * * *"' in docs),
+        ("account schedules documented", "night_scout" in docs and "liver_manager" in docs),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

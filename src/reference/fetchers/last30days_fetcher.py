@@ -7,16 +7,34 @@ last30days_fetcher.py - Last30Days Skill based Trend Fetcher（Phase 9）
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
+from pathlib import Path
 from typing import Any
 
 from .base_fetcher import BaseFetcher, FetchResult, RawSourceItem, _now_jst
 
 
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def _last30days_script() -> Path | None:
+    configured = str(os.environ.get("LAST30DAYS_SCRIPT", "")).strip()
+    candidates = [
+        Path(configured).expanduser() if configured else None,
+        ROOT / ".tools" / "last30days" / "skills" / "last30days" / "scripts" / "last30days.py",
+    ]
+    return next((path for path in candidates if path and path.is_file()), None)
+
+
 def _check_last30days() -> bool:
+    script = _last30days_script()
+    if not script:
+        return False
     try:
         result = subprocess.run(
-            ["last30days", "--help"],
+            [sys.executable, str(script), "--preflight"],
             capture_output=True, text=True, timeout=5,
         )
         return result.returncode == 0
@@ -105,22 +123,74 @@ class Last30DaysFetcher(BaseFetcher):
     def _run_last30days(
         self, query: str, platforms: list[str], limit: int
     ) -> list[dict]:
+        script = _last30days_script()
+        if not script:
+            raise RuntimeError("last30days_script_not_configured")
         cmd = [
-            "last30days",
-            "trends",
-            "--query", query,
-            "--platforms", ",".join(platforms),
-            "--limit", str(limit),
-            "--output", "json",
+            sys.executable,
+            str(script),
+            query,
+            "--emit=json",
+            "--quick",
+            "--days", "30",
+            "--max-results", str(max(1, min(limit, 50))),
+            "--no-browser-cookies",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr[:300])
+        data = self._extract_export(result.stdout)
+        if not data:
+            raise RuntimeError((result.stderr or "last30days_json_export_missing")[:300])
+        clusters = data.get("clusters", []) if isinstance(data, dict) else []
+        results = data.get("results", []) if isinstance(data, dict) else []
+        normalized: list[dict] = []
+        for index, cluster in enumerate(clusters[:limit]):
+            if not isinstance(cluster, dict):
+                continue
+            evidence = [row for row in results if isinstance(row, dict) and row.get("cluster") == index]
+            normalized.append({
+                "topic": cluster.get("title", f"Trend {index + 1}"),
+                "description": cluster.get("summary", ""),
+                "why_trending": f"engagement_total={cluster.get('engagement_total', '')}",
+                "suggested_hooks": [],
+                "suggested_angles": [],
+                "evidence_items": evidence[:10],
+                "source_platforms": cluster.get("sources", []),
+                "source_status": data.get("source_status", {}),
+                "schema_version": data.get("schema_version", ""),
+                "requested_platforms": platforms,
+            })
+        if normalized:
+            return normalized
+        for index, row in enumerate(results[:limit]):
+            if not isinstance(row, dict):
+                continue
+            normalized.append({
+                "topic": row.get("title", f"Trend {index + 1}"),
+                "description": row.get("summary", ""),
+                "why_trending": f"relevance_score={row.get('relevance_score', '')}",
+                "evidence_items": [row],
+                "source_platforms": [row.get("source", "")],
+                "source_status": data.get("source_status", {}),
+                "schema_version": data.get("schema_version", ""),
+                "requested_platforms": platforms,
+            })
+        return normalized
 
-        data = json.loads(result.stdout)
-        if isinstance(data, list):
-            return data
-        return data.get("trends", data.get("items", []))
+    @staticmethod
+    def _extract_export(output: str) -> dict[str, Any]:
+        """Extract the final agent JSON export after optional CLI preamble."""
+        decoder = json.JSONDecoder()
+        matches: list[dict[str, Any]] = []
+        for index, char in enumerate(output):
+            if char != "{":
+                continue
+            try:
+                value, _ = decoder.raw_decode(output[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(value, dict) and ("results" in value or "clusters" in value):
+                matches.append(value)
+        return matches[-1] if matches else {}
 
     def _trends_to_raw_items(
         self,

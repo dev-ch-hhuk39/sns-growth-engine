@@ -13,11 +13,12 @@ def main() -> int:
         s.get("media_pipeline_eligible") is True
         and s.get("clip_enabled") is True
         and s.get("media_download") == "gated"
-        and s.get("fetch_enabled") is False
-        and s.get("manual_only") is True
+        and s.get("fetch_enabled") is True
+        and s.get("manual_only") is False
+        and s.get("media_autopilot_enabled") is True
         for s in rows
     )
-    print(f"  {'PASS' if ok else 'FAIL'} approved liver sources media pipeline gated")
+    print(f"  {'PASS' if ok else 'FAIL'} approved liver sources use bounded autopilot with runtime gates")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1
 

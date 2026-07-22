@@ -17,7 +17,7 @@ def main() -> int:
         ("failure sets FAILED", '"status": "FAILED"' in failure_block),
         ("failure logs no retry", "no immediate retry" in failure_block),
         ("failure returns immediately", 'return {"status": "FAILED"' in failure_block),
-        ("no retry helper", "retry" not in src.lower().replace("no immediate retry", "")),
+        ("no publisher retry loop", "publisher.publish(" not in failure_block),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

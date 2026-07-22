@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import build_rights_decision
+from acquisition.ytdlp_runtime import metadata_options
 from discover_approved_source_videos import load_existing_source_videos
 
 
@@ -108,7 +109,8 @@ def execute_download(plan: dict) -> dict:
     output_dir = Path(str(plan["output_dir"]))
     output_dir.mkdir(parents=True, exist_ok=True)
     template = str(output_dir / f"{safe_id}.%(ext)s")
-    opts = {
+    platform = "youtube" if "youtu" in str(plan["source_url"]).lower() else "tiktok"
+    opts = metadata_options(platform, {
         "outtmpl": template,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "merge_output_format": "mp4",
@@ -116,7 +118,7 @@ def execute_download(plan: dict) -> dict:
         "no_warnings": True,
         "noplaylist": True,
         "socket_timeout": 30,
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([str(plan["source_url"])])

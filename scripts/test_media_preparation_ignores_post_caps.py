@@ -28,6 +28,7 @@ def main() -> int:
             "account_id": "liver_manager",
             "clip_status": "READY",
             "transcript_grounded": "true",
+            "alignment_status": "PASS",
             "public_post_text": text,
             "clip_score": 95,
         }],

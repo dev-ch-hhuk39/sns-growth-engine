@@ -166,12 +166,13 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
     if has_schedule:
         if name in {"autonomous-growth-loop-night-scout.yml", "autonomous-growth-loop-liver-manager.yml"}:
             if name == "autonomous-growth-loop-night-scout.yml":
-                expected = ['cron: "45 4 * * *"', 'cron: "45 6 * * *"', 'cron: "45 15 * * *"']
+                expected = ['cron: "2 5 * * *"', 'cron: "2 7 * * *"', 'cron: "2 16 * * *"']
             else:
-                expected = ['cron: "45 0 * * *"', 'cron: "45 3 * * *"', 'cron: "45 11 * * *"']
+                expected = ['cron: "4 1 * * *"', 'cron: "4 4 * * *"', 'cron: "4 12 * * *"']
             checks.append((f"{name} [schedule] account slots cron", all(slot in text for slot in expected)))
             checks.append((f"{name} [schedule] dry-run step exists", "Dry-run autonomous plan" in text))
-            checks.append((f"{name} [schedule] jitter exists", "random.randint(0, 1800)" in text and "time.sleep(delay)" in text))
+            checks.append((f"{name} [schedule] no idle delay", "random.randint" not in text and "time.sleep" not in text))
+            checks.append((f"{name} [schedule] delayed event is diagnostic only", "Diagnose schedule delay" in text and "steps.schedule_window.outputs.in_window" not in text))
             checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
             checks.append((f"{name} [schedule] schedule or confirm apply gate", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" in text))
             checks.append((f"{name} [schedule] X/media flags remain false", all(flag in text for flag in [
@@ -184,18 +185,19 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             return checks
         if name in {"direct-reference-media-liver-manager.yml", "direct-reference-media-night-scout.yml"}:
             account_id = "liver_manager" if "liver" in name else "night_scout"
-            cron = 'cron: "45 6 * * *"' if account_id == "liver_manager" else 'cron: "45 8 * * *"'
-            checks.append((f"{name} [schedule] fixed direct-media account", f"ACCOUNT_ID: {account_id}" in text))
+            cron = 'cron: "4 7 * * *"' if account_id == "liver_manager" else 'cron: "2 9 * * *"'
+            checks.append((f"{name} [schedule] fixed direct-media account", f'ACCOUNT_ID: "{account_id}"' in text))
             checks.append((f"{name} [schedule] direct-media slot cron", cron in text))
-            checks.append((f"{name} [schedule] dry run, jitter, and fallback", "Dry-run direct media plan" in text and "random.randint(0,1800)" in text and "--fallback-to-text" in text))
+            checks.append((f"{name} [schedule] prepared-only dispatch and fallback", "Dry-run prepared inventory" in text and "--post-ready" in text and "--fallback-to-text" in text and "acquire_approved_source_posts.py" not in text and "ingest_direct_reference_media.py" not in text))
+            checks.append((f"{name} [schedule] delayed schedule remains dispatchable", "Diagnose schedule delay" in text and "steps.schedule_window.outputs.in_window" not in text))
             checks.append((f"{name} [schedule] scoped media posting gates", all(flag in text for flag in ['PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"', 'ALLOW_MEDIA_POSTS: "true"', 'ALLOW_REAL_THREADS_VIDEO_POST: "true"'])))
             checks.append((f"{name} [schedule] no download/cut/upload", all(flag in text for flag in ['ALLOW_VIDEO_DOWNLOAD: "false"', 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"'])))
             return checks
         if name == "content-slot-recovery.yml":
             checks.append((f"{name} [schedule] 30-minute recovery cron", 'cron: "0,30 * * * *"' in text))
             checks.append((f"{name} [schedule] dry-run and explicit backfill worker", "--dry-run" in text and "--confirm-backfill" in text))
-            checks.append((f"{name} [schedule] scoped text gates", all(flag in text for flag in ['PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"'])))
-            checks.append((f"{name} [schedule] X/media remain blocked", all(flag in text for flag in ['ALLOW_REAL_X_POST: "false"', 'ALLOW_VIDEO_DOWNLOAD: "false"', 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"'])))
+            checks.append((f"{name} [schedule] scoped READY dispatcher gates", all(flag in text for flag in ['PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"', 'ALLOW_MEDIA_POSTS: "true"', 'ALLOW_REAL_THREADS_VIDEO_POST: "true"'])))
+            checks.append((f"{name} [schedule] X/heavy media operations remain blocked", all(flag in text for flag in ['ALLOW_REAL_X_POST: "false"', 'ALLOW_VIDEO_DOWNLOAD: "false"', 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"', 'ALLOW_TRANSCRIPTION_API: "false"'])))
             return checks
         if name in {"media-growth-production.yml", "media-growth-production-night-scout.yml"}:
             account_id = "liver_manager" if name == "media-growth-production.yml" else "night_scout"
@@ -217,10 +219,10 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             return checks
         if name in {"media-growth-post-liver-manager.yml", "media-growth-post-night-scout.yml"}:
             account_id = "liver_manager" if name.endswith("liver-manager.yml") else "night_scout"
-            cron = 'cron: "45 8 * * *"' if account_id == "liver_manager" else 'cron: "45 11 * * *"'
+            cron = 'cron: "4 9 * * *"' if account_id == "liver_manager" else 'cron: "2 12 * * *"'
             checks.append((f"{name} [schedule] fixed media account", f'ACCOUNT_ID: "{account_id}"' in text))
             checks.append((f"{name} [schedule] media slot cron", cron in text))
-            checks.append((f"{name} [schedule] dry run and jitter", "Dry-run saved media plan" in text and "random.randint(0, 1800)" in text))
+            checks.append((f"{name} [schedule] dry run and delayed-event dispatch", "Dry-run saved media plan" in text and "Diagnose schedule delay" in text and "steps.schedule_window.outputs.in_window" not in text and "time.sleep" not in text))
             checks.append((f"{name} [schedule] kill switch and saved-only runner", "kill_switch" in text and "--post-saved-media" in text))
             checks.append((f"{name} [schedule] scoped posting gates", all(flag in text for flag in [
                 'PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"',
@@ -248,6 +250,16 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             ])))
             checks.append((f"{name} [schedule] local transcription download scoped", 'ALLOW_VIDEO_DOWNLOAD: "true"' in text and 'ALLOW_LOCAL_TRANSCRIPTION: "true"' in text))
             checks.append((f"{name} [schedule] bounded transcription", "--limit 1" in text))
+            return checks
+        if name == "direct-media-preparation.yml":
+            checks.append((f"{name} [schedule] two approved account preparations", "night_scout" in text and "liver_manager" in text))
+            checks.append((f"{name} [schedule] download and Cloudinary are ingest-step scoped", 'ALLOW_VIDEO_DOWNLOAD: "true"' in text and 'ALLOW_CLOUDINARY_UPLOAD: "true"' in text and "--confirm-ingest" in text))
+            checks.append((f"{name} [schedule] READY-only preparation", "--prepare-only" in text and "--confirm-direct-media" in text))
+            checks.append((f"{name} [schedule] never publishes or cuts", all(flag in text for flag in [
+                'PUBLISH_ENABLED: "false"', 'ALLOW_REAL_THREADS_POST: "false"',
+                'ALLOW_MEDIA_POSTS: "false"', 'ALLOW_REAL_THREADS_VIDEO_POST: "false"',
+                'ALLOW_VIDEO_CUT: "false"', 'ALLOW_REAL_X_POST: "false"',
+            ]) and "--confirm-real-post" not in text))
             return checks
         # ファイル全体で literal "true" フラグ無し。
         lower = text.lower()

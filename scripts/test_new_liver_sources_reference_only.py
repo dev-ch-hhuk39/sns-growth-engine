@@ -12,11 +12,12 @@ def main() -> int:
     ok = len(rows) == 4 and all(
         s.get("rights_status") == "approved_creator_clip"
         and s.get("permission_status") == "approved"
-        and s.get("permission_evidence_type") == "user_asserted_permission"
+        and s.get("permission_evidence_type") == "owner_attestation"
+        and s.get("permission_evidence_reference") == "global_owner_attestation_v1"
         and s.get("can_reuse_media") is True
         for s in rows
     )
-    print(f"  {'PASS' if ok else 'FAIL'} new liver sources approved creator clip")
+    print(f"  {'PASS' if ok else 'FAIL'} new liver sources have owner-attested clip rights")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1
 

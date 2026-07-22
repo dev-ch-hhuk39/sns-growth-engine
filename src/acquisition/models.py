@@ -58,6 +58,38 @@ def stable_content_hash(text: str, media_urls: list[str]) -> str:
 
 
 @dataclass(frozen=True)
+class SourceAccount:
+    """One configured source account and its immutable targeting boundary."""
+
+    source_id: str
+    source_url: str
+    platform: str
+    source_type: str
+    target_account_id: str
+    rights_status: str
+    permission_status: str
+    active: bool = False
+    fetch_enabled: bool = False
+    manual_only: bool = True
+
+    @classmethod
+    def from_mapping(cls, row: dict[str, Any]) -> "SourceAccount":
+        targets = row.get("target_account_ids") or [row.get("target_account_id", "")]
+        return cls(
+            source_id=str(row.get("source_id", "")),
+            source_url=canonical_url(str(row.get("source_url", ""))),
+            platform=str(row.get("source_platform") or row.get("platform") or "").lower(),
+            source_type=str(row.get("source_type") or "account").lower(),
+            target_account_id=str(targets[0] if targets else ""),
+            rights_status=str(row.get("rights_status") or row.get("rights_policy") or "unknown").lower(),
+            permission_status=str(row.get("permission_status") or "unknown").lower(),
+            active=row.get("active") is True or str(row.get("active", "")).lower() == "true",
+            fetch_enabled=row.get("fetch_enabled") is True or str(row.get("fetch_enabled", "")).lower() == "true",
+            manual_only=not (row.get("manual_only") is False or str(row.get("manual_only", "")).lower() == "false"),
+        )
+
+
+@dataclass(frozen=True)
 class NormalizedMediaItem:
     source_post_media_id: str
     source_post_id: str
@@ -108,6 +140,11 @@ class NormalizedMediaItem:
             "reuse_status": "APPROVED",
             "retry_count": "0",
             "last_error": "",
+            "failure_signature": "",
+            "same_failure_count": "0",
+            "last_attempt_at": "",
+            "quarantined_at": "",
+            "quarantine_reason": "",
             "created_at": now,
             "updated_at": now,
         }
@@ -132,6 +169,8 @@ class NormalizedSourcePost:
     backend_version: str = ""
     content_hash: str = ""
     discovered_at: str = ""
+    comments: tuple[dict[str, Any], ...] = field(default_factory=tuple)
+    detail_status: str = "PARTIAL"
 
     @property
     def media_count(self) -> int:
@@ -165,6 +204,9 @@ class NormalizedSourcePost:
             "media_type": self.media_type,
             "media_items_json": json.dumps([asdict(item) for item in self.media_items], ensure_ascii=False),
             "engagement_json": json.dumps(self.engagement, ensure_ascii=False, sort_keys=True),
+            "comments_json": json.dumps(list(self.comments), ensure_ascii=False),
+            "comment_count_collected": str(len(self.comments)),
+            "detail_status": self.detail_status,
             "collection_backend": self.collection_backend,
             "backend_version": self.backend_version,
             "rights_status": rights_status,
@@ -177,6 +219,11 @@ class NormalizedSourcePost:
             "content_hash": self.content_hash,
             "retry_count": "0",
             "last_error": "",
+            "failure_signature": "",
+            "same_failure_count": "0",
+            "last_attempt_at": "",
+            "quarantined_at": "",
+            "quarantine_reason": "",
             "created_at": now,
             "updated_at": now,
         }
@@ -204,3 +251,9 @@ def validate_source_post(post: NormalizedSourcePost) -> list[str]:
         if not item.original_media_url.startswith("https://"):
             errors.append("media_url_required")
     return sorted(set(errors))
+
+
+# Public names used by the capability contracts.  The aliases preserve every
+# existing adapter import while making the ownership model explicit.
+SourceMediaItem = NormalizedMediaItem
+SourcePostBundle = NormalizedSourcePost

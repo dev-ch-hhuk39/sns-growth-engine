@@ -44,7 +44,10 @@ def main() -> int:
     # 実投稿に必要なゲートが明示されている
     checks.append(("実投稿ゲートに ALLOW_REAL_THREADS_POST 含む",
                    "ALLOW_REAL_THREADS_POST=true" in p["safety"]["real_post_requires"]))
-    checks.append(("人間ゲートは approve_queue", "approve_queue.py" in p["safety"]["human_gate"]))
+    checks.append(("READY昇格ゲートに approve_queue を含む",
+                   "approve_queue.py" in p["safety"]["ready_gate"]))
+    checks.append(("READY昇格ゲートに安全な auto_approve_queue を含む",
+                   "auto_approve_queue.py" in p["safety"]["ready_gate"]))
 
     # source 切り替え
     checks.append(("references → generate_from_references",

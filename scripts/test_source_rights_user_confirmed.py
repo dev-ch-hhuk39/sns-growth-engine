@@ -25,14 +25,15 @@ d = json.loads(open(path).read())
 sources = d.get("sources", [])
 by_id = {s["source_id"]: s for s in sources}
 
-# 1. ユーザー確認済み YouTube は review_notes 記録済み
+# 1. ユーザー確認済み YouTube は構造化されたowner attestationを持つ
 for sid in ["src_ns_yt_cand_001", "src_lm_yt_cand_001"]:
     s = by_id.get(sid, {})
-    note = s.get("review_notes", "")
-    check(f"{sid} review_notes に「ユーザー確認済み」", "ユーザー確認済み" in note)
-    check(f"{sid} rights_policy=reference_only", s.get("rights_policy") == "reference_only")
-    check(f"{sid} allow_download=false", s.get("allow_download") is False)
-    check(f"{sid} allow_upload=false", s.get("allow_upload") is False)
+    check(f"{sid} permission_status=approved", s.get("permission_status") == "approved")
+    check(f"{sid} owner attestation", s.get("permission_evidence_type") == "owner_attestation")
+    check(f"{sid} attestation reference", s.get("permission_evidence_reference") == "global_owner_attestation_v1")
+    check(f"{sid} rights_policy=approved_creator_clip", s.get("rights_policy") == "approved_creator_clip")
+    check(f"{sid} download remains gated", s.get("allow_download") == "gated")
+    check(f"{sid} upload remains gated", s.get("allow_upload") == "gated")
 
 # 2. beauty_account は active=false かつ BLOCKED_BEAUTY_ACCOUNT
 for sid in ["src_ba_yt_cand_001", "src_ba_tt_cand_001", "src_ba_x_cand_001"]:

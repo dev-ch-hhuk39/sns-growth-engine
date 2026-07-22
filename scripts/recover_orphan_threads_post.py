@@ -81,13 +81,22 @@ def _get_headers_with_retry(ws, retries: int = 4) -> list[str]:
 
 
 def _get_records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
-    return [dict(r) for r in _ws(client, logical).get_all_records()]
+    return [
+        dict(r)
+        for r in client._call_with_rate_limit_retry(
+            f"get_all_records:{logical}:orphan_recovery",
+            lambda: _ws(client, logical).get_all_records(),
+        )
+    ]
 
 
 def _append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     ws = _ws(client, logical)
     headers = _get_headers_with_retry(ws)
-    ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+    client._call_with_rate_limit_retry(
+        f"append_row:{logical}:orphan_recovery",
+        lambda: ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED"),
+    )
 
 
 def _update_row(client: SheetsClient, logical: str, key: str, key_value: str, fields: dict[str, Any]) -> bool:
@@ -95,12 +104,19 @@ def _update_row(client: SheetsClient, logical: str, key: str, key_value: str, fi
     headers = _get_headers_with_retry(ws)
     if key not in headers:
         raise KeyError(f"{logical}: missing key header {key!r}")
-    cell = ws.find(key_value, in_column=headers.index(key) + 1)
+    cell = client._call_with_rate_limit_retry(
+        f"find:{logical}:{key_value}:orphan_recovery",
+        lambda: ws.find(key_value, in_column=headers.index(key) + 1),
+    )
     if cell is None:
         return False
-    for field, value in fields.items():
-        if field in headers:
-            ws.update_cell(cell.row, headers.index(field) + 1, str(value))
+    client._batch_update_fields(
+        ws,
+        headers,
+        cell.row,
+        fields,
+        label=f"{logical}:{key_value}:orphan_recovery",
+    )
     return True
 
 
@@ -218,12 +234,14 @@ def _write_recovery(
         "save_source": "recover_orphan_threads_post",
         "created_by": "recover_orphan_threads_post",
         "measurement_window": "pending",
-        "views": "0",
-        "likes": "0",
-        "comments": "0",
-        "follows": "0",
-        "profile_clicks": "0",
-        "line_adds": "0",
+        # Unknown metrics remain blank. A confirmed zero must come from a
+        # metrics collector or human import, never from recovery.
+        "views": "",
+        "likes": "",
+        "comments": "",
+        "follows": "",
+        "profile_clicks": "",
+        "line_adds": "",
         "manual_memo": (
             f"Orphan recovery: Threads投稿は成功したがSheets保存が失敗したため復旧。"
             f"{permalink_note}{ext_id_note}"
@@ -282,7 +300,20 @@ def _write_recovery(
             "queue_id": queue_id,
             "result_id": result_id,
             "would_write": {
-                "posted_results": posted_result_row,
+                # Recovery previews are operational telemetry. Keep the post
+                # body and permalink out of stdout while still showing the
+                # exact state transition that would be written.
+                "posted_results": {
+                    "result_id": result_id,
+                    "queue_id": queue_id,
+                    "account_id": account_id,
+                    "platform": "threads",
+                    "status": "RECOVERED",
+                    "metrics_status": "MANUAL_PENDING",
+                    "external_post_id_known": bool(external_post_id),
+                    "post_url_known": bool(post_url),
+                    "posted_text_length": len(text),
+                },
                 "queue_update": queue_update_fields,
                 "log": {"log_id": log_row["log_id"]},
             },
@@ -381,7 +412,6 @@ def main() -> int:
                 print(f"  [MATCH] Threads投稿が一致: external_post_id={external_post_id}")
             else:
                 print(f"  [NO_MATCH] APIの最新{len(api_posts)}件にテキスト一致なし")
-                print(f"  テキスト先頭30文字: {text[:30]!r}")
                 print("  --external-post-id または --skip-api-lookup を指定して再実行してください")
                 if dry_run:
                     print("  [DRY_RUN] 情報確認完了。一致なしのため apply 不可。")

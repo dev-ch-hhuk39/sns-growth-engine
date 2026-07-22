@@ -565,7 +565,7 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
     approved_count = 0
     rejected_count = 0
     for r in results:
-        obj = r.get("payload") or {}
+        obj = r.get("payload") or _last_json_object(str(r.get("stdout_tail", "")))
         ready_count += int(obj.get("updated_count", 0) or 0)
         checked_count += int(obj.get("checked_count", obj.get("evaluated_count", 0)) or 0)
         approved_count += int(obj.get("approved_count", obj.get("approvable_count", 0)) or 0)

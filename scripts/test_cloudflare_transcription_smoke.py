@@ -149,7 +149,13 @@ def main() -> int:
             print("       実行するには --use-api --confirm-api + ALLOW_TRANSCRIPTION_API=true が必要です")
             print("       詳細: docs/cloudflare-transcription-smoke-test.md")
 
-    return 0 if env_ok else 1
+    if not env_ok:
+        print("\n[RESULT] UNAVAILABLE: optional Cloudflare credentials are not configured; no API call was made")
+    else:
+        print("\n[RESULT] PASS: credentials are available; no API call was made")
+    # Missing optional-provider credentials are not a CI failure. Explicit
+    # --use-api --confirm-api above remains strict and fails closed.
+    return 0
 
 
 if __name__ == "__main__":

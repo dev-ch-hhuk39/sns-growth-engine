@@ -1,0 +1,69 @@
+{
+  "_comment": "content_mix_planner デフォルト比率設定。account_id ごとに比率を定義する。",
+  "accounts": {
+    "night_scout": {
+      "x": {
+        "single_post": 40,
+        "thread_series": 30,
+        "reference_based": 20,
+        "video_clip_reference": 10,
+        "original_hypothesis": 0
+      },
+      "threads": {
+        "single_post": 35,
+        "thread_series": 35,
+        "reference_based": 20,
+        "video_clip_reference": 10,
+        "original_hypothesis": 0
+      }
+    },
+    "liver_manager": {
+      "x": {
+        "single_post": 35,
+        "thread_series": 35,
+        "reference_based": 20,
+        "video_clip_reference": 10,
+        "original_hypothesis": 0
+      },
+      "threads": {
+        "single_post": 30,
+        "thread_series": 40,
+        "reference_based": 20,
+        "video_clip_reference": 10,
+        "original_hypothesis": 0
+      }
+    },
+    "beauty_account": {
+      "x": {
+        "single_post": 40,
+        "thread_series": 40,
+        "reference_based": 20,
+        "video_clip_reference": 0,
+        "original_hypothesis": 0
+      },
+      "threads": {
+        "single_post": 35,
+        "thread_series": 45,
+        "reference_based": 20,
+        "video_clip_reference": 0,
+        "original_hypothesis": 0
+      }
+    }
+  },
+  "default": {
+    "x": {
+      "single_post": 40,
+      "thread_series": 30,
+      "reference_based": 20,
+      "video_clip_reference": 10,
+      "original_hypothesis": 0
+    },
+    "threads": {
+      "single_post": 35,
+      "thread_series": 35,
+      "reference_based": 20,
+      "video_clip_reference": 10,
+      "original_hypothesis": 0
+    }
+  }
+}

@@ -148,35 +148,24 @@ os.environ["ALLOW_REAL_X_POST"] = "false"
 
 
 # ------------------------------------------------------------------ #
-# Test 8-9: XPublisher dry_run=False + tweepy モック
+# Test 8-9: XPublisher dry_run=False + HTTP transport モック
 # ------------------------------------------------------------------ #
 
-print("\n[Test 8-9] XPublisher dry_run=False + tweepy モック（実API呼び出しなし）")
+print("\n[Test 8-9] XPublisher dry_run=False + HTTP transport モック（実API呼び出しなし）")
 
 # モック認証情報を設定
 os.environ["PUBLISH_ENABLED"] = "true"
 os.environ["ALLOW_REAL_X_POST"] = "true"
+os.environ["X_PUBLISHER_ENABLED"] = "true"
 os.environ["X_API_KEY"] = "mock_api_key"
 os.environ["X_API_SECRET"] = "mock_api_secret"
 os.environ["X_ACCESS_TOKEN"] = "mock_access_token"
 os.environ["X_ACCESS_TOKEN_SECRET"] = "mock_access_token_secret"
 
-# tweepy を sys.modules にモック注入（tweepy 未インストール環境でも動作）
-mock_tweepy_ok = mock.MagicMock()
-mock_tweepy_ok.__version__ = "4.14.0"
-mock_response_ok = mock.MagicMock()
-mock_response_ok.data = {"id": "9876543210987654321"}
-mock_tweepy_ok.Client.return_value.create_tweet.return_value = mock_response_ok
-
-with mock.patch.dict("sys.modules", {"tweepy": mock_tweepy_ok}):
-    # x_publisher の cached import を強制リロード
-    import importlib
-    import publishers.x_publisher as _xmod
-    importlib.reload(_xmod)
-    from publishers.x_publisher import XPublisher as XPub_reloaded
-
-    pub_reloaded = XPub_reloaded()
-    r_ok = pub_reloaded.publish(
+mock_response_ok = mock.MagicMock(status_code=201)
+mock_response_ok.json.return_value = {"data": {"id": "9876543210987654321"}}
+with mock.patch("requests.post", return_value=mock_response_ok):
+    r_ok = XPublisher().publish(
         _TEXT_NORMAL,
         account=_ACCOUNT, derivative=_DERIV_X, queue_item=_QUEUE, dry_run=False
     )
@@ -189,18 +178,10 @@ with mock.patch.dict("sys.modules", {"tweepy": mock_tweepy_ok}):
     _assert("twitter.com" in (r_ok.posted_url or ""),
             "tweepy モック: posted_url が twitter.com を含む", r_ok.posted_url or "")
 
-# tweepy エラーケース
-mock_tweepy_err = mock.MagicMock()
-mock_tweepy_err.__version__ = "4.14.0"
-mock_tweepy_err.Client.return_value.create_tweet.side_effect = Exception("API Error: Unauthorized")
-
-with mock.patch.dict("sys.modules", {"tweepy": mock_tweepy_err}):
-    import publishers.x_publisher as _xmod
-    importlib.reload(_xmod)
-    from publishers.x_publisher import XPublisher as XPub_err
-
-    pub_err = XPub_err()
-    r_err = pub_err.publish(
+# HTTP error case is mocked at the actual transport boundary.
+mock_response_err = mock.MagicMock(status_code=401, text="unauthorized")
+with mock.patch("requests.post", return_value=mock_response_err):
+    r_err = XPublisher().publish(
         _TEXT_NORMAL,
         account=_ACCOUNT, derivative=_DERIV_X, queue_item=_QUEUE, dry_run=False
     )
@@ -208,15 +189,10 @@ with mock.patch.dict("sys.modules", {"tweepy": mock_tweepy_err}):
     _assert("POST_FAILED" in r_err.message, "tweepy エラー → POST_FAILED メッセージ")
     _assert(r_err.posted_url is None, "tweepy エラー → posted_url=None")
 
-# x_publisher を元の状態に戻す
-import publishers.x_publisher as _xmod
-importlib.reload(_xmod)
-from publishers.x_publisher import XPublisher
-
 # 認証情報とガードをクリア
 os.environ["PUBLISH_ENABLED"] = "false"
 os.environ["ALLOW_REAL_X_POST"] = "false"
-for _k in ["X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]:
+for _k in ["X_PUBLISHER_ENABLED", "X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]:
     os.environ.pop(_k, None)
 
 
@@ -274,10 +250,10 @@ _assert("実 SNS 投稿は行いません" in r13.stdout,
 
 
 # ------------------------------------------------------------------ #
-# Test 14-15: publish_queue.py --confirm-real-post (tweepy モック)
+# Test 14-15: publish_queue.py --confirm-real-post (HTTP transport モック)
 # ------------------------------------------------------------------ #
 
-print("\n[Test 14-15] publish_queue.py --confirm-real-post + tweepy モック")
+print("\n[Test 14-15] publish_queue.py --confirm-real-post + HTTP transport モック")
 
 sheets_real = _setup_mock(status="READY")
 posted_before = len(sheets_real._posted_results)
@@ -289,24 +265,18 @@ _saved_pe = os.environ.get("PUBLISH_ENABLED", "false")
 _saved_ax = os.environ.get("ALLOW_REAL_X_POST", "false")
 os.environ["PUBLISH_ENABLED"] = "true"
 os.environ["ALLOW_REAL_X_POST"] = "true"
+os.environ["X_PUBLISHER_ENABLED"] = "true"
 os.environ["X_API_KEY"] = "mock_api_key"
 os.environ["X_API_SECRET"] = "mock_api_secret"
 os.environ["X_ACCESS_TOKEN"] = "mock_access_token"
 os.environ["X_ACCESS_TOKEN_SECRET"] = "mock_access_token_secret"
 
-mock_tweepy_real = mock.MagicMock()
-mock_tweepy_real.__version__ = "4.14.0"
-mock_response2 = mock.MagicMock()
-mock_response2.data = {"id": "1122334455667788990"}
-mock_tweepy_real.Client.return_value.create_tweet.return_value = mock_response2
+mock_response2 = mock.MagicMock(status_code=201)
+mock_response2.json.return_value = {"data": {"id": "1122334455667788990"}}
 
-# XPublisher を直接呼び出して verify する（サブプロセスでは tweepy モック不可）
-with mock.patch.dict("sys.modules", {"tweepy": mock_tweepy_real}):
-    import publishers.x_publisher as _xmod2
-    importlib.reload(_xmod2)
-    from publishers.x_publisher import XPublisher as XPub_real
-
-    publisher_real = XPub_real()
+# XPublisher を直接呼び出して verify する。HTTP transportは必ずmockする。
+with mock.patch("requests.post", return_value=mock_response2):
+    publisher_real = XPublisher()
     deriv = sheets_real.find_social_derivative("d-test-d01", "x") or {}
     acc = sheets_real.get_account("night_scout") or {}
     q_item = sheets_real.get_queue_item("q-test-d01") or {}
@@ -315,10 +285,6 @@ with mock.patch.dict("sys.modules", {"tweepy": mock_tweepy_real}):
         str(deriv.get("text", "")),
         account=acc, derivative=deriv, queue_item=q_item, dry_run=False,
     )
-
-import publishers.x_publisher as _xmod2
-importlib.reload(_xmod2)
-from publishers.x_publisher import XPublisher
 
 _assert(r_real.success is True,
         "XPublisher + tweepy モック: 投稿成功 → success=True", r_real.message)
@@ -350,7 +316,7 @@ _assert(posted_after > posted_before,
 # ガードをクリア
 os.environ["PUBLISH_ENABLED"] = _saved_pe
 os.environ["ALLOW_REAL_X_POST"] = _saved_ax
-for _k in ["X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]:
+for _k in ["X_PUBLISHER_ENABLED", "X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]:
     os.environ.pop(_k, None)
 
 

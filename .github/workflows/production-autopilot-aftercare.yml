@@ -36,8 +36,9 @@ env:
 
 jobs:
   aftercare:
-    name: Metrics / PDCA / Media discovery aftercare
-    runs-on: [self-hosted, linux, x64, sns-growth, production]
+    name: Metrics / PDCA / Schema / Health aftercare
+    runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 45
 
     env:
@@ -47,11 +48,11 @@ jobs:
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
 
@@ -90,8 +91,6 @@ jobs:
       - name: Dry-run aftercare plan
         run: |
           python3 scripts/collect_threads_metrics.py --account-id all --source unavailable --dry-run
-          python3 scripts/discover_approved_source_videos.py --account-id liver_manager --dry-run
-          python3 scripts/run_media_growth_engine.py --account-id liver_manager --dry-run
 
       - name: Apply metrics snapshots
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
@@ -136,21 +135,6 @@ jobs:
             --apply \
             --confirm-generate \
             --use-sheets || true
-
-      - name: Apply approved media discovery and clip candidates
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
-        run: |
-          python3 scripts/discover_approved_source_videos.py \
-            --account-id liver_manager \
-            --fetch-real \
-            --apply \
-            --confirm-discovery \
-            --use-sheets
-          python3 scripts/run_media_growth_engine.py \
-            --account-id liver_manager \
-            --apply \
-            --confirm-media-growth \
-            --use-sheets
 
       - name: Health summary
         if: always()

@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from run_media_growth_engine import build_media_growth_plan
+from media_growth_test_fixtures import fixture_caption_service
 
 video = {
     "source_video_id": "sv_src_lm_yt_user_001_abcdefghijk",
@@ -36,6 +37,7 @@ plan = build_media_growth_plan(
     confirm_media_growth=True,
     existing_source_videos=[video],
     existing_transcripts=[transcript],
+    caption_service=fixture_caption_service(),
 )
 checks = [
     ("media growth not blocked", plan["status"] != "BLOCKED"),

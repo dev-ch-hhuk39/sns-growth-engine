@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 wf = (ROOT / ".github/workflows/media-transcription-production.yml").read_text(encoding="utf-8")
 checks = [
     ("workflow exists", "name: Media Transcription Production" in wf),
-    ("scheduled jst 0010", 'cron: "10 15 * * *"' in wf),
+    ("manual diagnostic only", "workflow_dispatch:" in wf and "schedule:" not in wf),
     ("dry-run first", "Dry-run transcription plan" in wf),
     ("local transcription scoped true", 'ALLOW_LOCAL_TRANSCRIPTION: "true"' in wf),
     ("download scoped true", 'ALLOW_VIDEO_DOWNLOAD: "true"' in wf),

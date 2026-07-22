@@ -3,6 +3,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[1]
 workflow_names = [
+    "direct-media-preparation.yml",
     "media-growth-production.yml",
     "media-growth-production-night-scout.yml",
     "media-growth-post-night-scout.yml",
@@ -11,14 +12,16 @@ workflow_names = [
     "direct-reference-media-liver-manager.yml",
 ]
 texts = {name: (root / ".github/workflows" / name).read_text(encoding="utf-8") for name in workflow_names}
+clip_preparations = workflow_names[1:3]
+posting_workflows = workflow_names[3:]
 checks = [
     ("all media workflows run budget guard", all("check_media_resource_budget.py" in text for text in texts.values())),
-    ("all posting workflows force fallback", all("FORCE_TEXT_ONLY_FALLBACK" in texts[name] for name in workflow_names[2:])),
-    ("saved media posting uses post budget", all("--purpose post" in texts[name] for name in workflow_names[2:])),
-    ("direct ingest has separate preparation budget", all("steps.preparation_budget.outcome == 'success'" in texts[name] for name in workflow_names[4:])),
-    ("preparation skips when budget fails", all("steps.media_budget.outcome == 'success'" in texts[name] for name in workflow_names[:2])),
+    ("all posting workflows force fallback", all("FORCE_TEXT_ONLY_FALLBACK" in texts[name] for name in posting_workflows)),
+    ("saved media posting uses post budget", all("--purpose post" in texts[name] for name in posting_workflows)),
+    ("direct ingest has separate preparation budget", "steps.preparation_budget.outcome == 'success'" in texts["direct-media-preparation.yml"]),
+    ("preparation skips when budget fails", all("steps.media_budget.outcome == 'success'" in texts[name] for name in clip_preparations)),
     ("night preparation never sudo installs", "sudo apt-get" not in texts["media-growth-production-night-scout.yml"]),
-    ("cleanup is bounded workflow step", all("cleanup_media_workspace.py" in texts[name] for name in (workflow_names[0], workflow_names[1], workflow_names[4], workflow_names[5]))),
+    ("cleanup is bounded workflow step", all("cleanup_media_workspace.py" in texts[name] for name in ("direct-media-preparation.yml", *clip_preparations))),
 ]
 for name, ok in checks:
     print(f"  {'PASS' if ok else 'FAIL'} {name}")

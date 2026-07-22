@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 import time
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -130,6 +131,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_id", "source_url", "generation_mode", "validator_status",
         "media_asset_id", "media_url", "media_status",
         "source_post_id", "source_video_id", "clip_candidate_id",
+        "caption_provider", "caption_provider_version", "alignment_status",
+        "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
+        "source_copy_similarity", "recent_post_similarity", "source_content_hash",
+        "verification_status", "verification_checked_at",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -197,11 +202,16 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "updated_at", "posted_at", "post_url", "result_id",
         # Media Growth Engine provenance. Text-only rows leave these blank.
         "source_post_id", "source_video_id", "clip_candidate_id",
-        "media_url", "media_status", "media_required",
+        "slot_id", "business_date_jst",
+        "media_url", "media_status", "media_required", "media_type", "media_origin",
         "duration_seconds", "aspect_ratio",
         # A direct source post may be a carousel.  These lists must all share
         # the same source_post_id and are never used to mix different posts.
         "media_asset_ids_json", "media_urls_json", "media_types_json",
+        "caption_provider", "caption_provider_version",
+        "alignment_status", "final_alignment_score", "main_claim_coverage",
+        "unsupported_claim_count", "source_copy_similarity", "recent_post_similarity",
+        "claim_support_json", "content_hash", "failure_signature",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -287,6 +297,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_url", "video_id", "canonical_video_url", "original_video_url",
         "title", "description_preview", "author_handle", "published_at",
         "duration_seconds", "view_count", "like_count", "comment_count",
+        "comments_json", "comment_count_collected",
         "transcript_status", "analysis_status", "clip_candidate_count",
         "download_status", "cut_status", "upload_status", "post_status",
         "rights_status", "permission_status", "discovery_status",
@@ -334,10 +345,17 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Media Growth Engine production provenance / validator state.
         "source_video_id", "video_id", "canonical_video_url",
         "clip_candidate_id", "duplicate_clip_key", "reviewer_status",
-        "transcript_grounded", "transcript_id",
+        "transcript_grounded",
         "public_post_text", "public_post_validator_status",
         "start_seconds", "end_seconds", "aspect_ratio",
         "upload_status", "post_status", "storage_public_id",
+        "caption_provider", "caption_provider_version", "alignment_status",
+        "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
+        "source_copy_similarity", "recent_post_similarity", "claim_support_json",
+        "semantic_segment_score", "selected_reason",
+        "comment_signal_count", "comment_reaction_score",
+        "retry_count", "last_error", "last_attempt_at",
+        "failure_signature", "same_failure_count", "quarantined_at", "quarantine_reason",
     ],
     # 文字起こし日次実行記録。120分/日の上限管理に使う。
     "transcription_runs": [
@@ -449,6 +467,18 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_status", "permission_status", "permission_scope", "attribution_policy",
         "direct_media_reuse_allowed", "collection_status", "processing_status", "content_hash",
         "retry_count", "last_error", "created_at", "updated_at",
+        "comments_json", "comment_count_collected", "detail_status",
+        "failure_signature", "same_failure_count", "last_attempt_at",
+        "quarantined_at", "quarantine_reason",
+    ],
+    "source_media_understanding": [
+        "understanding_id", "source_post_media_id", "source_post_id", "source_id",
+        "account_id", "platform", "media_type", "status", "provider_name",
+        "visual_summary", "visible_text", "main_claims_json", "safety_flags_json",
+        "ocr_text", "ocr_hash", "transcript_text", "transcript_hash",
+        "transcription_provider", "transcript_status",
+        "representative_frame_timestamps_json", "representative_frame_count",
+        "content_hash", "blocked_reason", "created_at", "updated_at",
     ],
     # source_postsの付属media。source_post_idを唯一の親として保持し、本文/素材の取り違えを禁止する。
     "source_post_media": [
@@ -458,6 +488,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "download_status", "cloudinary_status", "cloudinary_public_id", "storage_url",
         "rights_status", "permission_status", "reuse_status", "retry_count", "last_error",
         "media_asset_id", "created_at", "updated_at",
+        "failure_signature", "same_failure_count", "last_attempt_at",
+        "quarantined_at", "quarantine_reason", "understanding_status",
+        "visual_summary", "visible_text", "ocr_hash", "transcript_hash",
+        "representative_frame_count", "understanding_id",
     ],
     # Acquisition routing observability. These rows contain no browser state,
     # source text, media URLs, tokens or session material.
@@ -469,19 +503,55 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     "backend_routing_history": [
         "routing_event_id", "source_id", "platform", "capability", "primary_backend",
         "selected_backend", "fallback_used", "shadow_backend_counts", "status",
-        "reason", "created_at",
+        "reason", "selected_backend_version", "attempt_count", "retryable", "created_at",
+    ],
+    "provider_runs": [
+        "provider_run_id", "source_id", "source_post_id", "source_video_id",
+        "platform", "capability", "provider_name", "provider_version",
+        "status", "reason", "retryable", "duration_ms", "attempt_count", "created_at",
+    ],
+    "content_understanding_runs": [
+        "understanding_id", "source_id", "source_post_id", "source_video_id",
+        "account_id", "platform", "main_claims_json", "topic", "audience",
+        "core_topic", "main_claim", "hook", "supporting_points_json",
+        "concrete_example", "conclusion", "intended_audience", "media_role",
+        "factual_constraints_json", "prohibited_inferences_json",
+        "comment_signal_count", "media_item_count", "provider_name", "provider_version",
+        "status", "content_hash", "created_at", "updated_at",
+    ],
+    "semantic_alignment_runs": [
+        "alignment_id", "source_id", "source_post_id", "source_video_id",
+        "clip_candidate_id", "queue_id", "account_id", "platform",
+        "caption_provider", "caption_provider_version", "status",
+        "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
+        "source_copy_similarity", "recent_post_similarity", "claim_support_json",
+        "blocked_reasons", "source_content_hash", "public_post_hash", "created_at", "updated_at",
+    ],
+    "quarantined_items": [
+        "quarantine_id", "entity_type", "entity_id", "source_id", "account_id",
+        "failure_signature", "same_failure_count", "status", "first_failed_at",
+        "last_failed_at", "quarantined_at", "resolution_status", "notes",
     ],
     "trend_signals": [
         "trend_signal_id", "account_id", "platform", "topic", "signal_summary",
         "source_count", "window_days", "collection_backend", "status", "created_at", "updated_at",
     ],
     "source_candidates": [
-        "source_candidate_id", "candidate_url", "platform", "discovery_backend", "reason",
+        "source_candidate_id", "account_id", "candidate_url", "platform", "discovery_backend", "reason",
         "status", "created_at", "updated_at",
+    ],
+    "topic_opportunities": [
+        "topic_opportunity_id", "account_id", "topic", "summary", "source_count",
+        "window_days", "research_backend", "status", "created_at", "updated_at",
+    ],
+    "content_angles": [
+        "content_angle_id", "account_id", "topic", "angle", "evidence_summary",
+        "research_backend", "status", "created_at", "updated_at",
     ],
     # User-operated permission ledger. Code never infers a direct-reuse grant.
     "media_permissions": [
         "permission_id", "source_id", "source_url", "account_id", "usage_mode",
+        "rights_status", "permission_status",
         "allow_download", "allow_cloudinary_storage", "allow_original_repost",
         "allow_transcription", "allow_analysis", "allow_cut", "allow_clip_repost",
         "allow_new_caption", "allow_edit", "attribution_required", "attribution_text",
@@ -594,10 +664,17 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "source_account_posts":           "収集済み投稿",
     "source_posts":                   "参照元投稿",
     "source_post_media":              "参照元投稿メディア",
+    "source_media_understanding":      "参照メディア理解",
     "backend_health":                 "取得バックエンドヘルス",
     "backend_routing_history":        "取得バックエンド履歴",
+    "provider_runs":                  "Provider実行履歴",
+    "content_understanding_runs":     "内容理解履歴",
+    "semantic_alignment_runs":        "意味整合履歴",
+    "quarantined_items":              "隔離対象",
     "trend_signals":                  "トレンドシグナル",
     "source_candidates":              "収集候補",
+    "topic_opportunities":            "トピック機会",
+    "content_angles":                 "投稿切り口",
     "media_permissions":              "メディア利用許可",
     "source_collection_plans":        "収集計画",
     "media_ingestion_runs":           "メディア取込履歴",
@@ -615,6 +692,41 @@ SCOPES = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/drive",
 ]
+
+
+_TRANSIENT_SHEETS_HTTP_STATUSES = {500, 502, 503, 504}
+
+
+def _sheets_retry_reason(exc: Exception) -> str | None:
+    """Classify retryable Sheets failures without returning response content."""
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    try:
+        status_code = int(status) if status is not None else None
+    except (TypeError, ValueError):
+        status_code = None
+
+    message = str(exc).lower()
+    if status_code == 429 or "quota" in message or re.search(r"\b429\b", message):
+        return "rate_limit"
+    if status_code in _TRANSIENT_SHEETS_HTTP_STATUSES:
+        return f"transient_http_{status_code}"
+
+    for candidate in sorted(_TRANSIENT_SHEETS_HTTP_STATUSES):
+        if re.search(rf"\b{candidate}\b", message):
+            return f"transient_http_{candidate}"
+    if any(
+        marker in message
+        for marker in (
+            "internal error",
+            "backend error",
+            "service unavailable",
+            "temporarily unavailable",
+            "gateway timeout",
+        )
+    ):
+        return "transient_server_error"
+    return None
 
 
 # ------------------------------------------------------------------ #
@@ -637,13 +749,17 @@ class SheetsClient:
         delays = [0, 10, 30, 60]
         for attempt, delay in enumerate(delays):
             if delay:
-                print(f"[RATE_LIMIT] Sheets 429 during open_by_key; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+                print(
+                    f"[SHEETS_RETRY] retrying open_by_key after {delay}s "
+                    f"(attempt {attempt + 1}/{len(delays)})"
+                )
                 time.sleep(delay)
             try:
                 return self._gc.open_by_key(sheet_id)
             except Exception as exc:
-                message = str(exc).lower()
-                if ("429" in message or "quota" in message) and attempt < len(delays) - 1:
+                reason = _sheets_retry_reason(exc)
+                if reason and attempt < len(delays) - 1:
+                    print(f"[SHEETS_RETRY] open_by_key failed with {reason}; response body suppressed")
                     continue
                 raise
 
@@ -678,19 +794,23 @@ class SheetsClient:
         )
 
     def _call_with_rate_limit_retry(self, label: str, fn):
-        """Sheets 429/quota を短い指数バックオフで吸収する。secret値は出さない。"""
+        """Sheets 429/quota と一時的な 5xx を限定バックオフで吸収する。"""
         # A per-minute quota can still be exhausted after 50 seconds.  The
         # final retry crosses that boundary instead of abandoning a safe run.
         delays = [0, 10, 30, 60]
         for attempt, delay in enumerate(delays):
             if delay > 0:
-                print(f"[RATE_LIMIT] Sheets 429 during {label}; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+                print(
+                    f"[SHEETS_RETRY] retrying {label} after {delay}s "
+                    f"(attempt {attempt + 1}/{len(delays)})"
+                )
                 time.sleep(delay)
             try:
                 return fn()
             except Exception as exc:
-                msg = str(exc).lower()
-                if ("429" in msg or "quota" in msg) and attempt < len(delays) - 1:
+                reason = _sheets_retry_reason(exc)
+                if reason and attempt < len(delays) - 1:
+                    print(f"[SHEETS_RETRY] {label} failed with {reason}; response body suppressed")
                     continue
                 raise
 
@@ -712,9 +832,19 @@ class SheetsClient:
                     "values": [[str(value)]],
                 })
         if update_ranges:
+            # gspread Worksheet.batch_update mutates each range by prefixing
+            # the worksheet title. A retry must receive a fresh payload or
+            # titles accumulate ("Sheet"!"Sheet"!A1) and the API returns 400.
+            def _batch_update_once():
+                fresh_ranges = [
+                    {"range": item["range"], "values": [list(row) for row in item["values"]]}
+                    for item in update_ranges
+                ]
+                return ws.batch_update(fresh_ranges, value_input_option="USER_ENTERED")
+
             self._call_with_rate_limit_retry(
                 f"batch_update:{label}",
-                lambda: ws.batch_update(update_ranges, value_input_option="USER_ENTERED"),
+                _batch_update_once,
             )
 
     def _ensure_tab(self, name: str, headers: list[str]) -> gspread.Worksheet:

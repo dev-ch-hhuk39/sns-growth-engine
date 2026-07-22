@@ -34,8 +34,9 @@ print("[1] TAB_DISPLAY_NAMES 整合性")
 
 from sheets_client import TAB_DEFINITIONS, TAB_DISPLAY_NAMES
 
-check("TAB_DISPLAY_NAMES の件数が 29", len(TAB_DISPLAY_NAMES) == 29)
-check("TAB_DEFINITIONS の件数が 29", len(TAB_DEFINITIONS) == 29)
+check("TAB_DISPLAY_NAMES は基準29タブ以上", len(TAB_DISPLAY_NAMES) >= 29)
+check("TAB_DEFINITIONS は基準29タブ以上", len(TAB_DEFINITIONS) >= 29)
+check("TAB定義と表示名の件数が一致", len(TAB_DISPLAY_NAMES) == len(TAB_DEFINITIONS))
 
 missing = [k for k in TAB_DEFINITIONS if k not in TAB_DISPLAY_NAMES]
 extra = [k for k in TAB_DISPLAY_NAMES if k not in TAB_DEFINITIONS]

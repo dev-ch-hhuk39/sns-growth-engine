@@ -11,6 +11,7 @@ import importlib.util
 import json
 import re
 import sys
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import rights_allows_media_use  # noqa: E402
+from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
 from media_growth_schemas import (  # noqa: E402
     SOURCE_VIDEO_FIELDS,
     build_source_video,
@@ -121,6 +123,27 @@ def select_discovery_sources(account_id: str, config: dict[str, Any]) -> list[di
     return rows
 
 
+def order_sources_for_discovery(
+    sources: list[dict[str, Any]],
+    existing_source_videos: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Give sources with less accumulated inventory the next bounded turn."""
+    counts: dict[str, int] = {}
+    latest: dict[str, str] = {}
+    for row in existing_source_videos:
+        source_id = str(row.get("source_id", ""))
+        counts[source_id] = counts.get(source_id, 0) + 1
+        latest[source_id] = max(latest.get(source_id, ""), str(row.get("last_seen_at") or row.get("discovered_at") or ""))
+    return sorted(
+        sources,
+        key=lambda source: (
+            counts.get(str(source.get("source_id", "")), 0),
+            latest.get(str(source.get("source_id", "")), ""),
+            str(source.get("source_id", "")),
+        ),
+    )
+
+
 def build_source_video_candidates(source: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
     """Return bounded planned candidates without network fetch."""
     scan_limit = int(config.get("max_videos_per_source_scan", 50))
@@ -148,6 +171,40 @@ def _entry_video_url(source: dict[str, Any], entry: dict[str, Any]) -> str:
     return raw
 
 
+def _bounded_public_comments(
+    platform: str,
+    video_url: str,
+    metadata: dict[str, Any],
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Read comments only from bounded public providers, never fabricate them."""
+    bounded = max(0, min(int(limit), 20))
+    if platform == "youtube":
+        try:
+            from youtube_comment_downloader import SORT_BY_POPULAR, YoutubeCommentDownloader
+
+            raw = YoutubeCommentDownloader().get_comments_from_url(video_url, sort_by=SORT_BY_POPULAR)
+            rows = []
+            for item in islice(raw, bounded):
+                text = str(item.get("text", "")).strip()
+                if text:
+                    rows.append({"text": text[:1000], "like_count": item.get("votes", "")})
+            return rows
+        except Exception:  # Optional ranking evidence must not block discovery.
+            return []
+    raw_comments = metadata.get("comments")
+    if platform == "tiktok" and isinstance(raw_comments, list):
+        rows = []
+        for item in raw_comments[:bounded]:
+            if not isinstance(item, dict):
+                continue
+            text = str(item.get("text") or item.get("content") or "").strip()
+            if text:
+                rows.append({"text": text[:1000], "like_count": item.get("like_count", "")})
+        return rows
+    return []
+
+
 def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
     """Use yt-dlp flat extraction with strict per-source limits and no media download."""
     if importlib.util.find_spec("yt_dlp") is None:
@@ -156,7 +213,8 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
 
     scan_limit = max(1, int(config.get("max_videos_per_source_scan", 50)))
     per_source_limit = max(1, int(config.get("max_new_videos_per_source_per_run", 10)))
-    opts = {
+    platform = str(source.get("source_platform", "")).lower()
+    opts = metadata_options(platform, {
         "extract_flat": "in_playlist",
         "playlistend": scan_limit,
         "skip_download": True,
@@ -164,7 +222,7 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
         "no_warnings": True,
         "ignoreerrors": True,
         "socket_timeout": 20,
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(str(source.get("source_url", "")), download=False)
@@ -190,13 +248,13 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
             continue
         metadata = dict(entry)
         if not metadata.get("duration"):
-            detail_opts = {
+            detail_opts = metadata_options(platform, {
                 "skip_download": True,
                 "quiet": True,
                 "no_warnings": True,
                 "noplaylist": True,
                 "socket_timeout": 20,
-            }
+            })
             try:
                 with yt_dlp.YoutubeDL(detail_opts) as detail_ydl:
                     detail = detail_ydl.extract_info(video_url, download=False)
@@ -218,6 +276,9 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
         row["view_count"] = metadata.get("view_count") or ""
         row["like_count"] = metadata.get("like_count") or ""
         row["comment_count"] = metadata.get("comment_count") or ""
+        comments = _bounded_public_comments(platform, video_url, metadata, limit=20)
+        row["comments_json"] = json.dumps(comments, ensure_ascii=False)
+        row["comment_count_collected"] = str(len(comments))
         rows.append(row)
     return rows, "REAL_DISCOVERY" if rows else "NO_INDIVIDUAL_VIDEOS"
 
@@ -241,7 +302,7 @@ def build_discovery_plan(
 ) -> dict[str, Any]:
     config = load_config()
     existing = existing_source_videos if existing_source_videos is not None else load_existing_source_videos()
-    selected = select_discovery_sources(account_id, config)
+    selected = order_sources_for_discovery(select_discovery_sources(account_id, config), existing)
     blocked: list[str] = []
     if not config.get("source_video_discovery_enabled"):
         blocked.append("source_video_discovery_disabled")
@@ -266,6 +327,24 @@ def build_discovery_plan(
             source_blocked.append("permission_evidence_missing")
 
         discovery_status = _source_discovery_status(source)
+        if len(new_videos) >= max_total:
+            source_results.append({
+                "source_id": source.get("source_id"),
+                "platform": source.get("source_platform"),
+                "source_type": source.get("source_type"),
+                "source_url": canonicalize_video_url(source.get("source_url", ""), source.get("source_platform", "")),
+                "rights_status": rights,
+                "permission_status": source.get("permission_status", ""),
+                "discovery_status": "MAX_TOTAL_LIMIT_REACHED",
+                "scan_limit": int(config.get("max_videos_per_source_scan", 50)),
+                "new_limit": int(config.get("max_new_videos_per_source_per_run", 10)),
+                "discovered_video_count": 0,
+                "new_video_count": 0,
+                "duplicate_video_count": 0,
+                "blocked_reasons": [],
+            })
+            skipped_count += 1
+            continue
         if source_blocked:
             candidates = []
         elif fetch_real:

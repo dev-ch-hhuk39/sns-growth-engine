@@ -33,7 +33,8 @@ permissions:
 
 jobs:
   refresh:
-    runs-on: [self-hosted, linux, x64, sns-growth, production]
+    runs-on: ubuntu-latest
+    environment: production
     env:
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
@@ -46,12 +47,12 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
 
@@ -75,10 +76,18 @@ jobs:
         env:
           _GH_TOKEN_SET: ${{ secrets.GH_SECRET_WRITE_TOKEN != '' }}
         run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "DRY_RUN=true: GitHub Secret更新権限の確認をスキップ"
+            exit 0
+          fi
           if [ "$_GH_TOKEN_SET" != "true" ]; then
             echo "READY_WITH_MISSING_GH_SECRET_WRITE_TOKEN: GH_SECRET_WRITE_TOKEN が GitHub Secrets に設定されていません。"
             echo "  Settings → Secrets and variables → Actions → GH_SECRET_WRITE_TOKEN を追加してください。"
             echo "  必要なスコープ: secrets:write"
+            exit 1
+          fi
+          if ! command -v gh >/dev/null 2>&1; then
+            echo "ERROR: GitHub CLI is unavailable on this runner; secret update was not attempted."
             exit 1
           fi
           echo "GH_SECRET_WRITE_TOKEN: SET"

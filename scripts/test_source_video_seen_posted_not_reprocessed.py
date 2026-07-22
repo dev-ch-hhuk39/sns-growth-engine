@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 from discover_approved_source_videos import build_discovery_plan
-from media_growth_schemas import build_source_video
+from media_growth_schemas import build_source_video, is_duplicate_source_video
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -11,7 +11,10 @@ def main() -> int:
     seen = build_source_video(src, 1)
     seen["discovery_status"] = "POSTED"
     p = build_discovery_plan("liver_manager", existing_source_videos=[seen])
-    ok = p["duplicate_video_count"] >= 1
+    candidate = build_source_video(src, 1)
+    ok = is_duplicate_source_video(candidate, [seen]) and not any(
+        row.get("duplicate_key") == candidate.get("duplicate_key") for row in p["new_videos"]
+    )
     print(f"  {'PASS' if ok else 'FAIL'} source video seen/posted not reprocessed")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1

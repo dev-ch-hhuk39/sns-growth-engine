@@ -6,9 +6,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     text = (ROOT / ".github/workflows/autonomous-growth-loop-liver-manager.yml").read_text(encoding="utf-8")
-    expected = ['cron: "45 0 * * *"', 'cron: "45 3 * * *"', 'cron: "45 6 * * *"', 'cron: "45 11 * * *"']
+    expected = ['cron: "4 1 * * *"', 'cron: "4 4 * * *"', 'cron: "4 12 * * *"']
+    direct = (ROOT / ".github/workflows/direct-reference-media-liver-manager.yml").read_text(encoding="utf-8")
     media = (ROOT / ".github/workflows/media-growth-post-liver-manager.yml").read_text(encoding="utf-8")
-    ok = all(x in text for x in expected) and 'cron: "45 8 * * *"' in media and "The 18:00 slot is owned" in text
+    ok = (
+        all(x in text for x in expected)
+        and 'cron: "4 7 * * *"' in direct
+        and 'cron: "4 9 * * *"' in media
+        and "16:00 is direct-reference media" in text
+        and "18:00 is generated clip media" in text
+    )
     print(f"  {'PASS' if ok else 'FAIL'} liver_manager schedule slots")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1

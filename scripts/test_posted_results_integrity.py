@@ -36,7 +36,7 @@ def main() -> int:
         ("recovery row metrics", row["metrics_status"] == "MANUAL_PENDING"),
         ("recovery row platform", row["platform"] == "threads"),
         ("recovery row safe status", row["status"] == "RECOVERED"),
-        ("strict metrics set", 'allowed_metrics = {"PENDING", "MEASURED", "MANUAL_PENDING"}' in source),
+        ("strict metrics set", 'allowed_metrics = {"PENDING", "MEASURED", "MANUAL_PENDING", "PARTIAL", "UNAVAILABLE"}' in source),
         ("post_url strictness", "posted_rows_have_post_url_or_permalink_pending" in source),
         ("real/media strictness", "posted_real_post_true" in source and "posted_media_used_false" in source),
         ("queue consistency check", "queue_posted_has_posted_result" in source and "posted_queue_id_consistent" in source),

@@ -135,7 +135,10 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
     ws = get_ws(client, logical)
     headers = _get_headers(ws)
     if key not in headers:
-        raise KeyError(f"{logical}: missing key header {key}")
+        # The caller has already made the fail-closed posting decision. A
+        # legacy or partially provisioned sheet must not turn that safe block
+        # into an uncaught exception; schema health reports the missing column.
+        return False
     cell = _call_with_rate_limit_retry(
         f"find:{logical}:{key}",
         lambda: ws.find(key_value, in_column=headers.index(key) + 1),
@@ -255,11 +258,10 @@ def duplicate_reason(
             and str(posted.get("account_id", "")) == account_id
             and str(posted.get("platform", "")).lower() == "threads"
             and str(posted.get("posted_text", "")).strip() == text.strip()
-            and str(posted.get("media_asset_id", "")).strip() == media_asset_id
             and text.strip()
         )
         if same_text:
-            return "same text/account/platform/media already POSTED"
+            return "same text/account/platform already POSTED"
     return ""
 
 
@@ -395,6 +397,17 @@ def save_posted_result(
         "clip_candidate_id": queue_row.get("clip_candidate_id", ""),
         "generation_mode": queue_row.get("generation_mode", ""),
         "validator_status": validator_status,
+        "caption_provider": queue_row.get("caption_provider", ""),
+        "caption_provider_version": queue_row.get("caption_provider_version", ""),
+        "alignment_status": queue_row.get("alignment_status", ""),
+        "final_alignment_score": queue_row.get("final_alignment_score", ""),
+        "main_claim_coverage": queue_row.get("main_claim_coverage", ""),
+        "unsupported_claim_count": queue_row.get("unsupported_claim_count", ""),
+        "source_copy_similarity": queue_row.get("source_copy_similarity", ""),
+        "recent_post_similarity": queue_row.get("recent_post_similarity", ""),
+        "source_content_hash": queue_row.get("content_hash", ""),
+        "verification_status": "PENDING",
+        "verification_checked_at": "",
         "source_queue_status": queue_row.get("status", ""),
         "save_source": "process_threads_queue",
         "created_by": "process_threads_queue",
@@ -570,6 +583,12 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "aspect_ratio": queue_row.get("aspect_ratio", ""),
             "public_post_text": text,
             "media_origin": "direct_reference" if str(queue_row.get("generation_mode", "")) == "direct_reference_media" else "generated_clip",
+            "alignment_status": queue_row.get("alignment_status", ""),
+            "final_alignment_score": queue_row.get("final_alignment_score", ""),
+            "main_claim_coverage": queue_row.get("main_claim_coverage", ""),
+            "unsupported_claim_count": queue_row.get("unsupported_claim_count", ""),
+            "source_copy_similarity": queue_row.get("source_copy_similarity", ""),
+            "recent_post_similarity": queue_row.get("recent_post_similarity", ""),
         })
         if media_validation["status"] != "PASS":
             log_event(client, account_id, "SAFETY_STOP_MEDIA_VALIDATOR", "media validator blocked post", {"queue_id": queue_id, "blocked_reasons": media_validation["blocked_reasons"]})

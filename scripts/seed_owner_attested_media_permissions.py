@@ -55,6 +55,7 @@ def permission_row(source: dict[str, Any], now: str) -> dict[str, str]:
         "source_url": str(source.get("canonical_url") or source.get("source_url") or ""),
         "account_id": str((source.get("target_account_ids") or [source.get("target_account_id")])[0] or ""),
         "usage_mode": "direct_and_clip" if is_clip_source else "direct_media_reuse",
+        "rights_status": "approved_creator_clip", "permission_status": "approved",
         "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true",
         "allow_transcription": str(is_clip_source).lower(), "allow_analysis": "true", "allow_cut": str(is_clip_source).lower(),
         "allow_clip_repost": str(is_clip_source).lower(), "allow_new_caption": "true", "allow_edit": str(is_clip_source).lower(),

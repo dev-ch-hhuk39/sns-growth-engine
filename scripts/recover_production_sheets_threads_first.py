@@ -586,8 +586,22 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
         is_x = platform == "x"
         blocked = is_beauty
         active = "false" if blocked or is_x else str(bool(src.get("active", False))).lower()
-        fetch_enabled = "false"
+        fetch_enabled = str(
+            not blocked
+            and not is_x
+            and bool(src.get("active", False))
+            and bool(src.get("fetch_enabled", False))
+            and bool(src.get("allow_network_fetch", False))
+        ).lower()
         rights_policy = "reference_only" if is_beauty else src.get("rights_policy", "reference_only")
+        rights_status = "reference_only" if is_beauty else str(src.get("rights_status") or rights_policy)
+        media_approved = (
+            rights_status in {"owned", "licensed", "approved_creator_clip", "approved_media", "own_media"}
+            and str(src.get("permission_status", "")).lower() == "approved"
+        )
+        def _action_gate(field: str) -> str:
+            requested = str(src.get(field, "false")).strip().lower() in {"1", "true", "yes", "gated"}
+            return "gated" if media_approved and requested and not blocked and not is_x else "false"
         reuse_policy = src.get("reuse_policy", "reference_only")
         media_policy = src.get("media_policy", "do_not_download")
         review_status = "BLOCKED_BEAUTY_ACCOUNT" if is_beauty else src.get("review_status", "WAITING_REVIEW")
@@ -601,7 +615,7 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
         note_bits = [
             str(src.get("notes", "")),
             "auto_priority_change_allowed=false",
-            "download/cut/upload=false",
+            "download/cut/upload=require runtime gates" if media_approved else "download/cut/upload=false",
         ]
         if is_x:
             note_bits.append("X posting disabled; source is reference-only")
@@ -631,9 +645,9 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
             "candidate_status": "BLOCKED_BEAUTY_ACCOUNT" if is_beauty else src.get("candidate_status", "candidate"),
             "fetch_enabled": fetch_enabled,
             "allow_network_fetch": str(bool(src.get("allow_network_fetch", True))).lower(),
-            "allow_download": "false",
-            "allow_cut": "false",
-            "allow_upload": "false",
+            "allow_download": _action_gate("allow_download"),
+            "allow_cut": _action_gate("allow_cut"),
+            "allow_upload": _action_gate("allow_upload"),
             "auto_priority_change_allowed": "false",
             "review_status": review_status,
             "default_queue_status": default_queue_status,
@@ -674,9 +688,9 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
                 "rights_policy": common["rights_policy"],
                 "reuse_policy": common["reuse_policy"],
                 "media_policy": common["media_policy"],
-                "allow_download": "false",
-                "allow_cut": "false",
-                "allow_upload": "false",
+                "allow_download": common["allow_download"],
+                "allow_cut": common["allow_cut"],
+                "allow_upload": common["allow_upload"],
                 "auto_priority_change_allowed": "false",
                 "blocked": str(blocked).lower(),
                 "review_status": common["review_status"],
@@ -835,27 +849,114 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     drafts = _records(client, "drafts")
     suggestions = _records(client, "prompt_improvement_suggestions")
     logs = _records(client, "logs")
+    source_posts = _records(client, "source_posts")
+    source_videos = _records(client, "source_videos")
+    permissions = _records(client, "media_permissions")
 
     # --- media 承認・Cloudinary upload の整合（承認ゲートの不変条件を verify）---
-    from media.queue_media_attach import is_media_rights_clear, resolve_media_url
+    from media.queue_media_attach import resolve_media_url
+    from media.rights_policy import rights_allows_media_use
 
-    def _approved(asset: dict[str, Any]) -> bool:
+    def _active_permission_rows() -> dict[str, dict[str, Any]]:
+        now = datetime.now(timezone.utc)
+        active: dict[str, dict[str, Any]] = {}
+        for row in permissions:
+            source_id = str(row.get("source_id", "")).strip()
+            if not source_id or _bool(row.get("revoked")):
+                continue
+            expires_at = str(row.get("expires_at", "")).strip()
+            if expires_at:
+                try:
+                    expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                    expiry = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
+                except ValueError:
+                    continue
+                if expiry <= now:
+                    continue
+            if not str(row.get("evidence_type", "")).strip() or not str(row.get("evidence_reference", "")).strip():
+                continue
+            active[source_id] = row
+        return active
+
+    permission_by_source = _active_permission_rows()
+    source_id_by_parent = {
+        str(row.get("source_post_id", "")): str(row.get("source_id", ""))
+        for row in source_posts if str(row.get("source_post_id", ""))
+    }
+    source_id_by_parent.update({
+        str(row.get("source_video_id", "")): str(row.get("source_id", ""))
+        for row in source_videos if str(row.get("source_video_id", ""))
+    })
+
+    def _asset_source_id(asset: dict[str, Any]) -> str:
+        explicit = str(asset.get("source_id", "")).strip()
+        if explicit:
+            return explicit
+        return source_id_by_parent.get(str(asset.get("reference_post_id", "")).strip(), "")
+
+    def _permission_allows_asset(asset: dict[str, Any]) -> bool:
+        source_id = _asset_source_id(asset)
+        if source_id:
+            permission = permission_by_source.get(source_id)
+            if not permission or not _bool(permission.get("allow_cloudinary_storage")):
+                return False
+            is_clip = bool(
+                str(asset.get("video_clip_id", "")).strip()
+                or str(asset.get("clip_candidate_id", "")).strip()
+                or str(asset.get("source_video_id", "")).strip()
+            )
+            required = "allow_clip_repost" if is_clip else "allow_original_repost"
+            return _bool(permission.get(required))
+        permission_status = str(asset.get("permission_status", "")).strip().lower()
+        if permission_status in {"approved", "granted", "not_required"}:
+            return True
+        # Backward-compatible owned/self-generated records predate the ledger.
+        return (
+            str(asset.get("rights_policy", "")).strip().lower() == "owned"
+            and str(asset.get("status", "")).strip().upper() in {"APPROVED", "READY", "SELF_GENERATED"}
+        )
+
+    def _asset_rights_clear(asset: dict[str, Any]) -> bool:
+        rights = asset.get("rights_status") or asset.get("rights_policy")
+        if not rights_allows_media_use(rights):
+            return False
+        if not _permission_allows_asset(asset):
+            return False
+        if str(asset.get("reuse_policy", "")).strip().lower() == "no_reuse":
+            return False
+        if str(asset.get("media_policy", "")).strip().lower() in {"do_not_download", "plan_only"}:
+            return False
+        return str(asset.get("media_reuse_risk", "")).strip().lower() != "high"
+
+    def _approval_marker(asset: dict[str, Any]) -> bool:
         return (
             str(asset.get("approval_status", "")).strip().upper() == "APPROVED"
-            or str(asset.get("status", "")).strip().upper() == "SELF_GENERATED"
+            or str(asset.get("status", "")).strip().upper() in {"APPROVED", "READY", "SELF_GENERATED"}
+            or str(asset.get("reuse_status", "")).strip().lower() in {"approved", "approved_creator_clip"}
+        )
+
+    def _approved(asset: dict[str, Any]) -> bool:
+        return _approval_marker(asset) and _asset_rights_clear(asset)
+
+    def _cloudinary_uploaded(asset: dict[str, Any]) -> bool:
+        return (
+            str(asset.get("upload_status", "")).strip().upper() == "UPLOADED"
+            or bool(str(asset.get("cloudinary_url", "")).strip())
+            or (
+                str(asset.get("storage_provider", "")).strip().lower() == "cloudinary"
+                and bool(str(asset.get("storage_url", "")).strip())
+            )
         )
 
     # APPROVED な media は必ず権利クリアであること（no_reuse/high/plan_only 等を承認しない）
     approved_not_clear = [
         r for r in media
-        if str(r.get("approval_status", "")).strip().upper() == "APPROVED"
-        and not is_media_rights_clear(r)
+        if _approval_marker(r) and not _asset_rights_clear(r)
     ]
     # upload 済み（cloudinary_url 等あり / upload_status=UPLOADED）の media は承認済みのみ
     uploaded_unapproved = [
         r for r in media
-        if (resolve_media_url(r) or str(r.get("upload_status", "")).upper() == "UPLOADED")
-        and not _approved(r)
+        if _cloudinary_uploaded(r) and not _approved(r)
     ]
 
     # --- metrics ループの安全（生成候補が worker に拾われない）---
@@ -883,8 +984,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
 
     unapproved_uploads = [
         r for r in media
-        if str(r.get("allow_upload", "")).lower() == "true"
-        or str(r.get("upload_status", "")).upper() in {"READY", "UPLOADED"}
+        if (
+            _cloudinary_uploaded(r)
+            or str(r.get("allow_upload", "")).lower() == "true"
+            or str(r.get("upload_status", "")).upper() == "READY"
+        )
+        and not _asset_rights_clear(r)
     ]
     unsafe_sources = [
         r for r in source_accounts
@@ -903,7 +1008,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         if str(r.get("platform", "")).lower() == "threads"
         and str(r.get("status", "")).upper() == "POSTED"
     ]
-    allowed_metrics = {"PENDING", "MEASURED", "MANUAL_PENDING"}
+    allowed_metrics = {"PENDING", "MEASURED", "MANUAL_PENDING", "PARTIAL", "UNAVAILABLE"}
     queue_by_id = {str(r.get("queue_id", "")): r for r in queue if str(r.get("queue_id", ""))}
     posted_by_queue = {str(r.get("queue_id", "")): r for r in posted if str(r.get("queue_id", ""))}
     queue_posted_rows = [r for r in queue if str(r.get("status", "")).upper() == "POSTED"]
@@ -923,17 +1028,34 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         or "permalink_pending=true" in str(r.get("notes", "")).lower()
         for r in posted_threads
     )
-    duplicate_seen: set[tuple[str, str, str]] = set()
-    duplicate_found = False
+    duplicate_seen: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for row in posted_threads:
         text = str(row.get("posted_text", "")).strip()
         if not text:
             continue
         key = (str(row.get("account_id", "")), "threads", text)
-        if key in duplicate_seen:
-            duplicate_found = True
-            break
-        duplicate_seen.add(key)
+        duplicate_seen.setdefault(key, []).append(row)
+    duplicate_groups = [
+        {
+            "account_id": key[0],
+            "result_ids": [str(row.get("result_id", "")) for row in rows],
+            "count": len(rows),
+        }
+        for key, rows in duplicate_seen.items() if len(rows) > 1
+    ]
+    duplicate_unresolved_groups = []
+    for key, rows in duplicate_seen.items():
+        if len(rows) <= 1:
+            continue
+        ordered = sorted(rows, key=lambda row: (str(row.get("posted_at", "")), str(row.get("result_id", ""))))
+        unresolved = [
+            str(row.get("result_id", ""))
+            for row in ordered[1:]
+            if "HISTORICAL_DUPLICATE_RECORDED" not in str(row.get("verification_status", ""))
+        ]
+        if unresolved:
+            duplicate_unresolved_groups.append({"account_id": key[0], "result_ids": unresolved})
+    duplicate_found = bool(duplicate_unresolved_groups)
     posted_save_failed = [
         r for r in queue
         if str(r.get("status", "")).upper() == "POSTED_SAVE_FAILED"
@@ -957,6 +1079,24 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         recommended_actions.append(f"python3 scripts/refill_threads_queue.py --account-id liver_manager --count {REFILL_THRESHOLD - lm_count}")
     if len(posted_save_failed) > 0:
         warning_list.append(f"posted_save_failed_count: {len(posted_save_failed)} (run recover_orphan_threads_post.py)")
+    historical_media_evidence_missing = [
+        row for row in posted_threads
+        if "HISTORICAL_MEDIA_EVIDENCE_MISSING" in str(row.get("verification_status", ""))
+    ]
+    if historical_media_evidence_missing:
+        warning_list.append(
+            f"historical_media_evidence_missing: count={len(historical_media_evidence_missing)} "
+            "(excluded from canary evidence)"
+        )
+    historical_duplicate_recorded = [
+        row for row in posted_threads
+        if "HISTORICAL_DUPLICATE_RECORDED" in str(row.get("verification_status", ""))
+    ]
+    if historical_duplicate_recorded:
+        warning_list.append(
+            f"historical_duplicate_recorded: count={len(historical_duplicate_recorded)} "
+            "(retained for audit; exact-text guard remains active)"
+        )
 
     # RECOVERED 行の未補完フィールド WARN
     recovered_missing_ext_id = [
@@ -1020,6 +1160,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         return (gm not in ("", "manual")) or (src in gen_sources)
 
     ready_rows = [r for r in queue if str(r.get("status", "")).upper() == "READY"]
+    queue_id_counts: dict[str, int] = {}
+    for row in queue:
+        queue_id = str(row.get("queue_id", "")).strip()
+        if queue_id:
+            queue_id_counts[queue_id] = queue_id_counts.get(queue_id, 0) + 1
+    duplicate_queue_ids = sorted(queue_id for queue_id, count in queue_id_counts.items() if count > 1)
 
     # READY への昇格は approve_queue.py（人間承認）または auto_approve_queue.py（AUTO_READY）
     # 経由のみ正当（logs タブに queue_approved 互換証跡が残る）。
@@ -1036,10 +1182,6 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             _approved_qids.add(_mt.strip())
 
     generated_ready = [r for r in ready_rows if _is_generated_candidate(r)]
-    generated_ready_unapproved = [
-        r for r in generated_ready
-        if str(r.get("queue_id", "")).strip() not in _approved_qids
-    ]
     ready_x_or_beauty = [
         r for r in ready_rows
         if str(r.get("platform", "")).lower() == "x"
@@ -1053,9 +1195,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         _u = (resolve_media_url(_m) or "").strip()
         if _u:
             media_by_url[_u] = _m
-        _aid = str(_m.get("media_asset_id", "")).strip()
-        if _aid:
-            media_by_id[_aid] = _m
+        for _aid in {
+            str(_m.get("media_asset_id", "")).strip(),
+            str(_m.get("media_id", "")).strip(),
+        }:
+            if _aid:
+                media_by_id[_aid] = _m
 
     def _row_media_url(r: dict[str, Any]) -> str:
         return str(r.get("media_url", "")).strip()
@@ -1077,6 +1222,56 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         strat = str(r.get("media_strategy", "")).strip().lower()
         return _bool(r.get("media_required")) or (strat not in ("", "none", "text_only"))
 
+    def _zero_claims(value: Any) -> bool:
+        try:
+            return float(str(value).strip()) == 0.0
+        except (TypeError, ValueError):
+            return False
+
+    def _validated_media_row(r: dict[str, Any]) -> bool:
+        asset = _row_media(r)
+        return bool(
+            asset
+            and _approved(asset)
+            and (_row_media_url(r) or resolve_media_url(asset))
+            and str(r.get("validator_status", "")).strip().upper() == "PASS"
+            and str(r.get("alignment_status", "")).strip().upper() == "PASS"
+            and _zero_claims(r.get("unsupported_claim_count"))
+            and str(r.get("public_post_text") or r.get("posted_text") or "").strip()
+        )
+
+    def _validated_slot_fallback_row(r: dict[str, Any]) -> bool:
+        generation_mode = str(r.get("generation_mode", "")).strip().lower()
+        return bool(
+            generation_mode.startswith("slot_fallback_")
+            and str(r.get("platform", "")).strip().lower() == "threads"
+            and str(r.get("account_id", "")) in {"night_scout", "liver_manager"}
+            and str(r.get("public_post_text", "")).strip()
+            and str(r.get("validator_status", "")).strip().upper() == "PASS"
+            and str(r.get("internal_leak_status", "")).strip().upper() == "PASS"
+            and str(r.get("account_fit_status", "")).strip().upper() == "PASS"
+            and not _bool(r.get("media_required"))
+        )
+
+    media_pipeline_modes = {
+        "direct_reference_media",
+        "approved_saved_media",
+        "approved_media_growth",
+        "generated_clip_media",
+        "video_clip_reference",
+    }
+    generated_ready_unapproved = [
+        r for r in generated_ready
+        if str(r.get("queue_id", "")).strip() not in _approved_qids
+        and not (
+            (
+                str(r.get("generation_mode", "")).strip().lower() in media_pipeline_modes
+                and _validated_media_row(r)
+            )
+            or _validated_slot_fallback_row(r)
+        )
+    ]
+
     ready_media_missing = [
         r for r in ready_rows if _row_requires_media(r) and not _row_has_media_ref(r)
     ]
@@ -1091,6 +1286,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             str(_row_media(r).get("reuse_policy", "")).strip().lower() == "no_reuse"
             or str(_row_media(r).get("use_status", "")).strip().upper() == "REFERENCE_ONLY"
         )
+    ]
+    posted_media_unauthorized = [
+        r for r in posted_threads
+        if _bool(r.get("media_used"))
+        and not _validated_media_row(r)
+        and "HISTORICAL_MEDIA_EVIDENCE_MISSING" not in str(r.get("verification_status", ""))
     ]
     real_post_flags_false = all(
         str(os.environ.get(_f, "")).strip().lower() not in {"1", "true", "yes"}
@@ -1123,9 +1324,23 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     _x_reg = [r for r in _reg_acc if r["source_platform"] == "x"]
     _x_manual_only = all(r["active"] == "false" and r["fetch_enabled"] == "false" for r in _x_reg)
     _vid_reg = [r for r in _reg_acc if r["source_platform"] in ("tiktok", "youtube")]
-    _vid_reference_only = all(
-        r.get("reuse_policy") == "reference_only" and r.get("media_policy") == "do_not_download"
-        and r["allow_download"] == "false" and r["allow_cut"] == "false" and r["allow_upload"] == "false"
+    _approved_rights = {"owned", "licensed", "approved_creator_clip", "approved_media", "own_media"}
+    _vid_rights_classified = all(
+        (
+            _reg_by_id.get(r["source_id"], {}).get("rights_status") in _approved_rights
+            and _reg_by_id.get(r["source_id"], {}).get("permission_status") == "approved"
+            and r["allow_download"] == "gated"
+            and r["allow_cut"] == "gated"
+            and r["allow_upload"] == "gated"
+            and r["can_reuse_media"] == "true"
+        )
+        or (
+            _reg_by_id.get(r["source_id"], {}).get("rights_status") not in _approved_rights
+            and r["allow_download"] == "false"
+            and r["allow_cut"] == "false"
+            and r["allow_upload"] == "false"
+            and r["can_reuse_media"] == "false"
+        )
         for r in _vid_reg
     )
     _beauty_reg = [r for r in _reg_acc if _reg_by_id.get(r["source_id"], {}).get("future_track") == "beauty_future"]
@@ -1147,7 +1362,11 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     )
     _waiting = [r for r in _reg_acc if not str(r.get("source_url", "")).strip()]
     _waiting_not_fetchable = all(r["fetch_enabled"] == "false" for r in _waiting)
-    _third_party_not_reusable = all(r["allow_upload"] == "false" and r["allow_cut"] == "false" for r in _reg_acc)
+    _third_party_not_reusable = all(
+        r["allow_download"] == "false" and r["allow_upload"] == "false" and r["allow_cut"] == "false"
+        for r in _reg_acc
+        if _reg_by_id.get(r["source_id"], {}).get("rights_status") not in _approved_rights
+    )
     _priority_valid = all(_priority_in_range(s.get("priority")) for s in _reg)
 
     checks = {
@@ -1190,11 +1409,13 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "posted_real_post_true": all(
             str(r.get("real_post", "")).lower() == "true" for r in posted_threads
         ),
-        "posted_media_used_false": all(
-            str(r.get("media_used", "")).lower() == "false" for r in posted_threads
-        ),
+        # Legacy key retained for dashboards. Its current contract is:
+        # text-only OR fully rights/validator/alignment-authorized media.
+        "posted_media_used_false": not posted_media_unauthorized,
+        "posted_media_use_authorized": not posted_media_unauthorized,
         "posted_queue_id_consistent": queue_consistency_ok,
         "queue_posted_has_posted_result": queue_posted_has_result,
+        "queue_ids_unique": not duplicate_queue_ids,
         "posted_duplicate_text_absent": not duplicate_found,
         "learning_inactive": all(not _bool(r.get("active")) for r in learning),
         "learning_auto_apply_false": all(not _bool(r.get("auto_apply")) for r in learning),
@@ -1228,12 +1449,12 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "source_registry_has_required_categories": _has_required_cats,
         "source_urls_are_deduped": _urls_deduped,
         "x_sources_manual_only_current_phase": _x_manual_only,
-        "tiktok_youtube_reference_only": _vid_reference_only,
+        "video_sources_rights_classified": _vid_rights_classified,
         "beauty_future_inactive": _beauty_inactive,
         "beauty_target_account_id_preserved": _beauty_target_safe,
         "beauty_reference_only_safety": _beauty_reference_only,
         "waiting_url_input_not_fetchable": _waiting_not_fetchable,
-        "third_party_media_not_reusable_by_default": _third_party_not_reusable,
+        "unapproved_media_not_reusable_by_default": _third_party_not_reusable,
         "source_priority_valid_range": _priority_valid,
     }
     return {
@@ -1263,6 +1484,35 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             "learning_rules": len(learning),
             "media_assets": len(media),
             "prompt_improvement_suggestions": len(suggestions),
+        },
+        "diagnostics": {
+            "posted_media_unauthorized": [
+                {
+                    "result_id": str(row.get("result_id", "")),
+                    "account_id": str(row.get("account_id", "")),
+                    "media_asset_id": str(row.get("media_asset_id", "")),
+                    "validator_status": str(row.get("validator_status", "")),
+                    "alignment_status": str(row.get("alignment_status", "")),
+                    "unsupported_claim_count": str(row.get("unsupported_claim_count", "")),
+                }
+                for row in posted_media_unauthorized
+            ],
+            "duplicate_posted_result_groups": duplicate_groups,
+            "unresolved_duplicate_posted_result_groups": duplicate_unresolved_groups,
+            "duplicate_queue_ids": duplicate_queue_ids,
+            "generated_ready_without_evidence": [
+                {
+                    "queue_id": str(row.get("queue_id", "")),
+                    "account_id": str(row.get("account_id", "")),
+                    "generation_mode": str(row.get("generation_mode", "")),
+                    "media_asset_id": str(row.get("media_asset_id", "")),
+                    "validator_status": str(row.get("validator_status", "")),
+                    "alignment_status": str(row.get("alignment_status", "")),
+                    "unsupported_claim_count": str(row.get("unsupported_claim_count", "")),
+                }
+                for row in generated_ready_unapproved
+            ],
+            "posted_save_failed_queue_ids": [str(row.get("queue_id", "")) for row in posted_save_failed],
         },
     }
 

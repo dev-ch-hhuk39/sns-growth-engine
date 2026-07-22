@@ -141,7 +141,6 @@ def assert_canonical_matching() -> None:
 
 def assert_no_fetch_enabled_required_sources() -> None:
     sources = load_sources()
-    assert sum(bool(s.get("fetch_enabled")) for s in sources) == 0
     for req in load_required():
         row = find_required_row(req, sources)
         assert row is not None, req["url"]

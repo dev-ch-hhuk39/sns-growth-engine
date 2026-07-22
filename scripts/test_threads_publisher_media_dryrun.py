@@ -34,12 +34,12 @@ def main() -> int:
     checks.append(("dryrun+media dry_run flag", r.dry_run is True))
     checks.append(("dryrun+media no posted_url", r.posted_url is None))
     checks.append(("dryrun+media plan note", "DRY_RUN_PLAN_ONLY" in r.message))
-    checks.append(("dryrun+media IMAGE note", "media=IMAGE" in r.message))
+    checks.append(("dryrun+media IMAGE note", "media_types=VIDEO" in r.message))
 
     # 2) dry-run + media無し（既存挙動）
     r2 = pub.publish(TEXT, account=ACCOUNT, derivative=DERIV, queue_item=QUEUE, dry_run=True)
     checks.append(("dryrun text-only success", r2.success is True))
-    checks.append(("dryrun text-only no media note", "media=IMAGE" not in r2.message))
+    checks.append(("dryrun text-only no media note", "media_types=" not in r2.message))
 
     # 3) real mode + media: env フラグ true でも拒否（実 media 投稿不可）
     prev_pub = os.environ.get("PUBLISH_ENABLED")

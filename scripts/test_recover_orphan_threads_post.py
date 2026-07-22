@@ -27,6 +27,7 @@ print("=== test_recover_orphan_threads_post ===\n")
 from scripts.recover_orphan_threads_post import (
     _check_already_recovered,
     _match_post_in_api_results,
+    _write_recovery,
 )
 
 
@@ -91,7 +92,31 @@ check("API posts 空リストで None を返す", matched4 is None)
 # 10. スクリプトが import できること（再確認）
 check("scripts/recover_orphan_threads_post.py import OK", True)
 
-# 11. --help が exit 0 相当で通ること
+# 11. dry-run telemetry must not expose post text, permalink, or unknown
+# metrics as fabricated zeroes.
+secret_text = "公開前の投稿本文はstdoutに出さない"
+dry_plan = _write_recovery(
+    object(),
+    queue_row={
+        "queue_id": "q_redacted",
+        "account_id": "night_scout",
+        "draft_id": "d_redacted",
+        "status": "POSTED_SAVE_FAILED",
+    },
+    social_derivative_id="sd_redacted",
+    text=secret_text,
+    external_post_id="external-redacted",
+    post_url="https://www.threads.com/@example/post/redacted",
+    dry_run=True,
+)
+dry_json = str(dry_plan)
+check("dry-runに投稿本文を含めない", secret_text not in dry_json)
+check("dry-runに投稿URLを含めない", "threads.com" not in dry_json)
+preview = dry_plan["would_write"]["posted_results"]
+check("dry-runはmetrics未計測を明示", preview["metrics_status"] == "MANUAL_PENDING")
+check("dry-runは未知metricsの0を表示しない", not ({"views", "likes", "comments"} & set(preview)))
+
+# 12. --help が exit 0 相当で通ること
 import subprocess, sys as _sys
 result_help = subprocess.run(
     [_sys.executable, "scripts/recover_orphan_threads_post.py", "--help"],
@@ -100,7 +125,7 @@ result_help = subprocess.run(
 check("--help が exit 0 で終了する", result_help.returncode == 0)
 check("--help に --apply が含まれる", b"--apply" in result_help.stdout)
 
-# 12. beauty_account は choices に含まれない
+# 13. beauty_account は choices に含まれない
 check("beauty_account は --account-id の選択肢外", b"beauty_account" not in result_help.stdout)
 
 print(f"\n--- 結果 ---")

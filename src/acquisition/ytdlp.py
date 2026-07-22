@@ -4,8 +4,10 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from .contracts import ProviderResult
 from .models import NormalizedMediaItem, NormalizedSourcePost, canonical_url, external_post_id, stable_content_hash, utc_now
 from .router import BackendFailure
+from .ytdlp_runtime import metadata_options
 
 
 class YtDlpProfilePostAdapter:
@@ -23,7 +25,12 @@ class YtDlpProfilePostAdapter:
         source_url = str(source.get("canonical_url") or source.get("source_url") or "").rstrip("/")
         if platform == "youtube" and "/channel/" in source_url and not source_url.endswith("/videos"):
             source_url = f"{source_url}/videos"
-        options = {"quiet": True, "skip_download": True, "extract_flat": True, "playlistend": max(1, min(limit, 20))}
+        options = metadata_options(platform, {
+            "quiet": True,
+            "skip_download": True,
+            "extract_flat": True,
+            "playlistend": max(1, min(limit, 20)),
+        })
         try:
             info = yt_dlp.YoutubeDL(options).extract_info(source_url, download=False)
         except Exception as exc:
@@ -78,3 +85,22 @@ class YtDlpProfilePostAdapter:
                 discovered_at=utc_now(),
             ))
         return result
+
+    def discover_profile(self, source: dict[str, Any], *, limit: int) -> ProviderResult[list[NormalizedSourcePost]]:
+        try:
+            posts = self.acquire(source, limit=limit)
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "PASS" if posts else "PARTIAL",
+                data=posts,
+                reason="" if posts else "no_videos_discovered",
+            )
+        except Exception as exc:
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "FAILED",
+                reason=f"{type(exc).__name__}:profile_discovery_failed",
+                retryable=True,
+            )

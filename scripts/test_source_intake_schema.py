@@ -27,8 +27,8 @@ REQUIRED_FIELDS = [
     "auto_priority_change_allowed",
 ]
 
-VALID_RIGHTS_POLICIES = {"reference_only", "approved_media", "own_media", "unknown", "do_not_use"}
-VALID_MEDIA_POLICIES = {"do_not_download", "approved_media_only", "plan_only"}
+VALID_RIGHTS_POLICIES = {"reference_only", "third_party_reference_only", "approved_media", "own_media", "approved_creator_clip", "licensed", "unknown", "do_not_use"}
+VALID_MEDIA_POLICIES = {"do_not_download", "approved_media_only", "approved_gated", "plan_only"}
 
 
 def _load_sources() -> list[dict]:
@@ -79,15 +79,16 @@ def test_beauty_account_inactive():
 def test_download_requires_approved_media():
     sources = _load_sources()
     failed = []
-    approved = {"approved_media", "own_media"}
+    approved = {"approved_media", "own_media", "approved_creator_clip", "licensed"}
     for s in sources:
         sid = s.get("source_id", "?")
         rp = s.get("rights_policy", "")
-        if s.get("allow_download") and rp not in approved:
+        permission_ok = str(s.get("permission_status", "")).lower() == "approved"
+        if s.get("allow_download") and (rp not in approved or not permission_ok):
             failed.append(f"{sid}: allow_download=true だが rights_policy={repr(rp)} (approved_media/own_media のみ許可)")
-        if s.get("allow_cut") and rp not in approved:
+        if s.get("allow_cut") and (rp not in approved or not permission_ok):
             failed.append(f"{sid}: allow_cut=true だが rights_policy={repr(rp)}")
-        if s.get("allow_upload") and rp not in approved:
+        if s.get("allow_upload") and (rp not in approved or not permission_ok):
             failed.append(f"{sid}: allow_upload=true だが rights_policy={repr(rp)}")
     assert not failed, "\n".join(failed)
     print(f"  [PASS] allow_download/cut/upload と rights_policy の整合性確認")

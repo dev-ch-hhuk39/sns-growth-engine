@@ -25,7 +25,7 @@ ungrounded = [{
     "clip_score": 99,
     "transcript_grounded": "false",
 }]
-grounded = [{**ungrounded[0], "clip_candidate_id": "clip_2", "transcript_grounded": "true"}]
+grounded = [{**ungrounded[0], "clip_candidate_id": "clip_2", "transcript_grounded": "true", "alignment_status": "PASS"}]
 blocked, _, reasons = select_candidate(ungrounded, source_videos, [])
 selected, _, _ = select_candidate(grounded, source_videos, [])
 checks = [

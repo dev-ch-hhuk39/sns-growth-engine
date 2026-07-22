@@ -8,11 +8,13 @@ profile no longer exposes post links.
 from __future__ import annotations
 
 import html
+import json
 import re
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.parse import urljoin
 
+from .contracts import ProviderResult
 from .models import NormalizedMediaItem, NormalizedSourcePost, canonical_url, external_post_id, stable_content_hash, utc_now
 from .router import BackendFailure
 
@@ -26,6 +28,87 @@ def _meta_values(page_html: str, key: str) -> list[str]:
         if match.group("key").lower() == key.lower():
             values.append(html.unescape(match.group("value")))
     return list(dict.fromkeys(values))
+
+
+def _json_scripts(page_html: str):
+    for payload in re.findall(r"<script[^>]*>(.*?)</script>", page_html, flags=re.I | re.S):
+        candidate = html.unescape(payload.strip())
+        if not candidate or candidate[0] not in "[{":
+            continue
+        try:
+            yield json.loads(candidate)
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+
+def _walk(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for nested in value.values():
+            yield from _walk(nested)
+    elif isinstance(value, list):
+        for nested in value:
+            yield from _walk(nested)
+
+
+def _https(value: Any) -> str:
+    candidate = html.unescape(str(value or "")).replace("\\/", "/")
+    return candidate if candidate.startswith("https://") else ""
+
+
+def _media_from_node(node: dict[str, Any]) -> tuple[str, str] | None:
+    video_candidates = node.get("video_versions") or node.get("video_candidates") or []
+    if isinstance(video_candidates, list):
+        for candidate in video_candidates:
+            if isinstance(candidate, dict):
+                url = _https(candidate.get("url") or candidate.get("src"))
+                if url:
+                    return "video", url
+    for key in ("video_url", "video_src", "playback_url"):
+        url = _https(node.get(key))
+        if url:
+            return "video", url
+
+    image_versions = node.get("image_versions2") or node.get("image_versions") or {}
+    if isinstance(image_versions, dict):
+        image_candidates = image_versions.get("candidates") or []
+        if isinstance(image_candidates, list):
+            for candidate in image_candidates:
+                if isinstance(candidate, dict):
+                    url = _https(candidate.get("url") or candidate.get("src"))
+                    if url:
+                        return "image", url
+    for key in ("image_url", "display_url", "image_src"):
+        url = _https(node.get(key))
+        if url:
+            return "image", url
+    return None
+
+
+def extract_ordered_post_media(page_html: str) -> list[tuple[str, str]]:
+    """Extract ordered carousel children from public embedded post JSON.
+
+    Only explicit carousel-like arrays are accepted.  Generic hydration lists
+    are intentionally ignored so profile avatars and recommended posts cannot
+    be attached to the selected source post.
+    """
+    carousel_keys = ("carousel_media", "carousel_media_items", "carousel_items", "children")
+    for payload in _json_scripts(page_html):
+        for node in _walk(payload):
+            for key in carousel_keys:
+                children = node.get(key)
+                if not isinstance(children, list) or not children:
+                    continue
+                ordered: list[tuple[str, str]] = []
+                for child in children:
+                    if not isinstance(child, dict):
+                        continue
+                    found = _media_from_node(child)
+                    if found and found not in ordered:
+                        ordered.append(found)
+                if ordered:
+                    return ordered
+    return []
 
 
 def extract_profile_post_urls(page_html: str, profile_url: str, *, limit: int) -> list[str]:
@@ -60,7 +143,9 @@ def parse_public_post_html(
     image_urls = _meta_values(page_html, "og:image")
     video_urls = _meta_values(page_html, "og:video") + _meta_values(page_html, "og:video:secure_url")
     media: list[NormalizedMediaItem] = []
-    ordered: list[tuple[str, str]] = [("image", url) for url in image_urls] + [("video", url) for url in video_urls]
+    ordered = extract_ordered_post_media(page_html)
+    if not ordered:
+        ordered = [("image", url) for url in image_urls] + [("video", url) for url in video_urls]
     for index, (media_type, media_url) in enumerate(dict.fromkeys(ordered)):
         media.append(NormalizedMediaItem(
             source_post_media_id=f"spm_{post_id}_{index}",
@@ -143,6 +228,19 @@ class ThreadsPublicProfileAdapter:
         if not posts:
             raise BackendFailure("threads_post_detail_unavailable")
         return posts
+
+    def discover_profile(self, source: dict[str, Any], *, limit: int) -> ProviderResult[list[NormalizedSourcePost]]:
+        try:
+            posts = self.acquire(source, limit=limit)
+            return ProviderResult(self.backend_name, self.backend_version, "PASS", data=posts)
+        except Exception as exc:
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "FAILED",
+                reason=f"{type(exc).__name__}:threads_profile_discovery_failed",
+                retryable=True,
+            )
 
 
 class ThreadsPublicHttpAdapter(ThreadsPublicProfileAdapter):

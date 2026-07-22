@@ -41,7 +41,7 @@ def main():
     result_blocked = fetcher.fetch(src, mock=False, confirm_fetch=False)
     check("BLOCKED", result_blocked.status == "BLOCKED")
 
-    print("\n[4] Agent-Reach 未インストール = NOT_INSTALLED")
+    print("\n[4] Xは常時BLOCK、YouTube研究経路は導入状態を正しく報告")
     import subprocess
     installed = False
     for cmd in [["agent-reach", "--version"], ["npx", "agent-reach", "--version"]]:
@@ -53,10 +53,13 @@ def main():
         except Exception:
             pass
 
+    x_result = fetcher.fetch(src, mock=False, confirm_fetch=True)
+    check("X network fetch BLOCKED", x_result.status == "BLOCKED")
     if not installed:
-        result_ni = fetcher.fetch(src, mock=False, confirm_fetch=True)
+        youtube_src = {**src, "source_platform": "youtube", "source_url": "https://www.youtube.com/@example"}
+        result_ni = fetcher.fetch(youtube_src, mock=False, confirm_fetch=True)
         check("NOT_INSTALLED", result_ni.status == "NOT_INSTALLED")
-        print("  [INFO] Agent-Reach 未インストール。NOT_INSTALLED として正常。")
+        print("  [INFO] Agent-Reach CLI未導入。YouTube研究経路はNOT_INSTALLEDとして正常。")
     else:
         check("installed", True, "インストール済み")
 

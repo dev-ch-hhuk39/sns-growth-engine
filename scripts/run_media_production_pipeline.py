@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
-from content_slot_runs import business_date, build_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
+from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
@@ -31,6 +31,7 @@ from process_threads_queue import process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 from upload_media_assets import build_upload_plan, execute_cloudinary_uploads  # noqa: E402
+from acquisition.reliability import build_quarantine_record, clear_failure, is_quarantined, register_failure  # noqa: E402
 
 MEDIA_CONFIG = ROOT / "config/media_growth_engine.json"
 AUTONOMOUS_CONFIG = ROOT / "config/autonomous_mode.json"
@@ -63,6 +64,17 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
+def _alignment_fields(clip: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "alignment_status": clip.get("alignment_status", ""),
+        "final_alignment_score": clip.get("final_alignment_score", ""),
+        "main_claim_coverage": clip.get("main_claim_coverage", ""),
+        "unsupported_claim_count": clip.get("unsupported_claim_count", ""),
+        "source_copy_similarity": clip.get("source_copy_similarity", ""),
+        "recent_post_similarity": clip.get("recent_post_similarity", ""),
+    }
+
+
 def _load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -88,11 +100,58 @@ def _append(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
         append()
 
 
+def _record_clip_failure(
+    client: SheetsClient,
+    clip: dict[str, Any],
+    *,
+    account_id: str,
+    reason: str,
+) -> dict[str, Any]:
+    """Persist bounded retry state and quarantine only on a repeated failure."""
+    clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+    state = register_failure(clip, reason)
+    updates = {
+        key: state.get(key, "")
+        for key in (
+            "retry_count", "last_error", "failure_signature", "same_failure_count",
+            "last_attempt_at", "quarantined_at", "quarantine_reason",
+        )
+    }
+    if is_quarantined(state):
+        updates.update({"clip_status": "QUARANTINED", "reviewer_status": "QUARANTINED", "post_status": "QUARANTINED"})
+    client.update_video_clip_candidate(clip_id, **updates)
+    if is_quarantined(state):
+        quarantine = build_quarantine_record(
+            state,
+            entity_type="video_clip_candidate",
+            entity_id=clip_id,
+            source_id=str(clip.get("source_id", "")),
+            account_id=account_id,
+        )
+        existing = {str(row.get("quarantine_id", "")) for row in _records(client, "quarantined_items")}
+        if quarantine["quarantine_id"] not in existing:
+            _append(client, "quarantined_items", quarantine)
+    return state
+
+
+def _clear_clip_failure(client: SheetsClient, clip: dict[str, Any]) -> None:
+    clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+    state = clear_failure(clip)
+    client.update_video_clip_candidate(
+        clip_id,
+        retry_count=state.get("retry_count", clip.get("retry_count", "0")),
+        last_error="",
+        failure_signature="",
+        same_failure_count="0",
+        last_attempt_at=state.get("last_attempt_at", ""),
+    )
+
+
 def _record_media_slot_result(plan: dict[str, Any], client: SheetsClient, result: dict[str, Any]) -> dict[str, Any]:
     slot_id = str(plan.get("slot_id", ""))
     if not slot_id:
         return {"status": "SKIPPED", "reason": "slot_id_not_provided"}
-    posted = str(result.get("status", "")) == "POSTED"
+    posted = str(result.get("status", "")) in {"POSTED", "POSTED_SAVE_FAILED"}
     row = build_slot_run(
         str(plan["account_id"]),
         slot_id,
@@ -214,6 +273,7 @@ def select_candidate(
     posted_results: list[dict[str, Any]],
     account_id: str = "liver_manager",
     media_assets: list[dict[str, Any]] | None = None,
+    excluded_clip_ids: set[str] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     sources = {str(row.get("source_video_id", "")): row for row in source_videos}
     posted_clip_ids = {str(row.get("clip_candidate_id", "")) for row in posted_results if row.get("clip_candidate_id")}
@@ -228,8 +288,15 @@ def select_candidate(
     }
     reasons: list[str] = []
     eligible = []
+    excluded = excluded_clip_ids or set()
     for clip in clips:
         clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+        if clip_id in excluded:
+            reasons.append(f"{clip_id}:attempted_this_run")
+            continue
+        if is_quarantined(clip):
+            reasons.append(f"{clip_id}:quarantined")
+            continue
         source_video_id = str(clip.get("source_video_id") or clip.get("reference_post_id") or "")
         source_video = sources.get(source_video_id)
         if not source_video:
@@ -252,12 +319,14 @@ def select_candidate(
         if not _true(clip.get("transcript_grounded")):
             reasons.append(f"{clip_id}:transcript_grounding_required")
             continue
+        if str(clip.get("alignment_status", "")).upper() != "PASS":
+            reasons.append(f"{clip_id}:semantic_alignment_required")
+            continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")
             continue
         if (
             clip_id in prepared_clip_ids
-            or str(clip.get("cut_status", "")).upper() in {"CUT", "DONE"}
             or str(clip.get("upload_status", "")).upper() == "UPLOADED"
             or bool(clip.get("media_asset_id") or clip.get("clip_media_asset_id") or clip.get("storage_url"))
         ):
@@ -280,8 +349,21 @@ def select_candidate(
         eligible.append((clip, source_video))
     if not eligible:
         return None, None, reasons
+    source_usage: dict[str, int] = {}
+    platform_usage: dict[str, int] = {}
+    for row in posted_results:
+        if str(row.get("account_id", "")) != account_id or str(row.get("status", "")).upper() != "POSTED":
+            continue
+        source_video = sources.get(str(row.get("source_video_id", "")), {})
+        source_id = str(source_video.get("source_id", ""))
+        platform = str(source_video.get("platform", "")).lower()
+        if source_id:
+            source_usage[source_id] = source_usage.get(source_id, 0) + 1
+        if platform:
+            platform_usage[platform] = platform_usage.get(platform, 0) + 1
     eligible.sort(key=lambda pair: (
-        0 if str(pair[1].get("platform", "")).lower() == "youtube" else 1,
+        source_usage.get(str(pair[1].get("source_id", "")), 0),
+        platform_usage.get(str(pair[1].get("platform", "")).lower(), 0),
         -float(pair[0].get("confidence_score") or pair[0].get("clip_score") or 0),
         str(pair[0].get("clip_id", "")),
     ))
@@ -294,6 +376,7 @@ def select_saved_media_candidate(
     media_assets: list[dict[str, Any]],
     posted_results: list[dict[str, Any]],
     account_id: str,
+    excluded_clip_ids: set[str] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     """Select one uploaded-but-never-posted approved asset for a timed slot."""
     clips_by_id = {str(row.get("clip_candidate_id") or row.get("clip_id") or ""): row for row in clips}
@@ -302,12 +385,19 @@ def select_saved_media_candidate(
     posted_assets = {str(row.get("media_asset_id", "") or row.get("media_id", "")) for row in posted_results}
     reasons: list[str] = []
     candidates: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
+    excluded = excluded_clip_ids or set()
     for asset in media_assets:
         media_id = str(asset.get("media_asset_id") or asset.get("media_id") or "")
         clip_id = str(asset.get("clip_candidate_id") or asset.get("video_clip_id") or "")
         clip = clips_by_id.get(clip_id)
         source_video = videos_by_id.get(str((clip or {}).get("source_video_id") or asset.get("source_video_id") or ""))
         if str(asset.get("account_id", "")) != account_id:
+            continue
+        if clip_id in excluded:
+            reasons.append(f"{media_id}:attempted_this_run")
+            continue
+        if clip and is_quarantined(clip):
+            reasons.append(f"{media_id}:clip_quarantined")
             continue
         if not clip or not source_video:
             reasons.append(f"{media_id}:clip_or_source_video_missing")
@@ -323,6 +413,9 @@ def select_saved_media_candidate(
             continue
         if str(asset.get("permission_status") or clip.get("permission_status") or "").lower() != "approved":
             reasons.append(f"{media_id}:permission_blocked")
+            continue
+        if str(clip.get("alignment_status", "")).upper() != "PASS":
+            reasons.append(f"{media_id}:semantic_alignment_required")
             continue
         if final_public_post_validator(clip.get("public_post_text", ""), account_id)["status"] != "PASS":
             reasons.append(f"{media_id}:public_post_validator_blocked")
@@ -344,6 +437,7 @@ def build_plan(
     prepare_only: bool = False,
     post_saved_media: bool = False,
     slot_id: str = "",
+    excluded_clip_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     media_cfg = _load(MEDIA_CONFIG)
     autonomous_cfg = _load(AUTONOMOUS_CONFIG)
@@ -410,11 +504,11 @@ def build_plan(
             blocked.append("media_daily_post_cap_reached")
     if post_saved_media:
         clip, source_video, selected_asset, skipped = select_saved_media_candidate(
-            clips, source_videos, media_assets, posted, account_id,
+            clips, source_videos, media_assets, posted, account_id, excluded_clip_ids,
         )
     else:
         clip, source_video, skipped = select_candidate(
-            clips, source_videos, posted, account_id, media_assets,
+            clips, source_videos, posted, account_id, media_assets, excluded_clip_ids,
         )
         selected_asset = None
     no_candidate = not clip or not source_video
@@ -470,10 +564,28 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "duration_seconds": asset.get("duration_seconds") or asset.get("duration", 0),
         "aspect_ratio": asset.get("aspect_ratio", "9:16"),
         "public_post_text": text,
+        **_alignment_fields(clip),
     })
     if validation["status"] != "PASS":
-        client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", post_status="BLOCKED")
-        return {**plan, "status": "BLOCKED_MEDIA_VALIDATOR", "media_validation": validation}
+        reason = "media_validator:" + "|".join(validation.get("blocked_reasons", []))
+        failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
+        return {
+            **plan,
+            "status": "BLOCKED_MEDIA_VALIDATOR",
+            "media_validation": validation,
+            "retryable_candidate_failure": True,
+            "candidate_quarantined": is_quarantined(failure),
+        }
+    slot_id = str(plan.get("slot_id", ""))
+    if slot_id:
+        claim = claim_slot_run(client, account_id, slot_id)
+        if claim.get("status") != "CLAIMED":
+            return {
+                **plan,
+                "status": "SKIPPED",
+                "reason": claim.get("reason", "slot_not_claimed"),
+                "would_post_video": False,
+            }
     queue_id = f"media_q_{clip_id}"
     queue_row = {
         "queue_id": queue_id,
@@ -484,6 +596,8 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "status": "READY",
         "auto_publish": "true",
         "generation_mode": "approved_saved_media",
+        "slot_id": slot_id,
+        "business_date_jst": business_date(),
         "media_asset_id": media_id,
         "video_clip_id": clip_id,
         "source_video_id": source_video_id,
@@ -497,9 +611,15 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "validator_status": "PASS",
         "internal_leak_status": "PASS",
         "account_fit_status": "PASS",
+        "caption_provider": clip.get("caption_provider", ""),
+        "caption_provider_version": clip.get("caption_provider_version", ""),
+        **_alignment_fields(clip),
+        "claim_support_json": clip.get("claim_support_json", ""),
         "media_url": media_url,
         "media_status": "UPLOADED",
         "media_required": "true",
+        "media_type": "video",
+        "media_origin": "generated_clip",
         "duration_seconds": asset.get("duration_seconds") or asset.get("duration", ""),
         "aspect_ratio": asset.get("aspect_ratio", "9:16"),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -509,13 +629,25 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         _append(client, "queue", queue_row)
     result = process_one(client, queue_row, dry_run=False, confirm_real_post=True)
     final_status = str(result.get("status", ""))
+    failure_state: dict[str, Any] | None = None
+    externally_posted = final_status in {"POSTED", "POSTED_SAVE_FAILED"}
+    if externally_posted:
+        _clear_clip_failure(client, clip)
+    else:
+        failure_state = _record_clip_failure(
+            client,
+            clip,
+            account_id=account_id,
+            reason=f"publisher_uncertain:{result.get('reason', final_status or 'unknown')}",
+        )
+    retry_status = "QUARANTINED" if failure_state and is_quarantined(failure_state) else "VERIFY_REQUIRED"
     client.update_video_clip_candidate(
         clip_id,
-        post_status="POSTED" if final_status == "POSTED" else final_status,
-        reviewer_status="AUTO_APPROVED" if final_status == "POSTED" else "MEDIA_READY",
-        clip_status="POSTED" if final_status == "POSTED" else "MEDIA_READY",
+        post_status="POSTED" if externally_posted else final_status,
+        reviewer_status="AUTO_APPROVED" if externally_posted else retry_status,
+        clip_status="POSTED" if externally_posted else retry_status,
     )
-    if final_status == "POSTED":
+    if externally_posted:
         client.save_source_video({**source_video, "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
         try:
             media_pdca = _save_media_pdca_records(
@@ -561,9 +693,14 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     )
     download = execute_download(build_download_plan(download_args))
     if download.get("status") != "DOWNLOADED":
-        client.save_source_video({**source_video, "download_status": "FAILED", "skip_reason": ",".join(download.get("blocked_reasons", []))})
-        client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", post_status="FAILED_DOWNLOAD")
-        return {**plan, "status": "FAILED_DOWNLOAD", "download_result": download, "would_download": False}
+        reason = "download:" + "|".join(download.get("blocked_reasons", []) or [str(download.get("status", "failed"))])
+        failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
+        client.save_source_video({**source_video, "download_status": "FAILED", "skip_reason": reason})
+        return {
+            **plan, "status": "FAILED_DOWNLOAD", "download_result": download,
+            "would_download": False, "retryable_candidate_failure": True,
+            "candidate_quarantined": is_quarantined(failure),
+        }
     local_source = str(download["download_result"]["local_path"])
     client.save_source_video({**source_video, "download_status": "DOWNLOADED", "local_path": local_source, "downloaded_at": datetime.now(timezone.utc).isoformat()})
 
@@ -583,8 +720,14 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     )
     cut = execute_cut(build_cut_plan(cut_args))
     if cut.get("status") != "CUT":
-        client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", cut_status="FAILED", notes=",".join(cut.get("blocked_reasons", [])))
-        return {**plan, "status": "FAILED_CUT", "cut_result": cut, "would_cut": False}
+        reason = "cut:" + "|".join(cut.get("blocked_reasons", []) or [str(cut.get("status", "failed"))])
+        failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
+        client.update_video_clip_candidate(clip_id, cut_status="FAILED", notes=reason)
+        return {
+            **plan, "status": "FAILED_CUT", "cut_result": cut,
+            "would_cut": False, "retryable_candidate_failure": True,
+            "candidate_quarantined": is_quarantined(failure),
+        }
     asset = dict(cut["media_asset_result"])
     asset["account_id"] = account_id
     asset["clip_candidate_id"] = clip_id
@@ -592,8 +735,17 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     upload_args = SimpleNamespace(upload=True, confirm_upload=True, dry_run=False)
     upload = execute_cloudinary_uploads(build_upload_plan(upload_args, [asset]))
     if upload.get("status") != "UPLOADED":
-        client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", cut_status="DONE", local_clip_path=asset["local_path"], upload_status="FAILED")
-        return {**plan, "status": "FAILED_UPLOAD", "upload_result": upload, "would_upload": False}
+        reason = "upload:" + "|".join(upload.get("blocked_reasons", []) or [str(upload.get("status", "failed"))])
+        failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
+        # Standard GitHub-hosted runners are ephemeral. A failed upload cannot
+        # rely on this local path in the next run, so retry the bounded
+        # download/cut sequence instead of pretending the clip is durable.
+        client.update_video_clip_candidate(clip_id, cut_status="RETRY_REQUIRED", local_clip_path="", upload_status="FAILED")
+        return {
+            **plan, "status": "FAILED_UPLOAD", "upload_result": upload,
+            "would_upload": False, "retryable_candidate_failure": True,
+            "candidate_quarantined": is_quarantined(failure),
+        }
     uploaded = dict(upload["uploaded_assets"][0])
     media_id = str(uploaded["media_asset_id"])
     media_url = str(uploaded["cloudinary_url"])
@@ -641,12 +793,20 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "duration_seconds": asset.get("duration_seconds", 0),
         "aspect_ratio": "9:16",
         "public_post_text": text,
+        **_alignment_fields(clip),
     })
     if validation["status"] != "PASS":
-        client.update_video_clip_candidate(clip_id, clip_status="BLOCKED", reviewer_status="BLOCKED", cut_status="DONE", upload_status="UPLOADED", storage_url=media_url, post_status="BLOCKED")
-        return {**plan, "status": "BLOCKED_MEDIA_VALIDATOR", "media_validation": validation}
+        reason = "media_validator:" + "|".join(validation.get("blocked_reasons", []))
+        failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
+        client.update_video_clip_candidate(clip_id, cut_status="DONE", upload_status="UPLOADED", storage_url=media_url, post_status="BLOCKED")
+        return {
+            **plan, "status": "BLOCKED_MEDIA_VALIDATOR", "media_validation": validation,
+            "retryable_candidate_failure": True,
+            "candidate_quarantined": is_quarantined(failure),
+        }
 
     if plan.get("prepare_only"):
+        _clear_clip_failure(client, clip)
         client.update_video_clip_candidate(
             clip_id,
             cut_status="DONE",
@@ -695,6 +855,10 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "validator_status": "PASS",
         "internal_leak_status": "PASS",
         "account_fit_status": "PASS",
+        "caption_provider": clip.get("caption_provider", ""),
+        "caption_provider_version": clip.get("caption_provider_version", ""),
+        **_alignment_fields(clip),
+        "claim_support_json": clip.get("claim_support_json", ""),
         "media_url": media_url,
         "media_status": "UPLOADED",
         "media_required": "true",
@@ -707,6 +871,17 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         _append(client, "queue", queue_row)
     result = process_one(client, queue_row, dry_run=False, confirm_real_post=True)
     final_status = str(result.get("status", ""))
+    failure_state: dict[str, Any] | None = None
+    if final_status == "POSTED":
+        _clear_clip_failure(client, clip)
+    else:
+        failure_state = _record_clip_failure(
+            client,
+            clip,
+            account_id=account_id,
+            reason=f"publisher_uncertain:{result.get('reason', final_status or 'unknown')}",
+        )
+    retry_status = "QUARANTINED" if failure_state and is_quarantined(failure_state) else "VERIFY_REQUIRED"
     client.update_video_clip_candidate(
         clip_id,
         cut_status="DONE",
@@ -716,8 +891,8 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         storage_url=media_url,
         upload_status="UPLOADED",
         post_status="POSTED" if final_status == "POSTED" else final_status,
-        reviewer_status="AUTO_APPROVED" if final_status == "POSTED" else "BLOCKED",
-        clip_status="POSTED" if final_status == "POSTED" else "BLOCKED",
+        reviewer_status="AUTO_APPROVED" if final_status == "POSTED" else retry_status,
+        clip_status="POSTED" if final_status == "POSTED" else retry_status,
     )
     if final_status == "POSTED":
         client.save_source_video({**source_video, "download_status": "DOWNLOADED", "cut_status": "CUT", "upload_status": "UPLOADED", "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
@@ -769,6 +944,7 @@ def main() -> int:
     if args.use_sheets:
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    excluded_clip_ids: set[str] = set()
     plan = build_plan(
         account_id=args.account_id,
         apply=args.apply,
@@ -777,6 +953,7 @@ def main() -> int:
         prepare_only=args.prepare_only,
         post_saved_media=args.post_saved_media,
         slot_id=args.slot_id,
+        excluded_clip_ids=excluded_clip_ids,
     )
     if args.slot_id:
         slot = slot_by_id(args.account_id, args.slot_id)
@@ -785,7 +962,40 @@ def main() -> int:
         else:
             plan["slot_id"] = args.slot_id
     if args.apply and args.confirm_production_media and client and plan.get("status") not in {"BLOCKED", "NO_POST"}:
-        plan = execute(plan, client)
+        candidate_attempts: list[dict[str, Any]] = []
+        max_attempts = min(3, int(_load(MEDIA_CONFIG).get("max_clip_candidates_per_video", 3) or 3))
+        for _ in range(max_attempts):
+            result = execute(plan, client)
+            candidate_attempts.append({
+                "clip_candidate_id": plan.get("selected_clip_candidate_id", ""),
+                "status": result.get("status", ""),
+                "candidate_quarantined": bool(result.get("candidate_quarantined")),
+            })
+            if not result.get("retryable_candidate_failure"):
+                plan = {**result, "candidate_attempts": candidate_attempts}
+                break
+            excluded_clip_ids.add(str(plan.get("selected_clip_candidate_id", "")))
+            next_plan = build_plan(
+                account_id=args.account_id,
+                apply=True,
+                confirm=True,
+                client=client,
+                prepare_only=args.prepare_only,
+                post_saved_media=args.post_saved_media,
+                slot_id=args.slot_id,
+                excluded_clip_ids=excluded_clip_ids,
+            )
+            if next_plan.get("status") in {"BLOCKED", "NO_POST"}:
+                plan = {
+                    **result,
+                    "candidate_attempts": candidate_attempts,
+                    "next_candidate_status": next_plan.get("status"),
+                    "next_candidate_reasons": next_plan.get("blocked_reasons", []),
+                }
+                break
+            plan = next_plan
+        else:
+            plan = {**plan, "status": "NO_POST", "candidate_attempts": candidate_attempts, "blocked_reasons": ["candidate_attempt_limit_reached"]}
     if args.apply and args.confirm_production_media and client and args.fallback_to_text and plan.get("status") in {"NO_POST", "FAILED_DOWNLOAD", "FAILED_CUT", "FAILED_UPLOAD", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"}:
         from run_slot_text_fallback import build_plan as build_fallback_plan, execute as execute_fallback
         if not args.slot_id:
