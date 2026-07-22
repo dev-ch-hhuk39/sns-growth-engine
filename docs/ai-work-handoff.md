@@ -26,6 +26,11 @@ gate で扱う。今回の対象は投稿ではなく、Liver media preparation 
   deterministic grounded fallback を使う。通常text投稿のprimary retryは維持する。
 - 初回再実行 `29892987715` は、既存動画全体で外部呼出が重なる余地を確認したため、
   media準備・投稿前にcancelした。全run上限を追加してから再実行する。
+- 修正後のLiver post-free preparation canary `29893298582` は成功。guard、discovery、
+  bounded transcription、clip candidate generation（9秒）、asset preparation、health
+  summaryまで完了し、workflowのpublish/Threads post gateはfalseのまま。
+- `check_autonomous_health.py` はdispatch-only media workflowsを正常なcanary modeとして
+  表示する。media schedule OFFは意図された状態であり、text-only scheduleの障害とは混同しない。
 - 各workflowの候補生成stepには5分の上限を追加した。publish gateはすべてfalseの
   ままであり、これらの変更は投稿を有効化しない。
 - PASS: bounded caption test、primary retry regression、media candidate plan、

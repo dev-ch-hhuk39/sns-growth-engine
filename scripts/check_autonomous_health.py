@@ -34,12 +34,18 @@ WORKFLOWS = {
 EXPECTED_CRONS = {
     "night_scout": {"45 4 * * *", "45 6 * * *", "45 15 * * *"},
     "liver_manager": {"45 0 * * *", "45 3 * * *", "45 11 * * *"},
-    "media_prepare_liver_manager": {"20 22 * * *"},
-    "media_prepare_night_scout": {"20 2 * * *"},
-    "media_post_liver_manager": {"45 8 * * *"},
-    "media_post_night_scout": {"45 11 * * *"},
-    "direct_media_liver_manager": {"45 6 * * *"},
-    "direct_media_night_scout": {"45 8 * * *"},
+}
+
+# Media preparation and posting are deliberately dispatch-only canaries until
+# current-scope inventory/evidence is complete.  A missing cron is healthy for
+# these workflows and must not be reported as an autonomous-posting incident.
+MEDIA_CANARY_WORKFLOWS = {
+    "media_prepare_liver_manager",
+    "media_prepare_night_scout",
+    "media_post_liver_manager",
+    "media_post_night_scout",
+    "direct_media_liver_manager",
+    "direct_media_night_scout",
 }
 
 
@@ -225,12 +231,15 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
                 'ALLOW_TRANSCRIPTION_API: "false"',
             ]),
             "crons": sorted(_crons(text)),
+            "trigger_mode": "dispatch_only_canary" if key in MEDIA_CANARY_WORKFLOWS else "scheduled",
         }
         if key in EXPECTED_CRONS and set(wf["crons"]) != EXPECTED_CRONS[key]:
             problems.append(f"{key}:schedule_mismatch")
         if key == "manual" and wf["has_schedule"]:
             problems.append("manual_workflow_has_schedule")
-        if key != "manual" and not wf["has_schedule"]:
+        if key in MEDIA_CANARY_WORKFLOWS and (wf["has_schedule"] or not wf["has_workflow_dispatch"]):
+            problems.append(f"{key}:dispatch_only_canary_contract_failed")
+        if key not in {"manual", *MEDIA_CANARY_WORKFLOWS} and not wf["has_schedule"]:
             problems.append(f"{key}:schedule_missing")
         if not wf["has_permissions_contents_read"] or not wf["has_permissions_actions_read"]:
             problems.append(f"{key}:permissions_missing")
@@ -290,9 +299,13 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
         "validator_sanity": {"final_public_post_validator": "EXPECTED_IN_RUNNER_AND_WORKER"},
         "media_schedule": {
             "text_only_schedule_on": True,
-            "media_schedule_on": bool(media_config.get("media_schedule_enabled")) and all(
-                workflow_results.get(key, {}).get("has_schedule", False)
-                for key in ("media_prepare_liver_manager", "media_prepare_night_scout", "media_post_liver_manager", "media_post_night_scout", "direct_media_liver_manager", "direct_media_night_scout")
+            "media_schedule_on": False,
+            "media_execution_mode": "dispatch_only_canary",
+            "media_canary_workflows_healthy": all(
+                workflow_results.get(key, {}).get("trigger_mode") == "dispatch_only_canary"
+                and workflow_results.get(key, {}).get("has_workflow_dispatch", False)
+                and not workflow_results.get(key, {}).get("has_schedule", False)
+                for key in MEDIA_CANARY_WORKFLOWS
             ),
             "media_growth_engine_enabled": bool(media_config.get("media_growth_engine_enabled")),
             "source_video_discovery_apply_enabled": bool(media_config.get("source_video_discovery_apply_enabled")),
