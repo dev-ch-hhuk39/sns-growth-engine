@@ -1,5 +1,62 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex direct-media Sheets-quota recovery
+
+### Current state
+
+- `main` and `origin/main` started at
+  `d6a3b08f545afc64c3f55402ebbfdd38ce9ec73b` after PR #12.
+- Direct Media Preparation run `29888243184` used that exact commit. Every
+  publishing flag stayed `false`; no Threads, X, or media post was attempted.
+- `liver_manager` completed ingestion for one approved asset, including
+  Cloudinary storage and content understanding. Its prepare-only runner
+  correctly returned `NO_READY_MEDIA` because source-grounded caption
+  alignment was not sufficient; no queue became postable.
+
+### Finding and correction
+
+- `night_scout` no longer selected a reference-only candidate. It reached the
+  permitted-source path, then exhausted the shared Google Sheets read quota
+  while repeatedly reading the permission ledger during selection.
+- Permission rows are now read once into an immutable run snapshot and reused
+  for both selection and final authorization. A quota failure becomes
+  `NO_PENDING_MEDIA:sheets_permission_read_unavailable`, a safe no-post
+  outcome that the next scheduled preparation can retry. It never becomes an
+  implicit approval.
+
+### Change files
+
+- Updated: `scripts/ingest_direct_reference_media.py`
+- Added: `scripts/test_direct_media_permission_snapshot.py`
+- Updated: `docs/ai-work-handoff.md`
+
+### Verification
+
+- PASS: reference-only rows are skipped before selection.
+- PASS: the permission ledger is read exactly once for a selection attempt.
+- PASS: latest permission history authority and external-unavailable handling.
+- PASS: workflow safety flags, `376 / 0`; `py_compile`; `git diff --check`.
+
+### Remaining work and warnings
+
+- Merge and re-run Direct Media Preparation. The expected night outcome is a
+  permitted candidate or a safe `NO_PENDING_MEDIA` quota/provider warning,
+  never a publisher call.
+- Liver media preparation is technically connected through Cloudinary and
+  local understanding, but its public caption remains blocked by the strict
+  source-grounding validator. Improve candidate construction, not validator
+  thresholds, before any media post is considered.
+- Goal completion still requires a human-provided third-party/approved
+  `liver_manager` Threads reference account URL. Do not repurpose a posting
+  account URL as that source.
+
+### Safe boundaries for the next AI
+
+- Safe: direct-media preparation retries, redacted Sheets quota handling,
+  source-grounded caption construction/tests, evidence collection, and docs.
+- Do not modify secrets, `.env`, `data/`, `output/`, `.claude/plans/`, cookies,
+  browser state, or publish/media-rights/validator safety gates.
+
 ## 2026-07-22 Codex direct-media candidate-selection correction
 
 ### Current state
