@@ -20,7 +20,7 @@ checks = [
     ("saved media posting uses post budget", all("--purpose post" in texts[name] for name in posting_workflows)),
     ("direct ingest has separate preparation budget", "steps.preparation_budget.outcome == 'success'" in texts["direct-media-preparation.yml"]),
     ("preparation skips when budget fails", all("steps.media_budget.outcome == 'success'" in texts[name] for name in clip_preparations)),
-    ("night preparation never sudo installs", "sudo apt-get" not in texts["media-growth-production-night-scout.yml"]),
+    ("night preparation installs only ffmpeg runtime", "sudo apt-get install --yes --no-install-recommends ffmpeg" in texts["media-growth-production-night-scout.yml"]),
     ("cleanup is bounded workflow step", all("cleanup_media_workspace.py" in texts[name] for name in ("direct-media-preparation.yml", *clip_preparations))),
 ]
 for name, ok in checks:

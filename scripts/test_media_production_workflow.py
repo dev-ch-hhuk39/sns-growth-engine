@@ -16,6 +16,7 @@ checks = [
     '--prepare-only' in wf,
     'ALLOW_REAL_THREADS_VIDEO_POST: "false"' in wf,
     "run_media_production_pipeline.py" in wf,
+    "apt-get install --yes --no-install-recommends ffmpeg" in wf,
 ]
 print(f"PASS: {sum(checks)} / FAIL: {len(checks)-sum(checks)}")
 raise SystemExit(0 if all(checks) else 1)
