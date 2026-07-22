@@ -21,9 +21,11 @@ gate で扱う。今回の対象は投稿ではなく、Liver media preparation 
 - Run `29892271688` は ffmpeg / discovery / transcription までは成功したが、
   `Generate transcript-grounded clip candidates` が複数windowごとの外部モデル
   呼出と再試行で長時間化したため、投稿・download・cut・upload前に cancel した。
-- media runner は動画ごとの外部caption生成を最大1回、timeout 25秒に制限する。
-  追加clip windowは同一の厳格なsemantic/public validatorを通す
+- media runner は動画ごと・run全体とも外部caption生成を最大1回、timeout 25秒に
+  制限する。追加clip windowと追加videoは同一の厳格なsemantic/public validatorを通す
   deterministic grounded fallback を使う。通常text投稿のprimary retryは維持する。
+- 初回再実行 `29892987715` は、既存動画全体で外部呼出が重なる余地を確認したため、
+  media準備・投稿前にcancelした。全run上限を追加してから再実行する。
 - 各workflowの候補生成stepには5分の上限を追加した。publish gateはすべてfalseの
   ままであり、これらの変更は投稿を有効化しない。
 - PASS: bounded caption test、primary retry regression、media candidate plan、

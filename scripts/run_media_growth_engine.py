@@ -522,6 +522,7 @@ def build_media_growth_plan(
     # to one attempt per video so a preparation workflow remains finite.
     remote_caption_timeout = int(config.get("remote_caption_timeout_seconds", 25))
     remote_caption_limit = max(0, int(config.get("max_remote_caption_generations_per_video", 1)))
+    remote_caption_run_limit = max(0, int(config.get("max_remote_caption_generations_per_run", 1)))
     uses_default_caption_service = caption_service is None
     caption_service = caption_service or SourceGroundedCaptionService(
         GitHubModelsGroundedProvider(timeout_seconds=remote_caption_timeout),
@@ -529,6 +530,7 @@ def build_media_growth_plan(
         retry_primary_on_alignment_failure=False,
     )
     deterministic_caption_service = SourceGroundedCaptionService(DeterministicGroundedProvider())
+    remote_caption_generation_count = 0
     public_text = ""
     validation = {"status": "BLOCKED", "blocked_reasons": ["no_grounded_clip_caption"]}
     existing_clips: list[dict[str, Any]] = []
@@ -585,11 +587,14 @@ def build_media_growth_plan(
                 media_items=(media,),
                 content_hash=str(source_video.get("content_hash", "")) or stable_content_hash(str(spec.get("excerpt", "")), [video_url]),
             )
-            active_caption_service = (
-                caption_service
-                if not uses_default_caption_service or i <= remote_caption_limit
-                else deterministic_caption_service
+            use_remote_caption = (
+                uses_default_caption_service
+                and i <= remote_caption_limit
+                and remote_caption_generation_count < remote_caption_run_limit
             )
+            if use_remote_caption:
+                remote_caption_generation_count += 1
+            active_caption_service = caption_service if (not uses_default_caption_service or use_remote_caption) else deterministic_caption_service
             clip_output = active_caption_service.generate(
                 bundle,
                 account_id=account_id,
@@ -745,6 +750,8 @@ def build_media_growth_plan(
         "media_plan": media_plan,
         "caption_generation_budget": {
             "max_remote_caption_generations_per_video": remote_caption_limit,
+            "max_remote_caption_generations_per_run": remote_caption_run_limit,
+            "remote_caption_generations_used": remote_caption_generation_count,
             "remote_caption_timeout_seconds": remote_caption_timeout,
             "remaining_candidates_use": "deterministic_grounded_fallback",
         },

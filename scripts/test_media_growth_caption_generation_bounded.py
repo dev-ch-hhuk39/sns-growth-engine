@@ -44,8 +44,9 @@ engine = (ROOT / "scripts/run_media_growth_engine.py").read_text()
 checks = [
     ("media service has one remote attempt when alignment blocks", provider.calls == 1),
     ("remote captions capped per video", config.get("max_remote_caption_generations_per_video") == 1),
+    ("remote captions capped across a whole run", config.get("max_remote_caption_generations_per_run") == 1),
     ("remote timeout stays bounded", 10 <= int(config.get("remote_caption_timeout_seconds", 0)) <= 30),
-    ("remaining clip windows use deterministic fallback", "deterministic_caption_service" in engine and "i <= remote_caption_limit" in engine),
+    ("remaining clip windows use deterministic fallback", "deterministic_caption_service" in engine and "remote_caption_generation_count < remote_caption_run_limit" in engine),
 ]
 for name, ok in checks:
     print(f"  {'PASS' if ok else 'FAIL'} {name}")
