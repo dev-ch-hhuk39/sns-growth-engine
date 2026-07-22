@@ -29,6 +29,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
 from download_approved_media import is_individual_video_url  # noqa: E402
 from media.rights_policy import rights_allows_media_use  # noqa: E402
+from transcription.sheets_limits import normalize_transcript_row  # noqa: E402
+from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
 from media_growth_schemas import extract_video_id, redacted_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
@@ -280,7 +282,8 @@ def transcribe_with_local_whisper(
         return {"ok": False, "status": "LOCAL_WHISPER_NOT_AVAILABLE", "error": type(exc).__name__}
     with TemporaryDirectory(prefix="sns_transcribe_") as tmp:
         outtmpl = str(Path(tmp) / "audio.%(ext)s")
-        opts = {
+        platform = "youtube" if "youtu" in video_url.lower() else "tiktok"
+        opts = metadata_options(platform, {
             "format": "bestaudio/best",
             "outtmpl": outtmpl,
             "quiet": True,
@@ -288,8 +291,7 @@ def transcribe_with_local_whisper(
             "noplaylist": True,
             "socket_timeout": 30,
             "noprogress": True,
-            "js_runtimes": {"node": {}},
-        }
+        })
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 ydl.download([video_url])
@@ -449,7 +451,9 @@ def save_rows(client: SheetsClient, transcript_rows: list[dict[str, Any]], sourc
     saved = updated = failed = 0
     for row in transcript_rows:
         try:
-            if client.save_video_transcript(row):
+            # This runner bypasses account acquisition, so it must enforce the
+            # Sheets cell cap at its own persistence boundary as well.
+            if client.save_video_transcript(normalize_transcript_row(row)):
                 saved += 1
         except Exception:
             failed += 1

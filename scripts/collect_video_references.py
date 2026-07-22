@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import THIRD_PARTY_REFERENCE_ONLY, build_rights_decision
+from acquisition.ytdlp_runtime import metadata_options
 
 PUBLIC_TIMEOUT_SECONDS = 15
 
@@ -71,7 +72,8 @@ def fetch_ytdlp_metadata(url: str) -> dict[str, Any]:
             def warning(self, msg): pass
             def error(self, msg): pass
 
-        opts = {
+        platform = "youtube" if "youtu" in url.lower() else "tiktok" if "tiktok.com" in url.lower() else ""
+        opts = metadata_options(platform, {
             "skip_download": True,
             "quiet": True,
             "no_warnings": True,
@@ -82,8 +84,7 @@ def fetch_ytdlp_metadata(url: str) -> dict[str, Any]:
             "retries": 1,
             "fragment_retries": 1,
             "extract_flat": False,
-            "js_runtimes": {"node": {}},
-        }
+        })
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
         return {

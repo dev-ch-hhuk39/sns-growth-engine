@@ -122,6 +122,24 @@ allowed without the required evidence keys.
 
 ## Work Package 1: Close Code Gaps
 
+### 2026-07-22 implementation checkpoint
+
+- [x] The independent `transcribe_approved_source_videos.py` persistence
+  boundary normalizes transcript and segment cells immediately before its
+  Sheets upsert. A >50,000-character regression test verifies retained hash,
+  bounded cells, and `SHEETS_BOUNDED` scope.
+- [x] All production yt-dlp routes now use one explicit Node-runtime helper.
+  The official `ejs:github` remote component is enabled only for YouTube;
+  TikTok remains bounded and never receives it.
+- [x] Profile routing now produces provider-run records with provider/version,
+  retryability and attempt count. Routing-history schema carries the same
+  redacted execution metadata.
+- [x] A read-only Goal evidence collector and fail-closed evaluator fixtures
+  now reject missing/stale evidence and accept only a complete 35-item fixture.
+- [ ] Run the complete suite in final CI and attach its machine-readable JSON
+  to final-main evidence. The desktop command envelope ended the local 632-test
+  run before it emitted JSON; focused Work Package 1 and phase-10 tests passed.
+
 ### 1.1 Normalize every transcript write
 
 Files:

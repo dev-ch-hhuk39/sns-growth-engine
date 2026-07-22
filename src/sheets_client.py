@@ -503,7 +503,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     "backend_routing_history": [
         "routing_event_id", "source_id", "platform", "capability", "primary_backend",
         "selected_backend", "fallback_used", "shadow_backend_counts", "status",
-        "reason", "created_at",
+        "reason", "selected_backend_version", "attempt_count", "retryable", "created_at",
     ],
     "provider_runs": [
         "provider_run_id", "source_id", "source_post_id", "source_video_id",

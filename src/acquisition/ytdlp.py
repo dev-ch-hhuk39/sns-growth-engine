@@ -7,6 +7,7 @@ from typing import Any
 from .contracts import ProviderResult
 from .models import NormalizedMediaItem, NormalizedSourcePost, canonical_url, external_post_id, stable_content_hash, utc_now
 from .router import BackendFailure
+from .ytdlp_runtime import metadata_options
 
 
 class YtDlpProfilePostAdapter:
@@ -24,13 +25,12 @@ class YtDlpProfilePostAdapter:
         source_url = str(source.get("canonical_url") or source.get("source_url") or "").rstrip("/")
         if platform == "youtube" and "/channel/" in source_url and not source_url.endswith("/videos"):
             source_url = f"{source_url}/videos"
-        options = {
+        options = metadata_options(platform, {
             "quiet": True,
             "skip_download": True,
             "extract_flat": True,
             "playlistend": max(1, min(limit, 20)),
-            "js_runtimes": {"node": {}},
-        }
+        })
         try:
             info = yt_dlp.YoutubeDL(options).extract_info(source_url, download=False)
         except Exception as exc:

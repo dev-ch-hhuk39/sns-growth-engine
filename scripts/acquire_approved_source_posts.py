@@ -193,6 +193,31 @@ def _provider_event(
     }
 
 
+def _route_provider_event(
+    source: dict[str, Any],
+    *,
+    platform: str,
+    capability: str,
+    provider_name: str,
+    provider_version: str,
+    status: str,
+    reason: str = "",
+    retryable: bool = False,
+    attempt_count: int = 1,
+) -> dict[str, Any]:
+    """Record profile routing like every other provider invocation."""
+    now = datetime.now(timezone.utc)
+    return {
+        "provider_run_id": f"pr_{source.get('source_id', '')}_{capability.replace('.', '_')}_{int(now.timestamp() * 1000000)}",
+        "source_id": source.get("source_id", ""), "source_post_id": "", "source_video_id": "",
+        "platform": platform, "capability": capability,
+        "provider_name": provider_name, "provider_version": provider_version,
+        "status": status, "reason": str(reason)[:240],
+        "retryable": str(bool(retryable)).lower(), "duration_ms": "",
+        "attempt_count": str(max(1, attempt_count)), "created_at": now.isoformat(),
+    }
+
+
 def enrich_posts(
     source: dict[str, Any],
     posts: list[NormalizedSourcePost],
@@ -327,7 +352,11 @@ def persist_observability(client: SheetsClient, results: list[dict[str, Any]]) -
             "primary_backend": result.get("primary_backend", ""), "selected_backend": result.get("selected_backend", ""),
             "fallback_used": str(result.get("fallback_used", False)).lower(),
             "shadow_backend_counts": json.dumps(result.get("shadow_backend_counts", {}), sort_keys=True),
-            "status": result.get("status", ""), "reason": result.get("reason", "")[:240], "created_at": now,
+            "status": result.get("status", ""), "reason": result.get("reason", "")[:240],
+            "selected_backend_version": result.get("selected_backend_version", ""),
+            "attempt_count": str(result.get("attempt_count") or 1),
+            "retryable": str(bool(result.get("retryable", result.get("status") != "PASS"))).lower(),
+            "created_at": now,
         }, "append:backend_routing_history:acquisition")
 
 
@@ -364,6 +393,16 @@ def run(account_id: str, platform_filter: str, max_posts: int, *, apply: bool, s
             continue
         try:
             routed = router.route(capability, source, limit=max(1, min(max_posts, 10)), shadow=shadow)
+            selected_adapter = router.adapters.get(routed.backend_name)
+            provider_run_rows.append(_route_provider_event(
+                source,
+                platform=platform,
+                capability=capability,
+                provider_name=routed.backend_name,
+                provider_version=str(getattr(selected_adapter, "backend_version", "unknown")),
+                status="PASS",
+                attempt_count=len(routed.attempted_backends),
+            ))
             valid = [post for post in routed.posts if not validate_source_post(post)]
             valid, videos, transcripts, provider_events = enrich_posts(source, valid, permission, providers)
             posts.extend(valid)
@@ -375,10 +414,25 @@ def run(account_id: str, platform_filter: str, max_posts: int, *, apply: bool, s
                 "permission_status": str(permission.get("permission_status") or "approved"),
             }
             item = {**base, "status": "PASS", "selected_backend": routed.backend_name,
+                    "selected_backend_version": str(getattr(selected_adapter, "backend_version", "unknown")),
+                    "attempt_count": len(routed.attempted_backends), "retryable": False,
                     "fallback_used": routed.fallback_used, "post_count": len(valid),
                     "shadow_backend_counts": routed.shadow_results}
         except BackendFailure as exc:
-            item = {**base, "status": "FAILED", "reason": str(exc)[:240]}
+            primary_adapter = router.adapters.get(base["primary_backend"])
+            attempts = 1 + len(router.routes[capability].fallbacks)
+            provider_run_rows.append(_route_provider_event(
+                source,
+                platform=platform,
+                capability=capability,
+                provider_name=base["primary_backend"],
+                provider_version=str(getattr(primary_adapter, "backend_version", "unknown")),
+                status="FAILED",
+                reason=str(exc),
+                retryable=True,
+                attempt_count=attempts,
+            ))
+            item = {**base, "status": "FAILED", "reason": str(exc)[:240], "attempt_count": attempts, "retryable": True}
         result["source_results"].append(item)
         observability.append(item)
     persisted = persist(client, posts, policy_by_source)

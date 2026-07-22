@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]; sys.path[:0] = [str(ROOT / "src"), s
 from config_loader import get_config
 from media.direct_content_understanding import analyze_local_media
 from sheets_client import TAB_DEFINITIONS, SheetsClient
+from acquisition.ytdlp_runtime import metadata_options
 
 
 def truthy(v: Any) -> bool: return str(v or "").lower() in {"1", "true", "yes"}
@@ -129,7 +130,8 @@ def download_with_ytdlp(url: str, path: Path) -> None:
         if isinstance(info, dict):
             guard_resolved_stream(info)
 
-    opts = {
+    platform = "youtube" if "youtu" in url.lower() else "tiktok"
+    opts = metadata_options(platform, {
         "quiet": True,
         "noplaylist": True,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
@@ -139,8 +141,7 @@ def download_with_ytdlp(url: str, path: Path) -> None:
         "socket_timeout": 45,
         "max_filesize": 300 * 1024 * 1024,
         "progress_hooks": [progress_guard],
-        "js_runtimes": {"node": {}},
-    }
+    })
     with yt_dlp.YoutubeDL(opts) as ydl:
         planned = ydl.extract_info(url, download=False)
         if not isinstance(planned, dict):

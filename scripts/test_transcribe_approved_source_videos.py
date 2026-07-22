@@ -9,8 +9,22 @@ from transcribe_approved_source_videos import (  # noqa: E402
     build_transcript_row,
     eligible_videos,
     night_metadata_clip_eligible,
+    save_rows,
     transcript_id_for,
 )
+from transcription.sheets_limits import MAX_SHEETS_CELL_CHARS  # noqa: E402
+
+
+class RecordingSheets:
+    def __init__(self):
+        self.transcripts = []
+
+    def save_video_transcript(self, row):
+        self.transcripts.append(dict(row))
+        return True
+
+    def save_source_video(self, _row):
+        return True
 
 video = {
     "source_video_id": "sv_lm_1",
@@ -50,6 +64,16 @@ partial = build_transcript_row(
     {**video, "duration_seconds": 4004},
     {"text": "safe transcript", "segments": [{"start": 0, "end": 899, "text": "safe transcript"}], "processed_duration_seconds": 899},
 )
+large_row = {
+    "transcript_id": "tr-persistence-boundary",
+    "transcript_text": "あ" * 55_000,
+    "segments_json": '[{"text":"' + ("い" * 55_000) + '"}]',
+    "transcript_hash": "full-transcript-sha",
+    "transcription_scope": "FULL",
+}
+recorder = RecordingSheets()
+save_result = save_rows(recorder, [large_row], [])
+persisted = recorder.transcripts[0]
 checks = [
     ("eligible approved individual video", len(selected) == 1 and not skipped),
     ("transcript id stable", transcript_id_for(video) == "tr_sv_lm_1"),
@@ -62,6 +86,8 @@ checks = [
     ("night unknown subject metadata blocked", not night_metadata_clip_eligible(night_unknown)[0]),
     ("night transcription skips unsuitable videos", [row["source_video_id"] for row in night_selected] == ["sv_ns_good"]),
     ("bounded long transcription recorded as partial", partial["transcription_scope"] == "PARTIAL" and partial["processed_minutes"] < 15.1),
+    ("runner persistence bounds long transcript cells", save_result["transcripts_saved"] == 1 and len(persisted["transcript_text"]) < MAX_SHEETS_CELL_CHARS and len(persisted["segments_json"]) < MAX_SHEETS_CELL_CHARS),
+    ("runner persistence keeps transcript evidence", persisted["transcript_hash"] == "full-transcript-sha" and "SHEETS_BOUNDED" in persisted["transcription_scope"]),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

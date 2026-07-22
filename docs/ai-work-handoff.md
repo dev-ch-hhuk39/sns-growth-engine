@@ -1,5 +1,95 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex Goal Work Package 1 checkpoint
+
+### 本システムについて
+
+SNS Growth Engine v2 は、許可済みの source を provenance と権利台帳で
+管理し、Threads の text/direct-media/generated-clip 投稿、Sheets 記録、
+Cloudinary asset、PDCA 証跡をつなぐ運用基盤である。X と
+`beauty_account` は block を維持し、公開本文は常に `public_post_text` のみを
+使う。
+
+### 現在 HEAD / 作業ブランチ
+
+- branch: `feature/oss-github-actions-media-autopilot`
+- checkpoint開始時 HEAD: `3e1a05e627c4a454d685199fd14a6eb999e5831a`
+- checkpoint開始時 `origin/main`: `f89f6ed44bc2a00930f04601d5700230e25949d3`
+- この章を含む commit/push 後は両方を再確認する。mainへの直接pushはしない。
+
+### 今回の変更ファイル一覧 / 追加ファイル一覧
+
+- Updated: `scripts/transcribe_approved_source_videos.py`,
+  `src/acquisition/ytdlp.py`, `src/acquisition/enrichment.py`, yt-dlp利用
+  scripts、`scripts/acquire_approved_source_posts.py`, `src/sheets_client.py`,
+  `scripts/evaluate_goal.py`, `requirements-acquisition.txt`。
+- Added: `src/acquisition/ytdlp_runtime.py`,
+  `scripts/collect_goal_evidence.py`,
+  `scripts/test_goal_evidence_fail_closed.py`,
+  `scripts/test_acquisition_router_all_backends_fail.py`,
+  `scripts/test_profile_route_observability.py`。
+
+### 完了内容 / テスト結果
+
+- 独立文字起こし runner の `video_transcripts` 保存直前で Sheets 49,000文字
+  上限へ正規化する。全文SHA、head/tail証跡、chunk数、`SHEETS_BOUNDED` を
+  保持し、本文全文はログ出力しない。
+- 全yt-dlp routeは `SNS_YTDLP_NODE_PATH` を優先する明示Node runtimeを使う。
+  YouTubeだけが公式 `ejs:github` componentを許可し、TikTok profile取得は
+  bounded fallback/no-login/no-unbounded-expansionのまま。
+- routing provider/version/retryability/attempt countを `provider_runs` と
+  `backend_routing_history` へ保存できるschemaにした。URL/token/bodyは保存しない。
+- Goal evidence collectorはread-onlyでcandidateを出力し、evaluatorは不足証跡・
+  stale commit・final-main SHA不一致をfail-closedする。
+- PASS: transcript cell-limit、independent transcript persistence、yt-dlp
+  runtime config、TikTok fallback、primary/fallback、all-backends-fail、
+  observability、provider contracts/registry、Goal evidence fixture、phase10
+  repository subset、`compileall`、`git diff --check`。
+
+### 未完了事項 / 残WARN
+
+- Goal evaluatorは現時点で17/35 PASS相当。public repository、production
+  Environment/protected main、final-main CI、live provider/source evidence、
+  account別direct/clip canary 4件が未完了。
+- GitHub API確認: repositoryはprivate、`production` Environmentは未作成。
+  private repositoryではbranch protection APIが403（public化またはProが必要）。
+- Work Package 2はrepository全historyを公開する不可逆操作を含むため、実装計画に
+  従い明示的な公開承認が必要。
+- ローカルの全632 test一括runnerはdesktop command envelopeで途中終了しJSONを
+  生成できなかった。対象subsetのテストはPASS。最終main GitHub CIが完全結果の
+  authoritative sourceになる。
+
+### スケール方針 / タスク
+
+- Work Package 2: exact merge candidateのhistory scan、publicization、
+  protected `main`、`production` Environment、CI。
+- Work Package 3: final-main read-only Sheets/provider validation。Liver
+  Managerのthird-party Threads source account URLが無い場合は捏造せずBLOCKED。
+- Work Packages 4-5: accountごとにdirect-mediaとgenerated-clipを各1件、
+  bounded canaryとして順番に検証する。失敗時はassetをquarantineし同一asset/textを
+  再投稿しない。
+
+### 次に触ってよいファイル / 触らない方がよいファイル
+
+- 次AIが触ってよい: `scripts/evaluate_goal.py`,
+  `scripts/collect_goal_evidence.py`, `scripts/acquire_approved_source_posts.py`,
+  `.github/workflows/`, `docs/goal-status.json`, `docs/runtime-health.json`,
+  `docs/goal-evidence.md`。
+- 衝突しやすい: `src/sheets_client.py`, `config/goal_acceptance.json`,
+  `docs/ai-work-handoff.md`, media workflow files。
+- 触らない方がよい: `.env`, `data/`, `output/`, `.claude/plans/`,
+  secret/token/cookie/storage_state、既存の安全gateを弱める変更。
+
+### 次AIへの引き継ぎメモ
+
+1. `docs/goal-completion-implementation-plan.md`のWork Package 2から再開。
+2. ただしpublic化前に、ユーザーへ「全Git historyが公開される」ことを一文で
+   明示確認する。
+3. 35/35のstatusをproseで更新しない。`collect_goal_evidence.py`の機械証跡、
+   final-main SHA、canary readbackでのみ更新する。
+4. 実download/cut/upload/postは各workflowの既存env+confirm+permission gateを
+   通す。X/beauty/unknown rightsは継続BLOCK。
+
 ## 2026-07-18 Codex live canary recovery completion
 
 ### 本システムについて / 現在の本番状態

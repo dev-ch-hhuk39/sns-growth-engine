@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]; sys.path[:0] = [str(ROOT / "scripts"
 from config_loader import get_config
 from media_source_policy import decision
 from sheets_client import TAB_DEFINITIONS, SheetsClient
+from acquisition.ytdlp_runtime import metadata_options
 
 
 def canonical(url: str) -> str:
@@ -32,13 +33,13 @@ def canonical(url: str) -> str:
 def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, Any]], str]:
     try:
         import yt_dlp
-        opts = {
+        platform = str(source.get("source_platform") or source.get("platform") or "").lower()
+        opts = metadata_options(platform, {
             "quiet": True,
             "skip_download": True,
             "extract_flat": True,
             "playlistend": limit,
-            "js_runtimes": {"node": {}},
-        }
+        })
         source_url = str(source.get("source_url", "")).rstrip("/")
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
         # A channel landing page exposes /videos, /streams and /shorts as

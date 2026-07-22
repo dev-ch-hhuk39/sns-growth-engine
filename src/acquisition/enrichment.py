@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from .contracts import ProviderResult
 from .models import SourceMediaItem, SourcePostBundle, stable_content_hash
+from .ytdlp_runtime import metadata_options
 
 
 class YouTubeTranscriptProvider:
@@ -210,13 +211,12 @@ class YtDlpPostDetailProvider:
         try:
             import yt_dlp
 
-            options = {
+            options = metadata_options(post.platform, {
                 "quiet": True,
                 "skip_download": True,
                 "noplaylist": True,
                 "writesubtitles": False,
-                "js_runtimes": {"node": {}},
-            }
+            })
             info = yt_dlp.YoutubeDL(options).extract_info(post.canonical_post_url, download=False)
             if not isinstance(info, dict):
                 return ProviderResult(self.provider_name, self.provider_version, "FAILED", reason="metadata_response_invalid")

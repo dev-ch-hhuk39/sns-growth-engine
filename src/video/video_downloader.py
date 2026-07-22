@@ -21,6 +21,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+from acquisition.ytdlp_runtime import metadata_options
+
 
 @dataclass
 class DownloadResult:
@@ -135,14 +137,14 @@ def download_video(
         print(f"[video-downloader] [ERROR] {msg}")
         return DownloadResult(ref_id, success=False, error=msg)
 
-    ydl_opts = {
+    platform = "youtube" if "youtu" in video_url.lower() else "tiktok"
+    ydl_opts = metadata_options(platform, {
         "outtmpl": output_path.replace(".mp4", ".%(ext)s"),
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": False,
-        "js_runtimes": {"node": {}},
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])

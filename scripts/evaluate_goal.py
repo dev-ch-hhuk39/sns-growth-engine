@@ -23,9 +23,15 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
-def evaluate() -> dict[str, Any]:
-    acceptance = _load(ACCEPTANCE)
-    state = _load(STATUS)
+def evaluate(
+    *,
+    acceptance_path: Path = ACCEPTANCE,
+    status_path: Path = STATUS,
+    current_head: str | None = None,
+    current_origin_main: str | None = None,
+) -> dict[str, Any]:
+    acceptance = _load(acceptance_path)
+    state = _load(status_path)
     recorded = state.get("criteria", {})
     failures: list[dict[str, Any]] = []
     passed: list[str] = []
@@ -49,8 +55,17 @@ def evaluate() -> dict[str, Any]:
     dynamic["self_hosted_workflow_references"] = workflow_text.count("self-hosted")
     dynamic["vps_workflow_references"] = workflow_text.lower().count("xserver")
     dynamic["working_tree_clean"] = not bool(_git("status", "--short"))
-    dynamic["head"] = _git("rev-parse", "HEAD")
-    dynamic["origin_main"] = _git("rev-parse", "origin/main")
+    dynamic["head"] = current_head if current_head is not None else _git("rev-parse", "HEAD")
+    dynamic["origin_main"] = current_origin_main if current_origin_main is not None else _git("rev-parse", "origin/main")
+
+    # PASS evidence is only valid for the exact commit it describes.  The
+    # planning documents are useful context, but can never promote a Goal.
+    scope_head = str(state.get("implementation_head") or "")
+    if any(str(row.get("status")) == acceptance.get("passing_status", "PASS") for row in recorded.values()):
+        if not scope_head:
+            failures.append({"id": "evidence_scope", "status": "FAIL", "missing_evidence": ["implementation_head"]})
+        elif scope_head != dynamic["head"]:
+            failures.append({"id": "evidence_scope", "status": "FAIL", "missing_evidence": ["commit_sha_mismatch"]})
 
     if recorded.get("github_hosted_only", {}).get("status") == "PASS" and dynamic["self_hosted_workflow_references"]:
         failures.append({"id": "github_hosted_only", "status": "FAIL", "missing_evidence": ["static_workflow_scan_failed"]})
@@ -58,6 +73,12 @@ def evaluate() -> dict[str, Any]:
         dynamic["self_hosted_workflow_references"] or dynamic["vps_workflow_references"]
     ):
         failures.append({"id": "no_vps_or_self_hosted_dependency", "status": "FAIL", "missing_evidence": ["static_dependency_scan_failed"]})
+    origin_evidence = recorded.get("origin_main_matches", {}).get("evidence", {})
+    if recorded.get("origin_main_matches", {}).get("status") == "PASS" and (
+        str(origin_evidence.get("head") or "") != dynamic["head"]
+        or str(origin_evidence.get("origin_main") or "") != dynamic["origin_main"]
+    ):
+        failures.append({"id": "origin_main_matches", "status": "FAIL", "missing_evidence": ["final_main_sha_mismatch"]})
 
     unique_failures = {item["id"]: item for item in failures}
     return {
@@ -72,8 +93,9 @@ def evaluate() -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--status-file", type=Path, default=STATUS)
     args = parser.parse_args()
-    result = evaluate()
+    result = evaluate(status_path=args.status_file)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

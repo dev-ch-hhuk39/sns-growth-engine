@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import rights_allows_media_use  # noqa: E402
+from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
 from media_growth_schemas import (  # noqa: E402
     SOURCE_VIDEO_FIELDS,
     build_source_video,
@@ -212,7 +213,8 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
 
     scan_limit = max(1, int(config.get("max_videos_per_source_scan", 50)))
     per_source_limit = max(1, int(config.get("max_new_videos_per_source_per_run", 10)))
-    opts = {
+    platform = str(source.get("source_platform", "")).lower()
+    opts = metadata_options(platform, {
         "extract_flat": "in_playlist",
         "playlistend": scan_limit,
         "skip_download": True,
@@ -220,8 +222,7 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
         "no_warnings": True,
         "ignoreerrors": True,
         "socket_timeout": 20,
-        "js_runtimes": {"node": {}},
-    }
+    })
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(str(source.get("source_url", "")), download=False)
@@ -247,14 +248,13 @@ def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) 
             continue
         metadata = dict(entry)
         if not metadata.get("duration"):
-            detail_opts = {
+            detail_opts = metadata_options(platform, {
                 "skip_download": True,
                 "quiet": True,
                 "no_warnings": True,
                 "noplaylist": True,
                 "socket_timeout": 20,
-                "js_runtimes": {"node": {}},
-            }
+            })
             try:
                 with yt_dlp.YoutubeDL(detail_opts) as detail_ydl:
                     detail = detail_ydl.extract_info(video_url, download=False)
