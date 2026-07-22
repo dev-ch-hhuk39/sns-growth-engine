@@ -174,6 +174,54 @@ def plan_posted_annotations(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def plan_stale_slot_run_recovery(
+    rows: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+    stale_after_minutes: int = 60,
+) -> list[dict[str, Any]]:
+    """Quarantine expired in-flight slots without creating a second claim.
+
+    ``RECOVERY_REQUIRED`` is deliberately not auto-retried by the normal slot
+    worker.  A later recovery workflow can make an explicit, auditable choice
+    between a safe fallback and a no-post terminal record.
+    """
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    repairs: list[dict[str, Any]] = []
+    for row_number, row in enumerate(rows, start=2):
+        if str(row.get("status", "")).upper() not in {"RUNNING", "CLAIMED", "PROCESSING"}:
+            continue
+        if str(row.get("actual_posted_at", "")).strip() or str(row.get("post_url", "")).strip():
+            continue
+        timestamp = str(row.get("lease_expires_at") or row.get("actual_started_at") or "").strip()
+        try:
+            observed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            if observed.tzinfo is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            # Invalid timestamps are unsafe to reclaim.  Quarantine them too.
+            observed = current - timedelta(minutes=stale_after_minutes + 1)
+        is_expired_lease = bool(str(row.get("lease_expires_at", "")).strip()) and observed <= current
+        is_stale_start = not str(row.get("lease_expires_at", "")).strip() and observed <= current - timedelta(minutes=stale_after_minutes)
+        if not (is_expired_lease or is_stale_start):
+            continue
+        repairs.append({
+            "row_number": row_number,
+            "slot_run_id": str(row.get("slot_run_id", "")),
+            "changes": {
+                "status": "RECOVERY_REQUIRED",
+                "claim_status": "EXPIRED",
+                "lease_expires_at": "",
+                "no_post_reason": "stale_slot_claim_requires_explicit_recovery",
+                "last_error_redacted": "stale_slot_claim_expired",
+                "updated_at": current.isoformat(),
+            },
+        })
+    return repairs
+
+
 def _read(client: SheetsClient, logical: str) -> tuple[Any, list[str], list[dict[str, Any]]]:
     ws = client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     headers = client._call_with_rate_limit_retry(f"headers:{logical}:reconcile", lambda: ws.row_values(1))
@@ -227,8 +275,10 @@ def main() -> int:
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=not args.apply)
     queue_ws, queue_headers, queue_rows = _read(client, "queue")
     posted_ws, posted_headers, posted_rows = _read(client, "posted_results")
+    slot_ws, slot_headers, slot_rows = _read(client, "content_slot_runs")
     queue_repairs = plan_queue_duplicate_repairs(queue_rows)
     posted_annotations = plan_posted_annotations(posted_rows)
+    stale_slot_repairs = plan_stale_slot_run_recovery(slot_rows)
     result = {
         "status": "PLAN_ONLY" if not args.apply else "APPLYING",
         "queue_duplicate_row_repair_count": len(queue_repairs),
@@ -237,6 +287,7 @@ def main() -> int:
             for repair in queue_repairs
         ),
         "posted_annotation_count": len(posted_annotations),
+        "stale_content_slot_recovery_count": len(stale_slot_repairs),
         "historical_media_evidence_missing_count": sum(
             "HISTORICAL_MEDIA_EVIDENCE_MISSING" in item["markers"] for item in posted_annotations
         ),
@@ -251,9 +302,11 @@ def main() -> int:
 
     _apply_plans(client, queue_ws, queue_headers, queue_repairs, label="queue_reconcile_batch")
     _apply_plans(client, posted_ws, posted_headers, posted_annotations, label="posted_reconcile_batch")
+    _apply_plans(client, slot_ws, slot_headers, stale_slot_repairs, label="content_slot_reconcile_batch")
     result["status"] = "APPLIED"
     result["updated_queue_rows"] = len(queue_repairs)
     result["updated_posted_rows"] = len(posted_annotations)
+    result["updated_content_slot_rows"] = len(stale_slot_repairs)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

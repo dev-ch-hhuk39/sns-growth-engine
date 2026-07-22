@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from backfill_missed_content_slots import missing_slots
 from content_schedule import slots_for_account
-from content_slot_runs import build_slot_run
+from content_slot_runs import build_slot_run, claim_slot_run
 
 
 class Worksheet:
@@ -35,9 +35,13 @@ claimed.update({"claim_status": "CLAIMED", "lease_expires_at": (now + timedelta(
 active_ids = {item["slot_id"] for item in missing_slots(Client([claimed]), "liver_manager", now)}
 claimed["lease_expires_at"] = (now - timedelta(minutes=1)).isoformat()
 expired_ids = {item["slot_id"] for item in missing_slots(Client([claimed]), "liver_manager", now)}
+recovery = build_slot_run("liver_manager", slot["slot_id"], status="RECOVERY_REQUIRED", now=now)
+recovery.update({"claim_status": "EXPIRED", "no_post_reason": "stale_slot_claim_requires_explicit_recovery"})
+recovery_claim = claim_slot_run(Client([recovery]), "liver_manager", slot["slot_id"], at=now)
 checks = [
     ("active claim skipped", slot["slot_id"] not in active_ids),
     ("expired claim recoverable", slot["slot_id"] in expired_ids),
+    ("recovery-required slot cannot receive a second claim", recovery_claim.get("reason") == "slot_recovery_required"),
 ]
 for name, ok in checks:
     print(f"  {'PASS' if ok else 'FAIL'} {name}")
