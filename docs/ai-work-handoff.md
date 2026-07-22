@@ -5038,3 +5038,126 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   clip E2E require an explicit ledger row plus an actual permitted source post
   or individual video asset. Do not call them complete until linked URLs and
   Sheet rows are observed.
+# Codex Handoff: High-Capability Planning Audit (2026-07-22)
+
+## 本システム / 現在位置
+
+- `night_scout` / `liver_manager` のThreads text投稿、許可台帳に基づく
+  source取得、direct media再利用、文字起こしに基づくclip生成、Cloudinary、
+  投稿、Sheets証跡、PDCAをGitHub Actions標準runnerだけで完結させるシステム。
+- 今回はユーザー指示により、最上位モデルでは現状監査・残作業設計・受入条件
+  確定だけを実施した。実装、公開化、Environment変更、merge、canary投稿は未実施。
+- 監査対象実装HEAD:
+  `026ed40b65d2c708673313286c8bc9a914b1efe7`。
+- 作業ブランチ: `feature/oss-github-actions-media-autopilot`。
+- `origin/main`: `f89f6ed44bc2a00930f04601d5700230e25949d3`。
+- PR: `https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/3`。
+
+## 今回の変更ファイル一覧 / 追加ファイル一覧
+
+- 更新: `docs/goal-status.json`
+- 更新: `docs/runtime-health.json`
+- 更新: `docs/goal-evidence.md`
+- 更新: `docs/ai-work-handoff.md`
+- 追加: `docs/goal-completion-implementation-plan.md`
+- 実装コード、workflow、config、Sheets、Cloudinary、Threadsは変更していない。
+
+## 監査結論
+
+- Goal evaluatorは現時点で未達。実態分類は35件中17 PASS、16件が
+  UNVERIFIED/FAIL、2件が外部BLOCKED。
+- repoはPRIVATE。公開化は全Git履歴の公開を伴うため、明示承認なしでは行わない。
+- PR #3はmergeableだがCI run `29690502128`はjob step開始前にfailure。
+  テスト失敗とは判定しない。mainはまだ旧実装。
+- branch内production workflowは26本、`self-hosted`/VPS参照は0、標準
+  `ubuntu-latest`へ移行済み。
+- gitleaks 8.30.1による全168 commit scanはPASS、leak 0。
+- repo testsは629/629 PASS、compileall PASS、workflow safety 359/359 PASS、
+  library matrix / registry PASS。localにはruff/mypyが未導入のためfinal CI必須。
+- Sheetsは直近の本番整合性修復後63/63 PASS、`posted_save_failed_count=0`。
+  今回のlocal再読はGoogle OAuth endpointのDNS解決不可でUNAVAILABLE。
+- Agent-Reach doctor、last30days preflight、source research applyは実証済み。
+- 実取得でYouTube metadataまでは進んだが、transcriptのSheets 50,000文字
+  制限が露出。acquisition runnerは修正済み。独立transcribe runnerへの
+  `normalize_transcript_row`接続が残作業。
+- TikTok real discoveryはrehydration failureが残り、bounded fallbackの
+  final-main live確認が必要。
+- Goal専用READY在庫は両accountともdirect media=0、generated clip=0。
+- Goalで必要な4 canary投稿は0件。旧投稿/旧assetをGoal証跡へ流用しない。
+- `liver_manager`の第三者Threads source account URLはtracked registryに0件。
+  架空URLやposting accountの暗黙転用は禁止。
+
+## 未完了事項 / タスク順
+
+1. `docs/goal-completion-implementation-plan.md` Work Package 1のコードgapを修正。
+2. 全tests、compile、ruff、mypy、license、dependency、gitleaksを通す。
+3. 公開化の明示承認を得てrepo public化、protected mainとapproval不要の
+   `production` Environmentを作成。
+4. PR CIを実step実行でPASSさせ、mainへmerge、origin/main一致確認。
+5. final mainでsource research/acquisitionとSheets verifier 63/63を実行。
+6. 各account direct media 1件、generated clip 1件を投稿せず準備。
+7. 4経路を各最大1件だけcanary投稿し、本文と実mediaを独立検証。
+8. 機械証跡でGoal statusを更新し、evaluator 35/35後だけGoal complete。
+
+## 残WARN / 外部ブロッカー
+
+- repository public化には、全Git履歴が公開されることへの明示承認が必要。
+- `liver_manager`用Threads source account URLは人間入力が必要。
+- GitHub `production` Environment / main protectionは公開化後にAPI再確認が必要。
+- GitHub APIとGoogle OAuth DNSがlocalで断続的に失敗する。Actions側のrun IDと
+  step logを最終証拠にする。
+- mainの直近scheduled runはworkflow successでもapply stepがSKIPPEDの例がある。
+  greenだけで投稿成功扱いにしない。
+
+## スケール方針 / 安全方針
+
+- discovery、acquisition、preparation、posting、recovery、evaluationを役割分離。
+- 取得はsource/account/total上限を守り、backend failureはbounded fallback。
+- `media_permissions` Sheets tabだけをruntime許可正本とする。repo configだけでは
+  download/cut/upload/postを許可しない。
+- 失敗assetはquarantineし次候補へ。無限retry、同一asset/text再投稿は禁止。
+- real canaryはaccount/pathごと最大1件。投稿後にSheets/Cloudinary/Threadsを
+  read-after-write確認してから次へ進む。
+- 字幕burn-inはユーザー指示によりOFFを維持。
+- X、beauty、secret/cookie/storage state、`.env`, `data/`, `output/`は対象外。
+
+## 全テスト結果 / dry-run結果
+
+- `run_repository_tests.py`: PASS 629 / FAIL 0。
+- `python3 -m compileall -q src scripts`: PASS。
+- `test_all_workflows_safety_flags.py`: PASS 359 / FAIL 0。
+- `test_library_capability_matrix_complete.py`: PASS 7。
+- `test_external_library_registry.py`: PASS 4 / FAIL 0。
+- gitleaks full history: PASS、168 commits、leak 0。
+- ruff/mypy: current local Pythonではmodule未導入のためNOT RUN。CI exact pinで必須。
+- `check_media_inventory.py --dry-run`: local DNSでGoogle OAuthに接続できずUNAVAILABLE。
+- 実fetch/download/cut/upload/post、Sheets apply、Cloudinary applyは今回0件。
+
+## 次に触ってよいファイル
+
+- `scripts/transcribe_approved_source_videos.py`
+- `src/transcription/sheets_limits.py`
+- `src/acquisition/ytdlp.py`
+- `src/acquisition/tiktok_public.py`
+- `scripts/discover_approved_source_videos.py`
+- `scripts/evaluate_goal.py`
+- 上記に直接対応する`test_*`、goal evidence/status docs。
+
+## 衝突しやすいファイル
+
+- `docs/ai-work-handoff.md`
+- `docs/goal-status.json`
+- `docs/runtime-health.json`
+- `config/source_accounts/default_sources.json`
+- `src/sheets_client.py`
+- acquisition/media production workflows。
+
+## 触らない方がよいファイル / 次AIへの引き継ぎメモ
+
+- `.env`, `data/`, `output/`, `.claude/plans/`, secret/token/cookie/storage-state。
+- `final_public_post_validator`、rights gate、same-post parent integrity、
+  unsupported-claim gateを弱めない。
+- まず`docs/goal-completion-implementation-plan.md`を読み、Work Package 1から
+  順番に進める。Goal設計の作り直しはしない。
+- 推奨実装モデルはGPT-5.6 Terra、思考力medium。テスト再実行・format・docs同期
+  だけlow可。設計矛盾/security incident/provider全fallback破綻時だけ最上位へ戻す。

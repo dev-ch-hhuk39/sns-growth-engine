@@ -1,44 +1,244 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-19T03:30:00+09:00",
-  "start_head": "f89f6ed44bc2a00930f04601d5700230e25949d3",
-  "start_origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3",
+  "generated_at": "2026-07-22T09:41:28+09:00",
+  "audit_scope": "planning_checkpoint_before_low_cost_implementation",
+  "implementation_head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
+  "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3",
+  "branch": "feature/oss-github-actions-media-autopilot",
   "repository_visibility": "PRIVATE",
+  "summary": {
+    "pass": 17,
+    "unverified_or_fail": 16,
+    "blocked": 2,
+    "required": 35,
+    "completion_claim": false
+  },
   "criteria": {
-    "repository_public": {"status": "FAIL", "evidence": {}},
-    "secret_history_scan": {"status": "UNVERIFIED", "evidence": {}},
-    "production_secrets_private": {"status": "UNVERIFIED", "evidence": {}},
-    "github_hosted_only": {"status": "FAIL", "evidence": {"workflow_scan": "22 workflow files reference self-hosted", "runner_label": "self-hosted/linux/x64/sns-growth/production"}},
-    "no_vps_or_self_hosted_dependency": {"status": "FAIL", "evidence": {"workflow_scan": "self-hosted references present", "dependency_scan": "sns-growth-xserver runner active"}},
-    "working_tree_clean": {"status": "UNVERIFIED", "evidence": {}},
-    "origin_main_matches": {"status": "UNVERIFIED", "evidence": {}},
-    "agent_reach_integrated": {"status": "NOT_IMPLEMENTED", "evidence": {}},
-    "last30days_integrated": {"status": "NOT_IMPLEMENTED", "evidence": {}},
-    "youtube_backends_integrated": {"status": "UNVERIFIED", "evidence": {}},
-    "tiktok_multiple_backends_integrated": {"status": "UNVERIFIED", "evidence": {}},
-    "threads_multiple_backends_integrated": {"status": "UNVERIFIED", "evidence": {}},
-    "web_fallback_integrated": {"status": "NOT_IMPLEMENTED", "evidence": {}},
-    "library_capability_matrix_complete": {"status": "UNVERIFIED", "evidence": {}},
-    "night_account_url_discovery": {"status": "UNVERIFIED", "evidence": {}},
-    "night_source_bundle": {"status": "UNVERIFIED", "evidence": {}},
-    "night_direct_media_post": {"status": "UNVERIFIED", "evidence": {}},
-    "night_generated_clip_post": {"status": "UNVERIFIED", "evidence": {}},
-    "night_caption_alignment": {"status": "UNVERIFIED", "evidence": {}},
-    "liver_account_url_discovery": {"status": "BLOCKED", "evidence": {}},
-    "liver_source_bundle": {"status": "UNVERIFIED", "evidence": {}},
-    "liver_direct_media_post": {"status": "UNVERIFIED", "evidence": {}},
-    "liver_generated_clip_post": {"status": "UNVERIFIED", "evidence": {}},
-    "liver_caption_alignment": {"status": "UNVERIFIED", "evidence": {}},
-    "permission_single_authority": {"status": "FAIL", "evidence": {}},
-    "backend_failover": {"status": "UNVERIFIED", "evidence": {}},
-    "asset_quarantine": {"status": "NOT_IMPLEMENTED", "evidence": {}},
-    "next_candidate_selection": {"status": "UNVERIFIED", "evidence": {}},
-    "schedule_delay_recovery": {"status": "UNVERIFIED", "evidence": {}},
-    "slot_idempotency": {"status": "UNVERIFIED", "evidence": {}},
-    "sheets_evidence": {"status": "FAIL", "evidence": {"verification_run": "local read-only 2026-07-19", "failed_checks": "7"}},
-    "cloudinary_idempotency": {"status": "UNVERIFIED", "evidence": {}},
-    "text_fallback": {"status": "UNVERIFIED", "evidence": {}},
-    "text_pipeline_regression_free": {"status": "UNVERIFIED", "evidence": {}},
-    "all_required_tests_pass": {"status": "UNVERIFIED", "evidence": {}}
+    "repository_public": {
+      "status": "BLOCKED",
+      "evidence": {},
+      "note": "Explicit human approval is required because publicization exposes the full Git history."
+    },
+    "secret_history_scan": {
+      "status": "PASS",
+      "evidence": {
+        "scanner": "gitleaks 8.30.1",
+        "scan_scope": "full Git history, 168 commits, approximately 6.41 MB",
+        "run_at": "2026-07-22T09:35:00+09:00"
+      }
+    },
+    "production_secrets_private": {
+      "status": "UNVERIFIED",
+      "evidence": {
+        "secret_names_only": "GitHub secret names listed without values"
+      },
+      "note": "A protected production Environment was absent in the last successful API audit."
+    },
+    "github_hosted_only": {
+      "status": "PASS",
+      "evidence": {
+        "workflow_scan": "0 self-hosted workflow references across 26 workflow files",
+        "runner_label": "ubuntu-latest"
+      }
+    },
+    "no_vps_or_self_hosted_dependency": {
+      "status": "PASS",
+      "evidence": {
+        "workflow_scan": "0 self-hosted and 0 VPS workflow references",
+        "dependency_scan": "self-hosted runner health workflow removed; standard hosted roles only"
+      }
+    },
+    "working_tree_clean": {
+      "status": "PASS",
+      "evidence": {
+        "head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
+        "checked_at": "2026-07-22T09:25:00+09:00"
+      },
+      "note": "Repeat after the planning-document commit and at final main."
+    },
+    "origin_main_matches": {
+      "status": "FAIL",
+      "evidence": {
+        "head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
+        "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3"
+      }
+    },
+    "agent_reach_integrated": {
+      "status": "PASS",
+      "evidence": {
+        "pinned_version": "1.5.0 at 1494c2ab239e7355a77e7cceaf3271453a1f34b5",
+        "doctor_result": "PASS; 15 channels detected, 5 usable",
+        "adapter": "src/reference/fetchers/agent_reach_fetcher.py"
+      }
+    },
+    "last30days_integrated": {
+      "status": "PASS",
+      "evidence": {
+        "pinned_version": "3.16.0 at 249c7a4c040558a903d6838dee31012980d4946d",
+        "smoke_result": "PASS; safe defaults, browser cookies disabled, no local writes",
+        "adapter": "src/reference/fetchers/last30days_fetcher.py"
+      }
+    },
+    "youtube_backends_integrated": {
+      "status": "PASS",
+      "evidence": {
+        "yt_dlp": "2026.7.4 exact pin with Node runtime configuration",
+        "transcript_api": "youtube-transcript-api provider contract and real metadata path",
+        "comment_downloader": "youtube-comment-downloader provider contract"
+      }
+    },
+    "tiktok_multiple_backends_integrated": {
+      "status": "PASS",
+      "evidence": {
+        "primary": "bounded yt-dlp account/post provider",
+        "fallback": "registered TikTok public fallback router",
+        "bounded_limit": "config and tests enforce per-source and total discovery limits"
+      },
+      "note": "Real TikTok rehydration fallback must be rechecked on final main."
+    },
+    "threads_multiple_backends_integrated": {
+      "status": "UNVERIFIED",
+      "evidence": {
+        "primary": "Playwright public provider",
+        "fallback": "HTTP public metadata fallback"
+      },
+      "note": "Final-main live result is missing."
+    },
+    "web_fallback_integrated": {
+      "status": "PASS",
+      "evidence": {
+        "provider": "Agent-Reach WebChannel using Jina Reader",
+        "smoke_result": "PASS in live Agent-Reach doctor"
+      }
+    },
+    "library_capability_matrix_complete": {
+      "status": "PASS",
+      "evidence": {
+        "matrix_path": "docs/library-capability-matrix.json",
+        "license_audit": "test_library_capability_matrix_complete and test_external_library_registry PASS",
+        "version_pins": "every Git dependency has an exact revision; yt-dlp has an exact package pin"
+      }
+    },
+    "night_account_url_discovery": {
+      "status": "UNVERIFIED",
+      "evidence": {},
+      "note": "Final-main source account to real post evidence is missing."
+    },
+    "night_source_bundle": {
+      "status": "UNVERIFIED",
+      "evidence": {},
+      "note": "No Goal-specific same-post direct-media bundle has been verified."
+    },
+    "night_direct_media_post": {
+      "status": "UNVERIFIED",
+      "evidence": {}
+    },
+    "night_generated_clip_post": {
+      "status": "UNVERIFIED",
+      "evidence": {}
+    },
+    "night_caption_alignment": {
+      "status": "UNVERIFIED",
+      "evidence": {}
+    },
+    "liver_account_url_discovery": {
+      "status": "BLOCKED",
+      "evidence": {},
+      "note": "No human-approved Liver Manager Threads source account URL exists in tracked registry/history."
+    },
+    "liver_source_bundle": {
+      "status": "UNVERIFIED",
+      "evidence": {}
+    },
+    "liver_direct_media_post": {
+      "status": "UNVERIFIED",
+      "evidence": {}
+    },
+    "liver_generated_clip_post": {
+      "status": "UNVERIFIED",
+      "evidence": {}
+    },
+    "liver_caption_alignment": {
+      "status": "UNVERIFIED",
+      "evidence": {}
+    },
+    "permission_single_authority": {
+      "status": "PASS",
+      "evidence": {
+        "authority": "Google Sheets media_permissions ledger",
+        "contradiction_check": "runtime requires active, unexpired, unrevoked evidence-bearing action grants; repo config cannot grant permission"
+      }
+    },
+    "backend_failover": {
+      "status": "PASS",
+      "evidence": {
+        "test": "provider contract, registry capability, and multiple-backend tests PASS",
+        "routing_evidence": "provider_runs and backend_routing_history schemas and persistence path"
+      }
+    },
+    "asset_quarantine": {
+      "status": "PASS",
+      "evidence": {
+        "test": "test_quarantine_after_same_failure.py PASS",
+        "quarantine_evidence": "asset failure state and bounded retry route implemented"
+      }
+    },
+    "next_candidate_selection": {
+      "status": "PASS",
+      "evidence": {
+        "test": "inventory-aware rotation and next-candidate tests PASS",
+        "selection_evidence": "quarantined/used candidates are excluded before next selection"
+      }
+    },
+    "schedule_delay_recovery": {
+      "status": "UNVERIFIED",
+      "evidence": {
+        "test": "scheduled dispatch and recovery tests PASS"
+      },
+      "note": "A run ID from the final merged implementation is still required."
+    },
+    "slot_idempotency": {
+      "status": "PASS",
+      "evidence": {
+        "test": "slot claim, fallback queue, and duplicate guard tests PASS",
+        "slot_evidence": "production duplicate queue rows reconciled and stale fallback rows expired"
+      }
+    },
+    "sheets_evidence": {
+      "status": "PASS",
+      "evidence": {
+        "verification_run": "live production verifier after integrity reconciliation",
+        "failed_checks": "0; 63/63 PASS; posted_save_failed_count=0"
+      },
+      "note": "Repeat after final merge and before canaries."
+    },
+    "cloudinary_idempotency": {
+      "status": "UNVERIFIED",
+      "evidence": {
+        "test": "test_cloudinary_upload_idempotency.py PASS"
+      },
+      "note": "Goal-specific asset evidence is missing."
+    },
+    "text_fallback": {
+      "status": "PASS",
+      "evidence": {
+        "test": "text fallback, READY gating, and slot idempotency tests PASS",
+        "fallback_evidence": "fallback queue creation remains public-text-only and media-independent"
+      }
+    },
+    "text_pipeline_regression_free": {
+      "status": "UNVERIFIED",
+      "evidence": {},
+      "note": "Final merged main needs one independently verified result per account."
+    },
+    "all_required_tests_pass": {
+      "status": "UNVERIFIED",
+      "evidence": {
+        "test_count": "629 local repository tests PASS",
+        "failed_count": "0 local; GitHub PR CI did not start job steps",
+        "run_at": "2026-07-22T09:39:00+09:00"
+      },
+      "note": "Final GitHub-hosted CI PASS at merged main is required."
+    }
   }
 }

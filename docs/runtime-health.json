@@ -1,37 +1,121 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-07-19T03:30:00+09:00",
-  "head": "f89f6ed44bc2a00930f04601d5700230e25949d3",
+  "checked_at": "2026-07-22T09:41:28+09:00",
+  "implementation_head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
   "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3",
+  "branch": "feature/oss-github-actions-media-autopilot",
   "repository_visibility": "PRIVATE",
-  "workflow_files": 22,
-  "self_hosted_workflow_references": 22,
-  "workflow_sleep_references": 7,
-  "production_runner": "sns-growth-xserver",
-  "sheets_verification": {
-    "passed": 54,
-    "failed": 7,
-    "failed_checks": [
-      "posted_metrics_status_allowed",
-      "posted_media_used_false",
-      "posted_duplicate_text_absent",
-      "media_no_unapproved_upload",
-      "media_uploaded_only_if_approved",
-      "generated_candidates_not_ready_by_default",
-      "tiktok_youtube_reference_only"
+  "pull_request": {
+    "number": 3,
+    "state": "OPEN",
+    "mergeable": "MERGEABLE",
+    "merge_state": "UNSTABLE",
+    "url": "https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/3"
+  },
+  "workflow_inventory": {
+    "workflow_files": 26,
+    "self_hosted_workflow_references": 0,
+    "vps_workflow_references": 0,
+    "standard_runner": "ubuntu-latest",
+    "role_workflows": [
+      "CI Security and Regression",
+      "OSS Source Research",
+      "Approved Account Acquisition",
+      "Direct Media Preparation",
+      "media clip preparation",
+      "posting dispatchers",
+      "Content Slot Recovery",
+      "Library Health"
+    ]
+  },
+  "ci": {
+    "pull_request_run_id": 29690502128,
+    "head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
+    "conclusion": "FAILURE_BEFORE_STEPS",
+    "jobs": [
+      "tests",
+      "dependency-audit",
+      "secret-history-scan"
     ],
-    "warnings": ["posted_save_failed_count=2"]
+    "job_steps_observed": 0,
+    "interpretation": "runner/platform startup failure; no test command executed"
   },
-  "latest_observed_failure": {
-    "run_id": "29668544577",
-    "workflow": "Autopilot AUTO_READY Pilot",
-    "reason": "full Sheets verifier exited 1 before AUTO_READY because seven legacy/production consistency checks failed"
+  "local_validation": {
+    "repository_tests": {
+      "status": "PASS",
+      "test_count": 629,
+      "failed_count": 0,
+      "excluded_external_probe_count": 8,
+      "excluded_optional_local_tool_count": 3
+    },
+    "compileall": "PASS",
+    "workflow_safety": "PASS 359 / FAIL 0",
+    "library_matrix": "PASS",
+    "external_library_registry": "PASS 4 / FAIL 0",
+    "ruff": "NOT_RUN_LOCAL_DEPENDENCY_MISSING",
+    "mypy": "NOT_RUN_LOCAL_DEPENDENCY_MISSING",
+    "ci_dependency_source": "requirements-ci.txt"
   },
-  "credentials_presence": {
-    "sheets": "SET",
-    "threads_night_scout": "SET",
-    "threads_liver_manager": "SET",
-    "cloudinary": "SET"
+  "secret_scan": {
+    "status": "PASS",
+    "scanner": "gitleaks 8.30.1",
+    "commit_count": 168,
+    "bytes_scanned_approx": 6413045,
+    "leak_count": 0,
+    "ignored_sensitive_paths_tracked": false
   },
-  "secret_values_logged": false
+  "production_sheets": {
+    "last_verified_status": "PASS",
+    "passed": 63,
+    "failed": 0,
+    "posted_save_failed_count": 0,
+    "repeat_required_after_final_merge": true,
+    "current_local_read": "UNAVAILABLE_DNS_OAUTH2_GOOGLEAPIS"
+  },
+  "libraries": {
+    "agent_reach_doctor": "PASS_15_CHANNELS_5_USABLE",
+    "last30days_preflight": "PASS_SAFE_DEFAULTS",
+    "youtube_live_metadata": "PARTIAL_PASS",
+    "youtube_transcript_sheets": "FIXED_IN_ACQUISITION_ONLY",
+    "tiktok_live_discovery": "REHYDRATION_FAILURE_REQUIRES_FINAL_MAIN_FALLBACK_CANARY",
+    "threads_live_multiple_backend": "UNVERIFIED_FINAL_MAIN",
+    "web_fallback": "PASS_JINA_READER"
+  },
+  "known_code_gap": {
+    "id": "transcribe_runner_sheets_normalization",
+    "file": "scripts/transcribe_approved_source_videos.py",
+    "reason": "independent transcribe runner does not call normalize_transcript_row before Sheets persistence"
+  },
+  "goal_media_inventory": {
+    "night_scout": {
+      "direct_media_ready": 0,
+      "generated_clip_ready": 0
+    },
+    "liver_manager": {
+      "direct_media_ready": 0,
+      "generated_clip_ready": 0
+    },
+    "source": "last successful live inventory audit; current local refresh unavailable due DNS"
+  },
+  "production_canaries": {
+    "night_direct_media": "NOT_RUN",
+    "night_generated_clip": "NOT_RUN",
+    "liver_direct_media": "NOT_RUN",
+    "liver_generated_clip": "NOT_RUN"
+  },
+  "latest_main_schedule_observation": {
+    "head": "f89f6ed44bc2a00930f04601d5700230e25949d3",
+    "night_run_id": 29851057467,
+    "liver_run_id": 29832743384,
+    "workflow_conclusion": "success",
+    "apply_step": "SKIPPED",
+    "warning": "green workflow conclusion is not posting evidence"
+  },
+  "external_blockers": [
+    "explicit approval required before repository publicization",
+    "no human-approved liver_manager Threads source account URL is registered",
+    "production Environment and protected main require post-publicization verification"
+  ],
+  "secret_values_logged": false,
+  "completion_claim": false
 }
