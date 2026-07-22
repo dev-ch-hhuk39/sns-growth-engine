@@ -45,6 +45,17 @@
   TikTok multiple-backend, provider-contract, `py_compile`, and
   `git diff --check`.
 
+### Direct-media preparation runtime finding
+
+- The read-only Direct Media Preparation run `29884573138` reached its hosted
+  runtime check but stopped before any dry-run plan or gated media action:
+  `ffmpeg` was not installed on the GitHub-hosted image although the workflow
+  asserted that it was present. OCR packages installed successfully.
+- The pending workflow fix installs `ffmpeg` explicitly together with the
+  bounded OCR dependencies and adds a static contract test. Publishing and all
+  media operation gates remain false unless the existing explicit confirmation
+  path is used.
+
 ### Next actions
 
 1. Merge this small workflow change through CI, dispatch it with

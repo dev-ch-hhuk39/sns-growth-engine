@@ -68,7 +68,7 @@ jobs:
       - name: Install bounded OCR runtime
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends tesseract-ocr tesseract-ocr-jpn
+          sudo apt-get install --yes --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-jpn
           command -v ffmpeg
           command -v ffprobe
           command -v tesseract
