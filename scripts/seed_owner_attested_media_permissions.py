@@ -21,23 +21,26 @@ from config_loader import get_config
 from sheets_client import TAB_DEFINITIONS, SheetsClient
 
 MEDIA_CAPABLE_PLATFORMS = {"threads", "youtube", "tiktok"}
+APPROVABLE_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 
 
 def truthy(value: Any) -> bool:
     return value is True or str(value or "").lower() in {"1", "true", "yes"}
 
 
-def eligible_sources() -> list[dict[str, Any]]:
+def eligible_sources(source_ids: set[str] | None = None) -> list[dict[str, Any]]:
     sources = json.loads((ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")).get("sources", [])
     result = []
     for source in sources:
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
-        if (
-            not truthy(source.get("active"))
-            or platform not in MEDIA_CAPABLE_PLATFORMS
-            or "beauty_account" in targets
-        ):
+        if source_ids is not None and str(source.get("source_id", "")) not in source_ids:
+            continue
+        if platform not in MEDIA_CAPABLE_PLATFORMS or "beauty_account" in targets:
+            continue
+        if str(source.get("rights_status", "")).lower() not in APPROVABLE_RIGHTS:
+            continue
+        if str(source.get("permission_status", "")).lower() != "approved":
             continue
         result.append(source)
     return result
@@ -71,13 +74,26 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-owner-attestation", action="store_true")
+    parser.add_argument("--source-id", action="append", default=[], help="Explicit approved source ID; repeat for each source")
     args = parser.parse_args()
     if args.apply and not args.confirm_owner_attestation:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-owner-attestation"}))
         return 1
+    if args.apply and not args.source_id:
+        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires at least one explicit --source-id"}))
+        return 1
     now = datetime.now(timezone.utc).isoformat()
-    rows = [permission_row(source, now) for source in eligible_sources()]
-    result: dict[str, Any] = {"status": "PLAN_ONLY", "eligible_source_count": len(rows), "would_write": len(rows), "revoked_preserved": True}
+    requested = {str(value).strip() for value in args.source_id if str(value).strip()} or None
+    rows = [permission_row(source, now) for source in eligible_sources(requested)]
+    result: dict[str, Any] = {
+        "status": "PLAN_ONLY",
+        "eligible_source_count": len(rows),
+        "requested_source_count": len(requested or []),
+        "selected_source_ids": [row["source_id"] for row in rows],
+        "would_write": len(rows),
+        "revoked_preserved": True,
+        "approved_rights_only": True,
+    }
     if not args.apply:
         print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
     cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
