@@ -111,6 +111,15 @@ def build_slot_run(
     return row
 
 
+def _slot_run_contract_issues(existing: dict[str, Any], expected: dict[str, Any]) -> list[str]:
+    """Return contract fields that failed persistence read-after-write."""
+    required = ("slot_run_id", "schedule_date_jst", "account_id", "slot_id", "idempotency_key")
+    return [
+        field for field in required
+        if str(existing.get(field, "")).strip() != str(expected.get(field, "")).strip()
+    ]
+
+
 def upsert_slot_run(client: Any, row: dict[str, Any]) -> dict[str, Any]:
     """Read the tab once and use a full-row batch update instead of ws.find()."""
     from sheets_client import TAB_DEFINITIONS
@@ -130,12 +139,21 @@ def upsert_slot_run(client: Any, row: dict[str, Any]) -> dict[str, Any]:
             "batch_update:content_slot_runs",
             lambda: ws.batch_update([{"range": f"A{row_number}:{end_column}{row_number}", "values": values_to_write}], value_input_option="USER_ENTERED"),
         )
-        return {"status": "UPDATED", "slot_run_id": row["slot_run_id"]}
-    client._call_with_rate_limit_retry(
-        "append_row:content_slot_runs",
-        lambda: ws.append_row(values_to_write[0], value_input_option="USER_ENTERED"),
+        result = {"status": "UPDATED", "slot_run_id": row["slot_run_id"]}
+    else:
+        client._call_with_rate_limit_retry(
+            "append_row:content_slot_runs",
+            lambda: ws.append_row(values_to_write[0], value_input_option="USER_ENTERED"),
+        )
+        result = {"status": "CREATED", "slot_run_id": row["slot_run_id"]}
+    verified = client._call_with_rate_limit_retry(
+        "get_all_records:content_slot_runs:verify",
+        lambda: ws.get_all_records(),
     )
-    return {"status": "CREATED", "slot_run_id": row["slot_run_id"]}
+    stored = next((item for item in verified if str(item.get("slot_run_id", "")) == row["slot_run_id"]), None)
+    if not stored or _slot_run_contract_issues(stored, row):
+        raise RuntimeError("content_slot_run_read_after_write_failed")
+    return result
 
 
 def existing_slot_row(client: Any, account_id: str, slot_id: str, at: datetime | None = None) -> dict[str, Any] | None:
@@ -192,6 +210,10 @@ def claim_slot_run(
         status = str(existing.get("status", ""))
         if status in {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED", "POSTED"}:
             return {"status": "SKIPPED", "reason": "slot_already_posted", "slot_run_id": expected}
+        if status == "RECOVERY_REQUIRED":
+            # A stale execution must be reconciled explicitly.  Taking a new
+            # claim here could publish the same business-date slot twice.
+            return {"status": "SKIPPED", "reason": "slot_recovery_required", "slot_run_id": expected}
         expiry = str(existing.get("lease_expires_at", ""))
         if str(existing.get("claim_status", "")) == "CLAIMED" and expiry:
             try:

@@ -1,5 +1,58 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex WP3 data-integrity contracts
+
+### 本システムについて
+
+SNS Growth Engine v2 は、権利台帳に基づく source-to-Threads 運用、
+Cloudinary media asset、slot 実行記録、PDCA 証跡を結ぶ基盤である。公開本文は
+`public_post_text` のみを使用し、X と `beauty_account` は引き続き block する。
+
+### 作業ブランチ / 変更ファイル
+
+- branch: `fix/production-data-integrity-contracts`
+- baseline `main` / `origin/main`: `154ae4c8b7bf0378713f6bb6d456165744d53834`
+- Updated: `scripts/ingest_direct_reference_media.py`,
+  `scripts/content_slot_runs.py`, `scripts/reconcile_production_integrity.py`,
+  `scripts/test_reconcile_production_integrity.py`,
+  `scripts/test_recovery_skips_active_claim.py`,
+  `scripts/test_business_date_0400_and_2500.py`.
+- Added: `scripts/test_media_asset_contract.py`.
+
+### 完了内容 / テスト結果
+
+- `media_assets` の既存行は、同じ deterministic asset ID でも source parent、
+  Cloudinary URL/public ID、account の read-after-write 契約を検証する。空欄だけを
+  現在の permissioned ingest の確定値で補い、非空の矛盾は fail closed する。利用数や
+  既存 lifecycle 列は上書きしない。
+- `content_slot_runs` は business-date/idempotency の read-after-write を要求し、
+  stale `RUNNING` / `CLAIMED` / `PROCESSING` は `RECOVERY_REQUIRED` に隔離する。
+  通常 worker は同 slot を再 claim しない。
+- Read-only production reconcile: queue duplicate `0`、stale recovery candidate
+  `5`、historical media evidence warning `4`、historical duplicate audit `1`。
+  apply はまだ未実行で、投稿・download・upload は一切していない。
+- PASS: focused asset/slot/reconcile tests、`py_compile`、`git diff --check`。
+  先行 WP1 complete suite は `644/644 PASS`。
+
+### 未完了事項 / 残 WARN / スケール方針
+
+- 次はこのブランチを CI 付き PR で main に反映し、production reconcile を
+  `--apply --confirm-reconcile` で一度だけ実行して 5 stale row の終端化を確認する。
+- historical media-evidence `4` と duplicate audit `1` は旧記録として保持し、Goal
+  canary 証跡には使わない。
+- その後は WP-B caption grounding、WP-C clip inventory、WP-D ten-slot rehearsal、
+  WP-E evidence/canary の順に進む。各段階は bounded batch・read-after-write・
+  source/asset provenance を維持し、権利ゲートを緩めない。
+
+### 次 AI への引き継ぎ
+
+- 次に触ってよい: 上記 data-integrity files、caption/clip/slot tests、Goal evidence docs。
+- 触らない: `.env`, `data/`, `output/`, `.claude/plans/`, secret/token/cookie/storage state。
+- 衝突しやすい: `src/sheets_client.py`, `scripts/content_slot_runs.py`,
+  `scripts/reconcile_production_integrity.py`, `docs/ai-work-handoff.md`。
+- `RECOVERY_REQUIRED` は通常 worker で再 claim しない。必ず reconciliation の
+  read-after-write result を確認してから次の slot/recovery 実装へ進む。
+
 ## 2026-07-22 Final production residual audit (design only)
 
 - Baseline: `main` / `origin/main` `3e05812a514b95827b99dc20736951c02269c6e6`.

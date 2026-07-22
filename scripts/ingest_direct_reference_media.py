@@ -206,16 +206,68 @@ def update_media_row(client: SheetsClient, source_post_media_id: str, fields: di
             lambda: ws.batch_update(updates, value_input_option="USER_ENTERED"),
         )
 
+def _media_asset_contract_issues(existing: dict[str, Any], expected: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Return missing and conflicting immutable asset-contract fields.
+
+    A content hash is deterministic, so a pre-existing ``media_id`` must point
+    to the same source post and Cloudinary object.  We may fill a genuinely
+    blank cell from the current, permissioned ingest, but never overwrite a
+    non-empty conflicting value or guess a parent relationship.
+    """
+    required = (
+        "media_id", "account_id", "reference_post_id", "source_post_url",
+        "original_media_url", "storage_url", "cloudinary_public_id",
+        "storage_provider", "upload_status",
+    )
+    missing: list[str] = []
+    conflicting: list[str] = []
+    for field in required:
+        actual = str(existing.get(field, "")).strip()
+        wanted = str(expected.get(field, "")).strip()
+        if not actual:
+            missing.append(field)
+        elif actual != wanted:
+            conflicting.append(field)
+    return missing, conflicting
+
+
 def upsert_media_asset(client: SheetsClient, post: dict[str, Any], media: dict[str, Any], *, storage_url: str, public_id: str, digest: str, mime: str, local_path: Path) -> str:
     asset_id = f"ma_{digest[:24]}"; ws = client._ensure_tab("media_assets", TAB_DEFINITIONS["media_assets"])
     headers = client._call_with_rate_limit_retry("read_headers:media_assets", lambda: ws.row_values(1))
     rows = client._call_with_rate_limit_retry("get_all_records:media_assets", lambda: ws.get_all_records())
-    if any(str(row.get("media_id", "")) == asset_id for row in rows): return asset_id
     now = datetime.now(timezone.utc).isoformat()
     row = {"media_id": asset_id, "account_id": post.get("target_account_id", ""), "reference_post_id": post.get("source_post_id", ""), "source_platform": post.get("platform", ""), "source_post_url": post.get("canonical_post_url", ""), "original_media_url": media.get("original_media_url", ""), "storage_provider": "cloudinary", "storage_url": storage_url, "cloudinary_public_id": public_id, "media_type": media.get("media_type", ""), "mime_type": mime, "width": media.get("width", ""), "height": media.get("height", ""), "aspect_ratio": media.get("aspect_ratio", ""), "duration_seconds": media.get("duration_seconds", ""), "reuse_status": "APPROVED", "media_reuse_risk": "low", "downloaded_at": now, "uploaded_at": now, "used_count": "0", "local_path": str(local_path), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""), "allow_download": "true", "allow_upload": "true", "upload_status": "UPLOADED"}
-    client._call_with_rate_limit_retry("append_row:media_assets", lambda: ws.append_row([str(row.get(header, "")) for header in headers], value_input_option="USER_ENTERED"))
+
+    existing_number = next(
+        (index for index, item in enumerate(rows, start=2) if str(item.get("media_id", "")) == asset_id),
+        0,
+    )
+    if existing_number:
+        existing = rows[existing_number - 2]
+        missing, conflicting = _media_asset_contract_issues(existing, row)
+        if conflicting:
+            raise RuntimeError("media_asset_contract_conflict:" + ",".join(sorted(conflicting)))
+        if missing:
+            # Preserve historical lifecycle fields such as used_count and
+            # posted references.  Only the exact missing contract values are
+            # supplied by this ingest; nothing is inferred or reset.
+            merged = dict(existing)
+            for field in missing:
+                merged[field] = row[field]
+            values = [str(merged.get(header, "")) for header in headers]
+            client._call_with_rate_limit_retry(
+                "update_existing_media_asset_contract",
+                lambda: ws.batch_update(
+                    [{"range": f"A{existing_number}:{col_letter(len(headers))}{existing_number}", "values": [values]}],
+                    value_input_option="USER_ENTERED",
+                ),
+            )
+    else:
+        client._call_with_rate_limit_retry("append_row:media_assets", lambda: ws.append_row([str(row.get(header, "")) for header in headers], value_input_option="USER_ENTERED"))
     verified = client._call_with_rate_limit_retry("get_all_records:media_assets:verify", lambda: ws.get_all_records())
-    if not any(str(item.get("media_id", "")) == asset_id for item in verified):
+    stored = next((item for item in verified if str(item.get("media_id", "")) == asset_id), None)
+    missing, conflicting = _media_asset_contract_issues(stored or {}, row)
+    if not stored or missing or conflicting:
         raise RuntimeError("media_asset_read_after_write_failed")
     return asset_id
 
