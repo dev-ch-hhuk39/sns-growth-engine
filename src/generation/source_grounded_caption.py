@@ -258,24 +258,44 @@ class SourceGroundedCaptionService:
                 "provider_status": generated.status,
                 "primary_provider_failure": primary_failure,
             }
+        def evaluate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str], list[dict[str, Any]], str, ProviderResult[dict[str, Any]], dict[str, Any], list[str]]:
+            internal = payload.get("internal_analysis") if isinstance(payload.get("internal_analysis"), dict) else {}
+            main_claims = [str(item).strip() for item in internal.get("main_claims", []) if str(item).strip()]
+            support = [item for item in payload.get("claim_support", []) if isinstance(item, dict)]
+            public_text = str(payload.get("public_post_text", "")).strip()
+            alignment = self.alignment_provider.evaluate(
+                source_text="\n".join(filter(None, [post.original_post_text, transcript_excerpt])),
+                public_post_text=public_text,
+                main_claims=main_claims,
+                claim_support=support,
+                recent_posts=recent_posts,
+            )
+            alignment_data = alignment.data or {
+                "status": "BLOCKED",
+                "blocked_reasons": [alignment.reason or "semantic_alignment_failed"],
+            }
+            blocked = [str(item) for item in payload.get("blocked_reasons", []) if str(item)]
+            blocked.extend(alignment_data.get("blocked_reasons", []))
+            return internal, main_claims, support, public_text, alignment, alignment_data, blocked
+
         data = generated.data
-        internal = data.get("internal_analysis") if isinstance(data.get("internal_analysis"), dict) else {}
-        main_claims = [str(item).strip() for item in internal.get("main_claims", []) if str(item).strip()]
-        support = [item for item in data.get("claim_support", []) if isinstance(item, dict)]
-        public_text = str(data.get("public_post_text", "")).strip()
-        alignment = self.alignment_provider.evaluate(
-            source_text="\n".join(filter(None, [post.original_post_text, transcript_excerpt])),
-            public_post_text=public_text,
-            main_claims=main_claims,
-            claim_support=support,
-            recent_posts=recent_posts,
-        )
-        alignment_data = alignment.data or {
-            "status": "BLOCKED",
-            "blocked_reasons": [alignment.reason or "semantic_alignment_failed"],
-        }
-        blocked = [str(item) for item in data.get("blocked_reasons", []) if str(item)]
-        blocked.extend(alignment_data.get("blocked_reasons", []))
+        internal, _main_claims, support, public_text, alignment, alignment_data, blocked = evaluate_payload(data)
+
+        # The model can produce a natural caption while returning malformed or
+        # insufficient claim-support pairs.  Do not weaken alignment; retry
+        # once with the bounded deterministic provider, which derives its sole
+        # claim and support directly from this same source bundle.
+        if (blocked or alignment.status != "PASS") and self.fallback_provider is not None:
+            fallback = self.fallback_provider.generate(
+                post,
+                account_id=account_id,
+                recent_posts=recent_posts,
+                transcript_excerpt=transcript_excerpt,
+            )
+            if fallback.ok and fallback.data:
+                generated = fallback
+                data = fallback.data
+                internal, _main_claims, support, public_text, alignment, alignment_data, blocked = evaluate_payload(data)
         return {
             "status": "PASS" if not blocked and alignment.status == "PASS" else "BLOCKED",
             "internal_analysis": internal,

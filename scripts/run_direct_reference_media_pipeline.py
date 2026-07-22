@@ -447,7 +447,10 @@ def build_plan(
         for row in posted_rows
         if str(row.get("account_id", "")) == account_id
     ][-30:]
-    caption_service = caption_service or SourceGroundedCaptionService(GitHubModelsGroundedProvider())
+    caption_service = caption_service or SourceGroundedCaptionService(
+        GitHubModelsGroundedProvider(),
+        allow_deterministic_fallback=True,
+    )
     attempted: list[dict[str, Any]] = []
     for post, media, _source in candidates:
         # Never expose original_post_text publicly. A source-specific provider

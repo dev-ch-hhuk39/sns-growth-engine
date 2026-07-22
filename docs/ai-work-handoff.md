@@ -25,6 +25,12 @@
 - A prepare-only run with no validator-approved asset now completes as
   `NO_READY_MEDIA` with its original block reason retained. This does not
   alter any dispatch/post behavior: only `--post-ready` can reach a publisher.
+- Direct-media run `29885767473` verified a `liver_manager` same-source chain
+  through download, Cloudinary and local content understanding. READY was
+  correctly withheld because semantic evidence was insufficient. The caption
+  service now retries once with its bounded deterministic, source-grounded
+  provider when a model response fails claim-support alignment; thresholds are
+  unchanged.
 
 ### Change files
 
@@ -33,6 +39,7 @@
 - Added: `scripts/test_direct_media_evidence_tabs_self_heal.py`
 - Added: `scripts/test_direct_media_external_unavailable_is_safe_skip.py`
 - Added: `scripts/test_direct_media_prepare_no_ready_is_successful.py`
+- Added: `scripts/test_source_grounded_caption_alignment_fallback.py`
 - Updated: `docs/ai-work-handoff.md`
 
 ### Verification
