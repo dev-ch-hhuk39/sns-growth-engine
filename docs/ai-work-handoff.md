@@ -31,6 +31,9 @@ gate で扱う。今回の対象は投稿ではなく、Liver media preparation 
   summaryまで完了し、workflowのpublish/Threads post gateはfalseのまま。
 - `check_autonomous_health.py` はdispatch-only media workflowsを正常なcanary modeとして
   表示する。media schedule OFFは意図された状態であり、text-only scheduleの障害とは混同しない。
+- Night post-free preparation `29893626598` は候補生成を12秒で終えたが、strict semantic
+  alignmentが公開候補をrejectした。validatorは維持し、`NO_ELIGIBLE_CANDIDATE` を
+  正常なno-work結果として扱う。configuration / rights gate の `BLOCKED` と混同しない。
 - 各workflowの候補生成stepには5分の上限を追加した。publish gateはすべてfalseの
   ままであり、これらの変更は投稿を有効化しない。
 - PASS: bounded caption test、primary retry regression、media candidate plan、

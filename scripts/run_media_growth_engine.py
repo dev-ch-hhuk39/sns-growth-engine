@@ -690,10 +690,15 @@ def build_media_growth_plan(
         "media_public_post_auto_enabled": bool(config.get("media_public_post_auto_enabled", False)),
     }
     pdca_records = build_media_pdca_records(clip_candidates[0]) if clip_candidates else {}
+    no_eligible_reasons: list[str] = []
     if planned_source_videos and validation["status"] != "PASS":
-        blocked.append("public_post_validator_blocked")
+        # Candidate rejection is the intended fail-closed behavior.  Keep the
+        # evidence rows for review, but do not fail the preparation workflow:
+        # a later bounded discovery run can supply another source video.
+        no_eligible_reasons.append("public_post_validator_blocked")
+    plan_status = "BLOCKED" if blocked else ("NO_ELIGIBLE_CANDIDATE" if no_eligible_reasons else "PLAN_ONLY")
     return {
-        "status": "PLAN_ONLY" if not blocked else "BLOCKED",
+        "status": plan_status,
         "account_id": account_id,
         "selected_sources": [{"source_id": s.get("source_id"), "source_url": s.get("source_url"), "rights_status": s.get("rights_status")} for s in selected],
         "rights_check": "PASS" if all(r["rights_check"] == "PASS" for r in source_results) else "BLOCKED",
@@ -761,6 +766,7 @@ def build_media_growth_plan(
         "would_post_video": False,
         "pdca_plan": pdca_records,
         "blocked_reasons": blocked,
+        "no_eligible_reasons": no_eligible_reasons,
     }
 
 
