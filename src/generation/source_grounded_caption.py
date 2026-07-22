@@ -282,9 +282,27 @@ class SourceGroundedCaptionService:
         internal, _main_claims, support, public_text, alignment, alignment_data, blocked = evaluate_payload(data)
 
         # The model can produce a natural caption while returning malformed or
-        # insufficient claim-support pairs.  Do not weaken alignment; retry
-        # once with the bounded deterministic provider, which derives its sole
-        # claim and support directly from this same source bundle.
+        # insufficient claim-support pairs.  Do not weaken alignment.  Retry
+        # the same provider once with the exact same source bundle before a
+        # bounded fallback is considered; this keeps provider variance from
+        # needlessly consuming a media candidate.
+        primary_attempt_count = 1
+        if blocked or alignment.status != "PASS":
+            primary_retry = self.generation_provider.generate(
+                post,
+                account_id=account_id,
+                recent_posts=recent_posts,
+                transcript_excerpt=transcript_excerpt,
+            )
+            primary_attempt_count = 2
+            if primary_retry.ok and primary_retry.data:
+                generated = primary_retry
+                data = primary_retry.data
+                internal, _main_claims, support, public_text, alignment, alignment_data, blocked = evaluate_payload(data)
+
+        # The same evidence packet failed twice, so use the explicitly
+        # registered bounded fallback.  Its sole claim is still derived from
+        # the source bundle and remains subject to the unchanged evaluator.
         if (blocked or alignment.status != "PASS") and self.fallback_provider is not None:
             fallback = self.fallback_provider.generate(
                 post,
@@ -308,6 +326,7 @@ class SourceGroundedCaptionService:
             "provider_version": generated.provider_version,
             "provider_status": generated.status,
             "primary_provider_failure": primary_failure,
+            "primary_attempt_count": primary_attempt_count,
         }
 
 

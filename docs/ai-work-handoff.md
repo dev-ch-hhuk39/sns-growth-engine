@@ -53,6 +53,22 @@ Cloudinary media asset、slot 実行記録、PDCA 証跡を結ぶ基盤である
 - `RECOVERY_REQUIRED` は通常 worker で再 claim しない。必ず reconciliation の
   read-after-write result を確認してから次の slot/recovery 実装へ進む。
 
+## 2026-07-22 Codex WP-B source-grounded caption retry
+
+- branch: `fix/source-grounded-caption-retry`; baseline `main`:
+  `e059e40b83dd92b7fc165234939c07db864fe550`.
+- `SourceGroundedCaptionService` は semantic-alignment block 時に、同じ source
+  bundle、comments、media evidence、recent-post set を使って primary provider を
+  一度だけ再実行してから、既存の bounded fallback へ進む。
+- alignment threshold、public-text validator、source-copy guard は変更していない。
+  retry でも失敗した candidate は既存の next-candidate / two-identical-failures
+  quarantine path を使う。
+- Added: `scripts/test_source_grounded_caption_primary_retry.py`.
+  Updated: `src/generation/source_grounded_caption.py`, `docs/ai-work-handoff.md`.
+- PASS: primary retry、fallback、public-only、direct next-candidate、quarantine、
+  semantic threshold tests、`py_compile`、`git diff --check`。実 provider 呼出、
+  download、upload、post は未実行。
+
 ## 2026-07-22 Final production residual audit (design only)
 
 - Baseline: `main` / `origin/main` `3e05812a514b95827b99dc20736951c02269c6e6`.
