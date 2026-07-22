@@ -434,24 +434,37 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             "understanding_provider": analysis.get("provider", ""),
         }
     except Exception as exc:
+        # Provider-side access controls (for example a YouTube bot challenge)
+        # are not a reason to fail the entire scheduled preparation run.  They
+        # are persisted as a retryable, visible skip and never bypassed with
+        # browser cookies or another authentication workaround.
+        error_text = str(exc).lower()
+        external_unavailable = any(marker in error_text for marker in (
+            "sign in to confirm you\u2019re not a bot",
+            "sign in to confirm you're not a bot",
+            "not a bot",
+            "http error 403",
+            "http error 429",
+        ))
+        status = "SKIPPED_EXTERNAL_UNAVAILABLE" if external_unavailable else "FAILED"
         try:
             update_media_row(
                 client,
                 source_post_media_id,
                 {
-                    "download_status": "FAILED",
-                    "cloudinary_status": "UPLOADED" if already_uploaded else "FAILED",
-                    "last_error": f"ingest_failed:{type(exc).__name__}",
+                    "download_status": "SKIPPED_EXTERNAL_UNAVAILABLE" if external_unavailable else "FAILED",
+                    "cloudinary_status": "UPLOADED" if already_uploaded else ("SKIPPED" if external_unavailable else "FAILED"),
+                    "last_error": f"ingest_{'skipped' if external_unavailable else 'failed'}:{type(exc).__name__}",
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
         except Exception:
             pass
         return {
-            "status": "FAILED",
+            "status": status,
             "source_post_media_id": source_post_media_id,
             "media_index": str(media.get("media_index", "")),
-            "reason": f"ingest_failed:{type(exc).__name__}",
+            "reason": f"ingest_{'skipped' if external_unavailable else 'failed'}:{type(exc).__name__}",
         }
     finally:
         local_path.unlink(missing_ok=True)
@@ -500,19 +513,28 @@ def main() -> int:
     if args.max_assets < 1 or len(bundle) > args.max_assets:
         print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_exceeds_cap", "asset_count": len(bundle), "max_assets": args.max_assets})); return 1
     results = [ingest_one(client, post, item) for item in bundle]
-    failed = [row for row in results if row.get("status") not in {"INGESTED", "ALREADY_INGESTED"}]
-    status = "INGESTED_BUNDLE" if not failed else "PARTIAL_FAILED" if len(failed) < len(results) else "FAILED"
+    failures = [row for row in results if row.get("status") == "FAILED"]
+    skipped = [row for row in results if row.get("status") == "SKIPPED_EXTERNAL_UNAVAILABLE"]
+    unsuccessful = failures + skipped
+    status = (
+        "INGESTED_BUNDLE" if not unsuccessful else
+        "PARTIAL_FAILED" if failures and len(unsuccessful) < len(results) else
+        "PARTIAL_SKIPPED" if skipped and len(unsuccessful) < len(results) else
+        "SKIPPED_EXTERNAL_UNAVAILABLE" if skipped and not failures else
+        "FAILED"
+    )
     output = {
         "status": status,
         "source_post_id": post["source_post_id"],
         "asset_count": len(results),
-        "ingested_count": len(results) - len(failed),
-        "failed_count": len(failed),
+        "ingested_count": len(results) - len(unsuccessful),
+        "failed_count": len(failures),
+        "skipped_count": len(skipped),
         "ordered_assets": results,
         "would_download": False,
         "would_upload": False,
     }
     print(json.dumps(output, ensure_ascii=False, indent=2))
-    return 0 if not failed else 1
+    return 0 if not failures else 1
 
 if __name__ == "__main__": raise SystemExit(main())

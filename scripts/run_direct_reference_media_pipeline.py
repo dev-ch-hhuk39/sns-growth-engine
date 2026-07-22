@@ -322,6 +322,11 @@ def _record_caption_attempt(
     account_id: str,
     grounded: dict[str, Any],
 ) -> None:
+    # These evidence tabs may not exist on a long-lived production sheet that
+    # predates direct-media preparation.  The write path must be self-healing;
+    # otherwise a successfully ingested asset cannot become READY.
+    client._ensure_tab("content_understanding_runs", TAB_DEFINITIONS["content_understanding_runs"])
+    client._ensure_tab("semantic_alignment_runs", TAB_DEFINITIONS["semantic_alignment_runs"])
     now = datetime.now(timezone.utc)
     suffix = str(int(now.timestamp() * 1_000_000))
     analysis = grounded.get("internal_analysis") if isinstance(grounded.get("internal_analysis"), dict) else {}

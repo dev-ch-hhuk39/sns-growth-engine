@@ -1,5 +1,65 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex direct-media preparation recovery
+
+### Current state
+
+- `main` and `origin/main` started at `cd8feec9b90912bf249f650064809a9953e23133`.
+- Production Actions run `29885166885` attempted **preparation only** for one
+  permissioned asset per account. All Threads publishing flags remained
+  `false`; no Threads post was attempted.
+- The explicitly scoped permission ledger contains only the user-approved
+  creator sources. X and `beauty_account` remain excluded.
+
+### Findings and correction
+
+- `liver_manager` completed asset ingestion but could not persist READY
+  inventory because its legacy Sheets workbook lacked the `内容理解履歴` tab.
+  The runner now creates both evidence tabs (`内容理解履歴` and `意味整合履歴`)
+  idempotently before it writes those rows.
+- `night_scout` received YouTube's bot-confirmation response for its selected
+  approved source. No cookie, browser-state, or authentication workaround is
+  used. This is now persisted as `SKIPPED_EXTERNAL_UNAVAILABLE` rather than
+  aborting every preparation attempt; unexpected local/Cloudinary/content
+  failures still fail closed.
+
+### Change files
+
+- Updated: `scripts/run_direct_reference_media_pipeline.py`
+- Updated: `scripts/ingest_direct_reference_media.py`
+- Added: `scripts/test_direct_media_evidence_tabs_self_heal.py`
+- Added: `scripts/test_direct_media_external_unavailable_is_safe_skip.py`
+- Updated: `docs/ai-work-handoff.md`
+
+### Verification
+
+- PASS: direct-media evidence self-healing contract.
+- PASS: external-provider challenge becomes a safe skip without an auth
+  bypass.
+- PASS: existing prepare-only and missing-content-understanding guards.
+- PASS: `py_compile` and `git diff --check`.
+
+### Next AI notes
+
+- Merge through protected-main CI, then re-run Direct Media Preparation.
+  Verify the liver asset produces the exact same-source chain: permission
+  evidence -> `source_post_media` -> content understanding -> Cloudinary URL
+  -> validator-approved READY queue. Do not post it yet.
+- The night candidate is a provider availability warning, not a rights
+  escalation. It needs a later permitted source or a normal provider retry;
+  do not add cookies.
+- Goal completion remains blocked by the documented requirement for a
+  third-party/approved `liver_manager` Threads reference URL. No posting
+  account URL may be silently reclassified to satisfy that condition.
+
+### Safe boundaries
+
+- Safe next files: direct-media runner/ingest tests, workflow result handling,
+  evidence collectors, and handoff documentation.
+- Do not edit `.env`, `data/`, `output/`, `.claude/plans/`, or any secret,
+  token, cookie, or browser-state file. Do not weaken public-text, X, beauty,
+  media-rights, or explicit-confirmation gates.
+
 ## 2026-07-22 Codex Work Package 3 integrity-repair checkpoint
 
 ### Current state
