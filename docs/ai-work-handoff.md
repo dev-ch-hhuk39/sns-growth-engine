@@ -1,5 +1,62 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex direct-media candidate-selection correction
+
+### Current state
+
+- `main` and `origin/main` started at
+  `a8e5c11112dc269f9061e0d296dec584c3cd58ca`.
+- Direct Media Preparation run `29887804145` ran in the production
+  Environment with publishing, Threads publishing, X, media-post, and video
+  post flags all `false`.
+- The `liver_manager` matrix job completed direct ingestion and persisted a
+  validator-approved READY inventory. No publisher was invoked.
+
+### Finding and correction
+
+- The `night_scout` job correctly rejected an unpermitted source-post media
+  row with `active_direct_media_permission_missing`, but its candidate
+  selector chose that reference-only row before checking the source's active
+  permission. A permitted source behind it was therefore never reached.
+- `select_pending_media_id()` now filters by the same latest-row,
+  fail-closed permission authority used by ingestion. It skips unpermitted,
+  revoked, incomplete, or non-approved rows before applying its deterministic
+  short-video preference. This does not grant permissions or weaken any
+  download/Cloudinary gate.
+
+### Change files
+
+- Updated: `scripts/ingest_direct_reference_media.py`
+- Added: `scripts/test_direct_media_selection_requires_active_permission.py`
+- Updated: `docs/ai-work-handoff.md`
+
+### Verification
+
+- PASS: permitted candidate selection skips an earlier reference-only row.
+- PASS: latest permission history authority.
+- PASS: provider bot challenge remains a safe external-unavailable skip.
+- PASS: all workflow safety flags, `376 / 0`.
+- PASS: `py_compile` and `git diff --check`.
+
+### Remaining work and warnings
+
+- Re-run Direct Media Preparation after this merge. `night_scout` should now
+  select its permitted source; an external YouTube bot challenge must remain
+  `SKIPPED_EXTERNAL_UNAVAILABLE` without cookies or an authentication bypass.
+- `liver_manager` has a prepared READY inventory, but no direct-media or
+  video post has been attempted in this checkpoint.
+- The goal's `liver_account_url_discovery` requirement is still blocked on a
+  human-provided third-party/approved `liver_manager` Threads reference
+  account URL. Do not relabel the liver posting account URL as a source.
+
+### Safe boundaries for the next AI
+
+- Safe: re-run the preparation workflow, inspect redacted run outcomes,
+  direct-media selection/runner tests, evidence collection, and docs.
+- Do not edit `.env`, `data/`, `output/`, `.claude/plans/`, secrets, tokens,
+  cookies, or browser state. Do not weaken the public-text validator, X and
+  beauty blocks, media-rights checks, or explicit confirmation gates.
+
 ## 2026-07-22 Codex direct-media preparation recovery
 
 ### Current state
