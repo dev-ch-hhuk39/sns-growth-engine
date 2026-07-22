@@ -10,10 +10,15 @@ class Bad:
     def acquire(self, source, *, limit): self.calls += 1; raise BackendFailure("expected")
 
 bad = Bad(); router = AdapterRouter({"bad": bad}, {"cap": BackendRoute("cap", "bad", cooldown_seconds=60)})
+for _ in range(3):
+    try: router.route("cap", {}, limit=1)
+    except BackendFailure: pass
 try: router.route("cap", {}, limit=1)
 except BackendFailure: pass
-try: router.route("cap", {}, limit=1)
-except BackendFailure: pass
-checks = {"first failure opens circuit": bad.calls == 1, "health is cooldown": router.health_rows()[0]["status"] == "COOLDOWN"}
+checks = {
+    "three failures are attempted before circuit": bad.calls == 3,
+    "fourth attempt sees circuit open": "circuit_open" in router.states["bad"].last_failure_reason or router.health_rows()[0]["status"] == "COOLDOWN",
+    "health is cooldown after threshold": router.health_rows()[0]["status"] == "COOLDOWN",
+}
 for name, ok in checks.items(): print(f"{'PASS' if ok else 'FAIL'} {name}")
 raise SystemExit(0 if all(checks.values()) else 1)

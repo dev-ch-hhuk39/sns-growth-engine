@@ -31,6 +31,20 @@
 - Local PASS: reconcile unit contract 8/8, reconcile-workflow contract 7/7,
   workflow safety 368/368, `git diff --check`.
 
+### Bounded acquisition finding and follow-up
+
+- Run `29883735428` completed without publishing, downloading, cutting, or
+  uploading. It discovered 18 bounded records and saved 3 source posts, 3
+  source-post media rows, 1 source video, 5 bounded transcript rows, and 44
+  provider-run rows. Threads profile adapters failed after the first source
+  because the in-memory router opened each backend's circuit immediately.
+- The pending router fix changes this to a three-consecutive-failures
+  threshold. It preserves the per-source limits and fails closed after repeated
+  failure, while allowing the next bounded source to use primary/fallback.
+- Local PASS: primary/fallback, all-backends-fail, new circuit-threshold,
+  TikTok multiple-backend, provider-contract, `py_compile`, and
+  `git diff --check`.
+
 ### Next actions
 
 1. Merge this small workflow change through CI, dispatch it with

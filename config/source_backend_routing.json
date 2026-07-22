@@ -6,13 +6,15 @@
       "primary": "threads_public_playwright",
       "fallbacks": ["threads_public_http"],
       "shadow": [],
-      "cooldown_seconds": 900
+      "cooldown_seconds": 900,
+      "circuit_failure_threshold": 3
     },
     "threads.post_detail": {
       "primary": "threads_public_playwright",
       "fallbacks": ["threads_public_http"],
       "shadow": [],
-      "cooldown_seconds": 900
+      "cooldown_seconds": 900,
+      "circuit_failure_threshold": 3
     },
     "tiktok.profile_posts": {
       "primary": "yt_dlp",
