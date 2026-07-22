@@ -278,8 +278,9 @@ def upsert_media_understanding(
 def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
     """Return one deterministic pending asset for the requested account.
 
-    This selector only chooses a row.  The existing permission, URL, download,
-    and Cloudinary gates still run before any external operation.
+    Only assets whose source has an active direct-media permission can enter
+    the candidate set.  This avoids selecting an older reference-only item,
+    failing it later, and starving a permitted item behind it.
     """
     posts = {
         str(row.get("source_post_id", "")): row
@@ -289,6 +290,8 @@ def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
     for media in client._ws("source_post_media").get_all_records():
         post = posts.get(str(media.get("source_post_id", "")))
         if not post or str(post.get("target_account_id", "")) != account_id:
+            continue
+        if not permission_ok(client, str(post.get("source_id", ""))):
             continue
         if str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and str(media.get("storage_url", "")):
             continue
