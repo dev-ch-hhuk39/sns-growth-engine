@@ -26,10 +26,30 @@ def record(client: SheetsClient, logical: str, key: str, value: str) -> dict[str
 def permission_ok(client: SheetsClient, source_id: str) -> bool:
     client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
     rows = client._call_with_rate_limit_retry("get_all_records:media_permissions", lambda: client._ws("media_permissions").get_all_records())
-    for row in rows:
-        if str(row.get("source_id", "")) == source_id and not truthy(row.get("revoked")):
-            return all(truthy(row.get(key)) for key in ("allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption"))
-    return False
+    matches = [
+        (index, dict(row))
+        for index, row in enumerate(rows)
+        if str(row.get("source_id", "")) == source_id
+    ]
+    if not matches:
+        return False
+    # Permission rows are append/update history.  Selecting the first match
+    # lets an obsolete denied row shadow the newer approval.  The latest
+    # timestamp (and sheet order as a deterministic fallback) is the single
+    # runtime authority; a latest revocation remains fail-closed.
+    _index, current = max(
+        matches,
+        key=lambda item: (str(item[1].get("updated_at") or item[1].get("approved_at") or ""), item[0]),
+    )
+    if truthy(current.get("revoked")):
+        return False
+    if str(current.get("permission_status", "")).lower() != "approved":
+        return False
+    if str(current.get("rights_status", "")).lower() not in {"owned", "licensed", "approved_creator_clip"}:
+        return False
+    return all(truthy(current.get(key)) for key in (
+        "allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption",
+    ))
 
 ALLOWLIST = {"youtube.com", "www.youtube.com", "youtu.be", "tiktok.com", "www.tiktok.com", "res.cloudinary.com"}
 STREAM_HOST_SUFFIXES = {

@@ -31,6 +31,11 @@
   service now retries once with its bounded deterministic, source-grounded
   provider when a model response fails claim-support alignment; thresholds are
   unchanged.
+- The `night_scout` preparation failure was traced to permission history
+  lookup, not to missing configured permission. Direct ingestion now selects
+  the latest row per source as the sole runtime authority and still fails
+  closed for revocation, non-approved status, non-approved rights, or any
+  missing required operation flag.
 
 ### Change files
 
@@ -40,6 +45,7 @@
 - Added: `scripts/test_direct_media_external_unavailable_is_safe_skip.py`
 - Added: `scripts/test_direct_media_prepare_no_ready_is_successful.py`
 - Added: `scripts/test_source_grounded_caption_alignment_fallback.py`
+- Added: `scripts/test_direct_media_permission_latest_row.py`
 - Updated: `docs/ai-work-handoff.md`
 
 ### Verification
