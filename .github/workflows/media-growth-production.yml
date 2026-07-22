@@ -1,9 +1,7 @@
 name: Media Growth Asset Preparation Liver Manager
 
 on:
-  schedule:
-    # JST 07:20 daily. This prepares an approved asset; it never posts.
-    - cron: "20 22 * * *"
+  # Canary gate: real discovery/transcription/cut/upload is dispatch-only.
   workflow_dispatch:
     inputs:
       confirm_production_media:

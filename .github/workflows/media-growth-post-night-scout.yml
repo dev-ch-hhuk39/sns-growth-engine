@@ -1,9 +1,7 @@
 name: Media Growth Post Night Scout
 
 on:
-  schedule:
-    # JST 21:00; start just after the target with no idle delay.
-    - cron: "2 12 * * *"
+  # Canary gate: media publishing is dispatch-only until all four canaries pass.
   workflow_dispatch:
     inputs:
       confirm_media_post:

@@ -1,9 +1,7 @@
 name: Media Growth Asset Preparation Night Scout
 
 on:
-  schedule:
-    # JST 11:20 daily. This prepares an approved asset; it never posts.
-    - cron: "20 2 * * *"
+  # Canary gate: real discovery/transcription/cut/upload is dispatch-only.
   workflow_dispatch:
     inputs:
       confirm_production_media:

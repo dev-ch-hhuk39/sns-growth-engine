@@ -1,8 +1,8 @@
 name: Direct Media Preparation
 
 on:
-  schedule:
-    - cron: "20 0 * * *"
+  # Canary gate: preparation remains dispatch-only until the current-scope
+  # asset contract and four bounded canaries have been independently proven.
   workflow_dispatch:
     inputs:
       confirm_preparation:

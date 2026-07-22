@@ -69,6 +69,28 @@ Cloudinary media asset、slot 実行記録、PDCA 証跡を結ぶ基盤である
   semantic threshold tests、`py_compile`、`git diff --check`。実 provider 呼出、
   download、upload、post は未実行。
 
+## 2026-07-22 Codex WP-C canary media schedule gate
+
+- branch: `fix/media-canary-schedule-gate`; baseline `main`:
+  `787418341249cd19c422fb1b17dbb5d36a3270d2`.
+- Read-only media-growth audit found no usable `source_videos` in the current
+  Sheets selection for either account. The approved channel/account records
+  therefore correctly return `INDIVIDUAL_VIDEO_URL_REQUIRED`; no clip
+  candidate is fabricated and no network/media operation occurred.
+- Before discovery creates usable videos, seven media workflows are now
+  `workflow_dispatch` only: direct preparation/dispatch and clip
+  preparation/dispatch for both accounts. The feature capability config stays
+  enabled so a later explicitly confirmed canary can run; the workflow
+  schedules, which are the actual automatic execution surface, are off.
+  Text-only autonomous schedules remain unchanged.
+- Scale policy: after WP-C inventory, WP-D rehearsal, WP-E evidence and the
+  four verified canaries succeed, re-enable only the specific media schedules
+  that have a current-scope asset/evidence contract. Do not flip every media
+  workflow on at once.
+- Updated: the seven media workflow YAMLs, `config/media_growth_engine.json`,
+  schedule/media workflow tests, and this handoff. No download, cut, upload,
+  Cloudinary action, or Threads post was performed.
+
 ## 2026-07-22 Final production residual audit (design only)
 
 - Baseline: `main` / `origin/main` `3e05812a514b95827b99dc20736951c02269c6e6`.

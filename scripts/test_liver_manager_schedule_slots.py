@@ -11,12 +11,14 @@ def main() -> int:
     media = (ROOT / ".github/workflows/media-growth-post-liver-manager.yml").read_text(encoding="utf-8")
     ok = (
         all(x in text for x in expected)
-        and 'cron: "4 7 * * *"' in direct
-        and 'cron: "4 9 * * *"' in media
+        and 'schedule:' not in direct
+        and 'schedule:' not in media
+        and "Canary gate" in direct
+        and "Canary gate" in media
         and "16:00 is direct-reference media" in text
         and "18:00 is generated clip media" in text
     )
-    print(f"  {'PASS' if ok else 'FAIL'} liver_manager schedule slots")
+    print(f"  {'PASS' if ok else 'FAIL'} liver_manager text schedule and manual media slots")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1
 

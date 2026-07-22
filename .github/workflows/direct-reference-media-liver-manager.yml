@@ -1,9 +1,7 @@
 name: Direct Reference Media Liver Manager
 
 on:
-  schedule:
-    # JST 16:00. A delayed event still owns this canonical slot.
-    - cron: "4 7 * * *"
+  # Canary gate: prepared direct-media dispatch is manual until evidence is complete.
   workflow_dispatch:
     inputs:
       confirm_direct_media:
