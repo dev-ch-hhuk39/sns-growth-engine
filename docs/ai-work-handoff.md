@@ -22,6 +22,9 @@
   used. This is now persisted as `SKIPPED_EXTERNAL_UNAVAILABLE` rather than
   aborting every preparation attempt; unexpected local/Cloudinary/content
   failures still fail closed.
+- A prepare-only run with no validator-approved asset now completes as
+  `NO_READY_MEDIA` with its original block reason retained. This does not
+  alter any dispatch/post behavior: only `--post-ready` can reach a publisher.
 
 ### Change files
 
@@ -29,6 +32,7 @@
 - Updated: `scripts/ingest_direct_reference_media.py`
 - Added: `scripts/test_direct_media_evidence_tabs_self_heal.py`
 - Added: `scripts/test_direct_media_external_unavailable_is_safe_skip.py`
+- Added: `scripts/test_direct_media_prepare_no_ready_is_successful.py`
 - Updated: `docs/ai-work-handoff.md`
 
 ### Verification

@@ -49,6 +49,28 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
+def normalize_prepare_only_outcome(plan: dict[str, Any], *, prepare_only: bool) -> dict[str, Any]:
+    """A preparation miss is observable but not a publishing/workflow failure.
+
+    A prepare-only job has no publisher side effect.  It should therefore
+    complete successfully when a provider is temporarily unavailable or no
+    asset currently meets the strict validator, while retaining every blocking
+    reason for the next run and for operators.
+    """
+    status = str(plan.get("status", ""))
+    if prepare_only and status in {
+        "NO_POST", "BLOCKED", "BLOCKED_MEDIA_VALIDATOR",
+        "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR",
+    }:
+        return {
+            **plan,
+            "status": "NO_READY_MEDIA",
+            "preparation_status": status,
+            "would_post": False,
+        }
+    return plan
+
+
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     # A direct-media plan reads several related tabs more than once.  Keep an
     # invocation-scoped snapshot to avoid spending Sheets quota on duplicate
@@ -683,6 +705,7 @@ def main() -> int:
         )
         if args.apply and client and plan.get("status") == "WILL_APPLY":
             plan = prepare(plan, client) if args.prepare_only else execute(plan, client)
+    plan = normalize_prepare_only_outcome(plan, prepare_only=args.prepare_only)
     if args.apply and client and plan.get("status") in {"NO_POST", "FAILED", "BLOCKED", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"} and args.fallback_to_text:
         if args.manual_e2e_proof:
             print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["manual_e2e_proof cannot use scheduled text fallback"]}, ensure_ascii=False)); return 1
