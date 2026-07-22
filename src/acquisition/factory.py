@@ -38,6 +38,7 @@ def build_router() -> AdapterRouter:
             fallbacks=tuple(row.get("fallbacks", [])),
             shadow=tuple(row.get("shadow", [])),
             cooldown_seconds=int(row.get("cooldown_seconds", 900)),
+            circuit_failure_threshold=int(row.get("circuit_failure_threshold", 3)),
         )
         for capability, row in config["routes"].items()
         if row["primary"] in adapters

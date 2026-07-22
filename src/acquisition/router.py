@@ -23,6 +23,7 @@ class BackendRoute:
     primary: str
     fallbacks: tuple[str, ...] = ()
     cooldown_seconds: int = 900
+    circuit_failure_threshold: int = 3
     shadow: tuple[str, ...] = ()
 
 
@@ -53,11 +54,11 @@ class AdapterRouter:
     def _available(self, backend_name: str) -> bool:
         return self.states.setdefault(backend_name, BackendState()).cooldown_until <= time.time()
 
-    def _fail(self, backend_name: str, exc: Exception, cooldown_seconds: int) -> None:
+    def _fail(self, backend_name: str, exc: Exception) -> BackendState:
         state = self.states.setdefault(backend_name, BackendState())
         state.consecutive_failures += 1
         state.last_failure_reason = f"{type(exc).__name__}:{exc}"[:240]
-        state.cooldown_until = time.time() + cooldown_seconds
+        return state
 
     def _pass(self, backend_name: str) -> None:
         state = self.states.setdefault(backend_name, BackendState())
@@ -100,10 +101,18 @@ class AdapterRouter:
                         try:
                             result.shadow_results[shadow_name] = len(shadow_adapter.acquire(source, limit=limit))
                         except Exception:
-                            self._fail(shadow_name, BackendFailure("shadow_failed"), route.cooldown_seconds)
+                            shadow_state = self._fail(shadow_name, BackendFailure("shadow_failed"))
+                            if shadow_state.consecutive_failures >= route.circuit_failure_threshold:
+                                shadow_state.cooldown_until = time.time() + route.cooldown_seconds
                 return result
             except Exception as exc:
-                self._fail(backend_name, exc, route.cooldown_seconds)
+                state = self._fail(backend_name, exc)
+                # A public profile can fail for one source while the same
+                # backend is healthy for the next source. Opening a long
+                # circuit on the first failure blocked every remaining bounded
+                # source in that run. Cool down only after repeated failures.
+                if state.consecutive_failures >= route.circuit_failure_threshold:
+                    state.cooldown_until = time.time() + route.cooldown_seconds
                 errors.append(f"{backend_name}:{type(exc).__name__}")
         raise BackendFailure("all_backends_failed:" + ",".join(errors))
 
