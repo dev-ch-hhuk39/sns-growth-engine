@@ -23,11 +23,20 @@ def record(client: SheetsClient, logical: str, key: str, value: str) -> dict[str
     rows = client._call_with_rate_limit_retry(f"get_all_records:{logical}", lambda: client._ws(logical).get_all_records())
     return next((dict(row) for row in rows if str(row.get(key, "")) == value), None)
 
-def permission_ok(client: SheetsClient, source_id: str) -> bool:
+def permission_rows(client: SheetsClient) -> list[dict[str, Any]]:
     client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
-    rows = client._call_with_rate_limit_retry("get_all_records:media_permissions", lambda: client._ws("media_permissions").get_all_records())
+    return [
+        dict(row)
+        for row in client._call_with_rate_limit_retry(
+            "get_all_records:media_permissions",
+            lambda: client._ws("media_permissions").get_all_records(),
+        )
+    ]
+
+
+def permission_ok_from_rows(rows: list[dict[str, Any]], source_id: str) -> bool:
     matches = [
-        (index, dict(row))
+        (index, row)
         for index, row in enumerate(rows)
         if str(row.get("source_id", "")) == source_id
     ]
@@ -50,6 +59,10 @@ def permission_ok(client: SheetsClient, source_id: str) -> bool:
     return all(truthy(current.get(key)) for key in (
         "allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption",
     ))
+
+
+def permission_ok(client: SheetsClient, source_id: str) -> bool:
+    return permission_ok_from_rows(permission_rows(client), source_id)
 
 ALLOWLIST = {"youtube.com", "www.youtube.com", "youtu.be", "tiktok.com", "www.tiktok.com", "res.cloudinary.com"}
 STREAM_HOST_SUFFIXES = {
@@ -275,13 +288,19 @@ def upsert_media_understanding(
         raise RuntimeError("source_media_understanding_read_after_write_failed")
     return understanding_id
 
-def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
+def select_pending_media_id(
+    client: SheetsClient,
+    account_id: str,
+    *,
+    permissions: list[dict[str, Any]] | None = None,
+) -> str:
     """Return one deterministic pending asset for the requested account.
 
     Only assets whose source has an active direct-media permission can enter
     the candidate set.  This avoids selecting an older reference-only item,
     failing it later, and starving a permitted item behind it.
     """
+    permissions = permission_rows(client) if permissions is None else permissions
     posts = {
         str(row.get("source_post_id", "")): row
         for row in client._ws("source_posts").get_all_records()
@@ -291,7 +310,7 @@ def select_pending_media_id(client: SheetsClient, account_id: str) -> str:
         post = posts.get(str(media.get("source_post_id", "")))
         if not post or str(post.get("target_account_id", "")) != account_id:
             continue
-        if not permission_ok(client, str(post.get("source_id", ""))):
+        if not permission_ok_from_rows(permissions, str(post.get("source_id", ""))):
             continue
         if str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and str(media.get("storage_url", "")):
             continue
@@ -517,18 +536,25 @@ def main() -> int:
     source_post_id = args.source_post_id
     if source_post_id and source_post_media_id:
         print(json.dumps({"status": "BLOCKED", "reason": "choose_source_post_id_or_source_post_media_id"})); return 1
+    try:
+        permissions = permission_rows(client)
+    except Exception:
+        # A transient Sheets quota failure must never be interpreted as
+        # permission.  End this preparation attempt without publishing; the
+        # scheduled run can retry after the quota window resets.
+        print(json.dumps({"status": "NO_PENDING_MEDIA", "reason": "sheets_permission_read_unavailable"})); return 0
     if source_post_id:
         bundle = source_post_media_bundle(client, source_post_id)
         source_post_media_id = str((bundle[0] if bundle else {}).get("source_post_media_id", ""))
     elif not source_post_media_id:
-        source_post_media_id = select_pending_media_id(client, args.account_id)
+        source_post_media_id = select_pending_media_id(client, args.account_id, permissions=permissions)
     if not source_post_media_id:
         print(json.dumps({"status": "NO_PENDING_MEDIA", "reason": "no_pending_source_post_media_for_account"})); return 0
     media = record(client, "source_post_media", "source_post_media_id", source_post_media_id)
     if not media:
         print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_not_found"})); return 1
     post = record(client, "source_posts", "source_post_id", str(media.get("source_post_id", "")))
-    if not post or not permission_ok(client, str(post.get("source_id", ""))):
+    if not post or not permission_ok_from_rows(permissions, str(post.get("source_id", ""))):
         print(json.dumps({"status": "BLOCKED", "reason": "active_direct_media_permission_missing"})); return 1
     bundle = [media] if args.source_post_media_id else source_post_media_bundle(client, str(post["source_post_id"]))
     if not bundle:
