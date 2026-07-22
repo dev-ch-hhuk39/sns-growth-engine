@@ -1,5 +1,17 @@
 # AI Work Handoff
 
+## 2026-07-22 Codex direct-media preparation verification
+
+- `main` / `origin/main`: `f84cb4f80c986be4d7813a7ce812f4bb96ca4b80` at run start.
+- Direct Media Preparation run `29888790626` completed successfully for both
+  `night_scout` and `liver_manager`. Each job ingested one permitted bundle
+  and ran the prepare-only READY-inventory stage.
+- `PUBLISH_ENABLED`, real Threads, X, media-post, and video-post flags stayed
+  `false`; no post was attempted or created.
+- The only remaining workflow warning is GitHub's Node 20 deprecation notice
+  for pinned upstream actions. It contains no execution failure or secret
+  exposure and should be handled in a dedicated dependency-maintenance change.
+
 ## 2026-07-22 Codex direct-media Sheets-quota recovery
 
 ### Current state
