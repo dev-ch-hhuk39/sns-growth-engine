@@ -1,5 +1,24 @@
 # AI Work Handoff
 
+## 2026-07-22 Final production residual audit (design only)
+
+- Baseline: `main` / `origin/main` `3e05812a514b95827b99dc20736951c02269c6e6`.
+- Read-only audits confirm public repository, protected `main`, protected
+  `production` Environment, GitHub-hosted workflows, protected secret names,
+  CI `29889173716` success, and Sheets verifier `63/63` with zero save failures.
+- Direct Media Preparation `29888790626` succeeded for both accounts without
+  publishing. The Goal evaluator remains fail-closed at `17/35 PASS` because
+  it has stale/missing current-scope evidence and no four-canary proof.
+- Critical implementation gaps are documented in
+  `docs/final-production-remaining-work-design.md`: asset identity linkage,
+  stale slot terminalization/business dates, source-grounded Liver captions,
+  Night clip inventory, canonical ten-slot workflow mapping, and mechanical
+  evidence/canary verification.
+- Read-only source audit found no approved third-party Liver Threads reference
+  account in Sheets, config, docs, candidates, or Git history. Do not use the
+  Liver posting account as a substitute. This is the sole human-input blocker.
+- No code or production behavior changed in this audit checkpoint.
+
 ## 2026-07-22 Codex direct-media preparation verification
 
 - `main` / `origin/main`: `f84cb4f80c986be4d7813a7ce812f4bb96ca4b80` at run start.
