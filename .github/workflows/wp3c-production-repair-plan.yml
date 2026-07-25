@@ -77,21 +77,32 @@ jobs:
           echo "\`${OVERALL_STATUS}\`" >> $GITHUB_STEP_SUMMARY
           
           echo "### Status Reasons" >> $GITHUB_STEP_SUMMARY
-          echo "$PLAN_JSON" | jq -r '.status_reasons[] | "- \(.)"' >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.status_reasons[]? | "- \(.)"' >> $GITHUB_STEP_SUMMARY
           
           echo "### Sheets Verifier" >> $GITHUB_STEP_SUMMARY
-          echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed)\n- Total: \(.total)\n- Failed: \(.failed_count)"' >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed // 0)\n- Total: \(.total // 0)\n- Failed: \(.failed_count // 0)"' >> $GITHUB_STEP_SUMMARY
           
           echo "### Parent Repairs" >> $GITHUB_STEP_SUMMARY
-          echo "$PLAN_JSON" | jq -r '.parent_repairs[] | "- **Source Post ID**: `\(.source_post_id)`\n  - Declared: \(.declared_media_count)\n  - Actual: \(.actual_child_count)\n  - Canonical mismatch children: \(.canonical_mismatch_child_ids | join(", "))\n  - Duplicate index groups: \(.unique_media_index_count)\n  - Operations: \(.operations | map(.operation) | join(", "))\n  - Apply Eligible: \(.apply_eligible)\n  - Blockers: \(.blocker_codes | join(", "))\n  - Has parent precondition hash: \(if .parent_precondition_hash != "" then true else false end)"' >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '
+            .parent_repairs[]? |
+            "- **Source Post ID**: `\(.source_post_id)`\n" +
+            "  - Declared: \(.declared_media_count // 0)\n" +
+            "  - Actual: \(.actual_child_count // 0)\n" +
+            "  - Canonical mismatch children: \((.canonical_mismatch_child_ids // []) | join(", "))\n" +
+            "  - Duplicate index groups: \((.duplicate_index_groups // []) | length)\n" +
+            "  - Operations: \((.operations // []) | map(.operation) | join(", "))\n" +
+            "  - Apply Eligible: \(.apply_eligible // false)\n" +
+            "  - Blockers: \((.blocker_codes // []) | join(", "))\n" +
+            "  - Has parent precondition hash: \(if (.parent_precondition_hash // "") != "" then true else false end)"
+          ' >> $GITHUB_STEP_SUMMARY
           
           echo "### Duplicate Index Groups" >> $GITHUB_STEP_SUMMARY
-          echo "$PLAN_JSON" | jq -r '.parent_repairs[].duplicate_index_groups[]? | "- Index: \(.media_index)\n  - Child IDs: \(.child_ids | join(", "))\n  - Asset Relation: \(.asset_relation)"' >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.parent_repairs[]?.duplicate_index_groups[]? | "- Index: \(.media_index)\n  - Child IDs: \((.child_ids // []) | join(", "))\n  - Asset Relation: \(.asset_relation)"' >> $GITHUB_STEP_SUMMARY
           
           echo "### Stale Slots" >> $GITHUB_STEP_SUMMARY
-          echo "$PLAN_JSON" | jq -r '.stale_slot_reviews[] | "- **Slot ID**: `\(.slot_run_id)`\n  - Recommendation: \(.recommendation)\n  - Blockers: \(.blocker_codes | join(", "))"' >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.stale_slot_reviews[]? | "- **Slot ID**: `\(.slot_run_id)`\n  - Recommendation: \(.recommendation)\n  - Blockers: \((.blocker_codes // []) | join(", "))"' >> $GITHUB_STEP_SUMMARY
           
           echo "### External Blockers" >> $GITHUB_STEP_SUMMARY
-          echo "$PLAN_JSON" | jq -r '.external_blockers[] | "- `\(.code)`"' >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.external_blockers[]? | "- `\(.code)`"' >> $GITHUB_STEP_SUMMARY
           
           exit "$PLANNER_EXIT"

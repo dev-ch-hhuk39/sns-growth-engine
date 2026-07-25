@@ -35,6 +35,19 @@ CHILD_HASH_FIELDS = (
     "updated_at",
 )
 
+SLOT_HASH_FIELDS = (
+    "slot_run_id",
+    "account_id",
+    "slot_id",
+    "status",
+    "claim_status",
+    "lease_expires_at",
+    "queue_id",
+    "result_id",
+    "post_url",
+    "updated_at",
+)
+
 ALLOWED_RIGHTS_STATUSES = {
     "allowed",
     "approved",
@@ -44,6 +57,14 @@ ALLOWED_RIGHTS_STATUSES = {
     "approved_media",
     "own_media",
 }
+
+def is_truthy(value) -> bool:
+    return str(value).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+    }
 
 def safe_int(val, default=0):
     try:
@@ -74,6 +95,19 @@ def canonicalize_source_url(value: str) -> str:
     if host == "threads.net":
         path = path.lower()
     return urlunsplit((scheme, host, path, "", ""))
+
+def canonicalize_threads_identity(value: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+
+    if "://" in raw:
+        return canonicalize_source_url(raw)
+
+    handle = raw.lstrip("@")
+    return canonicalize_source_url(
+        f"https://threads.net/@{handle}"
+    )
 
 def generate_hash(obj: dict) -> str:
     s = json.dumps(obj, sort_keys=True, separators=(',', ':'))
@@ -176,15 +210,41 @@ def classify_asset_relation(rows: list[dict]) -> str:
             
     return "UNKNOWN"
 
+def empty_parent_repair(
+    source_post_id: str,
+    blocker_code: str,
+) -> dict:
+    return {
+        "source_post_id": source_post_id,
+        "account_id": "",
+        "declared_media_count": 0,
+        "actual_child_count": 0,
+        "unique_media_index_count": 0,
+        "canonical_mismatch_child_ids": [],
+        "duplicate_index_groups": [],
+        "operations": [],
+        "blocker_codes": [blocker_code],
+        "apply_eligible": False,
+        "parent_precondition_hash": "",
+        "child_precondition_hashes": {},
+    }
+
 def plan_parent_repair(
     parent_id: str,
     parent_rows: list[dict],
     child_rows: list[dict],
 ) -> dict:
     if not parent_rows:
-        return {"source_post_id": parent_id, "blocker_codes": ["PARENT_NOT_FOUND"], "apply_eligible": False}
+        return empty_parent_repair(
+            parent_id,
+            "PARENT_NOT_FOUND",
+        )
+
     if len(parent_rows) > 1:
-        return {"source_post_id": parent_id, "blocker_codes": ["MULTIPLE_PARENTS"], "apply_eligible": False}
+        return empty_parent_repair(
+            parent_id,
+            "MULTIPLE_PARENTS",
+        )
         
     p = parent_rows[0]
     apply_eligible = True
@@ -375,6 +435,11 @@ def plan_stale_slot_review(
     elif expired and cstat in {"CLAIMED", "RUNNING"}:
         rec = "ELIGIBLE_TO_MARK_RECOVERY_REQUIRED"
         
+    precondition_hash = generate_hash({
+        key: s.get(key, "")
+        for key in SLOT_HASH_FIELDS
+    })
+        
     return {
         "slot_run_id": slot_run_id,
         "account_id": str(s.get("account_id", "")),
@@ -389,7 +454,7 @@ def plan_stale_slot_review(
         "has_post_url": bool(purl),
         "recommendation": rec,
         "blocker_codes": sorted(list(blocker_codes)),
-        "precondition_hash": generate_hash({k: s.get(k, "") for k in sorted(s.keys()) if k not in ["post_url"]})
+        "precondition_hash": precondition_hash
     }
 
 def parse_target_account_ids(raw_val: str) -> set:
@@ -418,14 +483,12 @@ def evaluate_external_blockers(
 ) -> list[dict]:
     blockers = []
     
-    # Pre-compute destination handles
     dest_handles = set()
     for acc in accounts:
         h = str(acc.get("threads_handle", "")).strip()
         if h:
-            dest_handles.add(canonicalize_source_url(f"https://threads.net/@{h}"))
+            dest_handles.add(canonicalize_threads_identity(h))
     
-    # 1. Liver Threads source
     liver_threads_found = False
     for a in source_accounts:
         t_id = str(a.get("target_account_id", ""))
@@ -433,8 +496,8 @@ def evaluate_external_blockers(
         plat = str(a.get("platform", "")).lower() or str(a.get("source_platform", "")).lower()
         
         if (t_id == "liver_manager" or "liver_manager" in t_ids) and "threads" in plat:
-            act = str(a.get("active", "")).lower()
-            blk = str(a.get("blocked", "")).lower()
+            act = is_truthy(a.get("active", ""))
+            blk = is_truthy(a.get("blocked", ""))
             url = str(a.get("source_url", ""))
             rev = str(a.get("review_status", "")).upper()
             cand = str(a.get("candidate_status", "")).upper()
@@ -443,7 +506,7 @@ def evaluate_external_blockers(
             if c_url in dest_handles:
                 continue
                 
-            if act == "true" and blk != "true" and url and (rev == "APPROVED" or cand == "APPROVED"):
+            if act and not blk and url and (rev == "APPROVED" or cand == "APPROVED"):
                 liver_threads_found = True
                 break
                 
@@ -453,7 +516,6 @@ def evaluate_external_blockers(
             "resolution": "USER_OR_OWNER_APPROVED_SOURCE_REQUIRED"
         })
         
-    # 2. Permission coverage
     perm_rows = [p for p in media_permissions if str(p.get("source_id", "")) == "src_lm_yt_cand_001"]
     valid_perm = False
     if perm_rows:
@@ -467,7 +529,7 @@ def evaluate_external_blockers(
             
         latest = sorted(perm_rows, key=perm_sort_key)[-1]
         
-        rev = str(latest.get("revoked", "")).lower()
+        rev = is_truthy(latest.get("revoked", ""))
         p_stat = str(latest.get("permission_status", "")).lower()
         r_stat = str(latest.get("rights_status", "")).lower()
         ev_type = str(latest.get("evidence_type", ""))
@@ -486,9 +548,9 @@ def evaluate_external_blockers(
                     expired = True
             except Exception:
                 malformed_lease = True
-                expired = True # Treat malformed as invalid
+                expired = True
                 
-        if (rev != "true" and p_stat in {"approved", "granted"} and 
+        if (not rev and p_stat in {"approved", "granted"} and 
             r_stat in ALLOWED_RIGHTS_STATUSES and not expired and not malformed_lease and 
             ev_type and ev_ref):
             valid_perm = True
@@ -547,7 +609,6 @@ def build_repair_plan(
     if sheets_verifier["failed_count"] > 0:
         overall = "FAIL"
         
-    # Check blocked conditions
     blocking_codes = {
         "PARENT_NOT_FOUND", "MULTIPLE_PARENTS", "SLOT_NOT_FOUND", "MULTIPLE_SLOTS",
         "CHILD_ID_MISSING", "DUPLICATE_CHILD_ID"

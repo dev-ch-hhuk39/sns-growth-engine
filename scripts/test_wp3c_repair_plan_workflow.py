@@ -1,13 +1,31 @@
 import unittest
-import yaml
 import os
-import subprocess
-import tempfile
 import json
+import tempfile
+import subprocess
+from datetime import datetime, timezone
+import sys
+
+from plan_wp3c_production_repairs import (
+    CHILD_HASH_FIELDS,
+    generate_hash,
+    media_index_sort_key,
+    classify_asset_relation,
+    evaluate_external_blockers,
+    plan_parent_repair,
+    plan_stale_slot_review,
+    build_failure_report,
+    build_repair_plan,
+    parse_target_account_ids,
+    prevent_writes,
+    TARGET_SOURCE_POST_IDS,
+    TARGET_SLOT_RUN_IDS,
+)
 
 class TestWP3CRepairPlanWorkflow(unittest.TestCase):
     def setUp(self):
         self.workflow_path = os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "wp3c-production-repair-plan.yml")
+        import yaml
         with open(self.workflow_path, "r") as f:
             self.workflow = yaml.safe_load(f)
         with open(self.workflow_path, "r") as f:
@@ -98,7 +116,7 @@ class TestWP3CRepairPlanWorkflow(unittest.TestCase):
 
     def test_23_24_duplicate_groups_and_operation_types_in_summary(self):
         self.assertIn('.duplicate_index_groups[]?', self.workflow_text)
-        self.assertIn('.operations | map(.operation) | join(", ")', self.workflow_text)
+        self.assertIn('(.operations // []) | map(.operation) | join(", ")', self.workflow_text)
 
     def test_25_no_echo_secret(self):
         self.assertNotIn('echo "${{ secrets', self.workflow_text)
@@ -155,6 +173,49 @@ class TestWP3CRepairPlanWorkflow(unittest.TestCase):
         exit 0
         """
         self.assertEqual(self.run_sh_helper(sh), 1)
+        
+    def test_null_safe_jq_summary(self):
+        import subprocess
+        # Mock empty PLAN_JSON with BLOCKED
+        sh = """
+        PLAN_JSON='{"overall_status": "BLOCKED", "status_reasons": ["A"], "sheets_verifier": {}, "parent_repairs": [{"source_post_id": "P"}], "stale_slot_reviews": [{"slot_run_id": "S"}], "external_blockers": [{"code": "B"}]}'
+        export GITHUB_STEP_SUMMARY=/tmp/sum.md
+        rm -f /tmp/sum.md
+        
+        echo "### Overall Status" >> $GITHUB_STEP_SUMMARY
+        OVERALL_STATUS=$(echo "$PLAN_JSON" | jq -r '.overall_status')
+        echo "\\`${OVERALL_STATUS}\\`" >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Status Reasons" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.status_reasons[]? | "- \\(.)"' >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Sheets Verifier" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \\(.passed // 0)\\n- Total: \\(.total // 0)\\n- Failed: \\(.failed_count // 0)"' >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Parent Repairs" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '
+          .parent_repairs[]? |
+          "- **Source Post ID**: `\\(.source_post_id)`\\n" +
+          "  - Declared: \\(.declared_media_count // 0)\\n" +
+          "  - Actual: \\(.actual_child_count // 0)\\n" +
+          "  - Canonical mismatch children: \\((.canonical_mismatch_child_ids // []) | join(", "))\\n" +
+          "  - Duplicate index groups: \\((.duplicate_index_groups // []) | length)\\n" +
+          "  - Operations: \\((.operations // []) | map(.operation) | join(", "))\\n" +
+          "  - Apply Eligible: \\(.apply_eligible // false)\\n" +
+          "  - Blockers: \\((.blocker_codes // []) | join(", "))\\n" +
+          "  - Has parent precondition hash: \\(if (.parent_precondition_hash // "") != "" then true else false end)"
+        ' >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Duplicate Index Groups" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.parent_repairs[]?.duplicate_index_groups[]? | "- Index: \\(.media_index)\\n  - Child IDs: \\((.child_ids // []) | join(", "))\\n  - Asset Relation: \\(.asset_relation)"' >> $GITHUB_STEP_SUMMARY
+        
+        echo "### Stale Slots" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.stale_slot_reviews[]? | "- **Slot ID**: `\\(.slot_run_id)`\\n  - Recommendation: \\(.recommendation)\\n  - Blockers: \\((.blocker_codes // []) | join(", "))"' >> $GITHUB_STEP_SUMMARY
+        
+        echo "### External Blockers" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.external_blockers[]? | "- `\\(.code)`"' >> $GITHUB_STEP_SUMMARY
+        """
+        self.assertEqual(self.run_sh_helper(sh), 0)
 
 if __name__ == '__main__':
     unittest.main()
