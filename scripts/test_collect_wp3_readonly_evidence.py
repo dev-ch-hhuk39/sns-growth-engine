@@ -17,7 +17,7 @@ def fake_client_factory(custom_ws=None):
     def forbidden_write(*args, **kwargs): raise AssertionError("write operation attempted")
     for name in ("append_row", "append_rows", "update", "update_cell", "batch_update", "resize", "clear", "delete_rows", "setup_all", "seed", "save"):
         setattr(client, name, MagicMock(side_effect=forbidden_write))
-    
+
     def ws_mock(name):
         ws = MagicMock()
         records = custom_ws.get(name, []) if custom_ws else []
@@ -25,7 +25,7 @@ def fake_client_factory(custom_ws=None):
         for n in ("append_row", "append_rows", "update", "update_cell", "batch_update", "resize", "clear", "delete_rows"):
             setattr(ws, n, MagicMock(side_effect=forbidden_write))
         return ws
-        
+
     client._ws.side_effect = ws_mock
     return client
 
@@ -41,13 +41,13 @@ def _run_with_mocks(fake_client, mock_args, verify_return=None):
          patch('collect_wp3_readonly_evidence._refresh_ws_cache'), \
          patch('collect_wp3_readonly_evidence.verify_state') as mock_verify, \
          patch('collect_wp3_readonly_evidence.credential_status') as mock_cred:
-         
+
         mock_config.return_value = {"sheet_id": "fake", "sa_dict": {}}
         mock_client_cls.return_value = fake_client
         mock_verify.return_value = verify_return or {"passed": 63, "failed": [], "total": 63, "warnings": {}, "counts": {}}
         mock_cred.return_value = {"threads": {"night_scout": {"publish_credentials": "SET"}, "liver_manager": {"publish_credentials": "SET"}}, "cloudinary": {}}
         run_collector(mock_args)
-        
+
     with open(mock_args.output, "r") as f:
         return json.load(f)
 
@@ -63,13 +63,65 @@ def test_2_report_schema_fixed():
 
 def test_3_safety_flag_true_fails():
     os.environ["PUBLISH_ENABLED"] = "true"
-    report = _run_with_mocks(fake_client_factory(), MockArgs())
+
+    args = MockArgs()
+    with patch('collect_wp3_readonly_evidence.get_config') as mock_config, \
+         patch('collect_wp3_readonly_evidence.SheetsClient') as mock_client_cls, \
+         patch('collect_wp3_readonly_evidence._refresh_ws_cache') as mock_refresh, \
+         patch('collect_wp3_readonly_evidence.verify_state') as mock_verify, \
+         patch('collect_wp3_readonly_evidence.credential_status') as mock_cred:
+
+         run_collector(args)
+
+         mock_config.assert_not_called()
+         mock_client_cls.assert_not_called()
+         mock_refresh.assert_not_called()
+         mock_verify.assert_not_called()
+         mock_cred.assert_not_called()
+
+    with open(args.output, "r") as f:
+        report = json.load(f)
+
     assert "SAFETY_FLAG_TRUE" in report["status_reasons"]
     del os.environ["PUBLISH_ENABLED"]
 
 def test_4_secret_not_in_json():
-    report = _run_with_mocks(fake_client_factory(), MockArgs())
-    assert "access_token" not in json.dumps(report)
+    # Insert dummy values in mock return
+    def custom_cred():
+        return {
+            "threads": {
+                "night_scout": {"publish_credentials": "SET", "access_token": "TEST_ACCESS_TOKEN_VALUE", "refresh_token": "TEST_REFRESH_TOKEN_VALUE"},
+                "liver_manager": {"publish_credentials": "SET", "cookie": "TEST_COOKIE_VALUE"}
+            },
+            "cloudinary": {"cloud_name": "SET", "api_key": "SET", "api_secret": "TEST_API_SECRET_VALUE", "GCP_SA_JSON": "TEST_SA_JSON_VALUE"}
+        }
+
+    args = MockArgs()
+    with patch('collect_wp3_readonly_evidence.get_config') as mock_config, \
+         patch('collect_wp3_readonly_evidence.SheetsClient') as mock_client_cls, \
+         patch('collect_wp3_readonly_evidence._refresh_ws_cache'), \
+         patch('collect_wp3_readonly_evidence.verify_state') as mock_verify, \
+         patch('collect_wp3_readonly_evidence.credential_status', side_effect=custom_cred):
+
+         mock_config.return_value = {"sheet_id": "fake", "sa_dict": {}}
+         mock_client_cls.return_value = fake_client_factory({"queue": [{"post_text": "TEST_POST_TEXT_VALUE"}], "source_videos": [{"transcript_text": "TEST_TRANSCRIPT_VALUE"}]})
+         mock_verify.return_value = {"passed": 63, "failed": [], "total": 63, "warnings": {}, "counts": {}}
+         run_collector(args)
+
+    with open(args.output, "r") as f:
+        report_str = f.read()
+
+    assert "TEST_ACCESS_TOKEN_VALUE" not in report_str
+    assert "TEST_REFRESH_TOKEN_VALUE" not in report_str
+    assert "TEST_COOKIE_VALUE" not in report_str
+    assert "TEST_API_SECRET_VALUE" not in report_str
+    assert "TEST_SA_JSON_VALUE" not in report_str
+    assert "TEST_POST_TEXT_VALUE" not in report_str
+    assert "TEST_TRANSCRIPT_VALUE" not in report_str
+
+    # check keys
+    for k in ["access_token", "refresh_token", "cookie", "authorization", "GCP_SA_JSON", "SA_JSON_BASE64", "transcript_text", "segments_json", "original_post_text", "post_text", "posted_text", "public_post_text", "internal_analysis", "comments_json", "raw_payload_json"]:
+        assert f'"{k}"' not in report_str
 
 def test_5_verifier_63_63():
     report = _run_with_mocks(fake_client_factory(), MockArgs())
@@ -323,6 +375,66 @@ def test_40_status_reason_codes():
     report = _run_with_mocks(fake_client_factory(db), MockArgs())
     assert "POSTED_SAVE_FAILED" in report["status_reasons"]
     assert report["overall_status"] == "FAIL"
+
+
+def test_41_permission_ledger_blocked_if_no_perms():
+    report = _run_with_mocks(fake_client_factory(), MockArgs())
+    assert report["blockers"]["permission_ledger"] == "BLOCKED"
+    assert "REQUIRED_PERMISSION_MISSING_NIGHT_SCOUT" in report["status_reasons"]
+    assert "REQUIRED_PERMISSION_MISSING_LIVER_MANAGER" in report["status_reasons"]
+
+def test_42_permission_night_only():
+    db = {
+        "source_accounts": [{"source_id": "s1", "platform": "youtube", "target_account_id": "night_scout", "source_url": "u", "active": "true", "blocked": "false", "review_status": "APPROVED"}],
+        "media_permissions": [{"source_id": "s1", "permission_status": "approved", "rights_status": "allowed", "evidence_type": "x", "evidence_reference": "y", "allow_analysis": "true", "allow_transcription": "true"}]
+    }
+    report = _run_with_mocks(fake_client_factory(db), MockArgs())
+    assert report["permission_requirements"]["night_scout"]["status"] == "PASS"
+    assert report["permission_requirements"]["liver_manager"]["status"] == "BLOCKED"
+    assert report["blockers"]["permission_ledger"] == "BLOCKED"
+
+def test_43_permission_both_valid():
+    db = {
+        "source_accounts": [
+            {"source_id": "s1", "platform": "youtube", "target_account_id": "night_scout", "source_url": "u", "active": "true", "blocked": "false", "review_status": "APPROVED"},
+            {"source_id": "s2", "platform": "youtube", "target_account_id": "liver_manager", "source_url": "u", "active": "true", "blocked": "false", "review_status": "APPROVED"}
+        ],
+        "media_permissions": [
+            {"source_id": "s1", "permission_status": "approved", "rights_status": "allowed", "evidence_type": "x", "evidence_reference": "y", "allow_analysis": "true", "allow_transcription": "true"},
+            {"source_id": "s2", "permission_status": "approved", "rights_status": "allowed", "evidence_type": "x", "evidence_reference": "y", "allow_analysis": "true", "allow_transcription": "true"}
+        ]
+    }
+    report = _run_with_mocks(fake_client_factory(db), MockArgs())
+    assert report["permission_requirements"]["night_scout"]["status"] == "PASS"
+    assert report["permission_requirements"]["liver_manager"]["status"] == "PASS"
+    assert report["blockers"]["permission_ledger"] == "PASS"
+
+def test_44_canonical_url_variations():
+    db = {
+        "source_posts": [
+            {"source_post_id": "p1", "canonical_post_url": "https://www.threads.com/@user/"},
+            {"source_post_id": "p2", "canonical_post_url": "https://threads.net/@user?query=1"}
+        ],
+        "source_post_media": [
+            {"source_post_id": "p1", "canonical_post_url": "https://threads.net/@user", "media_index": "1"},
+            {"source_post_id": "p2", "canonical_post_url": "https://threads.net/@user#hash", "media_index": "1"}
+        ]
+    }
+    report = _run_with_mocks(fake_client_factory(db), MockArgs())
+    # Should not produce CANONICAL_POST_URL_MISMATCH
+    assert not any(f["reason"] == "CANONICAL_POST_URL_MISMATCH" for f in report["integrity"]["parent_integrity_failures"])
+
+def test_45_source_video_account_mapping():
+    db = {
+        "source_accounts": [{"source_id": "s1", "target_account_id": "night_scout"}],
+        "source_videos": [
+            {"source_id": "s1", "account_id": ""}, # By join
+            {"source_id": "", "account_id": "night_scout"}, # By direct account_id
+            {"source_id": "s2", "account_id": ""} # Unknown
+        ]
+    }
+    report = _run_with_mocks(fake_client_factory(db), MockArgs())
+    assert report["source_inventory"]["night_scout"]["source_video_count"] == 2
 
 def run_all():
     for name, func in globals().items():

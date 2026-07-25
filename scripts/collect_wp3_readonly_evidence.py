@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import subprocess
+from urllib.parse import urlsplit, urlunsplit
 import re
 from datetime import datetime, timezone, timedelta
 
@@ -58,6 +59,34 @@ def parse_target_account_ids(value) -> list[str]:
     if "|" in t: return [x.strip() for x in t.split("|") if x.strip()]
     if "," in t: return [x.strip() for x in t.split(",") if x.strip()]
     return [t]
+
+
+def canonicalize_source_url(value: str) -> str:
+    if not value:
+        return ""
+
+    raw = str(value).strip()
+
+    if "://" not in raw:
+        raw = "https://" + raw.lstrip("/")
+
+    parsed = urlsplit(raw)
+
+    scheme = "https"
+    host = parsed.netloc.lower()
+
+    if host.startswith("www."):
+        host = host[4:]
+
+    if host in {"threads.com", "threads.net"}:
+        host = "threads.net"
+
+    path = parsed.path.rstrip("/")
+
+    if host == "threads.net":
+        path = path.lower()
+
+    return urlunsplit((scheme, host, path, "", ""))
 
 def canonicalize_threads_url(value: str) -> str:
     if not value: return ""
@@ -262,8 +291,8 @@ def collect_parent_integrity_failures(source_post_media: list[dict], sp_by_id: d
             failures.append({"id": sp_id, "reason": "PARENT_NOT_FOUND", "account_id": acc_id})
         else:
             p = sp_by_id[sp_id]
-            p_url = str(p.get("canonical_post_url", "")).strip().lower()
-            c_url = str(r.get("canonical_post_url", "")).strip().lower()
+            p_url = canonicalize_source_url(str(p.get("canonical_post_url", "")))
+            c_url = canonicalize_source_url(str(r.get("canonical_post_url", "")))
             if p_url and c_url and p_url != c_url:
                 failures.append({"id": sp_id, "reason": "CANONICAL_POST_URL_MISMATCH", "account_id": acc_id})
 
@@ -318,10 +347,48 @@ def run_collector(args):
     }
 
     safety_failed = False
+    failed_flags = []
     for env_var in safety_env_vars:
         val = str(os.environ.get(env_var, "")).strip().lower()
         if val in {"1", "true", "yes"}:
             safety_failed = True
+            failed_flags.append(env_var)
+            if env_var.lower() in safety:
+                safety[env_var.lower()] = True
+
+    if safety_failed:
+        report = {
+            "schema_version": 1,
+            "generated_at": now_iso(),
+            "mode": "READ_ONLY",
+            "implementation_head": get_git_head(),
+            "origin_main": get_git_origin_main(),
+            "safety": safety,
+            "sheets_verifier": {"passed": 0, "failed": [], "total": 0, "warnings": {}, "counts": {}},
+            "credentials": {},
+            "text_pipeline": {},
+            "source_inventory": {},
+            "permissions": {},
+            "permission_requirements": {},
+            "provider_routing": {},
+            "integrity": {
+                "duplicate_queue_ids": [],
+                "duplicate_slot_idempotency_keys": [],
+                "stale_inflight_slots": [],
+                "posted_save_failed_count": 0,
+                "unauthorized_ready_media": [],
+                "parent_integrity_failures": []
+            },
+            "blockers": {},
+            "overall_status": "FAIL",
+            "status_reasons": ["SAFETY_FLAG_TRUE"],
+            "read_errors": [],
+            "missing_tabs": [],
+            "safety_violation_flags": failed_flags
+        }
+        with open(args.output, "w") as f:
+            json.dump(report, f, indent=2, ensure_ascii=False)
+        return 0
 
     cfg = get_config()
     client = SheetsClient(cfg.get("sheet_id", ""), cfg.get("sa_dict", {}), dry_run=True)
@@ -456,6 +523,15 @@ def run_collector(args):
     all_sources = source_accounts + reference_sources
     liver_threads_source_classification = "MISSING"
 
+    source_targets_by_source_id: dict[str, set[str]] = {}
+    for s in all_sources:
+        s_id = str(s.get("source_id", ""))
+        if s_id:
+            if s_id not in source_targets_by_source_id:
+                source_targets_by_source_id[s_id] = set()
+            for t in parse_target_account_ids(s.get("target_account_ids")) + parse_target_account_ids(s.get("target_account_id")):
+                source_targets_by_source_id[s_id].add(t)
+
     source_inventory = {}
     all_pi_failures = collect_parent_integrity_failures(source_post_media, indexes["source_post_by_id"])
 
@@ -521,7 +597,7 @@ def run_collector(args):
 
         sp_count = sum(1 for r in source_posts if str(r.get("target_account_id", "")) == acc_id)
         spm_count = sum(1 for r in source_post_media if str(indexes["source_post_by_id"].get(str(r.get("source_post_id", "")), {}).get("target_account_id", "")) == acc_id)
-        sv_count = sum(1 for r in source_videos if str(r.get("account_id", "")) == acc_id or (r.get("source_id") and str(indexes["source_post_by_id"].get(r.get("source_id"), {}).get("target_account_id")) == acc_id))
+        sv_count = sum(1 for r in source_videos if str(r.get("account_id", "")) == acc_id or (str(r.get("source_id", "")) and acc_id in source_targets_by_source_id.get(str(r.get("source_id", "")), set())))
 
         source_inventory[acc_id] = {
             "threads_source_accounts": threads_source_accounts,
@@ -589,12 +665,61 @@ def run_collector(args):
         "parent_integrity_failures": all_pi_failures
     }
 
+    permission_requirements = {
+        "night_scout": {"required_source_ids": [], "valid_source_ids": [], "missing_or_invalid_source_ids": [], "status": "BLOCKED"},
+        "liver_manager": {"required_source_ids": [], "valid_source_ids": [], "missing_or_invalid_source_ids": [], "status": "BLOCKED"}
+    }
+
+    for acc_id in ["night_scout", "liver_manager"]:
+        req_ids = set()
+        for s in all_sources:
+            t_ids = parse_target_account_ids(s.get("target_account_ids")) + parse_target_account_ids(s.get("target_account_id"))
+            if acc_id not in t_ids: continue
+            active = str(s.get("active", "")).strip().lower() in {"1", "true", "yes"}
+            blocked = str(s.get("blocked", "")).strip().lower() in {"1", "true", "yes"}
+            s_url = str(s.get("source_url", "")).strip()
+            plat = str(s.get("platform", "")).lower() or str(s.get("source_platform", "")).lower()
+            can_reuse = str(s.get("can_reuse_media", "")).strip().lower() in {"1", "true", "yes"}
+            rev = str(s.get("review_status", "")).upper() == "APPROVED" or str(s.get("candidate_status", "")).upper() == "APPROVED"
+            s_id = str(s.get("source_id", ""))
+            if s_id and active and not blocked and s_url and (plat in {"youtube", "tiktok"} or can_reuse) and rev:
+                req_ids.add(s_id)
+
+        for r in queue:
+            if str(r.get("status", "")).upper() == "READY":
+                a_id = str(r.get("target_account_id") or r.get("account_id") or "").strip()
+                if a_id == acc_id or (not a_id and acc_id in parse_target_account_ids(r.get("target_account_ids", ""))):
+                    aid = str(r.get("media_asset_id", "")).strip()
+                    asset = media_by_id.get(aid) if aid else None
+                    q_s_id = resolve_queue_source_id(r, indexes, asset)
+                    if q_s_id:
+                        req_ids.add(q_s_id)
+
+        valid_ids = []
+        missing_ids = []
+        for sid in req_ids:
+            if permissions.get(sid, {}).get("valid"):
+                valid_ids.append(sid)
+            else:
+                missing_ids.append(sid)
+
+        status = "PASS" if valid_ids else "BLOCKED"
+        if len(req_ids) == 0:
+            status = "BLOCKED"
+
+        permission_requirements[acc_id] = {
+            "required_source_ids": sorted(list(req_ids)),
+            "valid_source_ids": sorted(valid_ids),
+            "missing_or_invalid_source_ids": sorted(missing_ids),
+            "status": status
+        }
+
     # Blockers & Overall Status
     blockers = {
         "liver_threads_source_url": "PASS" if liver_threads_source_classification == "FOUND_APPROVED" else "BLOCKED" if liver_threads_source_classification in {"MISSING", "FOUND_UNAPPROVED", "AMBIGUOUS"} else "FAIL",
         "night_threads_credentials": "PASS" if night_creds == "SET" else "BLOCKED",
         "liver_threads_credentials": "PASS" if liver_creds == "SET" else "BLOCKED",
-        "permission_ledger": "PASS" if sheets_verifier["passed"] == 63 and not sheets_verifier["failed"] else "BLOCKED",
+        "permission_ledger": "PASS" if (permission_requirements["night_scout"]["status"] == "PASS" and permission_requirements["liver_manager"]["status"] == "PASS") else "BLOCKED",
         "sheets_verifier": "PASS" if sheets_verifier["passed"] == 63 and not sheets_verifier["failed"] else "BLOCKED"
     }
 
@@ -617,18 +742,39 @@ def run_collector(args):
         status_reasons.append("MISSING_TABS")
     if read_errors:
         status_reasons.append("READ_ERRORS")
-    if safety_failed:
-        status_reasons.append("SAFETY_FLAG_TRUE")
     if schema_read_error:
         status_reasons.append("SCHEMA_READ_ERROR")
 
+    if liver_threads_source_classification == "MISSING":
+        status_reasons.append("LIVER_THREADS_SOURCE_MISSING")
+    elif liver_threads_source_classification == "FOUND_UNAPPROVED":
+        status_reasons.append("LIVER_THREADS_SOURCE_UNAPPROVED")
+    elif liver_threads_source_classification == "AMBIGUOUS":
+        status_reasons.append("LIVER_THREADS_SOURCE_AMBIGUOUS")
+
+    if blockers["night_threads_credentials"] == "BLOCKED":
+        status_reasons.append("NIGHT_THREADS_CREDENTIALS_MISSING")
+    if blockers["liver_threads_credentials"] == "BLOCKED":
+        status_reasons.append("LIVER_THREADS_CREDENTIALS_MISSING")
+
+    if permission_requirements["night_scout"]["status"] == "BLOCKED":
+        status_reasons.append("REQUIRED_PERMISSION_MISSING_NIGHT_SCOUT")
+    if permission_requirements["liver_manager"]["status"] == "BLOCKED":
+        status_reasons.append("REQUIRED_PERMISSION_MISSING_LIVER_MANAGER")
+
+    # unique reasons and determine overall
+    unique_reasons = []
+    for r in status_reasons:
+        if r not in unique_reasons:
+            unique_reasons.append(r)
+
+    status_reasons = unique_reasons
+
     if status_reasons:
-        overall = "FAIL"
-    else:
-        for k, v in blockers.items():
-            if v == "BLOCKED":
-                overall = "BLOCKED"
-                status_reasons.append(k.upper() + "_BLOCKED")
+        if any(r in ["SHEETS_VERIFIER_FAILED", "POSTED_SAVE_FAILED", "DUPLICATE_QUEUE_IDS", "DUPLICATE_SLOT_IDEMPOTENCY_KEYS", "UNAUTHORIZED_READY_MEDIA", "PARENT_INTEGRITY_FAILURES", "MISSING_TABS", "READ_ERRORS", "SCHEMA_READ_ERROR"] for r in status_reasons):
+            overall = "FAIL"
+        else:
+            overall = "BLOCKED"
 
     report = {
         "schema_version": 1,
@@ -642,6 +788,7 @@ def run_collector(args):
         "text_pipeline": text_pipeline,
         "source_inventory": source_inventory,
         "permissions": permissions,
+        "permission_requirements": permission_requirements,
         "provider_routing": provider_routing,
         "integrity": integrity,
         "blockers": blockers,
