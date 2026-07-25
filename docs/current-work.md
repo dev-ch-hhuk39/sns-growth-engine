@@ -1,10 +1,12 @@
-- active status: HANDED_OFF
-- assigned agent: Antigravity
-- tool: Antigravity
-- branch: ops/wp3b-diagnostic-fidelity
-- task: WP3-B diagnostic fidelity
-- related Work Package: WP3-B
-- related PR: #27
+- status: ACTIVE
+- current task: WP3-C production repair plan
+- current branch: ops/wp3c-production-repair-plan
+- PR: (To be created)
+- design authority: User explicit instructions
+
+## Context
+
+Generating a deterministic, redacted and strictly read-only repair plan for the confirmed WP3 production integrity failures without modifying Sheets.
 - files in scope:
   - scripts/evaluate_wp3_readonly_workflow_result.py
   - scripts/test_wp3_readonly_workflow.py
