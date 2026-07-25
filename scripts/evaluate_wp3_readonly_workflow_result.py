@@ -30,6 +30,26 @@ def classify_no_post_reason(value: str) -> str:
         return "THREADS_API_RUNTIME_ERROR"
     return "OTHER_REDACTED"
 
+def extract_stale_slot_ids(values) -> list[str]:
+    if not isinstance(values, list):
+        return []
+
+    result: list[str] = []
+
+    for item in values[:20]:
+        if isinstance(item, str):
+            slot_id = item.strip()
+        elif isinstance(item, dict):
+            slot_id = str(item.get("slot_run_id", "")).strip()
+        else:
+            slot_id = ""
+
+        if slot_id and slot_id not in result:
+            result.append(slot_id)
+
+    return result
+
+
 def build_safe_summary(report: dict) -> dict:
     sheets_info = report.get("sheets_verifier", {})
     creds = report.get("credentials", {})
@@ -49,7 +69,7 @@ def build_safe_summary(report: dict) -> dict:
 
     night_sources = si.get("night_scout", {})
     liver_sources = si.get("liver_manager", {})
-    
+
     # Process no_post_reasons
     no_post_reason_codes = {"night_scout": {}, "liver_manager": {}}
     for account_id in ["night_scout", "liver_manager"]:
@@ -58,13 +78,13 @@ def build_safe_summary(report: dict) -> dict:
             for reason_str, count in reasons.items():
                 code = classify_no_post_reason(reason_str)
                 no_post_reason_codes[account_id][code] = no_post_reason_codes[account_id].get(code, 0) + safe_int(count)
-    
+
     # Process permission warnings
     permission_warnings = []
     night_pr = pr.get("night_scout", {})
     if night_pr.get("status") == "PASS" and night_pr.get("missing_or_invalid_source_ids"):
         permission_warnings.append("NIGHT_HAS_PARTIAL_PERMISSION_COVERAGE")
-        
+
     liver_pr = pr.get("liver_manager", {})
     if liver_pr.get("status") == "PASS" and liver_pr.get("missing_or_invalid_source_ids"):
         permission_warnings.append("LIVER_HAS_PARTIAL_PERMISSION_COVERAGE")
@@ -77,23 +97,69 @@ def build_safe_summary(report: dict) -> dict:
         "CANONICAL_POST_URL_MISMATCH",
         "MEDIA_COUNT_MISMATCH"
     }
-    
-    parent_integrity_failures_raw = ig.get("parent_integrity_failures", [])
+
+    parent_integrity_failures_raw = (
+        ig.get("parent_integrity_failures", [])
+        if isinstance(ig.get("parent_integrity_failures", []), list)
+        else []
+    )
+
+    parent_reason_counts: dict[str, int] = {}
+
+    for failure in parent_integrity_failures_raw:
+        if not isinstance(failure, dict):
+            safe_reason = "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+        else:
+            reason = str(failure.get("reason", ""))
+            safe_reason = (
+                reason
+                if reason in allowed_parent_integrity_reasons
+                else "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+            )
+
+        parent_reason_counts[safe_reason] = (
+            parent_reason_counts.get(safe_reason, 0) + 1
+        )
+
     parent_integrity_failures_safe = []
-    parent_reason_counts = {}
     for failure in parent_integrity_failures_raw[:50]:
-        reason = failure.get("reason", "")
-        safe_reason = reason if reason in allowed_parent_integrity_reasons else "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+        if not isinstance(failure, dict):
+            safe_reason = "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+            account_id = ""
+            failure_id = ""
+        else:
+            reason = str(failure.get("reason", ""))
+            safe_reason = reason if reason in allowed_parent_integrity_reasons else "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+            account_id = str(failure.get("account_id", ""))
+            failure_id = str(failure.get("id", ""))
+
         parent_integrity_failures_safe.append({
-            "id": failure.get("id", ""),
+            "id": failure_id,
             "reason": safe_reason,
-            "account_id": failure.get("account_id", "")
+            "account_id": account_id
         })
-        parent_reason_counts[safe_reason] = parent_reason_counts.get(safe_reason, 0) + 1
-        
+
     # Process stale slots
     stale_slots_raw = ig.get("stale_inflight_slots", [])
-    stale_slots_safe = [s.get("slot_run_id", "") for s in stale_slots_raw[:20] if "slot_run_id" in s]
+    stale_slots_safe = extract_stale_slot_ids(stale_slots_raw)
+    stale_slot_count = (
+        len(stale_slots_raw)
+        if isinstance(stale_slots_raw, list)
+        else 0
+    )
+
+    # Cloudinary bundle
+    cloudinary_values = [
+        creds.get("Cloudinary cloud_name", "MISSING"),
+        creds.get("Cloudinary api_key", "MISSING"),
+        creds.get("Cloudinary api_secret", "MISSING"),
+    ]
+
+    cloudinary_bundle = (
+        "PRESENT"
+        if all(value == "PRESENT" for value in cloudinary_values)
+        else "MISSING"
+    )
 
     return {
         "schema_version": 1,
@@ -111,6 +177,7 @@ def build_safe_summary(report: dict) -> dict:
         "credentials": {
             "night_threads": creds.get("night_scout Threads publish credentials", "MISSING"),
             "liver_threads": creds.get("liver_manager Threads publish credentials", "MISSING"),
+            "cloudinary_bundle": cloudinary_bundle,
             "cloudinary_cloud_name": creds.get("Cloudinary cloud_name", "MISSING"),
             "cloudinary_api_key": creds.get("Cloudinary api_key", "MISSING"),
             "cloudinary_api_secret": creds.get("Cloudinary api_secret", "MISSING")
@@ -151,7 +218,7 @@ def build_safe_summary(report: dict) -> dict:
         "integrity": {
             "duplicate_queue_count": len(ig.get("duplicate_queue_ids", [])),
             "duplicate_slot_key_count": len(ig.get("duplicate_slot_idempotency_keys", [])),
-            "stale_inflight_slot_count": len(stale_slots_raw),
+            "stale_inflight_slot_count": stale_slot_count,
             "unauthorized_ready_media_count": len(ig.get("unauthorized_ready_media", [])),
             "parent_integrity_failure_count": len(parent_integrity_failures_raw)
         },
@@ -161,7 +228,7 @@ def build_safe_summary(report: dict) -> dict:
             "failures": parent_integrity_failures_safe
         },
         "stale_slots": {
-            "count": len(stale_slots_raw),
+            "count": stale_slot_count,
             "slot_run_ids": stale_slots_safe
         },
         "missing_tabs": report.get("missing_tabs", []),
@@ -190,7 +257,7 @@ def render_markdown_summary(summary: dict) -> str:
         f"**Credential evidence basis**: {summary.get('credential_evidence', {}).get('threads_status_basis')}",
         f"**Night Threads credential**: {summary.get('credentials', {}).get('night_threads')}",
         f"**Liver Threads credential**: {summary.get('credentials', {}).get('liver_threads')}",
-        f"**Cloudinary credential status**: {summary.get('credentials', {}).get('cloudinary_api_key')}",
+        f"**Cloudinary credential status**: {summary.get('credentials', {}).get('cloudinary_bundle')}",
         f"**Liver Threads source classification**: {summary.get('source_status', {}).get('liver_threads_source_classification')}",
         "",
         "### Permissions",
@@ -217,7 +284,7 @@ def render_markdown_summary(summary: dict) -> str:
         f"**Status reasons**: {summary.get('status_reasons', [])}",
         ""
     ]
-    return "\\n".join(md) + "\\n"
+    return "\n".join(md) + "\n"
 
 def evaluate_report(report: dict, summary_path: str) -> int:
     status = report.get("overall_status")

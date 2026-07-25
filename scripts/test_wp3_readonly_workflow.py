@@ -184,7 +184,10 @@ def get_collector_shaped_data():
             "posted_save_failed_count": 0,
             "duplicate_queue_ids": ["q1", "q2"],
             "duplicate_slot_idempotency_keys": ["slot1"],
-            "stale_inflight_slots": [{"slot_run_id": "stale1", "url": "https://media.url/secret"}, {"slot_run_id": "stale2"}],
+            "stale_inflight_slots": [
+                "stale1",
+                "stale2"
+            ],
             "unauthorized_ready_media": ["media1"],
             "parent_integrity_failures": [
                 {"id": "p1", "reason": "PARENT_NOT_FOUND", "account_id": "night_scout", "url": "https://media.url/secret"},
@@ -232,9 +235,7 @@ def test_evaluator_schema_alignment():
 
     assert safe_summary["credentials"]["night_threads"] == "PRESENT"
     assert safe_summary["credentials"]["liver_threads"] == "MISSING"
-    assert safe_summary["credentials"]["cloudinary_cloud_name"] == "PRESENT"
-    assert safe_summary["credentials"]["cloudinary_api_key"] == "PRESENT"
-    assert safe_summary["credentials"]["cloudinary_api_secret"] == "PRESENT"
+    assert safe_summary["credentials"]["cloudinary_bundle"] == "PRESENT"
     
     assert safe_summary["credential_evidence"]["threads_status_basis"] == "ENV_OR_TOKEN_FILE_PRESENCE_ONLY"
 
@@ -267,6 +268,7 @@ def test_evaluator_schema_alignment():
     # Check stale slot details
     assert safe_summary["stale_slots"]["count"] == 2
     assert "stale1" in safe_summary["stale_slots"]["slot_run_ids"]
+    assert "stale2" in safe_summary["stale_slots"]["slot_run_ids"]
     
     # Check permission warnings
     assert "LIVER_HAS_PARTIAL_PERMISSION_COVERAGE" in safe_summary["permission_warnings"]
@@ -280,6 +282,20 @@ def test_evaluator_schema_alignment():
 
     # Check Markdown
     assert "Parent integrity reason counts" in summary
+    assert "## WP3 Read-Only Production Baseline\n" in summary
+    assert "\\n" not in summary
+    assert summary.count("\n") > 5
+
+    # Check Cloudinary bundle variations
+    data2 = get_collector_shaped_data()
+    data2["credentials"]["Cloudinary api_secret"] = "MISSING"
+    _, _, stdout2 = run_eval(data2)
+    for line in stdout2.split("\n"):
+        if line.startswith("WP3_SAFE_SUMMARY_JSON="):
+            safe_summary2 = json.loads(line.replace("WP3_SAFE_SUMMARY_JSON=", ""))
+            break
+    assert safe_summary2["credentials"]["cloudinary_bundle"] == "MISSING"
+
 
 def test_collector_integration():
     import sys
@@ -300,12 +316,14 @@ def test_collector_integration():
             safe_summary = json.loads(line.replace("WP3_SAFE_SUMMARY_JSON=", ""))
             break
 
-    assert "night_threads" in safe_summary["credentials"]
-    assert "ready_text_count" in safe_summary["text_pipeline"]["night_scout"]
-    assert "night_source_post_count" in safe_summary["source_status"]
-    assert "status" in safe_summary["permission_requirements"]["night_scout"]
-
-    assert isinstance(safe_summary["integrity"]["duplicate_queue_count"], int)
+    assert safe_summary["credentials"]["night_threads"] == "PRESENT"
+    assert safe_summary["text_pipeline"]["night_scout"]["ready_text_count"] == 0
+    assert safe_summary["source_status"]["night_source_post_count"] == 0
+    assert safe_summary["permission_requirements"]["night_scout"]["status"] == "BLOCKED"
+    assert safe_summary["integrity"]["duplicate_queue_count"] == 0
+    assert safe_summary["parent_integrity"]["failure_count"] == 0
+    assert safe_summary["stale_slots"]["count"] == 0
+    assert safe_summary["no_post_reason_codes"] == {'night_scout': {}, 'liver_manager': {}}
 
     check_secrets(summary, stdout)
 
