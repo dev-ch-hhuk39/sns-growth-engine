@@ -49,23 +49,49 @@ jobs:
 
       - name: Generate Repair Plan
         run: |
-          python3 scripts/plan_wp3c_production_repairs.py --output /tmp/wp3c_repair_plan.json > stdout.log
-          cat stdout.log
+          set +e
+          python3 scripts/plan_wp3c_production_repairs.py --output /tmp/wp3c_repair_plan.json > /tmp/wp3c_stdout.log
+          PLANNER_EXIT=$?
+          set -e
           
-          if grep -q 'WP3C_SAFE_REPAIR_PLAN_JSON=' stdout.log; then
-             PLAN_JSON=$(grep 'WP3C_SAFE_REPAIR_PLAN_JSON=' stdout.log | sed 's/WP3C_SAFE_REPAIR_PLAN_JSON=//')
-             
-             echo "## WP3-C Safe Repair Plan Summary" >> $GITHUB_STEP_SUMMARY
-             
-             echo "### Overall Status" >> $GITHUB_STEP_SUMMARY
-             echo "\`$(echo "$PLAN_JSON" | jq -r '.overall_status')\`" >> $GITHUB_STEP_SUMMARY
-             
-             echo "### Parent Repairs" >> $GITHUB_STEP_SUMMARY
-             echo "$PLAN_JSON" | jq -r '.parent_repairs[] | "- **Source Post ID**: `\(.source_post_id)`\n  - Declared: \(.declared_media_count)\n  - Actual: \(.actual_child_count)\n  - Canonical mismatch children: \(.canonical_mismatch_child_ids | join(", "))\n  - Duplicate index groups: \(.unique_media_index_count)\n  - Operations: \(.operations | length)\n  - Apply Eligible: \(.apply_eligible)\n  - Blockers: \(.blocker_codes | join(", "))"' >> $GITHUB_STEP_SUMMARY
-             
-             echo "### Stale Slots" >> $GITHUB_STEP_SUMMARY
-             echo "$PLAN_JSON" | jq -r '.stale_slot_reviews[] | "- **Slot ID**: `\(.slot_run_id)`\n  - Recommendation: \(.recommendation)"' >> $GITHUB_STEP_SUMMARY
-             
-             echo "### External Blockers" >> $GITHUB_STEP_SUMMARY
-             echo "$PLAN_JSON" | jq -r '.external_blockers[] | "- `\(.code)`: \(.resolution)"' >> $GITHUB_STEP_SUMMARY
+          LINE_COUNT=$(grep -c 'WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
+          if [ "$LINE_COUNT" -ne 1 ]; then
+             echo "Error: Expected exactly 1 WP3C_SAFE_REPAIR_PLAN_JSON= line, got $LINE_COUNT"
+             exit 1
           fi
+          
+          PLAN_JSON=$(grep 'WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log | sed 's/WP3C_SAFE_REPAIR_PLAN_JSON=//')
+          
+          # Try parsing JSON to ensure it's valid
+          if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then
+             echo "Error: Failed to parse safe JSON"
+             exit 1
+          fi
+          
+          echo "$PLAN_JSON" | sed 's/^/WP3C_SAFE_REPAIR_PLAN_JSON=/'
+          
+          echo "## WP3-C Safe Repair Plan Summary" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Overall Status" >> $GITHUB_STEP_SUMMARY
+          OVERALL_STATUS=$(echo "$PLAN_JSON" | jq -r '.overall_status')
+          echo "\`${OVERALL_STATUS}\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Status Reasons" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.status_reasons[] | "- \(.)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Sheets Verifier" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed)\n- Total: \(.total)\n- Failed: \(.failed_count)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Parent Repairs" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.parent_repairs[] | "- **Source Post ID**: `\(.source_post_id)`\n  - Declared: \(.declared_media_count)\n  - Actual: \(.actual_child_count)\n  - Canonical mismatch children: \(.canonical_mismatch_child_ids | join(", "))\n  - Duplicate index groups: \(.unique_media_index_count)\n  - Operations: \(.operations | map(.operation) | join(", "))\n  - Apply Eligible: \(.apply_eligible)\n  - Blockers: \(.blocker_codes | join(", "))\n  - Has parent precondition hash: \(if .parent_precondition_hash != "" then true else false end)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Duplicate Index Groups" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.parent_repairs[].duplicate_index_groups[]? | "- Index: \(.media_index)\n  - Child IDs: \(.child_ids | join(", "))\n  - Asset Relation: \(.asset_relation)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Stale Slots" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.stale_slot_reviews[] | "- **Slot ID**: `\(.slot_run_id)`\n  - Recommendation: \(.recommendation)\n  - Blockers: \(.blocker_codes | join(", "))"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### External Blockers" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.external_blockers[] | "- `\(.code)`"' >> $GITHUB_STEP_SUMMARY
+          
+          exit "$PLANNER_EXIT"
