@@ -1,9 +1,12 @@
-- active status: COMPLETED
+- active status: HANDED_OFF
 - assigned agent: Antigravity
 - tool: Antigravity
-- branch: `ops/wp3-readonly-baseline`
-- task: WP3-A read-only production baseline実装完了
+- branch: ops/wp3-readonly-baseline
+- task: WP3-A read-only production baseline
 - related Work Package: WP3-A
-- files in scope: この指示で明示されたファイル
+- related PR: #26
+- files in scope: scripts/collect_wp3_readonly_evidence.py, scripts/test_collect_wp3_readonly_evidence.py, scripts/test_wp3_readonly_workflow.py, .github/workflows/wp3-production-readonly-verification.yml
 - files not to touch: production posting、media preparation、Goal定義、secrets
-- handoff status: COMPLETED
+- handoff status: COMPLETE
+- CI run ID: PENDING_NEW_RUN
+- CI result: PENDING

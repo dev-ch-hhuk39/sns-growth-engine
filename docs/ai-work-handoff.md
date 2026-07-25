@@ -1,6 +1,32 @@
 # AI Work Handoff
 
-## 2026-07-25 Antigravity WP3-A Read-only Production Baseline
+## 2026-07-25 Antigravity WP3-A Read-only Production Baseline Fixes
+
+- 使用ツール: Antigravity
+- audited main SHA: `21bc7f8f64e8fac8faf6ba33918c5d5ca6d00a56`
+- design authority: ChatGPT lead review
+- branch: `ops/wp3-readonly-baseline`
+- PR: `#26` (UNMERGED)
+- CI failure run: `30140582896`
+- CI failure reason: `test_collect_wp3_readonly_evidence.py` and `test_wp3_readonly_workflow.py` were not properly executing as tests in the repository test suite due to missing `if __name__ == "__main__":` blocks.
+- CI fixed run ID: PENDING_NEW_RUN
+- external writes: none
+- SNS posts: none
+- source fetch: none
+- Cloudinary operations: none
+- Sheets mode: read-only
+
+### 実施内容
+
+- `test_collect_wp3_readonly_evidence.py` を26項目以上の独立したテストに分割し、dummy testを削除した。
+- `test_wp3_readonly_workflow.py` を修正して詳細な検証を実装した。
+- `collect_wp3_readonly_evidence.py` のpermission最新行選択ロジック、parent integrityロジック、text pipelineロジック、source inventoryを要件通りに厳密に実装した。
+- `wp3-production-readonly-verification.yml` をPython 3.11化、Sheets credentialsチェック追加、safetyフラグのworkflowレベル設定へ修正した。
+- リポジトリテスト（651件）を全件PASS確認済み。
+
+
+
+## 2026-07-25 Antigravity WP3-A Read-only Production Baseline Initial
 
 - 使用ツール: Antigravity
 - audited main SHA: `56fae006bde664b85d7024d88450119fce31878d`
