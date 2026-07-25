@@ -5852,3 +5852,16 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   順番に進める。Goal設計の作り直しはしない。
 - 推奨実装モデルはGPT-5.6 Terra、思考力medium。テスト再実行・format・docs同期
   だけlow可。設計矛盾/security incident/provider全fallback破綻時だけ最上位へ戻す。
+
+## 2026-07-25: WP3-B Diagnostic Fidelity Schema Alignment (Antigravity)
+
+**実行内容:**
+- `evaluate_wp3_readonly_workflow_result.py`のスキーマの不整合を修正し、stale slot idやparent integrityをcollectorに合わせて正しく処理できるよう修正した。
+- `test_wp3_readonly_workflow.py`をcollectorモックに合わせたschemaでテストできるよう改修した。
+- `test_all_workflows_safety_flags.py`で安全確認テストがすべての条件で到達可能になるよう改善した。
+- unit test 652件パスを確認後、commitし、CI(ID: `30148433175`)がSUCCESSであることを確認した。
+- 指定されたドキュメントのステータスを更新した。
+
+**次のAIへの申し送り事項:**
+- `ops/wp3b-diagnostic-fidelity` でのschema修正とCI確認は完了している。
+- 次は指示に従ってPR #27をmerge、または本番read-only workflowをdispatchすることになるため、ユーザーの指示を待つ。

@@ -33,7 +33,7 @@ Additional diagnostics:
   missing_or_invalid_source_id = src_lm_yt_cand_001
 
 この文書内に、文書自身を含む最終commit SHAを固定値で記録しない。
-最新のPR headはGitHubのPR #26を参照する。
+最新のPR headはGitHubのPR #27を参照する。
 
 ## 最終Goal
 
