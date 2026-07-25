@@ -15,6 +15,12 @@ with open(WF_PATH, "r") as f:
 with open(WF_PATH, "r") as f:
     workflow_text = f.read()
 
+def parse_safe_summary(stdout: str) -> dict:
+    for line in stdout.splitlines():
+        if line.startswith("WP3_SAFE_SUMMARY_JSON="):
+            return json.loads(line.removeprefix("WP3_SAFE_SUMMARY_JSON="))
+    raise AssertionError("safe summary JSON was not emitted")
+
 def test_workflow_dispatch_only():
     on_key = True if True in workflow else "on"
     assert on_key in workflow
@@ -86,7 +92,6 @@ def test_no_banned_commands():
 
 def test_collector_called_once():
     assert workflow_text.count("collect_wp3_readonly_evidence.py") == 1
-
 
 def run_eval(data):
     import tempfile
@@ -227,11 +232,7 @@ def test_evaluator_schema_alignment():
     assert "WP3_SAFE_SUMMARY_JSON=" in stdout
     check_secrets(summary, stdout)
 
-    import json
-    for line in stdout.split("\n"):
-        if line.startswith("WP3_SAFE_SUMMARY_JSON="):
-            safe_summary = json.loads(line.replace("WP3_SAFE_SUMMARY_JSON=", ""))
-            break
+    safe_summary = parse_safe_summary(stdout)
 
     assert safe_summary["credentials"]["night_threads"] == "PRESENT"
     assert safe_summary["credentials"]["liver_threads"] == "MISSING"
@@ -260,41 +261,136 @@ def test_evaluator_schema_alignment():
     assert safe_summary["integrity"]["unauthorized_ready_media_count"] == 1
     assert safe_summary["integrity"]["parent_integrity_failure_count"] == 2
     
-    # Check parent integrity details
     assert safe_summary["parent_integrity"]["failure_count"] == 2
     assert safe_summary["parent_integrity"]["failures"][0]["reason"] == "PARENT_NOT_FOUND"
     assert safe_summary["parent_integrity"]["failures"][1]["reason"] == "UNKNOWN_PARENT_INTEGRITY_FAILURE"
     
-    # Check stale slot details
     assert safe_summary["stale_slots"]["count"] == 2
     assert "stale1" in safe_summary["stale_slots"]["slot_run_ids"]
     assert "stale2" in safe_summary["stale_slots"]["slot_run_ids"]
     
-    # Check permission warnings
     assert "LIVER_HAS_PARTIAL_PERMISSION_COVERAGE" in safe_summary["permission_warnings"]
     assert "NIGHT_HAS_PARTIAL_PERMISSION_COVERAGE" not in safe_summary["permission_warnings"]
     
-    # Check no-post reasons
     assert safe_summary["no_post_reason_codes"]["night_scout"]["STALE_SLOT_REQUIRES_RECOVERY"] == 2
     assert safe_summary["no_post_reason_codes"]["night_scout"]["THREADS_API_RUNTIME_ERROR"] == 1
     assert safe_summary["no_post_reason_codes"]["liver_manager"]["EMPTY_TEXT"] == 1
     assert safe_summary["no_post_reason_codes"]["liver_manager"]["OTHER_REDACTED"] == 2
 
-    # Check Markdown
     assert "Parent integrity reason counts" in summary
     assert "## WP3 Read-Only Production Baseline\n" in summary
     assert "\\n" not in summary
     assert summary.count("\n") > 5
 
-    # Check Cloudinary bundle variations
     data2 = get_collector_shaped_data()
     data2["credentials"]["Cloudinary api_secret"] = "MISSING"
     _, _, stdout2 = run_eval(data2)
-    for line in stdout2.split("\n"):
-        if line.startswith("WP3_SAFE_SUMMARY_JSON="):
-            safe_summary2 = json.loads(line.replace("WP3_SAFE_SUMMARY_JSON=", ""))
-            break
+    safe_summary2 = parse_safe_summary(stdout2)
     assert safe_summary2["credentials"]["cloudinary_bundle"] == "MISSING"
+
+def test_parent_integrity_full_count_and_safe_detail_limit():
+    data = get_collector_shaped_data()
+
+    failures = []
+    for index in range(55):
+        failures.append({
+            "id": f"parent_{index}",
+            "reason": (
+                "PARENT_NOT_FOUND"
+                if index < 52
+                else "UNSAFE_UNKNOWN_REASON"
+            ),
+            "account_id": (
+                "night_scout"
+                if index % 2 == 0
+                else "liver_manager"
+            ),
+            "url": "TEST_PARENT_SECRET_URL",
+            "raw": "TEST_PARENT_RAW_SECRET",
+            "notes": "TEST_PARENT_NOTES_SECRET",
+            "evidence_reference": "TEST_EVIDENCE_SECRET",
+        })
+
+    data["integrity"]["parent_integrity_failures"] = failures
+
+    code, summary, stdout = run_eval(data)
+    assert code == 0
+
+    safe_summary = parse_safe_summary(stdout)
+
+    assert safe_summary["parent_integrity"]["failure_count"] == 55
+    assert len(safe_summary["parent_integrity"]["failures"]) == 50
+    assert (
+        sum(
+            safe_summary["parent_integrity"]["reason_counts"].values()
+        )
+        == 55
+    )
+    assert (
+        safe_summary["parent_integrity"]["reason_counts"][
+            "PARENT_NOT_FOUND"
+        ]
+        == 52
+    )
+    assert (
+        safe_summary["parent_integrity"]["reason_counts"][
+            "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+        ]
+        == 3
+    )
+
+    for secret in (
+        "TEST_PARENT_SECRET_URL",
+        "TEST_PARENT_RAW_SECRET",
+        "TEST_PARENT_NOTES_SECRET",
+        "TEST_EVIDENCE_SECRET",
+    ):
+        assert secret not in summary
+        assert secret not in stdout
+
+def test_extract_stale_slot_ids_contract():
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from evaluate_wp3_readonly_workflow_result import (
+        extract_stale_slot_ids,
+    )
+
+    values = [
+        "slot_1",
+        "slot_1",
+        "",
+        {"slot_run_id": "slot_2"},
+        {
+            "slot_run_id": "slot_3",
+            "url": "TEST_STALE_URL_SECRET",
+            "lease_expires_at": "TEST_STALE_TIME_SECRET",
+        },
+    ] + [f"slot_{index}" for index in range(4, 30)]
+
+    result = extract_stale_slot_ids(values)
+
+    assert result[0] == "slot_1"
+    assert "slot_2" in result
+    assert "slot_3" in result
+    assert len(result) <= 20
+    assert len(result) == len(set(result))
+    assert "" not in result
+    assert extract_stale_slot_ids("invalid") == []
+
+    # Also test via run_eval to ensure schema matches
+    data = get_collector_shaped_data()
+    data["integrity"]["stale_inflight_slots"] = values
+    code, summary, stdout = run_eval(data)
+    assert code == 0
+
+    safe_summary = parse_safe_summary(stdout)
+    assert safe_summary["stale_slots"]["count"] == len(values)
+    assert len(safe_summary["stale_slots"]["slot_run_ids"]) <= 20
+    
+    assert "TEST_STALE_URL_SECRET" not in summary
+    assert "TEST_STALE_URL_SECRET" not in stdout
+    assert "TEST_STALE_TIME_SECRET" not in summary
+    assert "TEST_STALE_TIME_SECRET" not in stdout
 
 
 def test_collector_integration():
@@ -303,27 +399,66 @@ def test_collector_integration():
     from collect_wp3_readonly_evidence import run_collector
     from test_collect_wp3_readonly_evidence import fake_client_factory, _run_with_mocks, MockArgs
 
+    # Prepare database to inject stale slots and parent integrity failures
+    db = {
+        "content_slot_runs": [
+            {"slot_run_id": "stale_run_1", "status": "RUNNING", "lease_expires_at": "2000-01-01T00:00:00Z"},
+            {"slot_run_id": "stale_run_2", "status": "RUNNING", "lease_expires_at": "2000-01-01T00:00:00Z"},
+            {"account_id": "night_scout", "no_post_reason": "R1"},
+        ],
+        "source_post_media": [
+            {"source_post_id": "p1", "media_index": "1"} # Missing parent
+        ],
+        "media_permissions": [
+            {"source_id": "s1", "permission_status": "approved", "rights_status": "allowed", "evidence_type": "x", "evidence_reference": "y", "allow_analysis": "true", "allow_transcription": "true"}
+        ],
+        "source_accounts": [
+            {"source_id": "s1", "platform": "youtube", "target_account_id": "night_scout", "source_url": "u", "active": "true", "blocked": "false", "review_status": "APPROVED"}
+        ]
+    }
+
     # Run collector to get full report
-    report = _run_with_mocks(fake_client_factory(), MockArgs())
+    report = _run_with_mocks(fake_client_factory(db), MockArgs())
+
+    report["permission_requirements"]["liver_manager"] = {
+        "status": "PASS",
+        "required_source_ids": ["s2"],
+        "valid_source_ids": [],
+        "missing_or_invalid_source_ids": ["s2"],
+    }
+    report["overall_status"] = "PASS"
 
     # Evaluate it
     code, summary, stdout = run_eval(report)
     assert code == 0
 
-    import json
-    for line in stdout.split("\n"):
-        if line.startswith("WP3_SAFE_SUMMARY_JSON="):
-            safe_summary = json.loads(line.replace("WP3_SAFE_SUMMARY_JSON=", ""))
-            break
+    safe_summary = parse_safe_summary(stdout)
 
     assert safe_summary["credentials"]["night_threads"] == "PRESENT"
     assert safe_summary["text_pipeline"]["night_scout"]["ready_text_count"] == 0
     assert safe_summary["source_status"]["night_source_post_count"] == 0
-    assert safe_summary["permission_requirements"]["night_scout"]["status"] == "BLOCKED"
+    
     assert safe_summary["integrity"]["duplicate_queue_count"] == 0
-    assert safe_summary["parent_integrity"]["failure_count"] == 0
-    assert safe_summary["stale_slots"]["count"] == 0
-    assert safe_summary["no_post_reason_codes"] == {'night_scout': {}, 'liver_manager': {}}
+    
+    # Assert concrete parent failure integration
+    assert safe_summary["parent_integrity"]["failure_count"] == 1
+    assert safe_summary["parent_integrity"]["failures"][0]["reason"] == "PARENT_NOT_FOUND"
+    assert safe_summary["parent_integrity"]["failures"][0]["id"] == "p1"
+    assert "url" not in safe_summary["parent_integrity"]["failures"][0]
+    assert "raw" not in safe_summary["parent_integrity"]["failures"][0]
+    assert safe_summary["parent_integrity"]["reason_counts"]["PARENT_NOT_FOUND"] == 1
+
+    # Assert concrete stale slot integration
+    assert safe_summary["stale_slots"]["count"] == 2
+    assert "stale_run_1" in safe_summary["stale_slots"]["slot_run_ids"]
+    assert "stale_run_2" in safe_summary["stale_slots"]["slot_run_ids"]
+    assert isinstance(safe_summary["stale_slots"]["slot_run_ids"], list)
+
+    # Assert fixed codes for no-post reason
+    assert safe_summary["no_post_reason_codes"]["night_scout"]["OTHER_REDACTED"] == 1
+    
+    # Assert permission warnings
+    assert "LIVER_HAS_PARTIAL_PERMISSION_COVERAGE" in safe_summary["permission_warnings"]
 
     check_secrets(summary, stdout)
 
@@ -360,7 +495,10 @@ def run_all():
     test_workflow_no_cat_or_echo_full()
 
     test_evaluator_schema_alignment()
+    test_parent_integrity_full_count_and_safe_detail_limit()
+    test_extract_stale_slot_ids_contract()
     test_collector_integration()
+    
     test_eval_missing_json()
     test_eval_malformed_json()
     test_eval_unknown_status()
