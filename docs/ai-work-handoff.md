@@ -1,5 +1,57 @@
 # AI Work Handoff
 
+## 2026-07-25 Antigravity 複数AI引き継ぎ基盤
+
+- 使用ツール: Antigravity
+- audited main SHA: `56fae006bde664b85d7024d88450119fce31878d`
+- branch: `docs/multi-agent-handoff`
+- PR: `#25`
+- final CI run: `30138528733`
+- final CI result: `SUCCESS`
+- 実装変更: なし
+- 本番投稿: なし
+- schedule変更: なし
+- secret変更: なし
+- permission変更: なし
+
+### 実施内容
+
+- `AGENTS.md`新設
+- `START_HERE.md`新設
+- `docs/current-work.md`新設
+- 複数AIの役割・正本順位・衝突防止規約を整備
+- 旧`goal-status.json`を手作業で部分更新しないルールを追加
+- PR #25内の文書整合性を修正
+
+### 現在の状態
+
+- no-post media preparation canaryはNight/Liverとも完走済み
+- 実Threads投稿は未実施
+- Goal用direct media READY inventoryは未確認
+- Goal用generated clip READY inventoryは未確認
+- text-only資格情報、READY在庫、no-post理由はWP3残存検証
+- Xとbeautyは現在Goal対象外
+
+### 正しい次工程
+
+1. PR #25をCI通過後にmerge
+2. mainを更新
+3. WP3残存検証
+4. WP4 Goal用media inventory
+5. WP5 4本production canary
+6. WP6 35/35最終評価
+
+### 外部ブロッカー
+
+- Liver Manager用の承認済みThreads source account URLは未確認
+- Threads token状態は未確認
+- permission ledger状態はWP3で確認
+
+### 注意
+
+`docs/goal-status.json`は旧snapshotのままであり、WP6の機械評価まで最新状態として扱わない。
+
+
 ## 2026-07-22 Codex WP-C bounded media caption generation
 
 ### 本システムについて / 変更ファイル一覧

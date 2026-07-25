@@ -1,0 +1,23 @@
+- active status: HANDED_OFF
+- assigned agent: Antigravity
+- tool: Antigravity
+- branch: `docs/multi-agent-handoff`
+- task: PR #25 multi-agent handoff documentation consistency correction
+- files in scope:
+  - `AGENTS.md`
+  - `START_HERE.md`
+  - `docs/current-work.md`
+  - `docs/ai-work-handoff.md`
+  - `docs/goal-status.json`のPR変更取消し
+- files not to touch:
+  - production code
+  - workflows
+  - `GOAL.md`
+  - `config/goal_acceptance.json`
+  - secrets
+  - permission data
+- related Work Package: Admin / Handoff
+- related PR: `#25`
+- handoff status: COMPLETE
+- CI run ID: 30138528733
+- CI result: SUCCESS
