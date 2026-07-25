@@ -7,9 +7,8 @@
 - design authority: ChatGPT lead review
 - branch: `ops/wp3-readonly-baseline`
 - PR: `#26` (UNMERGED)
-- CI failure run: `30140582896`
-- CI failure reason: `test_collect_wp3_readonly_evidence.py` and `test_wp3_readonly_workflow.py` were not properly executing as tests in the repository test suite due to missing `if __name__ == "__main__":` blocks.
-- CI fixed run ID: 30141417862
+- final CI run: 30142149386
+- final CI result: SUCCESS
 - external writes: none
 - SNS posts: none
 - source fetch: none

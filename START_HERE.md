@@ -15,7 +15,7 @@
 - current task: WP3-A read-only production baseline
 - current branch: ops/wp3-readonly-baseline
 - related PR: #26
-- document_status: `PR_PENDING`
+- document_status: `IMPLEMENTED_BUT_UNVERIFIED_IN_PRODUCTION`
 
 この文書内に、文書自身を含む最終commit SHAを固定値で記録しない。
 最新のPR headはGitHubのPR #26を参照する。
