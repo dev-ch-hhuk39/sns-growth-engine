@@ -7,8 +7,9 @@
 - design authority: ChatGPT lead review
 - branch: `ops/wp3-readonly-baseline`
 - PR: `#26` (UNMERGED)
-- final CI run: 30142149386
-- final CI result: SUCCESS
+- implementation validation CI run: 30143305370
+- implementation validation CI result: SUCCESS
+- final PR head CI: PR #26を参照
 - external writes: none
 - SNS posts: none
 - source fetch: none
