@@ -2,9 +2,9 @@
   "schema_version": 1,
   "generated_at": "2026-07-22T09:41:28+09:00",
   "audit_scope": "planning_checkpoint_before_low_cost_implementation",
-  "implementation_head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
-  "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3",
-  "branch": "feature/oss-github-actions-media-autopilot",
+  "implementation_head": "56fae006bde664b85d7024d88450119fce31878d",
+  "origin_main": "56fae006bde664b85d7024d88450119fce31878d",
+  "branch": "docs/multi-agent-handoff",
   "repository_visibility": "PRIVATE",
   "summary": {
     "pass": 17,
