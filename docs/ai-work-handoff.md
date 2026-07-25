@@ -1,25 +1,55 @@
 # AI Work Handoff
 
-## 2026-07-25 Antigravity 複数AI間の引き継ぎ基盤整備と現在状態監査
+## 2026-07-25 Antigravity 複数AI引き継ぎ基盤
 
-* **日時**: 2026-07-25T09:48:00+09:00
-* **使用したAIまたはツール**: Antigravity
-* **開始HEAD**: `56fae006bde664b85d7024d88450119fce31878d`
-* **終了HEAD**: `10a6e491ddd0d8b30d16c5184e3ea0be7c6cc37c`
-* **使用branch**: `docs/multi-agent-handoff`
-* **実施内容**: 複数AIが円滑に引き継ぎを行うための共通ドキュメント基盤の整備と、リポジトリの最新状態の監査を実施。
-* **変更ファイル**: `AGENTS.md` (新規作成), `START_HERE.md` (新規作成), `docs/current-work.md` (新規作成), `docs/ai-work-handoff.md`, `docs/goal-status.json`
-* **実行したテスト**: ドキュメントのみの変更のため既存CIの整合性チェックに依存
-* **GitHub Actions run ID**: N/A (PR #25 作成済み・CI実行待ち)
-* **PR番号**: #25
-* **merge状況**: PR作成済み・未マージ
-* **実投稿の有無**: なし
-* **READY在庫の増減**: なし
-* **発見した問題**: `docs/goal-status.json` が古いHEAD (`026ed40b65d2c708673313286c8bc9a914b1efe7`) を指していたため更新が必要。
-* **未完了事項**: WP 4〜6の実装、本番canary、schedule有効化は着手せず保留。
-* **次の推奨作業**: 残っているWP 4〜6の実装、本番canary、schedule有効化。
-* **外部ブロッカー**: なし
-* **変更してはいけない箇所**: `GOAL.md`、既存コード、実投稿・X投稿・beauty操作に関する箇所。
+- 使用ツール: Antigravity
+- audited main SHA: `56fae006bde664b85d7024d88450119fce31878d`
+- branch: `docs/multi-agent-handoff`
+- PR: `#25`
+- initial CI run: `30137581879`
+- initial CI result: `SUCCESS`
+- 実装変更: なし
+- 本番投稿: なし
+- schedule変更: なし
+- secret変更: なし
+- permission変更: なし
+
+### 実施内容
+
+- `AGENTS.md`新設
+- `START_HERE.md`新設
+- `docs/current-work.md`新設
+- 複数AIの役割・正本順位・衝突防止規約を整備
+- 旧`goal-status.json`を手作業で部分更新しないルールを追加
+- PR #25内の文書整合性を修正
+
+### 現在の状態
+
+- no-post media preparation canaryはNight/Liverとも完走済み
+- 実Threads投稿は未実施
+- Goal用direct media READY inventoryは未確認
+- Goal用generated clip READY inventoryは未確認
+- text-only資格情報、READY在庫、no-post理由はWP3残存検証
+- Xとbeautyは現在Goal対象外
+
+### 正しい次工程
+
+1. PR #25をCI通過後にmerge
+2. mainを更新
+3. WP3残存検証
+4. WP4 Goal用media inventory
+5. WP5 4本production canary
+6. WP6 35/35最終評価
+
+### 外部ブロッカー
+
+- Liver Manager用の承認済みThreads source account URLは未確認
+- Threads token状態は未確認
+- permission ledger状態はWP3で確認
+
+### 注意
+
+`docs/goal-status.json`は旧snapshotのままであり、WP6の機械評価まで最新状態として扱わない。
 
 
 ## 2026-07-22 Codex WP-C bounded media caption generation
