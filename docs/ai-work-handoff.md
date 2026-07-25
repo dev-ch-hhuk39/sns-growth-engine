@@ -1,5 +1,33 @@
 # AI Work Handoff
 
+## 2026-07-25 Antigravity WP3-B Diagnostic Fidelity
+
+- 使用ツール: Antigravity
+- audited main SHA: `304a2c126223199a0d3554ed78509ea3652d2198`
+- branch: `ops/wp3b-diagnostic-fidelity`
+- PR: `TBD`
+- PR #26 merge: `304a2c126223199a0d3554ed78509ea3652d2198`
+- post-merge CI: 30146464509 / SUCCESS
+- WP3 production read-only run: 30146525043 / FAILURE
+- safe summary classification FAIL
+- external writesなし
+- parent integrity 6件
+- stale slots 2件
+- Liver Threads source missing
+- credentialsはUNVERIFIEDとして再分類
+- 次工程WP3-B
+
+### 実施内容
+
+- `wp3-production-readonly-verification.yml` に Threads と Cloudinary のシークレット参照を追加した。
+- `evaluate_wp3_readonly_workflow_result.py` に `credential_evidence` schema、parent integrity details、stale slot IDs、permission warnings、および `no_post_reason_codes` のマッピング処理を追加実装した。
+- `test_wp3_readonly_workflow.py` に検証用のテストを追加した。
+- 各種ドキュメント（`START_HERE.md`, `docs/ai-work-handoff.md`, `docs/current-work.md`）を更新した。
+
+### 現在の状態
+
+- CI確認待ちの段階。
+- 本番dispatchや外部変更は一切行われていない。
 ## 2026-07-25 Antigravity WP3-A Read-only Production Baseline Fixes
 
 - 使用ツール: Antigravity

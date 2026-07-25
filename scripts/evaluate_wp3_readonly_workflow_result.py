@@ -9,6 +9,27 @@ def safe_int(value) -> int:
     except (TypeError, ValueError):
         return 0
 
+def classify_no_post_reason(value: str) -> str:
+    if "stale_slot_claim_requires_explicit_recovery" in value:
+        return "STALE_SLOT_REQUIRES_RECOVERY"
+    if "same text/account/platform/media already POSTED" in value or "same text/account/platform already POSTED" in value:
+        return "DUPLICATE_CONTENT_ALREADY_POSTED"
+    if "missed_text_slot_aftercare" in value:
+        return "MISSED_TEXT_SLOT_AFTERCARE"
+    if "COMMAND_FAILED" in value:
+        return "COMMAND_FAILED"
+    if "EMPTY_TEXT" in value:
+        return "EMPTY_TEXT"
+    if "ALLOW_MEDIA_POSTS=true and ALLOW_REAL_THREADS_VIDEO_POST=true are required" in value:
+        return "MEDIA_POST_GATES_DISABLED"
+    if "generated_clip_recovery_no_eligible_media_candidate" in value:
+        return "NO_ELIGIBLE_MEDIA_CANDIDATE"
+    if "TimeoutError" in value:
+        return "THREADS_API_TIMEOUT"
+    if "RuntimeError" in value:
+        return "THREADS_API_RUNTIME_ERROR"
+    return "OTHER_REDACTED"
+
 def build_safe_summary(report: dict) -> dict:
     sheets_info = report.get("sheets_verifier", {})
     creds = report.get("credentials", {})
@@ -24,15 +45,55 @@ def build_safe_summary(report: dict) -> dict:
             "waiting_review_count": safe_int(account_data.get("waiting_review_count")),
             "processing_count": safe_int(account_data.get("processing_count")),
             "posted_text_count": safe_int(account_data.get("posted_text_count")),
-            "no_post_reasons": (
-                account_data.get("no_post_reasons", {})
-                if isinstance(account_data.get("no_post_reasons", {}), dict)
-                else {}
-            ),
         }
 
     night_sources = si.get("night_scout", {})
     liver_sources = si.get("liver_manager", {})
+    
+    # Process no_post_reasons
+    no_post_reason_codes = {"night_scout": {}, "liver_manager": {}}
+    for account_id in ["night_scout", "liver_manager"]:
+        reasons = tp.get(account_id, {}).get("no_post_reasons", {})
+        if isinstance(reasons, dict):
+            for reason_str, count in reasons.items():
+                code = classify_no_post_reason(reason_str)
+                no_post_reason_codes[account_id][code] = no_post_reason_codes[account_id].get(code, 0) + safe_int(count)
+    
+    # Process permission warnings
+    permission_warnings = []
+    night_pr = pr.get("night_scout", {})
+    if night_pr.get("status") == "PASS" and night_pr.get("missing_or_invalid_source_ids"):
+        permission_warnings.append("NIGHT_HAS_PARTIAL_PERMISSION_COVERAGE")
+        
+    liver_pr = pr.get("liver_manager", {})
+    if liver_pr.get("status") == "PASS" and liver_pr.get("missing_or_invalid_source_ids"):
+        permission_warnings.append("LIVER_HAS_PARTIAL_PERMISSION_COVERAGE")
+
+    # Process parent integrity
+    allowed_parent_integrity_reasons = {
+        "EMPTY_SOURCE_POST_ID",
+        "PARENT_NOT_FOUND",
+        "DUPLICATE_MEDIA_INDEX",
+        "CANONICAL_POST_URL_MISMATCH",
+        "MEDIA_COUNT_MISMATCH"
+    }
+    
+    parent_integrity_failures_raw = ig.get("parent_integrity_failures", [])
+    parent_integrity_failures_safe = []
+    parent_reason_counts = {}
+    for failure in parent_integrity_failures_raw[:50]:
+        reason = failure.get("reason", "")
+        safe_reason = reason if reason in allowed_parent_integrity_reasons else "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+        parent_integrity_failures_safe.append({
+            "id": failure.get("id", ""),
+            "reason": safe_reason,
+            "account_id": failure.get("account_id", "")
+        })
+        parent_reason_counts[safe_reason] = parent_reason_counts.get(safe_reason, 0) + 1
+        
+    # Process stale slots
+    stale_slots_raw = ig.get("stale_inflight_slots", [])
+    stale_slots_safe = [s.get("slot_run_id", "") for s in stale_slots_raw[:20] if "slot_run_id" in s]
 
     return {
         "schema_version": 1,
@@ -54,10 +115,17 @@ def build_safe_summary(report: dict) -> dict:
             "cloudinary_api_key": creds.get("Cloudinary api_key", "MISSING"),
             "cloudinary_api_secret": creds.get("Cloudinary api_secret", "MISSING")
         },
+        "credential_evidence": {
+            "threads_status_basis": "ENV_OR_TOKEN_FILE_PRESENCE_ONLY",
+            "cloudinary_status_basis": "ENV_PRESENCE_ONLY",
+            "api_validity": "UNVERIFIED",
+            "posting_capability": "NOT_TESTED"
+        },
         "text_pipeline": {
             "night_scout": get_tp_stats("night_scout"),
             "liver_manager": get_tp_stats("liver_manager")
         },
+        "no_post_reason_codes": no_post_reason_codes,
         "source_status": {
             "liver_threads_source_classification": report.get("liver_threads_source_classification", ""),
             "night_source_post_count": safe_int(night_sources.get("source_post_count")),
@@ -67,24 +135,34 @@ def build_safe_summary(report: dict) -> dict:
         },
         "permission_requirements": {
             "night_scout": {
-                "status": pr.get("night_scout", {}).get("status", "BLOCKED"),
-                "required_count": len(pr.get("night_scout", {}).get("required_source_ids", [])),
-                "valid_count": len(pr.get("night_scout", {}).get("valid_source_ids", [])),
-                "missing_or_invalid_source_ids": pr.get("night_scout", {}).get("missing_or_invalid_source_ids", [])
+                "status": night_pr.get("status", "BLOCKED"),
+                "required_count": len(night_pr.get("required_source_ids", [])),
+                "valid_count": len(night_pr.get("valid_source_ids", [])),
+                "missing_or_invalid_source_ids": night_pr.get("missing_or_invalid_source_ids", [])
             },
             "liver_manager": {
-                "status": pr.get("liver_manager", {}).get("status", "BLOCKED"),
-                "required_count": len(pr.get("liver_manager", {}).get("required_source_ids", [])),
-                "valid_count": len(pr.get("liver_manager", {}).get("valid_source_ids", [])),
-                "missing_or_invalid_source_ids": pr.get("liver_manager", {}).get("missing_or_invalid_source_ids", [])
+                "status": liver_pr.get("status", "BLOCKED"),
+                "required_count": len(liver_pr.get("required_source_ids", [])),
+                "valid_count": len(liver_pr.get("valid_source_ids", [])),
+                "missing_or_invalid_source_ids": liver_pr.get("missing_or_invalid_source_ids", [])
             }
         },
+        "permission_warnings": permission_warnings,
         "integrity": {
             "duplicate_queue_count": len(ig.get("duplicate_queue_ids", [])),
             "duplicate_slot_key_count": len(ig.get("duplicate_slot_idempotency_keys", [])),
-            "stale_inflight_slot_count": len(ig.get("stale_inflight_slots", [])),
+            "stale_inflight_slot_count": len(stale_slots_raw),
             "unauthorized_ready_media_count": len(ig.get("unauthorized_ready_media", [])),
-            "parent_integrity_failure_count": len(ig.get("parent_integrity_failures", []))
+            "parent_integrity_failure_count": len(parent_integrity_failures_raw)
+        },
+        "parent_integrity": {
+            "failure_count": len(parent_integrity_failures_raw),
+            "reason_counts": parent_reason_counts,
+            "failures": parent_integrity_failures_safe
+        },
+        "stale_slots": {
+            "count": len(stale_slots_raw),
+            "slot_run_ids": stale_slots_safe
         },
         "missing_tabs": report.get("missing_tabs", []),
         "read_errors": [{"tab": e.get("tab", ""), "error_type": e.get("error_type", "")} for e in report.get("read_errors", [])]
@@ -109,28 +187,37 @@ def render_markdown_summary(summary: dict) -> str:
         f"**Liver text READY**: {summary.get('text_pipeline', {}).get('liver_manager', {}).get('ready_text_count')}",
         "",
         "### Credentials & Source Status",
+        f"**Credential evidence basis**: {summary.get('credential_evidence', {}).get('threads_status_basis')}",
         f"**Night Threads credential**: {summary.get('credentials', {}).get('night_threads')}",
         f"**Liver Threads credential**: {summary.get('credentials', {}).get('liver_threads')}",
+        f"**Cloudinary credential status**: {summary.get('credentials', {}).get('cloudinary_api_key')}",
         f"**Liver Threads source classification**: {summary.get('source_status', {}).get('liver_threads_source_classification')}",
         "",
         "### Permissions",
         f"**Night permission status**: {summary.get('permission_requirements', {}).get('night_scout', {}).get('status')}",
+        f"**Night permission missing IDs**: {summary.get('permission_requirements', {}).get('night_scout', {}).get('missing_or_invalid_source_ids')}",
         f"**Liver permission status**: {summary.get('permission_requirements', {}).get('liver_manager', {}).get('status')}",
+        f"**Liver permission missing IDs**: {summary.get('permission_requirements', {}).get('liver_manager', {}).get('missing_or_invalid_source_ids')}",
+        f"**Permission warnings**: {summary.get('permission_warnings', [])}",
         "",
         "### Integrity",
         f"**Duplicate queue count**: {summary.get('integrity', {}).get('duplicate_queue_count')}",
         f"**Duplicate slot count**: {summary.get('integrity', {}).get('duplicate_slot_key_count')}",
         f"**Stale slot count**: {summary.get('integrity', {}).get('stale_inflight_slot_count')}",
+        f"**Stale slot IDs**: {summary.get('stale_slots', {}).get('slot_run_ids')}",
         f"**Unauthorized READY media count**: {summary.get('integrity', {}).get('unauthorized_ready_media_count')}",
         f"**Parent integrity failure count**: {summary.get('integrity', {}).get('parent_integrity_failure_count')}",
+        f"**Parent integrity reason counts**: {summary.get('parent_integrity', {}).get('reason_counts')}",
+        f"**Parent integrity safe details**: {summary.get('parent_integrity', {}).get('failures')}",
         "",
         "### Other",
+        f"**No-post reason codes**: {summary.get('no_post_reason_codes', {})}",
         f"**Missing tabs**: {summary.get('missing_tabs', [])}",
         f"**Read errors**: {summary.get('read_errors', [])}",
         f"**Status reasons**: {summary.get('status_reasons', [])}",
         ""
     ]
-    return "\n".join(md) + "\n"
+    return "\\n".join(md) + "\\n"
 
 def evaluate_report(report: dict, summary_path: str) -> int:
     status = report.get("overall_status")

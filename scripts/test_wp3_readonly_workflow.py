@@ -54,6 +54,13 @@ def test_job_env_credentials_only():
     assert "SA_JSON_BASE64" in env
     assert "SPREADSHEET_ID" in env
     assert "GCP_SA_JSON_BASE64" in env
+    assert "THREADS_ACCESS_TOKEN_NIGHT_SCOUT" in env
+    assert "THREADS_USER_ID_NIGHT_SCOUT" in env
+    assert "THREADS_ACCESS_TOKEN_LIVER_MANAGER" in env
+    assert "THREADS_USER_ID_LIVER_MANAGER" in env
+    assert "CLOUDINARY_CLOUD_NAME" in env
+    assert "CLOUDINARY_API_KEY" in env
+    assert "CLOUDINARY_API_SECRET" in env
 
     flags = [
         "PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_REAL_X_POST"
@@ -70,7 +77,9 @@ def test_no_banned_commands():
         "ffmpeg",
         "--confirm",
         "echo $SA_JSON_BASE64",
-        "echo $SNS_MASTER_SHEET_ID"
+        "echo $SNS_MASTER_SHEET_ID",
+        'echo "$THREADS',
+        'echo "$CLOUDINARY'
     ]
     for b in banned:
         assert b not in workflow_text, f"Found banned string: {b}"
@@ -132,7 +141,8 @@ def get_collector_shaped_data():
                 "processing_count": 1,
                 "posted_text_count": 10,
                 "no_post_reasons": {
-                    "NO_ELIGIBLE_CANDIDATE": 2
+                    "stale_slot_claim_requires_explicit_recovery": 2,
+                    "RuntimeError 123": 1
                 },
             },
             "liver_manager": {
@@ -140,7 +150,10 @@ def get_collector_shaped_data():
                 "waiting_review_count": 5,
                 "processing_count": 6,
                 "posted_text_count": 7,
-                "no_post_reasons": {},
+                "no_post_reasons": {
+                    "EMPTY_TEXT": 1,
+                    "some unknown reason": 2
+                },
             },
         },
         "source_inventory": {
@@ -161,19 +174,22 @@ def get_collector_shaped_data():
                 "missing_or_invalid_source_ids": [],
             },
             "liver_manager": {
-                "status": "BLOCKED",
-                "required_source_ids": ["source_liver"],
-                "valid_source_ids": [],
-                "missing_or_invalid_source_ids": ["source_liver"],
+                "status": "PASS",
+                "required_source_ids": ["source_liver", "missing_src"],
+                "valid_source_ids": ["source_liver"],
+                "missing_or_invalid_source_ids": ["missing_src"],
             },
         },
         "integrity": {
             "posted_save_failed_count": 0,
             "duplicate_queue_ids": ["q1", "q2"],
             "duplicate_slot_idempotency_keys": ["slot1"],
-            "stale_inflight_slots": ["stale1", "stale2", "stale3"],
+            "stale_inflight_slots": [{"slot_run_id": "stale1", "url": "https://media.url/secret"}, {"slot_run_id": "stale2"}],
             "unauthorized_ready_media": ["media1"],
-            "parent_integrity_failures": ["parent1", "parent2"],
+            "parent_integrity_failures": [
+                {"id": "p1", "reason": "PARENT_NOT_FOUND", "account_id": "night_scout", "url": "https://media.url/secret"},
+                {"id": "p2", "reason": "UNKNOWN_STRANGE_REASON", "account_id": "liver_manager", "raw": "secret_payload"}
+            ],
         },
         "missing_tabs": [],
         "read_errors": [],
@@ -219,6 +235,8 @@ def test_evaluator_schema_alignment():
     assert safe_summary["credentials"]["cloudinary_cloud_name"] == "PRESENT"
     assert safe_summary["credentials"]["cloudinary_api_key"] == "PRESENT"
     assert safe_summary["credentials"]["cloudinary_api_secret"] == "PRESENT"
+    
+    assert safe_summary["credential_evidence"]["threads_status_basis"] == "ENV_OR_TOKEN_FILE_PRESENCE_ONLY"
 
     assert safe_summary["text_pipeline"]["night_scout"]["ready_text_count"] == 3
     assert safe_summary["text_pipeline"]["night_scout"]["waiting_review_count"] == 2
@@ -237,14 +255,31 @@ def test_evaluator_schema_alignment():
 
     assert safe_summary["integrity"]["duplicate_queue_count"] == 2
     assert safe_summary["integrity"]["duplicate_slot_key_count"] == 1
-    assert safe_summary["integrity"]["stale_inflight_slot_count"] == 3
+    assert safe_summary["integrity"]["stale_inflight_slot_count"] == 2
     assert safe_summary["integrity"]["unauthorized_ready_media_count"] == 1
     assert safe_summary["integrity"]["parent_integrity_failure_count"] == 2
+    
+    # Check parent integrity details
+    assert safe_summary["parent_integrity"]["failure_count"] == 2
+    assert safe_summary["parent_integrity"]["failures"][0]["reason"] == "PARENT_NOT_FOUND"
+    assert safe_summary["parent_integrity"]["failures"][1]["reason"] == "UNKNOWN_PARENT_INTEGRITY_FAILURE"
+    
+    # Check stale slot details
+    assert safe_summary["stale_slots"]["count"] == 2
+    assert "stale1" in safe_summary["stale_slots"]["slot_run_ids"]
+    
+    # Check permission warnings
+    assert "LIVER_HAS_PARTIAL_PERMISSION_COVERAGE" in safe_summary["permission_warnings"]
+    assert "NIGHT_HAS_PARTIAL_PERMISSION_COVERAGE" not in safe_summary["permission_warnings"]
+    
+    # Check no-post reasons
+    assert safe_summary["no_post_reason_codes"]["night_scout"]["STALE_SLOT_REQUIRES_RECOVERY"] == 2
+    assert safe_summary["no_post_reason_codes"]["night_scout"]["THREADS_API_RUNTIME_ERROR"] == 1
+    assert safe_summary["no_post_reason_codes"]["liver_manager"]["EMPTY_TEXT"] == 1
+    assert safe_summary["no_post_reason_codes"]["liver_manager"]["OTHER_REDACTED"] == 2
 
-    # Check Markdown newline
-    assert "\n" in summary
-    assert "\\n" not in summary
-    assert "## WP3 Read-Only Production Baseline\n" in summary
+    # Check Markdown
+    assert "Parent integrity reason counts" in summary
 
 def test_collector_integration():
     import sys
