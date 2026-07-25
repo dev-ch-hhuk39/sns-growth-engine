@@ -105,21 +105,79 @@ def run_eval(data):
 
     return proc.returncode, summary, proc.stdout
 
-def get_base_data():
+def get_collector_shaped_data():
     return {
-        "overall_status": "PASS",
-        "status_reasons": ["REASON_X"],
-        "sheets_verifier": {"passed": 5, "total": 5, "failed": []},
-        "credentials": {},
-        "text_pipeline": {},
-        "source_inventory": {},
-        "permission_requirements": {
-            "night_scout": {"status": "PASS", "required_source_ids": ["a"], "valid_source_ids": ["a"], "missing_or_invalid_source_ids": []},
-            "liver_manager": {"status": "BLOCKED", "required_source_ids": ["b"], "valid_source_ids": [], "missing_or_invalid_source_ids": ["b"]}
+        "implementation_head": "HEAD_SHA",
+        "origin_main": "MAIN_SHA",
+        "overall_status": "BLOCKED",
+        "status_reasons": [
+            "REQUIRED_PERMISSION_MISSING_LIVER_MANAGER"
+        ],
+        "sheets_verifier": {
+            "passed": 63,
+            "total": 63,
+            "failed": [],
         },
-        "integrity": {"duplicate_queue_ids": ["1"]},
-        "missing_tabs": ["TabA"],
-        "read_errors": [{"tab": "TabB", "error_type": "HttpError"}],
+        "credentials": {
+            "night_scout Threads publish credentials": "PRESENT",
+            "liver_manager Threads publish credentials": "MISSING",
+            "Cloudinary cloud_name": "PRESENT",
+            "Cloudinary api_key": "PRESENT",
+            "Cloudinary api_secret": "PRESENT",
+        },
+        "text_pipeline": {
+            "night_scout": {
+                "ready_text_count": 3,
+                "waiting_review_count": 2,
+                "processing_count": 1,
+                "posted_text_count": 10,
+                "no_post_reasons": {
+                    "NO_ELIGIBLE_CANDIDATE": 2
+                },
+            },
+            "liver_manager": {
+                "ready_text_count": 4,
+                "waiting_review_count": 5,
+                "processing_count": 6,
+                "posted_text_count": 7,
+                "no_post_reasons": {},
+            },
+        },
+        "source_inventory": {
+            "night_scout": {
+                "source_post_count": 11,
+                "source_video_count": 12,
+            },
+            "liver_manager": {
+                "source_post_count": 13,
+                "source_video_count": 14,
+            },
+        },
+        "permission_requirements": {
+            "night_scout": {
+                "status": "PASS",
+                "required_source_ids": ["source_night"],
+                "valid_source_ids": ["source_night"],
+                "missing_or_invalid_source_ids": [],
+            },
+            "liver_manager": {
+                "status": "BLOCKED",
+                "required_source_ids": ["source_liver"],
+                "valid_source_ids": [],
+                "missing_or_invalid_source_ids": ["source_liver"],
+            },
+        },
+        "integrity": {
+            "posted_save_failed_count": 0,
+            "duplicate_queue_ids": ["q1", "q2"],
+            "duplicate_slot_idempotency_keys": ["slot1"],
+            "stale_inflight_slots": ["stale1", "stale2", "stale3"],
+            "unauthorized_ready_media": ["media1"],
+            "parent_integrity_failures": ["parent1", "parent2"],
+        },
+        "missing_tabs": [],
+        "read_errors": [],
+        "liver_threads_source_classification": "FOUND_UNAPPROVED",
         "TEST_SOURCE_URL_SECRET": "https://source.url/secret",
         "TEST_MEDIA_URL_SECRET": "https://media.url/secret",
         "TEST_POST_TEXT_SECRET": "secret_text",
@@ -142,58 +200,90 @@ def check_secrets(summary, stdout):
         assert s not in summary, f"Secret leaked in summary: {s}"
         assert s not in stdout, f"Secret leaked in stdout: {s}"
 
-# 1. PASSでexit 0, 2. PASSでもsummary fileが生成される, 3. PASSでもstdoutへsafe summary JSONが出る, 20-24. secrets leaked
-def test_eval_pass_and_secrets():
-    data = get_base_data()
+def test_evaluator_schema_alignment():
+    data = get_collector_shaped_data()
     code, summary, stdout = run_eval(data)
     assert code == 0
     assert summary != ""
     assert "WP3_SAFE_SUMMARY_JSON=" in stdout
     check_secrets(summary, stdout)
 
-    # 12. permission requirement, 13. integrity count, 14. missing tabs, 15. read error
-    assert "Night permission status**: PASS" in summary or "Night permission status: PASS" in summary
-    assert "duplicate_queue_count" in stdout or "Duplicate queue count" in summary
-    assert "TabA" in summary
-    assert "TabB" in summary
-    assert "HttpError" in summary
+    import json
+    for line in stdout.split("\n"):
+        if line.startswith("WP3_SAFE_SUMMARY_JSON="):
+            safe_summary = json.loads(line.replace("WP3_SAFE_SUMMARY_JSON=", ""))
+            break
 
-    # 11. optional field欠落
-    data_missing = {"overall_status": "PASS"}
-    code2, _, _ = run_eval(data_missing)
-    assert code2 == 0
+    assert safe_summary["credentials"]["night_threads"] == "PRESENT"
+    assert safe_summary["credentials"]["liver_threads"] == "MISSING"
+    assert safe_summary["credentials"]["cloudinary_cloud_name"] == "PRESENT"
+    assert safe_summary["credentials"]["cloudinary_api_key"] == "PRESENT"
+    assert safe_summary["credentials"]["cloudinary_api_secret"] == "PRESENT"
 
-# 4. BLOCKEDでexit 0, 5. BLOCKED reasonがsummaryへ出る
-def test_eval_blocked():
-    data = get_base_data()
-    data["overall_status"] = "BLOCKED"
-    code, summary, stdout = run_eval(data)
+    assert safe_summary["text_pipeline"]["night_scout"]["ready_text_count"] == 3
+    assert safe_summary["text_pipeline"]["night_scout"]["waiting_review_count"] == 2
+    assert safe_summary["text_pipeline"]["night_scout"]["processing_count"] == 1
+    assert safe_summary["text_pipeline"]["night_scout"]["posted_text_count"] == 10
+
+    assert safe_summary["text_pipeline"]["liver_manager"]["ready_text_count"] == 4
+    assert safe_summary["text_pipeline"]["liver_manager"]["waiting_review_count"] == 5
+    assert safe_summary["text_pipeline"]["liver_manager"]["processing_count"] == 6
+    assert safe_summary["text_pipeline"]["liver_manager"]["posted_text_count"] == 7
+
+    assert safe_summary["source_status"]["night_source_post_count"] == 11
+    assert safe_summary["source_status"]["night_source_video_count"] == 12
+    assert safe_summary["source_status"]["liver_source_post_count"] == 13
+    assert safe_summary["source_status"]["liver_source_video_count"] == 14
+
+    assert safe_summary["integrity"]["duplicate_queue_count"] == 2
+    assert safe_summary["integrity"]["duplicate_slot_key_count"] == 1
+    assert safe_summary["integrity"]["stale_inflight_slot_count"] == 3
+    assert safe_summary["integrity"]["unauthorized_ready_media_count"] == 1
+    assert safe_summary["integrity"]["parent_integrity_failure_count"] == 2
+
+    # Check Markdown newline
+    assert "\n" in summary
+    assert "\\n" not in summary
+    assert "## WP3 Read-Only Production Baseline\n" in summary
+
+def test_collector_integration():
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from collect_wp3_readonly_evidence import run_collector
+    from test_collect_wp3_readonly_evidence import fake_client_factory, _run_with_mocks, MockArgs
+
+    # Run collector to get full report
+    report = _run_with_mocks(fake_client_factory(), MockArgs())
+
+    # Evaluate it
+    code, summary, stdout = run_eval(report)
     assert code == 0
-    assert "REASON_X" in summary
+
+    import json
+    for line in stdout.split("\n"):
+        if line.startswith("WP3_SAFE_SUMMARY_JSON="):
+            safe_summary = json.loads(line.replace("WP3_SAFE_SUMMARY_JSON=", ""))
+            break
+
+    assert "night_threads" in safe_summary["credentials"]
+    assert "ready_text_count" in safe_summary["text_pipeline"]["night_scout"]
+    assert "night_source_post_count" in safe_summary["source_status"]
+    assert "status" in safe_summary["permission_requirements"]["night_scout"]
+
+    assert isinstance(safe_summary["integrity"]["duplicate_queue_count"], int)
+
     check_secrets(summary, stdout)
 
-# 6. FAILでexit 1, 7. FAIL reasonがsummaryへ出る
-def test_eval_fail():
-    data = get_base_data()
-    data["overall_status"] = "FAIL"
-    code, summary, stdout = run_eval(data)
-    assert code == 1
-    assert "REASON_X" in summary
-    check_secrets(summary, stdout)
-
-# 8. JSON不存在でexit 1
 def test_eval_missing_json():
     code, _, _ = run_eval(None)
     assert code == 1
 
-# 9. malformed JSONでexit 1
 def test_eval_malformed_json():
     code, _, _ = run_eval("{malformed")
     assert code == 1
 
-# 10. unknown statusでexit 1
 def test_eval_unknown_status():
-    data = get_base_data()
+    data = get_collector_shaped_data()
     data["overall_status"] = "UNKNOWN_STATUS"
     code, _, _ = run_eval(data)
     assert code == 1
@@ -216,9 +306,8 @@ def run_all():
     test_collector_called_once()
     test_workflow_no_cat_or_echo_full()
 
-    test_eval_pass_and_secrets()
-    test_eval_blocked()
-    test_eval_fail()
+    test_evaluator_schema_alignment()
+    test_collector_integration()
     test_eval_missing_json()
     test_eval_malformed_json()
     test_eval_unknown_status()

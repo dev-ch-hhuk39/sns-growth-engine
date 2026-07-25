@@ -3,6 +3,12 @@ import sys
 import json
 import os
 
+def safe_int(value) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
 def build_safe_summary(report: dict) -> dict:
     sheets_info = report.get("sheets_verifier", {})
     creds = report.get("credentials", {})
@@ -11,16 +17,22 @@ def build_safe_summary(report: dict) -> dict:
     pr = report.get("permission_requirements", {})
     ig = report.get("integrity", {})
 
-    def get_tp_stats(acc):
-        acc_tp = tp.get(acc, {})
-        if not acc_tp: return {"ready_text_count": 0, "waiting_review_count": 0, "processing_count": 0, "posted_text_count": 0, "no_post_reasons": {}}
+    def get_tp_stats(account_id: str) -> dict:
+        account_data = tp.get(account_id, {})
         return {
-            "ready_text_count": len(acc_tp.get("ready", [])),
-            "waiting_review_count": len(acc_tp.get("waiting_review", [])),
-            "processing_count": len(acc_tp.get("processing", [])),
-            "posted_text_count": len(acc_tp.get("posted", [])),
-            "no_post_reasons": acc_tp.get("no_post_reasons", {})
+            "ready_text_count": safe_int(account_data.get("ready_text_count")),
+            "waiting_review_count": safe_int(account_data.get("waiting_review_count")),
+            "processing_count": safe_int(account_data.get("processing_count")),
+            "posted_text_count": safe_int(account_data.get("posted_text_count")),
+            "no_post_reasons": (
+                account_data.get("no_post_reasons", {})
+                if isinstance(account_data.get("no_post_reasons", {}), dict)
+                else {}
+            ),
         }
+
+    night_sources = si.get("night_scout", {})
+    liver_sources = si.get("liver_manager", {})
 
     return {
         "schema_version": 1,
@@ -36,11 +48,11 @@ def build_safe_summary(report: dict) -> dict:
             "posted_save_failed_count": ig.get("posted_save_failed_count", 0)
         },
         "credentials": {
-            "night_threads": creds.get("night_scout_threads", "MISSING"),
-            "liver_threads": creds.get("liver_manager_threads", "MISSING"),
-            "cloudinary_cloud_name": creds.get("cloudinary_cloud_name", "MISSING"),
-            "cloudinary_api_key": creds.get("cloudinary_api_key", "MISSING"),
-            "cloudinary_api_secret": creds.get("cloudinary_api_secret", "MISSING")
+            "night_threads": creds.get("night_scout Threads publish credentials", "MISSING"),
+            "liver_threads": creds.get("liver_manager Threads publish credentials", "MISSING"),
+            "cloudinary_cloud_name": creds.get("Cloudinary cloud_name", "MISSING"),
+            "cloudinary_api_key": creds.get("Cloudinary api_key", "MISSING"),
+            "cloudinary_api_secret": creds.get("Cloudinary api_secret", "MISSING")
         },
         "text_pipeline": {
             "night_scout": get_tp_stats("night_scout"),
@@ -48,10 +60,10 @@ def build_safe_summary(report: dict) -> dict:
         },
         "source_status": {
             "liver_threads_source_classification": report.get("liver_threads_source_classification", ""),
-            "night_source_post_count": si.get("night_source_posts_count", 0),
-            "liver_source_post_count": si.get("liver_source_posts_count", 0),
-            "night_source_video_count": si.get("night_source_videos_count", 0),
-            "liver_source_video_count": si.get("liver_source_videos_count", 0)
+            "night_source_post_count": safe_int(night_sources.get("source_post_count")),
+            "liver_source_post_count": safe_int(liver_sources.get("source_post_count")),
+            "night_source_video_count": safe_int(night_sources.get("source_video_count")),
+            "liver_source_video_count": safe_int(liver_sources.get("source_video_count"))
         },
         "permission_requirements": {
             "night_scout": {
@@ -118,7 +130,7 @@ def render_markdown_summary(summary: dict) -> str:
         f"**Status reasons**: {summary.get('status_reasons', [])}",
         ""
     ]
-    return "\\n".join(md)
+    return "\n".join(md) + "\n"
 
 def evaluate_report(report: dict, summary_path: str) -> int:
     status = report.get("overall_status")
