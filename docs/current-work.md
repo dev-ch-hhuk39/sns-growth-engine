@@ -8,5 +8,5 @@
 - files in scope: scripts/collect_wp3_readonly_evidence.py, scripts/test_collect_wp3_readonly_evidence.py, scripts/test_wp3_readonly_workflow.py, .github/workflows/wp3-production-readonly-verification.yml
 - files not to touch: production posting、media preparation、Goal定義、secrets
 - handoff status: COMPLETE
-- CI run ID: PENDING_NEW_RUN
+- CI run ID: 30141417862
 - CI result: PENDING
