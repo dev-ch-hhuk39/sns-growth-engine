@@ -5,7 +5,7 @@ import os
 import sys
 import hashlib
 from urllib.parse import urlsplit, urlunsplit
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, str(ROOT))
@@ -23,9 +23,27 @@ TARGET_SLOT_RUN_IDS = (
     "slot_20260724_liver_manager_lm_2100_pdca",
 )
 
-TARGET_PERMISSION_SOURCE_IDS = (
-    "src_lm_yt_cand_001",
+CHILD_HASH_FIELDS = (
+    "source_post_media_id",
+    "source_post_id",
+    "media_index",
+    "canonical_post_url",
+    "content_hash",
+    "original_media_url",
+    "cloudinary_public_id",
+    "media_asset_id",
+    "updated_at",
 )
+
+ALLOWED_RIGHTS_STATUSES = {
+    "allowed",
+    "approved",
+    "owned",
+    "licensed",
+    "approved_creator_clip",
+    "approved_media",
+    "own_media",
+}
 
 def safe_int(val, default=0):
     try:
@@ -33,6 +51,11 @@ def safe_int(val, default=0):
         return int(float(val))
     except (ValueError, TypeError):
         return default
+
+def media_index_sort_key(value):
+    if isinstance(value, int):
+        return (0, value)
+    return (1, str(value))
 
 def canonicalize_source_url(value: str) -> str:
     if not value:
@@ -136,16 +159,22 @@ def classify_asset_relation(rows: list[dict]) -> str:
             if a1 and a2 and a1 == a2:
                 return "SAME_ASSET"
                 
-    # Check if there's sufficient distinct signals
-    for r in rows:
-        h = str(r.get("content_hash", ""))
-        m = canonicalize_source_url(str(r.get("original_media_url", "")))
-        c = str(r.get("cloudinary_public_id", ""))
-        a = str(r.get("media_asset_id", ""))
-        if not (h or m or c or a):
-            return "UNKNOWN"
+    sig_fields = ["content_hash", "original_media_url", "cloudinary_public_id", "media_asset_id"]
+    for field in sig_fields:
+        vals = set()
+        all_present = True
+        for r in rows:
+            v = str(r.get(field, ""))
+            if field == "original_media_url":
+                v = canonicalize_source_url(v)
+            if not v:
+                all_present = False
+                break
+            vals.add(v)
+        if all_present and len(vals) == len(rows):
+            return "DISTINCT_ASSET"
             
-    return "DISTINCT_ASSET"
+    return "UNKNOWN"
 
 def plan_parent_repair(
     parent_id: str,
@@ -211,7 +240,8 @@ def plan_parent_repair(
     duplicate_index_groups = []
     all_child_ids_seen = set()
     
-    for idx, items in sorted(idx_groups.items(), key=lambda x: (str(x[0]) if not isinstance(x[0], int) else x[0])):
+    for idx in sorted(idx_groups.keys(), key=media_index_sort_key):
+        items = idx_groups[idx]
         for it in items:
             cid = str(it.get("source_post_media_id", ""))
             if cid in all_child_ids_seen:
@@ -273,7 +303,7 @@ def plan_parent_repair(
     ))
         
     phash = generate_hash({k: p.get(k, "") for k in ["source_post_id", "target_account_id", "canonical_post_url", "media_count", "updated_at"]})
-    chashes = {str(c.get("source_post_media_id", "")): generate_hash({k: c.get(k, "") for k in ["source_post_media_id", "source_post_id", "media_index", "canonical_post_url", "updated_at"]}) for c in child_rows if str(c.get("source_post_media_id", ""))}
+    chashes = {str(c.get("source_post_media_id", "")): generate_hash({k: c.get(k, "") for k in CHILD_HASH_FIELDS}) for c in child_rows if str(c.get("source_post_media_id", ""))}
     
     return {
         "source_post_id": parent_id,
@@ -362,28 +392,58 @@ def plan_stale_slot_review(
         "precondition_hash": generate_hash({k: s.get(k, "") for k in sorted(s.keys()) if k not in ["post_url"]})
     }
 
+def parse_target_account_ids(raw_val: str) -> set:
+    if not raw_val:
+        return set()
+    v = raw_val.strip()
+    if v.startswith("[") and v.endswith("]"):
+        try:
+            arr = json.loads(v)
+            if isinstance(arr, list):
+                return set(str(x).strip() for x in arr if str(x).strip())
+        except Exception:
+            pass
+    if "|" in v:
+        return set(x.strip() for x in v.split("|") if x.strip())
+    if "," in v:
+        return set(x.strip() for x in v.split(",") if x.strip())
+    return {v}
+
 def evaluate_external_blockers(
     source_accounts: list[dict],
     media_permissions: list[dict],
+    accounts: list[dict],
     *,
     now: datetime,
 ) -> list[dict]:
     blockers = []
     
+    # Pre-compute destination handles
+    dest_handles = set()
+    for acc in accounts:
+        h = str(acc.get("threads_handle", "")).strip()
+        if h:
+            dest_handles.add(canonicalize_source_url(f"https://threads.net/@{h}"))
+    
     # 1. Liver Threads source
     liver_threads_found = False
     for a in source_accounts:
         t_id = str(a.get("target_account_id", ""))
-        t_ids = str(a.get("target_account_ids", ""))
+        t_ids = parse_target_account_ids(str(a.get("target_account_ids", "")))
         plat = str(a.get("platform", "")).lower() or str(a.get("source_platform", "")).lower()
-        if ("liver_manager" in t_id or "liver_manager" in t_ids) and "threads" in plat:
+        
+        if (t_id == "liver_manager" or "liver_manager" in t_ids) and "threads" in plat:
             act = str(a.get("active", "")).lower()
             blk = str(a.get("blocked", "")).lower()
             url = str(a.get("source_url", ""))
             rev = str(a.get("review_status", "")).upper()
             cand = str(a.get("candidate_status", "")).upper()
-            dest = str(a.get("destination_account", "")).lower()
-            if act == "true" and blk != "true" and url and (rev == "APPROVED" or cand == "APPROVED") and dest != "true":
+            
+            c_url = canonicalize_source_url(url)
+            if c_url in dest_handles:
+                continue
+                
+            if act == "true" and blk != "true" and url and (rev == "APPROVED" or cand == "APPROVED"):
                 liver_threads_found = True
                 break
                 
@@ -397,11 +457,14 @@ def evaluate_external_blockers(
     perm_rows = [p for p in media_permissions if str(p.get("source_id", "")) == "src_lm_yt_cand_001"]
     valid_perm = False
     if perm_rows:
-        # Get latest by updated_at or approved_at
+        for i, r in enumerate(perm_rows):
+            r["_original_index"] = i
+            
         def perm_sort_key(r):
             u = str(r.get("updated_at", ""))
             a = str(r.get("approved_at", ""))
-            return (u, a)
+            return (u, a, r["_original_index"])
+            
         latest = sorted(perm_rows, key=perm_sort_key)[-1]
         
         rev = str(latest.get("revoked", "")).lower()
@@ -411,6 +474,7 @@ def evaluate_external_blockers(
         ev_ref = str(latest.get("evidence_reference", ""))
         
         expired = False
+        malformed_lease = False
         exp = str(latest.get("expires_at", ""))
         if exp:
             try:
@@ -421,9 +485,12 @@ def evaluate_external_blockers(
                 if dt < now:
                     expired = True
             except Exception:
-                pass
+                malformed_lease = True
+                expired = True # Treat malformed as invalid
                 
-        if rev != "true" and p_stat in {"approved", "granted"} and r_stat in {"approved", "granted", "permitted", "allowed", "ok"} and not expired and ev_type and ev_ref:
+        if (rev != "true" and p_stat in {"approved", "granted"} and 
+            r_stat in ALLOWED_RIGHTS_STATUSES and not expired and not malformed_lease and 
+            ev_type and ev_ref):
             valid_perm = True
             
     if not valid_perm:
@@ -450,6 +517,7 @@ def build_repair_plan(
     posted_results = datasets.get("posted_results", [])
     media_permissions = datasets.get("media_permissions", [])
     source_accounts = datasets.get("source_accounts", [])
+    accounts = datasets.get("accounts", [])
     
     sheets_verifier = {
         "passed": safe_int(verifier_result.get("passed")),
@@ -457,10 +525,6 @@ def build_repair_plan(
         "failed_count": len(verifier_result.get("failed", []))
     }
     
-    status_reasons = set()
-    if sheets_verifier["failed_count"] > 0:
-        status_reasons.add("SHEETS_VERIFIER_FAILED")
-        
     parent_repairs = []
     for pid in TARGET_SOURCE_POST_IDS:
         p_rows = [r for r in source_posts if str(r.get("source_post_id", "")) == pid]
@@ -476,24 +540,28 @@ def build_repair_plan(
         rev = plan_stale_slot_review(sid, s_rows, q_by_id, r_by_id, now=now)
         stale_slot_reviews.append(rev)
         
-    ext_blockers = evaluate_external_blockers(source_accounts, media_permissions, now=now)
+    ext_blockers = evaluate_external_blockers(source_accounts, media_permissions, accounts, now=now)
     
     overall = "READY_FOR_REVIEW"
-    if status_reasons or ext_blockers:
-        overall = "BLOCKED"
-        
-    for p in parent_repairs:
-        if not p.get("apply_eligible") or p.get("blocker_codes"):
-            overall = "BLOCKED"
-        if not p.get("parent_precondition_hash"):
-            overall = "BLOCKED"
-            
-    for s in stale_slot_reviews:
-        if s.get("recommendation") == "MANUAL_REVIEW":
-            overall = "BLOCKED"
-            
+    
     if sheets_verifier["failed_count"] > 0:
         overall = "FAIL"
+        
+    # Check blocked conditions
+    blocking_codes = {
+        "PARENT_NOT_FOUND", "MULTIPLE_PARENTS", "SLOT_NOT_FOUND", "MULTIPLE_SLOTS",
+        "CHILD_ID_MISSING", "DUPLICATE_CHILD_ID"
+    }
+    
+    for p in parent_repairs:
+        if set(p.get("blocker_codes", [])) & blocking_codes:
+            if overall != "FAIL": overall = "BLOCKED"
+        if not p.get("parent_precondition_hash"):
+            if overall != "FAIL": overall = "BLOCKED"
+            
+    for s in stale_slot_reviews:
+        if set(s.get("blocker_codes", [])) & blocking_codes:
+            if overall != "FAIL": overall = "BLOCKED"
 
     return {
         "schema_version": 1,
@@ -501,7 +569,7 @@ def build_repair_plan(
         "implementation_head": implementation_head,
         "origin_main": origin_main,
         "overall_status": overall,
-        "status_reasons": sorted(list(status_reasons)),
+        "status_reasons": ["SHEETS_VERIFIER_FAILED"] if sheets_verifier["failed_count"] > 0 else [],
         "safety": {},
         "sheets_verifier": sheets_verifier,
         "parent_repairs": parent_repairs,
@@ -524,7 +592,6 @@ def _get_git_origin_main() -> str:
         return ""
 
 def main():
-    # Only allow --output
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
@@ -572,7 +639,7 @@ def main():
 
     tabs = [
         "source_posts", "source_post_media", "content_slot_runs",
-        "queue", "posted_results", "media_permissions", "source_accounts"
+        "queue", "posted_results", "media_permissions", "source_accounts", "accounts"
     ]
     for t in tabs:
         datasets[t] = fetch_records(t)

@@ -54,15 +54,15 @@ jobs:
           PLANNER_EXIT=$?
           set -e
           
-          LINE_COUNT=$(grep -c 'WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
+          LINE_COUNT=$(grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
           if [ "$LINE_COUNT" -ne 1 ]; then
              echo "Error: Expected exactly 1 WP3C_SAFE_REPAIR_PLAN_JSON= line, got $LINE_COUNT"
              exit 1
           fi
           
-          PLAN_JSON=$(grep 'WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log | sed 's/WP3C_SAFE_REPAIR_PLAN_JSON=//')
+          PLAN_LINE=$(grep '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log)
+          PLAN_JSON=${PLAN_LINE#WP3C_SAFE_REPAIR_PLAN_JSON=}
           
-          # Try parsing JSON to ensure it's valid
           if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then
              echo "Error: Failed to parse safe JSON"
              exit 1

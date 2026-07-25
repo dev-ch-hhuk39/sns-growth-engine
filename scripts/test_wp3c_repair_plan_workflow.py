@@ -1,6 +1,9 @@
 import unittest
 import yaml
 import os
+import subprocess
+import tempfile
+import json
 
 class TestWP3CRepairPlanWorkflow(unittest.TestCase):
     def setUp(self):
@@ -81,10 +84,10 @@ class TestWP3CRepairPlanWorkflow(unittest.TestCase):
         self.assertNotIn("--repair", self.workflow_text)
 
     def test_17_19_20_safe_line_check(self):
-        self.assertIn('LINE_COUNT=$(grep -c \'WP3C_SAFE_REPAIR_PLAN_JSON=\' /tmp/wp3c_stdout.log || true)', self.workflow_text)
+        self.assertIn("grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON='", self.workflow_text)
         self.assertIn('if [ "$LINE_COUNT" -ne 1 ]; then', self.workflow_text)
         self.assertIn('exit 1', self.workflow_text)
-
+        
     def test_18_malformed_json_fail(self):
         self.assertIn('echo "$PLAN_JSON" | jq . > /dev/null 2>&1', self.workflow_text)
         
@@ -99,6 +102,59 @@ class TestWP3CRepairPlanWorkflow(unittest.TestCase):
 
     def test_25_no_echo_secret(self):
         self.assertNotIn('echo "${{ secrets', self.workflow_text)
+
+    def run_sh_helper(self, script_body: str):
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            f.write(script_body)
+            f_name = f.name
+        try:
+            res = subprocess.run(["bash", f_name], capture_output=True, text=True)
+            return res.returncode
+        finally:
+            os.remove(f_name)
+
+    def test_prefix_shell_valid(self):
+        sh = """
+        echo 'WP3C_SAFE_REPAIR_PLAN_JSON={"a": 1}' > /tmp/wp3c_stdout.log
+        LINE_COUNT=$(grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
+        if [ "$LINE_COUNT" -ne 1 ]; then exit 1; fi
+        PLAN_LINE=$(grep '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log)
+        PLAN_JSON=${PLAN_LINE#WP3C_SAFE_REPAIR_PLAN_JSON=}
+        if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then exit 1; fi
+        exit 0
+        """
+        self.assertEqual(self.run_sh_helper(sh), 0)
+
+    def test_prefix_shell_zero(self):
+        sh = """
+        echo 'foo' > /tmp/wp3c_stdout.log
+        LINE_COUNT=$(grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
+        if [ "$LINE_COUNT" -ne 1 ]; then exit 1; fi
+        exit 0
+        """
+        self.assertEqual(self.run_sh_helper(sh), 1)
+
+    def test_prefix_shell_two(self):
+        sh = """
+        echo 'WP3C_SAFE_REPAIR_PLAN_JSON={"a": 1}' > /tmp/wp3c_stdout.log
+        echo 'WP3C_SAFE_REPAIR_PLAN_JSON={"b": 1}' >> /tmp/wp3c_stdout.log
+        LINE_COUNT=$(grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
+        if [ "$LINE_COUNT" -ne 1 ]; then exit 1; fi
+        exit 0
+        """
+        self.assertEqual(self.run_sh_helper(sh), 1)
+
+    def test_prefix_shell_malformed(self):
+        sh = """
+        echo 'WP3C_SAFE_REPAIR_PLAN_JSON={malformed' > /tmp/wp3c_stdout.log
+        LINE_COUNT=$(grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
+        if [ "$LINE_COUNT" -ne 1 ]; then exit 1; fi
+        PLAN_LINE=$(grep '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log)
+        PLAN_JSON=${PLAN_LINE#WP3C_SAFE_REPAIR_PLAN_JSON=}
+        if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then exit 1; fi
+        exit 0
+        """
+        self.assertEqual(self.run_sh_helper(sh), 1)
 
 if __name__ == '__main__':
     unittest.main()
