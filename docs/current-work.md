@@ -1,23 +1,9 @@
-- active status: HANDED_OFF
+- active status: COMPLETED
 - assigned agent: Antigravity
 - tool: Antigravity
-- branch: `docs/multi-agent-handoff`
-- task: PR #25 multi-agent handoff documentation consistency correction
-- files in scope:
-  - `AGENTS.md`
-  - `START_HERE.md`
-  - `docs/current-work.md`
-  - `docs/ai-work-handoff.md`
-  - `docs/goal-status.json`のPR変更取消し
-- files not to touch:
-  - production code
-  - workflows
-  - `GOAL.md`
-  - `config/goal_acceptance.json`
-  - secrets
-  - permission data
-- related Work Package: Admin / Handoff
-- related PR: `#25`
-- handoff status: COMPLETE
-- CI run ID: 30138528733
-- CI result: SUCCESS
+- branch: `ops/wp3-readonly-baseline`
+- task: WP3-A read-only production baseline実装完了
+- related Work Package: WP3-A
+- files in scope: この指示で明示されたファイル
+- files not to touch: production posting、media preparation、Goal定義、secrets
+- handoff status: COMPLETED

@@ -1,5 +1,39 @@
 # AI Work Handoff
 
+## 2026-07-25 Antigravity WP3-A Read-only Production Baseline
+
+- 使用ツール: Antigravity
+- audited main SHA: `56fae006bde664b85d7024d88450119fce31878d`
+- branch: `ops/wp3-readonly-baseline`
+- PR: `#26`
+- 実装変更: `scripts/collect_wp3_readonly_evidence.py`, `scripts/test_collect_wp3_readonly_evidence.py`, `.github/workflows/wp3-production-readonly-verification.yml`, `scripts/test_wp3_readonly_workflow.py`を追加・修正。
+- 本番投稿: なし (厳格なread-only baseline)
+- schedule変更: なし
+- secret変更: なし
+- permission変更: なし
+
+### 実施内容
+
+- `collect_wp3_readonly_evidence.py`を実装し、Google Sheetsへの書き込み・外部へのネットワーク通信を一切行わずに本番状況を検証するread-only collectorを作成した。
+- `test_collect_wp3_readonly_evidence.py`で書き込みメソッドを例外化し、safety flagとJSON schemaの動作を検証した。
+- `wp3-production-readonly-verification.yml`を追加し、PUBLISH_ENABLED等のsafety flagをfalseに固定、credentials persistをfalseにした環境でcollectorを実行・検証するGitHub Actions workflowを作成した。
+- `test_wp3_readonly_workflow.py`でworkflowの設定値(on: workflow_dispatchのみ、env flagsがfalse等)を検証した。
+- リポジトリテスト(651件)およびworkflow safetyテストすべてにPASS。
+
+### 現在の状態
+
+- WP3-A のread-only検証基盤が実装完了。
+- 投稿・取得などは一切実行していない。
+
+### 正しい次工程
+
+1. WP3-A PR #26のCIを待ってmerge。
+2. mainを更新後、本番環境でWP3の残存検証 (workflow実行) を実施 (WP3 B-F)。
+3. WP4 Goal用media inventory
+4. WP5 4本production canary
+5. WP6 35/35最終評価
+
+
 ## 2026-07-25 Antigravity 複数AI引き継ぎ基盤
 
 - 使用ツール: Antigravity
