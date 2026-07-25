@@ -1,5 +1,32 @@
 # AI Work Handoff
 
+## 2026-07-25 Antigravity WP3-B Diagnostic Fidelity
+
+- design authority: ChatGPT lead review
+- WP3-B implementation: COMPLETE
+- implementation validation CI: 30148951779 / SUCCESS
+- final PR head CI: GitHub PR #27 metadataを正本とする
+- production workflow dispatch: NONE
+- production Sheets read in this PR: NONE
+- external writes: NONE
+- API credential validity test: NONE
+- PR #27: UNMERGED
+- next action: merge後、read-only workflowを1回だけdispatch
+- parent integrity failures: 6
+- stale slots: 2
+- Liver Threads source: MISSING
+- credentials: UNVERIFIED before WP3-B secret injection
+
+### 実施内容
+
+- `wp3-production-readonly-verification.yml` に Threads と Cloudinary のシークレット参照を追加した。
+- `evaluate_wp3_readonly_workflow_result.py` に `credential_evidence` schema、parent integrity details、stale slot IDs、permission warnings、および `no_post_reason_codes` のマッピング処理を追加実装した。
+- `test_wp3_readonly_workflow.py` に検証用のテストを追加した。
+- 各種ドキュメント（`START_HERE.md`, `docs/ai-work-handoff.md`, `docs/current-work.md`）を更新した。
+
+### 現在の状態
+
+- 本番dispatchや外部変更は一切行われていない。
 ## 2026-07-25 Antigravity WP3-A Read-only Production Baseline Fixes
 
 - 使用ツール: Antigravity
@@ -5824,3 +5851,15 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   順番に進める。Goal設計の作り直しはしない。
 - 推奨実装モデルはGPT-5.6 Terra、思考力medium。テスト再実行・format・docs同期
   だけlow可。設計矛盾/security incident/provider全fallback破綻時だけ最上位へ戻す。
+
+## 2026-07-25: WP3-B Diagnostic Fidelity Boundary Contracts (Antigravity)
+
+**実行内容:**
+- `evaluate_wp3_readonly_workflow_result.py` と `test_wp3_readonly_workflow.py` における parent integrity limit と stale slots の boundary contracts の追加実装を完了した。
+- `scripts/test_wp3_readonly_workflow.py` の `test_collector_integration` が collector モックの `db` 状態と合致し、全アサーションをパスするよう修正した。
+- unit test 652件パスを確認後、commitし、CI(ID: `30148951779`)がSUCCESSであることを確認した。
+- 指示に従い PR #27 の title, body を更新した。
+
+**次のAIへの申し送り事項:**
+- `ops/wp3b-diagnostic-fidelity` でのschema修正、boundary contractテスト追加、CI確認は完了している。
+- 次は指示に従ってPR #27をmergeし、本番read-only workflowを1回だけdispatchすることになるため、ユーザーの指示を待つ。

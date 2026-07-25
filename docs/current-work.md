@@ -1,13 +1,20 @@
 - active status: HANDED_OFF
 - assigned agent: Antigravity
 - tool: Antigravity
-- branch: ops/wp3-readonly-baseline
-- task: WP3-A read-only production baseline
-- related Work Package: WP3-A
-- related PR: #26
-- files in scope: scripts/collect_wp3_readonly_evidence.py, scripts/test_collect_wp3_readonly_evidence.py, scripts/test_wp3_readonly_workflow.py, .github/workflows/wp3-production-readonly-verification.yml
+- branch: ops/wp3b-diagnostic-fidelity
+- task: WP3-B diagnostic fidelity
+- related Work Package: WP3-B
+- related PR: #27
+- files in scope:
+  - scripts/evaluate_wp3_readonly_workflow_result.py
+  - scripts/test_wp3_readonly_workflow.py
+  - .github/workflows/wp3-production-readonly-verification.yml
+  - scripts/test_all_workflows_safety_flags.py
+  - START_HERE.md
+  - docs/current-work.md
+  - docs/ai-work-handoff.md
 - files not to touch: production posting、media preparation、Goal定義、secrets
 - handoff status: COMPLETE
-- implementation validation CI run ID: 30144585103
+- implementation validation CI run ID: 30148951779
 - implementation validation CI result: SUCCESS
-- final PR head CI: GitHub PR #26 metadataを正本とする
+- final PR head CI: GitHub PR #27 metadataを正本とする

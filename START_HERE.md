@@ -2,23 +2,38 @@
 
 ## 文書情報
 
-- updated_at: 2026-07-25T11:30:00+09:00
+- updated_at: 2026-07-25T15:15:00+09:00
 - updated_by: Antigravity
-- document_branch: `ops/wp3-readonly-baseline`
-- related_pr: `#26`
-- audited_main_sha: `21bc7f8f64e8fac8faf6ba33918c5d5ca6d00a56`
-- audited_origin_main_sha: `21bc7f8f64e8fac8faf6ba33918c5d5ca6d00a56`
-- PR #25: MERGED
-- PR #25 merge commit: `21bc7f8f64e8fac8faf6ba33918c5d5ca6d00a56`
-- post-merge CI: 30138819291
-- post-merge CI result: SUCCESS
-- current task: WP3-A read-only production baseline
-- current branch: ops/wp3-readonly-baseline
-- related PR: #26
-- document_status: `IMPLEMENTED_BUT_UNVERIFIED_IN_PRODUCTION`
+- document_branch: `ops/wp3b-diagnostic-fidelity`
+- related_pr: `#27`
+- audited_main_sha: `304a2c126223199a0d3554ed78509ea3652d2198`
+- audited_origin_main_sha: `304a2c126223199a0d3554ed78509ea3652d2198`
+- PR #26: MERGED
+- PR #26 merge commit: `304a2c126223199a0d3554ed78509ea3652d2198`
+- post-merge CI: 30146464509 / SUCCESS
+- WP3 production read-only run: 30146525043 / FAILURE
+- current task: WP3-B diagnostic fidelity
+- current branch: ops/wp3b-diagnostic-fidelity
+- document_status: `PRODUCTION_BASELINE_FAILED_DIAGNOSTICS_IN_PROGRESS`
+
+Confirmed hard failure:
+- parent integrity failures: 6
+
+Confirmed blockers:
+- Liver Threads source: MISSING
+
+Unverified due workflow secret injection gap:
+- Night Threads credential
+- Liver Threads credential
+- Cloudinary credentials
+
+Additional diagnostics:
+- stale inflight slots: 2
+- Liver permission partial coverage:
+  missing_or_invalid_source_id = src_lm_yt_cand_001
 
 この文書内に、文書自身を含む最終commit SHAを固定値で記録しない。
-最新のPR headはGitHubのPR #26を参照する。
+最新のPR headはGitHubのPR #27を参照する。
 
 ## 最終Goal
 

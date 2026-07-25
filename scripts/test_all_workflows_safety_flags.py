@@ -161,6 +161,35 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
     # 例外: autonomous-growth-loop.yml は初回Actions apply成功後の明示方針として、
     # scheduleでもThreads text-only applyを許可する。ただしdry-run先行、kill_switch、
     # X/media/download/cut/upload/transcription禁止、confirm/schedule if gateを必須にする。
+    if name == "wp3-production-readonly-verification.yml":
+        checks.append((f"{name} has workflow_dispatch", "workflow_dispatch:" in text))
+        checks.append((f"{name} has no schedule", "schedule:" not in text))
+        checks.append((f"{name} has Night Threads token secret", "THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT || secrets.THREADS_ACCESS_TOKEN }}" in text))
+        checks.append((f"{name} has Night Threads user ID secret", "THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT || secrets.THREADS_USER_ID }}" in text))
+        checks.append((f"{name} has Liver Threads token secret", "THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER || secrets.THREADS_ACCESS_TOKEN }}" in text))
+        checks.append((f"{name} has Liver Threads user ID secret", "THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER || secrets.THREADS_USER_ID }}" in text))
+        checks.append((f"{name} has Cloudinary name secret", "CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}" in text))
+        checks.append((f"{name} has Cloudinary api key secret", "CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}" in text))
+        checks.append((f"{name} has Cloudinary api secret secret", "CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}" in text))
+        checks.append((f"{name} has no X credentials", all(x not in text for x in [
+            "X_API_KEY:", "X_API_SECRET:", "X_ACCESS_TOKEN:", "X_ACCESS_TOKEN_SECRET:",
+            "X_CLIENT_ID:", "X_CLIENT_SECRET:", "X_BEARER_TOKEN:", "X_OAUTH2_ACCESS_TOKEN:", "X_OAUTH2_REFRESH_TOKEN:"
+        ])))
+        checks.append((f"{name} does not echo tokens", 'echo "$THREADS' not in text and 'echo "$CLOUDINARY' not in text))
+        checks.append((f"{name} has no echo of secret values", 'echo "${{ secrets' not in text))
+        checks.append((f"{name} posting gates remain disabled", all(flag in text for flag in [
+            'PUBLISH_ENABLED: "false"', 'ALLOW_REAL_THREADS_POST: "false"',
+            'ALLOW_REAL_X_POST: "false"', 'ALLOW_VIDEO_DOWNLOAD: "false"',
+            'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"',
+            'ALLOW_MEDIA_POSTS: "false"', 'ALLOW_REAL_THREADS_VIDEO_POST: "false"',
+            'ALLOW_TRANSCRIPTION_API: "false"'
+        ])))
+        checks.append((f"{name} has no artifact upload", "actions/upload-artifact" not in text))
+        checks.append((f"{name} has no full evidence report output", "cat /tmp/wp3_evidence.json" not in text and "echo $WP3_EVIDENCE" not in text))
+        checks.append((f"{name} has no source fetch", "acquire_approved_source_posts.py" not in text))
+        checks.append((f"{name} has no publisher", "threads_publisher.py" not in text))
+        return checks
+
     on_val = _get_on(wf)
     has_schedule = isinstance(on_val, dict) and "schedule" in on_val
     if has_schedule:
@@ -261,6 +290,7 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
                 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_REAL_X_POST: "false"',
             ]) and "--confirm-real-post" not in text))
             return checks
+
         # ファイル全体で literal "true" フラグ無し。
         lower = text.lower()
         for flag in WATCHED_FLAGS:
