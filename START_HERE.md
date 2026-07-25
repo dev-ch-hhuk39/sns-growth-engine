@@ -2,16 +2,23 @@
 
 ## 文書情報
 
-- updated_at: 2026-07-25T10:15:00+09:00
+- updated_at: 2026-07-25T11:30:00+09:00
 - updated_by: Antigravity
-- document_branch: `docs/multi-agent-handoff`
-- related_pr: `#25`
-- audited_main_sha: `56fae006bde664b85d7024d88450119fce31878d`
-- audited_origin_main_sha: `56fae006bde664b85d7024d88450119fce31878d`
-- document_status: `PR_PENDING_MERGE`
+- document_branch: `ops/wp3-readonly-baseline`
+- related_pr: `#26`
+- audited_main_sha: `21bc7f8f64e8fac8faf6ba33918c5d5ca6d00a56`
+- audited_origin_main_sha: `21bc7f8f64e8fac8faf6ba33918c5d5ca6d00a56`
+- PR #25: MERGED
+- PR #25 merge commit: `21bc7f8f64e8fac8faf6ba33918c5d5ca6d00a56`
+- post-merge CI: 30138819291
+- post-merge CI result: SUCCESS
+- current task: WP3-A read-only production baseline
+- current branch: ops/wp3-readonly-baseline
+- related PR: #26
+- document_status: `IMPLEMENTED_BUT_UNVERIFIED_IN_PRODUCTION`
 
 この文書内に、文書自身を含む最終commit SHAを固定値で記録しない。
-最新のPR headはGitHubのPR #25を参照する。
+最新のPR headはGitHubのPR #26を参照する。
 
 ## 最終Goal
 
@@ -83,8 +90,7 @@
 
 ## 正しい残作業順序
 
-1. PR #25の文書整合性修正、CI、merge
-2. main更新後、Work Package 3の残存検証
+1. Work Package 3の残存検証
 3. Work Package 4: Goal固有media inventory作成
 4. Work Package 5: 4本のproduction canary
 5. Work Package 6: 最終テスト、証跡生成、35/35評価
