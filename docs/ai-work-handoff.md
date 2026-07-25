@@ -2,20 +2,20 @@
 
 ## 2026-07-25 Antigravity WP3-B Diagnostic Fidelity
 
-- 使用ツール: Antigravity
-- audited main SHA: `304a2c126223199a0d3554ed78509ea3652d2198`
-- branch: `ops/wp3b-diagnostic-fidelity`
-- PR: `#27`
-- PR #26 merge: `304a2c126223199a0d3554ed78509ea3652d2198`
-- post-merge CI: 30146464509 / SUCCESS
-- WP3 production read-only run: 30146525043 / FAILURE
-- safe summary classification FAIL
-- external writesなし
-- parent integrity 6件
-- stale slots 2件
-- Liver Threads source missing
-- credentialsはUNVERIFIEDとして再分類
-- 次工程WP3-B
+- design authority: ChatGPT lead review
+- WP3-B implementation: COMPLETE
+- implementation validation CI: 30148951779 / SUCCESS
+- final PR head CI: GitHub PR #27 metadataを正本とする
+- production workflow dispatch: NONE
+- production Sheets read in this PR: NONE
+- external writes: NONE
+- API credential validity test: NONE
+- PR #27: UNMERGED
+- next action: merge後、read-only workflowを1回だけdispatch
+- parent integrity failures: 6
+- stale slots: 2
+- Liver Threads source: MISSING
+- credentials: UNVERIFIED before WP3-B secret injection
 
 ### 実施内容
 
@@ -26,7 +26,6 @@
 
 ### 現在の状態
 
-- CI確認待ちの段階。
 - 本番dispatchや外部変更は一切行われていない。
 ## 2026-07-25 Antigravity WP3-A Read-only Production Baseline Fixes
 
@@ -5853,15 +5852,14 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 推奨実装モデルはGPT-5.6 Terra、思考力medium。テスト再実行・format・docs同期
   だけlow可。設計矛盾/security incident/provider全fallback破綻時だけ最上位へ戻す。
 
-## 2026-07-25: WP3-B Diagnostic Fidelity Schema Alignment (Antigravity)
+## 2026-07-25: WP3-B Diagnostic Fidelity Boundary Contracts (Antigravity)
 
 **実行内容:**
-- `evaluate_wp3_readonly_workflow_result.py`のスキーマの不整合を修正し、stale slot idやparent integrityをcollectorに合わせて正しく処理できるよう修正した。
-- `test_wp3_readonly_workflow.py`をcollectorモックに合わせたschemaでテストできるよう改修した。
-- `test_all_workflows_safety_flags.py`で安全確認テストがすべての条件で到達可能になるよう改善した。
-- unit test 652件パスを確認後、commitし、CI(ID: `30148433175`)がSUCCESSであることを確認した。
-- 指定されたドキュメントのステータスを更新した。
+- `evaluate_wp3_readonly_workflow_result.py` と `test_wp3_readonly_workflow.py` における parent integrity limit と stale slots の boundary contracts の追加実装を完了した。
+- `scripts/test_wp3_readonly_workflow.py` の `test_collector_integration` が collector モックの `db` 状態と合致し、全アサーションをパスするよう修正した。
+- unit test 652件パスを確認後、commitし、CI(ID: `30148951779`)がSUCCESSであることを確認した。
+- 指示に従い PR #27 の title, body を更新した。
 
 **次のAIへの申し送り事項:**
-- `ops/wp3b-diagnostic-fidelity` でのschema修正とCI確認は完了している。
-- 次は指示に従ってPR #27をmerge、または本番read-only workflowをdispatchすることになるため、ユーザーの指示を待つ。
+- `ops/wp3b-diagnostic-fidelity` でのschema修正、boundary contractテスト追加、CI確認は完了している。
+- 次は指示に従ってPR #27をmergeし、本番read-only workflowを1回だけdispatchすることになるため、ユーザーの指示を待つ。
