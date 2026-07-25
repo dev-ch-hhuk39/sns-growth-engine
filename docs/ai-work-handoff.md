@@ -5,7 +5,7 @@
 - 使用ツール: Antigravity
 - audited main SHA: `304a2c126223199a0d3554ed78509ea3652d2198`
 - branch: `ops/wp3b-diagnostic-fidelity`
-- PR: `TBD`
+- PR: `#27`
 - PR #26 merge: `304a2c126223199a0d3554ed78509ea3652d2198`
 - post-merge CI: 30146464509 / SUCCESS
 - WP3 production read-only run: 30146525043 / FAILURE

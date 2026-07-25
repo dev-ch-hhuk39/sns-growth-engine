@@ -4,7 +4,7 @@
 - branch: ops/wp3b-diagnostic-fidelity
 - task: WP3-B diagnostic fidelity
 - related Work Package: WP3-B
-- related PR: TBD
+- related PR: #27
 - files in scope: scripts/evaluate_wp3_readonly_workflow_result.py, scripts/test_wp3_readonly_workflow.py, .github/workflows/wp3-production-readonly-verification.yml
 - files not to touch: production posting、media preparation、Goal定義、secrets
 - handoff status: IN_PROGRESS

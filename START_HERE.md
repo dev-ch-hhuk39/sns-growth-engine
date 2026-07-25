@@ -5,7 +5,7 @@
 - updated_at: 2026-07-25T15:15:00+09:00
 - updated_by: Antigravity
 - document_branch: `ops/wp3b-diagnostic-fidelity`
-- related_pr: `TBD`
+- related_pr: `#27`
 - audited_main_sha: `304a2c126223199a0d3554ed78509ea3652d2198`
 - audited_origin_main_sha: `304a2c126223199a0d3554ed78509ea3652d2198`
 - PR #26: MERGED
