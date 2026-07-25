@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: sns-growth-wp3-readonly-verification
+  cancel-in-progress: false
+
 env:
   PUBLISH_ENABLED: "false"
   ALLOW_REAL_THREADS_POST: "false"
@@ -21,9 +25,12 @@ jobs:
   readonly_verification:
     runs-on: ubuntu-latest
     environment: production
+    timeout-minutes: 20
     env:
-      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID }}
-      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
 
     steps:
       - name: Checkout Code
@@ -40,12 +47,12 @@ jobs:
       - name: Check Credentials
         run: |
           if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
-            echo "[BLOCKED] Sheets spreadsheet secret is missing." >> $GITHUB_STEP_SUMMARY
+            echo "[\"SHEETS_SPREADSHEET_SECRET_MISSING\"]" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
           if [ -z "$SA_JSON_BASE64" ] && [ -z "$GCP_SA_JSON_BASE64" ]; then
-            echo "[BLOCKED] Sheets service account secret is missing." >> $GITHUB_STEP_SUMMARY
+            echo "[\"SHEETS_SA_SECRET_MISSING\"]" >> $GITHUB_STEP_SUMMARY
             exit 1
           fi
 
@@ -56,31 +63,4 @@ jobs:
         id: collector
         run: |
           python3 scripts/collect_wp3_readonly_evidence.py --output /tmp/wp3_evidence.json
-
-          if [ ! -f /tmp/wp3_evidence.json ]; then
-            echo "Failed to generate report JSON." >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-
-          status=$(jq -r '.overall_status // empty' /tmp/wp3_evidence.json)
-          if [ -z "$status" ]; then
-            echo "Failed to parse JSON." >> $GITHUB_STEP_SUMMARY
-            exit 1
-          fi
-
-          echo "Status: $status" >> $GITHUB_STEP_SUMMARY
-
-          if [ "$status" = "FAIL" ]; then
-            exit 1
-          fi
-
-          if [ "$status" = "BLOCKED" ]; then
-            jq -r '.status_reasons[]' /tmp/wp3_evidence.json >> $GITHUB_STEP_SUMMARY
-            exit 0
-          fi
-
-          if [ "$status" = "PASS" ]; then
-            exit 0
-          fi
-
-          exit 1
+          python3 scripts/evaluate_wp3_readonly_workflow_result.py /tmp/wp3_evidence.json $GITHUB_STEP_SUMMARY

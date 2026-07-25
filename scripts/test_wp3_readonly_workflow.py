@@ -2,6 +2,9 @@
 import os
 import yaml
 import sys
+import subprocess
+import tempfile
+import json
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WF_PATH = os.path.join(ROOT, ".github", "workflows", "wp3-production-readonly-verification.yml")
@@ -49,7 +52,9 @@ def test_job_env_credentials_only():
     env = job.get("env", {})
     assert "SNS_MASTER_SHEET_ID" in env
     assert "SA_JSON_BASE64" in env
-    
+    assert "SPREADSHEET_ID" in env
+    assert "GCP_SA_JSON_BASE64" in env
+
     flags = [
         "PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_REAL_X_POST"
     ]
@@ -73,13 +78,55 @@ def test_no_banned_commands():
 def test_collector_called_once():
     assert workflow_text.count("collect_wp3_readonly_evidence.py") == 1
 
-def test_exit_codes_handled():
-    assert 'exit 1' in workflow_text
-    assert 'exit 0' in workflow_text
-    
-    assert '"$status" = "FAIL"' in workflow_text or 'status == "FAIL"' in workflow_text
-    assert '"$status" = "BLOCKED"' in workflow_text or 'status == "BLOCKED"' in workflow_text
-    assert '"$status" = "PASS"' in workflow_text or 'status == "PASS"' in workflow_text
+def run_eval(data):
+    with tempfile.NamedTemporaryFile("w", delete=False) as jf, tempfile.NamedTemporaryFile("w", delete=False) as sf:
+        if data is not None:
+            json.dump(data, jf)
+        jf.flush()
+
+    cmd = ["python3", "scripts/evaluate_wp3_readonly_workflow_result.py", jf.name if data is not None else "nonexistent", sf.name]
+    proc = subprocess.run(cmd, capture_output=True)
+
+    if os.path.exists(sf.name):
+        with open(sf.name, "r") as f:
+            summary = f.read()
+    else:
+        summary = ""
+
+    if os.path.exists(jf.name): os.unlink(jf.name)
+    if os.path.exists(sf.name): os.unlink(sf.name)
+
+    return proc.returncode, summary
+
+def test_eval_missing_json():
+    code, _ = run_eval(None)
+    assert code == 1
+
+def test_eval_malformed_json():
+    with tempfile.NamedTemporaryFile("w", delete=False) as jf, tempfile.NamedTemporaryFile("w", delete=False) as sf:
+        jf.write("{malformed")
+        jf.flush()
+        proc = subprocess.run(["python3", "scripts/evaluate_wp3_readonly_workflow_result.py", jf.name, sf.name])
+        assert proc.returncode == 1
+        os.unlink(jf.name)
+        os.unlink(sf.name)
+
+def test_eval_fail():
+    code, _ = run_eval({"overall_status": "FAIL"})
+    assert code == 1
+
+def test_eval_blocked():
+    code, summary = run_eval({"overall_status": "BLOCKED", "status_reasons": ["REASON1"]})
+    assert code == 0
+    assert "REASON1" in summary
+
+def test_eval_pass():
+    code, _ = run_eval({"overall_status": "PASS"})
+    assert code == 0
+
+def test_eval_unknown():
+    code, _ = run_eval({"overall_status": "UNKNOWN"})
+    assert code == 1
 
 def run_all():
     test_workflow_dispatch_only()
@@ -90,7 +137,13 @@ def run_all():
     test_job_env_credentials_only()
     test_no_banned_commands()
     test_collector_called_once()
-    test_exit_codes_handled()
+
+    test_eval_missing_json()
+    test_eval_malformed_json()
+    test_eval_fail()
+    test_eval_blocked()
+    test_eval_pass()
+    test_eval_unknown()
 
 if __name__ == "__main__":
     run_all()
