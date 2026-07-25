@@ -8,6 +8,6 @@
 - files in scope: scripts/collect_wp3_readonly_evidence.py, scripts/test_collect_wp3_readonly_evidence.py, scripts/test_wp3_readonly_workflow.py, .github/workflows/wp3-production-readonly-verification.yml
 - files not to touch: production posting、media preparation、Goal定義、secrets
 - handoff status: COMPLETE
-- implementation validation CI run ID: 30143305370
+- implementation validation CI run ID: 30144002837
 - implementation validation CI result: SUCCESS
 - final PR head CI: GitHub PR #26 metadataを正本とする

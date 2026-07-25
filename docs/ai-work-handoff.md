@@ -7,7 +7,7 @@
 - design authority: ChatGPT lead review
 - branch: `ops/wp3-readonly-baseline`
 - PR: `#26` (UNMERGED)
-- implementation validation CI run: 30143305370
+- implementation validation CI run: 30144002837
 - implementation validation CI result: SUCCESS
 - final PR head CI: PR #26を参照
 - external writes: none
@@ -23,6 +23,7 @@
 - `collect_wp3_readonly_evidence.py` のpermission最新行選択ロジック、parent integrityロジック、text pipelineロジック、source inventoryを要件通りに厳密に実装した。
 - `wp3-production-readonly-verification.yml` をPython 3.11化、Sheets credentialsチェック追加、safetyフラグのworkflowレベル設定へ修正した。
 - リポジトリテスト（651件）を全件PASS確認済み。
+- safe summary出力を追加し、full report内のsecretやURLなどをマスクしてGitHub Actions summaryとstdout JSONに出力するように修正しました。
 
 
 
