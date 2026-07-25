@@ -6,8 +6,8 @@
 - audited main SHA: `56fae006bde664b85d7024d88450119fce31878d`
 - branch: `docs/multi-agent-handoff`
 - PR: `#25`
-- initial CI run: `30138109096`
-- initial CI result: `SUCCESS`
+- final CI run: `30138178738`
+- final CI result: `SUCCESS`
 - 実装変更: なし
 - 本番投稿: なし
 - schedule変更: なし
