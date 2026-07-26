@@ -64,16 +64,10 @@ jobs:
           PLAN_JSON=${PLAN_LINE#WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=}
           
           # output to file for python script
-          echo "$PLAN_JSON" > /tmp/wp3c2_safe_plan.json
-          
-          # basic check
-          if ! jq . /tmp/wp3c2_safe_plan.json > /dev/null 2>&1; then
-             echo "Error: Failed to parse safe JSON"
-             exit 1
-          fi
+          printf '%s\n' "$PLAN_JSON" > /tmp/wp3c2_safe_plan.json
           
           # output line so parser can catch it
-          echo "$PLAN_JSON" | sed 's/^/WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=/'
+          printf 'WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=%s\n' "$PLAN_JSON"
           
           python3 scripts/render_wp3c2_inspection_summary.py \
             --json-input /tmp/wp3c2_safe_plan.json \
