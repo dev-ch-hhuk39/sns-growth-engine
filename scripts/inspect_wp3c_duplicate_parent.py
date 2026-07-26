@@ -297,6 +297,12 @@ def inspect_duplicate_parent(
                 [],
             )
         })
+
+        for candidate in candidates:
+            candidate["recommended_disposition"] = (
+                "MANUAL_DECISION_REQUIRED"
+            )
+
         if len(parents) < 2:
             status_reasons = [
                 "NOT_ENOUGH_PARENTS",

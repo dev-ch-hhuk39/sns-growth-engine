@@ -238,17 +238,24 @@ class TestWP3C2DuplicateInspector(unittest.TestCase):
     def test_0_call_on_safety_abort(self):
         import inspect_wp3c_duplicate_parent
         with patch("inspect_wp3c_duplicate_parent.check_safety_flags", return_value=True):
-            mock_cfg = MagicMock()
-            mock_client = MagicMock()
+            mock_get_config = MagicMock()
+            mock_sheets_client = MagicMock()
+            mock_client_instance = MagicMock()
             mock_ws = MagicMock()
             mock_get_all_values = MagicMock()
-            mock_verify = MagicMock()
+            mock_verify_state = MagicMock()
+            
+            mock_sheets_client.return_value = mock_client_instance
+            mock_client_instance._ws.return_value = mock_ws
+            mock_ws.get_all_values = mock_get_all_values
             
             import sys
-            sys.modules["config_loader"] = MagicMock(get_config=mock_cfg)
-            sys.modules["sheets_client"] = MagicMock(SheetsClient=mock_client)
-            sys.modules["recover_production_sheets_threads_first"] = MagicMock(verify_state=mock_verify)
+            sys.modules["config_loader"] = MagicMock(get_config=mock_get_config)
+            sys.modules["sheets_client"] = MagicMock(SheetsClient=mock_sheets_client)
+            sys.modules["recover_production_sheets_threads_first"] = MagicMock(verify_state=mock_verify_state)
             
+            import tempfile
+            import os
             with tempfile.NamedTemporaryFile(delete=False) as f:
                 out_path = f.name
             old_argv = sys.argv
@@ -257,9 +264,11 @@ class TestWP3C2DuplicateInspector(unittest.TestCase):
                 with self.assertRaises(SystemExit):
                     inspect_wp3c_duplicate_parent.main()
                 
-                self.assertEqual(mock_cfg.call_count, 0)
-                self.assertEqual(mock_client.call_count, 0)
-                self.assertEqual(mock_verify.call_count, 0)
+                mock_get_config.assert_not_called()
+                mock_sheets_client.assert_not_called()
+                mock_client_instance._ws.assert_not_called()
+                mock_get_all_values.assert_not_called()
+                mock_verify_state.assert_not_called()
             finally:
                 sys.argv = old_argv
                 if os.path.exists(out_path): os.remove(out_path)
@@ -320,7 +329,7 @@ class TestWP3C2DuplicateInspector(unittest.TestCase):
         with self.assertRaises(Exception): source_posts_ws.update()
         with self.assertRaises(Exception): source_post_media_ws.update()
 
-    def test_cli_strict_parsing(self):
+    def test_single_tab_write_guard_read_path(self):
         class FakeWs:
             def __init__(self):
                 self.calls = {m: 0 for m in ["append_row", "append_rows", "update", "update_cell", "batch_update", "resize", "clear", "delete_rows"]}
