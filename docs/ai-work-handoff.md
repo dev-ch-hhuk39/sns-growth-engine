@@ -5,7 +5,7 @@
 - branch: `ops/wp3c-production-repair-plan`
 - PR: `#28`
 - WP3-C implementation: COMPLETE
-- implementation validation CI: 30179082017
+- implementation validation CI: 30180466653
 - final PR head CI: GitHub PR #28 metadataを正本とする
 - production workflow dispatch: NONE
 - production Sheets read in this PR: NONE
@@ -31,7 +31,7 @@
 
 - design authority: ChatGPT lead review
 - WP3-B implementation: COMPLETE
-- implementation validation CI: 30148951779 / SUCCESS
+- implementation validation CI: 30180466653 / SUCCESS
 - final PR head CI: GitHub PR #27 metadataを正本とする
 - production workflow dispatch: NONE
 - production Sheets read in this PR: NONE
