@@ -239,15 +239,22 @@ class TestWP3CRepairPlannerCore(unittest.TestCase):
         prevent_writes(client)
 
         # Test full read path using protected client
-        missing = []
         datasets = {}
-        for t in ["source_posts", "source_post_media"]:
-            try:
-                ws = client._ws(t)
-                prevent_writes(ws)
-                datasets[t] = [dict(r) for r in ws.get_all_records()]
-            except Exception as e:
-                pass
+        for tab_name in (
+            "source_posts",
+            "source_post_media",
+        ):
+            worksheet = client._ws(tab_name)
+            prevent_writes(worksheet)
+            datasets[tab_name] = [
+                dict(row)
+                for row in worksheet.get_all_records()
+            ]
+
+        self.assertIn("source_posts", datasets)
+        self.assertIn("source_post_media", datasets)
+        self.assertEqual(datasets["source_posts"], [])
+        self.assertEqual(datasets["source_post_media"], [])
 
         for m, count in client.calls.items():
             self.assertEqual(count, 0, f"Method {m} was called {count} times")
