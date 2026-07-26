@@ -289,13 +289,30 @@ def inspect_duplicate_parent(
         })
         
     if has_blocker or len(parents) < 2:
+        candidate_blocker_codes = sorted({
+            blocker
+            for candidate in candidates
+            for blocker in candidate.get(
+                "blocker_codes",
+                [],
+            )
+        })
+        if len(parents) < 2:
+            status_reasons = [
+                "NOT_ENOUGH_PARENTS",
+            ]
+        else:
+            status_reasons = (
+                candidate_blocker_codes
+                or ["INVALID_CANDIDATES"]
+            )
         return {
             "schema_version": 1,
             "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION",
             "implementation_head": implementation_head,
             "origin_main": origin_main,
             "overall_status": "BLOCKED",
-            "status_reasons": ["NOT_ENOUGH_PARENTS"] if len(parents) < 2 else ["INVALID_CANDIDATES"],
+            "status_reasons": status_reasons,
             "sheets_verifier": sheets_verifier,
             "target_source_post_id": TARGET_SOURCE_POST_ID,
             "parent_candidate_count": len(candidates),

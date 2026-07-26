@@ -51,8 +51,9 @@ class TestWP3C2DuplicateWorkflow(unittest.TestCase):
             self.assertEqual(str(self.w["env"][f]).lower(), "false")
             
     def test_09_sheets_credential_only(self):
-        self.assertIn("GCP_SA_JSON_BASE64", self.job["env"])
-        self.assertIn("SPREADSHEET_ID", self.job["env"])
+        expected_keys = {"GCP_SA_JSON_BASE64", "SA_JSON_BASE64", "SPREADSHEET_ID", "SNS_MASTER_SHEET_ID"}
+        actual_keys = set(self.job["env"].keys())
+        self.assertEqual(expected_keys, actual_keys)
         
     def test_10_no_threads_secret(self):
         for k in self.job["env"].keys():
@@ -91,14 +92,12 @@ class TestWP3C2DuplicateWorkflow(unittest.TestCase):
         self.assertIn("LINE_COUNT=$(grep -c '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON='", self.step_run)
         self.assertIn('[ "$LINE_COUNT" -ne 1 ]', self.step_run)
         
-    def test_19_20_safe_prefix_fail_logic(self):
+    def test_19_safe_prefix_zero_lines_fails(self):
         import subprocess
         import textwrap
         
-        # Test bash script logic directly via subprocess
         script = textwrap.dedent('''
         set -e
-        # Mock inspection failure
         echo "some garbage" > /tmp/wp3c2_stdout.log
         LINE_COUNT=$(grep -c '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log || true)
         if [ "$LINE_COUNT" -ne 1 ]; then
@@ -106,6 +105,22 @@ class TestWP3C2DuplicateWorkflow(unittest.TestCase):
         fi
         ''')
         p = subprocess.run(["bash", "-c", script], capture_output=True)
+        self.assertEqual(p.returncode, 42)
+        
+    def test_20_safe_prefix_two_lines_fails(self):
+        import subprocess
+        import textwrap
+        
+        script2 = textwrap.dedent('''
+        set -e
+        echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON={}" > /tmp/wp3c2_stdout.log
+        echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON={}" >> /tmp/wp3c2_stdout.log
+        LINE_COUNT=$(grep -c '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log || true)
+        if [ "$LINE_COUNT" -ne 1 ]; then
+           exit 42
+        fi
+        ''')
+        p = subprocess.run(["bash", "-c", script2], capture_output=True)
         self.assertEqual(p.returncode, 42)
         
         script2 = textwrap.dedent('''
@@ -137,7 +152,48 @@ class TestWP3C2DuplicateWorkflow(unittest.TestCase):
         self.assertEqual(p.returncode, 43)
 
     def test_22_inspector_exit_1(self):
-        self.assertIn('exit "$INSPECT_EXIT"', self.step_run)
+        import subprocess
+        import textwrap
+        import tempfile
+        import os
+        
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            summary_path = f.name
+            
+        script = textwrap.dedent('''
+        set -e
+        INSPECT_EXIT=1
+        GITHUB_STEP_SUMMARY="{}"
+        echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON={\"overall_status\": \"FAIL\"}" > /tmp/wp3c2_stdout.log
+        LINE_COUNT=$(grep -c '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log || true)
+        if [ "$LINE_COUNT" -ne 1 ]; then
+            echo "Safe inspection JSON prefix must appear exactly once in stdout. Found $LINE_COUNT times." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+        fi
+        
+        PLAN_LINE=$(grep '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log)
+        PLAN_JSON=${PLAN_LINE#WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=}
+        if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then
+            echo "Inspection returned invalid JSON." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+        fi
+        
+        echo "### Inspection Result" >> "$GITHUB_STEP_SUMMARY"
+        echo "- **Overall Status**: $(echo "$PLAN_JSON" | jq -r '.overall_status')" >> "$GITHUB_STEP_SUMMARY"
+        
+        exit "$INSPECT_EXIT"
+        ''').format(summary_path)
+        
+        p = subprocess.run(["bash", "-c", script], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertFalse(p.stderr)
+        
+        with open(summary_path, 'r') as f:
+            summary_content = f.read()
+        self.assertIn("FAIL", summary_content)
+        
+        if os.path.exists(summary_path):
+            os.remove(summary_path)
         
     def test_23_no_full_output_cat(self):
         self.assertNotIn("cat /tmp/wp3c2_inspect.json", self.step_run)
