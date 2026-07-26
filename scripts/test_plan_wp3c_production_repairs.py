@@ -18,6 +18,7 @@ from plan_wp3c_production_repairs import (
     build_repair_plan,
     parse_target_account_ids,
     prevent_writes,
+    normalize_sheets_verifier,
     TARGET_SOURCE_POST_IDS,
     TARGET_SLOT_RUN_IDS,
 )
@@ -665,6 +666,52 @@ class TestWP3CRepairPlannerCore(unittest.TestCase):
         # Liver destination itself is excluded
         src7 = {"target_account_id": "liver_manager", "platform": "threads", "active": "true", "source_url": "https://threads.net/@my_dest", "review_status": "APPROVED"}
         self.assertIn("LIVER_THREADS_SOURCE_MISSING", run_source(src7))
+
+    def test_24_normalize_sheets_verifier(self):
+        # total=63が提供される
+        res = normalize_sheets_verifier({"passed": 63, "total": 63, "failed": []})
+        self.assertEqual(res["total"], 63)
+        self.assertEqual(res["total_basis"], "PROVIDED")
+        self.assertTrue(res["count_consistent"])
+        
+        # total欠落、passed=63、failed=[]ならtotal=63
+        res = normalize_sheets_verifier({"passed": 63, "failed": []})
+        self.assertEqual(res["total"], 63)
+        self.assertEqual(res["total_basis"], "DERIVED_PASSED_PLUS_FAILED")
+        self.assertTrue(res["count_consistent"])
+        
+        # total=0、passed=63、failed=[]ならtotal=63
+        res = normalize_sheets_verifier({"passed": 63, "total": 0, "failed": []})
+        self.assertEqual(res["total"], 63)
+        self.assertEqual(res["total_basis"], "DERIVED_PASSED_PLUS_FAILED")
+        self.assertTrue(res["count_consistent"])
+        
+        # passed=60、failedが3件ならtotal=63
+        res = normalize_sheets_verifier({"passed": 60, "total": 0, "failed": [{"reason": "1"}, {"reason": "2"}, {"reason": "3"}]})
+        self.assertEqual(res["total"], 63)
+        self.assertEqual(res["failed_count"], 3)
+        self.assertEqual(res["total_basis"], "DERIVED_PASSED_PLUS_FAILED")
+        self.assertTrue(res["count_consistent"])
+        
+        # provided totalがpassed＋failed未満なら不整合
+        res = normalize_sheets_verifier({"passed": 60, "total": 50, "failed": [{"reason": "1"}]})
+        self.assertEqual(res["total"], 50)
+        self.assertEqual(res["total_basis"], "PROVIDED")
+        self.assertFalse(res["count_consistent"])
+        
+        # failedがlist以外でもsafeに処理
+        res = normalize_sheets_verifier({"passed": 63, "total": 63, "failed": "not a list"})
+        self.assertEqual(res["failed_count"], 0)
+        self.assertEqual(res["total"], 63)
+        self.assertTrue(res["count_consistent"])
+        
+        # production相当fixture (passed: 63, total: 0, failed: None/[])
+        res = normalize_sheets_verifier({"passed": 63, "total": 0})
+        self.assertEqual(res["passed"], 63)
+        self.assertEqual(res["total"], 63)
+        self.assertEqual(res["failed_count"], 0)
+        self.assertEqual(res["total_basis"], "DERIVED_PASSED_PLUS_FAILED")
+        self.assertTrue(res["count_consistent"])
 
 
 if __name__ == '__main__':
