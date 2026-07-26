@@ -38,6 +38,10 @@
   #29
 - WP3-C2 implementation:
   COMPLETE
+- implementation validation CI:
+  30184775272 / SUCCESS
+- final PR head CI:
+  GitHub PR #29 metadataを正本とする
 - production workflow dispatch:
   NONE
 - production Sheets read in this PR:
