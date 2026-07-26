@@ -50,22 +50,24 @@ jobs:
           set +e
           python3 scripts/inspect_wp3c4_unresolved_url_shapes.py \
             --output /tmp/wp3c4_safe.json \
-            > /tmp/wp3c4_out.txt
+            > /tmp/wp3c4_out.txt \
+            2> /tmp/wp3c4_err.txt
           EXIT_CODE=$?
           set -e
 
           SAFE_PREFIX_COUNT=$(grep -c "^WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=" /tmp/wp3c4_out.txt || true)
 
           if [ "$SAFE_PREFIX_COUNT" != "1" ]; then
-            printf '%s\n' "Safe prefix count is not 1"
-            exit 1
+            SAFE_JSON_STR="{\"schema_version\":1,\"mode\":\"READ_ONLY_SAFE_URL_SHAPE_DIAGNOSTICS\",\"overall_status\":\"FAIL\",\"classification\":\"MIXED_OR_UNRESOLVED\",\"status_reasons\":[\"INSPECTOR_STARTUP_FAILED\"],\"checked_commit_sha\":\"$GITHUB_SHA\",\"parent_count\":0,\"child_count\":0,\"unique_parent_recovered_group_count\":0,\"unique_child_recovered_group_count\":0,\"unique_normalized_url_group_count\":0,\"unique_semantic_parent_group_count\":0,\"unique_semantic_child_group_count\":0,\"parents\":[],\"children\":[],\"recommended_next_action\":\"MANUAL_INVESTIGATION\",\"apply_operations\":[]}"
+            printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c4_safe_clean.json
+            printf 'WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=%s\n' "$SAFE_JSON_STR"
+            EXIT_CODE=1
+          else
+            SAFE_JSON_LINE=$(grep "^WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=" /tmp/wp3c4_out.txt)
+            SAFE_JSON_STR=${SAFE_JSON_LINE#WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=}
+            printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c4_safe_clean.json
+            printf 'WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=%s\n' "$SAFE_JSON_STR"
           fi
-
-          SAFE_JSON_LINE=$(grep "^WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=" /tmp/wp3c4_out.txt)
-          SAFE_JSON_STR=${SAFE_JSON_LINE#WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=}
-
-          printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c4_safe_clean.json
-          printf 'WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=%s\n' "$SAFE_JSON_STR"
 
           python3 scripts/render_wp3c4_url_shape_summary.py \
             --json-input "/tmp/wp3c4_safe_clean.json" \

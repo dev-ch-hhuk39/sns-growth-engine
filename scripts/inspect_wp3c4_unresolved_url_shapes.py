@@ -5,6 +5,13 @@ import hashlib
 import re
 from typing import Any
 import argparse
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
 
 from src.sheets_client import SheetsClient
 from src.url_shape_diagnostics import (
