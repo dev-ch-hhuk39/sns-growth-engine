@@ -102,5 +102,48 @@ printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c4_safe_clean.json
         os.unlink(tf_name)
 
 
+
+    def test_direct_invocation_without_pythonpath(self):
+        import os, subprocess, sys
+        from pathlib import Path
+        ROOT = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "scripts/inspect_wp3c4_unresolved_url_shapes.py",
+                "--help",
+            ],
+            cwd=ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, f"Failed: {result.stderr}")
+        self.assertNotIn("ModuleNotFoundError", result.stderr)
+        self.assertNotIn("No module named 'src'", result.stderr)
+
+    def test_workflow_fallback_0_prefix(self):
+        run = self.wf["jobs"]["inspect"]["steps"][3]["run"]
+        self.assertIn("INSPECTOR_STARTUP_FAILED", run)
+        self.assertIn('EXIT_CODE=1', run)
+        self.assertIn('\\"checked_commit_sha\\":\\"$GITHUB_SHA\\"', run)
+        self.assertIn('\\"parents\\":[]', run)
+        self.assertIn('\\"children\\":[]', run)
+        self.assertIn('\\"apply_operations\\":[]', run)
+
+    def test_workflow_fallback_multiple_prefix(self):
+        # same logic applies to != 1
+        run = self.wf["jobs"]["inspect"]["steps"][3]["run"]
+        self.assertIn('if [ "$SAFE_PREFIX_COUNT" != "1" ]; then', run)
+
+    def test_no_raw_stderr(self):
+        run = self.wf["jobs"]["inspect"]["steps"][3]["run"]
+        self.assertIn('2> /tmp/wp3c4_err.txt', run)
+        self.assertNotIn('cat /tmp/wp3c4_err.txt', run)
+        self.assertNotIn('cat ', run)
+
 if __name__ == "__main__":
     unittest.main()
