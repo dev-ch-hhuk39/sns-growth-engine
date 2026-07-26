@@ -1,3 +1,30 @@
+## 2026-07-26 Antigravity WP3-C Production Repair Plan
+
+- design authority: ChatGPT lead review
+- audited main SHA: `de0d8a130f048034199d97a029b5611e11dc8db1`
+- branch: `ops/wp3c-production-repair-plan`
+- PR: `#28`
+- WP3-C implementation: COMPLETE
+- implementation validation CI: 30181402571 / SUCCESS
+- final PR head CI: GitHub PR #28 metadataを正本とする
+- production workflow dispatch: NONE
+- production Sheets read in this PR: NONE
+- Sheets writes: NONE
+- source fetch: NONE
+- API validation: NONE
+- media operations: NONE
+- SNS posts: NONE
+- apply mode: NOT IMPLEMENTED
+- next action: merge後、repair-plan workflowを1回だけdispatch
+
+### Confirmed production state
+
+- parent integrity failures: 6
+- affected parent posts: 4
+- stale slots: 2
+- Liver Threads source: MISSING
+- Liver permission partial coverage: `src_lm_yt_cand_001`
+
 # AI Work Handoff
 
 ## 2026-07-25 Antigravity WP3-B Diagnostic Fidelity
@@ -10,12 +37,15 @@
 - production Sheets read in this PR: NONE
 - external writes: NONE
 - API credential validity test: NONE
-- PR #27: UNMERGED
-- next action: merge後、read-only workflowを1回だけdispatch
+- PR #27: MERGED
 - parent integrity failures: 6
 - stale slots: 2
 - Liver Threads source: MISSING
 - credentials: UNVERIFIED before WP3-B secret injection
+
+- PR #27 merge commit: de0d8a130f048034199d97a029b5611e11dc8db1
+- post-merge CI: 30149480422 / SUCCESS
+- production read-only run: 30149540484 / FAILURE
 
 ### 実施内容
 

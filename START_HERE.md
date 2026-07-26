@@ -2,38 +2,28 @@
 
 ## 文書情報
 
-- updated_at: 2026-07-25T15:15:00+09:00
+- updated_at: 2026-07-25T16:55:00+09:00
 - updated_by: Antigravity
-- document_branch: `ops/wp3b-diagnostic-fidelity`
-- related_pr: `#27`
-- audited_main_sha: `304a2c126223199a0d3554ed78509ea3652d2198`
-- audited_origin_main_sha: `304a2c126223199a0d3554ed78509ea3652d2198`
-- PR #26: MERGED
-- PR #26 merge commit: `304a2c126223199a0d3554ed78509ea3652d2198`
-- post-merge CI: 30146464509 / SUCCESS
-- WP3 production read-only run: 30146525043 / FAILURE
-- current task: WP3-B diagnostic fidelity
-- current branch: ops/wp3b-diagnostic-fidelity
-- document_status: `PRODUCTION_BASELINE_FAILED_DIAGNOSTICS_IN_PROGRESS`
+- document_branch: `ops/wp3c-production-repair-plan`
+- related_pr: `#28`
+- audited_main_sha: `de0d8a130f048034199d97a029b5611e11dc8db1`
+- PR #27: MERGED
+- PR #27 merge commit: `de0d8a130f048034199d97a029b5611e11dc8db1`
+- post-merge CI: 30149480422 / SUCCESS
+- WP3 production read-only run: 30149540484 / FAILURE
+- current task: WP3-C production repair plan
+- document_status: `PRODUCTION_REPAIR_PLAN_IN_PROGRESS`
 
-Confirmed hard failure:
+Confirmed failures:
 - parent integrity failures: 6
-
-Confirmed blockers:
+- unique affected parent posts: 4
+- stale slots: 2
 - Liver Threads source: MISSING
-
-Unverified due workflow secret injection gap:
-- Night Threads credential
-- Liver Threads credential
-- Cloudinary credentials
-
-Additional diagnostics:
-- stale inflight slots: 2
-- Liver permission partial coverage:
-  missing_or_invalid_source_id = src_lm_yt_cand_001
+- Liver permission partial coverage: src_lm_yt_cand_001
+- credentials: PRESENT_PRESENCE_ONLY
+- API validity: UNVERIFIED
 
 この文書内に、文書自身を含む最終commit SHAを固定値で記録しない。
-最新のPR headはGitHubのPR #27を参照する。
 
 ## 最終Goal
 

@@ -1,0 +1,108 @@
+name: CI WP3-C Production Repair Plan
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-wp3c-repair-plan
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  repair_plan:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    env:
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate Repair Plan
+        run: |
+          set +e
+          python3 scripts/plan_wp3c_production_repairs.py --output /tmp/wp3c_repair_plan.json > /tmp/wp3c_stdout.log
+          PLANNER_EXIT=$?
+          set -e
+          
+          LINE_COUNT=$(grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
+          if [ "$LINE_COUNT" -ne 1 ]; then
+             echo "Error: Expected exactly 1 WP3C_SAFE_REPAIR_PLAN_JSON= line, got $LINE_COUNT"
+             exit 1
+          fi
+          
+          PLAN_LINE=$(grep '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log)
+          PLAN_JSON=${PLAN_LINE#WP3C_SAFE_REPAIR_PLAN_JSON=}
+          
+          if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then
+             echo "Error: Failed to parse safe JSON"
+             exit 1
+          fi
+          
+          echo "$PLAN_JSON" | sed 's/^/WP3C_SAFE_REPAIR_PLAN_JSON=/'
+          
+          echo "## WP3-C Safe Repair Plan Summary" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Overall Status" >> $GITHUB_STEP_SUMMARY
+          OVERALL_STATUS=$(echo "$PLAN_JSON" | jq -r '.overall_status')
+          echo "\`${OVERALL_STATUS}\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Status Reasons" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.status_reasons[]? | "- \(.)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Sheets Verifier" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed // 0)\n- Total: \(.total // 0)\n- Failed: \(.failed_count // 0)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Parent Repairs" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '
+            .parent_repairs[]? |
+            "- **Source Post ID**: `\(.source_post_id)`\n" +
+            "  - Declared: \(.declared_media_count // 0)\n" +
+            "  - Actual: \(.actual_child_count // 0)\n" +
+            "  - Canonical mismatch children: \((.canonical_mismatch_child_ids // []) | join(", "))\n" +
+            "  - Duplicate index groups: \((.duplicate_index_groups // []) | length)\n" +
+            "  - Operations: \((.operations // []) | map(.operation) | join(", "))\n" +
+            "  - Apply Eligible: \(.apply_eligible // false)\n" +
+            "  - Blockers: \((.blocker_codes // []) | join(", "))\n" +
+            "  - Has parent precondition hash: \(if (.parent_precondition_hash // "") != "" then true else false end)"
+          ' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Duplicate Index Groups" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.parent_repairs[]?.duplicate_index_groups[]? | "- Index: \(.media_index)\n  - Child IDs: \((.child_ids // []) | join(", "))\n  - Asset Relation: \(.asset_relation)"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Stale Slots" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.stale_slot_reviews[]? | "- **Slot ID**: `\(.slot_run_id)`\n  - Recommendation: \(.recommendation)\n  - Blockers: \((.blocker_codes // []) | join(", "))"' >> $GITHUB_STEP_SUMMARY
+          
+          echo "### External Blockers" >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.external_blockers[]? | "- `\(.code)`"' >> $GITHUB_STEP_SUMMARY
+          
+          exit "$PLANNER_EXIT"
