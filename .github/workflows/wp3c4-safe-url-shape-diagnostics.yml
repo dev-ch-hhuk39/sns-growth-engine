@@ -1,0 +1,49 @@
+name: WP3-C4 Safe URL Shape Diagnostics
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: wp3c4-safe-url-shape-diagnostics
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    name: Inspect URL Shapes
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Safe URL Shape Diagnostics
+        env:
+          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
+          PYTHONPATH: .
+        run: |
+          set +e
+          python3 scripts/inspect_wp3c4_unresolved_url_shapes.py --output shape_inspection.json
+          EXIT_CODE=$?
+          set -e
+          
+          if [ -f shape_inspection.json ]; then
+             python3 scripts/render_wp3c4_url_shape_summary.py --json shape_inspection.json --summary-file $GITHUB_STEP_SUMMARY --exit-code $EXIT_CODE
+          else
+             echo "Inspection failed to produce JSON" >> $GITHUB_STEP_SUMMARY
+             exit 1
+          fi
