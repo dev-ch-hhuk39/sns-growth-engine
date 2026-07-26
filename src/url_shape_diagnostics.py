@@ -19,7 +19,7 @@ class SafeUrlShape:
     recovered_stable_post_id: str
 
 ALLOWED_QUERY_KEYS = {"v", "url", "q", "u", "target", "list"}
-TRACKING_KEYS = {"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "si", "fbclid", "gclid", "igshid"}
+NESTED_URL_KEYS = {"url", "q", "u", "target"}
 
 def parse_url_shape(url: str) -> SafeUrlShape:
     if not url or not str(url).strip():
@@ -53,7 +53,7 @@ def parse_url_shape(url: str) -> SafeUrlShape:
     found_keys = tuple(sorted(k for k in query_params.keys() if k in ALLOWED_QUERY_KEYS))
 
     ident = extract_source_post_identity(url)
-    direct_identity_extracted = ident.confidence != "NONE"
+    direct_identity_extracted = ident.confidence == "HIGH"
     
     recovery_method = "NONE"
     recovered_ident = ident if direct_identity_extracted else None
@@ -61,12 +61,14 @@ def parse_url_shape(url: str) -> SafeUrlShape:
     has_nested_url = False
 
     for k, v_list in query_params.items():
+        if k not in NESTED_URL_KEYS:
+            continue
         for v in v_list:
             if v.startswith("http://") or v.startswith("https://") or urllib.parse.unquote(v).startswith("http"):
                 has_nested_url = True
                 if not recovered_ident:
                     nested_ident = extract_source_post_identity(v)
-                    if nested_ident.confidence != "NONE":
+                    if nested_ident.confidence == "HIGH":
                         recovered_ident = nested_ident
                         recovery_method = "NESTED_QUERY_URL"
 
@@ -77,11 +79,11 @@ def parse_url_shape(url: str) -> SafeUrlShape:
             if next_decoded == decoded_url:
                 break
             decoded_url = next_decoded
+            decoded_layer_count = i
             nested_ident = extract_source_post_identity(decoded_url)
-            if nested_ident.confidence != "NONE":
+            if nested_ident.confidence == "HIGH":
                 recovered_ident = nested_ident
                 recovery_method = "PERCENT_DECODED_URL"
-                decoded_layer_count = i
                 break
                 
     if not recovered_ident:
@@ -90,7 +92,7 @@ def parse_url_shape(url: str) -> SafeUrlShape:
             if len(parts) >= 2 and parts[1]:
                 fake_url = f"https://www.youtube.com/watch?v={parts[1]}"
                 nested_ident = extract_source_post_identity(fake_url)
-                if nested_ident.confidence != "NONE":
+                if nested_ident.confidence == "HIGH":
                     recovered_ident = nested_ident
                     recovery_method = "EMBED_PATH"
 
@@ -114,7 +116,7 @@ def parse_url_shape(url: str) -> SafeUrlShape:
 def _determine_host_family(host: str) -> str:
     if not host:
         return "NONE"
-    host = host.split(":")[0]  # strip port
+    host = host.split(":")[0]
     if host in ("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"):
         return "YOUTUBE"
     if host in ("youtu.be", "www.youtu.be"):
@@ -123,7 +125,7 @@ def _determine_host_family(host: str) -> str:
         return "THREADS"
     if host in ("tiktok.com", "www.tiktok.com", "m.tiktok.com", "vm.tiktok.com", "vt.tiktok.com"):
         return "TIKTOK"
-    if host in ("google.com", "www.google.com") or host.endswith(".google.com"):
+    if host in ("google.com", "www.google.com"):
         return "GOOGLE_REDIRECT"
     return "OTHER"
 
@@ -136,52 +138,38 @@ def _determine_path_family(path: str, host_family: str) -> str:
     first = parts[0].lower()
 
     if host_family == "YOUTUBE":
-        if first == "watch": return "WATCH"
-        if first == "shorts": return "SHORTS"
-        if first == "live": return "LIVE"
-        if first == "embed": return "EMBED"
-        if first == "channel": return "CHANNEL"
-        if first == "user": return "USER"
-        if first == "playlist": return "PLAYLIST"
-        if first.startswith("@"): return "HANDLE"
+        if first == "watch" and len(parts) == 1: return "WATCH"
+        if first == "shorts" and len(parts) == 2: return "SHORTS"
+        if first == "live" and len(parts) == 2: return "LIVE"
+        if first == "embed" and len(parts) == 2: return "EMBED"
+        if first == "channel" and len(parts) == 2: return "CHANNEL"
+        if first == "user" and len(parts) == 2: return "USER"
+        if first == "playlist" and len(parts) == 1: return "PLAYLIST"
+        if first.startswith("@") and len(parts) == 1: return "HANDLE"
         return "OTHER"
 
     if host_family == "TIKTOK":
-        if "video" in parts: return "TIKTOK_VIDEO"
-        if first.startswith("@"):
-            if len(parts) > 1 and parts[1] == "video":
-                return "TIKTOK_VIDEO"
-            return "HANDLE"
+        if len(parts) == 3 and parts[0].startswith("@") and parts[1] == "video": return "TIKTOK_VIDEO"
+        if len(parts) == 1 and parts[0].startswith("@"): return "HANDLE"
         return "OTHER"
 
     if host_family == "THREADS":
-        if "post" in parts: return "THREADS_POST"
-        if first.startswith("@"):
-            if len(parts) > 1 and parts[1] == "post":
-                return "THREADS_POST"
-            return "HANDLE"
+        if len(parts) == 3 and parts[0].startswith("@") and parts[1] == "post": return "THREADS_POST"
+        if len(parts) == 1 and parts[0].startswith("@"): return "HANDLE"
         return "OTHER"
 
     if host_family == "GOOGLE_REDIRECT":
-        if first == "url": return "REDIRECT"
+        if first == "url" and len(parts) == 1: return "REDIRECT"
         return "OTHER"
         
     return "OTHER"
 
-def _normalize_url_string(url: str) -> str:
+def _normalize_url_string(url: str, is_media: bool = False) -> str:
     if not url or not str(url).strip():
         return ""
+        
     try:
-        decoded = url
-        for _ in range(2):
-            next_decoded = urllib.parse.unquote(decoded)
-            if next_decoded == decoded:
-                break
-            decoded = next_decoded
-            
-        parsed = urllib.parse.urlparse(decoded)
-        if not parsed.scheme and not parsed.netloc and not url.startswith("http"):
-            parsed = urllib.parse.urlparse("https://" + decoded)
+        parsed = urllib.parse.urlparse(url)
     except Exception:
         parsed = urllib.parse.urlparse("http://malformed")
 
@@ -189,18 +177,37 @@ def _normalize_url_string(url: str) -> str:
     host = parsed.netloc.lower() if parsed.netloc else ""
     path = parsed.path if parsed.path else ""
     
+    if is_media:
+        return f"{scheme}://{host}{path}"
+        
     query_params = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True) if parsed.query else []
-    new_query = []
     
     for k, v in query_params:
-        if k.lower() not in TRACKING_KEYS:
+        if k in NESTED_URL_KEYS:
+            if v.startswith("http"):
+                nested = _normalize_url_string(v)
+                if nested: return nested
+                
+    new_query = []
+    for k, v in query_params:
+        if k in ALLOWED_QUERY_KEYS and k not in NESTED_URL_KEYS:
             new_query.append((k, v))
             
+    new_query.sort()
     new_qs = urllib.parse.urlencode(new_query)
-    return urllib.parse.urlunparse((scheme, host, path, "", new_qs, ""))
+    return f"{scheme}://{host}{path}?{new_qs}" if new_qs else f"{scheme}://{host}{path}"
+
+def _safe_hash(val: str) -> str:
+    return hashlib.sha256(val.encode("utf-8")).hexdigest()
 
 def normalize_url_for_safe_grouping(url: str) -> str:
-    normalized = _normalize_url_string(url)
+    normalized = _normalize_url_string(url, is_media=False)
     if not normalized:
         return ""
-    return "URL_GROUP_" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return _safe_hash(normalized)
+
+def normalize_media_url_for_fingerprint(url: str) -> str:
+    normalized = _normalize_url_string(url, is_media=True)
+    if not normalized:
+        return ""
+    return _safe_hash(normalized)

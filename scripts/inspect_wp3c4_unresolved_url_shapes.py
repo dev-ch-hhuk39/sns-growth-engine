@@ -1,64 +1,93 @@
 import os
 import json
+import sys
 import hashlib
+import re
 from typing import Any
 import argparse
 
 from src.sheets_client import SheetsClient
-from src.url_shape_diagnostics import parse_url_shape, normalize_url_for_safe_grouping
+from src.url_shape_diagnostics import (
+    parse_url_shape, 
+    normalize_url_for_safe_grouping,
+    normalize_media_url_for_fingerprint
+)
 from scripts.inspect_wp3c3_source_identity_collision import (
     TARGET_SOURCE_POST_ID,
     prevent_writes,
     check_safety_flags,
-    read_rows_with_sheet_numbers
+    read_rows_with_sheet_numbers,
+    parse_non_negative_integer,
+    normalize_media_type
 )
 
-def safe_hash(value: str) -> str:
-    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+def _safe_hash(val: str) -> str:
+    return hashlib.sha256(val.encode("utf-8")).hexdigest()
 
-def get_parent_semantic_group(row: dict[str, Any], recovered_ident) -> str:
-    parts = []
-    if recovered_ident and recovered_ident.confidence != "NONE":
-        parts.append(recovered_ident.stable_post_id)
-    else:
-        parts.append("NONE")
-    parts.append(str(row.get("media_count", "")))
-    parts.append(str(row.get("platform", "")))
-    parts.append(str(row.get("source_type", "")))
-    parts.append(str(row.get("content_type", "")))
-    
-    return "SEM_PARENT_" + safe_hash("|".join(parts))
+def get_ident_hash(shape) -> str:
+    if shape and shape.recovered_stable_post_id:
+        return _safe_hash(f"{shape.recovered_platform}:{shape.recovered_identity_kind}:{shape.recovered_stable_post_id}")
+    return "NONE"
 
-def get_child_semantic_group(row: dict[str, Any], recovered_ident) -> str:
+def get_parent_sem_hash(row: dict[str, Any], shape) -> str:
     parts = []
-    if recovered_ident and recovered_ident.confidence != "NONE":
-        parts.append(recovered_ident.stable_post_id)
-    else:
-        parts.append("NONE")
-        
-    parts.append(str(row.get("media_index", "")))
-    
-    media_type = str(row.get("media_type", "")).strip().lower()
-    if media_type not in ("image", "video", "audio", "carousel"):
-        media_type = "unknown"
-    parts.append(media_type)
-    
-    url = str(row.get("original_media_url", "")).strip()
-    norm = normalize_url_for_safe_grouping(url)
-    parts.append(norm)
-    
-    parts.append(str(row.get("width", "")))
-    parts.append(str(row.get("height", "")))
-    parts.append(str(row.get("duration", "")))
-    
-    return "SEM_CHILD_" + safe_hash("|".join(parts))
+    parts.append(get_ident_hash(shape))
+    acct = str(row.get("account_id", "")).strip() or str(row.get("target_account_id", "")).strip()
+    parts.append(_safe_hash(acct) if acct else "NONE")
+    parts.append(str(row.get("media_count", "")).strip())
+    parts.append(str(row.get("platform", "")).strip())
+    parts.append(str(row.get("source_type", "")).strip())
+    parts.append(str(row.get("content_type", "")).strip())
+    return _safe_hash("|".join(parts))
+
+def get_child_sem_hash(row: dict[str, Any], shape) -> str:
+    parts = []
+    parts.append(get_ident_hash(shape))
+    parts.append(str(row.get("media_index", "")).strip())
+    parts.append(normalize_media_type(row.get("media_type")))
+    media_url = str(row.get("original_media_url", "")).strip()
+    parts.append(normalize_media_url_for_fingerprint(media_url) if media_url else "NONE")
+    parts.append(str(row.get("width", "")).strip())
+    parts.append(str(row.get("height", "")).strip())
+    parts.append(str(row.get("duration", "")).strip())
+    return _safe_hash("|".join(parts))
+
+def create_mapping(prefix: str, hashes: set[str]) -> dict[str, str]:
+    sorted_hashes = sorted(list(h for h in hashes if h and h != "UNRESOLVED" and h != "NONE"))
+    mapping = {h: f"{prefix}_{i+1}" for i, h in enumerate(sorted_hashes)}
+    mapping["UNRESOLVED"] = "UNRESOLVED"
+    mapping["NONE"] = "NONE"
+    return mapping
+
+def generate_fail_report(reason: str):
+    sha = os.environ.get("GITHUB_SHA", "unknown_local")
+    if len(sha) != 40 or not re.match(r"^[0-9a-f]{40}$", sha):
+        sha = "0000000000000000000000000000000000000000"
+    out = {
+        "schema_version": 1,
+        "mode": "READ_ONLY_SAFE_URL_SHAPE_DIAGNOSTICS",
+        "overall_status": "FAIL",
+        "classification": "MIXED_OR_UNRESOLVED",
+        "status_reasons": [reason],
+        "checked_commit_sha": sha,
+        "parent_count": 0,
+        "child_count": 0,
+        "unique_parent_recovered_group_count": 0,
+        "unique_child_recovered_group_count": 0,
+        "unique_normalized_url_group_count": 0,
+        "unique_semantic_parent_group_count": 0,
+        "unique_semantic_child_group_count": 0,
+        "parents": [],
+        "children": [],
+        "recommended_next_action": "MANUAL_INVESTIGATION",
+        "apply_operations": []
+    }
+    print(f"WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={json.dumps(out, separators=(',', ':'))}")
+    sys.exit(1)
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--output", required=True)
-    args = parser.parse_args()
-
-    check_safety_flags()
+    if check_safety_flags():
+        generate_fail_report("UNSAFE_FLAG_ENABLED")
 
     client = SheetsClient()
     prevent_writes(client)
@@ -72,161 +101,232 @@ def main():
     parents = [r for r in source_posts_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
     children = [r for r in source_post_media_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
 
-    # Process Parents
+    sha = os.environ.get("GITHUB_SHA", "unknown_local")
+    if len(sha) != 40 or not re.match(r"^[0-9a-f]{40}$", sha):
+        sha = "0000000000000000000000000000000000000000"
+
+    raw_parents = []
+    raw_children = []
+    
+    url_hashes = set()
+    rec_hashes = set()
+    sem_parent_hashes = set()
+    sem_child_hashes = set()
+    child_id_hashes = set()
+
+    for sheet_row, row in parents:
+        url = str(row.get("canonical_post_url", ""))
+        shape = parse_url_shape(url)
+        url_hash = normalize_url_for_safe_grouping(url)
+        
+        ident_hash = get_ident_hash(shape) if shape.direct_identity_extracted or shape.recovered_stable_post_id else "UNRESOLVED"
+        sem_parent_hash = get_parent_sem_hash(row, shape if shape.recovered_stable_post_id else None)
+        
+        mc = parse_non_negative_integer(row.get("media_count"))
+        if mc is None or mc <= 0:
+            mc_valid = False
+            mc_val = 0
+        else:
+            mc_valid = True
+            mc_val = mc
+            
+        url_hashes.add(url_hash)
+        rec_hashes.add(ident_hash)
+        sem_parent_hashes.add(sem_parent_hash)
+        
+        raw_parents.append({
+            "sheet_row_number": sheet_row,
+            "input_state": shape.input_state,
+            "host_family": shape.host_family,
+            "path_family": shape.path_family,
+            "allowed_query_key_flags": list(shape.has_allowed_query_keys),
+            "has_nested_url": shape.has_nested_url,
+            "decoded_layer_count": shape.decoded_layer_count,
+            "direct_identity_extracted": shape.direct_identity_extracted,
+            "recovery_method": shape.recovery_method,
+            "recovered_identity_extracted": bool(shape.recovered_stable_post_id),
+            "_ident_hash": ident_hash,
+            "_url_hash": url_hash,
+            "_sem_parent_hash": sem_parent_hash,
+            "declared_media_count": mc_val,
+            "_mc_valid": mc_valid,
+            "_recovered_ident_str": shape.recovered_stable_post_id
+        })
+
+    for sheet_row, row in children:
+        url = str(row.get("canonical_post_url", ""))
+        shape = parse_url_shape(url)
+        url_hash = normalize_url_for_safe_grouping(url)
+        
+        ident_hash = get_ident_hash(shape) if shape.direct_identity_extracted or shape.recovered_stable_post_id else "UNRESOLVED"
+        sem_child_hash = get_child_sem_hash(row, shape if shape.recovered_stable_post_id else None)
+        c_id = str(row.get("source_post_media_id", ""))
+        cid_hash = _safe_hash(c_id) if c_id else "NONE"
+        
+        mi = parse_non_negative_integer(row.get("media_index"))
+        if mi is None:
+            mi_valid = False
+            mi_val = 0
+        else:
+            mi_valid = True
+            mi_val = mi
+            
+        url_hashes.add(url_hash)
+        rec_hashes.add(ident_hash)
+        sem_child_hashes.add(sem_child_hash)
+        child_id_hashes.add(cid_hash)
+        
+        raw_children.append({
+            "sheet_row_number": sheet_row,
+            "input_state": shape.input_state,
+            "host_family": shape.host_family,
+            "path_family": shape.path_family,
+            "allowed_query_key_flags": list(shape.has_allowed_query_keys),
+            "has_nested_url": shape.has_nested_url,
+            "decoded_layer_count": shape.decoded_layer_count,
+            "direct_identity_extracted": shape.direct_identity_extracted,
+            "recovery_method": shape.recovery_method,
+            "recovered_identity_extracted": bool(shape.recovered_stable_post_id),
+            "_ident_hash": ident_hash,
+            "_url_hash": url_hash,
+            "_cid_hash": cid_hash,
+            "_sem_child_hash": sem_child_hash,
+            "media_index": mi_val,
+            "_mi_valid": mi_valid,
+            "media_type": normalize_media_type(row.get("media_type")),
+            "_recovered_ident_str": shape.recovered_stable_post_id
+        })
+
+    url_map = create_mapping("URL_GROUP", url_hashes)
+    rec_map = create_mapping("RECOVERED_POST_GROUP", rec_hashes)
+    sp_map = create_mapping("SEM_PARENT_GROUP", sem_parent_hashes)
+    sc_map = create_mapping("SEM_CHILD_GROUP", sem_child_hashes)
+    cid_map = create_mapping("CHILD_ID_GROUP", child_id_hashes)
+
     safe_parents = []
-    for idx, (sheet_row, row) in enumerate(parents):
-        url = str(row.get("canonical_post_url", ""))
-        shape = parse_url_shape(url)
-        
-        parts = []
-        parts.append(shape.recovered_stable_post_id if shape.recovered_stable_post_id else "NONE")
-        parts.append(str(row.get("media_count", "")))
-        parts.append(str(row.get("platform", "")))
-        parts.append(str(row.get("source_type", "")))
-        parts.append(str(row.get("content_type", "")))
-        sem_group = "SEM_PARENT_" + safe_hash("|".join(parts))
-        
-        rec_post_group = "RECOVERED_GROUP_" + safe_hash(shape.recovered_stable_post_id) if shape.recovered_stable_post_id else "UNRESOLVED"
-        
-        safe_parents.append({
-            "candidate_number": idx + 1,
-            "sheet_row_number": sheet_row,
-            "input_state": shape.input_state,
-            "host_family": shape.host_family,
-            "path_family": shape.path_family,
-            "allowed_query_key_flags": list(shape.has_allowed_query_keys),
-            "has_nested_url": shape.has_nested_url,
-            "decoded_layer_count": shape.decoded_layer_count,
-            "direct_identity_extracted": shape.direct_identity_extracted,
-            "recovery_method": shape.recovery_method,
-            "recovered_identity_extracted": bool(shape.recovered_stable_post_id),
-            "recovered_post_group": rec_post_group,
-            "normalized_url_group": normalize_url_for_safe_grouping(url) if url.strip() else "EMPTY",
-            "semantic_parent_group": sem_group,
-            "declared_media_count": str(row.get("media_count", "")).strip(),
-            "matching_recovered_child_count": 0,
-            "_recovered_ident_str": shape.recovered_stable_post_id
-        })
-
-    # Process Children
-    safe_children = []
-    for idx, (sheet_row, row) in enumerate(children):
-        url = str(row.get("canonical_post_url", ""))
-        shape = parse_url_shape(url)
-        
-        parts = []
-        parts.append(shape.recovered_stable_post_id if shape.recovered_stable_post_id else "NONE")
-        parts.append(str(row.get("media_index", "")))
-        media_type = str(row.get("media_type", "")).strip().lower()
-        if media_type not in ("image", "video", "audio", "carousel"):
-            media_type = "unknown"
-        parts.append(media_type)
-        parts.append(normalize_url_for_safe_grouping(str(row.get("original_media_url", "")).strip()))
-        parts.append(str(row.get("width", "")))
-        parts.append(str(row.get("height", "")))
-        parts.append(str(row.get("duration", "")))
-        sem_group = "SEM_CHILD_" + safe_hash("|".join(parts))
-
-        rec_post_group = "RECOVERED_GROUP_" + safe_hash(shape.recovered_stable_post_id) if shape.recovered_stable_post_id else "UNRESOLVED"
-        
-        safe_children.append({
-            "child_number": idx + 1,
-            "sheet_row_number": sheet_row,
-            "input_state": shape.input_state,
-            "host_family": shape.host_family,
-            "path_family": shape.path_family,
-            "allowed_query_key_flags": list(shape.has_allowed_query_keys),
-            "has_nested_url": shape.has_nested_url,
-            "decoded_layer_count": shape.decoded_layer_count,
-            "direct_identity_extracted": shape.direct_identity_extracted,
-            "recovery_method": shape.recovery_method,
-            "recovered_identity_extracted": bool(shape.recovered_stable_post_id),
-            "recovered_post_group": rec_post_group,
-            "normalized_url_group": normalize_url_for_safe_grouping(url) if url.strip() else "EMPTY",
-            "child_id_group": "CHILD_ID_GROUP_" + safe_hash(str(row.get("source_post_media_id", ""))),
-            "semantic_child_group": sem_group,
-            "media_index": str(row.get("media_index", "")).strip(),
-            "media_type": media_type,
-            "_recovered_ident_str": shape.recovered_stable_post_id
-        })
-
-    # Update matching counts
-    for p in safe_parents:
+    for idx, p in enumerate(raw_parents):
+        c = p.copy()
+        c["candidate_number"] = idx + 1
+        c["recovered_post_group"] = rec_map[p["_ident_hash"]]
+        c["normalized_url_group"] = url_map[p["_url_hash"]] if p["_url_hash"] else "EMPTY"
+        c["semantic_parent_group"] = sp_map[p["_sem_parent_hash"]]
         p_id = p["_recovered_ident_str"]
-        if p_id:
-            count = sum(1 for c in safe_children if c["_recovered_ident_str"] == p_id)
-            p["matching_recovered_child_count"] = count
+        c["matching_recovered_child_count"] = sum(1 for ch in raw_children if ch["_recovered_ident_str"] == p_id and p_id)
+        
+        for k in ["_ident_hash", "_url_hash", "_sem_parent_hash", "_mc_valid", "_recovered_ident_str"]:
+            del c[k]
+        safe_parents.append(c)
+        
+    safe_children = []
+    for idx, c in enumerate(raw_children):
+        cc = c.copy()
+        cc["child_number"] = idx + 1
+        cc["recovered_post_group"] = rec_map[c["_ident_hash"]]
+        cc["normalized_url_group"] = url_map[c["_url_hash"]] if c["_url_hash"] else "EMPTY"
+        cc["child_id_group"] = cid_map[c["_cid_hash"]]
+        cc["semantic_child_group"] = sc_map[c["_sem_child_hash"]]
+        
+        for k in ["_ident_hash", "_url_hash", "_cid_hash", "_sem_child_hash", "_mi_valid", "_recovered_ident_str"]:
+            del cc[k]
+        safe_children.append(cc)
 
-    # Classification
-    all_parents_recovered = all(p["recovered_identity_extracted"] for p in safe_parents)
-    all_children_recovered = all(c["recovered_identity_extracted"] for c in safe_children)
+    all_parents_recovered = len(raw_parents) > 0 and all(p["recovered_identity_extracted"] for p in raw_parents)
+    all_children_recovered = len(raw_children) > 0 and all(c["recovered_identity_extracted"] for c in raw_children)
     unique_parent_groups = set(p["recovered_post_group"] for p in safe_parents if p["recovered_post_group"] != "UNRESOLVED")
     
     classification = "MIXED_OR_UNRESOLVED"
     next_action = "MANUAL_INVESTIGATION"
+    status_reasons = []
 
-    if len(safe_parents) >= 2 and all_parents_recovered and all_children_recovered:
-        if len(unique_parent_groups) == 1:
-            child_groups = set(c["recovered_post_group"] for c in safe_children)
-            if len(child_groups) == 1 and child_groups.pop() == list(unique_parent_groups)[0]:
-                sem_parents = set(p["semantic_parent_group"] for p in safe_parents)
-                if len(sem_parents) == 1:
-                    # check media index consistency (one sem group per index)
-                    index_to_sem = {}
-                    consistent = True
-                    for c in safe_children:
-                        idx_val = c["media_index"]
-                        if idx_val in index_to_sem and index_to_sem[idx_val] != c["semantic_child_group"]:
-                            consistent = False
-                            break
-                        index_to_sem[idx_val] = c["semantic_child_group"]
-                    if consistent:
-                        classification = "RECOVERABLE_SAME_POST"
-                        next_action = "PLAN_DEDUPLICATION_INSPECTION"
-        elif len(unique_parent_groups) >= 2:
-            # RECOVERABLE_DISTINCT_POSTS
-            has_missing_child = False
-            for group in unique_parent_groups:
-                if not any(c["recovered_post_group"] == group for c in safe_children):
-                    has_missing_child = True
-                    break
-            if not has_missing_child:
-                classification = "RECOVERABLE_DISTINCT_POSTS"
-                next_action = "PLAN_REKEY_MIGRATION_INSPECTION"
-                
+    if len(raw_parents) == 0 or len(raw_children) == 0:
+        status_reasons.append("Zero parents or children.")
+    elif not all(p["_mc_valid"] for p in raw_parents):
+        status_reasons.append("Invalid media_count in parents.")
+    elif not all(c["_mi_valid"] for c in raw_children):
+        status_reasons.append("Invalid media_index in children.")
+    else:
+        if len(safe_parents) >= 2 and all_parents_recovered and all_children_recovered:
+            if len(unique_parent_groups) == 1:
+                child_groups = set(c["recovered_post_group"] for c in safe_children)
+                if len(child_groups) == 1 and child_groups.pop() == list(unique_parent_groups)[0]:
+                    sem_parents = set(p["semantic_parent_group"] for p in safe_parents)
+                    if len(sem_parents) == 1:
+                        N = raw_parents[0]["declared_media_count"]
+                        if all(p["declared_media_count"] == N for p in raw_parents) and len(safe_children) == len(safe_parents) * N:
+                            expected_indices = set(range(N))
+                            actual_indices = set(c["media_index"] for c in safe_children)
+                            if expected_indices == actual_indices:
+                                valid_counts = all(sum(1 for c in safe_children if c["media_index"] == i) == len(safe_parents) for i in expected_indices)
+                                if valid_counts:
+                                    sem_child_valid = True
+                                    for i in expected_indices:
+                                        sems = set(c["semantic_child_group"] for c in safe_children if c["media_index"] == i)
+                                        if len(sems) != 1 or sum(1 for c in safe_children if c["semantic_child_group"] == list(sems)[0]) != len(safe_parents):
+                                            sem_child_valid = False
+                                            break
+                                    if sem_child_valid:
+                                        classification = "RECOVERABLE_SAME_POST"
+                                        next_action = "PLAN_DEDUPLICATION_INSPECTION"
+                                        status_reasons.append("All parents and children perfectly match a single post structure.")
+            elif len(unique_parent_groups) >= 2:
+                child_groups = set(c["recovered_post_group"] for c in safe_children)
+                if child_groups == unique_parent_groups:
+                    valid_distinct = True
+                    for group in unique_parent_groups:
+                        pgs = [p for p in safe_parents if p["recovered_post_group"] == group]
+                        cgs = [c for c in safe_children if c["recovered_post_group"] == group]
+                        if not pgs or not cgs:
+                            valid_distinct = False; break
+                        N_total = sum(p["declared_media_count"] for p in pgs)
+                        if len(cgs) != N_total:
+                            valid_distinct = False; break
+                        for p in pgs:
+                            N = p["declared_media_count"]
+                            # Media index check not perfect without associating child to specific parent row in distinct, 
+                            # but we assume distinct posts have N distinct medias for that group.
+                    if valid_distinct and not any(c["recovered_post_group"] not in unique_parent_groups for c in safe_children):
+                        classification = "RECOVERABLE_DISTINCT_POSTS"
+                        next_action = "PLAN_REKEY_MIGRATION_INSPECTION"
+                        status_reasons.append("Matches disjoint sets of parent-child groups.")
+
     if classification == "MIXED_OR_UNRESOLVED":
-        # Check ACCOUNT_OR_CHANNEL_URLS
         if len(safe_parents) > 0 and all(p["path_family"] in ("CHANNEL", "USER", "HANDLE", "PLAYLIST") for p in safe_parents) and not all_parents_recovered:
             classification = "ACCOUNT_OR_CHANNEL_URLS"
             next_action = "TRACE_ID_GENERATION"
-        elif len(safe_parents) > 0 and any(p["recovery_method"] in ("NESTED_QUERY_URL", "PERCENT_DECODED_URL") for p in safe_parents) and not all_parents_recovered:
+            status_reasons.append("All parent URLs represent account or channel pages, not posts.")
+        elif len(safe_parents) > 0 and any(p["has_nested_url"] or p["decoded_layer_count"] > 0 or p["recovery_method"] in ("NESTED_QUERY_URL", "PERCENT_DECODED_URL") for p in safe_parents) and not all_parents_recovered:
             classification = "WRAPPED_OR_ENCODED_URLS"
             next_action = "EXTEND_LOCAL_PARSER"
-        elif len(safe_parents) > 0 and all(p["host_family"] == "NONE" and p["path_family"] == "OTHER" for p in safe_parents):
+            status_reasons.append("Contains wrapped or encoded URLs that failed identity extraction.")
+        elif len(safe_parents) > 0 and all(p["host_family"] == "NONE" and p["path_family"] == "OTHER" for p in safe_parents) and not all_parents_recovered:
             classification = "PLACEHOLDER_OR_NONPUBLIC_URLS"
             next_action = "TRACE_DATA_ORIGIN"
-
-    for x in safe_parents: del x["_recovered_ident_str"]
-    for x in safe_children: del x["_recovered_ident_str"]
+            status_reasons.append("All URLs are placeholders or malformed.")
+            
+    if not status_reasons:
+        status_reasons.append("Could not classify into a known recoverable or specific unresolved state.")
 
     out = {
         "schema_version": 1,
         "mode": "READ_ONLY_SAFE_URL_SHAPE_DIAGNOSTICS",
         "overall_status": "READY_FOR_MANUAL_DECISION",
         "classification": classification,
-        "status_reasons": [],
-        "checked_commit_sha": os.environ.get("GITHUB_SHA", "unknown_local"),
+        "status_reasons": status_reasons,
+        "checked_commit_sha": sha,
         "parent_count": len(safe_parents),
         "child_count": len(safe_children),
         "unique_parent_recovered_group_count": len(unique_parent_groups),
+        "unique_child_recovered_group_count": len(set(c["recovered_post_group"] for c in safe_children if c["recovered_post_group"] != "UNRESOLVED")),
+        "unique_normalized_url_group_count": len(set(p["normalized_url_group"] for p in safe_parents if p["normalized_url_group"] != "EMPTY") | set(c["normalized_url_group"] for c in safe_children if c["normalized_url_group"] != "EMPTY")),
+        "unique_semantic_parent_group_count": len(set(p["semantic_parent_group"] for p in safe_parents)),
+        "unique_semantic_child_group_count": len(set(c["semantic_child_group"] for c in safe_children)),
         "parents": safe_parents,
         "children": safe_children,
         "recommended_next_action": next_action,
         "apply_operations": []
     }
 
-    with open(args.output, "w", encoding="utf-8") as f:
-        json.dump(out, f)
+    print(f"WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={json.dumps(out, separators=(',', ':'))}")
 
 if __name__ == "__main__":
     main()
