@@ -165,7 +165,7 @@ class TestWP3C2DuplicateWorkflow(unittest.TestCase):
         INSPECT_EXIT=1
         GITHUB_STEP_SUMMARY="{}"
         
-        JSON_VAL='{"overall_status": "FAIL", "sheets_verifier": {"passed": 0, "total": 0, "total_basis": ""}, "target_source_post_id": "target", "parent_candidate_count": 0, "parent_candidates": [], "child_summary": {"child_count": 0, "unique_child_id_count": 0, "duplicate_media_indexes": []}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": []}'
+        JSON_VAL='{"overall_status": "FAIL", "sheets_verifier": {"passed": 63, "total": 63, "total_basis": "basis"}, "target_source_post_id": "target", "parent_candidate_count": 1, "parent_candidates": [{"candidate_number": 1, "sheet_row_number": 2, "account_id": "a", "declared_media_count": 0, "has_canonical_post_url": false, "canonical_identity_hash": "", "required_field_presence_count": 0, "parent_precondition_hash": "", "canonical_matching_child_count": 0, "canonical_mismatching_child_ids": [], "material_difference_fields": [], "recommended_disposition": "MANUAL_DECISION_REQUIRED", "blocker_codes": ["DUMMY"]}], "child_summary": {"child_count": 0, "unique_child_id_count": 0, "duplicate_media_indexes": []}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": []}'
         
         echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=$JSON_VAL" > /tmp/wp3c2_stdout.log
         LINE_COUNT=$(grep -c '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log || true)
@@ -181,27 +181,80 @@ class TestWP3C2DuplicateWorkflow(unittest.TestCase):
             exit 1
         fi
         
-        echo "### Inspection Result" >> "$GITHUB_STEP_SUMMARY"
-        echo "- **Overall Status**: $(echo "$PLAN_JSON" | jq -r '.overall_status')" >> "$GITHUB_STEP_SUMMARY"
-        echo "- **Target Source Post ID**: $(echo "$PLAN_JSON" | jq -r '.target_source_post_id')" >> "$GITHUB_STEP_SUMMARY"
-        echo "#### Sheets Verifier" >> "$GITHUB_STEP_SUMMARY"
-        echo "#### Candidates" >> "$GITHUB_STEP_SUMMARY"
-        echo "#### Child Summary" >> "$GITHUB_STEP_SUMMARY"
-        echo "#### Decision" >> "$GITHUB_STEP_SUMMARY"
+        echo "## WP3-C2 Duplicate Parent Inspection Summary" >> "$GITHUB_STEP_SUMMARY"
+        echo "### Overall Status" >> "$GITHUB_STEP_SUMMARY"
+        echo "\`$(echo "$PLAN_JSON" | jq -r '.overall_status')\`" >> "$GITHUB_STEP_SUMMARY"
+        
+        echo "### Target Source Post ID" >> "$GITHUB_STEP_SUMMARY"
+        echo "\`$(echo "$PLAN_JSON" | jq -r '.target_source_post_id')\`" >> "$GITHUB_STEP_SUMMARY"
+        
+        echo "### Sheets Verifier" >> "$GITHUB_STEP_SUMMARY"
+        echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed // 0)
+- Total: \(.total // 0)
+- Basis: \(.total_basis // \"\")"' >> "$GITHUB_STEP_SUMMARY"
+        
+        echo "### Candidates ($(echo "$PLAN_JSON" | jq -r '.parent_candidate_count'))" >> "$GITHUB_STEP_SUMMARY"
+        echo "$PLAN_JSON" | jq -r '
+          .parent_candidates[]? |
+          "- **Candidate #\(.candidate_number)** (Row \(.sheet_row_number))
+" +
+          "  - Account: \(.account_id)
+" +
+          "  - Declared Media: \(.declared_media_count)
+" +
+          "  - Has Canonical URL: \(.has_canonical_post_url)
+" +
+          "  - Has Canonical Identity Hash: \(if (.canonical_identity_hash // \"\") != \"\" then true else false end)
+" +
+          "  - Required Fields: \(.required_field_presence_count)
+" +
+          "  - Has Parent Precondition Hash: \(if (.parent_precondition_hash // \"\") != \"\" then true else false end)
+" +
+          "  - Canonical Match Children: \(.canonical_matching_child_count)
+" +
+          "  - Mismatch Child IDs: \((.canonical_mismatching_child_ids // []) | join(\", \"))
+" +
+          "  - Material Diffs: \((.material_difference_fields // []) | join(\", \"))
+" +
+          "  - Disposition: \(.recommended_disposition)
+" +
+          "  - Blockers: \((.blocker_codes // []) | join(\", \"))"
+        ' >> "$GITHUB_STEP_SUMMARY"
+        
+        echo "### Child Summary ($(echo "$PLAN_JSON" | jq -r '.child_summary.child_count'))" >> "$GITHUB_STEP_SUMMARY"
+        echo "$PLAN_JSON" | jq -r '
+          .child_summary |
+          "- Unique IDs: \(.unique_child_id_count)
+" +
+          "- Duplicate Media Indexes: \((.duplicate_media_indexes // []) | join(\", \"))"
+        ' >> "$GITHUB_STEP_SUMMARY"
+        
+        echo "### Decision" >> "$GITHUB_STEP_SUMMARY"
+        echo "- Recommended Keep Row: $(echo "$PLAN_JSON" | jq -r '.recommended_keep_sheet_row_number')" >> "$GITHUB_STEP_SUMMARY"
+        echo "- Manual Delete Rows: $(echo "$PLAN_JSON" | jq -r '(.manual_delete_candidate_sheet_row_numbers // []) | join(\", \")')" >> "$GITHUB_STEP_SUMMARY"
         
         exit "$INSPECT_EXIT"
         ''').format(summary_path)
         
+        # Ensure it doesn't exist before run
+        if os.path.exists(summary_path):
+            os.remove(summary_path)
+            
         p = subprocess.run(["bash", "-c", script], capture_output=True)
         self.assertEqual(p.returncode, 1)
-        self.assertFalse(p.stderr)
+        self.assertFalse(p.stderr, f"stderr: {p.stderr.decode('utf-8')}")
         
+        self.assertTrue(os.path.exists(summary_path))
         with open(summary_path, 'r') as f:
             summary_content = f.read()
+            
         self.assertIn("FAIL", summary_content)
-        self.assertIn("Sheets Verifier", summary_content)
-        self.assertIn("Child Summary", summary_content)
-        self.assertIn("Decision", summary_content)
+        self.assertIn("target", summary_content)
+        self.assertIn("- Passed: 63", summary_content)
+        self.assertIn("- Total: 63", summary_content)
+        self.assertIn("Candidate #1", summary_content)
+        self.assertIn("- Unique IDs: 0", summary_content)
+        self.assertIn("- Recommended Keep Row: null", summary_content)
         
         if os.path.exists(summary_path):
             os.remove(summary_path)

@@ -139,6 +139,49 @@ class TestWP3C2DuplicateInspector(unittest.TestCase):
         rep = inspect_duplicate_parent([], [], verifier_result={"passed": 63, "total": 63}, implementation_head="", origin_main="")
         self.assertEqual(rep["overall_status"], "BLOCKED")
 
+    def test_status_1_parent_blocked_normalization(self):
+        p1 = {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "http://a", "media_count": 1, "target_account_id": "a"}
+        rep = inspect_duplicate_parent([(2, p1)], [], verifier_result={"passed": 63, "total": 63}, implementation_head="", origin_main="")
+        self.assertEqual(rep["overall_status"], "BLOCKED")
+        self.assertEqual(rep["parent_candidates"][0]["recommended_disposition"], "MANUAL_DECISION_REQUIRED")
+        self.assertIsNone(rep["recommended_keep_sheet_row_number"])
+        self.assertEqual(rep["manual_delete_candidate_sheet_row_numbers"], [])
+        self.assertEqual(rep["apply_operations"], [])
+        self.assertEqual(rep["status_reasons"], ["NOT_ENOUGH_PARENTS"])
+
+    def test_status_invalid_row_blocked_normalization(self):
+        p1 = {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "http://a", "media_count": 1, "target_account_id": "a"}
+        parents = [(1, p1), (3, p1)] # 1 is invalid
+        rep = inspect_duplicate_parent(parents, [], verifier_result={"passed": 63, "total": 63}, implementation_head="", origin_main="")
+        self.assertEqual(rep["overall_status"], "BLOCKED")
+        self.assertEqual(rep["parent_candidates"][0]["recommended_disposition"], "MANUAL_DECISION_REQUIRED")
+        self.assertEqual(rep["parent_candidates"][1]["recommended_disposition"], "MANUAL_DECISION_REQUIRED")
+        self.assertIn("INVALID_SHEET_ROW_NUMBER", rep["status_reasons"])
+        self.assertIsNone(rep["recommended_keep_sheet_row_number"])
+        self.assertEqual(rep["manual_delete_candidate_sheet_row_numbers"], [])
+        self.assertEqual(rep["apply_operations"], [])
+
+    def test_status_duplicate_row_blocked_normalization(self):
+        p1 = {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "http://a", "media_count": 1, "target_account_id": "a"}
+        parents = [(2, p1), (2, p1)]
+        rep = inspect_duplicate_parent(parents, [], verifier_result={"passed": 63, "total": 63}, implementation_head="", origin_main="")
+        self.assertEqual(rep["overall_status"], "BLOCKED")
+        for c in rep["parent_candidates"]:
+            self.assertEqual(c["recommended_disposition"], "MANUAL_DECISION_REQUIRED")
+        self.assertIn("DUPLICATE_SHEET_ROW_NUMBER", rep["status_reasons"])
+        self.assertIsNone(rep["recommended_keep_sheet_row_number"])
+        self.assertEqual(rep["manual_delete_candidate_sheet_row_numbers"], [])
+        self.assertEqual(rep["apply_operations"], [])
+
+    def test_status_reasons_sorted_unique(self):
+        p1 = {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "http://a", "media_count": 1, "target_account_id": "a"}
+        parents = [(1, p1), (2, p1), (2, p1)] # invalid row (1) and duplicate row (2, 2)
+        rep = inspect_duplicate_parent(parents, [], verifier_result={"passed": 63, "total": 63}, implementation_head="", origin_main="")
+        reasons = rep["status_reasons"]
+        self.assertEqual(len(reasons), len(set(reasons)), "status_reasons are not unique")
+        self.assertEqual(reasons, sorted(reasons), "status_reasons are not sorted")
+        self.assertTrue(len(reasons) >= 2)
+
     def test_status_invalid_row(self):
         p1 = {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "http://a", "media_count": 1, "target_account_id": "a"}
         parents = [(1, p1), (3, p1)] # 1 is invalid
