@@ -15,6 +15,7 @@ jobs:
     name: Inspect Identity Collision
     runs-on: ubuntu-latest
     environment: production
+    timeout-minutes: 20
     
     steps:
       - name: Checkout Code
@@ -29,13 +30,15 @@ jobs:
           
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
           
       - name: Run Inspector
         id: inspect
         env:
-          GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
+          GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+          SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+          SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
           PUBLISH_ENABLED: "false"
           ALLOW_REAL_THREADS_POST: "false"
           ALLOW_REAL_X_POST: "false"
@@ -51,17 +54,19 @@ jobs:
           EXIT_CODE=$?
           set -e
           
-          cat /tmp/wp3c3_out.txt
-          
-          if grep -q "^WP3C3_SAFE_IDENTITY_INSPECTION_JSON=" /tmp/wp3c3_out.txt; then
-            grep "^WP3C3_SAFE_IDENTITY_INSPECTION_JSON=" /tmp/wp3c3_out.txt > /tmp/wp3c3_env.txt
-            source /tmp/wp3c3_env.txt
-            echo "$WP3C3_SAFE_IDENTITY_INSPECTION_JSON" > /tmp/wp3c3_safe.json
+          SAFE_PREFIX_COUNT=$(grep -c "^WP3C3_SAFE_IDENTITY_INSPECTION_JSON=" /tmp/wp3c3_out.txt || true)
+          if [ "$SAFE_PREFIX_COUNT" != "1" ]; then
+            echo "Safe prefix count is not 1"
+            exit 1
           fi
           
+          SAFE_JSON_LINE=$(grep "^WP3C3_SAFE_IDENTITY_INSPECTION_JSON=" /tmp/wp3c3_out.txt)
+          SAFE_JSON_STR=${SAFE_JSON_LINE#WP3C3_SAFE_IDENTITY_INSPECTION_JSON=}
+          
+          printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c3_safe_clean.json
+          printf '%s\n' "$SAFE_JSON_STR"
+          
           python3 scripts/render_wp3c3_identity_summary.py \
-            --json-input /tmp/wp3c3_safe.json \
+            --json-input /tmp/wp3c3_safe_clean.json \
             --summary-output $GITHUB_STEP_SUMMARY \
             --exit-code $EXIT_CODE
-            
-          exit $EXIT_CODE

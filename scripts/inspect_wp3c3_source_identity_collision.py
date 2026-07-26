@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import hashlib
+from collections import defaultdict
 from urllib.parse import urlsplit, urlunsplit
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -83,6 +84,8 @@ def build_failure_report(
         "checked_commit_sha": implementation_head,
         "parent_count": 0,
         "child_count": 0,
+        "unique_parent_post_identity_group_count": 0,
+        "unique_child_post_identity_group_count": 0,
         "unique_post_identity_group_count": 0,
         "unique_child_id_group_count": 0,
         "unique_parent_fingerprint_group_count": 0,
@@ -119,7 +122,10 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
     parents = [r for r in source_posts_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
     children = [r for r in source_post_media_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
     
-    post_identity_hashes = set()
+    parent_post_identity_hashes = set()
+    child_post_identity_hashes = set()
+    combined_post_identity_hashes = set()
+    
     parent_fingerprint_hashes = set()
     child_id_hashes = set()
     child_fingerprint_hashes = set()
@@ -129,6 +135,23 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
     
     status_reasons = []
     
+    # 1st pass to collect all identities for hashing
+    for _, p in parents:
+        url = str(p.get("canonical_post_url", ""))
+        ident = extract_source_post_identity(url)
+        if ident.confidence == "HIGH" and ident.stable_post_id:
+            h = sha256_text(f"{ident.platform}:{ident.identity_kind}:{ident.stable_post_id}")
+            parent_post_identity_hashes.add(h)
+            combined_post_identity_hashes.add(h)
+
+    for _, c in children:
+        url = str(c.get("canonical_post_url", ""))
+        ident = extract_source_post_identity(url)
+        if ident.confidence == "HIGH" and ident.stable_post_id:
+            h = sha256_text(f"{ident.platform}:{ident.identity_kind}:{ident.stable_post_id}")
+            child_post_identity_hashes.add(h)
+            combined_post_identity_hashes.add(h)
+            
     for r_idx, p in parents:
         url = str(p.get("canonical_post_url", ""))
         ident = extract_source_post_identity(url)
@@ -136,7 +159,6 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
         ident_hash = ""
         if ident.confidence == "HIGH" and ident.stable_post_id:
             ident_hash = sha256_text(f"{ident.platform}:{ident.identity_kind}:{ident.stable_post_id}")
-            post_identity_hashes.add(ident_hash)
             
         p_clone = dict(p)
         for k in ["canonical_post_url", "created_at", "updated_at"]:
@@ -149,7 +171,15 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
         if str(p.get("target_account_id", "")).strip() or str(p.get("account_id", "")).strip():
             req_count += 1
             
-        matching_child_count = sum(1 for _, c in children if str(c.get("canonical_post_url", "")) == url and url)
+        matching_child_count = 0
+        if ident_hash:
+            for _, c in children:
+                curl = str(c.get("canonical_post_url", ""))
+                cident = extract_source_post_identity(curl)
+                if cident.confidence == "HIGH" and cident.stable_post_id:
+                    chash = sha256_text(f"{cident.platform}:{cident.identity_kind}:{cident.stable_post_id}")
+                    if chash == ident_hash:
+                        matching_child_count += 1
         
         raw_parents.append({
             "candidate_number": len(raw_parents) + 1,
@@ -173,7 +203,6 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
         ident_hash = ""
         if ident.confidence == "HIGH" and ident.stable_post_id:
             ident_hash = sha256_text(f"{ident.platform}:{ident.identity_kind}:{ident.stable_post_id}")
-            post_identity_hashes.add(ident_hash)
             
         cid = str(c.get("source_post_media_id", ""))
         cid_hash = sha256_text(cid) if cid else ""
@@ -181,7 +210,6 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
             child_id_hashes.add(cid_hash)
             
         c_clone = dict(c)
-        # Exclude dynamic/unique ID fields from fingerprint to find true duplicates
         for k in ["created_at", "updated_at", "canonical_post_url", "source_post_media_id", "id", "row_hash"]:
             c_clone.pop(k, None)
         c_clone["_computed_ident_hash"] = ident_hash
@@ -199,7 +227,7 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
             "ident_hash": ident_hash,
             "identity_extracted": ident.confidence == "HIGH",
             "cid_hash": cid_hash,
-            "media_index": safe_int(c.get("media_index", "")),
+            "media_index": safe_int(c.get("media_index", "") if str(c.get("media_index", "")) else "-1", -1),
             "media_type": str(c.get("media_type", "")),
             "fingerprint": c_fingerprint
         })
@@ -207,7 +235,7 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
     def create_group_map(hashes, prefix):
         return {h: f"{prefix}_{i+1}" for i, h in enumerate(sorted(list(hashes)))}
         
-    post_identity_map = create_group_map(post_identity_hashes, "POST_GROUP")
+    post_identity_map = create_group_map(combined_post_identity_hashes, "POST_GROUP")
     parent_fingerprint_map = create_group_map(parent_fingerprint_hashes, "PARENT_GROUP")
     child_id_map = create_group_map(child_id_hashes, "CHILD_ID_GROUP")
     child_fingerprint_map = create_group_map(child_fingerprint_hashes, "CHILD_ROW_GROUP")
@@ -217,15 +245,20 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
     for p in raw_parents:
         pg = post_identity_map.get(p["ident_hash"], "UNRESOLVED")
         p["post_identity_group"] = pg
-        parent_identity_groups.add(pg)
+        if pg != "UNRESOLVED":
+            parent_identity_groups.add(pg)
         p["stable_parent_fingerprint_group"] = parent_fingerprint_map.get(p["fingerprint"], "UNRESOLVED")
         del p["ident_hash"]
         del p["fingerprint"]
         final_parents.append(p)
         
     final_children = []
+    child_identity_groups = set()
     for c in raw_children:
-        c["post_identity_group"] = post_identity_map.get(c["ident_hash"], "UNRESOLVED")
+        pg = post_identity_map.get(c["ident_hash"], "UNRESOLVED")
+        c["post_identity_group"] = pg
+        if pg != "UNRESOLVED":
+            child_identity_groups.add(pg)
         c["child_id_group"] = child_id_map.get(c["cid_hash"], "UNRESOLVED")
         c["stable_child_fingerprint_group"] = child_fingerprint_map.get(c["fingerprint"], "UNRESOLVED")
         del c["ident_hash"]
@@ -233,7 +266,10 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
         del c["fingerprint"]
         final_children.append(c)
 
-    unique_post_identity_group_count = len(post_identity_hashes)
+    unique_parent_post_identity_group_count = len(parent_post_identity_hashes)
+    unique_child_post_identity_group_count = len(child_post_identity_hashes)
+    unique_post_identity_group_count = len(combined_post_identity_hashes)
+    
     unique_child_id_group_count = len(child_id_hashes)
     unique_parent_fingerprint_group_count = len(parent_fingerprint_hashes)
     unique_child_fingerprint_group_count = len(child_fingerprint_hashes)
@@ -241,36 +277,103 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
     classification = "UNRESOLVED_IDENTITY"
     recommended_next_action = "MANUAL_INVESTIGATION"
     
-    all_parents_extracted = all(p["identity_extracted"] for p in final_parents)
-    if not final_parents:
-        all_parents_extracted = False
+    # Validation checks
+    unresolved = False
+    
+    if len(final_parents) == 0:
+        unresolved = True
+        status_reasons.append("NO_PARENT_ROWS")
+    elif len(final_parents) == 1:
+        unresolved = True
+        status_reasons.append("NOT_ENOUGH_PARENT_ROWS")
         
-    # Check if any child identity does not correspond to a parent identity
-    child_mismatch = any(c["post_identity_group"] not in parent_identity_groups for c in final_children)
+    if len(final_children) == 0:
+        unresolved = True
+        status_reasons.append("NO_CHILD_ROWS")
         
-    if all_parents_extracted and not child_mismatch:
-        if unique_post_identity_group_count == 1:
-            all_children_same_post = all(c["post_identity_group"] == final_parents[0]["post_identity_group"] for c in final_children)
+    if any(not p["identity_extracted"] for p in final_parents):
+        unresolved = True
+        status_reasons.append("PARENT_IDENTITY_UNRESOLVED")
+        
+    if any(not c["identity_extracted"] for c in final_children):
+        unresolved = True
+        status_reasons.append("CHILD_IDENTITY_UNRESOLVED")
+        
+    if any(c["post_identity_group"] not in parent_identity_groups for c in final_children if c["identity_extracted"]):
+        unresolved = True
+        status_reasons.append("CHILD_WITHOUT_PARENT_IDENTITY")
+        
+    if any(p["post_identity_group"] not in child_identity_groups for p in final_parents if p["identity_extracted"]):
+        unresolved = True
+        status_reasons.append("PARENT_WITHOUT_CHILD")
+
+    for pg in parent_identity_groups:
+        pg_parents = [p for p in final_parents if p["post_identity_group"] == pg]
+        pg_children = [c for c in final_children if c["post_identity_group"] == pg]
+        
+        sum_declared = sum(p["declared_media_count"] for p in pg_parents)
+        if sum_declared != len(pg_children):
+            unresolved = True
+            if "DECLARED_MEDIA_COUNT_MISMATCH" not in status_reasons:
+                status_reasons.append("DECLARED_MEDIA_COUNT_MISMATCH")
+                
+        media_indices = [c["media_index"] for c in pg_children]
+        if any(idx < 0 for idx in media_indices):
+            unresolved = True
+            if "MEDIA_INDEX_LAYOUT_MISMATCH" not in status_reasons:
+                status_reasons.append("MEDIA_INDEX_LAYOUT_MISMATCH")
+                
+        # Media index configuration must be exactly 0 to N-1 for each parent
+        for p in pg_parents:
+            dmc = p["declared_media_count"]
+            expected_indices = list(range(dmc)) * len(pg_parents)
+            if sorted(media_indices) != sorted(expected_indices):
+                unresolved = True
+                if "MEDIA_INDEX_LAYOUT_MISMATCH" not in status_reasons:
+                    status_reasons.append("MEDIA_INDEX_LAYOUT_MISMATCH")
+
+    if not unresolved:
+        if unique_parent_post_identity_group_count == 1:
+            # SAME_POST_REINGESTED
+            pg_parents = final_parents
+            pg_children = final_children
+            dmcs = set(p["declared_media_count"] for p in pg_parents)
             
-            # The prompt says: "stable child fingerprint groupが1種類".
-            # For this test, I will assume it literally means exactly 1 fingerprint across all child rows
-            # if they are identical except for ID.
-            if all_children_same_post and unique_parent_fingerprint_group_count == 1 and unique_child_fingerprint_group_count <= 1:
-                classification = "SAME_POST_REINGESTED"
-                recommended_next_action = "PLAN_DEDUPLICATION"
-        elif unique_post_identity_group_count >= 2:
+            if len(dmcs) == 1 and unique_parent_fingerprint_group_count == 1:
+                dmc = list(dmcs)[0]
+                if dmc > 0 and len(pg_children) == len(pg_parents) * dmc:
+                    # check stable child fingerprint is 1 per media index
+                    fingerprints_by_index = defaultdict(set)
+                    for c in pg_children:
+                        fingerprints_by_index[c["media_index"]].add(c["stable_child_fingerprint_group"])
+                        
+                    if all(len(s) == 1 for s in fingerprints_by_index.values()):
+                        # check counts
+                        counts = defaultdict(int)
+                        for c in pg_children:
+                            counts[c["stable_child_fingerprint_group"]] += 1
+                        if all(v == len(pg_parents) for v in counts.values()):
+                            classification = "SAME_POST_REINGESTED"
+                            recommended_next_action = "PLAN_DEDUPLICATION"
+                            
+        elif unique_parent_post_identity_group_count >= 2:
             classification = "DISTINCT_POSTS_COLLIDED"
             recommended_next_action = "PLAN_REKEY_MIGRATION"
+
+    if classification == "UNRESOLVED_IDENTITY":
+        recommended_next_action = "MANUAL_INVESTIGATION"
 
     return {
         "schema_version": 1,
         "mode": "READ_ONLY_SOURCE_IDENTITY_COLLISION_INSPECTION",
         "overall_status": "READY_FOR_MANUAL_DECISION",
         "classification": classification,
-        "status_reasons": status_reasons,
+        "status_reasons": sorted(status_reasons),
         "checked_commit_sha": implementation_head,
         "parent_count": len(final_parents),
         "child_count": len(final_children),
+        "unique_parent_post_identity_group_count": unique_parent_post_identity_group_count,
+        "unique_child_post_identity_group_count": unique_child_post_identity_group_count,
         "unique_post_identity_group_count": unique_post_identity_group_count,
         "unique_child_id_group_count": unique_child_id_group_count,
         "unique_parent_fingerprint_group_count": unique_parent_fingerprint_group_count,

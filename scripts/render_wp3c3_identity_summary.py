@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+import re
 
 def is_plain_int(val):
     if isinstance(val, bool):
@@ -21,6 +22,8 @@ REQUIRED_TOP_LEVEL_KEYS = [
     "checked_commit_sha",
     "parent_count",
     "child_count",
+    "unique_parent_post_identity_group_count",
+    "unique_child_post_identity_group_count",
     "unique_post_identity_group_count",
     "unique_child_id_group_count",
     "unique_parent_fingerprint_group_count",
@@ -39,6 +42,12 @@ def sanitize_text(text: str) -> str:
         s = s[:197] + "..."
     return s
 
+def validate_group_name(val, prefix):
+    if val == "UNRESOLVED":
+        return
+    if not re.match(r"^" + prefix + r"_[1-9][0-9]*$", val):
+        raise ValueError(f"Invalid group name: {val}")
+
 def validate_contract(data, exit_code):
     if not isinstance(data, dict):
         raise ValueError("JSON root must be an object")
@@ -53,6 +62,19 @@ def validate_contract(data, exit_code):
         
     if data["overall_status"] not in ["READY_FOR_MANUAL_DECISION", "BLOCKED", "FAIL"]:
         raise ValueError("Invalid overall_status")
+        
+    if data["classification"] not in ["SAME_POST_REINGESTED", "DISTINCT_POSTS_COLLIDED", "UNRESOLVED_IDENTITY"]:
+        raise ValueError("Invalid classification")
+        
+    if data["recommended_next_action"] not in ["PLAN_DEDUPLICATION", "PLAN_REKEY_MIGRATION", "MANUAL_INVESTIGATION"]:
+        raise ValueError("Invalid recommended_next_action")
+        
+    if data["classification"] == "SAME_POST_REINGESTED" and data["recommended_next_action"] != "PLAN_DEDUPLICATION":
+        raise ValueError("Invalid classification/action combo")
+    if data["classification"] == "DISTINCT_POSTS_COLLIDED" and data["recommended_next_action"] != "PLAN_REKEY_MIGRATION":
+        raise ValueError("Invalid classification/action combo")
+    if data["classification"] == "UNRESOLVED_IDENTITY" and data["recommended_next_action"] != "MANUAL_INVESTIGATION":
+        raise ValueError("Invalid classification/action combo")
         
     if not isinstance(data["status_reasons"], list):
         raise ValueError("status_reasons must be a list")
@@ -76,6 +98,17 @@ def validate_contract(data, exit_code):
         raise ValueError("parent_count mismatch")
     if data["child_count"] != len(data["children"]):
         raise ValueError("child_count mismatch")
+
+    for p in data["parents"]:
+        require_keys(p, ["post_identity_group", "stable_parent_fingerprint_group", "identity_extracted"], "parent")
+        validate_group_name(p["post_identity_group"], "POST_GROUP")
+        validate_group_name(p["stable_parent_fingerprint_group"], "PARENT_GROUP")
+        
+    for c in data["children"]:
+        require_keys(c, ["post_identity_group", "child_id_group", "stable_child_fingerprint_group", "identity_extracted"], "child")
+        validate_group_name(c["post_identity_group"], "POST_GROUP")
+        validate_group_name(c["child_id_group"], "CHILD_ID_GROUP")
+        validate_group_name(c["stable_child_fingerprint_group"], "CHILD_ROW_GROUP")
 
 def render_markdown(data) -> str:
     lines = []
@@ -119,6 +152,10 @@ def main():
     parser.add_argument("--exit-code", type=int, required=True)
     args = parser.parse_args()
 
+    if args.exit_code not in [0, 1]:
+        print(f"WP3-C3 summary renderer failed: ValueError", file=sys.stderr)
+        sys.exit(1)
+
     try:
         with open(args.json_input, "r") as f:
             data = json.load(f)
@@ -126,11 +163,13 @@ def main():
         validate_contract(data, args.exit_code)
         md = render_markdown(data)
         
-        with open(args.summary_output, "w") as f:
-            f.write(md)
+        with open(args.summary_output, "a") as f:
+            f.write(md + "\n")
+            
+        sys.exit(args.exit_code)
             
     except Exception as e:
-        print(f"WP3-C3 summary renderer failed: {type(e).__name__}: {str(e)}", file=sys.stderr)
+        print(f"WP3-C3 summary renderer failed: {type(e).__name__}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
