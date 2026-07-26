@@ -122,169 +122,221 @@ class TestWP3C2DuplicateWorkflow(unittest.TestCase):
         ''')
         p = subprocess.run(["bash", "-c", script2], capture_output=True)
         self.assertEqual(p.returncode, 42)
-        
-        script2 = textwrap.dedent('''
-        set -e
-        echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON={}" > /tmp/wp3c2_stdout.log
-        echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON={}" >> /tmp/wp3c2_stdout.log
-        LINE_COUNT=$(grep -c '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log || true)
-        if [ "$LINE_COUNT" -ne 1 ]; then
-           exit 42
-        fi
-        ''')
-        p = subprocess.run(["bash", "-c", script2], capture_output=True)
-        self.assertEqual(p.returncode, 42)
-
-    def test_21_malformed_json_fail(self):
-        import subprocess
-        import textwrap
-        script = textwrap.dedent('''
-        set -e
-        echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON={bad" > /tmp/wp3c2_stdout.log
-        LINE_COUNT=1
-        PLAN_LINE=$(grep '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log)
-        PLAN_JSON=${PLAN_LINE#WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=}
-        if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then
-           exit 43
-        fi
-        ''')
-        p = subprocess.run(["bash", "-c", script], capture_output=True)
-        self.assertEqual(p.returncode, 43)
-
-    def test_22_inspector_exit_1(self):
-        import subprocess
-        import textwrap
-        import tempfile
-        import os
-        
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            summary_path = f.name
-            
-        script = textwrap.dedent('''
-        set -e
-        INSPECT_EXIT=1
-        GITHUB_STEP_SUMMARY="{}"
-        
-        JSON_VAL='{"overall_status": "FAIL", "sheets_verifier": {"passed": 63, "total": 63, "total_basis": "basis"}, "target_source_post_id": "target", "parent_candidate_count": 1, "parent_candidates": [{"candidate_number": 1, "sheet_row_number": 2, "account_id": "a", "declared_media_count": 0, "has_canonical_post_url": false, "canonical_identity_hash": "", "required_field_presence_count": 0, "parent_precondition_hash": "", "canonical_matching_child_count": 0, "canonical_mismatching_child_ids": [], "material_difference_fields": [], "recommended_disposition": "MANUAL_DECISION_REQUIRED", "blocker_codes": ["DUMMY"]}], "child_summary": {"child_count": 0, "unique_child_id_count": 0, "duplicate_media_indexes": []}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": []}'
-        
-        echo "WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=$JSON_VAL" > /tmp/wp3c2_stdout.log
-        LINE_COUNT=$(grep -c '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log || true)
-        if [ "$LINE_COUNT" -ne 1 ]; then
-            echo "Safe inspection JSON prefix must appear exactly once in stdout. Found $LINE_COUNT times." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-        fi
-        
-        PLAN_LINE=$(grep '^WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=' /tmp/wp3c2_stdout.log)
-        PLAN_JSON=${PLAN_LINE#WP3C2_SAFE_DUPLICATE_INSPECTION_JSON=}
-        if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then
-            echo "Inspection returned invalid JSON." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-        fi
-        
-        echo "## WP3-C2 Duplicate Parent Inspection Summary" >> "$GITHUB_STEP_SUMMARY"
-        echo "### Overall Status" >> "$GITHUB_STEP_SUMMARY"
-        echo "\`$(echo "$PLAN_JSON" | jq -r '.overall_status')\`" >> "$GITHUB_STEP_SUMMARY"
-        
-        echo "### Target Source Post ID" >> "$GITHUB_STEP_SUMMARY"
-        echo "\`$(echo "$PLAN_JSON" | jq -r '.target_source_post_id')\`" >> "$GITHUB_STEP_SUMMARY"
-        
-        echo "### Sheets Verifier" >> "$GITHUB_STEP_SUMMARY"
-        echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed // 0)
-- Total: \(.total // 0)
-- Basis: \(.total_basis // \"\")"' >> "$GITHUB_STEP_SUMMARY"
-        
-        echo "### Candidates ($(echo "$PLAN_JSON" | jq -r '.parent_candidate_count'))" >> "$GITHUB_STEP_SUMMARY"
-        echo "$PLAN_JSON" | jq -r '
-          .parent_candidates[]? |
-          "- **Candidate #\(.candidate_number)** (Row \(.sheet_row_number))
-" +
-          "  - Account: \(.account_id)
-" +
-          "  - Declared Media: \(.declared_media_count)
-" +
-          "  - Has Canonical URL: \(.has_canonical_post_url)
-" +
-          "  - Has Canonical Identity Hash: \(if (.canonical_identity_hash // \"\") != \"\" then true else false end)
-" +
-          "  - Required Fields: \(.required_field_presence_count)
-" +
-          "  - Has Parent Precondition Hash: \(if (.parent_precondition_hash // \"\") != \"\" then true else false end)
-" +
-          "  - Canonical Match Children: \(.canonical_matching_child_count)
-" +
-          "  - Mismatch Child IDs: \((.canonical_mismatching_child_ids // []) | join(\", \"))
-" +
-          "  - Material Diffs: \((.material_difference_fields // []) | join(\", \"))
-" +
-          "  - Disposition: \(.recommended_disposition)
-" +
-          "  - Blockers: \((.blocker_codes // []) | join(\", \"))"
-        ' >> "$GITHUB_STEP_SUMMARY"
-        
-        echo "### Child Summary ($(echo "$PLAN_JSON" | jq -r '.child_summary.child_count'))" >> "$GITHUB_STEP_SUMMARY"
-        echo "$PLAN_JSON" | jq -r '
-          .child_summary |
-          "- Unique IDs: \(.unique_child_id_count)
-" +
-          "- Duplicate Media Indexes: \((.duplicate_media_indexes // []) | join(\", \"))"
-        ' >> "$GITHUB_STEP_SUMMARY"
-        
-        echo "### Decision" >> "$GITHUB_STEP_SUMMARY"
-        echo "- Recommended Keep Row: $(echo "$PLAN_JSON" | jq -r '.recommended_keep_sheet_row_number')" >> "$GITHUB_STEP_SUMMARY"
-        echo "- Manual Delete Rows: $(echo "$PLAN_JSON" | jq -r '(.manual_delete_candidate_sheet_row_numbers // []) | join(\", \")')" >> "$GITHUB_STEP_SUMMARY"
-        
-        exit "$INSPECT_EXIT"
-        ''').format(summary_path)
-        
-        # Ensure it doesn't exist before run
-        if os.path.exists(summary_path):
-            os.remove(summary_path)
-            
-        p = subprocess.run(["bash", "-c", script], capture_output=True)
-        self.assertEqual(p.returncode, 1)
-        self.assertFalse(p.stderr, f"stderr: {p.stderr.decode('utf-8')}")
-        
+    def test_21_summary_renderer_valid_ready_with_secrets(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "READY_FOR_MANUAL_DECISION", "target_source_post_id": "T1", "sheets_verifier": {"passed": 63, "total": 63}, "parent_candidate_count": 2, "parent_candidates": [{"candidate_number": 1, "sheet_row_number": 2, "account_id": "a1\\nb1", "declared_media_count": 1, "has_canonical_post_url": true, "canonical_identity_hash": "CANONICAL_HASH_SECRET", "required_field_presence_count": 5, "parent_precondition_hash": "PRECONDITION_HASH_SECRET", "canonical_matching_child_count": 1, "canonical_mismatching_child_ids": [], "material_difference_fields": [], "recommended_disposition": "MANUAL_DECISION_REQUIRED", "blocker_codes": [], "canonical_post_url": "https://unsafe.example/canonical", "original_media_url": "https://unsafe.example/media", "raw_row": "RAW_ROW_SECRET", "access_token": "TOKEN_SECRET", "client_secret": "CLIENT_SECRET_VALUE"}, {"candidate_number": 2, "sheet_row_number": 3, "account_id": "a2", "declared_media_count": 1, "has_canonical_post_url": false, "canonical_identity_hash": "", "required_field_presence_count": 5, "parent_precondition_hash": "", "canonical_matching_child_count": 0, "canonical_mismatching_child_ids": [], "material_difference_fields": [], "recommended_disposition": "MANUAL_DECISION_REQUIRED", "blocker_codes": []}], "child_summary": {"child_count": 1, "unique_child_id_count": 1, "child_id_duplicate_count": 0, "duplicate_media_indexes": [], "missing_child_id_count": 0, "malformed_media_index_count": 0, "negative_media_index_count": 0}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": ["REASON1"], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 0, msg=f"stderr: {p.stderr.decode()}")
         self.assertTrue(os.path.exists(summary_path))
         with open(summary_path, 'r') as f:
-            summary_content = f.read()
-            
-        self.assertIn("FAIL", summary_content)
-        self.assertIn("target", summary_content)
-        self.assertIn("- Passed: 63", summary_content)
-        self.assertIn("- Total: 63", summary_content)
-        self.assertIn("Candidate #1", summary_content)
-        self.assertIn("- Unique IDs: 0", summary_content)
-        self.assertIn("- Recommended Keep Row: null", summary_content)
-        
-        if os.path.exists(summary_path):
-            os.remove(summary_path)
-        
-    def test_23_no_full_output_cat(self):
-        self.assertNotIn("cat /tmp/wp3c2_inspect.json", self.step_run)
-        
-    def test_24_no_raw_log_cat(self):
-        self.assertNotIn("cat /tmp/wp3c2_stdout.log", self.step_run)
-        
-    def test_25_no_canonical_hash_value(self):
-        self.assertNotIn("\(.canonical_identity_hash)\n", self.step_run)
-        
-    def test_26_canonical_hash_presence(self):
-        self.assertIn(r'Has Canonical Identity Hash: \(if (.canonical_identity_hash // "") != "" then true else false end)', self.step_run)
-        
-    def test_27_parent_hash_presence(self):
-        self.assertIn(r'Has Parent Precondition Hash: \(if (.parent_precondition_hash // "") != "" then true else false end)', self.step_run)
-        
-    def test_28_row_number(self):
-        self.assertIn("Row \(.sheet_row_number)", self.step_run)
-        
-    def test_29_disposition(self):
-        self.assertIn("Disposition: \(.recommended_disposition)", self.step_run)
-        
-    def test_30_blocker_code(self):
-        self.assertIn('Blockers: \((.blocker_codes // []) | join(\", \"))', self.step_run)
-        
-    def test_31_recommended_keep_row(self):
-        self.assertIn('Recommended Keep Row: \($(echo \"$PLAN_JSON\" | jq -r \'.recommended_keep_sheet_row_number\')\)', self.step_run)
-        
-    def test_32_manual_delete_rows(self):
-        self.assertIn('Manual Delete Rows: $(echo \"$PLAN_JSON\" | jq -r \'(.manual_delete_candidate_sheet_row_numbers // []) | join(\", \")\')', self.step_run)
+            out = f.read()
+        self.assertIn("READY_FOR_MANUAL_DECISION", out)
+        self.assertIn("Candidate #1", out)
+        self.assertIn("Candidate #2", out)
+        self.assertIn("Recommended Keep Row: null", out)
+        self.assertIn("- REASON1", out)
+        self.assertIn("Apply Operations Count: 0", out)
+        self.assertNotIn("unsafe.example", out)
+        self.assertNotIn("CANONICAL_HASH_SECRET", out)
+        self.assertNotIn("PRECONDITION_HASH_SECRET", out)
+        self.assertNotIn("RAW_ROW_SECRET", out)
+        self.assertNotIn("TOKEN_SECRET", out)
+        self.assertNotIn("CLIENT_SECRET_VALUE", out)
+        self.assertIn("Has Canonical Identity Hash: true", out)
+        self.assertIn("Account: a1 b1", out)
+        os.remove(json_path)
+        os.remove(summary_path)
+
+    def test_22_summary_renderer_valid_blocked(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "BLOCKED", "target_source_post_id": "T1", "sheets_verifier": {}, "parent_candidates": [], "parent_candidate_count": 0, "child_summary": {"child_count": 0, "unique_child_id_count": 0, "child_id_duplicate_count": 0, "duplicate_media_indexes": [], "missing_child_id_count": 0, "malformed_media_index_count": 0, "negative_media_index_count": 0}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": [], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 0, msg=f"stderr: {p.stderr.decode()}")
+        with open(summary_path, 'r') as f:
+            out = f.read()
+        self.assertIn("BLOCKED", out)
+        self.assertIn("Candidates (0)", out)
+        self.assertIn("- None", out)
+        os.remove(json_path)
+        os.remove(summary_path)
+
+    def test_23_summary_renderer_valid_fail_empty_child(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "FAIL", "target_source_post_id": "T1", "sheets_verifier": {}, "parent_candidates": [], "parent_candidate_count": 0, "child_summary": {}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": [], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "1"], capture_output=True)
+        self.assertEqual(p.returncode, 1, msg=f"stderr: {p.stderr.decode()}")
+        with open(summary_path, 'r') as f:
+            out = f.read()
+        self.assertIn("FAIL", out)
+        os.remove(json_path)
+        os.remove(summary_path)
+
+    def test_24_summary_renderer_missing_top_level_key(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "overall_status": "READY_FOR_MANUAL_DECISION"}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_25_summary_renderer_invalid_mode(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "INVALID_MODE", "overall_status": "FAIL", "target_source_post_id": "T1", "sheets_verifier": {}, "parent_candidates": [], "parent_candidate_count": 0, "child_summary": {}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": [], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "1"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_26_summary_renderer_schema_bool(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": true, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "FAIL", "target_source_post_id": "T1", "sheets_verifier": {}, "parent_candidates": [], "parent_candidate_count": 0, "child_summary": {}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": [], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "1"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_27_summary_renderer_candidate_count_bool(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "FAIL", "target_source_post_id": "T1", "sheets_verifier": {}, "parent_candidates": [], "parent_candidate_count": false, "child_summary": {}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": [], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "1"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_28_summary_renderer_candidate_missing_key(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "READY_FOR_MANUAL_DECISION", "target_source_post_id": "T1", "sheets_verifier": {"passed": 63, "total": 63}, "parent_candidate_count": 1, "parent_candidates": [{"candidate_number": 1}], "child_summary": {"child_count": 1, "unique_child_id_count": 1, "child_id_duplicate_count": 0, "duplicate_media_indexes": [], "missing_child_id_count": 0, "malformed_media_index_count": 0, "negative_media_index_count": 0}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": ["REASON1"], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_29_summary_renderer_child_summary_missing_key(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "READY_FOR_MANUAL_DECISION", "target_source_post_id": "T1", "sheets_verifier": {"passed": 63, "total": 63}, "parent_candidate_count": 0, "parent_candidates": [], "child_summary": {"child_count": 1}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": ["REASON1"], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_30_summary_renderer_fail_with_exit_code_0(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "FAIL", "target_source_post_id": "T1", "sheets_verifier": {}, "parent_candidates": [], "parent_candidate_count": 0, "child_summary": {}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": [], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_31_summary_renderer_ready_with_exit_code_1(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "READY_FOR_MANUAL_DECISION", "target_source_post_id": "T1", "sheets_verifier": {"passed": 63, "total": 63}, "parent_candidate_count": 0, "parent_candidates": [], "child_summary": {"child_count": 1, "unique_child_id_count": 1, "child_id_duplicate_count": 0, "duplicate_media_indexes": [], "missing_child_id_count": 0, "malformed_media_index_count": 0, "negative_media_index_count": 0}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": ["REASON1"], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "1"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_32_summary_renderer_exit_code_2(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "FAIL", "target_source_post_id": "T1", "sheets_verifier": {}, "parent_candidates": [], "parent_candidate_count": 0, "child_summary": {}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": [], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "2"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_33_summary_renderer_delete_rows_string(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "READY_FOR_MANUAL_DECISION", "target_source_post_id": "T1", "sheets_verifier": {"passed": 63, "total": 63}, "parent_candidate_count": 0, "parent_candidates": [], "child_summary": {"child_count": 1, "unique_child_id_count": 1, "child_id_duplicate_count": 0, "duplicate_media_indexes": [], "missing_child_id_count": 0, "malformed_media_index_count": 0, "negative_media_index_count": 0}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": ["a"], "status_reasons": ["REASON1"], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_34_summary_renderer_duplicate_media_indexes_string(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION", "overall_status": "READY_FOR_MANUAL_DECISION", "target_source_post_id": "T1", "sheets_verifier": {"passed": 63, "total": 63}, "parent_candidate_count": 0, "parent_candidates": [], "child_summary": {"child_count": 1, "unique_child_id_count": 1, "child_id_duplicate_count": 0, "duplicate_media_indexes": ["a"], "missing_child_id_count": 0, "malformed_media_index_count": 0, "negative_media_index_count": 0}, "recommended_keep_sheet_row_number": null, "manual_delete_candidate_sheet_row_numbers": [], "status_reasons": ["REASON1"], "apply_operations": []}')
+        summary_path = json_path + ".md"
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "0"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        self.assertFalse(os.path.exists(summary_path))
+        os.remove(json_path)
+
+    def test_35_summary_renderer_no_overwrite_on_error(self):
+        import subprocess, tempfile, os
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as fj:
+            json_path = fj.name
+            fj.write(b'{"schema_version": 1, "overall_status": "FAIL"}')
+        summary_path = json_path + ".md"
+        with open(summary_path, 'w') as f:
+            f.write("EXISTING CONTENT")
+        p = subprocess.run(["python3", "scripts/render_wp3c2_inspection_summary.py", "--json-input", json_path, "--summary-output", summary_path, "--exit-code", "1"], capture_output=True)
+        self.assertEqual(p.returncode, 1)
+        self.assertIn(b"WP3-C2 summary renderer failed: ValueError", p.stderr)
+        with open(summary_path, 'r') as f:
+            out = f.read()
+        self.assertEqual("EXISTING CONTENT", out)
+        os.remove(json_path)
+        os.remove(summary_path)
+
+    def test_36_workflow_file_checks(self):
+        with open(".github/workflows/wp3c2-duplicate-parent-inspection.yml", "r") as f:
+            content = f.read()
+        self.assertNotIn("jq -r '.parent_candidates[]", content)
+        self.assertNotIn("jq .", content)
+        self.assertIn("printf '%s\\n' \"$PLAN_JSON\"", content)
+        self.assertIn("scripts/render_wp3c2_inspection_summary.py", content)
+        self.assertIn("--exit-code \"$INSPECT_EXIT\"", content)
+        self.assertEqual(content.count("scripts/render_wp3c2_inspection_summary.py"), 1)
+        self.assertNotIn("cat /tmp/wp3c2_stdout.log", content)
+        self.assertNotIn("cat /tmp/wp3c2_safe_plan.json", content)
