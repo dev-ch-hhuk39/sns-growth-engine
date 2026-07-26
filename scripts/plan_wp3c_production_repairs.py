@@ -612,6 +612,42 @@ def evaluate_external_blockers(
         
     return blockers
 
+def normalize_sheets_verifier(
+    verifier_result: dict,
+) -> dict:
+    passed = safe_int(
+        verifier_result.get("passed"),
+    )
+
+    failed = verifier_result.get("failed", [])
+    if not isinstance(failed, list):
+        failed = []
+
+    failed_count = len(failed)
+    provided_total = safe_int(
+        verifier_result.get("total"),
+    )
+
+    minimum_total = passed + failed_count
+
+    if provided_total > 0:
+        total = provided_total
+        total_basis = "PROVIDED"
+    else:
+        total = minimum_total
+        total_basis = "DERIVED_PASSED_PLUS_FAILED"
+
+    count_consistent = total >= minimum_total
+
+    return {
+        "passed": passed,
+        "total": total,
+        "failed_count": failed_count,
+        "total_basis": total_basis,
+        "count_consistent": count_consistent,
+    }
+
+
 def build_repair_plan(
     datasets: dict[str, list[dict]],
     *,
@@ -629,11 +665,7 @@ def build_repair_plan(
     source_accounts = datasets.get("source_accounts", [])
     accounts = datasets.get("accounts", [])
     
-    sheets_verifier = {
-        "passed": safe_int(verifier_result.get("passed")),
-        "total": safe_int(verifier_result.get("total")),
-        "failed_count": len(verifier_result.get("failed", []))
-    }
+    sheets_verifier = normalize_sheets_verifier(verifier_result)
     
     parent_repairs = []
     for pid in TARGET_SOURCE_POST_IDS:
@@ -653,8 +685,14 @@ def build_repair_plan(
     ext_blockers = evaluate_external_blockers(source_accounts, media_permissions, accounts, now=now)
     
     overall = "READY_FOR_REVIEW"
+    status_reasons = []
+    
+    if not sheets_verifier.get("count_consistent"):
+        status_reasons.append("SHEETS_VERIFIER_COUNT_INCONSISTENT")
+        overall = "FAIL"
     
     if sheets_verifier["failed_count"] > 0:
+        status_reasons.append("SHEETS_VERIFIER_FAILED")
         overall = "FAIL"
         
     blocking_codes = {
@@ -678,7 +716,7 @@ def build_repair_plan(
         "implementation_head": implementation_head,
         "origin_main": origin_main,
         "overall_status": overall,
-        "status_reasons": ["SHEETS_VERIFIER_FAILED"] if sheets_verifier["failed_count"] > 0 else [],
+        "status_reasons": status_reasons,
         "safety": {},
         "sheets_verifier": sheets_verifier,
         "parent_repairs": parent_repairs,
