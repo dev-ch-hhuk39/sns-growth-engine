@@ -64,9 +64,9 @@ jobs:
           SAFE_JSON_STR=${SAFE_JSON_LINE#WP3C3_SAFE_IDENTITY_INSPECTION_JSON=}
           
           printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c3_safe_clean.json
-          printf '%s\n' "$SAFE_JSON_STR"
+          printf 'WP3C3_SAFE_IDENTITY_INSPECTION_JSON=%s\n' "$SAFE_JSON_STR"
           
           python3 scripts/render_wp3c3_identity_summary.py \
-            --json-input /tmp/wp3c3_safe_clean.json \
-            --summary-output $GITHUB_STEP_SUMMARY \
-            --exit-code $EXIT_CODE
+            --json-input "/tmp/wp3c3_safe_clean.json" \
+            --summary-output "$GITHUB_STEP_SUMMARY" \
+            --exit-code "$EXIT_CODE"

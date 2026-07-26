@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import hashlib
+import re
 from collections import defaultdict
 from urllib.parse import urlsplit, urlunsplit
 
@@ -14,12 +15,33 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 
 TARGET_SOURCE_POST_ID = "sp_src_lm_yt_user_001_UCzFzty7aEd4tw3NqCW6pkLQ"
 
-def safe_int(val, default=0):
-    try:
-        if val is None or val == "": return default
-        return int(float(val))
-    except (ValueError, TypeError):
-        return default
+INTEGER_TEXT_PATTERN = re.compile(r"^(0|[1-9][0-9]*)$")
+
+def parse_non_negative_integer(value) -> int | None:
+    if isinstance(value, bool):
+        return None
+
+    if isinstance(value, int):
+        return value if value >= 0 else None
+
+    text = str(value).strip()
+    if not INTEGER_TEXT_PATTERN.fullmatch(text):
+        return None
+
+    return int(text)
+
+ALLOWED_MEDIA_TYPES = {
+    "image",
+    "video",
+    "audio",
+    "carousel",
+}
+
+def normalize_media_type(value) -> str:
+    text = str(value).strip().lower()
+    if text in ALLOWED_MEDIA_TYPES:
+        return text
+    return "unknown"
 
 def sha256_text(value: str) -> str:
     return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
@@ -100,13 +122,13 @@ def _get_git_head() -> str:
     try:
         return os.popen("git rev-parse HEAD").read().strip()
     except Exception:
-        return ""
+        return "0000000000000000000000000000000000000000"
 
 def _get_git_origin_main() -> str:
     try:
         return os.popen("git rev-parse origin/main").read().strip()
     except Exception:
-        return ""
+        return "0000000000000000000000000000000000000000"
 
 def strip_query_and_temp_signatures(url: str) -> str:
     if not url: return ""
@@ -180,6 +202,14 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
                     chash = sha256_text(f"{cident.platform}:{cident.identity_kind}:{cident.stable_post_id}")
                     if chash == ident_hash:
                         matching_child_count += 1
+
+        dmc_val = parse_non_negative_integer(p.get("media_count", ""))
+        if dmc_val is None or dmc_val == 0:
+            if "DECLARED_MEDIA_COUNT_INVALID" not in status_reasons:
+                status_reasons.append("DECLARED_MEDIA_COUNT_INVALID")
+            safe_dmc = 0
+        else:
+            safe_dmc = dmc_val
         
         raw_parents.append({
             "candidate_number": len(raw_parents) + 1,
@@ -188,7 +218,7 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
             "identity_kind": ident.identity_kind,
             "identity_extracted": ident.confidence == "HIGH",
             "ident_hash": ident_hash,
-            "declared_media_count": safe_int(p.get("media_count", "")),
+            "declared_media_count": safe_dmc,
             "required_field_presence_count": req_count,
             "has_created_at": bool(str(p.get("created_at", "")).strip()),
             "has_updated_at": bool(str(p.get("updated_at", "")).strip()),
@@ -221,14 +251,28 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
         c_fingerprint = sha256_text(json.dumps(c_clone, sort_keys=True))
         child_fingerprint_hashes.add(c_fingerprint)
         
+        mi_val = parse_non_negative_integer(c.get("media_index", ""))
+        if mi_val is None:
+            if "MEDIA_INDEX_INVALID" not in status_reasons:
+                status_reasons.append("MEDIA_INDEX_INVALID")
+            safe_mi = -1
+        else:
+            safe_mi = mi_val
+
+        mt_raw = str(c.get("media_type", "")).strip()
+        safe_mt = normalize_media_type(mt_raw)
+        if mt_raw and safe_mt == "unknown":
+            if "MEDIA_TYPE_UNRECOGNIZED" not in status_reasons:
+                status_reasons.append("MEDIA_TYPE_UNRECOGNIZED")
+
         raw_children.append({
             "child_number": len(raw_children) + 1,
             "sheet_row_number": r_idx,
             "ident_hash": ident_hash,
             "identity_extracted": ident.confidence == "HIGH",
             "cid_hash": cid_hash,
-            "media_index": safe_int(c.get("media_index", "") if str(c.get("media_index", "")) else "-1", -1),
-            "media_type": str(c.get("media_type", "")),
+            "media_index": safe_mi,
+            "media_type": safe_mt,
             "fingerprint": c_fingerprint
         })
         
@@ -280,32 +324,42 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
     # Validation checks
     unresolved = False
     
+    if "DECLARED_MEDIA_COUNT_INVALID" in status_reasons or "MEDIA_INDEX_INVALID" in status_reasons:
+        unresolved = True
+
     if len(final_parents) == 0:
         unresolved = True
-        status_reasons.append("NO_PARENT_ROWS")
+        if "NO_PARENT_ROWS" not in status_reasons:
+            status_reasons.append("NO_PARENT_ROWS")
     elif len(final_parents) == 1:
         unresolved = True
-        status_reasons.append("NOT_ENOUGH_PARENT_ROWS")
+        if "NOT_ENOUGH_PARENT_ROWS" not in status_reasons:
+            status_reasons.append("NOT_ENOUGH_PARENT_ROWS")
         
     if len(final_children) == 0:
         unresolved = True
-        status_reasons.append("NO_CHILD_ROWS")
+        if "NO_CHILD_ROWS" not in status_reasons:
+            status_reasons.append("NO_CHILD_ROWS")
         
     if any(not p["identity_extracted"] for p in final_parents):
         unresolved = True
-        status_reasons.append("PARENT_IDENTITY_UNRESOLVED")
+        if "PARENT_IDENTITY_UNRESOLVED" not in status_reasons:
+            status_reasons.append("PARENT_IDENTITY_UNRESOLVED")
         
     if any(not c["identity_extracted"] for c in final_children):
         unresolved = True
-        status_reasons.append("CHILD_IDENTITY_UNRESOLVED")
+        if "CHILD_IDENTITY_UNRESOLVED" not in status_reasons:
+            status_reasons.append("CHILD_IDENTITY_UNRESOLVED")
         
     if any(c["post_identity_group"] not in parent_identity_groups for c in final_children if c["identity_extracted"]):
         unresolved = True
-        status_reasons.append("CHILD_WITHOUT_PARENT_IDENTITY")
+        if "CHILD_WITHOUT_PARENT_IDENTITY" not in status_reasons:
+            status_reasons.append("CHILD_WITHOUT_PARENT_IDENTITY")
         
     if any(p["post_identity_group"] not in child_identity_groups for p in final_parents if p["identity_extracted"]):
         unresolved = True
-        status_reasons.append("PARENT_WITHOUT_CHILD")
+        if "PARENT_WITHOUT_CHILD" not in status_reasons:
+            status_reasons.append("PARENT_WITHOUT_CHILD")
 
     for pg in parent_identity_groups:
         pg_parents = [p for p in final_parents if p["post_identity_group"] == pg]
@@ -369,7 +423,7 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
         "overall_status": "READY_FOR_MANUAL_DECISION",
         "classification": classification,
         "status_reasons": sorted(status_reasons),
-        "checked_commit_sha": implementation_head,
+        "checked_commit_sha": implementation_head if implementation_head else "0000000000000000000000000000000000000000",
         "parent_count": len(final_parents),
         "child_count": len(final_children),
         "unique_parent_post_identity_group_count": unique_parent_post_identity_group_count,
@@ -390,6 +444,8 @@ def main():
     args = parser.parse_args()
 
     head = _get_git_head()
+    if len(head) != 40 or not re.match(r"^[0-9a-f]{40}$", head):
+        head = "0000000000000000000000000000000000000000"
     origin_main = _get_git_origin_main()
 
     if check_safety_flags():

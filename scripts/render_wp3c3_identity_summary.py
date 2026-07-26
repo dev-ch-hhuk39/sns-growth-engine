@@ -45,7 +45,7 @@ def sanitize_text(text: str) -> str:
 def validate_group_name(val, prefix):
     if val == "UNRESOLVED":
         return
-    if not re.match(r"^" + prefix + r"_[1-9][0-9]*$", val):
+    if not isinstance(val, str) or not re.match(r"^" + prefix + r"_[1-9][0-9]*$", val):
         raise ValueError(f"Invalid group name: {val}")
 
 def validate_contract(data, exit_code):
@@ -78,6 +78,12 @@ def validate_contract(data, exit_code):
         
     if not isinstance(data["status_reasons"], list):
         raise ValueError("status_reasons must be a list")
+    for r in data["status_reasons"]:
+        if not isinstance(r, str) or not re.match(r"^[A-Z][A-Z0-9_]*$", r):
+            raise ValueError(f"Invalid status reason")
+            
+    if not isinstance(data["checked_commit_sha"], str) or not re.match(r"^[0-9a-f]{40}$", data["checked_commit_sha"]):
+        raise ValueError("checked_commit_sha must be 40 lowercase hex chars")
         
     if not isinstance(data["apply_operations"], list) or len(data["apply_operations"]) > 0:
         raise ValueError("apply_operations must be empty")
@@ -89,6 +95,19 @@ def validate_contract(data, exit_code):
         if exit_code != 0:
             raise ValueError("exit_code must be 0 when overall_status is not FAIL")
 
+    int_keys = [
+        "parent_count", "child_count",
+        "unique_parent_post_identity_group_count",
+        "unique_child_post_identity_group_count",
+        "unique_post_identity_group_count",
+        "unique_child_id_group_count",
+        "unique_parent_fingerprint_group_count",
+        "unique_child_fingerprint_group_count"
+    ]
+    for k in int_keys:
+        if not is_plain_int(data[k]) or data[k] < 0:
+            raise ValueError(f"{k} must be plain int >= 0")
+
     if not isinstance(data["parents"], list):
         raise ValueError("parents must be a list")
     if not isinstance(data["children"], list):
@@ -99,16 +118,92 @@ def validate_contract(data, exit_code):
     if data["child_count"] != len(data["children"]):
         raise ValueError("child_count mismatch")
 
+    parent_row_numbers = set()
+    parent_candidate_numbers = set()
+    parent_identity_groups = set()
     for p in data["parents"]:
-        require_keys(p, ["post_identity_group", "stable_parent_fingerprint_group", "identity_extracted"], "parent")
+        require_keys(p, [
+            "candidate_number", "sheet_row_number", "platform", "identity_kind", 
+            "identity_extracted", "post_identity_group", "declared_media_count", 
+            "required_field_presence_count", "has_created_at", "has_updated_at", 
+            "stable_parent_fingerprint_group", "matching_child_count"
+        ], "parent")
+        if not is_plain_int(p["candidate_number"]) or p["candidate_number"] < 1: raise ValueError("Invalid candidate_number")
+        if not is_plain_int(p["sheet_row_number"]) or p["sheet_row_number"] < 2: raise ValueError("Invalid sheet_row_number")
+        if p["platform"] not in ["youtube", "threads", "tiktok", ""]: raise ValueError("Invalid platform")
+        if p["identity_kind"] not in ["youtube_video", "threads_post", "tiktok_video", ""]: raise ValueError("Invalid identity_kind")
+        if not isinstance(p["identity_extracted"], bool): raise ValueError("Invalid identity_extracted")
+        if not is_plain_int(p["declared_media_count"]) or p["declared_media_count"] < 0: raise ValueError("Invalid declared_media_count")
+        if not is_plain_int(p["required_field_presence_count"]) or p["required_field_presence_count"] < 0: raise ValueError("Invalid required_field_presence_count")
+        if not isinstance(p["has_created_at"], bool): raise ValueError("Invalid has_created_at")
+        if not isinstance(p["has_updated_at"], bool): raise ValueError("Invalid has_updated_at")
+        if not is_plain_int(p["matching_child_count"]) or p["matching_child_count"] < 0: raise ValueError("Invalid matching_child_count")
+        
         validate_group_name(p["post_identity_group"], "POST_GROUP")
         validate_group_name(p["stable_parent_fingerprint_group"], "PARENT_GROUP")
         
+        if not p["identity_extracted"]:
+            if p["platform"] != "" or p["identity_kind"] != "" or p["post_identity_group"] != "UNRESOLVED":
+                raise ValueError("identity_extracted=false requires empty platform/kind and UNRESOLVED group")
+                
+        parent_row_numbers.add(p["sheet_row_number"])
+        parent_candidate_numbers.add(p["candidate_number"])
+        if p["post_identity_group"] != "UNRESOLVED":
+            parent_identity_groups.add(p["post_identity_group"])
+            
+    child_row_numbers = set()
+    child_candidate_numbers = set()
+    child_identity_groups = set()
     for c in data["children"]:
-        require_keys(c, ["post_identity_group", "child_id_group", "stable_child_fingerprint_group", "identity_extracted"], "child")
+        require_keys(c, [
+            "child_number", "sheet_row_number", "identity_extracted", 
+            "post_identity_group", "child_id_group", "media_index", 
+            "media_type", "stable_child_fingerprint_group"
+        ], "child")
+        if not is_plain_int(c["child_number"]) or c["child_number"] < 1: raise ValueError("Invalid child_number")
+        if not is_plain_int(c["sheet_row_number"]) or c["sheet_row_number"] < 2: raise ValueError("Invalid sheet_row_number")
+        if not isinstance(c["identity_extracted"], bool): raise ValueError("Invalid identity_extracted")
+        if not is_plain_int(c["media_index"]) or c["media_index"] < -1: raise ValueError("Invalid media_index")
+        if c["media_type"] not in ["image", "video", "audio", "carousel", "unknown"]: raise ValueError("Invalid media_type")
+        
         validate_group_name(c["post_identity_group"], "POST_GROUP")
         validate_group_name(c["child_id_group"], "CHILD_ID_GROUP")
         validate_group_name(c["stable_child_fingerprint_group"], "CHILD_ROW_GROUP")
+        
+        child_row_numbers.add(c["sheet_row_number"])
+        child_candidate_numbers.add(c["child_number"])
+        if c["post_identity_group"] != "UNRESOLVED":
+            child_identity_groups.add(c["post_identity_group"])
+            
+    if data["parent_count"] > 0:
+        if sorted(list(parent_candidate_numbers)) != list(range(1, data["parent_count"] + 1)):
+            raise ValueError("candidate_number must be contiguous 1..N")
+        if len(parent_row_numbers) != data["parent_count"]:
+            raise ValueError("Duplicate sheet_row_number in parents")
+            
+    if data["child_count"] > 0:
+        if sorted(list(child_candidate_numbers)) != list(range(1, data["child_count"] + 1)):
+            raise ValueError("child_number must be contiguous 1..N")
+        if len(child_row_numbers) != data["child_count"]:
+            raise ValueError("Duplicate sheet_row_number in children")
+            
+    if set(parent_row_numbers).intersection(child_row_numbers):
+        pass # It is okay if parent and child are on different sheets, but wait, they are different sheets, so row numbers can overlap. No issue.
+
+    if len(parent_identity_groups) != data["unique_parent_post_identity_group_count"]:
+        raise ValueError("unique_parent_post_identity_group_count mismatch")
+    if len(child_identity_groups) != data["unique_child_post_identity_group_count"]:
+        raise ValueError("unique_child_post_identity_group_count mismatch")
+    if len(parent_identity_groups.union(child_identity_groups)) != data["unique_post_identity_group_count"]:
+        raise ValueError("unique_post_identity_group_count mismatch")
+
+    if data["classification"] == "SAME_POST_REINGESTED":
+        if data["parent_count"] < 2: raise ValueError("SAME needs parent_count >= 2")
+        if data["child_count"] < 1: raise ValueError("SAME needs child_count > 0")
+        if data["unique_parent_post_identity_group_count"] != 1: raise ValueError("SAME needs 1 parent identity group")
+    elif data["classification"] == "DISTINCT_POSTS_COLLIDED":
+        if data["parent_count"] < 2: raise ValueError("DISTINCT needs parent_count >= 2")
+        if data["unique_parent_post_identity_group_count"] < 2: raise ValueError("DISTINCT needs >= 2 parent identity groups")
 
 def render_markdown(data) -> str:
     lines = []
@@ -153,7 +248,7 @@ def main():
     args = parser.parse_args()
 
     if args.exit_code not in [0, 1]:
-        print(f"WP3-C3 summary renderer failed: ValueError", file=sys.stderr)
+        print("WP3-C3 summary renderer failed: ValueError", file=sys.stderr)
         sys.exit(1)
 
     try:
