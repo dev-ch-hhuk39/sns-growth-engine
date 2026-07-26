@@ -1,0 +1,67 @@
+name: CI WP3-C3 Source Identity Collision Inspection
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: wp3c3-source-identity-collision-inspection
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  inspect_identity:
+    name: Inspect Identity Collision
+    runs-on: ubuntu-latest
+    environment: production
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.11"
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          
+      - name: Run Inspector
+        id: inspect
+        env:
+          GOOGLE_SHEETS_CREDENTIALS_JSON: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS_JSON }}
+          PUBLISH_ENABLED: "false"
+          ALLOW_REAL_THREADS_POST: "false"
+          ALLOW_REAL_X_POST: "false"
+          ALLOW_VIDEO_DOWNLOAD: "false"
+          ALLOW_VIDEO_CUT: "false"
+          ALLOW_CLOUDINARY_UPLOAD: "false"
+          ALLOW_MEDIA_POSTS: "false"
+          ALLOW_REAL_THREADS_VIDEO_POST: "false"
+          ALLOW_TRANSCRIPTION_API: "false"
+        run: |
+          set +e
+          python3 scripts/inspect_wp3c3_source_identity_collision.py --output /tmp/wp3c3_safe.json > /tmp/wp3c3_out.txt
+          EXIT_CODE=$?
+          set -e
+          
+          cat /tmp/wp3c3_out.txt
+          
+          if grep -q "^WP3C3_SAFE_IDENTITY_INSPECTION_JSON=" /tmp/wp3c3_out.txt; then
+            grep "^WP3C3_SAFE_IDENTITY_INSPECTION_JSON=" /tmp/wp3c3_out.txt > /tmp/wp3c3_env.txt
+            source /tmp/wp3c3_env.txt
+            echo "$WP3C3_SAFE_IDENTITY_INSPECTION_JSON" > /tmp/wp3c3_safe.json
+          fi
+          
+          python3 scripts/render_wp3c3_identity_summary.py \
+            --json-input /tmp/wp3c3_safe.json \
+            --summary-output $GITHUB_STEP_SUMMARY \
+            --exit-code $EXIT_CODE
+            
+          exit $EXIT_CODE
