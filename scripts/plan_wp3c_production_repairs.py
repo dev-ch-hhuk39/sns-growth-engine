@@ -58,6 +58,21 @@ ALLOWED_RIGHTS_STATUSES = {
     "own_media",
 }
 
+
+def parse_iso_datetime_utc(value: str) -> datetime:
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("EMPTY_DATETIME")
+
+    parsed = datetime.fromisoformat(
+        raw.replace("Z", "+00:00")
+    )
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
+
 def is_truthy(value) -> bool:
     return str(value).strip().lower() in {
         "1",
@@ -326,17 +341,20 @@ def plan_parent_repair(
                 sorted_items = sorted(items, key=lambda x: (str(x.get("created_at", "")), str(x.get("source_post_media_id", ""))))
                 reassign = sorted_items[1:]
                 
-                for r_item in reassign:
-                    nxt = 0
-                    while nxt in used_indices:
-                        nxt += 1
-                    used_indices.add(nxt)
-                    ops.append({
-                        "operation": "SET_MEDIA_INDEX",
-                        "source_post_media_id": str(r_item.get("source_post_media_id", "")),
-                        "from": idx,
-                        "to": nxt
-                    })
+                if isinstance(idx, int) and idx >= 0:
+                    for r_item in reassign:
+                        nxt = 0
+                        while nxt in used_indices:
+                            nxt += 1
+                        used_indices.add(nxt)
+                        ops.append({
+                            "operation": "SET_MEDIA_INDEX",
+                            "source_post_media_id": str(r_item.get("source_post_media_id", "")),
+                            "from": idx,
+                            "to": nxt
+                        })
+                else:
+                    apply_eligible = False
 
     try:
         declared = int(str(p.get("media_count", "")))
@@ -380,6 +398,28 @@ def plan_parent_repair(
         "child_precondition_hashes": chashes
     }
 
+
+def empty_stale_slot_review(
+    slot_run_id: str,
+    blocker_code: str,
+) -> dict:
+    return {
+        "slot_run_id": slot_run_id,
+        "account_id": "",
+        "slot_id": "",
+        "status": "",
+        "claim_status": "",
+        "lease_expired": False,
+        "has_queue_id": False,
+        "linked_queue_status": "",
+        "has_result_id": False,
+        "linked_result_status": "",
+        "has_post_url": False,
+        "recommendation": "MANUAL_REVIEW",
+        "blocker_codes": [blocker_code],
+        "precondition_hash": "",
+    }
+
 def plan_stale_slot_review(
     slot_run_id: str,
     slot_rows: list[dict],
@@ -389,9 +429,16 @@ def plan_stale_slot_review(
     now: datetime,
 ) -> dict:
     if not slot_rows:
-        return {"slot_run_id": slot_run_id, "blocker_codes": ["SLOT_NOT_FOUND"], "recommendation": "MANUAL_REVIEW"}
+        return empty_stale_slot_review(
+            slot_run_id,
+            "SLOT_NOT_FOUND",
+        )
+
     if len(slot_rows) > 1:
-        return {"slot_run_id": slot_run_id, "blocker_codes": ["MULTIPLE_SLOTS"], "recommendation": "MANUAL_REVIEW"}
+        return empty_stale_slot_review(
+            slot_run_id,
+            "MULTIPLE_SLOTS",
+        )
         
     s = slot_rows[0]
     qid = str(s.get("queue_id", ""))
@@ -408,10 +455,7 @@ def plan_stale_slot_review(
     exp = str(s.get("lease_expires_at", ""))
     if exp:
         try:
-            if not exp.endswith("Z") and "+" not in exp: exp += "Z"
-            dt = datetime.fromisoformat(exp.replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+            dt = parse_iso_datetime_utc(exp)
             if dt < now:
                 expired = True
         except Exception:
@@ -485,17 +529,24 @@ def evaluate_external_blockers(
     
     dest_handles = set()
     for acc in accounts:
-        h = str(acc.get("threads_handle", "")).strip()
-        if h:
-            dest_handles.add(canonicalize_threads_identity(h))
+        if str(acc.get("account_id", "")) == "liver_manager":
+            h = str(acc.get("threads_handle", "")).strip()
+            if h:
+                dest_handles.add(canonicalize_threads_identity(h))
     
     liver_threads_found = False
     for a in source_accounts:
-        t_id = str(a.get("target_account_id", ""))
-        t_ids = parse_target_account_ids(str(a.get("target_account_ids", "")))
+        target_ids = (
+            parse_target_account_ids(
+                str(a.get("target_account_id", ""))
+            )
+            | parse_target_account_ids(
+                str(a.get("target_account_ids", ""))
+            )
+        )
         plat = str(a.get("platform", "")).lower() or str(a.get("source_platform", "")).lower()
         
-        if (t_id == "liver_manager" or "liver_manager" in t_ids) and "threads" in plat:
+        if "liver_manager" in target_ids and plat == "threads":
             act = is_truthy(a.get("active", ""))
             blk = is_truthy(a.get("blocked", ""))
             url = str(a.get("source_url", ""))
@@ -540,10 +591,7 @@ def evaluate_external_blockers(
         exp = str(latest.get("expires_at", ""))
         if exp:
             try:
-                if not exp.endswith("Z") and "+" not in exp: exp += "Z"
-                dt = datetime.fromisoformat(exp.replace("Z", "+00:00"))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
+                dt = parse_iso_datetime_utc(exp)
                 if dt < now:
                     expired = True
             except Exception:
