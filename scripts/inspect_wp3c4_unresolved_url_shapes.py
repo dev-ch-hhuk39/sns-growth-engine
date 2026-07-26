@@ -59,7 +59,7 @@ def create_mapping(prefix: str, hashes: set[str]) -> dict[str, str]:
     mapping["NONE"] = "NONE"
     return mapping
 
-def generate_fail_report(reason: str):
+def generate_fail_report(reason: str, output_file: str = None):
     sha = os.environ.get("GITHUB_SHA", "unknown_local")
     if len(sha) != 40 or not re.match(r"^[0-9a-f]{40}$", sha):
         sha = "0000000000000000000000000000000000000000"
@@ -82,12 +82,20 @@ def generate_fail_report(reason: str):
         "recommended_next_action": "MANUAL_INVESTIGATION",
         "apply_operations": []
     }
-    print(f"WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={json.dumps(out, separators=(',', ':'))}")
+    j = json.dumps(out, separators=(',', ':'))
+    if output_file:
+        with open(output_file, 'w') as f:
+            f.write(j)
+    print(f"WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={j}")
     sys.exit(1)
 
+import argparse
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", required=True)
+    args = parser.parse_args()
     if check_safety_flags():
-        generate_fail_report("UNSAFE_FLAG_ENABLED")
+        generate_fail_report("UNSAFE_FLAG_ENABLED", args.output)
 
     client = SheetsClient()
     prevent_writes(client)
@@ -239,11 +247,11 @@ def main():
     status_reasons = []
 
     if len(raw_parents) == 0 or len(raw_children) == 0:
-        status_reasons.append("Zero parents or children.")
+        status_reasons.extend(["NO_PARENT_ROWS", "NO_CHILD_ROWS"])
     elif not all(p["_mc_valid"] for p in raw_parents):
-        status_reasons.append("Invalid media_count in parents.")
+        status_reasons.append("INVALID_PARENT_MEDIA_COUNT")
     elif not all(c["_mi_valid"] for c in raw_children):
-        status_reasons.append("Invalid media_index in children.")
+        status_reasons.append("INVALID_CHILD_MEDIA_INDEX")
     else:
         if len(safe_parents) >= 2 and all_parents_recovered and all_children_recovered:
             if len(unique_parent_groups) == 1:
@@ -267,44 +275,71 @@ def main():
                                     if sem_child_valid:
                                         classification = "RECOVERABLE_SAME_POST"
                                         next_action = "PLAN_DEDUPLICATION_INSPECTION"
-                                        status_reasons.append("All parents and children perfectly match a single post structure.")
+                                        status_reasons.append("SAME_POST_STRUCTURE_CONFIRMED")
             elif len(unique_parent_groups) >= 2:
                 child_groups = set(c["recovered_post_group"] for c in safe_children)
                 if child_groups == unique_parent_groups:
+                    from collections import Counter
                     valid_distinct = True
                     for group in unique_parent_groups:
-                        pgs = [p for p in safe_parents if p["recovered_post_group"] == group]
-                        cgs = [c for c in safe_children if c["recovered_post_group"] == group]
-                        if not pgs or not cgs:
-                            valid_distinct = False; break
-                        N_total = sum(p["declared_media_count"] for p in pgs)
-                        if len(cgs) != N_total:
-                            valid_distinct = False; break
-                        for p in pgs:
-                            N = p["declared_media_count"]
-                            # Media index check not perfect without associating child to specific parent row in distinct, 
-                            # but we assume distinct posts have N distinct medias for that group.
+                        group_parents = [p for p in safe_parents if p["recovered_post_group"] == group]
+                        group_children = [c for c in safe_children if c["recovered_post_group"] == group]
+                        
+                        if not group_parents or not group_children:
+                            valid_distinct = False
+                            break
+                            
+                        expected = Counter()
+                        for p in group_parents:
+                            if p["declared_media_count"] <= 0:
+                                valid_distinct = False
+                                break
+                            for media_index in range(p["declared_media_count"]):
+                                expected[media_index] += 1
+                                
+                        if not valid_distinct:
+                            break
+                            
+                        actual = Counter()
+                        for c in group_children:
+                            if c["media_index"] < 0:
+                                valid_distinct = False
+                                break
+                            actual[c["media_index"]] += 1
+                            
+                        if not valid_distinct:
+                            break
+                            
+                        if expected != actual:
+                            valid_distinct = False
+                            break
+                            
+                        N_total = sum(p["declared_media_count"] for p in group_parents)
+                        if len(group_children) != N_total:
+                            valid_distinct = False
+                            break
+                            
                     if valid_distinct and not any(c["recovered_post_group"] not in unique_parent_groups for c in safe_children):
                         classification = "RECOVERABLE_DISTINCT_POSTS"
                         next_action = "PLAN_REKEY_MIGRATION_INSPECTION"
-                        status_reasons.append("Matches disjoint sets of parent-child groups.")
+                        status_reasons.append("DISTINCT_POST_STRUCTURE_CONFIRMED")
 
     if classification == "MIXED_OR_UNRESOLVED":
         if len(safe_parents) > 0 and all(p["path_family"] in ("CHANNEL", "USER", "HANDLE", "PLAYLIST") for p in safe_parents) and not all_parents_recovered:
             classification = "ACCOUNT_OR_CHANNEL_URLS"
             next_action = "TRACE_ID_GENERATION"
-            status_reasons.append("All parent URLs represent account or channel pages, not posts.")
+            status_reasons.append("ACCOUNT_OR_CHANNEL_URLS_DETECTED")
         elif len(safe_parents) > 0 and any(p["has_nested_url"] or p["decoded_layer_count"] > 0 or p["recovery_method"] in ("NESTED_QUERY_URL", "PERCENT_DECODED_URL") for p in safe_parents) and not all_parents_recovered:
             classification = "WRAPPED_OR_ENCODED_URLS"
             next_action = "EXTEND_LOCAL_PARSER"
-            status_reasons.append("Contains wrapped or encoded URLs that failed identity extraction.")
+            status_reasons.append("WRAPPED_OR_ENCODED_URLS_DETECTED")
         elif len(safe_parents) > 0 and all(p["host_family"] == "NONE" and p["path_family"] == "OTHER" for p in safe_parents) and not all_parents_recovered:
             classification = "PLACEHOLDER_OR_NONPUBLIC_URLS"
             next_action = "TRACE_DATA_ORIGIN"
-            status_reasons.append("All URLs are placeholders or malformed.")
+            status_reasons.append("PLACEHOLDER_OR_NONPUBLIC_URLS_DETECTED")
             
     if not status_reasons:
-        status_reasons.append("Could not classify into a known recoverable or specific unresolved state.")
+        status_reasons.append("MIXED_OR_UNRESOLVED")
 
     out = {
         "schema_version": 1,
@@ -326,7 +361,10 @@ def main():
         "apply_operations": []
     }
 
-    print(f"WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={json.dumps(out, separators=(',', ':'))}")
+    j = json.dumps(out, separators=(',', ':'))
+    with open(args.output, 'w') as f:
+        f.write(j)
+    print(f"WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={j}")
 
 if __name__ == "__main__":
     main()
