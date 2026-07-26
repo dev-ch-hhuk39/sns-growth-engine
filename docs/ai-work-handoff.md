@@ -5,7 +5,7 @@
 - branch: `ops/wp3c-production-repair-plan`
 - PR: `#28`
 - WP3-C implementation: COMPLETE
-- implementation validation CI: 30180466653
+- implementation validation CI: 30181402571 / SUCCESS
 - final PR head CI: GitHub PR #28 metadataを正本とする
 - production workflow dispatch: NONE
 - production Sheets read in this PR: NONE

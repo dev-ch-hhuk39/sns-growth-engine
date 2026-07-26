@@ -8,7 +8,7 @@
 - related Work Package: WP3-C
 - related PR: #28
 - handoff status: COMPLETE
-- implementation validation CI run ID: 30180970791
+- implementation validation CI run ID: 30181402571
 - implementation validation CI result: SUCCESS
 - final PR head CI: GitHub PR #28 metadataを正本とする
 
