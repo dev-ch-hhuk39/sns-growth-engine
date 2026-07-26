@@ -31,18 +31,21 @@
 
 - design authority: ChatGPT lead review
 - WP3-B implementation: COMPLETE
-- implementation validation CI: 30180466653 / SUCCESS
+- implementation validation CI: 30148951779 / SUCCESS
 - final PR head CI: GitHub PR #27 metadataを正本とする
 - production workflow dispatch: NONE
 - production Sheets read in this PR: NONE
 - external writes: NONE
 - API credential validity test: NONE
-- PR #27: UNMERGED
-- next action: merge後、read-only workflowを1回だけdispatch
+- PR #27: MERGED
 - parent integrity failures: 6
 - stale slots: 2
 - Liver Threads source: MISSING
 - credentials: UNVERIFIED before WP3-B secret injection
+
+- PR #27 merge commit: de0d8a130f048034199d97a029b5611e11dc8db1
+- post-merge CI: 30149480422 / SUCCESS
+- production read-only run: 30149540484 / FAILURE
 
 ### 実施内容
 
