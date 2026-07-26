@@ -41,8 +41,8 @@ def sanitize_text(text: str) -> str:
         s = s[:197] + "..."
     return s
 
-def validate_group_name(val, prefix):
-    if val in ("UNRESOLVED", "EMPTY", "NONE"):
+def validate_group_name(val, prefix, allowed_empty=()):
+    if val in allowed_empty:
         return
     if not isinstance(val, str) or not re.match(r"^" + prefix + r"_[1-9][0-9]*$", val):
         raise ValueError(f"Invalid group name: {val}")
@@ -65,8 +65,14 @@ def validate_contract(data, exit_code):
     if data["mode"] != "READ_ONLY_SAFE_URL_SHAPE_DIAGNOSTICS":
         raise ValueError("Invalid mode")
         
-    if data["overall_status"] not in ["READY_FOR_MANUAL_DECISION", "FAIL"]:
+    if data["overall_status"] not in ["READY_FOR_MANUAL_DECISION", "BLOCKED", "FAIL"]:
         raise ValueError("Invalid overall_status")
+        
+    INPUT_STATES = {"EMPTY", "ABSOLUTE_URL", "SCHEME_MISSING", "MALFORMED"}
+    HOST_FAMILIES = {"YOUTUBE", "YOUTU_BE", "GOOGLE_REDIRECT", "THREADS", "TIKTOK", "OTHER", "NONE"}
+    PATH_FAMILIES = {"WATCH", "SHORTS", "LIVE", "EMBED", "CHANNEL", "USER", "HANDLE", "PLAYLIST", "THREADS_POST", "TIKTOK_VIDEO", "REDIRECT", "ROOT", "OTHER", "NONE"}
+    RECOVERY_METHODS = {"DIRECT", "NESTED_QUERY_URL", "PERCENT_DECODED_URL", "EMBED_PATH", "LEGACY_PATH", "NONE"}
+    MEDIA_TYPES = {"image", "video", "audio", "carousel", "unknown"}
         
     valid_actions = {
         "RECOVERABLE_SAME_POST": "PLAN_DEDUPLICATION_INSPECTION",
@@ -93,12 +99,13 @@ def validate_contract(data, exit_code):
     if not isinstance(data["apply_operations"], list) or len(data["apply_operations"]) > 0:
         raise ValueError("apply_operations must be empty")
 
-    if data["overall_status"] == "FAIL":
-        if exit_code != 1:
-            raise ValueError("exit_code must be 1 when overall_status is FAIL")
-    else:
-        if exit_code != 0:
-            raise ValueError("exit_code must be 0 when overall_status is not FAIL")
+    status_exit_map = {
+        "READY_FOR_MANUAL_DECISION": 0,
+        "BLOCKED": 0,
+        "FAIL": 1
+    }
+    if exit_code != status_exit_map.get(data["overall_status"]):
+        raise ValueError("overall_status and exit code mismatch")
 
     int_keys = [
         "parent_count", "child_count",
@@ -157,9 +164,31 @@ def validate_contract(data, exit_code):
         if not is_plain_int(p["declared_media_count"]) or p["declared_media_count"] < 0: raise ValueError("Invalid declared_media_count")
         if not is_plain_int(p["matching_recovered_child_count"]) or p["matching_recovered_child_count"] < 0: raise ValueError("Invalid matching_recovered_child_count")
         
-        validate_group_name(p["recovered_post_group"], "RECOVERED_POST_GROUP")
-        validate_group_name(p["normalized_url_group"], "URL_GROUP")
-        validate_group_name(p["semantic_parent_group"], "SEM_PARENT_GROUP")
+        if type(p["has_nested_url"]) is not bool: raise ValueError("has_nested_url must be strict bool")
+        if type(p["direct_identity_extracted"]) is not bool: raise ValueError("direct_identity_extracted must be strict bool")
+        if type(p["recovered_identity_extracted"]) is not bool: raise ValueError("recovered_identity_extracted must be strict bool")
+        
+        if p["input_state"] not in INPUT_STATES: raise ValueError("Invalid input_state")
+        if p["host_family"] not in HOST_FAMILIES: raise ValueError("Invalid host_family")
+        if p["path_family"] not in PATH_FAMILIES: raise ValueError("Invalid path_family")
+        if p["recovery_method"] not in RECOVERY_METHODS: raise ValueError("Invalid recovery_method")
+
+        if p["recovered_identity_extracted"]:
+            if not str(p["recovered_post_group"]).startswith("RECOVERED_POST_GROUP_"): raise ValueError("Invalid recovered_post_group for extracted=true")
+            if p["recovery_method"] == "NONE": raise ValueError("recovery_method cannot be NONE when extracted=true")
+        else:
+            if p["recovered_post_group"] != "UNRESOLVED": raise ValueError("recovered_post_group must be UNRESOLVED when extracted=false")
+            
+        if p["direct_identity_extracted"]:
+            if not p["recovered_identity_extracted"]: raise ValueError("recovered_identity_extracted must be true when direct is true")
+            if p["recovery_method"] != "DIRECT": raise ValueError("recovery_method must be DIRECT when direct is true")
+            
+        if p["recovery_method"] == "DIRECT" and not p["direct_identity_extracted"]:
+            raise ValueError("direct_identity_extracted must be true when recovery_method is DIRECT")
+        
+        validate_group_name(p["recovered_post_group"], "RECOVERED_POST_GROUP", ("UNRESOLVED",))
+        validate_group_name(p["normalized_url_group"], "URL_GROUP", ("EMPTY",))
+        validate_group_name(p["semantic_parent_group"], "SEM_PARENT_GROUP", ())
         validate_no_secrets_or_urls(p["recovered_post_group"])
         validate_no_secrets_or_urls(p["normalized_url_group"])
         validate_no_secrets_or_urls(p["semantic_parent_group"])
@@ -183,10 +212,33 @@ def validate_contract(data, exit_code):
         if not is_plain_int(c["decoded_layer_count"]) or c["decoded_layer_count"] < 0 or c["decoded_layer_count"] > 2: raise ValueError("Invalid decoded_layer_count")
         if not is_plain_int(c["media_index"]) or c["media_index"] < 0: raise ValueError("Invalid media_index")
         
-        validate_group_name(c["recovered_post_group"], "RECOVERED_POST_GROUP")
-        validate_group_name(c["normalized_url_group"], "URL_GROUP")
-        validate_group_name(c["child_id_group"], "CHILD_ID_GROUP")
-        validate_group_name(c["semantic_child_group"], "SEM_CHILD_GROUP")
+        if type(c["has_nested_url"]) is not bool: raise ValueError("has_nested_url must be strict bool")
+        if type(c["direct_identity_extracted"]) is not bool: raise ValueError("direct_identity_extracted must be strict bool")
+        if type(c["recovered_identity_extracted"]) is not bool: raise ValueError("recovered_identity_extracted must be strict bool")
+        
+        if c["input_state"] not in INPUT_STATES: raise ValueError("Invalid input_state")
+        if c["host_family"] not in HOST_FAMILIES: raise ValueError("Invalid host_family")
+        if c["path_family"] not in PATH_FAMILIES: raise ValueError("Invalid path_family")
+        if c["recovery_method"] not in RECOVERY_METHODS: raise ValueError("Invalid recovery_method")
+        if c["media_type"] not in MEDIA_TYPES: raise ValueError("Invalid media_type")
+
+        if c["recovered_identity_extracted"]:
+            if not str(c["recovered_post_group"]).startswith("RECOVERED_POST_GROUP_"): raise ValueError("Invalid recovered_post_group for extracted=true")
+            if c["recovery_method"] == "NONE": raise ValueError("recovery_method cannot be NONE when extracted=true")
+        else:
+            if c["recovered_post_group"] != "UNRESOLVED": raise ValueError("recovered_post_group must be UNRESOLVED when extracted=false")
+            
+        if c["direct_identity_extracted"]:
+            if not c["recovered_identity_extracted"]: raise ValueError("recovered_identity_extracted must be true when direct is true")
+            if c["recovery_method"] != "DIRECT": raise ValueError("recovery_method must be DIRECT when direct is true")
+            
+        if c["recovery_method"] == "DIRECT" and not c["direct_identity_extracted"]:
+            raise ValueError("direct_identity_extracted must be true when recovery_method is DIRECT")
+        
+        validate_group_name(c["recovered_post_group"], "RECOVERED_POST_GROUP", ("UNRESOLVED",))
+        validate_group_name(c["normalized_url_group"], "URL_GROUP", ("EMPTY",))
+        validate_group_name(c["child_id_group"], "CHILD_ID_GROUP", ("NONE",))
+        validate_group_name(c["semantic_child_group"], "SEM_CHILD_GROUP", ())
         validate_no_secrets_or_urls(c["recovered_post_group"])
         validate_no_secrets_or_urls(c["normalized_url_group"])
         validate_no_secrets_or_urls(c["child_id_group"])

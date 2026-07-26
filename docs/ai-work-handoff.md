@@ -5941,9 +5941,3 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 **次のAIへの申し送り事項:**
 - `ops/wp3b-diagnostic-fidelity` でのschema修正、boundary contractテスト追加、CI確認は完了している。
 - 次は指示に従ってPR #27をmergeし、本番read-only workflowを1回だけdispatchすることになるため、ユーザーの指示を待つ。
-
-## 2026-07-27 (Antigravity)
-- Implemented WP3-C4 URL Shape Diagnostics without network calls.
-- Added SafeUrlShape dataclass and semantic fingerprinting.
-- Traced ID generation pathways and recorded them in PR #32 body.
-- Created PR #32 from `feat/wp3c4-safe-url-shape-diagnostics`.
