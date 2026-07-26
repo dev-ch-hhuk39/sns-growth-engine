@@ -393,22 +393,30 @@ def inspect_wp3c3(source_posts_rows: list, source_post_media_rows: list, impleme
             pg_children = final_children
             dmcs = set(p["declared_media_count"] for p in pg_parents)
             
-            if len(dmcs) == 1 and unique_parent_fingerprint_group_count == 1:
+            if len(dmcs) == 1:
                 dmc = list(dmcs)[0]
                 if dmc > 0 and len(pg_children) == len(pg_parents) * dmc:
-                    # check stable child fingerprint is 1 per media index
-                    fingerprints_by_index = defaultdict(set)
-                    for c in pg_children:
-                        fingerprints_by_index[c["media_index"]].add(c["stable_child_fingerprint_group"])
-                        
-                    if all(len(s) == 1 for s in fingerprints_by_index.values()):
-                        # check counts
-                        counts = defaultdict(int)
+                    if unique_parent_fingerprint_group_count != 1:
+                        if "PARENT_FINGERPRINT_MISMATCH" not in status_reasons:
+                            status_reasons.append("PARENT_FINGERPRINT_MISMATCH")
+                    else:
+                        fingerprints_by_index = defaultdict(set)
                         for c in pg_children:
-                            counts[c["stable_child_fingerprint_group"]] += 1
-                        if all(v == len(pg_parents) for v in counts.values()):
-                            classification = "SAME_POST_REINGESTED"
-                            recommended_next_action = "PLAN_DEDUPLICATION"
+                            fingerprints_by_index[c["media_index"]].add(c["stable_child_fingerprint_group"])
+                            
+                        if not all(len(s) == 1 for s in fingerprints_by_index.values()):
+                            if "CHILD_FINGERPRINT_MISMATCH" not in status_reasons:
+                                status_reasons.append("CHILD_FINGERPRINT_MISMATCH")
+                        else:
+                            counts = defaultdict(int)
+                            for c in pg_children:
+                                counts[c["stable_child_fingerprint_group"]] += 1
+                            if not all(v == len(pg_parents) for v in counts.values()):
+                                if "CHILD_FINGERPRINT_COUNT_MISMATCH" not in status_reasons:
+                                    status_reasons.append("CHILD_FINGERPRINT_COUNT_MISMATCH")
+                            else:
+                                classification = "SAME_POST_REINGESTED"
+                                recommended_next_action = "PLAN_DEDUPLICATION"
                             
         elif unique_parent_post_identity_group_count >= 2:
             classification = "DISTINCT_POSTS_COLLIDED"

@@ -24,6 +24,102 @@ class TestWP3C3Inspection(unittest.TestCase):
         self.assertEqual(rep["classification"], "SAME_POST_REINGESTED")
         self.assertEqual(rep["parents"][0]["matching_child_count"], 2)
         self.assertEqual(rep["parents"][1]["matching_child_count"], 2)
+        self.assertEqual(rep["apply_operations"], [])
+
+    def test_same_post_reingested_media_count_2(self):
+        parents = [
+            (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "2"}),
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "2"}),
+        ]
+        children = [
+            (4, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0", "source_post_media_id": "c1"}),
+            (5, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0", "source_post_media_id": "c2"}),
+            (6, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "1", "source_post_media_id": "c3"}),
+            (7, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "1", "source_post_media_id": "c4"}),
+        ]
+        rep = inspect_wp3c3(parents, children, "a"*40, "main")
+        self.assertEqual(rep["classification"], "SAME_POST_REINGESTED")
+
+    def test_unresolved_no_children(self):
+        rep = inspect_wp3c3([(2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"})], [], "a"*40, "main")
+        self.assertEqual(rep["classification"], "UNRESOLVED_IDENTITY")
+        self.assertIn("NOT_ENOUGH_PARENT_ROWS", rep["status_reasons"])
+        self.assertIn("NO_CHILD_ROWS", rep["status_reasons"])
+        
+        rep2 = inspect_wp3c3([
+            (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+            (4, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+        ], [], "a"*40, "main")
+        self.assertEqual(rep2["classification"], "UNRESOLVED_IDENTITY")
+        self.assertIn("NO_CHILD_ROWS", rep2["status_reasons"])
+
+    def test_unresolved_missing_child(self):
+        parents = [
+            (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "2"}),
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "2"}),
+        ]
+        children = [
+            (4, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0"}),
+            (5, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0"}),
+            (6, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "1"}),
+        ]
+        rep = inspect_wp3c3(parents, children, "a"*40, "main")
+        self.assertEqual(rep["classification"], "UNRESOLVED_IDENTITY")
+        self.assertIn("DECLARED_MEDIA_COUNT_MISMATCH", rep["status_reasons"])
+        self.assertIn("MEDIA_INDEX_LAYOUT_MISMATCH", rep["status_reasons"])
+
+    def test_distinct_posts(self):
+        parents = [
+            (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/def", "media_count": "1"}),
+        ]
+        children = [
+            (4, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0"}),
+            (5, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/def", "media_index": "0"}),
+        ]
+        rep = inspect_wp3c3(parents, children, "a"*40, "main")
+        self.assertEqual(rep["classification"], "DISTINCT_POSTS_COLLIDED")
+
+    def test_distinct_but_parent_missing_child(self):
+        parents = [
+            (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/def", "media_count": "1"}),
+        ]
+        children = [
+            (4, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0"}),
+        ]
+        rep = inspect_wp3c3(parents, children, "a"*40, "main")
+        self.assertEqual(rep["classification"], "UNRESOLVED_IDENTITY")
+        self.assertIn("PARENT_WITHOUT_CHILD", rep["status_reasons"])
+        self.assertIn("DECLARED_MEDIA_COUNT_MISMATCH", rep["status_reasons"])
+
+    def test_distinct_child_identity_mismatch(self):
+        parents = [
+            (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/def", "media_count": "1"}),
+        ]
+        children = [
+            (4, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0", "source_post_media_id": "c1"}),
+            (5, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/ghi", "media_index": "0", "source_post_media_id": "c1"}),
+        ]
+        rep = inspect_wp3c3(parents, children, "a"*40, "main")
+        self.assertEqual(rep["classification"], "UNRESOLVED_IDENTITY")
+        self.assertIn("CHILD_WITHOUT_PARENT_IDENTITY", rep["status_reasons"])
+        self.assertEqual(rep["unique_post_identity_group_count"], 3)
+
+    def test_unresolved_unextracted_child(self):
+        parents = [
+            (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+        ]
+        children = [
+            (4, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0"}),
+            (5, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://notyoutube.com/abc", "media_index": "0"}),
+        ]
+        rep = inspect_wp3c3(parents, children, "a"*40, "main")
+        self.assertEqual(rep["classification"], "UNRESOLVED_IDENTITY")
+        self.assertIn("CHILD_IDENTITY_UNRESOLVED", rep["status_reasons"])
 
     def test_invalid_media_count(self):
         tests = ["1.5", "1e0", "01", "-1", ""]
@@ -54,7 +150,7 @@ class TestWP3C3Inspection(unittest.TestCase):
             self.assertEqual(rep["children"][0]["media_index"], -1)
 
     def test_media_type_unknown(self):
-        tests = ["https://evil.com", "token123", "some_type"]
+        tests = ["https://evil.example/secret", "TOKEN_SECRET_VALUE", "some_type"]
         for t in tests:
             parents = [
                 (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
@@ -66,9 +162,10 @@ class TestWP3C3Inspection(unittest.TestCase):
             self.assertIn("MEDIA_TYPE_UNRECOGNIZED", rep["status_reasons"])
             self.assertEqual(rep["children"][0]["media_type"], "unknown")
             rep_str = json.dumps(rep)
-            if t not in ["https://evil.com", "token123"]: # because we are testing that raw value is not output
-                self.assertNotIn(t, rep_str)
-                
+            self.assertNotIn("evil.example", rep_str)
+            self.assertNotIn("TOKEN_SECRET_VALUE", rep_str)
+            self.assertNotIn("some_type", rep_str)
+
     def test_no_sensitive_data_in_output(self):
         parents = [
             (10, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/SECRET123", "media_count": "1"}),
@@ -86,6 +183,17 @@ class TestWP3C3Inspection(unittest.TestCase):
         self.assertEqual(rep["parents"][1]["sheet_row_number"], 12)
         self.assertEqual(rep["children"][0]["sheet_row_number"], 20)
         self.assertEqual(rep["apply_operations"], [])
+        
+    def test_physical_row_number(self):
+        parents = [
+            (100, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_count": "1"}),
+        ]
+        children = [
+            (200, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/abc", "media_index": "0"}),
+        ]
+        rep = inspect_wp3c3(parents, children, "a"*40, "main")
+        self.assertEqual(rep["parents"][0]["sheet_row_number"], 100)
+        self.assertEqual(rep["children"][0]["sheet_row_number"], 200)
 
 class TestWP3C3RendererSubprocess(unittest.TestCase):
     def setUp(self):
@@ -198,6 +306,58 @@ class TestWP3C3RendererSubprocess(unittest.TestCase):
         data["parent_count"] = True
         proc = self._run_renderer(data, 0)
         self.assertEqual(proc.returncode, 1)
+        
+    def test_parent_extracted_true_unresolved(self):
+        data = self._get_valid_data()
+        data["parents"][0]["post_identity_group"] = "UNRESOLVED"
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
+
+    def test_parent_extracted_false_with_group(self):
+        data = self._get_valid_data()
+        data["parents"][0]["identity_extracted"] = False
+        data["parents"][0]["platform"] = ""
+        data["parents"][0]["identity_kind"] = ""
+        # Group is still POST_GROUP_1 which is invalid when extracted=False
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
+
+    def test_child_extracted_true_unresolved(self):
+        data = self._get_valid_data()
+        data["children"][0]["post_identity_group"] = "UNRESOLVED"
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
+
+    def test_child_extracted_false_with_group(self):
+        data = self._get_valid_data()
+        data["children"][0]["identity_extracted"] = False
+        # Group is still POST_GROUP_1 which is invalid when extracted=False
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
+
+    def test_parent_missing_keys(self):
+        data = self._get_valid_data()
+        del data["parents"][0]["has_created_at"]
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
+        
+    def test_child_missing_keys(self):
+        data = self._get_valid_data()
+        del data["children"][0]["media_type"]
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
+        
+    def test_group_hex_invalid(self):
+        data = self._get_valid_data()
+        data["parents"][0]["post_identity_group"] = "a"*64
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
+
+    def test_status_reasons_url_invalid(self):
+        data = self._get_valid_data()
+        data["status_reasons"].append("https://evil.com")
+        proc = self._run_renderer(data, 0)
+        self.assertEqual(proc.returncode, 1)
 
 class TestWP3C3WorkflowContract(unittest.TestCase):
     def test_workflow_contract(self):
@@ -225,9 +385,12 @@ class TestWP3C3WorkflowContract(unittest.TestCase):
         self.assertIn("--exit-code \"$EXIT_CODE\"", content)
         
     def test_shell_injection(self):
-        wf_path = os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "wp3c3-source-identity-inspection.yml")
+        # We need to simulate the exact workflow grep/printf mechanism
         script = """
-        SAFE_JSON_STR='$(touch /tmp/wp3c3_injection_marker)'
+        echo 'WP3C3_SAFE_IDENTITY_INSPECTION_JSON={"key":"val", "payload": "$(touch /tmp/wp3c3_injection_marker)"}' > /tmp/wp3c3_out.txt
+        SAFE_JSON_LINE=$(grep "^WP3C3_SAFE_IDENTITY_INSPECTION_JSON=" /tmp/wp3c3_out.txt)
+        SAFE_JSON_STR=${SAFE_JSON_LINE#WP3C3_SAFE_IDENTITY_INSPECTION_JSON=}
+        printf '%s\\n' "$SAFE_JSON_STR" > /tmp/wp3c3_safe_clean.json
         printf 'WP3C3_SAFE_IDENTITY_INSPECTION_JSON=%s\\n' "$SAFE_JSON_STR" > /dev/null
         """
         if os.path.exists("/tmp/wp3c3_injection_marker"):
@@ -238,3 +401,4 @@ class TestWP3C3WorkflowContract(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+

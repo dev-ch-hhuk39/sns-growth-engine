@@ -142,7 +142,11 @@ def validate_contract(data, exit_code):
         validate_group_name(p["post_identity_group"], "POST_GROUP")
         validate_group_name(p["stable_parent_fingerprint_group"], "PARENT_GROUP")
         
-        if not p["identity_extracted"]:
+        if p["identity_extracted"]:
+            if p["platform"] == "": raise ValueError("platform cannot be empty when identity_extracted=true")
+            if p["identity_kind"] == "": raise ValueError("identity_kind cannot be empty when identity_extracted=true")
+            if p["post_identity_group"] == "UNRESOLVED": raise ValueError("post_identity_group cannot be UNRESOLVED when identity_extracted=true")
+        else:
             if p["platform"] != "" or p["identity_kind"] != "" or p["post_identity_group"] != "UNRESOLVED":
                 raise ValueError("identity_extracted=false requires empty platform/kind and UNRESOLVED group")
                 
@@ -170,6 +174,12 @@ def validate_contract(data, exit_code):
         validate_group_name(c["child_id_group"], "CHILD_ID_GROUP")
         validate_group_name(c["stable_child_fingerprint_group"], "CHILD_ROW_GROUP")
         
+        if c["identity_extracted"]:
+            if c["post_identity_group"] == "UNRESOLVED": raise ValueError("post_identity_group cannot be UNRESOLVED when identity_extracted=true")
+        else:
+            if c["post_identity_group"] != "UNRESOLVED":
+                raise ValueError("identity_extracted=false requires UNRESOLVED group")
+                
         child_row_numbers.add(c["sheet_row_number"])
         child_candidate_numbers.add(c["child_number"])
         if c["post_identity_group"] != "UNRESOLVED":
