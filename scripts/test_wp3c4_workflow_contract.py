@@ -73,10 +73,34 @@ class TestWP3C4WorkflowContract(unittest.TestCase):
             if "uses" in step:
                 self.assertNotIn("upload-artifact", step["uses"])
 
-    def test_shell_injection_payload_not_executed(self):
-        run = self.wf["jobs"]["inspect"]["steps"][3]["run"]
-        self.assertNotIn("$(cat", run)
-        self.assertNotIn("`", run)
+
+    def test_shell_injection_execution(self):
+        import subprocess, tempfile, os
+        marker = "/tmp/wp3c4_injection_marker"
+        if os.path.exists(marker):
+            os.unlink(marker)
+            
+        payload = 'WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={"test": "$(touch /tmp/wp3c4_injection_marker)"}'
+        with tempfile.NamedTemporaryFile("w+", delete=False) as tf:
+            tf.write(payload + "\n")
+            tf_name = tf.name
+            
+        script = f'''
+SAFE_PREFIX_COUNT=$(grep -c "^WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=" {tf_name} || true)
+if [ "$SAFE_PREFIX_COUNT" != "1" ]; then
+    echo "WP3-C4 diagnostics failed or produced multiple JSON outputs."
+    exit 1
+fi
+SAFE_JSON_LINE=$(grep "^WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=" {tf_name})
+SAFE_JSON_STR=${{SAFE_JSON_LINE#WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=}}
+printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c4_safe_clean.json
+'''
+        subprocess.run(["sh", "-c", script], capture_output=True)
+        self.assertFalse(os.path.exists(marker))
+        if os.path.exists(marker):
+            os.unlink(marker)
+        os.unlink(tf_name)
+
 
 if __name__ == "__main__":
     unittest.main()

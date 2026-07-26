@@ -184,9 +184,12 @@ def _normalize_url_string(url: str, is_media: bool = False) -> str:
     
     for k, v in query_params:
         if k in NESTED_URL_KEYS:
-            if v.startswith("http"):
-                nested = _normalize_url_string(v)
-                if nested: return nested
+            decoded_v = v
+            for _ in range(3):
+                if decoded_v.startswith("http"):
+                    nested = _normalize_url_string(decoded_v)
+                    if nested: return nested
+                decoded_v = urllib.parse.unquote(decoded_v)
                 
     new_query = []
     for k, v in query_params:

@@ -171,7 +171,7 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
     def test_mixed_unresolved_urls(self, mock_check, mock_read, mock_sheets):
         mock_check.return_value = False
-        parents = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://example.com/post/1", "media_count": 1})]
+        parents = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtube.com/watch?v=invalid12", "media_count": 1})]
         children = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
