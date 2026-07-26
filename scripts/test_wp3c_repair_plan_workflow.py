@@ -218,38 +218,161 @@ class TestWP3CRepairPlanWorkflow(unittest.TestCase):
         self.assertEqual(self.run_sh_helper(sh), 0)
 
 
+
+    def run_jq_summary(self, plan_json_str, planner_exit=0):
+        import subprocess
+        import tempfile
+        import os
+
+        sh = """
+        export GITHUB_STEP_SUMMARY=/tmp/sum.md
+        rm -f /tmp/sum.md
+        PLAN_JSON='{{PLAN_JSON}}'
+        PLANNER_EXIT={{PLANNER_EXIT}}
+
+        echo "### Overall Status" >> $GITHUB_STEP_SUMMARY
+        OVERALL_STATUS=$(echo "$PLAN_JSON" | jq -r '.overall_status')
+        echo "\`${OVERALL_STATUS}\`" >> $GITHUB_STEP_SUMMARY
+
+        echo "### Status Reasons" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.status_reasons[]? | "- \(.)"' >> $GITHUB_STEP_SUMMARY
+
+        echo "### Sheets Verifier" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed // 0)\n- Total: \(.total // 0)\n- Failed: \(.failed_count // 0)"' >> $GITHUB_STEP_SUMMARY
+
+        echo "### Parent Repairs" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '
+          .parent_repairs[]? |
+          "- **Source Post ID**: `\(.source_post_id)`\n" +
+          "  - Declared: \(.declared_media_count // 0)\n" +
+          "  - Actual: \(.actual_child_count // 0)\n" +
+          "  - Canonical mismatch children: \((.canonical_mismatch_child_ids // []) | join(", "))\n" +
+          "  - Duplicate index groups: \((.duplicate_index_groups // []) | length)\n" +
+          "  - Operations: \((.operations // []) | map(.operation) | join(", "))\n" +
+          "  - Apply Eligible: \(.apply_eligible // false)\n" +
+          "  - Blockers: \((.blocker_codes // []) | join(", "))\n" +
+          "  - Has parent precondition hash: \(if (.parent_precondition_hash // "") != "" then true else false end)"
+        ' >> $GITHUB_STEP_SUMMARY
+
+        echo "### Duplicate Index Groups" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.parent_repairs[]?.duplicate_index_groups[]? | "- Index: \(.media_index)\n  - Child IDs: \((.child_ids // []) | join(", "))\n  - Asset Relation: \(.asset_relation)"' >> $GITHUB_STEP_SUMMARY
+
+        echo "### Stale Slots" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.stale_slot_reviews[]? | "- **Slot ID**: `\(.slot_run_id)`\n  - Recommendation: \(.recommendation)\n  - Blockers: \((.blocker_codes // []) | join(", "))"' >> $GITHUB_STEP_SUMMARY
+
+        echo "### External Blockers" >> $GITHUB_STEP_SUMMARY
+        echo "$PLAN_JSON" | jq -r '.external_blockers[]? | "- `\(.code)`"' >> $GITHUB_STEP_SUMMARY
+
+        cat /tmp/sum.md
+        exit "$PLANNER_EXIT"
+        """.replace("{{PLAN_JSON}}", plan_json_str).replace("{{PLANNER_EXIT}}", str(planner_exit))
+
+        with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+            f.write(sh)
+            f_name = f.name
+        try:
+            res = subprocess.run(["bash", f_name], capture_output=True, text=True)
+            return res.returncode, res.stdout, res.stderr
+        finally:
+            os.remove(f_name)
+
     def test_26_summary_with_blocked_fixed_schema(self):
-        # We already have a test for this: test_null_safe_jq_summary
-        pass
+        plan_json = json.dumps({
+            "overall_status": "BLOCKED",
+            "status_reasons": [],
+            "sheets_verifier": {
+                "passed": 63,
+                "total": 63,
+                "failed_count": 0
+            },
+            "parent_repairs": [
+                {
+                    "source_post_id": "P",
+                    "account_id": "",
+                    "declared_media_count": 0,
+                    "actual_child_count": 0,
+                    "unique_media_index_count": 0,
+                    "canonical_mismatch_child_ids": [],
+                    "duplicate_index_groups": [],
+                    "operations": [],
+                    "blocker_codes": ["PARENT_NOT_FOUND"],
+                    "apply_eligible": False,
+                    "parent_precondition_hash": "",
+                    "child_precondition_hashes": {}
+                }
+            ],
+            "stale_slot_reviews": [],
+            "external_blockers": []
+        })
+        ret, stdout, stderr = self.run_jq_summary(plan_json, 0)
+        self.assertEqual(ret, 0)
+        self.assertIn("PARENT_NOT_FOUND", stdout)
+        self.assertIn("Source Post ID**: `P`", stdout)
+        self.assertEqual(stderr, "")
 
     def test_27_summary_with_planner_exit1_and_valid_safe_json(self):
-        sh = """
-        echo 'WP3C_SAFE_REPAIR_PLAN_JSON={"overall_status": "FAIL", "status_reasons": ["A"], "sheets_verifier": {}, "parent_repairs": [{"source_post_id": "P"}], "stale_slot_reviews": [{"slot_run_id": "S"}], "external_blockers": [{"code": "B"}]}' > /tmp/wp3c_stdout.log
-        LINE_COUNT=$(grep -c '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log || true)
-        if [ "$LINE_COUNT" -ne 1 ]; then exit 1; fi
-        PLAN_LINE=$(grep '^WP3C_SAFE_REPAIR_PLAN_JSON=' /tmp/wp3c_stdout.log)
-        PLAN_JSON=${PLAN_LINE#WP3C_SAFE_REPAIR_PLAN_JSON=}
-        if ! echo "$PLAN_JSON" | jq . > /dev/null 2>&1; then exit 1; fi
-        PLANNER_EXIT=1
-
-        # summary generation should succeed
-        export GITHUB_STEP_SUMMARY=/tmp/sum2.md
-        rm -f /tmp/sum2.md
-        echo "$PLAN_JSON" | jq -r '.overall_status' >> $GITHUB_STEP_SUMMARY
-
-        # Return what planner returned
-        exit "$PLANNER_EXIT"
-        """
-        self.assertEqual(self.run_sh_helper(sh), 1)
+        plan_json = json.dumps({
+            "overall_status": "FAIL",
+            "status_reasons": ["A"],
+            "sheets_verifier": {},
+            "parent_repairs": [{"source_post_id": "P"}],
+            "stale_slot_reviews": [{"slot_run_id": "S"}],
+            "external_blockers": [{"code": "B"}]
+        })
+        ret, stdout, stderr = self.run_jq_summary(plan_json, 1)
+        self.assertEqual(ret, 1)
+        self.assertIn("FAIL", stdout)
+        self.assertEqual(stderr, "")
 
     def test_28_parent_missing_jq_success(self):
-        # The jq handles empty list for canonical_mismatch_child_ids etc. We test it in test_null_safe_jq_summary
-        pass
+        plan = plan_parent_repair("P", [], [])
+        plan_json = json.dumps({
+            "overall_status": "BLOCKED",
+            "status_reasons": [],
+            "sheets_verifier": {},
+            "parent_repairs": [plan],
+            "stale_slot_reviews": [],
+            "external_blockers": []
+        })
+        # Check all keys exist in plan
+        expected_keys = {
+            "source_post_id", "account_id", "declared_media_count",
+            "actual_child_count", "unique_media_index_count",
+            "canonical_mismatch_child_ids", "duplicate_index_groups",
+            "operations", "blocker_codes", "apply_eligible",
+            "parent_precondition_hash", "child_precondition_hashes"
+        }
+        self.assertEqual(set(plan.keys()), expected_keys)
+
+        ret, stdout, stderr = self.run_jq_summary(plan_json, 0)
+        self.assertEqual(ret, 0)
+        self.assertIn("PARENT_NOT_FOUND", stdout)
+        self.assertEqual(stderr, "")
 
     def test_29_slot_missing_jq_success(self):
-        # The jq handles missing slots. We test it in test_null_safe_jq_summary
-        pass
+        plan = plan_stale_slot_review("S", [], {}, {}, now=datetime.now(timezone.utc))
+        plan_json = json.dumps({
+            "overall_status": "BLOCKED",
+            "status_reasons": [],
+            "sheets_verifier": {},
+            "parent_repairs": [],
+            "stale_slot_reviews": [plan],
+            "external_blockers": []
+        })
+        # Check all keys exist in plan
+        expected_keys = {
+            "slot_run_id", "account_id", "slot_id", "status", "claim_status",
+            "lease_expired", "has_queue_id", "linked_queue_status",
+            "has_result_id", "linked_result_status", "has_post_url",
+            "recommendation", "blocker_codes", "precondition_hash"
+        }
+        self.assertEqual(set(plan.keys()), expected_keys)
 
+        ret, stdout, stderr = self.run_jq_summary(plan_json, 0)
+        self.assertEqual(ret, 0)
+        self.assertIn("SLOT_NOT_FOUND", stdout)
+        self.assertIn("MANUAL_REVIEW", stdout)
+        self.assertEqual(stderr, "")
     def test_30_safe_prefix_not_at_start_fail(self):
         sh = """
         echo 'some text WP3C_SAFE_REPAIR_PLAN_JSON={"a": 1}' > /tmp/wp3c_stdout.log

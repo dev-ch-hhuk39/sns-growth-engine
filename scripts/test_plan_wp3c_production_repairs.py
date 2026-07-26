@@ -526,5 +526,139 @@ class TestWP3CRepairPlannerCore(unittest.TestCase):
             self.assertNotIn(sv, safe_line, f"Secret {sv} leaked in safe_line stdout")
 
 
+
+    def test_17_malformed_duplicate_index(self):
+        child_rows = [
+            {"source_post_media_id": "1", "media_index": "malformed", "content_hash": "a", "canonical_post_url": "http://a"},
+            {"source_post_media_id": "2", "media_index": "malformed", "content_hash": "b", "canonical_post_url": "http://a"},
+        ]
+        rep = plan_parent_repair("P1", [{"source_post_id": "P1", "canonical_post_url": "http://a", "media_count": 2}], child_rows)
+        self.assertIn("MALFORMED_MEDIA_INDEX", rep["blocker_codes"])
+        self.assertFalse(rep["apply_eligible"])
+        ops = [op for op in rep["operations"] if op["operation"] == "SET_MEDIA_INDEX"]
+        self.assertEqual(len(ops), 0)
+
+    def test_18_negative_duplicate_index(self):
+        child_rows = [
+            {"source_post_media_id": "1", "media_index": -1, "content_hash": "a", "canonical_post_url": "http://a"},
+            {"source_post_media_id": "2", "media_index": -1, "content_hash": "b", "canonical_post_url": "http://a"},
+        ]
+        rep = plan_parent_repair("P1", [{"source_post_id": "P1", "canonical_post_url": "http://a", "media_count": 2}], child_rows)
+        self.assertIn("NEGATIVE_MEDIA_INDEX", rep["blocker_codes"])
+        self.assertFalse(rep["apply_eligible"])
+        ops = [op for op in rep["operations"] if op["operation"] == "SET_MEDIA_INDEX"]
+        self.assertEqual(len(ops), 0)
+
+    def test_19_normal_duplicate_index(self):
+        child_rows = [
+            {"source_post_media_id": "1", "media_index": 0, "content_hash": "a", "canonical_post_url": "http://a", "created_at": "2026-01-01"},
+            {"source_post_media_id": "2", "media_index": 0, "content_hash": "b", "canonical_post_url": "http://a", "created_at": "2026-01-02"},
+        ]
+        rep = plan_parent_repair("P1", [{"source_post_id": "P1", "canonical_post_url": "http://a", "media_count": 2}], child_rows)
+        self.assertTrue(rep["apply_eligible"])
+        ops = [op for op in rep["operations"] if op["operation"] == "SET_MEDIA_INDEX"]
+        self.assertEqual(len(ops), 1)
+        self.assertEqual(ops[0]["from"], 0)
+        self.assertEqual(ops[0]["to"], 1)
+
+    def test_20_fixed_stale_slot_schema(self):
+        expected_keys = {
+            "slot_run_id", "account_id", "slot_id", "status", "claim_status",
+            "lease_expired", "has_queue_id", "linked_queue_status",
+            "has_result_id", "linked_result_status", "has_post_url",
+            "recommendation", "blocker_codes", "precondition_hash"
+        }
+        now = datetime.now(timezone.utc)
+
+        # Missing
+        rep = plan_stale_slot_review("S", [], {}, {}, now=now)
+        self.assertEqual(set(rep.keys()), expected_keys)
+        self.assertIn("SLOT_NOT_FOUND", rep["blocker_codes"])
+        self.assertEqual(rep["recommendation"], "MANUAL_REVIEW")
+        self.assertEqual(rep["precondition_hash"], "")
+
+        # Duplicate
+        rep2 = plan_stale_slot_review("S", [{"slot_run_id": "S"}, {"slot_run_id": "S"}], {}, {}, now=now)
+        self.assertEqual(set(rep2.keys()), expected_keys)
+        self.assertIn("MULTIPLE_SLOTS", rep2["blocker_codes"])
+        self.assertEqual(rep2["recommendation"], "MANUAL_REVIEW")
+        self.assertEqual(rep2["precondition_hash"], "")
+
+    def test_21_datetime_parse_iso_datetime_utc(self):
+        from plan_wp3c_production_repairs import parse_iso_datetime_utc
+
+        # Z
+        dt = parse_iso_datetime_utc("2026-07-26T00:00:00Z")
+        self.assertEqual(dt.tzinfo, timezone.utc)
+        self.assertEqual(dt.year, 2026)
+
+        # +09:00
+        dt = parse_iso_datetime_utc("2026-07-26T00:00:00+09:00")
+        self.assertEqual(dt.tzinfo, timezone.utc)
+
+        # -07:00
+        dt = parse_iso_datetime_utc("2026-07-26T00:00:00-07:00")
+        self.assertEqual(dt.tzinfo, timezone.utc)
+
+        # naive
+        dt = parse_iso_datetime_utc("2026-07-26T00:00:00")
+        self.assertEqual(dt.tzinfo, timezone.utc)
+
+        # malformed
+        with self.assertRaises(ValueError):
+            parse_iso_datetime_utc("malformed")
+
+    def test_22_permission_boolean(self):
+        now = datetime.now(timezone.utc)
+        def eval_perm(perm_dict):
+            base = {"source_id": "src_lm_yt_cand_001", "permission_status": "approved", "rights_status": "approved", "evidence_type": "url", "evidence_reference": "url"}
+            base.update(perm_dict)
+            blockers = evaluate_external_blockers([], [base], [], now=now)
+            return [b["code"] for b in blockers]
+
+        self.assertIn("LIVER_PERMISSION_PARTIAL_COVERAGE", eval_perm({"revoked": "true"}))
+        self.assertIn("LIVER_PERMISSION_PARTIAL_COVERAGE", eval_perm({"revoked": "1"}))
+        self.assertIn("LIVER_PERMISSION_PARTIAL_COVERAGE", eval_perm({"revoked": "yes"}))
+        self.assertIn("LIVER_PERMISSION_PARTIAL_COVERAGE", eval_perm({"revoked": "y"}))
+
+    def test_23_exact_source_matching(self):
+        now = datetime.now(timezone.utc)
+        accs = [{"account_id": "liver_manager", "threads_handle": "my_dest"}]
+
+        def run_source(src):
+            b = evaluate_external_blockers([src], [], accs, now=now)
+            return [x["code"] for x in b]
+
+        # target_account_id=liver_manager
+        src1 = {"target_account_id": "liver_manager", "platform": "threads", "active": "true", "source_url": "https://threads.net/@other", "review_status": "APPROVED"}
+        self.assertNotIn("LIVER_THREADS_SOURCE_MISSING", run_source(src1))
+
+        # target_account_ids JSON array
+        src2 = {"target_account_ids": '["liver_manager", "other"]', "platform": "threads", "active": "true", "source_url": "https://threads.net/@other", "review_status": "APPROVED"}
+        self.assertNotIn("LIVER_THREADS_SOURCE_MISSING", run_source(src2))
+
+        # target_account_ids pipe delimited
+        src3 = {"target_account_ids": "liver_manager|other", "platform": "threads", "active": "true", "source_url": "https://threads.net/@other", "review_status": "APPROVED"}
+        self.assertNotIn("LIVER_THREADS_SOURCE_MISSING", run_source(src3))
+
+        # not_liver_manager mismatch
+        src4 = {"target_account_id": "not_liver_manager", "platform": "threads", "active": "true", "source_url": "https://threads.net/@other", "review_status": "APPROVED"}
+        self.assertIn("LIVER_THREADS_SOURCE_MISSING", run_source(src4))
+
+        # notthreads mismatch
+        src5 = {"target_account_id": "liver_manager", "platform": "notthreads", "active": "true", "source_url": "https://threads.net/@other", "review_status": "APPROVED"}
+        self.assertIn("LIVER_THREADS_SOURCE_MISSING", run_source(src5))
+
+        # Night destination with Liver source should not be excluded
+        accs_night = [{"account_id": "night_manager", "threads_handle": "night_dest"}]
+        src6 = {"target_account_id": "liver_manager", "platform": "threads", "active": "true", "source_url": "https://threads.net/@night_dest", "review_status": "APPROVED"}
+        b = evaluate_external_blockers([src6], [], accs_night, now=now)
+        self.assertNotIn("LIVER_THREADS_SOURCE_MISSING", [x["code"] for x in b])
+
+        # Liver destination itself is excluded
+        src7 = {"target_account_id": "liver_manager", "platform": "threads", "active": "true", "source_url": "https://threads.net/@my_dest", "review_status": "APPROVED"}
+        self.assertIn("LIVER_THREADS_SOURCE_MISSING", run_source(src7))
+
+
 if __name__ == '__main__':
     unittest.main()
