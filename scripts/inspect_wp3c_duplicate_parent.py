@@ -63,6 +63,9 @@ def generate_hash(obj: dict) -> str:
     s = json.dumps(obj, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
+def sha256_text(value: str) -> str:
+    return hashlib.sha256(str(value).encode("utf-8")).hexdigest()
+
 def prevent_writes(obj):
     forbidden = [
         "_ensure_tab", "append_row", "append_rows", "update", "update_cell",
@@ -86,6 +89,33 @@ def check_safety_flags():
         if val in {"1", "true", "yes"}:
             return True
     return False
+
+def read_rows_with_sheet_numbers(worksheet) -> list[tuple[int, dict]]:
+    values = worksheet.get_all_values()
+
+    if not values:
+        return []
+
+    headers = [str(value).strip() for value in values[0]]
+
+    if not headers or not any(headers):
+        raise ValueError("HEADER_ROW_MISSING")
+
+    rows = []
+
+    for sheet_row_number, values_row in enumerate(values[1:], start=2):
+        padded = list(values_row) + [""] * (len(headers) - len(values_row))
+        row = {
+            header: padded[index] if index < len(padded) else ""
+            for index, header in enumerate(headers)
+            if header
+        }
+        
+        # Check if row is completely blank (all values empty strings)
+        if any(str(v).strip() for v in row.values()):
+            rows.append((sheet_row_number, row))
+
+    return rows
 
 def build_failure_report(
     reason: str,
@@ -127,43 +157,18 @@ def inspect_duplicate_parent(
     implementation_head: str,
     origin_main: str,
 ) -> dict:
-    
     from plan_wp3c_production_repairs import normalize_sheets_verifier
     sheets_verifier = normalize_sheets_verifier(verifier_result)
     
     if not sheets_verifier.get("count_consistent"):
-        rep = build_failure_report("SHEETS_VERIFIER_COUNT_INCONSISTENT", implementation_head=implementation_head, origin_main=origin_main, sheets_verifier=sheets_verifier)
-        return rep
+        return build_failure_report("SHEETS_VERIFIER_COUNT_INCONSISTENT", implementation_head=implementation_head, origin_main=origin_main, sheets_verifier=sheets_verifier)
     
     if sheets_verifier["failed_count"] > 0:
-        rep = build_failure_report("SHEETS_VERIFIER_FAILED", implementation_head=implementation_head, origin_main=origin_main, sheets_verifier=sheets_verifier)
-        return rep
+        return build_failure_report("SHEETS_VERIFIER_FAILED", implementation_head=implementation_head, origin_main=origin_main, sheets_verifier=sheets_verifier)
         
     parents = [r for r in source_posts_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
     children = [r for r in source_post_media_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
     
-    if len(parents) < 2:
-        overall = "BLOCKED"
-        reasons = ["NOT_ENOUGH_PARENTS"]
-        return {
-            "schema_version": 1,
-            "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION",
-            "implementation_head": implementation_head,
-            "origin_main": origin_main,
-            "overall_status": overall,
-            "status_reasons": reasons,
-            "sheets_verifier": sheets_verifier,
-            "target_source_post_id": TARGET_SOURCE_POST_ID,
-            "parent_candidate_count": len(parents),
-            "parent_candidates": [],
-            "child_summary": {},
-            "recommended_keep_sheet_row_number": None,
-            "manual_delete_candidate_sheet_row_numbers": [],
-            "apply_operations": [],
-            "missing_tabs": [],
-            "read_errors": []
-        }
-        
     child_count = len(children)
     child_ids = []
     media_indices = []
@@ -181,14 +186,18 @@ def inspect_duplicate_parent(
                 duplicate_child_ids += 1
             child_ids.append(cid)
             
-        try:
-            idx = int(str(c.get("media_index", "")))
-            if idx < 0:
-                negative_media_indices += 1
-            else:
-                media_indices.append(idx)
-        except ValueError:
+        idx_str = str(c.get("media_index", ""))
+        if not idx_str:
             malformed_media_indices += 1
+        else:
+            try:
+                idx = int(idx_str)
+                if idx < 0:
+                    negative_media_indices += 1
+                else:
+                    media_indices.append(idx)
+            except ValueError:
+                malformed_media_indices += 1
             
     unique_child_id_count = len(set(child_ids))
     unique_media_index_count = len(set(media_indices))
@@ -213,14 +222,39 @@ def inspect_duplicate_parent(
     }
     
     candidates = []
+    seen_rows = set()
+    has_blocker = False
     
     for i, (r_idx, p) in enumerate(parents):
-        p_canon = canonicalize_source_url(str(p.get("canonical_post_url", "")))
+        c_blockers = []
         
-        req_count = 0
-        for f in REQUIRED_FIELDS:
-            if str(p.get(f, "")).strip():
-                req_count += 1
+        if not isinstance(r_idx, int) or r_idx < 2:
+            c_blockers.append("INVALID_SHEET_ROW_NUMBER")
+            has_blocker = True
+        elif r_idx in seen_rows:
+            c_blockers.append("DUPLICATE_SHEET_ROW_NUMBER")
+            has_blocker = True
+        seen_rows.add(r_idx)
+        
+        if str(p.get("source_post_id", "")) != TARGET_SOURCE_POST_ID:
+            c_blockers.append("TARGET_SOURCE_POST_ID_MISMATCH")
+            has_blocker = True
+            
+        p_canon = canonicalize_source_url(str(p.get("canonical_post_url", "")))
+        canonical_identity_hash = sha256_text(p_canon) if p_canon else ""
+        
+        if p_canon and len(canonical_identity_hash) != 64:
+            c_blockers.append("CANONICAL_IDENTITY_HASH_MISSING")
+            has_blocker = True
+        
+        p_hash_obj = {k: str(p.get(k, "")) for k in COMPARISON_FIELDS}
+        p_hash = generate_hash(p_hash_obj)
+        
+        if not p_hash or len(p_hash) != 64:
+            c_blockers.append("PARENT_PRECONDITION_HASH_MISSING")
+            has_blocker = True
+            
+        req_count = sum(1 for f in REQUIRED_FIELDS if str(p.get(f, "")).strip())
         if str(p.get("target_account_id", "")).strip() or str(p.get("account_id", "")).strip():
             req_count += 1
             
@@ -236,9 +270,6 @@ def inspect_duplicate_parent(
                     if cid:
                         mismatch_ids.append(cid)
                         
-        p_hash_obj = {k: str(p.get(k, "")) for k in COMPARISON_FIELDS}
-        p_hash = generate_hash(p_hash_obj)
-        
         candidates.append({
             "candidate_number": i + 1,
             "sheet_row_number": r_idx,
@@ -246,16 +277,36 @@ def inspect_duplicate_parent(
             "account_id": str(p.get("target_account_id", "")) or str(p.get("account_id", "")),
             "declared_media_count": safe_int(p.get("media_count", "")),
             "has_canonical_post_url": bool(str(p.get("canonical_post_url", "")).strip()),
-            "canonical_identity_hash": generate_hash({"url": p_canon}) if p_canon else "",
+            "canonical_identity_hash": canonical_identity_hash,
             "has_updated_at": bool(str(p.get("updated_at", "")).strip()),
             "required_field_presence_count": req_count,
             "parent_precondition_hash": p_hash,
             "canonical_matching_child_count": matching_count,
             "canonical_mismatching_child_ids": sorted(mismatch_ids),
             "material_difference_fields": [],
-            "recommended_disposition": "",
-            "blocker_codes": []
+            "recommended_disposition": "MANUAL_DECISION_REQUIRED" if has_blocker else "",
+            "blocker_codes": c_blockers
         })
+        
+    if has_blocker or len(parents) < 2:
+        return {
+            "schema_version": 1,
+            "mode": "READ_ONLY_DUPLICATE_PARENT_INSPECTION",
+            "implementation_head": implementation_head,
+            "origin_main": origin_main,
+            "overall_status": "BLOCKED",
+            "status_reasons": ["NOT_ENOUGH_PARENTS"] if len(parents) < 2 else ["INVALID_CANDIDATES"],
+            "sheets_verifier": sheets_verifier,
+            "target_source_post_id": TARGET_SOURCE_POST_ID,
+            "parent_candidate_count": len(candidates),
+            "parent_candidates": candidates,
+            "child_summary": child_summary,
+            "recommended_keep_sheet_row_number": None,
+            "manual_delete_candidate_sheet_row_numbers": [],
+            "apply_operations": [],
+            "missing_tabs": [],
+            "read_errors": []
+        }
         
     for i, c1 in enumerate(candidates):
         for j, c2 in enumerate(candidates):
@@ -265,7 +316,6 @@ def inspect_duplicate_parent(
                 for f in COMPARISON_FIELDS:
                     if str(p1.get(f, "")) != str(p2.get(f, "")) and f not in c1["material_difference_fields"]:
                         c1["material_difference_fields"].append(f)
-                        
         c1["material_difference_fields"].sort()
         
     keep_idx = -1
@@ -358,11 +408,7 @@ def _get_git_origin_main() -> str:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
-    args, unknown = parser.parse_known_args()
-    
-    if unknown:
-        print("Error: Unknown arguments", file=sys.stderr)
-        sys.exit(1)
+    args = parser.parse_args()
 
     head = _get_git_head()
     origin_main = _get_git_origin_main()
@@ -398,9 +444,7 @@ def main():
     try:
         ws = client._ws("source_posts")
         prevent_writes(ws)
-        all_recs = ws.get_all_records()
-        for i, r in enumerate(all_recs):
-            source_posts_rows.append((i + 2, dict(r)))
+        source_posts_rows = read_rows_with_sheet_numbers(ws)
     except Exception as e:
         if "WorksheetNotFound" in type(e).__name__ or "WorksheetNotFound" in str(e):
             missing_tabs.append("source_posts")
@@ -410,9 +454,7 @@ def main():
     try:
         ws = client._ws("source_post_media")
         prevent_writes(ws)
-        all_recs = ws.get_all_records()
-        for i, r in enumerate(all_recs):
-            source_post_media_rows.append((i + 2, dict(r)))
+        source_post_media_rows = read_rows_with_sheet_numbers(ws)
     except Exception as e:
         if "WorksheetNotFound" in type(e).__name__ or "WorksheetNotFound" in str(e):
             missing_tabs.append("source_post_media")

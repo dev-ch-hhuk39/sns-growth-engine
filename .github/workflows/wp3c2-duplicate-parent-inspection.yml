@@ -79,33 +79,34 @@ jobs:
           echo "\`$(echo "$PLAN_JSON" | jq -r '.target_source_post_id')\`" >> $GITHUB_STEP_SUMMARY
           
           echo "### Sheets Verifier" >> $GITHUB_STEP_SUMMARY
-          echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \\(.passed // 0)\\n- Total: \\(.total // 0)\\n- Basis: \\(.total_basis // \"\")"' >> $GITHUB_STEP_SUMMARY
+          echo "$PLAN_JSON" | jq -r '.sheets_verifier | "- Passed: \(.passed // 0)\n- Total: \(.total // 0)\n- Basis: \(.total_basis // \"\")"' >> $GITHUB_STEP_SUMMARY
           
-          echo "### Candidates (\\($(echo "$PLAN_JSON" | jq -r '.parent_candidate_count')\\))" >> $GITHUB_STEP_SUMMARY
+          echo "### Candidates (\($(echo "$PLAN_JSON" | jq -r '.parent_candidate_count')\))" >> $GITHUB_STEP_SUMMARY
           echo "$PLAN_JSON" | jq -r '
             .parent_candidates[]? |
-            "- **Candidate #\\(.candidate_number)** (Row \\(.sheet_row_number))\\n" +
-            "  - Account: \\(.account_id)\\n" +
-            "  - Declared Media: \\(.declared_media_count)\\n" +
-            "  - Has Canonical URL: \\(.has_canonical_post_url)\\n" +
-            "  - Canonical Identity Hash: \\(.canonical_identity_hash)\\n" +
-            "  - Required Fields: \\(.required_field_presence_count)\\n" +
-            "  - Canonical Match Children: \\(.canonical_matching_child_count)\\n" +
-            "  - Mismatch Child IDs: \\((.canonical_mismatching_child_ids // []) | join(\", \"))\\n" +
-            "  - Material Diffs: \\((.material_difference_fields // []) | join(\", \"))\\n" +
-            "  - Disposition: \\(.recommended_disposition)\\n" +
-            "  - Blockers: \\((.blocker_codes // []) | join(\", \"))"
+            "- **Candidate #\(.candidate_number)** (Row \(.sheet_row_number))\n" +
+            "  - Account: \(.account_id)\n" +
+            "  - Declared Media: \(.declared_media_count)\n" +
+            "  - Has Canonical URL: \(.has_canonical_post_url)\n" +
+            "  - Has Canonical Identity Hash: \(if (.canonical_identity_hash // \"\") != \"\" then true else false end)\n" +
+            "  - Required Fields: \(.required_field_presence_count)\n" +
+            "  - Has Parent Precondition Hash: \(if (.parent_precondition_hash // \"\") != \"\" then true else false end)\n" +
+            "  - Canonical Match Children: \(.canonical_matching_child_count)\n" +
+            "  - Mismatch Child IDs: \((.canonical_mismatching_child_ids // []) | join(\", \"))\n" +
+            "  - Material Diffs: \((.material_difference_fields // []) | join(\", \"))\n" +
+            "  - Disposition: \(.recommended_disposition)\n" +
+            "  - Blockers: \((.blocker_codes // []) | join(\", \"))"
           ' >> $GITHUB_STEP_SUMMARY
           
-          echo "### Child Summary (\\($(echo "$PLAN_JSON" | jq -r '.child_summary.child_count')\\))" >> $GITHUB_STEP_SUMMARY
+          echo "### Child Summary (\($(echo "$PLAN_JSON" | jq -r '.child_summary.child_count')\))" >> $GITHUB_STEP_SUMMARY
           echo "$PLAN_JSON" | jq -r '
             .child_summary |
-            "- Unique IDs: \\(.unique_child_id_count)\\n" +
-            "- Duplicate Media Indexes: \\((.duplicate_media_indexes // []) | join(\", \"))"
+            "- Unique IDs: \(.unique_child_id_count)\n" +
+            "- Duplicate Media Indexes: \((.duplicate_media_indexes // []) | join(\", \"))"
           ' >> $GITHUB_STEP_SUMMARY
           
           echo "### Decision" >> $GITHUB_STEP_SUMMARY
           echo "- Recommended Keep Row: \($(echo "$PLAN_JSON" | jq -r '.recommended_keep_sheet_row_number')\)" >> $GITHUB_STEP_SUMMARY
-          echo "- Manual Delete Rows: $(echo "$PLAN_JSON" | jq -r '(.manual_delete_candidate_sheet_row_numbers // []) | join(", ")')" >> $GITHUB_STEP_SUMMARY
+          echo "- Manual Delete Rows: $(echo "$PLAN_JSON" | jq -r '(.manual_delete_candidate_sheet_row_numbers // []) | join(\", \")')" >> $GITHUB_STEP_SUMMARY
           
           exit "$INSPECT_EXIT"
