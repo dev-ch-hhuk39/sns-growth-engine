@@ -38,7 +38,18 @@ class TestWP3C5WorkflowContract(unittest.TestCase):
         job = self.workflow["jobs"]["inspect-and-render"]
         env = job["env"]
         
-        flags = [
+        actual_flags = [
+            "PUBLISH_ENABLED",
+            "ALLOW_REAL_THREADS_POST",
+            "ALLOW_REAL_X_POST",
+            "ALLOW_VIDEO_DOWNLOAD",
+            "ALLOW_VIDEO_CUT",
+            "ALLOW_CLOUDINARY_UPLOAD",
+            "ALLOW_MEDIA_POSTS",
+            "ALLOW_REAL_THREADS_VIDEO_POST",
+            "ALLOW_TRANSCRIPTION_API"
+        ]
+        absent_flags = [
             "ALLOW_SNS_POSTING",
             "ALLOW_SPREADSHEET_MUTATION",
             "ALLOW_CLOUD_STORAGE_MUTATION",
@@ -50,9 +61,12 @@ class TestWP3C5WorkflowContract(unittest.TestCase):
             "ALLOW_CANARY_AUTO_MERGE"
         ]
         
-        for flag in flags:
+        for flag in actual_flags:
             self.assertIn(flag, env)
             self.assertEqual(env[flag], "false", f"{flag} must be false")
+            
+        for flag in absent_flags:
+            self.assertNotIn(flag, env)
 
     def test_fallback_json(self):
         job = self.workflow["jobs"]["inspect-and-render"]
@@ -63,6 +77,10 @@ class TestWP3C5WorkflowContract(unittest.TestCase):
         self.assertIn('if [ "$JSON_COUNT" -eq 0 ]; then', run_script)
         # Check multiple case
         self.assertIn('elif [ "$JSON_COUNT" -gt 1 ]; then', run_script)
+        
+        # Both must have INSPECTOR_STARTUP_FAILED
+        count_startup_failed = run_script.count('"status_reasons":["INSPECTOR_STARTUP_FAILED"]')
+        self.assertEqual(count_startup_failed, 2)
         
         # Ensure static_trace is complete in fallback
         self.assertIn('"static_trace": {', run_script)
@@ -79,6 +97,8 @@ class TestWP3C5WorkflowContract(unittest.TestCase):
         self.assertNotIn("cat raw.stderr", content)
         self.assertNotIn("cat raw.stdout", content)
         self.assertNotIn("traceback", content.lower())
+        self.assertNotIn("cat /tmp/wp3c5_err.txt", content)
+        self.assertNotIn("echo /tmp/wp3c5_err.txt", content)
         
     def test_no_artifact_upload(self):
         with open(WORKFLOW_PATH, "r", encoding="utf-8") as f:

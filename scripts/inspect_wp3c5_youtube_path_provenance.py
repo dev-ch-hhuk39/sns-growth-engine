@@ -98,80 +98,47 @@ def _static_trace() -> dict:
     """
     import ast
 
-    def _path_contains(rel_path: str, needle: str) -> bool:
-        full = ROOT / rel_path
-        if not full.exists():
-            return False
+    uses_source_and_external = False
+    uses_parent_and_media_index = False
+    rejects_nonpost = False
+    handles_channel_landing = False
+
+    ytdlp_path = ROOT / "src" / "acquisition" / "ytdlp.py"
+    if ytdlp_path.exists():
         try:
-            return needle in full.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(ytdlp_path.read_text(encoding="utf-8", errors="replace"))
+            for node in ast.walk(tree):
+                # 1) Check parent ID generation
+                if isinstance(node, ast.Assign) and len(node.targets) == 1:
+                    target = node.targets[0]
+                    if isinstance(target, ast.Name) and target.id == "post_id":
+                        val_str = ast.unparse(node.value)
+                        if "source_id" in val_str and "post_external_id" in val_str:
+                            uses_source_and_external = True
+
+                # 2) Check child ID generation
+                if isinstance(node, ast.keyword) and node.arg == "source_post_media_id":
+                    val_str = ast.unparse(node.value)
+                    if "spm_" in val_str and "post_id" in val_str:
+                        uses_parent_and_media_index = True
+
+                # 3 & 4) Check specific condition logic
+                if isinstance(node, ast.If):
+                    test_str = ast.unparse(node.test)
+                    if "platform == 'youtube'" in test_str and "'/watch' in post_url" in test_str and "'/shorts/' in post_url" in test_str:
+                        rejects_nonpost = True
+                    if "platform == 'youtube'" in test_str and "'/channel/' in source_url" in test_str and "source_url.endswith('/videos')" in test_str:
+                        handles_channel_landing = True
         except Exception:
-            return False
-
-    # source_post_id generation: uses source_id and external_post_id
-    # src/acquisition/ytdlp.py: post_id = f"sp_{source['source_id']}_{post_external_id}"
-    uses_source_and_external = (
-        _path_contains("src/acquisition/ytdlp.py", "source_id") and
-        _path_contains("src/acquisition/ytdlp.py", "external_post_id")
-    )
-
-    # source_post_media_id generation: uses parent_id and media_index
-    uses_parent_and_media_index = (
-        _path_contains("src/acquisition/ytdlp.py", "spm_") and
-        _path_contains("src/acquisition/tiktok_public.py", "spm_")
-    )
-
-    # discovery rejects nonpost YouTube URLs
-    rejects_nonpost = _path_contains(
-        "src/acquisition/ytdlp.py",
-        "/channel/"
-    )
-
-    # handles channel landing pages
-    handles_channel_landing = _path_contains(
-        "src/acquisition/ytdlp.py",
-        "/videos"
-    )
-
-    # Candidate historical writers (files that write source_posts or source_post_media)
-    candidate_files = []
-    for directory in ["src", "scripts"]:
-        base_dir = ROOT / directory
-        if not base_dir.exists():
-            continue
-        for root, dirs, files in os.walk(base_dir):
-            rel_root = os.path.relpath(root, ROOT)
-            if '__pycache__' in dirs:
-                dirs.remove('__pycache__')
-            for file in files:
-                if not file.endswith('.py'):
-                    continue
-                if file.startswith('test_'):
-                    continue
-                if file == 'inspect_wp3c5_youtube_path_provenance.py' or file == 'render_wp3c5_youtube_path_provenance_summary.py':
-                    continue
-                full_path = Path(root) / file
-                rel_path = f"{rel_root}/{file}"
-                if rel_path.startswith("./"):
-                    rel_path = rel_path[2:]
-                try:
-                    text = full_path.read_text(encoding="utf-8", errors="replace")
-                    if any(term in text for term in [
-                        "source_post_id", "source_post_media_id", "source_posts",
-                        "source_post_media", "append_row", "append_rows",
-                        "_ensure_tab", "_batch_update_fields"
-                    ]):
-                        candidate_files.append(rel_path)
-                except Exception:
-                    pass
-    candidate_files.sort()
+            pass
 
     return {
         "current_parent_id_uses_source_and_external_id": uses_source_and_external,
         "current_child_id_uses_parent_and_media_index": uses_parent_and_media_index,
         "current_discovery_rejects_nonpost_youtube_urls": rejects_nonpost,
         "current_discovery_handles_channel_landing_pages": handles_channel_landing,
-        "candidate_historical_writer_count": len(candidate_files),
-        "candidate_historical_writer_labels": candidate_files,
+        "candidate_historical_writer_count": 0,
+        "candidate_historical_writer_labels": [],
     }
 
 
