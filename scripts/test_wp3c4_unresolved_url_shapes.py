@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 import unittest
 import json
 import tempfile
@@ -17,30 +18,26 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
     def setUp(self):
         self.env_patcher = patch.dict(os.environ, {"GITHUB_SHA": "1234567890123456789012345678901234567890"})
         self.env_patcher.start()
-        self.exit_patcher = patch('sys.exit')
-        self.mock_exit = self.exit_patcher.start()
-        self.mock_exit.side_effect = SystemExit
         self.config_patcher = patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
         self.mock_config = self.config_patcher.start()
         self.mock_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
 
     def tearDown(self):
         self.config_patcher.stop()
-        self.exit_patcher.stop()
         self.env_patcher.stop()
 
     def create_mock_sheets(self, parents, children):
         mock_client = unittest.mock.MagicMock()
         mock_source_posts_ws = unittest.mock.MagicMock()
         mock_source_post_media_ws = unittest.mock.MagicMock()
-        
+
         mock_client._ws.side_effect = lambda n: mock_source_posts_ws if n == "source_posts" else mock_source_post_media_ws
-        
+
         def fake_read_rows(ws):
             if ws == mock_source_posts_ws:
                 return parents
             return children
-            
+
         return mock_client, fake_read_rows
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
@@ -49,11 +46,9 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
     def test_unsafe_flag_stops_before_sheets(self, mock_check, mock_read, mock_sheets):
         mock_check.return_value = True
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            try:
+            with self.assertRaises(SystemExit) as cm:
                 main()
-            except SystemExit:
-                pass
-        self.mock_exit.assert_called_with(1)
+        self.assertEqual(cm.exception.code, 1)
         mock_sheets.assert_not_called()
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
@@ -61,7 +56,7 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
     def test_recoverable_same_post(self, mock_check, mock_read, mock_sheets):
         mock_check.return_value = False
-        
+
         parents = [
             (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtube.com/watch?v=11111111111", "media_count": 2, "platform": "youtube", "source_type": "url", "content_type": "video"}),
             (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtu.be/11111111111", "media_count": 2, "platform": "youtube", "source_type": "url", "content_type": "video"})
@@ -72,32 +67,29 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             (4, {"source_post_id": TARGET_SOURCE_POST_ID, "source_post_media_id": "spm_2_0", "media_index": 0, "canonical_post_url": "https://youtu.be/11111111111", "media_type": "video", "original_media_url": "https://cdn.example/1.mp4"}),
             (5, {"source_post_id": TARGET_SOURCE_POST_ID, "source_post_media_id": "spm_2_1", "media_index": 1, "canonical_post_url": "https://youtu.be/11111111111", "media_type": "video", "original_media_url": "https://cdn.example/2.mp4"})
         ]
-        
+
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
-        
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            from io import StringIO
-            captured = StringIO()
-            sys.stdout = captured
-            try:
-                main()
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            
-            output = captured.getvalue()
-            self.assertIn("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=", output)
-            json_str = output.split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1]
-            data = json.loads(json_str)
-            self.assertEqual(data["classification"], "RECOVERABLE_SAME_POST")
-            
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        self.assertEqual(cm.exception.code, 0)
+
+        output = captured.getvalue()
+        self.assertIn("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=", output)
+        json_str = output.split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1]
+        data = json.loads(json_str)
+        self.assertEqual(data["classification"], "RECOVERABLE_SAME_POST")
+
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
     def test_recoverable_distinct_posts(self, mock_check, mock_read, mock_sheets):
         mock_check.return_value = False
-        
+
         parents = [
             (2, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtube.com/watch?v=11111111111", "media_count": 1, "platform": "youtube", "source_type": "url", "content_type": "video"}),
             (3, {"source_post_id": TARGET_SOURCE_POST_ID, "canonical_post_url": "https://youtube.com/watch?v=22222222222", "media_count": 1, "platform": "youtube", "source_type": "url", "content_type": "video"})
@@ -106,24 +98,21 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             (2, {"source_post_id": TARGET_SOURCE_POST_ID, "source_post_media_id": "spm_1_0", "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=11111111111", "media_type": "video", "original_media_url": "https://cdn.example/1.mp4"}),
             (3, {"source_post_id": TARGET_SOURCE_POST_ID, "source_post_media_id": "spm_2_0", "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=22222222222", "media_type": "video", "original_media_url": "https://cdn.example/2.mp4"}),
         ]
-        
+
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
-        
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            from io import StringIO
-            captured = StringIO()
-            sys.stdout = captured
-            try:
-                main()
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            
-            output = captured.getvalue()
-            json_str = output.split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1]
-            data = json.loads(json_str)
-            self.assertEqual(data["classification"], "RECOVERABLE_DISTINCT_POSTS")
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        self.assertEqual(cm.exception.code, 0)
+
+        output = captured.getvalue()
+        json_str = output.split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1]
+        data = json.loads(json_str)
+        self.assertEqual(data["classification"], "RECOVERABLE_DISTINCT_POSTS")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -137,17 +126,16 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            from io import StringIO
-            captured = StringIO()
-            sys.stdout = captured
-            try:
-                main()
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "ACCOUNT_OR_CHANNEL_URLS")
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "ACCOUNT_OR_CHANNEL_URLS")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -158,17 +146,16 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            from io import StringIO
-            captured = StringIO()
-            sys.stdout = captured
-            try:
-                main()
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "WRAPPED_OR_ENCODED_URLS")
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "WRAPPED_OR_ENCODED_URLS")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -179,17 +166,16 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            from io import StringIO
-            captured = StringIO()
-            sys.stdout = captured
-            try:
-                main()
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "PLACEHOLDER_OR_NONPUBLIC_URLS")
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "PLACEHOLDER_OR_NONPUBLIC_URLS")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -200,18 +186,16 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
-        with patch("sys.argv", ["script", "--output", "out.json"]):
-            from io import StringIO
-            captured = StringIO()
-            sys.stdout = captured
-            try:
-                main()
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
+        captured = io.StringIO()
+        with patch("sys.argv", ["script", "--output", "out.json"]):
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -228,34 +212,28 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         ]
         mock_sheets.return_value, fake_read1 = self.create_mock_sheets(parents1, children1)
         mock_read.side_effect = fake_read1
+
+        captured1 = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out1.json"]):
-            import io, json; captured1 = io.StringIO(); sys.stdout = captured1; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured1):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data1 = json.loads(captured1.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            
+        self.assertEqual(cm.exception.code, 0)
+        data1 = json.loads(captured1.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+
         parents2 = parents1[::-1]
         children2 = children1[::-1]
         mock_sheets.return_value, fake_read2 = self.create_mock_sheets(parents2, children2)
         mock_read.side_effect = fake_read2
+
+        captured2 = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out2.json"]):
-            import io, json; captured2 = io.StringIO(); sys.stdout = captured2; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured2):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data2 = json.loads(captured2.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            
+        self.assertEqual(cm.exception.code, 0)
+        data2 = json.loads(captured2.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+
         self.assertEqual(data1["unique_parent_recovered_group_count"], data2["unique_parent_recovered_group_count"])
         self.assertEqual(data1["classification"], data2["classification"])
 
@@ -269,22 +247,20 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(2, {"source_post_id": f"sp1_{hash_64}", "media_index": 0, "canonical_post_url": f"https://youtube.com/watch?v=1&token=secret_{hash_64}"})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            out_str = captured.getvalue()
-            self.assertNotIn(hash_64, out_str)
-            self.assertNotIn("https://", out_str)
-            self.assertNotIn("token", out_str)
-            self.assertNotIn("secret", out_str)
-            
+        self.assertEqual(cm.exception.code, 0)
+
+        out_str = captured.getvalue()
+        self.assertNotIn(hash_64, out_str)
+        self.assertNotIn("https://", out_str)
+        self.assertNotIn("token", out_str)
+        self.assertNotIn("secret", out_str)
+
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
@@ -292,20 +268,18 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_check.return_value = False
         mock_sheets.return_value, fake_read = self.create_mock_sheets([], [])
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertIn("NO_PARENT_ROWS", data["status_reasons"])
-            self.assertIn("NO_CHILD_ROWS", data["status_reasons"])
-            self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertIn("NO_PARENT_ROWS", data["status_reasons"])
+        self.assertIn("NO_CHILD_ROWS", data["status_reasons"])
+        self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -316,19 +290,17 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": -1})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertIn("INVALID_CHILD_MEDIA_INDEX", data["status_reasons"])
-            
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertIn("INVALID_CHILD_MEDIA_INDEX", data["status_reasons"])
+
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
@@ -341,19 +313,17 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         ]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
-            
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
+
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
@@ -365,23 +335,21 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         ]
         children = [
             (2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=1"}),
-            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=1"}), # duplicate 0 instead of 0, 1
+            (3, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=1"}),  # duplicate 0 instead of 0, 1
             (4, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=2"})
         ]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -398,18 +366,16 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         ]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -426,18 +392,16 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         ]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
@@ -448,19 +412,17 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(2, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=1"})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
+
+        captured = io.StringIO()
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
                     main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["apply_operations"], [])
-            
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["apply_operations"], [])
+
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.read_rows_with_sheet_numbers")
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
@@ -470,20 +432,17 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         children = [(600, {"source_post_id": TARGET_SOURCE_POST_ID, "media_index": 0, "canonical_post_url": "https://youtube.com/watch?v=1"})]
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
-        with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                try:
-                    main()
-                except SystemExit:
-                    pass
-            except SystemExit:
-                pass
-            sys.stdout = sys.__stdout__
-            data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
-            self.assertEqual(data["parents"][0]["sheet_row_number"], 500)
-            self.assertEqual(data["children"][0]["sheet_row_number"], 600)
 
+        captured = io.StringIO()
+        with patch("sys.argv", ["script", "--output", "out.json"]):
+            with patch("sys.stdout", captured):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        self.assertEqual(cm.exception.code, 0)
+
+        data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
+        self.assertEqual(data["parents"][0]["sheet_row_number"], 500)
+        self.assertEqual(data["children"][0]["sheet_row_number"], 600)
 
 
     def valid_ready_json(self):
@@ -495,7 +454,6 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         return j
 
     def run_renderer_fail(self, j, exit_code):
-        import tempfile, json, subprocess
         with tempfile.NamedTemporaryFile("w") as fj, tempfile.NamedTemporaryFile("w") as fs:
             json.dump(j, fj)
             fj.flush()
@@ -505,7 +463,6 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             return summary, p.stderr
 
     def run_renderer(self, j, exit_code):
-        import tempfile, json, subprocess
         with tempfile.NamedTemporaryFile("w") as fj, tempfile.NamedTemporaryFile("w") as fs:
             json.dump(j, fj)
             fj.flush()
@@ -519,93 +476,92 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         j = self.valid_ready_json()
         out = self.run_renderer(j, 0)
         self.assertIn("READY_FOR_MANUAL_DECISION", out)
-        
+
     def test_renderer_fail_exit_1(self):
         j = self.valid_fail_json()
         out, err = self.run_renderer_fail(j, 1)
         self.assertIn("FAIL", out)
-        
+
     def test_renderer_fail_exit_0_rejected(self):
         j = self.valid_fail_json()
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("WP3-C4 summary renderer failed: ValueError", err)
-        
+
     def test_renderer_ready_exit_1_rejected(self):
         j = self.valid_ready_json()
         out, err = self.run_renderer_fail(j, 1)
         self.assertIn("WP3-C4 summary renderer failed: ValueError", err)
-        
+
     def test_renderer_mode_invalid(self):
         j = self.valid_ready_json()
         j["mode"] = "INVALID"
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_sha_invalid(self):
         j = self.valid_ready_json()
         j["checked_commit_sha"] = "short"
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_count_type_invalid(self):
         j = self.valid_ready_json()
         j["parent_count"] = "2"
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_count_mismatch(self):
         j = self.valid_ready_json()
         j["parent_count"] = 99
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_classification_action_mismatch(self):
         j = self.valid_ready_json()
         j["classification"] = "ACCOUNT_OR_CHANNEL_URLS"
         j["recommended_next_action"] = "MANUAL_INVESTIGATION"
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_parent_missing_key(self):
         j = self.valid_ready_json()
         del j["parents"][0]["host_family"]
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_child_missing_key(self):
         j = self.valid_ready_json()
         del j["children"][0]["host_family"]
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_group_64_hex(self):
         j = self.valid_ready_json()
         j["parents"][0]["normalized_url_group"] = "a" * 64
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_group_url(self):
         j = self.valid_ready_json()
         j["parents"][0]["normalized_url_group"] = "https://example.com"
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_status_reason_url(self):
         j = self.valid_ready_json()
         j["status_reasons"] = ["https://example.com"]
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_apply_operations_not_empty(self):
         j = self.valid_ready_json()
         j["apply_operations"] = ["something"]
         out, err = self.run_renderer_fail(j, 0)
         self.assertIn("ValueError", err)
-        
+
     def test_renderer_invalid_input_summary_unchanged(self):
         j = self.valid_ready_json()
         del j["mode"]
-        import tempfile, json, subprocess
         with tempfile.NamedTemporaryFile("w") as fj, tempfile.NamedTemporaryFile("w") as fs:
             json.dump(j, fj)
             fj.flush()
@@ -615,11 +571,10 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             self.assertEqual(p.returncode, 1)
             with open(fs.name) as f2:
                 self.assertEqual(f2.read(), "ORIGINAL_SUMMARY")
-                
+
     def test_renderer_stderr_fixed_format(self):
         j = self.valid_ready_json()
         del j["mode"]
-        import tempfile, json, subprocess
         with tempfile.NamedTemporaryFile("w") as fj, tempfile.NamedTemporaryFile("w") as fs:
             json.dump(j, fj)
             fj.flush()
@@ -648,7 +603,7 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
                 "apply_operations": []
             }, temp_json)
             json_path = temp_json.name
-            
+
         with tempfile.NamedTemporaryFile("w+", delete=False) as temp_md:
             md_path = temp_md.name
 
@@ -660,7 +615,7 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
                 "--exit-code", "0"
             ], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0)
-            
+
             with open(md_path, "r") as f:
                 content = f.read()
                 self.assertIn("# WP3-C4 Safe URL Shape Diagnostics", content)
@@ -670,6 +625,7 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
 
 
 class TestWP3C4SheetsClientContract(unittest.TestCase):
+
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
     @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_client.json'])
@@ -678,24 +634,21 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_client = unittest.mock.MagicMock()
         mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
         mock_sheets_client.side_effect = Exception("CLIENT_SECRET_EXCEPTION_TEXT")
-        
-        import sys, io
+
         captured_out = io.StringIO()
         captured_err = io.StringIO()
-        from scripts.inspect_wp3c4_unresolved_url_shapes import main
         with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
             with self.assertRaises(SystemExit) as cm:
                 main()
-        
+
         self.assertEqual(cm.exception.code, 1)
         self.assertNotIn("CLIENT_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
         self.assertNotIn("CLIENT_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
-        
+
         mock_client._ensure_tab.assert_not_called()
         mock_client.setup_all.assert_not_called()
         mock_client._batch_update_fields.assert_not_called()
-        
-        import json
+
         with open('/tmp/test_fail_client.json', 'r') as f:
             j = json.load(f)
             self.assertEqual(j["status_reasons"], ["CLIENT_INITIALIZATION_FAILED"])
@@ -714,15 +667,13 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_client = unittest.mock.MagicMock()
         mock_sheets_client.return_value = mock_client
         mock_client._ws.side_effect = Exception("WORKSHEET_SECRET_EXCEPTION_TEXT")
-        
-        import sys, io
+
         captured_out = io.StringIO()
         captured_err = io.StringIO()
-        from scripts.inspect_wp3c4_unresolved_url_shapes import main
         with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
             with self.assertRaises(SystemExit) as cm:
                 main()
-                
+
         self.assertEqual(cm.exception.code, 1)
         self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
         self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
@@ -730,8 +681,7 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_client._ensure_tab.assert_not_called()
         mock_client.setup_all.assert_not_called()
         mock_client._batch_update_fields.assert_not_called()
-        
-        import json
+
         with open('/tmp/test_fail_ws.json', 'r') as f:
             j = json.load(f)
             self.assertEqual(j["status_reasons"], ["WORKSHEET_READ_FAILED"])
@@ -752,15 +702,13 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_ws_posts = unittest.mock.MagicMock()
         mock_client._ws.return_value = mock_ws_posts
         mock_ws_posts.get_all_values.side_effect = Exception("WORKSHEET_SECRET_EXCEPTION_TEXT")
-        
-        import sys, io
+
         captured_out = io.StringIO()
         captured_err = io.StringIO()
-        from scripts.inspect_wp3c4_unresolved_url_shapes import main
         with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
             with self.assertRaises(SystemExit) as cm:
                 main()
-                
+
         self.assertEqual(cm.exception.code, 1)
         self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
         self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
@@ -768,7 +716,7 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_client._ensure_tab.assert_not_called()
         mock_client.setup_all.assert_not_called()
         mock_client._batch_update_fields.assert_not_called()
-        
+
         for ws in [mock_ws_posts]:
             ws.append_row.assert_not_called()
             ws.append_rows.assert_not_called()
@@ -778,8 +726,7 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
             ws.resize.assert_not_called()
             ws.clear.assert_not_called()
             ws.delete_rows.assert_not_called()
-        
-        import json
+
         with open('/tmp/test_fail_ws_get.json', 'r') as f:
             j = json.load(f)
             self.assertEqual(j["status_reasons"], ["WORKSHEET_READ_FAILED"])
@@ -803,25 +750,23 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_client._ws.side_effect = lambda name: mock_ws_posts if name == "source_posts" else mock_ws_media
         mock_ws_posts.get_all_values.return_value = [["sheet_row_number", "source_post_id", "canonical_post_url"], ["2", "sp_src_lm_yt_user_001_UCzFzty7aEd4tw3NqCW6pkLQ", "http://test.com"]]
         mock_ws_media.get_all_values.return_value = [["sheet_row_number", "source_post_id"], ["3", "sp_src_lm_yt_user_001_UCzFzty7aEd4tw3NqCW6pkLQ"]]
-        
+
         mock_parse.side_effect = Exception("ANALYSIS_SECRET_EXCEPTION_TEXT")
-        
-        import sys, io
+
         captured_out = io.StringIO()
         captured_err = io.StringIO()
-        from scripts.inspect_wp3c4_unresolved_url_shapes import main
         with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
             with self.assertRaises(SystemExit) as cm:
                 main()
-                
+
         self.assertEqual(cm.exception.code, 1)
         self.assertNotIn("ANALYSIS_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
         self.assertNotIn("ANALYSIS_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
-        
+
         mock_client._ensure_tab.assert_not_called()
         mock_client.setup_all.assert_not_called()
         mock_client._batch_update_fields.assert_not_called()
-        
+
         for ws in [mock_ws_posts, mock_ws_media]:
             ws.append_row.assert_not_called()
             ws.append_rows.assert_not_called()
@@ -831,8 +776,7 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
             ws.resize.assert_not_called()
             ws.clear.assert_not_called()
             ws.delete_rows.assert_not_called()
-            
-        import json
+
         with open('/tmp/test_fail_analysis.json', 'r') as f:
             j = json.load(f)
             self.assertEqual(j["status_reasons"], ["ANALYSIS_FAILED"])
@@ -841,7 +785,6 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
             self.assertEqual(j["parents"], [])
             self.assertEqual(j["children"], [])
             self.assertEqual(j["apply_operations"], [])
-
 
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
@@ -856,38 +799,38 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_client._ws.side_effect = lambda name: mock_ws_posts if name == "source_posts" else mock_ws_media
         mock_ws_posts.get_all_values.return_value = [["header1"], ["1"]]
         mock_ws_media.get_all_values.return_value = [["header1"], ["1"]]
-        
-        from scripts.inspect_wp3c4_unresolved_url_shapes import main
+
         with self.assertRaises(SystemExit) as cm:
             main()
         self.assertEqual(cm.exception.code, 0)
-        
-        # Check get_config called exactly once
+
+        # get_config called exactly once
         mock_get_config.assert_called_once()
-        
-        # Check SheetsClient constructor contract
+
+        # SheetsClient constructor contract: positional sheet_id, sa_dict, keyword dry_run=True
         mock_sheets_client.assert_called_once_with("test_sheet_id", {"test": "dict"}, dry_run=True)
-        
-        # Check _ws was called exactly twice
+
+        # _ws called exactly twice
         self.assertEqual(mock_client._ws.call_count, 2)
         mock_client._ws.assert_any_call("source_posts")
         mock_client._ws.assert_any_call("source_post_media")
-        
-        # Check get_all_values called exactly once per worksheet
+
+        # get_all_values called exactly once per worksheet
         mock_ws_posts.get_all_values.assert_called_once()
         mock_ws_media.get_all_values.assert_called_once()
-        
-        # Check prevent_writes
+
+        # prevent_writes applied to client and both worksheets
         self.assertEqual(mock_prevent_writes.call_count, 3)
         mock_prevent_writes.assert_any_call(mock_client)
         mock_prevent_writes.assert_any_call(mock_ws_posts)
         mock_prevent_writes.assert_any_call(mock_ws_media)
-        
-        # Check writes are prevented
+
+        # No write operations on client
         mock_client._ensure_tab.assert_not_called()
         mock_client.setup_all.assert_not_called()
         mock_client._batch_update_fields.assert_not_called()
-        
+
+        # No write operations on worksheets
         for ws in [mock_ws_posts, mock_ws_media]:
             ws.append_row.assert_not_called()
             ws.append_rows.assert_not_called()
@@ -897,6 +840,25 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
             ws.resize.assert_not_called()
             ws.clear.assert_not_called()
             ws.delete_rows.assert_not_called()
+
+    def test_no_global_exit_patch_or_swallowing(self):
+        """Regression test: verify this test file does not contain forbidden patterns."""
+        test_file = os.path.abspath(__file__)
+        if test_file.endswith('.pyc'):
+            test_file = test_file[:-1]
+        with open(test_file, 'r') as f:
+            source = f.read()
+        forbidden = [
+            "patch(" + '"sys.exit"' + ")",
+            "patch(" + "'sys.exit'" + ")",
+            "except " + "SystemExit:",
+        ]
+        for pattern in forbidden:
+            self.assertNotIn(
+                pattern, source,
+                f"Forbidden pattern found in test file: {pattern!r}"
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
