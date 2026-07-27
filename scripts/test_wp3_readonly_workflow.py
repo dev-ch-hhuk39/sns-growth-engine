@@ -266,8 +266,7 @@ def test_evaluator_schema_alignment():
     assert safe_summary["parent_integrity"]["failures"][1]["reason"] == "UNKNOWN_PARENT_INTEGRITY_FAILURE"
     
     assert safe_summary["stale_slots"]["count"] == 2
-    assert "stale1" in safe_summary["stale_slots"]["slot_run_ids"]
-    assert "stale2" in safe_summary["stale_slots"]["slot_run_ids"]
+    assert safe_summary["stale_slots"]["labels"] == ["STALE_SLOT_1", "STALE_SLOT_2"]
     
     assert "LIVER_HAS_PARTIAL_PERMISSION_COVERAGE" in safe_summary["permission_warnings"]
     assert "NIGHT_HAS_PARTIAL_PERMISSION_COVERAGE" not in safe_summary["permission_warnings"]
@@ -348,11 +347,11 @@ def test_parent_integrity_full_count_and_safe_detail_limit():
         assert secret not in summary
         assert secret not in stdout
 
-def test_extract_stale_slot_ids_contract():
+def test_extract_stale_slot_labels_contract():
     import sys
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from evaluate_wp3_readonly_workflow_result import (
-        extract_stale_slot_ids,
+        extract_stale_slot_labels,
     )
 
     values = [
@@ -367,15 +366,15 @@ def test_extract_stale_slot_ids_contract():
         },
     ] + [f"slot_{index}" for index in range(4, 30)]
 
-    result = extract_stale_slot_ids(values)
+    result = extract_stale_slot_labels(values)
 
-    assert result[0] == "slot_1"
-    assert "slot_2" in result
-    assert "slot_3" in result
+    assert result[0] == "STALE_SLOT_1"
+    assert result[1] == "STALE_SLOT_2"
+    assert result[2] == "STALE_SLOT_3"
     assert len(result) <= 20
     assert len(result) == len(set(result))
     assert "" not in result
-    assert extract_stale_slot_ids("invalid") == []
+    assert extract_stale_slot_labels("invalid") == []
 
     # Also test via run_eval to ensure schema matches
     data = get_collector_shaped_data()
@@ -385,7 +384,7 @@ def test_extract_stale_slot_ids_contract():
 
     safe_summary = parse_safe_summary(stdout)
     assert safe_summary["stale_slots"]["count"] == len(values)
-    assert len(safe_summary["stale_slots"]["slot_run_ids"]) <= 20
+    assert len(safe_summary["stale_slots"]["labels"]) <= 20
     
     assert "TEST_STALE_URL_SECRET" not in summary
     assert "TEST_STALE_URL_SECRET" not in stdout
@@ -443,16 +442,15 @@ def test_collector_integration():
     # Assert concrete parent failure integration
     assert safe_summary["parent_integrity"]["failure_count"] == 1
     assert safe_summary["parent_integrity"]["failures"][0]["reason"] == "PARENT_NOT_FOUND"
-    assert safe_summary["parent_integrity"]["failures"][0]["id"] == "p1"
+    assert safe_summary["parent_integrity"]["failures"][0]["failure_label"] == "PARENT_FAILURE_1"
     assert "url" not in safe_summary["parent_integrity"]["failures"][0]
     assert "raw" not in safe_summary["parent_integrity"]["failures"][0]
     assert safe_summary["parent_integrity"]["reason_counts"]["PARENT_NOT_FOUND"] == 1
 
     # Assert concrete stale slot integration
     assert safe_summary["stale_slots"]["count"] == 2
-    assert "stale_run_1" in safe_summary["stale_slots"]["slot_run_ids"]
-    assert "stale_run_2" in safe_summary["stale_slots"]["slot_run_ids"]
-    assert isinstance(safe_summary["stale_slots"]["slot_run_ids"], list)
+    assert safe_summary["stale_slots"]["labels"] == ["STALE_SLOT_1", "STALE_SLOT_2"]
+    assert isinstance(safe_summary["stale_slots"]["labels"], list)
 
     # Assert fixed codes for no-post reason
     assert safe_summary["no_post_reason_codes"]["night_scout"]["OTHER_REDACTED"] == 1
@@ -496,7 +494,7 @@ def run_all():
 
     test_evaluator_schema_alignment()
     test_parent_integrity_full_count_and_safe_detail_limit()
-    test_extract_stale_slot_ids_contract()
+    test_extract_stale_slot_labels_contract()
     test_collector_integration()
     
     test_eval_missing_json()
