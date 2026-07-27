@@ -27,6 +27,21 @@
 
 # AI Work Handoff
 
+## 2026-07-28 Codex WP3-C5 Completed Read-only Diagnosis
+
+- Merged PR #36: `33af92f50417ddd63d19ff09d61ae64adfc5f87d`.
+- CI: PR `30314232445` SUCCESS; post-merge `30314336252` SUCCESS.
+- Production read-only run: `30314454246` SUCCESS. Renderer output is
+  contract-validated and redacted before it reaches the workflow log.
+- Result: `HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES`; three parent and three
+  child records, one parent semantic/ID group, one child-ID group, and three
+  matched canonical URL groups. All are non-post YouTube channel-tab paths.
+  Apply operations are empty; manual repair review is the only next action.
+- No Sheets write, source fetch, media action, Cloudinary action, or social
+  activity occurred. X and beauty remain untouched.
+- Goal baseline remains 21/35 PASS. Canaries remain unverified and the Liver
+  Manager Threads source-account URL remains a human-input blocker.
+
 ## 2026-07-28 Codex WP3-C5 Observability Rebaseline
 
 - Current merged main: `ca287afb85092bdb7549818bffa027c113c00d9d`.

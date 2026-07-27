@@ -1,14 +1,11 @@
-status: IN_PROGRESS
+status: WP3_C5_COMPLETE
 assigned agent: Codex
-branch: fix/wp3c5-safe-result-observability
-task: WP3-C5 safe diagnostic observability and current-state rebaseline
+branch: docs/wp3c5-diagnostic-evidence
+task: record confirmed WP3-C5 read-only provenance result
 related Work Package: Work Package 1 / Work Package 3 gate
-base main: ca287afb85092bdb7549818bffa027c113c00d9d
-production operations: none
-known issue: run 30313039483 completed successfully, but its validated safe
-  inspector result was redirected to a temporary file and never emitted to
-  the job log. The run therefore cannot be used as provenance evidence.
-next checkpoint: focused tests, PR CI, normal merge, then one new read-only
-  WP3-C5 dispatch from the merged main.
-stop conditions: no production write, no source fetch, no media operation,
-  no Threads post. A non-successful safe result is recorded without retry.
+base main: 33af92f50417ddd63d19ff09d61ae64adfc5f87d
+completed run: 30314454246 / SUCCESS / workflow_dispatch
+safe classification: HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES
+next checkpoint: manual repair review planning only; then remaining Work
+  Package 1/3 read-only work.
+production operations: no writes, media operations, source fetches, or posts

@@ -2,6 +2,15 @@
 
 ## Purpose And Stop Line
 
+## 2026-07-28 WP3-C5 Completed Checkpoint
+
+- PR #36 merged as `33af92f50417ddd63d19ff09d61ae64adfc5f87d`; post-merge
+  CI `30314336252` passed.
+- The one new read-only run `30314454246` exposed its renderer-validated
+  result: `HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES`, three parents and three
+  children. The apply list is empty and the result requires manual repair
+  review; do not mutate rows under this checkpoint.
+
 ## 2026-07-28 Rebaseline Checkpoint
 
 - `main` was rechecked at `ca287afb85092bdb7549818bffa027c113c00d9d`.

@@ -1,5 +1,19 @@
 # Goal Evidence
 
+## 2026-07-28 WP3-C5 Confirmed Read-only Result
+
+- Merge `33af92f50417ddd63d19ff09d61ae64adfc5f87d` contains the safe-result
+  observability fix; post-merge CI `30314336252` passed.
+- One new dispatch, `30314454246`, completed successfully at that merge SHA.
+  The renderer-validated result is `READY_FOR_MANUAL_DECISION` with
+  classification `HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES`.
+- Safe aggregate evidence: three parents, three children, three matched
+  canonical URL groups, one parent semantic/ID group, one child-ID group, and
+  no extracted post identity. The paths are YouTube channel tabs only.
+- Recommended action is `PLAN_HISTORICAL_PSEUDO_ENTRY_REPAIR_REVIEW`.
+  `apply_operations` is empty. No Sheets repair, media action, source fetch,
+  or posting was executed. This does not satisfy a Goal media canary.
+
 ## 2026-07-28 Rebaseline
 
 - GitHub API confirms repository visibility `public`, default branch `main`,
