@@ -17,8 +17,16 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
     def setUp(self):
         self.env_patcher = patch.dict(os.environ, {"GITHUB_SHA": "1234567890123456789012345678901234567890"})
         self.env_patcher.start()
+        self.exit_patcher = patch('sys.exit')
+        self.mock_exit = self.exit_patcher.start()
+        self.mock_exit.side_effect = SystemExit
+        self.config_patcher = patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
+        self.mock_config = self.config_patcher.start()
+        self.mock_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
 
     def tearDown(self):
+        self.config_patcher.stop()
+        self.exit_patcher.stop()
         self.env_patcher.stop()
 
     def create_mock_sheets(self, parents, children):
@@ -26,7 +34,7 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_source_posts_ws = unittest.mock.MagicMock()
         mock_source_post_media_ws = unittest.mock.MagicMock()
         
-        mock_client.get_worksheet.side_effect = lambda n: mock_source_posts_ws if n == "source_posts" else mock_source_post_media_ws
+        mock_client._ws.side_effect = lambda n: mock_source_posts_ws if n == "source_posts" else mock_source_post_media_ws
         
         def fake_read_rows(ws):
             if ws == mock_source_posts_ws:
@@ -40,10 +48,12 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.check_safety_flags")
     def test_unsafe_flag_stops_before_sheets(self, mock_check, mock_read, mock_sheets):
         mock_check.return_value = True
-        with self.assertRaises(SystemExit) as cm:
-            with patch("sys.argv", ["script", "--output", "out.json"]):
+        with patch("sys.argv", ["script", "--output", "out.json"]):
+            try:
                 main()
-        self.assertEqual(cm.exception.code, 1)
+            except SystemExit:
+                pass
+        self.mock_exit.assert_called_with(1)
         mock_sheets.assert_not_called()
 
     @patch("scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient")
@@ -70,7 +80,10 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             from io import StringIO
             captured = StringIO()
             sys.stdout = captured
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             sys.stdout = sys.__stdout__
             
             output = captured.getvalue()
@@ -101,7 +114,10 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             from io import StringIO
             captured = StringIO()
             sys.stdout = captured
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             sys.stdout = sys.__stdout__
             
             output = captured.getvalue()
@@ -125,7 +141,10 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             from io import StringIO
             captured = StringIO()
             sys.stdout = captured
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "ACCOUNT_OR_CHANNEL_URLS")
@@ -143,7 +162,10 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             from io import StringIO
             captured = StringIO()
             sys.stdout = captured
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "WRAPPED_OR_ENCODED_URLS")
@@ -161,7 +183,10 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             from io import StringIO
             captured = StringIO()
             sys.stdout = captured
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "PLACEHOLDER_OR_NONPUBLIC_URLS")
@@ -179,7 +204,10 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
             from io import StringIO
             captured = StringIO()
             sys.stdout = captured
-            main()
+            try:
+                main()
+            except SystemExit:
+                pass
             sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
@@ -201,7 +229,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read1 = self.create_mock_sheets(parents1, children1)
         mock_read.side_effect = fake_read1
         with patch("sys.argv", ["script", "--output", "out1.json"]):
-            import io, json; captured1 = io.StringIO(); sys.stdout = captured1; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured1 = io.StringIO(); sys.stdout = captured1; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data1 = json.loads(captured1.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             
         parents2 = parents1[::-1]
@@ -209,7 +245,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read2 = self.create_mock_sheets(parents2, children2)
         mock_read.side_effect = fake_read2
         with patch("sys.argv", ["script", "--output", "out2.json"]):
-            import io, json; captured2 = io.StringIO(); sys.stdout = captured2; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured2 = io.StringIO(); sys.stdout = captured2; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data2 = json.loads(captured2.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             
         self.assertEqual(data1["unique_parent_recovered_group_count"], data2["unique_parent_recovered_group_count"])
@@ -226,7 +270,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             out_str = captured.getvalue()
             self.assertNotIn(hash_64, out_str)
             self.assertNotIn("https://", out_str)
@@ -241,7 +293,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets([], [])
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertIn("NO_PARENT_ROWS", data["status_reasons"])
             self.assertIn("NO_CHILD_ROWS", data["status_reasons"])
@@ -257,7 +317,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertIn("INVALID_CHILD_MEDIA_INDEX", data["status_reasons"])
             
@@ -274,7 +342,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
             
@@ -295,7 +371,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
@@ -315,7 +399,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
@@ -335,7 +427,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["classification"], "MIXED_OR_UNRESOLVED")
 
@@ -349,7 +449,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["apply_operations"], [])
             
@@ -363,7 +471,15 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         mock_sheets.return_value, fake_read = self.create_mock_sheets(parents, children)
         mock_read.side_effect = fake_read
         with patch("sys.argv", ["script", "--output", "out.json"]):
-            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main; main(); sys.stdout = sys.__stdout__
+            import io, json; captured = io.StringIO(); sys.stdout = captured; from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                try:
+                    main()
+                except SystemExit:
+                    pass
+            except SystemExit:
+                pass
+            sys.stdout = sys.__stdout__
             data = json.loads(captured.getvalue().split("WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON=")[1])
             self.assertEqual(data["parents"][0]["sheet_row_number"], 500)
             self.assertEqual(data["children"][0]["sheet_row_number"], 600)
@@ -551,6 +667,129 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
         finally:
             os.unlink(json_path)
             os.unlink(md_path)
+
+
+class TestWP3C4SheetsClientContract(unittest.TestCase):
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
+    @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/dev/null'])
+    def test_constructor_contract(self, mock_sheets_client, mock_get_config):
+        mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
+        mock_client = unittest.mock.MagicMock()
+        mock_sheets_client.return_value = mock_client
+        mock_ws_posts = unittest.mock.MagicMock()
+        mock_ws_media = unittest.mock.MagicMock()
+        mock_client._ws.side_effect = lambda name: mock_ws_posts if name == "source_posts" else mock_ws_media
+        mock_ws_posts.get_all_values.return_value = [["header1", "source_post_id"], ["1", "post1"]]
+        mock_ws_media.get_all_values.return_value = [["header1", "source_post_id"], ["1", "post1"]]
+        
+        with patch('sys.exit') as mock_exit:
+            mock_exit.side_effect = SystemExit
+            from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                main()
+            except SystemExit:
+                pass
+            mock_exit.assert_called_with(0)
+            
+        mock_get_config.assert_called_once()
+        mock_sheets_client.assert_called_once_with("test_sheet_id", {"test": "dict"}, dry_run=True)
+        
+        self.assertEqual(mock_client._ws.call_count, 2)
+        mock_client._ws.assert_any_call("source_posts")
+        mock_client._ws.assert_any_call("source_post_media")
+        
+        mock_ws_posts.get_all_values.assert_called_once()
+        mock_ws_media.get_all_values.assert_called_once()
+        
+        
+
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
+    @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_client.json'])
+    def test_client_initialization_failure(self, mock_get_config):
+        mock_get_config.side_effect = Exception("Config error")
+        with patch('sys.exit') as mock_exit:
+            mock_exit.side_effect = SystemExit
+            from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                main()
+            except SystemExit:
+                pass
+            mock_exit.assert_called_with(1)
+            
+        import json
+        with open('/tmp/test_fail_client.json', 'r') as f:
+            j = json.load(f)
+            self.assertEqual(j["status_reasons"], ["CLIENT_INITIALIZATION_FAILED"])
+            self.assertEqual(j["parent_count"], 0)
+            self.assertEqual(j["child_count"], 0)
+            self.assertEqual(j["apply_operations"], [])
+
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
+    @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_ws.json'])
+    def test_worksheet_read_failure(self, mock_sheets_client, mock_get_config):
+        mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
+        mock_client = unittest.mock.MagicMock()
+        mock_sheets_client.return_value = mock_client
+        mock_client._ws.side_effect = Exception("Worksheet error")
+        
+        with patch('sys.exit') as mock_exit:
+            mock_exit.side_effect = SystemExit
+            from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                main()
+            except SystemExit:
+                pass
+            mock_exit.assert_called_with(1)
+            
+        import json
+        with open('/tmp/test_fail_ws.json', 'r') as f:
+            j = json.load(f)
+            self.assertEqual(j["status_reasons"], ["WORKSHEET_READ_FAILED"])
+            self.assertEqual(j["parent_count"], 0)
+            self.assertEqual(j["child_count"], 0)
+            self.assertEqual(j["apply_operations"], [])
+
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.parse_non_negative_integer')
+    @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_analysis.json'])
+    def test_analysis_failure(self, mock_diagnose, mock_sheets_client, mock_get_config):
+        mock_parse = mock_diagnose
+        mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
+        mock_client = unittest.mock.MagicMock()
+        mock_sheets_client.return_value = mock_client
+        mock_ws_posts = unittest.mock.MagicMock()
+        mock_ws_media = unittest.mock.MagicMock()
+        mock_client._ws.side_effect = lambda name: mock_ws_posts if name == "source_posts" else mock_ws_media
+        mock_ws_posts.get_all_values.return_value = [["sheet_row_number", "source_post_id", "canonical_post_url"], ["2", "sp_src_lm_yt_user_001_UCzFzty7aEd4tw3NqCW6pkLQ", "http://test.com"]]
+        mock_ws_media.get_all_values.return_value = [["sheet_row_number", "source_post_id"], ["3", "sp_src_lm_yt_user_001_UCzFzty7aEd4tw3NqCW6pkLQ"]]
+        
+        mock_diagnose.side_effect = Exception("Analysis error")
+        
+        with patch('sys.exit') as mock_exit:
+            mock_exit.side_effect = SystemExit
+            from scripts.inspect_wp3c4_unresolved_url_shapes import main
+            try:
+                main()
+            except SystemExit:
+                pass
+            mock_exit.assert_called_with(1)
+            
+        import json
+        with open('/tmp/test_fail_analysis.json', 'r') as f:
+            j = json.load(f)
+            self.assertEqual(j["status_reasons"], ["ANALYSIS_FAILED"])
+            self.assertEqual(j["parent_count"], 0)
+            self.assertEqual(j["child_count"], 0)
+            self.assertEqual(j["apply_operations"], [])
+
+    def test_regression_no_invalid_calls_in_source(self):
+        with open("scripts/inspect_wp3c4_unresolved_url_shapes.py", "r") as f:
+            src = f.read()
+        self.assertNotIn("client = SheetsClient()", src)
+        self.assertNotIn(".get_worksheet(", src)
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
+from src.config_loader import get_config
 from src.sheets_client import SheetsClient
 from src.url_shape_diagnostics import (
     parse_url_shape, 
@@ -101,18 +102,33 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True)
     args = parser.parse_args()
+    if check_safety_flags():
+        generate_fail_report("UNSAFE_FLAG_ENABLED", args.output)
+
     try:
-        if check_safety_flags():
-            generate_fail_report("UNSAFE_FLAG_ENABLED", args.output)
-
-        client = SheetsClient()
+        cfg = get_config()
+        client = SheetsClient(
+            cfg["sheet_id"],
+            cfg["sa_dict"],
+            dry_run=True,
+        )
         prevent_writes(client)
+    except Exception:
+        generate_fail_report("CLIENT_INITIALIZATION_FAILED", args.output)
 
-        source_posts_ws = client.get_worksheet("source_posts")
-        source_post_media_ws = client.get_worksheet("source_post_media")
+    try:
+        source_posts_ws = client._ws("source_posts")
+        prevent_writes(source_posts_ws)
+
+        source_post_media_ws = client._ws("source_post_media")
+        prevent_writes(source_post_media_ws)
 
         source_posts_rows = read_rows_with_sheet_numbers(source_posts_ws)
         source_post_media_rows = read_rows_with_sheet_numbers(source_post_media_ws)
+    except Exception:
+        generate_fail_report("WORKSHEET_READ_FAILED", args.output)
+
+    try:
 
         parents = [r for r in source_posts_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
         children = [r for r in source_post_media_rows if str(r[1].get("source_post_id", "")) == TARGET_SOURCE_POST_ID]
@@ -378,9 +394,9 @@ def main():
         with open(args.output, 'w') as f:
             f.write(j)
         print(f"WP3C4_SAFE_URL_SHAPE_DIAGNOSTICS_JSON={j}")
+        sys.exit(0)
     except Exception:
-        generate_fail_report("INSPECTION_FAILED", args.output)
-        sys.exit(1)
+        generate_fail_report("ANALYSIS_FAILED", args.output)
 
 if __name__ == "__main__":
     main()
