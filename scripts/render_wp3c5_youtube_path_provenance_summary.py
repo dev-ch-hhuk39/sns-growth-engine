@@ -40,7 +40,7 @@ REQUIRED_PARENT_KEYS = {
     "external_post_id_group", "source_id_group", "source_account_id_group",
     "canonical_url_group", "discovered_at_group", "created_at_group",
     "semantic_parent_group", "path_shape", "tab_kind", "post_kind",
-    "media_count", "input_state", "host_family", "has_query", "has_fragment", "post_identity_extracted"
+    "media_count", "input_state", "host_family", "path_segment_count", "has_query", "allowed_query_key_flags", "has_fragment", "post_identity_extracted"
 }
 
 REQUIRED_CHILD_KEYS = {
@@ -48,7 +48,7 @@ REQUIRED_CHILD_KEYS = {
     "child_id_group", "canonical_url_group", "original_media_url_group",
     "created_at_group", "semantic_child_group", "path_shape", "tab_kind",
     "post_kind", "media_index", "media_type", "acquisition_method_family",
-    "input_state", "host_family", "has_query", "has_fragment", "post_identity_extracted"
+    "input_state", "host_family", "path_segment_count", "has_query", "allowed_query_key_flags", "has_fragment", "post_identity_extracted"
 }
 
 VALID_STATUS_REASONS = {
@@ -72,13 +72,14 @@ VALID_CLASSIFICATIONS = {
     "MIXED_OR_UNRESOLVED": "MANUAL_INVESTIGATION"
 }
 
-VALID_INPUT_STATES = {"EMPTY", "MALFORMED", "NON_HTTP_URL", "VALID_URL"}
-VALID_HOST_FAMILIES = {"EMPTY_OR_INVALID", "OTHER", "INSTAGRAM", "X_TWITTER", "TIKTOK", "YOUTUBE"}
-VALID_PATH_SHAPES = {"EMPTY_OR_INVALID", "ROOT_ONLY", "NON_YOUTUBE", "YOUTUBE_POST_SHAPE", "YOUTUBE_NONPOST_OTHER"}
-VALID_TAB_KINDS = {"UNKNOWN", "VIDEOS", "SHORTS", "STREAMS"}
-VALID_POST_KINDS = {"UNKNOWN", "VIDEO", "SHORT", "STREAM"}
-VALID_ACQ_FAMILIES = {"UNKNOWN", "SCRAPER_API", "YTDLP", "BROWSER_AUTOMATION"}
-VALID_MEDIA_TYPES = {"UNKNOWN", "VIDEO", "IMAGE", "CAROUSEL"}
+VALID_INPUT_STATES = {"ABSOLUTE_URL", "RELATIVE", "EMPTY", "MALFORMED"}
+VALID_HOST_FAMILIES = {"YOUTUBE", "YOUTU_BE", "NON_YOUTUBE", "NONE"}
+VALID_PATH_SHAPES = {"YOUTUBE_HANDLE_ROOT", "YOUTUBE_HANDLE_TAB", "YOUTUBE_CHANNEL_ROOT", "YOUTUBE_CHANNEL_TAB", "YOUTUBE_USER_ROOT", "YOUTUBE_USER_TAB", "YOUTUBE_CUSTOM_ROOT", "YOUTUBE_CUSTOM_TAB", "YOUTUBE_POST_URL", "YOUTUBE_OTHER", "NON_YOUTUBE", "EMPTY", "MALFORMED"}
+VALID_TAB_KINDS = {"VIDEOS", "SHORTS", "STREAMS", "LIVE", "PLAYLISTS", "COMMUNITY", "ABOUT", "FEATURED", "NONE", "OTHER"}
+VALID_POST_KINDS = {"WATCH", "SHORTS", "LIVE", "YOUTU_BE", "NONE"}
+VALID_ACQ_FAMILIES = {"YT_DLP_RESOLVE_ON_INGEST", "MANUAL", "OTHER", "EMPTY"}
+VALID_MEDIA_TYPES = {"image", "video", "audio", "carousel", "unknown"}
+VALID_QUERY_KEYS = {"v", "list", "index", "t", "si"}
 
 def is_plain_int(value: any) -> bool:
     return type(value) is int and type(value) is not bool
@@ -228,6 +229,8 @@ def validate_contract(data: dict, exit_code: int) -> None:
             raise ValueError("Invalid sheet_row_number")
         if not is_plain_int(p["media_count"]) or p["media_count"] < 0:
             raise ValueError("Invalid media_count")
+        if not is_plain_int(p["path_segment_count"]) or p["path_segment_count"] < 0:
+            raise ValueError("Invalid path_segment_count")
             
         if p["input_state"] not in VALID_INPUT_STATES: raise ValueError("Invalid input_state")
         if p["host_family"] not in VALID_HOST_FAMILIES: raise ValueError("Invalid host_family")
@@ -237,6 +240,7 @@ def validate_contract(data: dict, exit_code: int) -> None:
         if not is_strict_bool(p["has_query"]): raise ValueError("has_query must be bool")
         if not is_strict_bool(p["has_fragment"]): raise ValueError("has_fragment must be bool")
         if not is_strict_bool(p["post_identity_extracted"]): raise ValueError("post_identity_extracted must be bool")
+        if not isinstance(p["allowed_query_key_flags"], list) or p["allowed_query_key_flags"] != sorted(set(p["allowed_query_key_flags"])) or any(type(key) is not str or key not in VALID_QUERY_KEYS for key in p["allowed_query_key_flags"]): raise ValueError("Invalid allowed_query_key_flags")
             
         validate_group_name(p["external_post_id_group"], "EXT_POST_ID_GROUP")
         validate_group_name(p["source_id_group"], "SOURCE_ID_GROUP")
@@ -261,6 +265,8 @@ def validate_contract(data: dict, exit_code: int) -> None:
             raise ValueError("Invalid sheet_row_number")
         if not is_plain_int(c["media_index"]) or c["media_index"] < 0:
             raise ValueError("Invalid media_index")
+        if not is_plain_int(c["path_segment_count"]) or c["path_segment_count"] < 0:
+            raise ValueError("Invalid path_segment_count")
             
         if c["input_state"] not in VALID_INPUT_STATES: raise ValueError("Invalid input_state")
         if c["host_family"] not in VALID_HOST_FAMILIES: raise ValueError("Invalid host_family")
@@ -272,6 +278,7 @@ def validate_contract(data: dict, exit_code: int) -> None:
         if not is_strict_bool(c["has_query"]): raise ValueError("has_query must be bool")
         if not is_strict_bool(c["has_fragment"]): raise ValueError("has_fragment must be bool")
         if not is_strict_bool(c["post_identity_extracted"]): raise ValueError("post_identity_extracted must be bool")
+        if not isinstance(c["allowed_query_key_flags"], list) or c["allowed_query_key_flags"] != sorted(set(c["allowed_query_key_flags"])) or any(type(key) is not str or key not in VALID_QUERY_KEYS for key in c["allowed_query_key_flags"]): raise ValueError("Invalid allowed_query_key_flags")
             
         validate_group_name(c["child_id_group"], "CHILD_ID_GROUP")
         validate_group_name(c["canonical_url_group"], "CANON_URL_GROUP")

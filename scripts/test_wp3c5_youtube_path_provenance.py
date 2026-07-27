@@ -374,6 +374,42 @@ class TestWP3C5YouTubePathProvenance(unittest.TestCase):
                 self.assertNotIn(keyword, json.dumps(j))
 
 class TestWP3C5Renderer(unittest.TestCase):
+    def test_renderer_accepts_all_real_analysis_classifications(self):
+        """Renderer contracts the actual analyser output, never hand-built rows."""
+        import render_wp3c5_youtube_path_provenance_summary as renderer
+        fixtures = TestWP3C5YouTubePathProvenance()
+        historical_parents = [
+            (1, fixtures._make_mock_parent("https://youtube.com/@h/videos")),
+            (2, fixtures._make_mock_parent("https://youtube.com/@h/shorts")),
+            (3, fixtures._make_mock_parent("https://youtube.com/@h/streams")),
+        ]
+        historical_children = [
+            (4, fixtures._make_mock_child("https://youtube.com/@h/videos", media_url="url1", child_id="c1", m_idx=0)),
+            (5, fixtures._make_mock_child("https://youtube.com/@h/shorts", media_url="url2", child_id="c1", m_idx=0)),
+            (6, fixtures._make_mock_child("https://youtube.com/@h/streams", media_url="url3", child_id="c1", m_idx=0)),
+        ]
+        account_children = [
+            (4, fixtures._make_mock_child("https://youtube.com/@h/videos", media_url="url1", child_id="c1", m_idx=0)),
+            (5, fixtures._make_mock_child("https://youtube.com/@h/shorts", media_url="url2", child_id="c2", m_idx=0)),
+            (6, fixtures._make_mock_child("https://youtube.com/@h/streams", media_url="url3", child_id="c3", m_idx=0)),
+        ]
+        cases = [
+            ("HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES", historical_parents, historical_children),
+            ("ACCOUNT_PAGE_COLLISION_CONFIRMED", historical_parents, account_children),
+            ("NONPOST_YOUTUBE_URL_COLLISION", [(1, fixtures._make_mock_parent("https://youtube.com/playlist?list=1"))], [(2, fixtures._make_mock_child("https://youtube.com/playlist?list=1"))]),
+            ("MIXED_OR_UNRESOLVED", [(1, fixtures._make_mock_parent("https://youtube.com/watch?v=1"))], [(2, fixtures._make_mock_child("https://youtube.com/watch?v=1"))]),
+        ]
+        for expected, parents, children in cases:
+            with self.subTest(expected=expected):
+                result = _analyse(parents, children, "0" * 40)
+                self.assertEqual(result["classification"], expected)
+                renderer.validate_contract(result, 0)
+
+    def test_renderer_enum_allowlists_match_path_module(self):
+        import render_wp3c5_youtube_path_provenance_summary as renderer
+        self.assertEqual(renderer.VALID_PATH_SHAPES, {value.value for value in PathShape})
+        self.assertEqual(renderer.VALID_TAB_KINDS, {value.value for value in TabKind})
+        self.assertEqual(renderer.VALID_POST_KINDS, {value.value for value in PostKind})
     def test_renderer_success(self):
         import render_wp3c5_youtube_path_provenance_summary as renderer
         data = {
