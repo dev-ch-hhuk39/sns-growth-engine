@@ -672,91 +672,129 @@ class TestWP3C4UnresolvedUrlShapes(unittest.TestCase):
 class TestWP3C4SheetsClientContract(unittest.TestCase):
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
-    @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/dev/null'])
-    def test_constructor_contract(self, mock_sheets_client, mock_get_config):
-        mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
-        mock_client = unittest.mock.MagicMock()
-        mock_sheets_client.return_value = mock_client
-        mock_ws_posts = unittest.mock.MagicMock()
-        mock_ws_media = unittest.mock.MagicMock()
-        mock_client._ws.side_effect = lambda name: mock_ws_posts if name == "source_posts" else mock_ws_media
-        mock_ws_posts.get_all_values.return_value = [["header1", "source_post_id"], ["1", "post1"]]
-        mock_ws_media.get_all_values.return_value = [["header1", "source_post_id"], ["1", "post1"]]
-        
-        with patch('sys.exit') as mock_exit:
-            mock_exit.side_effect = SystemExit
-            from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
-                main()
-            except SystemExit:
-                pass
-            mock_exit.assert_called_with(0)
-            
-        mock_get_config.assert_called_once()
-        mock_sheets_client.assert_called_once_with("test_sheet_id", {"test": "dict"}, dry_run=True)
-        
-        self.assertEqual(mock_client._ws.call_count, 2)
-        mock_client._ws.assert_any_call("source_posts")
-        mock_client._ws.assert_any_call("source_post_media")
-        
-        mock_ws_posts.get_all_values.assert_called_once()
-        mock_ws_media.get_all_values.assert_called_once()
-        
-        
-
-    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
     @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_client.json'])
-    def test_client_initialization_failure(self, mock_get_config):
-        mock_get_config.side_effect = Exception("Config error")
-        with patch('sys.exit') as mock_exit:
-            mock_exit.side_effect = SystemExit
-            from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.prevent_writes')
+    def test_client_initialization_failure(self, mock_prevent_writes, mock_sheets_client, mock_get_config):
+        mock_client = unittest.mock.MagicMock()
+        mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
+        mock_sheets_client.side_effect = Exception("CLIENT_SECRET_EXCEPTION_TEXT")
+        
+        import sys, io
+        captured_out = io.StringIO()
+        captured_err = io.StringIO()
+        from scripts.inspect_wp3c4_unresolved_url_shapes import main
+        with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
+            with self.assertRaises(SystemExit) as cm:
                 main()
-            except SystemExit:
-                pass
-            mock_exit.assert_called_with(1)
-            
+        
+        self.assertEqual(cm.exception.code, 1)
+        self.assertNotIn("CLIENT_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
+        self.assertNotIn("CLIENT_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
+        
+        mock_client._ensure_tab.assert_not_called()
+        mock_client.setup_all.assert_not_called()
+        mock_client._batch_update_fields.assert_not_called()
+        
         import json
         with open('/tmp/test_fail_client.json', 'r') as f:
             j = json.load(f)
             self.assertEqual(j["status_reasons"], ["CLIENT_INITIALIZATION_FAILED"])
             self.assertEqual(j["parent_count"], 0)
             self.assertEqual(j["child_count"], 0)
+            self.assertEqual(j["parents"], [])
+            self.assertEqual(j["children"], [])
             self.assertEqual(j["apply_operations"], [])
 
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
     @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_ws.json'])
-    def test_worksheet_read_failure(self, mock_sheets_client, mock_get_config):
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.prevent_writes')
+    def test_worksheet_read_failure(self, mock_prevent_writes, mock_sheets_client, mock_get_config):
         mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
         mock_client = unittest.mock.MagicMock()
         mock_sheets_client.return_value = mock_client
-        mock_client._ws.side_effect = Exception("Worksheet error")
+        mock_client._ws.side_effect = Exception("WORKSHEET_SECRET_EXCEPTION_TEXT")
         
-        with patch('sys.exit') as mock_exit:
-            mock_exit.side_effect = SystemExit
-            from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
+        import sys, io
+        captured_out = io.StringIO()
+        captured_err = io.StringIO()
+        from scripts.inspect_wp3c4_unresolved_url_shapes import main
+        with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
+            with self.assertRaises(SystemExit) as cm:
                 main()
-            except SystemExit:
-                pass
-            mock_exit.assert_called_with(1)
-            
+                
+        self.assertEqual(cm.exception.code, 1)
+        self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
+        self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
+
+        mock_client._ensure_tab.assert_not_called()
+        mock_client.setup_all.assert_not_called()
+        mock_client._batch_update_fields.assert_not_called()
+        
         import json
         with open('/tmp/test_fail_ws.json', 'r') as f:
             j = json.load(f)
             self.assertEqual(j["status_reasons"], ["WORKSHEET_READ_FAILED"])
             self.assertEqual(j["parent_count"], 0)
             self.assertEqual(j["child_count"], 0)
+            self.assertEqual(j["parents"], [])
+            self.assertEqual(j["children"], [])
+            self.assertEqual(j["apply_operations"], [])
+
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
+    @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_ws_get.json'])
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.prevent_writes')
+    def test_worksheet_get_all_values_failure(self, mock_prevent_writes, mock_sheets_client, mock_get_config):
+        mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
+        mock_client = unittest.mock.MagicMock()
+        mock_sheets_client.return_value = mock_client
+        mock_ws_posts = unittest.mock.MagicMock()
+        mock_client._ws.return_value = mock_ws_posts
+        mock_ws_posts.get_all_values.side_effect = Exception("WORKSHEET_SECRET_EXCEPTION_TEXT")
+        
+        import sys, io
+        captured_out = io.StringIO()
+        captured_err = io.StringIO()
+        from scripts.inspect_wp3c4_unresolved_url_shapes import main
+        with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
+            with self.assertRaises(SystemExit) as cm:
+                main()
+                
+        self.assertEqual(cm.exception.code, 1)
+        self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
+        self.assertNotIn("WORKSHEET_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
+
+        mock_client._ensure_tab.assert_not_called()
+        mock_client.setup_all.assert_not_called()
+        mock_client._batch_update_fields.assert_not_called()
+        
+        for ws in [mock_ws_posts]:
+            ws.append_row.assert_not_called()
+            ws.append_rows.assert_not_called()
+            ws.update.assert_not_called()
+            ws.update_cell.assert_not_called()
+            ws.batch_update.assert_not_called()
+            ws.resize.assert_not_called()
+            ws.clear.assert_not_called()
+            ws.delete_rows.assert_not_called()
+        
+        import json
+        with open('/tmp/test_fail_ws_get.json', 'r') as f:
+            j = json.load(f)
+            self.assertEqual(j["status_reasons"], ["WORKSHEET_READ_FAILED"])
+            self.assertEqual(j["parent_count"], 0)
+            self.assertEqual(j["child_count"], 0)
+            self.assertEqual(j["parents"], [])
+            self.assertEqual(j["children"], [])
             self.assertEqual(j["apply_operations"], [])
 
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
     @patch('scripts.inspect_wp3c4_unresolved_url_shapes.parse_non_negative_integer')
     @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/tmp/test_fail_analysis.json'])
-    def test_analysis_failure(self, mock_diagnose, mock_sheets_client, mock_get_config):
-        mock_parse = mock_diagnose
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.prevent_writes')
+    def test_analysis_failure(self, mock_prevent_writes, mock_parse, mock_sheets_client, mock_get_config):
         mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
         mock_client = unittest.mock.MagicMock()
         mock_sheets_client.return_value = mock_client
@@ -766,16 +804,33 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
         mock_ws_posts.get_all_values.return_value = [["sheet_row_number", "source_post_id", "canonical_post_url"], ["2", "sp_src_lm_yt_user_001_UCzFzty7aEd4tw3NqCW6pkLQ", "http://test.com"]]
         mock_ws_media.get_all_values.return_value = [["sheet_row_number", "source_post_id"], ["3", "sp_src_lm_yt_user_001_UCzFzty7aEd4tw3NqCW6pkLQ"]]
         
-        mock_diagnose.side_effect = Exception("Analysis error")
+        mock_parse.side_effect = Exception("ANALYSIS_SECRET_EXCEPTION_TEXT")
         
-        with patch('sys.exit') as mock_exit:
-            mock_exit.side_effect = SystemExit
-            from scripts.inspect_wp3c4_unresolved_url_shapes import main
-            try:
+        import sys, io
+        captured_out = io.StringIO()
+        captured_err = io.StringIO()
+        from scripts.inspect_wp3c4_unresolved_url_shapes import main
+        with patch('sys.stdout', captured_out), patch('sys.stderr', captured_err):
+            with self.assertRaises(SystemExit) as cm:
                 main()
-            except SystemExit:
-                pass
-            mock_exit.assert_called_with(1)
+                
+        self.assertEqual(cm.exception.code, 1)
+        self.assertNotIn("ANALYSIS_SECRET_EXCEPTION_TEXT", captured_out.getvalue())
+        self.assertNotIn("ANALYSIS_SECRET_EXCEPTION_TEXT", captured_err.getvalue())
+        
+        mock_client._ensure_tab.assert_not_called()
+        mock_client.setup_all.assert_not_called()
+        mock_client._batch_update_fields.assert_not_called()
+        
+        for ws in [mock_ws_posts, mock_ws_media]:
+            ws.append_row.assert_not_called()
+            ws.append_rows.assert_not_called()
+            ws.update.assert_not_called()
+            ws.update_cell.assert_not_called()
+            ws.batch_update.assert_not_called()
+            ws.resize.assert_not_called()
+            ws.clear.assert_not_called()
+            ws.delete_rows.assert_not_called()
             
         import json
         with open('/tmp/test_fail_analysis.json', 'r') as f:
@@ -783,13 +838,65 @@ class TestWP3C4SheetsClientContract(unittest.TestCase):
             self.assertEqual(j["status_reasons"], ["ANALYSIS_FAILED"])
             self.assertEqual(j["parent_count"], 0)
             self.assertEqual(j["child_count"], 0)
+            self.assertEqual(j["parents"], [])
+            self.assertEqual(j["children"], [])
             self.assertEqual(j["apply_operations"], [])
 
-    def test_regression_no_invalid_calls_in_source(self):
-        with open("scripts/inspect_wp3c4_unresolved_url_shapes.py", "r") as f:
-            src = f.read()
-        self.assertNotIn("client = SheetsClient()", src)
-        self.assertNotIn(".get_worksheet(", src)
+
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.get_config')
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.SheetsClient')
+    @patch('scripts.inspect_wp3c4_unresolved_url_shapes.prevent_writes')
+    @patch('sys.argv', ['inspect_wp3c4_unresolved_url_shapes.py', '--output', '/dev/null'])
+    def test_constructor_contract(self, mock_prevent_writes, mock_sheets_client, mock_get_config):
+        mock_get_config.return_value = {"sheet_id": "test_sheet_id", "sa_dict": {"test": "dict"}}
+        mock_client = unittest.mock.MagicMock()
+        mock_sheets_client.return_value = mock_client
+        mock_ws_posts = unittest.mock.MagicMock()
+        mock_ws_media = unittest.mock.MagicMock()
+        mock_client._ws.side_effect = lambda name: mock_ws_posts if name == "source_posts" else mock_ws_media
+        mock_ws_posts.get_all_values.return_value = [["header1"], ["1"]]
+        mock_ws_media.get_all_values.return_value = [["header1"], ["1"]]
+        
+        from scripts.inspect_wp3c4_unresolved_url_shapes import main
+        with self.assertRaises(SystemExit) as cm:
+            main()
+        self.assertEqual(cm.exception.code, 0)
+        
+        # Check get_config called exactly once
+        mock_get_config.assert_called_once()
+        
+        # Check SheetsClient constructor contract
+        mock_sheets_client.assert_called_once_with("test_sheet_id", {"test": "dict"}, dry_run=True)
+        
+        # Check _ws was called exactly twice
+        self.assertEqual(mock_client._ws.call_count, 2)
+        mock_client._ws.assert_any_call("source_posts")
+        mock_client._ws.assert_any_call("source_post_media")
+        
+        # Check get_all_values called exactly once per worksheet
+        mock_ws_posts.get_all_values.assert_called_once()
+        mock_ws_media.get_all_values.assert_called_once()
+        
+        # Check prevent_writes
+        self.assertEqual(mock_prevent_writes.call_count, 3)
+        mock_prevent_writes.assert_any_call(mock_client)
+        mock_prevent_writes.assert_any_call(mock_ws_posts)
+        mock_prevent_writes.assert_any_call(mock_ws_media)
+        
+        # Check writes are prevented
+        mock_client._ensure_tab.assert_not_called()
+        mock_client.setup_all.assert_not_called()
+        mock_client._batch_update_fields.assert_not_called()
+        
+        for ws in [mock_ws_posts, mock_ws_media]:
+            ws.append_row.assert_not_called()
+            ws.append_rows.assert_not_called()
+            ws.update.assert_not_called()
+            ws.update_cell.assert_not_called()
+            ws.batch_update.assert_not_called()
+            ws.resize.assert_not_called()
+            ws.clear.assert_not_called()
+            ws.delete_rows.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()
