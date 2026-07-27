@@ -79,4 +79,4 @@ jobs:
           python3 scripts/render_wp3c5_youtube_path_provenance_summary.py \
             --json-file "/tmp/wp3c5_safe_clean.json" \
             --exit-code $EXIT_CODE \
-            > "$GITHUB_STEP_SUMMARY"
+            | tee -a "$GITHUB_STEP_SUMMARY"

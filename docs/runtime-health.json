@@ -1,16 +1,16 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-07-22T09:41:28+09:00",
-  "implementation_head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
-  "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3",
-  "branch": "feature/oss-github-actions-media-autopilot",
-  "repository_visibility": "PRIVATE",
+  "checked_at": "2026-07-28T08:00:00+09:00",
+  "implementation_head": "ca287afb85092bdb7549818bffa027c113c00d9d",
+  "origin_main": "ca287afb85092bdb7549818bffa027c113c00d9d",
+  "branch": "main",
+  "repository_visibility": "PUBLIC",
   "pull_request": {
-    "number": 3,
-    "state": "OPEN",
-    "mergeable": "MERGEABLE",
-    "merge_state": "UNSTABLE",
-    "url": "https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/3"
+    "number": 35,
+    "state": "MERGED",
+    "mergeable": "MERGED",
+    "merge_state": "MERGED",
+    "url": "https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/35"
   },
   "workflow_inventory": {
     "workflow_files": 26,
@@ -29,16 +29,16 @@
     ]
   },
   "ci": {
-    "pull_request_run_id": 29690502128,
-    "head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
-    "conclusion": "FAILURE_BEFORE_STEPS",
+    "pull_request_run_id": 30312913280,
+    "head": "ca287afb85092bdb7549818bffa027c113c00d9d",
+    "conclusion": "SUCCESS",
     "jobs": [
       "tests",
       "dependency-audit",
       "secret-history-scan"
     ],
-    "job_steps_observed": 0,
-    "interpretation": "runner/platform startup failure; no test command executed"
+    "job_steps_observed": 3,
+    "interpretation": "post-merge CI jobs passed at the recorded main SHA"
   },
   "local_validation": {
     "repository_tests": {
@@ -112,9 +112,9 @@
     "warning": "green workflow conclusion is not posting evidence"
   },
   "external_blockers": [
-    "explicit approval required before repository publicization",
     "no human-approved liver_manager Threads source account URL is registered",
-    "production Environment and protected main require post-publicization verification"
+    "Goal-specific media inventory and all four independently verified canaries are missing",
+    "WP3-C5 run 30313039483 lacks a retrievable validated safe result in its job log"
   ],
   "secret_values_logged": false,
   "completion_claim": false

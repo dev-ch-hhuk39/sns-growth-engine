@@ -1,5 +1,26 @@
 # Goal Evidence
 
+## 2026-07-28 Rebaseline
+
+- GitHub API confirms repository visibility `public`, default branch `main`,
+  protected-main required checks (`tests`, `dependency-audit`, and
+  `secret-history-scan`), and disabled force pushes/deletions. The production
+  Environment exists with a branch-policy protection rule. No secret values
+  were read or recorded.
+- Canonical merged main is `ca287afb85092bdb7549818bffa027c113c00d9d`.
+  PR #35 merged normally and post-merge CI run `30312913280` passed.
+- WP3-C5 run `30313039483` completed successfully as a read-only job.
+  Its workflow redirected the inspector stdout to a temporary file and wrote
+  the renderer output only to the job summary, so a safe provenance JSON was
+  not retrievable from standard run logs. This is an observability defect,
+  not evidence that any classification passed or failed.
+- All Goal media canaries, media assets, source bundles, and final posting
+  evidence remain unverified. No prior asset, permalink, dry-run, or green
+  workflow conclusion is promoted to Goal evidence.
+- Current blocker remains: no human-approved Liver Manager Threads source
+  account URL is recorded. No substitute account is used.
+
+
 ## 2026-07-19 Baseline
 
 - Start HEAD and `origin/main`: `f89f6ed44bc2a00930f04601d5700230e25949d3`.

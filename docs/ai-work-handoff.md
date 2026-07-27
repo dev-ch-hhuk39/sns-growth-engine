@@ -27,6 +27,37 @@
 
 # AI Work Handoff
 
+## 2026-07-28 Codex WP3-C5 Observability Rebaseline
+
+- Current merged main: `ca287afb85092bdb7549818bffa027c113c00d9d`.
+- Current working branch: `fix/wp3c5-safe-result-observability`.
+- Confirmed GitHub state: repository is public; `main` requires the three CI
+  checks and disallows force push/deletion; `production` has a branch-policy
+  protection rule. Secret values were never read.
+- Previous WP3-C5 run `30313039483`: workflow conclusion SUCCESS, but its
+  inspector result was not observable in logs because `Run Inspector` sent
+  stdout to `/tmp` and `Render Summary` wrote stdout only to the job summary.
+  Do not label it `INSPECTOR_STARTUP_FAILED`; that string was from the
+  workflow fallback source, not a confirmed runtime result.
+- This branch changes the renderer to emit the same contract-validated,
+  redacted JSON prefix and mirrors that output to the log and Step Summary.
+  It does not print raw inspector stdout/stderr, URLs, IDs, source content,
+  secrets, tokens, or cookies.
+- Changed files in progress: `.github/workflows/wp3c5-safe-youtube-path-provenance.yml`,
+  `scripts/render_wp3c5_youtube_path_provenance_summary.py`,
+  `scripts/test_wp3c5_workflow_contract.py`,
+  `scripts/test_wp3c5_youtube_path_provenance.py`, and the current-state docs.
+- Focused verification: provenance tests 23 PASS; workflow-contract tests
+  8 PASS; `py_compile` and `git diff --check` PASS. Local Ruff/Mypy are not
+  installed. The full repository runner did not complete in this desktop
+  envelope and must be confirmed by PR CI.
+- Unfinished: merge this bounded PR normally, verify post-merge CI, dispatch
+  a new WP3-C5 read-only workflow exactly once, then record its validated
+  safe outcome. Do not run production writes or canaries yet.
+- Next safe files: WP3-C5 workflow, renderer, inspector/tests, and the Goal
+  status docs. Do not touch `.env`, `data`, `output`, secrets, permission
+  ledger rows, or publishing workflows without a separately satisfied gate.
+
 ## 2026-07-26 Antigravity WP3-C2 Duplicate Parent Inspection
 
 - design authority: ChatGPT lead review

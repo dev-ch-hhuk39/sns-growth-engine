@@ -2,6 +2,22 @@
 
 ## Purpose And Stop Line
 
+## 2026-07-28 Rebaseline Checkpoint
+
+- `main` was rechecked at `ca287afb85092bdb7549818bffa027c113c00d9d`.
+  PR #35 and post-merge CI `30312913280` are successful.
+- WP3-C5 workflow run `30313039483` is job-successful but does not make its
+  renderer-validated safe JSON available in the standard log. It must not be
+  treated as a completed provenance diagnosis.
+- The next bounded PR exposes only validated, redacted safe JSON after the
+  renderer contract passes. It does not alter Sheets, source records,
+  permissions, media, or posting state. After its merge and CI success, run
+  WP3-C5 once from its merged `main`; do not rerun an earlier workflow.
+- The repository is now public, `main` is protected, and a production
+  Environment branch-policy rule exists. These infrastructure facts are
+  verified by GitHub API; production canary and final evidence requirements
+  remain unchanged.
+
 This document is the executable handoff for completing the 35-item Goal in
 `config/goal_acceptance.json`. The audit was performed on branch
 `feature/oss-github-actions-media-autopilot` at implementation HEAD

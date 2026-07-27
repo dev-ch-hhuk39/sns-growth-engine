@@ -1,23 +1,26 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-22T09:41:28+09:00",
-  "audit_scope": "planning_checkpoint_before_low_cost_implementation",
-  "implementation_head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
-  "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3",
-  "branch": "feature/oss-github-actions-media-autopilot",
-  "repository_visibility": "PRIVATE",
+  "generated_at": "2026-07-28T08:00:00+09:00",
+  "audit_scope": "read_only_github_rebaseline_before_wp3c5_observability_fix",
+  "implementation_head": "ca287afb85092bdb7549818bffa027c113c00d9d",
+  "origin_main": "ca287afb85092bdb7549818bffa027c113c00d9d",
+  "branch": "main",
+  "repository_visibility": "PUBLIC",
   "summary": {
-    "pass": 17,
-    "unverified_or_fail": 16,
-    "blocked": 2,
+    "pass": 21,
+    "unverified_or_fail": 13,
+    "blocked": 1,
     "required": 35,
     "completion_claim": false
   },
   "criteria": {
     "repository_public": {
-      "status": "BLOCKED",
-      "evidence": {},
-      "note": "Explicit human approval is required because publicization exposes the full Git history."
+      "status": "PASS",
+      "evidence": {
+        "repository_url": "https://github.com/dev-ch-hhuk39/sns-growth-engine",
+        "visibility_checked_at": "2026-07-28T08:00:00+09:00"
+      },
+      "note": "GitHub API reported public visibility."
     },
     "secret_history_scan": {
       "status": "PASS",
@@ -28,11 +31,12 @@
       }
     },
     "production_secrets_private": {
-      "status": "UNVERIFIED",
+      "status": "PASS",
       "evidence": {
-        "secret_names_only": "GitHub secret names listed without values"
+        "secret_names_only": "GitHub secret names inspected without values",
+        "environment_protection": "production Environment has a branch-policy protection rule"
       },
-      "note": "A protected production Environment was absent in the last successful API audit."
+      "note": "Only secret names and Environment metadata were read."
     },
     "github_hosted_only": {
       "status": "PASS",
@@ -51,16 +55,16 @@
     "working_tree_clean": {
       "status": "PASS",
       "evidence": {
-        "head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
-        "checked_at": "2026-07-22T09:25:00+09:00"
+        "head": "ca287afb85092bdb7549818bffa027c113c00d9d",
+        "checked_at": "2026-07-28T08:00:00+09:00"
       },
       "note": "Repeat after the planning-document commit and at final main."
     },
     "origin_main_matches": {
-      "status": "FAIL",
+      "status": "PASS",
       "evidence": {
-        "head": "026ed40b65d2c708673313286c8bc9a914b1efe7",
-        "origin_main": "f89f6ed44bc2a00930f04601d5700230e25949d3"
+        "head": "ca287afb85092bdb7549818bffa027c113c00d9d",
+        "origin_main": "ca287afb85092bdb7549818bffa027c113c00d9d"
       }
     },
     "agent_reach_integrated": {
@@ -232,13 +236,13 @@
       "note": "Final merged main needs one independently verified result per account."
     },
     "all_required_tests_pass": {
-      "status": "UNVERIFIED",
+      "status": "PASS",
       "evidence": {
-        "test_count": "629 local repository tests PASS",
-        "failed_count": "0 local; GitHub PR CI did not start job steps",
-        "run_at": "2026-07-22T09:39:00+09:00"
+        "test_count": "GitHub Actions tests job passed",
+        "failed_count": "0 failed CI jobs",
+        "run_at": "2026-07-27T23:04:09Z"
       },
-      "note": "Final GitHub-hosted CI PASS at merged main is required."
+      "note": "Post-merge CI 30312913280 passed at the recorded main SHA; repeat after subsequent merged changes."
     }
   }
 }
