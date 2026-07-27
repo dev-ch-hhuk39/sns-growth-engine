@@ -14,6 +14,7 @@ import json
 import hashlib
 import argparse
 from pathlib import Path
+import os
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,19 +134,36 @@ def _static_trace() -> dict:
 
     # Candidate historical writers (files that write source_posts or source_post_media)
     candidate_files = []
-    for rel in [
-        "scripts/seed_source_registry.py",
-        "scripts/seed_reference_posts_from_sources.py",
-        "src/acquisition/ytdlp.py",
-        "src/acquisition/tiktok_public.py",
-        "src/acquisition/threads_public.py",
-        "src/seeds.py",
-    ]:
-        full = ROOT / rel
-        if full.exists():
-            text = full.read_text(encoding="utf-8", errors="replace")
-            if "source_post_id" in text or "source_post_media_id" in text or "append_row" in text:
-                candidate_files.append(rel)
+    for directory in ["src", "scripts"]:
+        base_dir = ROOT / directory
+        if not base_dir.exists():
+            continue
+        for root, dirs, files in os.walk(base_dir):
+            rel_root = os.path.relpath(root, ROOT)
+            if '__pycache__' in dirs:
+                dirs.remove('__pycache__')
+            for file in files:
+                if not file.endswith('.py'):
+                    continue
+                if file.startswith('test_'):
+                    continue
+                if file == 'inspect_wp3c5_youtube_path_provenance.py' or file == 'render_wp3c5_youtube_path_provenance_summary.py':
+                    continue
+                full_path = Path(root) / file
+                rel_path = f"{rel_root}/{file}"
+                if rel_path.startswith("./"):
+                    rel_path = rel_path[2:]
+                try:
+                    text = full_path.read_text(encoding="utf-8", errors="replace")
+                    if any(term in text for term in [
+                        "source_post_id", "source_post_media_id", "source_posts",
+                        "source_post_media", "append_row", "append_rows",
+                        "_ensure_tab", "_batch_update_fields"
+                    ]):
+                        candidate_files.append(rel_path)
+                except Exception:
+                    pass
+    candidate_files.sort()
 
     return {
         "current_parent_id_uses_source_and_external_id": uses_source_and_external,
@@ -197,10 +215,14 @@ def _build_fail_result(status_reasons: list[str], checked_sha: str) -> dict:
 
 
 def _classify(parents: list[dict], children: list[dict],
-               parent_tab_kinds: list[str], child_tab_kinds: list[str]) -> tuple[str, str]:
-    """
-    Returns (classification, recommended_next_action).
-    """
+               parent_tab_kinds: list[str], child_tab_kinds: list[str],
+               apply_operations: list[dict] = None) -> tuple[str, str]:
+    if apply_operations is None:
+        apply_operations = []
+    
+    if not parents or not children:
+        return "MIXED_OR_UNRESOLVED", "MANUAL_INVESTIGATION"
+
     pc = len(parents)
     cc = len(children)
 
@@ -209,9 +231,6 @@ def _classify(parents: list[dict], children: list[dict],
     ) and all(
         c["host_family"] in ("YOUTUBE", "YOUTU_BE") for c in children
     )
-
-    if not all_youtube:
-        return "MIXED_OR_UNRESOLVED", "MANUAL_INVESTIGATION"
 
     all_no_post_identity = all(
         not p["post_identity_extracted"] for p in parents
@@ -226,67 +245,67 @@ def _classify(parents: list[dict], children: list[dict],
     )
 
     # Check HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES
-    if (
-        pc == 3 and cc == 3
-        and all_no_post_identity
-        and all_account_or_tab
-    ):
-        unique_tab_kinds = set(parent_tab_kinds) | set(child_tab_kinds)
-        all_tabs_allowed = all(tk in _ALLOWED_CHANNEL_TAB_KINDS for tk in unique_tab_kinds)
-        unique_tabs_excl_none = unique_tab_kinds - {"NONE"}
-        two_or_more_tab_kinds = len(unique_tabs_excl_none) >= 2
+    if all_youtube and all_no_post_identity and all_account_or_tab:
+        if pc == 3 and cc == 3:
+            unique_tab_kinds = set(parent_tab_kinds) | set(child_tab_kinds)
+            all_tabs_allowed = all(tk in _ALLOWED_CHANNEL_TAB_KINDS for tk in unique_tab_kinds)
+            unique_tabs_excl_none = unique_tab_kinds - {"NONE"}
+            two_or_more_tab_kinds = len(unique_tabs_excl_none) >= 2
 
-        # ordinal group counts
-        ext_post_groups = set(p.get("external_post_id_group", "") for p in parents)
-        src_groups = set(p.get("source_id_group", "") for p in parents)
-        child_id_groups = set(c.get("child_id_group", "") for c in children)
+            ext_post_groups = set(p.get("external_post_id_group", "") for p in parents)
+            src_groups = set(p.get("source_id_group", "") for p in parents)
+            child_id_groups = set(c.get("child_id_group", "") for c in children)
 
-        unique_ext_post_id_count = len(ext_post_groups)
-        unique_src_id_count = len(src_groups)
-        unique_child_id_count = len(child_id_groups)
+            unique_ext_post_id_count = len(ext_post_groups)
+            unique_src_id_count = len(src_groups)
+            unique_child_id_count = len(child_id_groups)
 
-        all_child_media_index_zero = all(
-            c.get("media_index") == 0 for c in children
-        )
+            all_child_media_index_zero = all(c.get("media_index") == 0 for c in children)
 
-        parent_canon_groups = set(p.get("canonical_url_group", "") for p in parents)
-        child_canon_groups = set(c.get("canonical_url_group", "") for c in children)
-        child_media_url_groups = set(c.get("original_media_url_group", "") for c in children)
-        url_groups_match_one_to_one = (
-            len(parent_canon_groups) == len(children) and
-            parent_canon_groups == child_canon_groups
-        )
+            parent_canon_groups = set(p.get("canonical_url_group", "") for p in parents)
+            child_canon_groups = set(c.get("canonical_url_group", "") for c in children)
+            child_media_url_groups = set(c.get("original_media_url_group", "") for c in children)
+            
+            unique_parent_canon_count = len(parent_canon_groups)
+            unique_child_canon_count = len(child_canon_groups)
+            url_groups_match_count = len(parent_canon_groups & child_canon_groups)
+            
+            url_groups_match_one_to_one = (
+                unique_parent_canon_count == 3 and
+                unique_child_canon_count == 3 and
+                url_groups_match_count == 3
+            )
 
-        unique_parent_sem_count = len(set(p.get("semantic_parent_group", "") for p in parents))
+            unique_parent_sem_count = len(set(p.get("semantic_parent_group", "") for p in parents))
 
-        if (
-            all_tabs_allowed
-            and two_or_more_tab_kinds
-            and unique_ext_post_id_count == 1
-            and unique_src_id_count == 1
-            and unique_child_id_count == 1
-            and all_child_media_index_zero
-            and url_groups_match_one_to_one
-            and unique_parent_sem_count == 1
-            and len(child_media_url_groups) > 1
-        ):
-            return "HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES", "PLAN_HISTORICAL_PSEUDO_ENTRY_REPAIR_REVIEW"
+            if (
+                all_tabs_allowed
+                and two_or_more_tab_kinds
+                and unique_ext_post_id_count == 1
+                and unique_src_id_count == 1
+                and unique_child_id_count == 1
+                and all_child_media_index_zero
+                and url_groups_match_one_to_one
+                and unique_parent_sem_count == 1
+                and len(child_media_url_groups) > 1
+                and len(apply_operations) == 0
+            ):
+                return "HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES", "PLAN_HISTORICAL_PSEUDO_ENTRY_REPAIR_REVIEW"
 
-        # Account-page collision but not all conditions met
         return "ACCOUNT_PAGE_COLLISION_CONFIRMED", "TRACE_HISTORICAL_WRITER"
 
-    # All YouTube but not post URL nor account/tab
-    all_nonpost_youtube = all_youtube and all(
-        p["path_shape"] not in _ACCOUNT_OR_TAB_SHAPES and
-        p["path_shape"] != PathShape.YOUTUBE_POST_URL.value
-        for p in parents
-    ) and all(
-        c["path_shape"] not in _ACCOUNT_OR_TAB_SHAPES and
-        c["path_shape"] != PathShape.YOUTUBE_POST_URL.value
-        for c in children
-    )
-    if all_nonpost_youtube:
-        return "NONPOST_YOUTUBE_URL_COLLISION", "TRACE_DATA_ORIGIN"
+    if all_youtube:
+        all_nonpost_youtube = all(
+            p["path_shape"] not in _ACCOUNT_OR_TAB_SHAPES and
+            p["path_shape"] != PathShape.YOUTUBE_POST_URL.value
+            for p in parents
+        ) and all(
+            c["path_shape"] not in _ACCOUNT_OR_TAB_SHAPES and
+            c["path_shape"] != PathShape.YOUTUBE_POST_URL.value
+            for c in children
+        )
+        if all_nonpost_youtube:
+            return "NONPOST_YOUTUBE_URL_COLLISION", "TRACE_DATA_ORIGIN"
 
     return "MIXED_OR_UNRESOLVED", "MANUAL_INVESTIGATION"
 
@@ -371,8 +390,8 @@ def _analyse(
     # Ordinal group registries (hash -> label)
     ext_post_id_reg: dict[str, str] = {}
     source_id_reg: dict[str, str] = {}
-    parent_canon_url_reg: dict[str, str] = {}
-    child_canon_url_reg: dict[str, str] = {}
+    source_account_id_reg: dict[str, str] = {}
+    canonical_url_reg: dict[str, str] = {}
     child_id_reg: dict[str, str] = {}
     media_url_reg: dict[str, str] = {}
     disc_at_reg: dict[str, str] = {}
@@ -396,15 +415,18 @@ def _analyse(
         shape = analyse_youtube_url(canon_url)
         shape_dict = shape_to_safe_dict(shape)
 
-        canon_group = _ordinal_group(canon_url, parent_canon_url_reg, "PARENT_CANON_URL_GROUP")
+        platform = str(row.get("platform", "")).strip()
+        source_type = str(row.get("source_type", "")).strip()
+        content_type = str(row.get("content_type", "")).strip()
+
+        canon_group = _ordinal_group(canon_url, canonical_url_reg, "CANON_URL_GROUP")
         ext_post_group = _ordinal_group(ext_id if ext_id else f"__empty_parent_{candidate_number}", ext_post_id_reg, "EXT_POST_ID_GROUP")
         src_group = _ordinal_group(source_id if source_id else f"__empty_src_{candidate_number}", source_id_reg, "SOURCE_ID_GROUP")
-        src_acc_group = _ordinal_group(source_acc_id if source_acc_id else f"__empty_acc_{candidate_number}", source_id_reg, "SOURCE_ACC_ID_GROUP")
+        src_acc_group = _ordinal_group(source_acc_id if source_acc_id else f"__empty_acc_{candidate_number}", source_account_id_reg, "SOURCE_ACCOUNT_ID_GROUP")
         disc_group = _ordinal_group(disc_at, disc_at_reg, "DISC_AT_GROUP")
         created_group = _ordinal_group(created_at, created_at_reg, "CREATED_AT_GROUP")
 
-        # Semantic parent group: path_shape + tab_kind + host_family + source_id_group + media_count
-        sem_key = f"{shape.path_shape.value}|{shape.tab_kind.value}|{shape.host_family}|{src_group}|{media_count}"
+        sem_key = f"{ext_post_group}|{src_group}|{src_acc_group}|{media_count}|{platform}|{source_type}|{content_type}"
         sem_group = _ordinal_group(sem_key, parent_sem_reg, "SEM_PARENT_GROUP")
 
         parent_tab_kinds.append(shape.tab_kind.value)
@@ -443,12 +465,12 @@ def _analyse(
         shape = analyse_youtube_url(canon_url)
         shape_dict = shape_to_safe_dict(shape)
 
-        canon_group = _ordinal_group(canon_url, child_canon_url_reg, "CHILD_CANON_URL_GROUP")
+        canon_group = _ordinal_group(canon_url, canonical_url_reg, "CANON_URL_GROUP")
         media_url_group = _ordinal_group(media_url if media_url else f"__empty_media_{child_number}", media_url_reg, "MEDIA_URL_GROUP")
         child_id_group = _ordinal_group(child_id if child_id else f"__empty_child_id_{child_number}", child_id_reg, "CHILD_ID_GROUP")
         created_group = _ordinal_group(created_at, created_at_reg, "CREATED_AT_GROUP")
 
-        sem_key = f"{shape.path_shape.value}|{shape.tab_kind.value}|{shape.host_family}|{child_id_group}|{media_index}|{media_type}"
+        sem_key = f"{child_id_group}|{canon_group}|{media_url_group}|{media_index}|{media_type}|{acq_family}"
         sem_group = _ordinal_group(sem_key, child_sem_reg, "SEM_CHILD_GROUP")
 
         child_tab_kinds.append(shape.tab_kind.value)
@@ -471,7 +493,7 @@ def _analyse(
         })
 
     classification, recommended_next_action = _classify(
-        parent_dicts, child_dicts, parent_tab_kinds, child_tab_kinds
+        parent_dicts, child_dicts, parent_tab_kinds, child_tab_kinds, apply_operations=[]
     )
 
     # Counts

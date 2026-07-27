@@ -1,21 +1,35 @@
 name: WP3-C5 Safe YouTube Path Provenance
 
-on:
+"on":
   workflow_dispatch:
 
 concurrency:
   group: wp3c5-safe-youtube-path-provenance
   cancel-in-progress: false
 
-permissions:
-  contents: read
-
 jobs:
-  inspect:
+  inspect-and-render:
     name: Inspect YouTube Path Provenance
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     environment: production
     timeout-minutes: 20
+    env:
+      ALLOW_SNS_POSTING: "false"
+      ALLOW_SPREADSHEET_MUTATION: "false"
+      ALLOW_CLOUD_STORAGE_MUTATION: "false"
+      ALLOW_EXTERNAL_API_FETCH: "false"
+      ALLOW_UNSAFE_DEBUG_LOGGING: "false"
+      DRY_RUN_OVERRIDE: "false"
+      BYPASS_PERMISSION_GATE: "false"
+      ENABLE_EXPERIMENTAL_REPAIR: "false"
+      ALLOW_CANARY_AUTO_MERGE: "false"
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -32,44 +46,37 @@ jobs:
 
       - name: Run Inspector
         id: inspect
-        env:
-          GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
-          SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
-          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
-          SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
-          PUBLISH_ENABLED: "false"
-          ALLOW_REAL_THREADS_POST: "false"
-          ALLOW_REAL_X_POST: "false"
-          ALLOW_VIDEO_DOWNLOAD: "false"
-          ALLOW_VIDEO_CUT: "false"
-          ALLOW_CLOUDINARY_UPLOAD: "false"
-          ALLOW_MEDIA_POSTS: "false"
-          ALLOW_REAL_THREADS_VIDEO_POST: "false"
-          ALLOW_TRANSCRIPTION_API: "false"
         run: |
           set +e
           python3 scripts/inspect_wp3c5_youtube_path_provenance.py \
             --output /tmp/wp3c5_safe.json \
             > /tmp/wp3c5_out.txt \
             2> /tmp/wp3c5_err.txt
-          EXIT_CODE=$?
+          echo "EXIT_CODE=$?" >> $GITHUB_ENV
           set -e
 
-          SAFE_PREFIX_COUNT=$(grep -c "^WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON=" /tmp/wp3c5_out.txt || true)
+      - name: Parse and Fallback
+        id: fallback
+        run: |
+          JSON_COUNT=$(grep -c "^WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON=" /tmp/wp3c5_out.txt || true)
 
-          if [ "$SAFE_PREFIX_COUNT" != "1" ]; then
-            SAFE_JSON_STR="{\"schema_version\":1,\"mode\":\"READ_ONLY_SAFE_YOUTUBE_PATH_PROVENANCE\",\"overall_status\":\"FAIL\",\"classification\":\"MIXED_OR_UNRESOLVED\",\"status_reasons\":[\"INSPECTOR_STARTUP_FAILED\"],\"checked_commit_sha\":\"$GITHUB_SHA\",\"counts\":{\"parent_count\":0,\"child_count\":0,\"unique_external_post_id_group_count\":0,\"unique_source_id_group_count\":0,\"unique_child_id_group_count\":0,\"unique_parent_canonical_url_group_count\":0,\"unique_child_canonical_url_group_count\":0,\"unique_child_original_media_url_group_count\":0,\"unique_parent_tab_kind_count\":0,\"unique_child_tab_kind_count\":0,\"parent_child_url_group_match_count\":0,\"parent_child_row_number_match_count\":0,\"unique_parent_recovered_group_count\":0,\"unique_child_recovered_group_count\":0},\"static_trace\":{},\"parents\":[],\"children\":[],\"recommended_next_action\":\"MANUAL_INVESTIGATION\",\"apply_operations\":[]}"
-            printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c5_safe_clean.json
-            printf 'WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON=%s\n' "$SAFE_JSON_STR"
-            EXIT_CODE=1
+          SAFE_JSON_STR=""
+          if [ "$JSON_COUNT" -eq 0 ]; then
+            SAFE_JSON_STR='{"schema_version":1,"mode":"READ_ONLY_SAFE_YOUTUBE_PATH_PROVENANCE","overall_status":"FAIL","classification":"MIXED_OR_UNRESOLVED","status_reasons":["INSPECTOR_STARTUP_FAILED"],"checked_commit_sha":"'"$GITHUB_SHA"'","counts":{"parent_count":0,"child_count":0,"unique_external_post_id_group_count":0,"unique_source_id_group_count":0,"unique_child_id_group_count":0,"unique_parent_canonical_url_group_count":0,"unique_child_canonical_url_group_count":0,"unique_child_original_media_url_group_count":0,"unique_parent_tab_kind_count":0,"unique_child_tab_kind_count":0,"parent_child_url_group_match_count":0,"parent_child_row_number_match_count":0,"unique_parent_recovered_group_count":0,"unique_child_recovered_group_count":0},"static_trace": {"current_parent_id_uses_source_and_external_id": false, "current_child_id_uses_parent_and_media_index": false, "current_discovery_rejects_nonpost_youtube_urls": false, "current_discovery_handles_channel_landing_pages": false, "candidate_historical_writer_count": 0, "candidate_historical_writer_labels": []},"parents":[],"children":[],"recommended_next_action":"MANUAL_INVESTIGATION","apply_operations":[]}'
+            echo "EXIT_CODE=1" >> $GITHUB_ENV
+          elif [ "$JSON_COUNT" -gt 1 ]; then
+            SAFE_JSON_STR='{"schema_version":1,"mode":"READ_ONLY_SAFE_YOUTUBE_PATH_PROVENANCE","overall_status":"FAIL","classification":"MIXED_OR_UNRESOLVED","status_reasons":["MULTIPLE_JSON_OUTPUT_FOUND"],"checked_commit_sha":"'"$GITHUB_SHA"'","counts":{"parent_count":0,"child_count":0,"unique_external_post_id_group_count":0,"unique_source_id_group_count":0,"unique_child_id_group_count":0,"unique_parent_canonical_url_group_count":0,"unique_child_canonical_url_group_count":0,"unique_child_original_media_url_group_count":0,"unique_parent_tab_kind_count":0,"unique_child_tab_kind_count":0,"parent_child_url_group_match_count":0,"parent_child_row_number_match_count":0,"unique_parent_recovered_group_count":0,"unique_child_recovered_group_count":0},"static_trace": {"current_parent_id_uses_source_and_external_id": false, "current_child_id_uses_parent_and_media_index": false, "current_discovery_rejects_nonpost_youtube_urls": false, "current_discovery_handles_channel_landing_pages": false, "candidate_historical_writer_count": 0, "candidate_historical_writer_labels": []},"parents":[],"children":[],"recommended_next_action":"MANUAL_INVESTIGATION","apply_operations":[]}'
+            echo "EXIT_CODE=1" >> $GITHUB_ENV
           else
             SAFE_JSON_LINE=$(grep "^WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON=" /tmp/wp3c5_out.txt)
             SAFE_JSON_STR=${SAFE_JSON_LINE#WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON=}
-            printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c5_safe_clean.json
-            printf 'WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON=%s\n' "$SAFE_JSON_STR"
           fi
+          printf '%s\n' "$SAFE_JSON_STR" > /tmp/wp3c5_safe_clean.json
 
+      - name: Render Summary
+        id: render
+        run: |
           python3 scripts/render_wp3c5_youtube_path_provenance_summary.py \
             --json-file "/tmp/wp3c5_safe_clean.json" \
-            --exit-code "$EXIT_CODE" \
+            --exit-code $EXIT_CODE \
             > "$GITHUB_STEP_SUMMARY"
