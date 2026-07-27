@@ -116,5 +116,13 @@ class TestWP3C5WorkflowContract(unittest.TestCase):
         # No `set +e` inside renderer step so it fails the workflow if renderer exits with 1
         self.assertNotIn('set +e', render_step["run"])
 
+    def test_only_validated_renderer_output_is_mirrored_to_logs(self):
+        job = self.workflow["jobs"]["inspect-and-render"]
+        render_step = next(step for step in job["steps"] if step.get("id") == "render")
+        run_script = render_step["run"]
+        self.assertIn('| tee -a "$GITHUB_STEP_SUMMARY"', run_script)
+        self.assertNotIn("/tmp/wp3c5_out.txt", run_script)
+        self.assertNotIn("/tmp/wp3c5_err.txt", run_script)
+
 if __name__ == "__main__":
     unittest.main()

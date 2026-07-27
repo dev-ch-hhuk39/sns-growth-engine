@@ -579,6 +579,49 @@ class TestWP3C5Renderer(unittest.TestCase):
         finally:
             os.remove(name)
 
+    def test_renderer_emits_validated_safe_prefix_only_after_contract_passes(self):
+        import subprocess, sys, os, tempfile, json
+        data = {
+            "schema_version": 1,
+            "mode": "READ_ONLY_SAFE_YOUTUBE_PATH_PROVENANCE",
+            "overall_status": "FAIL",
+            "classification": "MIXED_OR_UNRESOLVED",
+            "status_reasons": ["INSPECTOR_STARTUP_FAILED"],
+            "checked_commit_sha": "0" * 40,
+            "counts": {
+                "parent_count": 0, "child_count": 0,
+                "unique_external_post_id_group_count": 0, "unique_source_id_group_count": 0,
+                "unique_child_id_group_count": 0, "unique_parent_canonical_url_group_count": 0,
+                "unique_child_canonical_url_group_count": 0, "unique_child_original_media_url_group_count": 0,
+                "unique_parent_tab_kind_count": 0, "unique_child_tab_kind_count": 0,
+                "parent_child_url_group_match_count": 0, "parent_child_row_number_match_count": 0,
+                "unique_parent_recovered_group_count": 0, "unique_child_recovered_group_count": 0,
+            },
+            "static_trace": {
+                "current_parent_id_uses_source_and_external_id": False,
+                "current_child_id_uses_parent_and_media_index": False,
+                "current_discovery_rejects_nonpost_youtube_urls": False,
+                "current_discovery_handles_channel_landing_pages": False,
+                "candidate_historical_writer_count": 0,
+                "candidate_historical_writer_labels": [],
+            },
+            "parents": [], "children": [],
+            "recommended_next_action": "MANUAL_INVESTIGATION",
+            "apply_operations": [],
+        }
+        with tempfile.NamedTemporaryFile("w", delete=False) as f:
+            json.dump(data, f)
+            name = f.name
+        try:
+            renderer_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "render_wp3c5_youtube_path_provenance_summary.py")
+            res = subprocess.run([sys.executable, renderer_path, "--json-file", name, "--exit-code", "1"], capture_output=True, text=True)
+            self.assertEqual(res.returncode, 1)
+            self.assertIn("WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON=", res.stdout)
+            self.assertNotIn("https://", res.stdout)
+            self.assertEqual(res.stderr, "")
+        finally:
+            os.remove(name)
+
 
 if __name__ == "__main__":
     unittest.main()

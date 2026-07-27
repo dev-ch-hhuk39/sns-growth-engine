@@ -10,6 +10,8 @@ REQUIRED_TOP_LEVEL_KEYS = {
     "static_trace", "parents", "children", "recommended_next_action", "apply_operations"
 }
 
+SAFE_OUTPUT_PREFIX = "WP3C5_SAFE_YOUTUBE_PATH_PROVENANCE_JSON="
+
 REQUIRED_COUNTS_KEYS = {
     "parent_count", "child_count",
     "unique_external_post_id_group_count",
@@ -339,6 +341,10 @@ def main() -> None:
         print("WP3-C5 summary renderer failed: ValueError", file=sys.stderr)
         sys.exit(1)
         
+    # Only expose the result after the complete no-secret/no-raw-URL contract
+    # has accepted it. The workflow mirrors this validated line to its summary.
+    safe_json = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    print(f"{SAFE_OUTPUT_PREFIX}{safe_json}")
     print("WP3-C5 SUMMARY")
     sys.exit(args.exit_code)
 
