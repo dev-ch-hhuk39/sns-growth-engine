@@ -5941,8 +5941,3 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 **次のAIへの申し送り事項:**
 - `ops/wp3b-diagnostic-fidelity` でのschema修正、boundary contractテスト追加、CI確認は完了している。
 - 次は指示に従ってPR #27をmergeし、本番read-only workflowを1回だけdispatchすることになるため、ユーザーの指示を待つ。
-
-* 2026-07-27 (Antigravity)
-  * Implemented WP3-C5 safe YouTube path provenance (PR #35).
-  * Created src/youtube_path_provenance.py, inspect_wp3c5_youtube_path_provenance.py, render_wp3c5_youtube_path_provenance_summary.py and unit tests.
-  * All tests pass successfully. Created workflow .github/workflows/wp3c5-safe-youtube-path-provenance.yml.
