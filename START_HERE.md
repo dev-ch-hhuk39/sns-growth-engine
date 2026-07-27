@@ -1,4 +1,14 @@
 updated_by: Antigravity
+
+## 2026-07-28 WP3-C5 Confirmed Result
+
+- Current merged `main`: `33af92f50417ddd63d19ff09d61ae64adfc5f87d`.
+- PR #36 and post-merge CI `30314336252` succeeded. The one new WP3-C5
+  read-only run `30314454246` made its renderer-validated safe JSON visible.
+- Classification: `HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES`, with three parent
+  and three child rows, matched canonical URL groups, and an empty apply list.
+  The next action is manual repair review only; no mutation was performed.
+- All canary, source-bundle, and media-post evidence remains unverified.
 document_branch:
 ops/wp3c2-duplicate-parent-inspection
 
@@ -33,7 +43,7 @@ document_status:
 DUPLICATE_PARENT_INSPECTION_IN_PROGRESS
 ## 2026-07-28 Current Rebaseline
 
-- Canonical merged `main`: `ca287afb85092bdb7549818bffa027c113c00d9d`.
+- Canonical merged `main`: `33af92f50417ddd63d19ff09d61ae64adfc5f87d`.
 - Repository visibility is `public`; `main` has required PR checks and force
   push/deletion protection. The `production` Environment has a branch-policy
   protection rule. These are GitHub API observations, not production-posting
