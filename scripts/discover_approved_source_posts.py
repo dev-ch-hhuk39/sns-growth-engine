@@ -30,6 +30,39 @@ def canonical(url: str) -> str:
     return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), urlencode(query), ""))
 
 
+def is_individual_post_url(platform: str, url: str) -> bool:
+    normalized = canonical(url)
+    platform = str(platform).lower()
+    if platform == "youtube":
+        return "/watch?" in normalized or "/shorts/" in normalized
+    if platform == "tiktok":
+        return "/video/" in normalized
+    if platform == "threads":
+        return "/post/" in normalized
+    return False
+
+
+def normalize_media_items(item: dict[str, Any], canonical_post_url: str) -> list[dict[str, str]]:
+    """Normalize all declared media while retaining source order and parent URL."""
+    raw_items = item.get("media_items") or item.get("attachments") or []
+    if not isinstance(raw_items, list):
+        raw_items = []
+    if not raw_items:
+        raw_items = [{"url": canonical_post_url, "media_type": item.get("media_type", "video")}]
+    normalized: list[dict[str, str]] = []
+    for index, raw in enumerate(raw_items):
+        if not isinstance(raw, dict):
+            continue
+        media_url = str(raw.get("url") or raw.get("media_url") or raw.get("original_media_url") or "").strip()
+        if not media_url.startswith("https://"):
+            continue
+        media_type = str(raw.get("media_type") or raw.get("type") or item.get("media_type") or "video").lower()
+        if media_type not in {"image", "video"}:
+            continue
+        normalized.append({"media_index": str(index), "original_media_url": media_url, "media_type": media_type, "duration_seconds": str(raw.get("duration_seconds") or item.get("duration_seconds") or ""), "thumbnail_url": str(raw.get("thumbnail_url") or "")})
+    return normalized
+
+
 def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, Any]], str]:
     try:
         import yt_dlp
@@ -59,12 +92,10 @@ def discover_ytdlp(source: dict[str, Any], limit: int) -> tuple[list[dict[str, A
         if not raw_url.startswith("http"): continue
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
         canonical_url = canonical(raw_url)
-        if platform == "youtube" and not ("/watch" in canonical_url or "/shorts/" in canonical_url):
-            continue
-        if platform == "tiktok" and "/video/" not in canonical_url:
+        if not is_individual_post_url(platform, canonical_url):
             continue
         video_id = str(item.get("id") or hashlib.sha256(canonical(raw_url).encode()).hexdigest()[:16])
-        result.append({"external_post_id": video_id, "canonical_post_url": canonical_url, "original_post_text": str(item.get("description") or ""), "published_at": str(item.get("upload_date") or ""), "media_count": "1", "media_type": "video", "duration_seconds": str(item.get("duration") or "")})
+        result.append({"external_post_id": video_id, "canonical_post_url": canonical_url, "original_post_text": str(item.get("description") or ""), "published_at": str(item.get("upload_date") or ""), "media_type": "video", "duration_seconds": str(item.get("duration") or ""), "media_items": [{"url": canonical_url, "media_type": "video", "duration_seconds": str(item.get("duration") or "")} ]})
     return result, "PASS"
 
 
@@ -86,12 +117,14 @@ def plan_sources(account_id: str) -> tuple[list[dict[str, Any]], list[dict[str, 
 def source_post_row(source: dict[str, Any], item: dict[str, Any]) -> dict[str, str]:
     now = datetime.now(timezone.utc).isoformat(); external = str(item["external_post_id"])
     source_id = str(source["source_id"])
+    media_items = normalize_media_items(item, str(item["canonical_post_url"]))
+    media_types = {entry["media_type"] for entry in media_items}
     return {"source_post_id": f"sp_{source_id}_{external}", "source_id": source_id, "source_account_id": source_id,
         "target_account_id": str((source.get("target_account_ids") or [source.get("target_account_id")])[0]),
         "platform": str(source.get("source_platform") or source.get("platform") or "").lower(),
         "canonical_post_url": item["canonical_post_url"], "external_post_id": external,
         "original_post_text": item.get("original_post_text", ""), "published_at": item.get("published_at", ""),
-        "discovered_at": now, "media_count": item.get("media_count", "0"), "media_type": item.get("media_type", ""),
+        "discovered_at": now, "media_count": str(len(media_items)), "media_type": next(iter(media_types)) if len(media_types) == 1 else ("mixed_carousel" if media_types else ""), "media_items_json": json.dumps(media_items, ensure_ascii=False),
         "duration_seconds": item.get("duration_seconds", ""),
         "rights_status": str(source.get("rights_status", "approved_creator_clip")), "permission_status": "approved",
         "permission_scope": "owner_attestation", "attribution_policy": "internal_ledger", "direct_media_reuse_allowed": "true",
@@ -99,20 +132,36 @@ def source_post_row(source: dict[str, Any], item: dict[str, Any]) -> dict[str, s
         "retry_count": "0", "last_error": "", "created_at": now, "updated_at": now}
 
 
-def source_post_media_row(post: dict[str, str]) -> dict[str, str]:
-    """Create a durable asset plan, never an expiring extractor stream URL."""
+def source_post_media_rows(post: dict[str, str]) -> list[dict[str, str]]:
+    """Create a durable ordered asset plan, never expiring extractor stream URLs."""
     now = datetime.now(timezone.utc).isoformat()
     post_id = post["source_post_id"]
-    media_type = str(post.get("media_type") or "video").lower()
-    return {
-        "source_post_media_id": f"spm_{post_id}_0", "source_post_id": post_id, "media_index": "0",
-        "original_media_url": post["canonical_post_url"], "canonical_post_url": post["canonical_post_url"],
+    try:
+        items = json.loads(str(post.get("media_items_json") or "[]"))
+    except json.JSONDecodeError:
+        items = []
+    rows = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        index = str(item.get("media_index", len(rows)))
+        media_type = str(item.get("media_type") or "video").lower()
+        rows.append({
+        "source_post_media_id": f"spm_{post_id}_{index}", "source_post_id": post_id, "media_index": index,
+        "original_media_url": item.get("original_media_url", post["canonical_post_url"]), "canonical_post_url": post["canonical_post_url"],
         "acquisition_method": "yt_dlp_resolve_on_ingest", "thumbnail_url": "", "media_type": media_type,
-        "mime_type": "", "width": "", "height": "", "duration_seconds": post.get("duration_seconds", ""), "content_hash": "",
+        "mime_type": "", "width": "", "height": "", "duration_seconds": item.get("duration_seconds", post.get("duration_seconds", "")), "content_hash": "",
         "download_status": "PENDING", "cloudinary_status": "PENDING", "cloudinary_public_id": "", "storage_url": "",
         "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "reuse_status": "APPROVED", "retry_count": "0", "last_error": "", "created_at": now, "updated_at": now,
-    }
+    })
+    return rows
+
+
+def source_post_media_row(post: dict[str, str]) -> dict[str, str]:
+    """Compatibility helper for one-media callers."""
+    rows = source_post_media_rows(post)
+    return rows[0] if rows else {}
 
 
 def main() -> int:
@@ -121,8 +170,8 @@ def main() -> int:
     parser.add_argument("--max-posts", type=int, default=10)
     parser.add_argument("--dry-run", action="store_true"); parser.add_argument("--apply", action="store_true"); parser.add_argument("--confirm-discovery", action="store_true")
     args = parser.parse_args()
-    if args.apply and not args.confirm_discovery:
-        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-discovery"})); return 1
+    if args.apply and (not args.confirm_discovery or str(__import__("os").environ.get("ALLOW_SOURCE_DISCOVERY", "")).lower() not in {"1", "true", "yes"}):
+        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires ALLOW_SOURCE_DISCOVERY=true and --confirm-discovery"})); return 1
     selected, blocked = plan_sources(args.account_id); previews: list[dict[str, Any]] = []; reasons = []
     for source in selected:
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
@@ -149,14 +198,14 @@ def main() -> int:
     for row in deduped.values():
         if row["canonical_post_url"] not in existing:
             client._call_with_rate_limit_retry("append_row:source_posts:discovery", lambda row=row: ws.append_row([row.get(header, "") for header in headers], value_input_option="USER_ENTERED")); saved += 1
-        media_row = source_post_media_row(row)
-        existing_entry = existing_media_rows.get(media_row["source_post_media_id"])
-        existing_media = existing_entry[1] if existing_entry else None
-        if not existing_media:
-            client._call_with_rate_limit_retry("append_row:source_post_media:discovery", lambda media_row=media_row: media_ws.append_row([media_row.get(header, "") for header in media_headers], value_input_option="USER_ENTERED")); media_saved += 1
-        elif media_row.get("duration_seconds") and not str(existing_media.get("duration_seconds", "")):
-            row_number = existing_entry[0]
-            client._batch_update_fields(media_ws, media_headers, row_number, {"duration_seconds": media_row["duration_seconds"]}, label=f"source_post_media:{media_row['source_post_media_id']}")
+        for media_row in source_post_media_rows(row):
+            existing_entry = existing_media_rows.get(media_row["source_post_media_id"])
+            existing_media = existing_entry[1] if existing_entry else None
+            if not existing_media:
+                client._call_with_rate_limit_retry("append_row:source_post_media:discovery", lambda media_row=media_row: media_ws.append_row([media_row.get(header, "") for header in media_headers], value_input_option="USER_ENTERED")); media_saved += 1
+            elif media_row.get("duration_seconds") and not str(existing_media.get("duration_seconds", "")):
+                row_number = existing_entry[0]
+                client._batch_update_fields(media_ws, media_headers, row_number, {"duration_seconds": media_row["duration_seconds"]}, label=f"source_post_media:{media_row['source_post_media_id']}")
     print(json.dumps({**result, "status": "APPLIED", "saved_source_posts": saved, "saved_source_post_media": media_saved}, ensure_ascii=False, indent=2)); return 0
 
 if __name__ == "__main__": raise SystemExit(main())

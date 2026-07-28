@@ -10,6 +10,20 @@
 
 ## 2026-07-28 Codex Source Identity Repair Executor (In Progress)
 
+## 2026-07-28 Codex Source Discovery Parent Integrity (In Progress)
+
+### 実装内容 / 安全境界
+
+- approved source discoveryはYouTube channel/TikTok account/Threads profileのトップURLを投稿recordに保存しない。個別`watch`/`shorts`/`video`/`post` URLだけをsource post候補として扱う。
+- 一つのsource postに紐付く全mediaを`source_post_media`へ順序付きで展開する。image/video/mixed carouselを含め、`source_post_id`とcanonical post URLは全childで一致する。
+- Night Scout/Liver Managerとも同一source post bundle contractを通る。外部discovery/applyには`ALLOW_SOURCE_DISCOVERY=true`とconfirmが必要で、今回実行していない。
+
+### 変更 / テスト / 未完了
+
+- 更新: `scripts/discover_approved_source_posts.py`。追加: parent integrity/multimedia test。
+- focused PASS: top URL reject、YouTube/TikTok/Threads post accept、両accountの3媒体順序、既存single media、normalized parent invariant、compile、diff check。
+- 未完了: official Threads discovery adapter、production source discovery、source post実保存は未実行。
+
 ### 実装内容 / 安全境界
 
 - `apply_source_identity_repairs.py` を追加した。通常はread-only export JSONへのdry-runだけを行う。実Sheets applyはreviewed plan、`ALLOW_SHEETS_IDENTITY_REPAIR=true`、`--apply`、`--confirm-source-identity-repair`の全てが必要である。
