@@ -6277,6 +6277,11 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   collection; publicly fetchable Threads posts or a browser export; approved
   `media_permissions` entries for each direct asset; individual approved video
   candidates for generated clips; then explicit production activation.
+- GitHub Actions manual full CI run `30404807702` passed (secret scan,
+  dependency audit, tests). PR #57 cannot be normally merged while main
+  requires PR-associated automatic checks: a `workflow_dispatch` result does
+  not satisfy that GitHub branch-protection condition. Do not bypass main
+  protection or weaken it without a new explicit owner authorization.
 
 ### Next AI / file ownership
 
