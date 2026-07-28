@@ -180,13 +180,84 @@ def _reader_value_score(text: str, account_id: str) -> int:
     return max(0, min(100, score))
 
 
-def _account_fit_score(text: str, account_id: str) -> int:
-    terms = ACCOUNT_TERMS.get(account_id, ())
-    hits = sum(1 for term in terms if term in text)
-    score = 68 + min(24, hits * 6)
+def persona_validation(text: str, account_id: str) -> dict[str, Any]:
+    """Validate the reader-facing voice from the central account profile."""
+    profiles = load_post_generation_rules().get("persona_profiles", {})
+    profile = profiles.get(account_id)
     if account_id == "beauty_account":
-        score = 0
-    return max(0, min(100, score))
+        return {"status": "BLOCKED", "score": 0, "reasons": ["blocked_account"], "details": {}}
+    if not isinstance(profile, dict):
+        return {"status": "PASS", "score": 80, "reasons": [], "details": {"profile": "not_configured"}}
+
+    reasons: list[str] = []
+    reader_terms = [str(term) for term in profile.get("reader_terms", [])]
+    reader_hits = [term for term in reader_terms if term in text]
+    if len(reader_hits) < int(profile.get("minimum_reader_terms", 1)):
+        reasons.append("persona_reader_context_insufficient")
+    forbidden_first_person = [str(term) for term in profile.get("forbidden_first_person", [])]
+    first_person_mismatches = [term for term in forbidden_first_person if term in text]
+    if first_person_mismatches:
+        reasons.append("persona_first_person_mismatch")
+    blocked_terms = [str(term) for term in profile.get("blocked_terms", [])]
+    blocked_hits = [term for term in blocked_terms if term in text]
+    if blocked_hits:
+        reasons.append("persona_aggressive_recruiting")
+
+    details: dict[str, Any] = {
+        "first_person": str(profile.get("first_person", "")),
+        "reader_term_count": len(reader_hits),
+        "reader_terms": reader_hits,
+        "first_person_mismatches": first_person_mismatches,
+        "blocked_terms": blocked_hits,
+    }
+    score = 72 + min(16, len(reader_hits) * 6)
+
+    if account_id == "night_scout":
+        decision_hits = [term for term in profile.get("decision_markers", []) if str(term) in text]
+        details["decision_marker_count"] = len(decision_hits)
+        details["decision_markers"] = decision_hits
+        if len(decision_hits) < int(profile.get("minimum_decision_markers", 1)):
+            reasons.append("persona_decision_support_missing")
+        score += min(10, len(decision_hits) * 4)
+    elif account_id == "liver_manager":
+        action_hits = [term for term in profile.get("action_markers", []) if str(term) in text]
+        if re.search(r"(?:してみ|した方が|すること|できる|見てお|決めてお)", text):
+            action_hits.append("action_sentence_structure")
+        logic_hits = [term for term in profile.get("logic_markers", []) if str(term) in text]
+        if re.search(r"(?:から|ので|と、|この|だけで|ほど)", text):
+            logic_hits.append("logic_sentence_structure")
+        manager_hits = [term for term in profile.get("manager_markers", []) if str(term) in text]
+        masculine_endings = sum(text.count(str(term)) for term in profile.get("masculine_endings", []))
+        fragments = [line.strip() for line in text.splitlines() if line.strip() and len(line.strip()) <= 18 and not re.search(r"[。！？]$", line.strip())]
+        details.update({
+            "action_marker_count": len(action_hits),
+            "logic_marker_count": len(logic_hits),
+            "manager_marker_count": len(manager_hits),
+            "masculine_ending_count": masculine_endings,
+            "short_fragment_count": len(fragments),
+        })
+        if len(action_hits) < int(profile.get("minimum_action_markers", 1)):
+            reasons.append("persona_concrete_action_missing")
+        if len(logic_hits) < int(profile.get("minimum_logic_markers", 1)):
+            reasons.append("persona_logic_missing")
+        if masculine_endings >= 3:
+            reasons.append("persona_masculine_assertion_repetition")
+        if len(fragments) >= 6:
+            reasons.append("persona_fragment_overuse")
+        score += min(7, len(action_hits) * 3) + min(7, len(logic_hits) * 3) + min(4, len(manager_hits) * 2)
+        score -= masculine_endings * 5
+        score -= max(0, len(fragments) - 5) * 4
+
+    if first_person_mismatches:
+        score -= 35
+    if blocked_hits:
+        score -= 35
+    return {
+        "status": "PASS" if not reasons else "BLOCKED",
+        "score": max(0, min(100, score)),
+        "reasons": sorted(set(reasons)),
+        "details": details,
+    }
 
 
 def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, Any]:
@@ -199,7 +270,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
     cta = _cta_pressure_score(public_text)
     natural = _naturalness_score(public_text)
     reader = _reader_value_score(public_text, account_id)
-    fit = _account_fit_score(public_text, account_id)
+    persona = persona_validation(public_text, account_id)
+    fit = int(persona["score"])
     quality = min(100, int((natural + reader + fit + max(0, 100 - cta) + max(0, 100 - risk)) / 5))
 
     if internal_hits:
@@ -222,8 +294,9 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("naturalness_below_threshold")
     if reader < 80:
         reasons.append("reader_value_below_threshold")
-    if fit < 80:
+    if persona["status"] != "PASS" or fit < 80:
         reasons.append("account_fit_below_threshold")
+    reasons.extend(persona["reasons"])
     if quality < 85:
         reasons.append("quality_below_threshold")
 
@@ -242,8 +315,9 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
             "hits": metadata_hits,
         },
         "account_fit_check": {
-            "status": "PASS" if fit >= 80 else "BLOCKED",
+            "status": "PASS" if persona["status"] == "PASS" and fit >= 80 else "BLOCKED",
             "account_fit_score": fit,
+            "persona": persona,
         },
         "public_post_quality_score": quality,
         "reader_value_score": reader,
@@ -647,6 +721,11 @@ def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, An
             ),
         ]
         text = variants[(index - 1) % len(variants)]
+    persona = persona_validation(text, account_id)
+    if "persona_decision_support_missing" in persona["reasons"]:
+        text += "\n\n僕なら、条件だけで決めずに無理なく続けられるかを先に確認する。"
+    if "persona_concrete_action_missing" in persona["reasons"]:
+        text += "\n\n私が見ている中では、まず次の配信で一つだけ試してみることからで大丈夫です。"
     return build_generation_output(
         internal_analysis=f"account={account_id}; deterministic reader-facing template; index={index}",
         public_post_text=text,
