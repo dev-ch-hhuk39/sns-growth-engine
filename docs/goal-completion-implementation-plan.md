@@ -355,6 +355,13 @@ Acceptance:
 
 ## Work Package 5: Four Production Canaries
 
+### Publisher delivery verification
+
+Every canary must confirm the `posted_results` row after the publisher returns
+success. A missing or mismatched row is `POSTED_SAVE_UNVERIFIED`, never a
+retryable posting failure. Preserve the fallback evidence and resolve it with
+a human read-only check before considering another publish attempt.
+
 Prerequisites: Work Packages 1-4 PASS, final-main CI PASS, 63/63 Sheets verifier,
 valid Threads tokens, and the evaluator has no unrelated failing criteria.
 

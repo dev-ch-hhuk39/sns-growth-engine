@@ -4,6 +4,20 @@
 
 ## 2026-07-28 Codex Generic Source Identity Repair Contract (In Progress)
 
+## 2026-07-28 Codex Publisher Delivery Contract (In Progress)
+
+### 実装内容 / 安全境界
+
+- Threads queue workerは、投稿API成功後に`posted_results`をread-after-writeで検証する。queue/account/external post identityと`POSTED` statusが一致しなければ`POSTED_SAVE_UNVERIFIED`に固定する。
+- この状態は投稿済みかもしれないため自動再試行しない。fallback evidenceを保存し、`DO_NOT_RETRY_MANUAL_RECOVERY`として人間が照合する。通常のAPI失敗でも即時retryはしない。
+- delivery idempotency keyを結果へ返す。text/mediaの実投稿gate、X/beauty block、public text validatorは変更していない。
+
+### 変更 / テスト / 未完了
+
+- 更新: `scripts/process_threads_queue.py`。追加: `scripts/publisher_delivery_contract.py`, contract test。
+- focused PASS: read-after-write success/failure、identity mismatch、retry disposition、queue worker、READY text-only、duplicate guard、compile、diff check。
+- 未完了: 実投稿をせずにcontractを実装した段階。production canaryでread-after-write evidenceを取得する前にpublisher capabilityをPASSへ変更しない。
+
 ### 実装内容 / 安全境界
 
 - 固定の過去source/slot IDに依存しない`source_identity_repair_contract`を追加した。read-only exportからparent/child canonical URL、media count、media indexの不整合を検出する。
