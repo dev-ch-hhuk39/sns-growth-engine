@@ -6235,3 +6235,10 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 次に触ってよい: account workflow schedule、content slots/queue、canary inventory、metrics scheduler、capability evidence、関連tests/docs。
 - 触らない: X/beauty、未承認source、permission evidenceなしのmedia。`config/autonomous_mode.json`のpublish/media activationは12 canary完了まで変更しない。
 - 次AIメモ: identity repairのrollback receiptは`/tmp/source_identity_repair_apply_live_v2.json`（repo外）。最新Sheets整合性は63/63 verification PASS、identity残件0。外部mutationはユーザー承認済みだが、canary毎にsource/permission/validator/read-after-writeを再確認すること。
+## 2026-07-28 PR #57 Liver Reference Sources And Slot Safety (In Progress)
+
+- Liver Managerの`src_lm_x_cand_001` (`https://x.com/meg_lsm`) をread-only reference_postへ更新し、`src_lm_threads_user_me01_lsm` (`https://www.threads.com/@me01_lsm`) を追加した。両方はreference/direct-media candidateのみで、clip/transcript/ffmpeg/generated clip/X postはfalseまたは禁止。
+- direct mediaはsource registryだけで許可しない。`media_permissions`のapproved、rights、evidence、target account/platform、expiryを満たす場合だけ使用する。
+- health expected cronを実workflowへ整合し、expired content slot leaseは新規claimにせず`slot_lease_expired_requires_recovery`として隔離する。
+- focused PASS: source registry/transform guard、YouTube reference contract、health schedule、clip/direct claim contract。PR #57のGitHub CIは再実行中。
+- 未完了: bounded X real adapter、Threads post discovery、過去queue/posted-save inventoryの実Sheets隔離、canary inventory、external media/publish canary。実fetch/download/upload/postは未実行。
