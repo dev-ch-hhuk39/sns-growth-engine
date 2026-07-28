@@ -494,14 +494,26 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
     scores = [dict(r) for r in client._ws("reference_post_scores").get_all_records() if str(r.get("account_id", "")) == account_id]
     history = [str(row.get("posted_text", "")) for row in client._ws("posted_results").get_all_records() if str(row.get("account_id", "")) == account_id]
     metric_rows = [dict(row) for logical in ("metric_snapshots", "media_metrics") for row in client._ws(logical).get_all_records() if str(row.get("account_id", "")) == account_id]
+    from generation.context_selector import select_generation_context
+    category_scores = [dict(row) for row in client._ws("category_scores").get_all_records() if str(row.get("account_id", "")) == account_id]
+    learning_rules = [dict(row) for row in client._ws("learning_rules").get_all_records() if str(row.get("account_id", "")) == account_id]
+    context = select_generation_context(
+        account_id=account_id,
+        posted_results=[dict(row) for row in client._ws("posted_results").get_all_records()],
+        metric_rows=metric_rows,
+        category_scores=category_scores,
+        learning_rules=learning_rules,
+        requested_theme=theme,
+    )
+    effective_theme = str(context["selected_theme"])
     measured = [row for row in metric_rows if str(row.get("metrics_status", "")).upper() == "MEASURED"]
     fallback_used = post_type == "original_text" or (post_type == "pdca_text" and not measured)
     if post_type == "original_text":
-        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history, fallback_reason="original_text_slot")
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=effective_theme, schedule_date_jst=schedule_date_jst, history=history, fallback_reason="original_text_slot")
     elif post_type == "pdca_text" and not measured:
         rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text" if post_type != "reference_text" else post_type, theme=theme, schedule_date_jst=schedule_date_jst, history=history)
     else:
-        rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n, slot_id=slot_id, post_type=post_type, theme=theme, schedule_date_jst=schedule_date_jst)
+        rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n, slot_id=slot_id, post_type=post_type, theme=effective_theme, schedule_date_jst=schedule_date_jst)
         if not rows["queue"]:
             rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history)
             fallback_used = True
@@ -519,6 +531,8 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
         "slot_id": slot_id,
         "post_type": post_type,
         "theme": theme,
+        "effective_theme": effective_theme,
+        "generation_context": {key: value for key, value in context.items() if key not in {"avoid_recent_texts"}},
         "measured_metric_count": len(measured),
         "pdca_fallback_to_original": post_type == "pdca_text" and not measured,
     }
