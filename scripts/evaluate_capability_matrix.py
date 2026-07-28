@@ -21,9 +21,17 @@ def evaluate(*, config_path: Path = CONFIG, status_path: Path = STATUS) -> dict[
     status = _load(status_path)
     failures: list[dict[str, str]] = []
     passed = 0
+    code_complete = 0
+    code_incomplete: list[dict[str, str]] = []
     for account_id in config["accounts"]:
         rows = status.get("accounts", {}).get(account_id, {})
         for capability in config["capabilities"]:
+            evidence_paths = [str(path) for path in config.get("code_evidence", {}).get(capability, [])]
+            missing_paths = [path for path in evidence_paths if not (ROOT / path).exists()]
+            if evidence_paths and not missing_paths:
+                code_complete += 1
+            else:
+                code_incomplete.append({"account_id": account_id, "capability": capability, "missing_paths": ",".join(missing_paths or ["code_evidence_missing"])})
             row = rows.get(capability, {}) if isinstance(rows, dict) else {}
             state = str(row.get("state", "UNVERIFIED"))
             evidence = row.get("evidence", {}) if isinstance(row.get("evidence"), dict) else {}
@@ -32,7 +40,17 @@ def evaluate(*, config_path: Path = CONFIG, status_path: Path = STATUS) -> dict[
                 failures.append({"account_id": account_id, "capability": capability, "state": state, "missing_evidence": ",".join(missing)})
             else:
                 passed += 1
-    return {"status": "PASS" if not failures else "FAIL", "passed": passed, "required": len(config["accounts"]) * len(config["capabilities"]), "failed": failures}
+    required = len(config["accounts"]) * len(config["capabilities"])
+    return {
+        "status": "PASS" if not failures else "FAIL",
+        "passed": passed,
+        "required": required,
+        "failed": failures,
+        "code_complete": code_complete,
+        "code_required": required,
+        "code_incomplete": code_incomplete,
+        "production_unverified": required - passed,
+    }
 
 
 def main() -> int:
@@ -44,7 +62,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(f"capability_matrix={result['status']} passed={result['passed']}/{result['required']}")
+        print(f"capability_matrix={result['status']} production_pass={result['passed']}/{result['required']} code_complete={result['code_complete']}/{result['code_required']}")
     return 0 if result["status"] == "PASS" else 1
 
 
