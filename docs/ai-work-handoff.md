@@ -1,3 +1,17 @@
+## 2026-07-28 Codex Scheduled Mutation Activation Gate (In Progress)
+
+### 実装内容 / 安全境界
+
+- account別のscheduled workflowは残すが、schedule eventではdry-run/healthのみを実行する。Threads実投稿、source acquisition、Sheets mutation、metrics/PDCA mutation、recovery backfillはscheduleから実行しない。
+- mutationは`workflow_dispatch`、対応する`confirm_*`、`config/autonomous_mode.json`の`production_publish_activation_approved=true`を全て必要とする。commit済み既定値は`false`である。
+- Night Scout/Liver Managerのtext schedule、X/beauty block、mediaのmanual-only gateは維持した。実fetch、Sheets write、download、transcription、cut、Cloudinary upload、Threads postは今回一切実行していない。
+
+### 変更 / テスト / 未完了
+
+- 更新: account autonomous、recovery、acquisition、research、aftercare、AUTO_READY workflowと`config/autonomous_mode.json`、関連safety test/runbook。
+- focused PASS: schedule prepare-only contract、manual activation contract、全workflow safety flags、diff check。
+- 未完了: 実canaryでsource/Sheets/media/publisherを検証する前に、最終人間承認で`production_publish_activation_approved`をtrueへ変更すること。実際のexternal mutationは未実行。
+
 ## 2026-07-28 Codex Shared Persona Validator (In Progress)
 
 ## 2026-07-28 Codex Completion Matrix And Additive Goal Contract (In Progress)

@@ -24,6 +24,10 @@ on:
         options:
           - "1"
           - "2"
+      confirm_auto_ready:
+        description: "Type true to write AUTO_READY rows after final production activation"
+        required: true
+        default: "false"
 
 env:
   PUBLISH_ENABLED: "false"
@@ -63,6 +67,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Guard account and Sheets secrets
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
         run: |
           if [ "$ACCOUNT_ID" != "all" ] && [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ]; then
             echo "[BLOCKED] unsupported account"
@@ -76,11 +81,19 @@ jobs:
             echo "[BLOCKED] Sheets service account secret is missing."
             exit 1
           fi
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          if not json.loads(Path("config/autonomous_mode.json").read_text()).get("production_publish_activation_approved", False):
+              raise SystemExit("[BLOCKED] production_publish_activation_approved=false")
+          PY
 
       - name: Verify Sheets before AUTO_READY
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
 
       - name: AUTO_READY apply only
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
         run: |
           python3 scripts/run_autopilot_loop.py \
             --apply \
@@ -93,4 +106,5 @@ jobs:
             --skip-real-post
 
       - name: Verify Sheets after AUTO_READY
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
