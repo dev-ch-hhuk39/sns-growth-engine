@@ -52,6 +52,19 @@
 - focused PASS: 8件固定、evidence欠損BLOCK、approved candidate readiness、no-side-effect、compile、diff check。
 - 未完了: human-approved source/permission ledgerとcandidate recordをread-onlyで確定し、最終承認後に各canary最大1回だけを実行すること。
 
+## 2026-07-28 Codex Contextual Generation Selection (In Progress)
+
+### 実装内容 / 安全境界
+
+- original/reference generationの前に、persona account、最近の投稿テーマ、MEASURED metrics、category score、review待ちlearning rule、未使用テーマをまとめて選択する。learning ruleは`active=true`へ変更せず、候補としてのみ使う。
+- public textそのものは従来どおりfinal validatorを通る。固定fallbackはsource不足などのemergency pathに限定し、通常のreference pathは選択contextを使う。
+
+### 変更 / テスト / 未完了
+
+- 追加: generation context selectorとcontract test。更新: reference generatorへcontext注入。
+- focused PASS: recent-theme avoidance、MEASURED-only metrics、category/learning candidate、auto-applyなし、compile、diff check。
+- 未完了: model providerにcontextを渡す詳細promptをproduction canary前にレビューし、fallback templateへの依存度をさらに下げること。
+
 ## 2026-07-28 Codex Shared Persona Validator (In Progress)
 
 ## 2026-07-28 Codex Completion Matrix And Additive Goal Contract (In Progress)
