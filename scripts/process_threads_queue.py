@@ -29,6 +29,7 @@ from config_loader import get_config  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
+from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
@@ -42,6 +43,7 @@ FINAL_OR_LOCKED_STATUSES = {
     "PROCESSING",
     "FAILED",
     "POSTED_SAVE_FAILED",
+    "POSTED_SAVE_UNVERIFIED",
     "DUPLICATE_BLOCKED",
 }
 BEAUTY_BLOCKED = {"beauty_account"}
@@ -641,6 +643,26 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             media_status=media["media_status"],
             validator_status=public_validation["status"],
         )
+        persistence = verify_posted_result_persistence(
+            records(client, "posted_results"),
+            result_id=result_id,
+            queue_id=queue_id,
+            account_id=account_id,
+            external_post_id=result.external_post_id or "",
+        )
+        if persistence["status"] != "PASS":
+            fallback = write_fallback(queue_row, social, text, result)
+            update_row(client, "queue", "queue_id", queue_id, {
+                "status": "POSTED_SAVE_UNVERIFIED",
+                "error": persistence["reason"],
+                "processed_at": now_iso(),
+            })
+            log_event(client, account_id, "POSTED_SAVE_UNVERIFIED", "Posted result needs manual read-after-write recovery", {
+                "queue_id": queue_id,
+                "persistence_reason": persistence["reason"],
+                "retry_disposition": retry_disposition(publish_succeeded=True, persisted=False, api_outcome_known=True),
+            })
+            return {"status": "POSTED_SAVE_UNVERIFIED", "queue_id": queue_id, "fallback": str(fallback), "reason": persistence["reason"]}
         update_row(client, "queue", "queue_id", queue_id, {
             "status": "POSTED",
             "error": "",
@@ -674,6 +696,12 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         "queue_id": queue_id,
         "result_id": result_id,
         "external_post_id": result.external_post_id or "",
+        "delivery_idempotency_key": delivery_idempotency_key(
+            account_id=account_id,
+            platform="threads",
+            queue_id=queue_id,
+            external_post_id=result.external_post_id or "",
+        ),
         "post_url": result.posted_url or "",
         "warning": pdca_warning,
     }
