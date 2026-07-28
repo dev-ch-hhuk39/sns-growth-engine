@@ -934,7 +934,6 @@ def main() -> int:
     parser.add_argument("--prepare-only", action="store_true", help="download/cut/upload one approved clip, but never post it")
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
     parser.add_argument("--slot-id", default="", help="canonical generated_clip_media slot for idempotency and reporting")
-    parser.add_argument("--fallback-to-text", action="store_true", help="use the named slot's safe text fallback when no media asset is ready")
     args = parser.parse_args()
     if args.prepare_only and args.post_saved_media:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["prepare_only_and_post_saved_media_are_mutually_exclusive"]}, ensure_ascii=False))
@@ -996,14 +995,13 @@ def main() -> int:
             plan = next_plan
         else:
             plan = {**plan, "status": "NO_POST", "candidate_attempts": candidate_attempts, "blocked_reasons": ["candidate_attempt_limit_reached"]}
-    if args.apply and args.confirm_production_media and client and args.fallback_to_text and plan.get("status") in {"NO_POST", "FAILED_DOWNLOAD", "FAILED_CUT", "FAILED_UPLOAD", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"}:
-        from run_slot_text_fallback import build_plan as build_fallback_plan, execute as execute_fallback
-        if not args.slot_id:
-            plan = {**plan, "status": "BLOCKED", "blocked_reasons": ["--fallback-to-text requires --slot-id"]}
-        else:
-            fallback_plan = build_fallback_plan(args.account_id, args.slot_id, f"generated_clip_media_primary_{str(plan.get('status')).lower()}", apply=True)
-            fallback = execute_fallback(fallback_plan, client)
-            plan = {**plan, "status": fallback.get("status", "FAILED"), "fallback": fallback, "actual_post_type": fallback_plan.get("actual_post_type", "")}
+    if args.slot_id and plan.get("status") in {"NO_POST", "FAILED_DOWNLOAD", "FAILED_CUT", "FAILED_UPLOAD", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"}:
+        plan = {
+            **plan,
+            "status": "SKIPPED_NO_VALID_MEDIA",
+            "no_post_reason": "media_slot_has_no_ready_generated_clip",
+            "would_post": False,
+        }
     safe = {k: v for k, v in plan.items() if k not in {"selected_clip", "selected_source_video"}}
     print(json.dumps(safe, ensure_ascii=False, indent=2))
     return 1 if str(plan.get("status", "")).startswith(("FAILED", "BLOCKED")) else 0

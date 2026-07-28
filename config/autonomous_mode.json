@@ -42,15 +42,11 @@
   "kill_switch": false,
   "report_only": false,
   "human_review_required": false,
-  "account_rotation_strategy": {
-    "account_rotation_enabled": true,
-    "rotation_accounts": [
-      "night_scout",
-      "liver_manager"
-    ],
-    "rotation_strategy": "alternate_by_last_posted_account",
-    "fallback_to_available_account": true,
-    "last_posted_account_hint_for_dry_run": "night_scout"
+  "account_execution_strategy": {
+    "independent_account_runs": true,
+    "scheduled_workflow_account_is_authoritative": true,
+    "max_posts_per_run_is_per_account": true,
+    "cross_account_rotation": false
   },
   "public_post_quality_thresholds": {
     "public_post_quality_score_min": 85,

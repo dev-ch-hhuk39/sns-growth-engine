@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Post one validator-safe text fallback when a scheduled media slot has no asset.
+"""Post one validator-safe fallback for a scheduled text slot only.
 
 This runner is deliberately narrow: it is called only by a named slot and uses
 the normal Threads queue worker, so every regular posting, duplicate, and
@@ -38,6 +38,17 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
     slot = slot_by_id(account_id, slot_id)
     if not slot:
         return {"status": "BLOCKED", "blocked_reasons": ["unknown_content_slot"]}
+    if slot["post_type"] in {"direct_reference_media", "generated_clip_media"}:
+        return {
+            "status": "SKIPPED_NO_VALID_MEDIA",
+            "account_id": account_id,
+            "slot_id": slot_id,
+            "expected_post_type": slot["post_type"],
+            "actual_post_type": "",
+            "fallback_reason": reason,
+            "would_post": False,
+            "blocked_reasons": ["media_slot_text_fallback_forbidden"],
+        }
     jst = timezone(timedelta(hours=9))
     schedule_date = business_date(datetime.now(jst))
     template_count = max(1, reader_facing_template_count(account_id))
@@ -49,8 +60,8 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
         "account_id": account_id,
         "slot_id": slot_id,
         "expected_post_type": slot["post_type"],
-        "actual_post_type": "reference_text" if slot["post_type"] in {"direct_reference_media", "generated_clip_media"} else "original_text",
-        "fallback_level": 3 if slot["post_type"] in {"direct_reference_media", "generated_clip_media"} else 1,
+        "actual_post_type": slot["post_type"],
+        "fallback_level": 1,
         "fallback_reason": reason,
         "schedule_date_jst": schedule_date,
         "variant_attempt": attempt,
@@ -63,6 +74,8 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
 
 
 def execute(plan: dict[str, Any], client: SheetsClient, *, started: dict[str, Any] | None = None) -> dict[str, Any]:
+    if plan.get("status") == "SKIPPED_NO_VALID_MEDIA":
+        return plan
     account_id = str(plan["account_id"])
     slot_id = str(plan["slot_id"])
     # Existing production sheets may predate public_post_text.  Migrate the

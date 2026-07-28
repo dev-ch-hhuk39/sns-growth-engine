@@ -24,7 +24,7 @@ from content_slot_runs import build_slot_run, claim_slot_run, existing_slot_stat
 from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
 from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
-from public_post_quality import account_rotation_order, final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
+from public_post_quality import independent_account_order, final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
 from content_schedule import TEXT_POST_TYPES, slot_by_id  # noqa: E402
 
 CONFIG_FILE = ROOT / "config/autonomous_mode.json"
@@ -62,22 +62,12 @@ def account_order_for_scope(
     *,
     posted_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Use rotation only for manual all-account runs.
-
-    Account-specific scheduled workflows must never rotate away from their
-    fixed ACCOUNT_ID, otherwise the night/liver schedules can starve each other.
-    """
+    """Every requested account is independent; never rotate one away for another."""
+    order = independent_account_order(accounts)
     if requested_account_id != "all":
-        selected = accounts[0] if accounts else ""
-        return {
-            "enabled": False,
-            "strategy": "fixed_account_override",
-            "ordered_accounts": accounts,
-            "selected_account": selected,
-            "skipped_accounts": [],
-            "fallback_to_available_account": False,
-        }
-    return account_rotation_order(accounts, config, posted_rows=posted_rows or [])
+        order["strategy"] = "fixed_account_override"
+        order["selected_account"] = accounts[0] if accounts else ""
+    return order
 
 
 def build_gate_summary(config: dict[str, Any], rules: dict[str, Any]) -> dict[str, Any]:
@@ -369,8 +359,8 @@ def build_autonomous_plan(
     rules = rules or load_auto_approval_rules()
     gate = build_gate_summary(config, rules)
     accounts = account_scope(account_id, config)
-    rotation = account_order_for_scope(account_id, accounts, config, posted_rows=[])
-    rotated_accounts = rotation.get("ordered_accounts", accounts)
+    execution = account_order_for_scope(account_id, accounts, config, posted_rows=[])
+    selected_accounts = execution.get("ordered_accounts", accounts)
 
     base_sources = load_sources().get("sources", [])
     pilot_plan = select_pilot_sources(
@@ -403,10 +393,10 @@ def build_autonomous_plan(
         "status": "BLOCKED" if blocked_reasons else "PLAN_ONLY",
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "account_id": account_id,
-        "accounts": rotated_accounts,
-        "account_rotation": rotation,
-        "selected_account": rotation.get("selected_account", rotated_accounts[0] if rotated_accounts else ""),
-        "skipped_account": rotation.get("skipped_accounts", []),
+        "accounts": selected_accounts,
+        "account_execution": execution,
+        "selected_account": execution.get("selected_account", selected_accounts[0] if len(selected_accounts) == 1 else ""),
+        "skipped_account": execution.get("skipped_accounts", []),
         "gate_summary": gate,
         "selected_pilot_sources": autonomous_sources["selected"],
         "selected_source_count": autonomous_sources["selected_count"],
@@ -463,9 +453,10 @@ def build_autonomous_plan(
     }
     plan_result["video_reference_analysis"] = build_video_reference_analysis(plan_result, config, fetch_metadata=False)
     slot_index = (sum(ord(char) for char in slot_id) % 20) + 1 if slot_id else 1
-    preview_output = generate_reader_facing_post(str(plan_result.get("selected_account") or "night_scout"), index=slot_index)
+    preview_account = str(plan_result.get("selected_account") or (selected_accounts[0] if selected_accounts else "night_scout"))
+    preview_output = generate_reader_facing_post(preview_account, index=slot_index)
     preview_text = str(preview_output["public_post_text"])
-    preview_validation = final_public_post_validator(preview_text, str(plan_result.get("selected_account") or ""))
+    preview_validation = final_public_post_validator(preview_text, preview_account)
     plan_result["public_post_preview"] = public_preview(preview_text)
     plan_result["internal_leak_check"] = preview_validation["internal_leak_check"]["status"]
     plan_result["account_fit_check"] = preview_validation["account_fit_check"]["status"]
@@ -689,11 +680,11 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
     if not dry:
         config = load_autonomous_config()
         posted_rows_for_caps = load_posted_results_for_rotation()
-        rotation = account_order_for_scope(args.account_id, accounts, config, posted_rows=posted_rows_for_caps)
-        accounts = list(rotation.get("ordered_accounts", accounts))
-        plan["account_rotation"] = rotation
-        plan["selected_account"] = rotation.get("selected_account", accounts[0] if accounts else "")
-        plan["skipped_account"] = rotation.get("skipped_accounts", [])
+        execution = account_order_for_scope(args.account_id, accounts, config, posted_rows=posted_rows_for_caps)
+        accounts = list(execution.get("ordered_accounts", accounts))
+        plan["account_execution"] = execution
+        plan["selected_account"] = execution.get("selected_account", accounts[0] if len(accounts) == 1 else "")
+        plan["skipped_account"] = execution.get("skipped_accounts", [])
     threads_source_urls = source_urls_for_platform(plan, "threads")
     threads_source_ids = source_ids_for_platform(plan, "threads")
     slot = dict(plan.get("content_slot") or {})
@@ -793,8 +784,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
                 "daily_post_cap": daily_post_cap,
             })
             continue
-        if len(post_candidate_accounts) < max_posts_per_run:
-            post_candidate_accounts.append(account)
+        post_candidate_accounts.append(account)
     for account in accounts:
         if account not in post_candidate_accounts:
             results.append({
@@ -875,7 +865,6 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         env.setdefault("PUBLISH_ENABLED", "true")
         env.setdefault("ALLOW_REAL_THREADS_POST", "true")
         env.setdefault("ALLOW_REAL_X_POST", "false")
-        remaining_posts = max_posts_per_run
         for account in accounts:
             if account in posted_by_slot_fallback:
                 results.append({
@@ -885,22 +874,10 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
                     "reason": "canonical_slot_fallback_already_posted",
                 })
                 continue
-            if remaining_posts <= 0:
-                results.append({
-                    "cmd": f"scripts/process_threads_queue.py --account-id {account} --confirm-real-post --max-posts 1",
-                    "returncode": 0,
-                    "status": "SKIPPED",
-                    "reason": "max_posts_per_run_reached",
-                })
-                continue
-            result = _run([sys.executable, "scripts/process_threads_queue.py", "--account-id", account, "--confirm-real-post", "--max-posts", "1"], env=env)
+            result = _run([sys.executable, "scripts/process_threads_queue.py", "--account-id", account, "--confirm-real-post", "--max-posts", str(max_posts_per_run)], env=env)
             results.append(result)
             if result.get("returncode") != 0:
                 return results
-            if '"status": "POSTED"' in str(result.get("stdout_tail", "")):
-                remaining_posts -= 1
-            elif not plan.get("account_rotation", {}).get("fallback_to_available_account", True):
-                remaining_posts -= 1
     return results
 
 

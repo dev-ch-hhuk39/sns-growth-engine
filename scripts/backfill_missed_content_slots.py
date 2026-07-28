@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Find overdue unfilled slots; optionally fill each once via the safe fallback."""
+"""Find overdue slots and recover only the post type configured for each slot."""
 from __future__ import annotations
 
 import argparse
@@ -94,7 +94,7 @@ def recover_slot(
     *,
     apply: bool,
 ) -> dict[str, Any]:
-    """Recover READY media first; use text only when no valid media exists."""
+    """Recover READY media first; never replace a media slot with text."""
     slot_id = str(slot["slot_id"])
     expected = str(slot.get("expected_post_type", ""))
 
@@ -122,13 +122,11 @@ def recover_slot(
                 "selected_queue_id": posted.get("selected_queue_id", ""),
                 "post_url": (posted.get("post_result") or {}).get("post_url", ""),
             }
-        return _text_fallback(
-            client,
-            account_id,
-            slot,
-            apply=apply,
-            reason=f"direct_media_recovery_{str(preflight.get('reason') or preflight.get('status') or 'unavailable').lower()}",
-        )
+        return {
+            "status": "SKIPPED_NO_VALID_MEDIA",
+            "path": "saved_direct_reference_media",
+            "reason": f"direct_media_recovery_{str(preflight.get('reason') or preflight.get('status') or 'unavailable').lower()}",
+        }
 
     if expected == "generated_clip_media":
         from run_media_production_pipeline import build_plan as build_media_plan, execute as execute_media
@@ -172,7 +170,11 @@ def recover_slot(
         reason = "generated_clip_recovery_" + str(
             (media_plan.get("blocked_reasons") or [media_plan.get("status", "unavailable")])[0]
         ).lower()
-        return _text_fallback(client, account_id, slot, apply=apply, reason=reason)
+        return {
+            "status": "SKIPPED_NO_VALID_MEDIA",
+            "path": "saved_generated_clip_media",
+            "reason": reason,
+        }
 
     return _text_fallback(client, account_id, slot, apply=apply, reason="missed_text_slot_aftercare")
 

@@ -1,11 +1,12 @@
-status: WP3_C5_COMPLETE
+status: INDEPENDENT_SLOT_CONTRACTS_IN_PROGRESS
 assigned agent: Codex
-branch: docs/wp3c5-diagnostic-evidence
-task: record confirmed WP3-C5 read-only provenance result
-related Work Package: Work Package 1 / Work Package 3 gate
-base main: 33af92f50417ddd63d19ff09d61ae64adfc5f87d
-completed run: 30314454246 / SUCCESS / workflow_dispatch
-safe classification: HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES
-next checkpoint: manual repair review planning only; then remaining Work
-  Package 1/3 read-only work.
-production operations: no writes, media operations, source fetches, or posts
+branch: feature/independent-slot-contracts
+task: prohibit media-slot text fallback and remove cross-account execution rotation
+related Work Package: unified runtime safety baseline
+base main: 582e26303d38f4b59c99b6ce8405b1b47c8df98d
+completed run: none for this code-only change
+safe classification: CODE_AND_CONTRACT_ONLY
+next checkpoint: focused/full tests, PR CI, normal merge, then capability matrix
+  and shared persona implementation.
+production operations: no Sheets writes, source-registry writes, media operations,
+  source fetches, or posts.
