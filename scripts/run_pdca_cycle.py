@@ -24,6 +24,7 @@ except ImportError:
     pass
 
 from learning.pdca_orchestrator import PDCAOrchestrator
+from metrics_pdca_contract import measured_results_only, pdca_input_summary
 
 
 # サンプルposted_results（mock用）
@@ -57,14 +58,28 @@ _MOCK_RESULTS = [
 ]
 
 
+def load_measured_results_from_sheets(account_id: str, platform: str) -> list[dict]:
+    """Read production results without mutation; never substitute synthetic metrics."""
+    from config_loader import get_config
+    from sheets_client import SheetsClient
+
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=True)
+    rows = [dict(row) for row in client._ws("posted_results").get_all_records()]
+    return measured_results_only(rows, account_id=account_id, platform=platform)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="PDCAオーケストレーター CLI")
     parser.add_argument("--account-id", default="night_scout")
     parser.add_argument("--platform", default="x", choices=["x", "threads"])
     parser.add_argument("--days", type=int, default=7)
-    parser.add_argument("--dry-run", action="store_true", default=True)
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=True)
+    parser.add_argument("--no-dry-run", dest="dry_run", action="store_false", help="required together with --apply --confirm-pdca for a PDCA audit write")
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--test-write", action="store_true")
+    parser.add_argument("--apply", action="store_true", help="write PDCA audit row (requires --confirm-pdca)")
+    parser.add_argument("--confirm-pdca", action="store_true", help="explicit confirmation for PDCA audit write")
     parser.add_argument("--mock", action="store_true")
     parser.add_argument("--generate-next-plan", action="store_true")
     parser.add_argument("--max-suggestions", type=int, default=5)
@@ -91,6 +106,12 @@ def main() -> None:
                 r for r in _MOCK_RESULTS if r.get("account_id") == account_id
             ]
             if not results_to_analyze:
+                results_to_analyze = []
+        elif args.use_sheets:
+            try:
+                results_to_analyze = load_measured_results_from_sheets(account_id, platform)
+            except Exception as exc:
+                print(f"  [WARN] metrics read unavailable: {type(exc).__name__}")
                 results_to_analyze = []
         else:
             results_to_analyze = _MOCK_RESULTS if args.mock else []
@@ -138,9 +159,14 @@ def main() -> None:
     for note in result["safety_notes"]:
         print(f"    - {note}")
 
-    if args.test_write:
+    input_summary = pdca_input_summary(results_to_analyze) if args.use_sheets and not args.mock else {"metrics_status": "MOCK_OR_OFFLINE", "measured_result_count": len(results_to_analyze), "known_metric_value_count": 0}
+    print(f"  metrics_input     : {input_summary['metrics_status']} ({input_summary['measured_result_count']})")
+
+    if args.test_write or args.apply:
         print(f"\n--- test-write ---")
-        if args.use_sheets:
+        if args.dry_run or not args.apply or not args.confirm_pdca:
+            print("  [BLOCKED] PDCA audit write requires --no-dry-run --apply --confirm-pdca")
+        elif args.use_sheets:
             try:
                 from config_loader import get_config, get_config_partial
                 from sheets_client import make_client
@@ -158,7 +184,7 @@ def main() -> None:
                 })
                 print(f"  [OK] pdca_runs 書き込み完了")
             except Exception as e:
-                print(f"  [WARN] Sheets書き込みエラー: {e}")
+                print(f"  [WARN] Sheets write error: {type(e).__name__}")
         else:
             print(f"  [MockSheets] pdca_run を保存（mock）: {result['pdca_run_id']}")
 

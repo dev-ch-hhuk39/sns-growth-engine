@@ -6,6 +6,20 @@
 
 ## 2026-07-28 Codex Publisher Delivery Contract (In Progress)
 
+## 2026-07-28 Codex Metrics And PDCA Lifecycle (In Progress)
+
+### 実装内容 / 安全境界
+
+- `run_pdca_cycle.py --use-sheets` は`posted_results`をread-onlyで読み、`metrics_status=MEASURED`の結果だけをPDCA入力にする。PARTIAL/UNAVAILABLE/PENDINGとunknown値を0へ捏造しない。
+- PDCA outputは従来どおり`WAITING_REVIEW`/`PLANNED`までで、learning rule/source priority/promptの自動変更をしない。
+- PDCA audit書込みは`--no-dry-run --apply --confirm-pdca`の三重明示が必要。今回これらのapply操作は実行していない。
+
+### 変更 / テスト / 未完了
+
+- 更新: `scripts/run_pdca_cycle.py`。追加: `scripts/metrics_pdca_contract.py`, lifecycle test。
+- focused PASS: MEASUREDの限定、確定0の保存、unknown/partial除外、DRAFT/WAITING_REVIEW維持、compile、diff check。
+- 未完了: 両アカウントの本番metricsを収集してMEASURED証跡を作り、human-reviewed PDCA auditを実行すること。metrics/PDCA capabilityは未検証。
+
 ### 実装内容 / 安全境界
 
 - Threads queue workerは、投稿API成功後に`posted_results`をread-after-writeで検証する。queue/account/external post identityと`POSTED` statusが一致しなければ`POSTED_SAVE_UNVERIFIED`に固定する。
