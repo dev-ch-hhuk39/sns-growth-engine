@@ -723,7 +723,7 @@
         "manual_json"
       ],
       "candidate_status": "candidate",
-      "active": true,
+      "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": false,
       "allow_download": false,
