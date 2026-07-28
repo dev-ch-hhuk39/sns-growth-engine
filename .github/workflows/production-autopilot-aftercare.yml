@@ -66,7 +66,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Guard aftercare config and secrets
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -77,6 +77,8 @@ jobs:
               raise SystemExit("[BLOCKED] production_autopilot_enabled=false")
           if auto.get("kill_switch"):
               raise SystemExit("[BLOCKED] autonomous kill_switch=true")
+          if not auto.get("production_publish_activation_approved", False):
+              raise SystemExit("[BLOCKED] production_publish_activation_approved=false")
           print("[OK] aftercare accepted: production_autopilot_enabled=true kill_switch=false")
           PY
           if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
@@ -93,7 +95,7 @@ jobs:
           python3 scripts/collect_threads_metrics.py --account-id all --source unavailable --dry-run
 
       - name: Apply metrics snapshots
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
         run: |
           # Metrics may legitimately be PARTIAL/UNAVAILABLE before a platform
           # exposes public numbers. Record the result, then continue to the
@@ -111,7 +113,7 @@ jobs:
           exit 0
 
       - name: Sync source registry and Sheets schema
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
         run: |
           python3 scripts/seed_source_registry.py \
             --apply \
@@ -121,7 +123,7 @@ jobs:
             --platform all
 
       - name: Apply PDCA candidate generation
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_aftercare == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
         run: |
           python3 scripts/generate_next_queue_from_metrics.py \
             --account-id night_scout \

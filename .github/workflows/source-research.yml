@@ -58,7 +58,7 @@ jobs:
       - name: Dry-run research plan
         run: python3 scripts/run_source_research.py --account-id all --max-topics-per-account 1 --max-results 10 --dry-run
       - name: Guard research persistence
-        if: github.event_name == 'schedule' || github.event.inputs.confirm_research == 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_research == 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -71,5 +71,5 @@ jobs:
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Persist research evidence only
-        if: github.event_name == 'schedule' || github.event.inputs.confirm_research == 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_research == 'true'
         run: python3 scripts/run_source_research.py --account-id all --max-topics-per-account 1 --max-results 10 --apply --confirm-research --use-sheets

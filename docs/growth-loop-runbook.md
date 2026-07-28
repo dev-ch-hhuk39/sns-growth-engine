@@ -195,7 +195,7 @@ Scheduled target windows:
 - `night_scout`: JST 14:00, 16:00, 18:00, 21:00, 25:00.
 - `liver_manager`: JST 10:00, 13:00, 16:00, 18:00, 21:00.
 
-Each scheduled workflow starts 15 minutes before the target time and sleeps a random 0-1800 seconds before dry-run/apply. Only the sleep seconds are printed. Secrets are not printed.
+Each scheduled workflow starts 15 minutes before the target time and performs a dry-run preparation/report. It does not apply, fetch, upload, or post until final human activation. The former random-delay execution policy is historical; no scheduled mutation is enabled in the current configuration. Secrets are not printed.
 
 Caps:
 

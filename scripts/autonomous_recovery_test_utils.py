@@ -65,12 +65,14 @@ def test_manual_workflow_has_no_schedule() -> None:
     assert "workflow_dispatch:" in read(MANUAL_WF)
 
 
-def test_scheduled_workflows_apply_on_schedule() -> None:
+def test_scheduled_workflows_prepare_only_until_activation() -> None:
     for wf in (NS_WF, LM_WF):
         text = read(wf)
         assert "github.event_name == 'schedule'" in text
         assert "--apply" in text and "--confirm-autonomous" in text
         assert "dry_run_only != 'true'" in text
+        assert "github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_autonomous == 'true'" in text
+        assert "production_publish_activation_approved" in text
 
 
 def test_scheduled_workflows_have_jitter() -> None:
@@ -115,10 +117,11 @@ def test_scheduled_workflows_have_concurrency() -> None:
         assert "cancel-in-progress: false" in text
 
 
-def test_scheduled_workflows_schedule_event_runs_apply() -> None:
+def test_scheduled_workflows_schedule_event_does_not_apply() -> None:
     for wf in (NS_WF, LM_WF):
         text = read(wf)
-        assert "(github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true')" in text
+        assert "(github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true')" not in text
+        assert "github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_autonomous == 'true'" in text
         assert "dry_run_only != 'true'" in text
         assert "--apply" in text
         assert "--confirm-autonomous" in text

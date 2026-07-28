@@ -158,9 +158,6 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             )
 
     # --- 不変条件 5: schedule トリガは実アクションを一切持たない ---
-    # 例外: autonomous-growth-loop.yml は初回Actions apply成功後の明示方針として、
-    # scheduleでもThreads text-only applyを許可する。ただしdry-run先行、kill_switch、
-    # X/media/download/cut/upload/transcription禁止、confirm/schedule if gateを必須にする。
     if name == "wp3-production-readonly-verification.yml":
         checks.append((f"{name} has workflow_dispatch", "workflow_dispatch:" in text))
         checks.append((f"{name} has no schedule", "schedule:" not in text))
@@ -203,7 +200,7 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             checks.append((f"{name} [schedule] no idle delay", "random.randint" not in text and "time.sleep" not in text))
             checks.append((f"{name} [schedule] delayed event is diagnostic only", "Diagnose schedule delay" in text and "steps.schedule_window.outputs.in_window" not in text))
             checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
-            checks.append((f"{name} [schedule] schedule or confirm apply gate", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" in text))
+            checks.append((f"{name} [schedule] prepare-only until manual activation", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" not in text and "production_publish_activation_approved" in text))
             checks.append((f"{name} [schedule] X/media flags remain false", all(flag in text for flag in [
                 'ALLOW_REAL_X_POST: "false"',
                 'ALLOW_VIDEO_DOWNLOAD: "false"',

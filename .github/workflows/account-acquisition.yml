@@ -54,7 +54,7 @@ jobs:
       - name: Dry-run acquisition plan
         run: python3 scripts/acquire_approved_source_posts.py --account-id all --platform all --max-posts 3 --dry-run
       - name: Guard acquisition persistence
-        if: github.event_name == 'schedule' || github.event.inputs.confirm_acquisition == 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_acquisition == 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -67,5 +67,5 @@ jobs:
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Acquire approved source bundles
-        if: github.event_name == 'schedule' || github.event.inputs.confirm_acquisition == 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_acquisition == 'true'
         run: python3 scripts/acquire_approved_source_posts.py --account-id all --platform all --max-posts 3 --apply --confirm-acquisition

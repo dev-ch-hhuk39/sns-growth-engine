@@ -1,5 +1,16 @@
 # Production Completion Status
 
+## 2026-07-28 Current safety boundary
+
+The system is **not yet enabled for automatic external mutation**. Scheduled
+Night Scout and Liver Manager workflows are retained for dry-run preparation
+and health reporting, while source acquisition, Sheets writes, media
+download/transcription/cut/upload, and Threads publishing require a manual
+workflow dispatch, the corresponding explicit confirmation, and
+`production_publish_activation_approved=true`. The committed default is
+`false`. This supersedes older operational notes below when they describe
+scheduled apply behavior.
+
 ## 2026-07-18 Live recovery update
 
 Current operational evidence is now live, not dry-run only:

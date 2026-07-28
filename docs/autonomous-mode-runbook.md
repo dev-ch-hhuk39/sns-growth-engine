@@ -145,6 +145,13 @@ python3 scripts/run_autonomous_loop.py --account-id all --apply --confirm-autono
 
 There is no per-post approval prompt in autonomous mode. The explicit run approval is the command-level `--confirm-autonomous` gate plus the rules in `config/autonomous_mode.json`.
 
+> **Current activation policy (2026-07-28):** schedules remain enabled for
+> heartbeat and dry-run preparation only. They do not fetch, write Sheets,
+> upload media, or post. Any mutation requires `workflow_dispatch`, the
+> relevant `confirm_*` input, and
+> `production_publish_activation_approved=true`. The repository ships that
+> configuration as `false` until the final human canary approval.
+
 ## GitHub Actions
 
 Workflows:
@@ -155,13 +162,13 @@ Workflows:
 .github/workflows/autonomous-growth-loop-liver-manager.yml
 ```
 
-The manual workflow is `workflow_dispatch` only. The account-specific workflows have schedules and fixed `ACCOUNT_ID`; scheduled runs apply automatically while preserving the real-post gates.
+The manual workflow is `workflow_dispatch` only. The account-specific workflows have schedules and fixed `ACCOUNT_ID`; scheduled runs prepare and report only. Publishing is available only through a manually dispatched, explicitly confirmed, production-activated run.
 
 ### Production Autopilot Aftercare
 
-`Production Autopilot Aftercare` is the scheduled non-posting aftercare workflow. It runs daily at JST 23:40 (`cron: 40 14 * * *`) and keeps the production loop moving without creating an immediate public post.
+`Production Autopilot Aftercare` is a scheduled planning/health workflow. It runs daily at JST 23:40 (`cron: 40 14 * * *`) without creating a public post or writing Sheets. Its mutation path is manual-dispatch and production-activation gated.
 
-It automatically runs:
+Its dry-run reports plan the following work; they do not execute it:
 
 - metrics snapshot collection into Sheets when credentials are present
 - next queue / PDCA candidate generation for `night_scout` and `liver_manager`
@@ -293,13 +300,13 @@ liver_manager:
 
 Operational rules:
 
-- Scheduled runs apply automatically in the account-specific windows above.
+- Scheduled runs are prepare-only in the account-specific windows above.
 - Each scheduled run sleeps a random `0-1800` seconds before dry-run/apply.
 - Each workflow declares `permissions: contents: read` and `actions: read`.
 - Each account-specific workflow has `concurrency` with `cancel-in-progress: false` so close schedule slots do not cancel each other.
 - Each run prints **Schedule heartbeat** with workflow name, event, account, and UTC time before dependency install.
 - Manual dispatch includes `dry_run_only`; when `dry_run_only=true`, guard/apply are skipped even if `confirm_autonomous=true`.
-- Manual runs still use `workflow_dispatch` and `confirm_autonomous=true`.
+- Manual mutation runs require `workflow_dispatch`, `confirm_autonomous=true`, and `production_publish_activation_approved=true`.
 - Keep `max_posts_per_run=1`, `daily_post_cap_per_account=5`, and `cooldown_minutes=90`.
 - If a bad post appears, set `kill_switch=true` in `config/autonomous_mode.json`, commit, and push.
 - To stop a schedule without changing runtime config, comment out the `schedule` block in the account-specific workflow and push.

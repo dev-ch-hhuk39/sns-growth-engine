@@ -4,6 +4,9 @@
   "auto_idea_generation_enabled": true,
   "auto_ready_enabled": true,
   "auto_post_enabled": true,
+  "production_publish_activation_approved": false,
+  "scheduled_prepare_enabled": true,
+  "scheduled_publish_enabled": false,
   "allowed_accounts": [
     "night_scout",
     "liver_manager"
