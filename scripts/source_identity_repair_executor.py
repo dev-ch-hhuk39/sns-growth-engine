@@ -97,10 +97,11 @@ def apply_plan_in_memory(plan: dict[str, Any], datasets: dict[str, list[dict[str
                     continue
                 else:
                     raise RuntimeError("UNSUPPORTED_REPAIR_OPERATION")
+                target_fingerprint = str(operation.get("row_fingerprint", "")) or row_fingerprint(row)
                 old = row.get(field, "")
                 row[field] = target
-                audits.append({"repair_plan_id": plan.get("repair_plan_id", ""), "affected_row_type": row_type, "affected_row_id": row_id, "field": field, "old_value": old, "new_value": target, "reason": operation.get("reason", kind), "operation": kind, "row_fingerprint": operation.get("row_fingerprint", ""), "applied_at": _now(), "verifier_result": "PENDING"})
-                rollback.append({"affected_row_type": row_type, "affected_row_id": row_id, "field": field, "restore_value": old, "row_fingerprint": operation.get("row_fingerprint", ""), "reason": f"ROLLBACK_{kind}"})
+                audits.append({"repair_plan_id": plan.get("repair_plan_id", ""), "affected_row_type": row_type, "affected_row_id": row_id, "field": field, "old_value": old, "new_value": target, "reason": operation.get("reason", kind), "operation": kind, "row_fingerprint": target_fingerprint, "applied_at": _now(), "verifier_result": "PENDING"})
+                rollback.append({"affected_row_type": row_type, "affected_row_id": row_id, "field": field, "restore_value": old, "row_fingerprint": target_fingerprint, "reason": f"ROLLBACK_{kind}"})
     except Exception as exc:
         return {"status": "PARTIAL_FAILED", "reason": type(exc).__name__, "error": str(exc), "datasets": working, "audit_records": audits, "rollback_plan": list(reversed(rollback))}
 

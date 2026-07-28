@@ -15,6 +15,7 @@ result = apply_plan_in_memory(plan, snapshot())
 assert result["status"] == "APPLIED"
 assert result["verification"]["status"] == "PASS"
 assert result["audit_records"] and result["rollback_plan"]
+assert all(record["row_fingerprint"] for record in result["audit_records"])
 changed = snapshot(child_url="https://threads.net/@a/post/changed")
 assert apply_plan_in_memory(plan, changed)["status"] == "BLOCKED_PRECONDITION"
 assert production_apply_allowed(apply=False, confirm=True) is False
