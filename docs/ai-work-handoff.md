@@ -1,4 +1,4 @@
-## 2026-07-28 Codex Shared Persona Validator (In Progress)
+## 2026-07-28 Codex Shared Persona Validator (Merged)
 
 ### 本システムについて / 実装内容
 
@@ -14,7 +14,7 @@
 
 ### 未完了事項 / 残WARN / 次AIへの引き継ぎ
 
-- Goal/acceptanceの拡張はAGENTS.mdの正本変更制約により、ユーザーへの明示確認待ち。コード側のpersona実装は継続可能。
+- PR #40 は通常マージ済み。post-merge CI `30320565704` は記録時点で実行中。Goal/acceptanceの拡張はAGENTS.mdの正本変更制約により、ユーザーへの明示確認待ち。
 - LLM/metrics-aware original generation、source parent repair、direct media/clip E2E、metrics/PDCA、production canaryは未完了。外部操作は未実行。
 - 次に触ってよい: personaを使う生成テスト、source identity/permission/publisher/metrics contracts、関連docs。
 - 触らない方がよい: `.env`, `data`, `output`, production credentials、X/beauty実行経路。
