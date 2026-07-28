@@ -57,5 +57,8 @@ DUPLICATE_PARENT_INSPECTION_IN_PROGRESS
   inspector stdout/stderr and performs no Sheets mutation, media operation,
   or social post.
 - Goal evaluation remains incomplete. The evidence-backed baseline is tracked
-  in `docs/goal-status.json`; all canaries and Liver Manager source-account
+  in `docs/goal-status.json`; the additive cross-account completion contract
+  is in `config/production_capability_matrix.json` and begins `UNVERIFIED`
+  until evidence is checked by `scripts/evaluate_capability_matrix.py`; all
+  canaries and Liver Manager source-account
   evidence remain unverified or blocked.

@@ -180,7 +180,8 @@ three validated inventories/path, and active tokens.
 3. Stop on any mismatch, quarantine the source asset, repair root cause, and
 continue from a new asset. Never repost a canary asset/text.
 4. Run final ten-slot rehearsal, recovery replay, full test/CI/security suite,
-then collect evidence and require `35/35 PASS`.
+then collect evidence and require `48/48 PASS` plus an evidence-backed PASS
+from `scripts/evaluate_capability_matrix.py`.
 
 ## External Blocker
 
@@ -196,7 +197,8 @@ Liver posting account cannot be repurposed.
 ## Required Evidence At Completion
 
 `docs/goal-status.json` must be regenerated at the exact final `main` SHA and
-the evaluator must return `35/35 PASS`. Required external evidence includes
+the evaluator must return `48/48 PASS`, and the production capability matrix
+must independently pass. Required external evidence includes
 the repository URL/visibility check, protected environment, CI run, Sheets
 63/63 run, source/post/video IDs, parent text/transcript hashes, Cloudinary
 public ID and secure URL, alignment values, four Threads permalinks with media

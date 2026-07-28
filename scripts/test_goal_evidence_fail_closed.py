@@ -40,6 +40,6 @@ with tempfile.TemporaryDirectory() as temp:
 
     path.write_text(json.dumps(fixture(head="fixture-head")), encoding="utf-8")
     pass_result = evaluate(status_path=path, current_head="fixture-head", current_origin_main="fixture-head")
-    assert pass_result["status"] == "PASS" and pass_result["passed"] == 35
+    assert pass_result["status"] == "PASS" and pass_result["passed"] == len(acceptance["criteria"])
 
 print("PASS test_goal_evidence_fail_closed.py")

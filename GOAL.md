@@ -4,6 +4,11 @@ This repository is complete only when the machine-readable acceptance criteria
 in `config/goal_acceptance.json` all have real production evidence and
 `python3 scripts/evaluate_goal.py` exits with status 0.
 
+Both account rows in `docs/capability-matrix-status.json` must also have real
+production evidence and `python3 scripts/evaluate_capability_matrix.py` must
+exit with status 0. The original acceptance criteria are retained; the matrix
+adds parity, persona, media-type, metrics, and PDCA completion requirements.
+
 The required production system:
 
 - discovers posts from approved Threads, YouTube, and TikTok account URLs;
