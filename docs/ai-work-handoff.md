@@ -26,6 +26,19 @@
 - focused PASS: 24h/72h/7d作成、重複排除、due判定、availability分類、collector dry-run、compile、diff check。
 - 未完了: 最終canary後、scheduled/workerのmanual-gated collection adapterを有効化して両accountの実snapshotを取得すること。MEASUREDのみPDCAへ渡す既存契約は維持。
 
+## 2026-07-28 Codex Capability Matrix Evidence Separation (In Progress)
+
+### 実装内容 / 安全境界
+
+- 22能力は、コードpathが存在する`code_complete`と、実canary/外部証跡が必要な`production_pass`を別集計する。production evidenceが無い項目は従来どおり`UNVERIFIED`で、PASSへ昇格しない。
+- 現在のcode evidenceは22/22を確認するが、production passは0/22である。これは完成主張ではなく、次のcanary対象を明示するための状態である。
+
+### 変更 / テスト / 未完了
+
+- 更新: production capability config/evaluator。追加: code/prod evidence separation test。
+- focused PASS: 22 code path evidence、0 production evidence fail-closed、compile、diff check。
+- 未完了: 両account各4件のbounded canaryでpublic URL、Sheets read-after-write、Cloudinary/asset provenance、metrics evidenceを取得した時だけ該当production capabilityをPASSにする。
+
 ## 2026-07-28 Codex Shared Persona Validator (In Progress)
 
 ## 2026-07-28 Codex Completion Matrix And Additive Goal Contract (In Progress)
