@@ -27,8 +27,18 @@ def _rows_hash(rows: list[dict[str, Any]]) -> str:
 
 
 def row_fingerprint(row: dict[str, Any]) -> str:
-    """Stable precondition for one Sheets row, independent of its row number."""
-    return hashlib.sha256(_canonical_json(row).encode("utf-8")).hexdigest()
+    """Stable precondition for one Sheets row, independent of its row number.
+
+    gspread returns numbers as Python values through ``get_all_records`` but
+    as strings through ``get_all_values``.  Sheets itself stores cell values,
+    not Python types, so normalize to the latter representation before
+    comparing a planning snapshot with an apply-time row lookup.
+    """
+    normalized = {
+        str(key): "" if value is None else str(value)
+        for key, value in row.items()
+    }
+    return hashlib.sha256(_canonical_json(normalized).encode("utf-8")).hexdigest()
 
 
 def _youtube_url_class(value: str) -> str:

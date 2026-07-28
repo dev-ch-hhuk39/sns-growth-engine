@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Executor must be preconditioned, bounded, and rollback-capable."""
-from source_identity_repair_contract import build_identity_repair_plan
+from source_identity_repair_contract import build_identity_repair_plan, row_fingerprint
 from source_identity_repair_executor import apply_plan_in_memory, production_apply_allowed, validate_preconditions
 from pathlib import Path
 
@@ -16,6 +16,7 @@ assert result["status"] == "APPLIED"
 assert result["verification"]["status"] == "PASS"
 assert result["audit_records"] and result["rollback_plan"]
 assert all(record["row_fingerprint"] for record in result["audit_records"])
+assert row_fingerprint({"count": 1, "enabled": True, "empty": None}) == row_fingerprint({"count": "1", "enabled": "True", "empty": ""})
 changed = snapshot(child_url="https://threads.net/@a/post/changed")
 assert apply_plan_in_memory(plan, changed)["status"] == "BLOCKED_PRECONDITION"
 assert production_apply_allowed(apply=False, confirm=True) is False
