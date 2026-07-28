@@ -12,8 +12,9 @@ import json
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
-from plan_wp3c_production_repairs import generate_hash, plan_parent_repair
+from plan_wp3c_production_repairs import canonicalize_source_url, generate_hash, plan_parent_repair
 
 
 def _canonical_json(value: Any) -> str:
@@ -23,6 +24,122 @@ def _canonical_json(value: Any) -> str:
 def _rows_hash(rows: list[dict[str, Any]]) -> str:
     normalized = sorted((_canonical_json(row) for row in rows))
     return hashlib.sha256("\n".join(normalized).encode("utf-8")).hexdigest()
+
+
+def row_fingerprint(row: dict[str, Any]) -> str:
+    """Stable precondition for one Sheets row, independent of its row number."""
+    return hashlib.sha256(_canonical_json(row).encode("utf-8")).hexdigest()
+
+
+def _youtube_url_class(value: str) -> str:
+    """Return individual, landing, or other without guessing a video identity."""
+    parsed = urlsplit(str(value).strip())
+    host = parsed.netloc.lower().removeprefix("www.")
+    path = parsed.path.rstrip("/")
+    if host not in {"youtube.com", "m.youtube.com", "youtu.be"}:
+        return "other"
+    if host == "youtu.be" and path.strip("/"):
+        return "individual"
+    if path == "/watch" and parse_qs(parsed.query).get("v"):
+        return "individual"
+    if path.startswith("/shorts/") and len(path.split("/")) >= 3:
+        return "individual"
+    if path == "/watch" or path.startswith("/channel/") or path.startswith("/@") or path.startswith("/playlist"):
+        return "landing"
+    return "other"
+
+
+def _canonical_individual_youtube_url(value: str) -> str:
+    parsed = urlsplit(str(value).strip())
+    host = parsed.netloc.lower().removeprefix("www.")
+    path = parsed.path.rstrip("/")
+    if host == "youtu.be":
+        return f"https://youtu.be{path}"
+    if path == "/watch":
+        video_id = parse_qs(parsed.query).get("v", [""])[0]
+        return f"https://youtube.com/watch?v={video_id}" if video_id else ""
+    if path.startswith("/shorts/"):
+        return f"https://youtube.com{path}"
+    return ""
+
+
+def _safe_duplicate_parent_repair(
+    parent_id: str,
+    parent_rows: list[dict[str, Any]],
+    child_rows: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Resolve only deterministic YouTube duplicate rows.
+
+    A channel tab is never an individual source post.  It is therefore safe to
+    remove a group containing *only* channel/tab rows.  When exactly one
+    individual watch/short URL survives and the alternatives are incomplete
+    landing rows, retain that one parent and repair children to its canonical
+    URL.  Every other duplicate remains explicitly blocked for human review.
+    """
+    classes = [_youtube_url_class(str(row.get("canonical_post_url", ""))) for row in parent_rows]
+    if not parent_rows or any(value == "other" for value in classes):
+        return None
+
+    ops: list[dict[str, Any]] = []
+    if all(value == "landing" for value in classes):
+        # These rows describe a channel surface, never a post.  Their media
+        # children cannot have a valid individual parent, so remove both.
+        for child in child_rows:
+            ops.append({
+                "operation": "DELETE_SOURCE_POST_MEDIA_ROW",
+                "row_fingerprint": row_fingerprint(child),
+                "source_post_media_id": str(child.get("source_post_media_id", "")),
+                "reason": "YOUTUBE_LANDING_URL_NOT_A_SOURCE_POST",
+            })
+        for parent in parent_rows:
+            ops.append({
+                "operation": "DELETE_SOURCE_POST_ROW",
+                "row_fingerprint": row_fingerprint(parent),
+                "source_post_id": parent_id,
+                "reason": "YOUTUBE_LANDING_URL_NOT_A_SOURCE_POST",
+            })
+    elif classes.count("individual") == 1 and all(value in {"individual", "landing"} for value in classes):
+        keep = next(row for row, value in zip(parent_rows, classes) if value == "individual")
+        canonical = _canonical_individual_youtube_url(str(keep.get("canonical_post_url", "")))
+        if not canonical:
+            return None
+        for parent, value in zip(parent_rows, classes):
+            if value == "landing":
+                ops.append({
+                    "operation": "DELETE_SOURCE_POST_ROW",
+                    "row_fingerprint": row_fingerprint(parent),
+                    "source_post_id": parent_id,
+                    "reason": "INCOMPLETE_YOUTUBE_WATCH_URL",
+                })
+        for child in child_rows:
+            if canonicalize_source_url(str(child.get("canonical_post_url", ""))) != canonical:
+                ops.append({
+                    "operation": "SET_CHILD_CANONICAL_URL_BY_FINGERPRINT",
+                    "row_fingerprint": row_fingerprint(child),
+                    "source_post_media_id": str(child.get("source_post_media_id", "")),
+                    "to": canonical,
+                    "reason": "ALIGN_CHILD_TO_RETAINED_INDIVIDUAL_VIDEO",
+                })
+    else:
+        return None
+
+    if not ops:
+        return None
+    return {
+        "source_post_id": parent_id,
+        "account_id": str(parent_rows[0].get("target_account_id", "")),
+        "declared_media_count": 0,
+        "actual_child_count": len(child_rows),
+        "unique_media_index_count": len({str(row.get("media_index", "")) for row in child_rows}),
+        "canonical_mismatch_child_ids": [],
+        "duplicate_index_groups": [],
+        "operations": ops,
+        "blocker_codes": [],
+        "apply_eligible": True,
+        "parent_precondition_hash": "",
+        "child_precondition_hashes": {},
+        "resolution_kind": "DETERMINISTIC_YOUTUBE_DUPLICATE_REMEDIATION",
+    }
 
 
 def _parent_snapshot_hash(parent_id: str, datasets: dict[str, list[dict[str, Any]]]) -> str:
@@ -60,7 +177,13 @@ def build_identity_repair_plan(
     repairs: list[dict[str, Any]] = []
     audit_records: list[dict[str, Any]] = []
     for parent_id in _parent_ids(datasets):
-        repair = plan_parent_repair(parent_id, posts_by_id[parent_id], children_by_id[parent_id])
+        parent_rows = posts_by_id[parent_id]
+        child_rows = children_by_id[parent_id]
+        repair = plan_parent_repair(parent_id, parent_rows, child_rows)
+        if "MULTIPLE_PARENTS" in repair["blocker_codes"]:
+            safe_repair = _safe_duplicate_parent_repair(parent_id, parent_rows, child_rows)
+            if safe_repair is not None:
+                repair = safe_repair
         if not repair["operations"] and not repair["blocker_codes"]:
             continue
         repair["before_snapshot_hash"] = _parent_snapshot_hash(parent_id, datasets)
@@ -81,6 +204,7 @@ def build_identity_repair_plan(
         "origin_main": origin_main,
         "affected_parent_ids": [repair["source_post_id"] for repair in repairs],
         "snapshot_hash": _rows_hash(datasets.get("source_posts", []) + datasets.get("source_post_media", [])),
+        "operations": [repair.get("operations", []) for repair in repairs],
     }
     repair_plan_id = f"source_identity_{generate_hash(plan_seed)[:16]}"
     for record in audit_records:

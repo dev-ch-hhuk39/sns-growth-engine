@@ -11,7 +11,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 
-from source_identity_repair_contract import _parent_snapshot_hash, verify_identity_repair_outcome
+from source_identity_repair_contract import _parent_snapshot_hash, row_fingerprint, verify_identity_repair_outcome
 
 
 def _now() -> str:
@@ -34,6 +34,11 @@ def _find(rows: list[dict[str, Any]], key: str, value: str) -> dict[str, Any] | 
     return matches[0] if len(matches) == 1 else None
 
 
+def _find_by_fingerprint(rows: list[dict[str, Any]], fingerprint: str) -> tuple[int, dict[str, Any]] | None:
+    matches = [(index, row) for index, row in enumerate(rows) if row_fingerprint(row) == fingerprint]
+    return matches[0] if len(matches) == 1 else None
+
+
 def apply_plan_in_memory(plan: dict[str, Any], datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     """Apply only plan operations to a snapshot, returning audit and rollback data.
 
@@ -52,8 +57,9 @@ def apply_plan_in_memory(plan: dict[str, Any], datasets: dict[str, list[dict[str
             if not repair.get("apply_eligible"):
                 raise RuntimeError("PLAN_CONTAINS_NON_ELIGIBLE_REPAIR")
             parent_id = str(repair["source_post_id"])
+            operation_kinds = {str(operation.get("operation", "")) for operation in repair.get("operations", [])}
             parent = _find(working.get("source_posts", []), "source_post_id", parent_id)
-            if parent is None:
+            if parent is None and operation_kinds & {"SET_PARENT_MEDIA_COUNT", "SET_CHILD_CANONICAL_URL_FROM_PARENT"}:
                 raise RuntimeError("PARENT_NOT_UNIQUELY_RESOLVABLE")
             for operation in repair.get("operations", []):
                 kind = str(operation.get("operation", ""))
@@ -68,14 +74,35 @@ def apply_plan_in_memory(plan: dict[str, Any], datasets: dict[str, list[dict[str
                     field = "canonical_post_url" if kind == "SET_CHILD_CANONICAL_URL_FROM_PARENT" else "media_index"
                     target = parent.get("canonical_post_url", "") if kind == "SET_CHILD_CANONICAL_URL_FROM_PARENT" else operation.get("to")
                     row_type = "source_post_media"
+                elif kind == "SET_CHILD_CANONICAL_URL_BY_FINGERPRINT":
+                    match = _find_by_fingerprint(working.get("source_post_media", []), str(operation.get("row_fingerprint", "")))
+                    if match is None:
+                        raise RuntimeError("CHILD_FINGERPRINT_NOT_UNIQUELY_RESOLVABLE")
+                    _, row = match
+                    row_id = str(operation.get("source_post_media_id", ""))
+                    field, target, row_type = "canonical_post_url", operation.get("to"), "source_post_media"
+                elif kind in {"DELETE_SOURCE_POST_ROW", "DELETE_SOURCE_POST_MEDIA_ROW"}:
+                    table = "source_posts" if kind == "DELETE_SOURCE_POST_ROW" else "source_post_media"
+                    match = _find_by_fingerprint(working.get(table, []), str(operation.get("row_fingerprint", "")))
+                    if match is None:
+                        raise RuntimeError("ROW_FINGERPRINT_NOT_UNIQUELY_RESOLVABLE")
+                    index, row = match
+                    row_id = str(row.get("source_post_id" if table == "source_posts" else "source_post_media_id", ""))
+                    row_type, field, target = ("source_post" if table == "source_posts" else "source_post_media"), "__row__", "DELETED"
+                    old = row_fingerprint(row)
+                    deleted_snapshot = deepcopy(row)
+                    del working[table][index]
+                    audits.append({"repair_plan_id": plan.get("repair_plan_id", ""), "affected_row_type": row_type, "affected_row_id": row_id, "field": field, "old_value": old, "new_value": target, "reason": operation.get("reason", kind), "operation": kind, "row_fingerprint": operation.get("row_fingerprint", ""), "applied_at": _now(), "verifier_result": "PENDING"})
+                    rollback.append({"affected_row_type": row_type, "affected_row_id": row_id, "field": field, "restore_row": deleted_snapshot, "row_fingerprint": operation.get("row_fingerprint", ""), "reason": f"ROLLBACK_{kind}"})
+                    continue
                 else:
                     raise RuntimeError("UNSUPPORTED_REPAIR_OPERATION")
                 old = row.get(field, "")
                 row[field] = target
-                audits.append({"repair_plan_id": plan.get("repair_plan_id", ""), "affected_row_type": row_type, "affected_row_id": row_id, "field": field, "old_value": old, "new_value": target, "reason": kind, "applied_at": _now(), "verifier_result": "PENDING"})
-                rollback.append({"affected_row_type": row_type, "affected_row_id": row_id, "field": field, "restore_value": old, "reason": f"ROLLBACK_{kind}"})
+                audits.append({"repair_plan_id": plan.get("repair_plan_id", ""), "affected_row_type": row_type, "affected_row_id": row_id, "field": field, "old_value": old, "new_value": target, "reason": operation.get("reason", kind), "operation": kind, "row_fingerprint": operation.get("row_fingerprint", ""), "applied_at": _now(), "verifier_result": "PENDING"})
+                rollback.append({"affected_row_type": row_type, "affected_row_id": row_id, "field": field, "restore_value": old, "row_fingerprint": operation.get("row_fingerprint", ""), "reason": f"ROLLBACK_{kind}"})
     except Exception as exc:
-        return {"status": "PARTIAL_FAILED", "reason": type(exc).__name__, "datasets": working, "audit_records": audits, "rollback_plan": list(reversed(rollback))}
+        return {"status": "PARTIAL_FAILED", "reason": type(exc).__name__, "error": str(exc), "datasets": working, "audit_records": audits, "rollback_plan": list(reversed(rollback))}
 
     verification = verify_identity_repair_outcome(plan, working)
     for record in audits:

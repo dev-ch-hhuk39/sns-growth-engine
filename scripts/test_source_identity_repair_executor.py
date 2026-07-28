@@ -23,4 +23,27 @@ adapter = (Path(__file__).resolve().parent / "apply_source_identity_repairs.py")
 assert "ALLOW_SHEETS_IDENTITY_REPAIR" in adapter
 assert "confirm-source-identity-repair" in adapter
 assert "read_after_write" in adapter
+
+# Deterministic duplicate remediation is deliberately narrow: a YouTube
+# channel surface is never retained as a source post, while a complete watch
+# URL survives and its child is aligned to it.
+duplicate_snapshot = {
+    "source_posts": [
+        {"source_post_id": "channel", "canonical_post_url": "https://youtube.com/channel/abc/videos", "media_count": 1},
+        {"source_post_id": "channel", "canonical_post_url": "https://youtube.com/channel/abc/streams", "media_count": 1},
+        {"source_post_id": "video", "canonical_post_url": "https://youtube.com/watch", "media_count": 1},
+        {"source_post_id": "video", "canonical_post_url": "https://youtube.com/watch?v=good", "media_count": 1},
+    ],
+    "source_post_media": [
+        {"source_post_media_id": "channel-1", "source_post_id": "channel", "media_index": 0, "canonical_post_url": "https://youtube.com/channel/abc/videos"},
+        {"source_post_media_id": "channel-2", "source_post_id": "channel", "media_index": 0, "canonical_post_url": "https://youtube.com/channel/abc/streams"},
+        {"source_post_media_id": "video-1", "source_post_id": "video", "media_index": 0, "canonical_post_url": "https://youtube.com/watch"},
+    ],
+}
+duplicate_plan = build_identity_repair_plan(duplicate_snapshot, implementation_head="head", origin_main="main")
+assert all(repair["apply_eligible"] for repair in duplicate_plan["parent_repairs"])
+duplicate_result = apply_plan_in_memory(duplicate_plan, duplicate_snapshot)
+assert duplicate_result["status"] == "APPLIED"
+assert not [row for row in duplicate_result["datasets"]["source_posts"] if row["source_post_id"] == "channel"]
+assert duplicate_result["datasets"]["source_post_media"][0]["canonical_post_url"] == "https://youtube.com/watch?v=good"
 print("PASS test_source_identity_repair_executor.py")
