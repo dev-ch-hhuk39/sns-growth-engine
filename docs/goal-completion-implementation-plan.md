@@ -286,6 +286,17 @@ Acceptance:
 
 ## Work Package 3: Final-Main Data And Provider Verification
 
+### Source identity repair boundary
+
+Use `scripts/plan_source_identity_repairs.py` only with a read-only exported
+snapshot. It discovers parent/child identity defects without relying on fixed
+historical IDs and emits a `repair_plan_id`, affected-row list, pre-repair
+hashes, reasons, and a `PENDING_HUMAN_APPROVAL` audit record. A human-approved
+repair is outside this runner. Afterwards, use
+`scripts/verify_source_identity_repairs.py` with a second read-only export;
+it emits old/new hashes, `applied_at`, and an independent verifier result. No
+plan or verifier command has a Sheets client or a write/apply mode.
+
 Run on final `main`, with posting flags false.
 
 1. Verify Sheets schema and production integrity read-only.
