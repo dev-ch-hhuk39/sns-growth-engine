@@ -1,3 +1,24 @@
+## 2026-07-28 Codex Shared Persona Validator (In Progress)
+
+### 本システムについて / 実装内容
+
+- `config/post_generation_rules.json` に Night Scout と Liver Manager の共通persona profileを追加した。Night Scoutは「僕」の相談者視点、Liver Managerは「私」の女性マネージャー視点を一元管理する。
+- `scripts/public_post_quality.py` の最終validatorは、読者文脈、誤った一人称、強い求人表現、具体行動、因果・理由、男性的断定連続、短文断片の過剰を判定する。
+- すべての既存生成経路は既にこの最終validatorを通るため、original/reference/direct-media/clip/fallback/retry/PDCA系に同じprofileが適用される。
+
+### 変更ファイル一覧 / テスト結果
+
+- 更新: `config/post_generation_rules.json`, `scripts/public_post_quality.py`, `docs/current-work.md`, `docs/ai-work-handoff.md`。
+- 追加: persona PASS/BLOCK例と25件ずつのfallback template全件validatorテスト。
+- focused PASS: persona validator両アカウント、template全件、internal/source metadata leak block、public text only、compile、diff check。
+
+### 未完了事項 / 残WARN / 次AIへの引き継ぎ
+
+- Goal/acceptanceの拡張はAGENTS.mdの正本変更制約により、ユーザーへの明示確認待ち。コード側のpersona実装は継続可能。
+- LLM/metrics-aware original generation、source parent repair、direct media/clip E2E、metrics/PDCA、production canaryは未完了。外部操作は未実行。
+- 次に触ってよい: personaを使う生成テスト、source identity/permission/publisher/metrics contracts、関連docs。
+- 触らない方がよい: `.env`, `data`, `output`, production credentials、X/beauty実行経路。
+
 ## 2026-07-28 Codex Independent Slot Contracts (In Progress)
 
 ### 本システムについて
