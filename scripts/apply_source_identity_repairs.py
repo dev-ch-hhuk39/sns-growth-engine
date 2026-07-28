@@ -87,7 +87,7 @@ def apply_to_sheets(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
             applied.append({"audit": audit, "receipt": receipt})
     except Exception as exc:
         rollback_errors = _rollback_applied(client, applied)
-        return {**result, "status": "PARTIAL_FAILED", "reason": type(exc).__name__, "applied_audit_records": [item["audit"] for item in applied], "rollback_attempted": True, "rollback_errors": rollback_errors}
+        return {**result, "status": "PARTIAL_FAILED", "reason": type(exc).__name__, "error": str(exc), "applied_audit_records": [item["audit"] for item in applied], "rollback_attempted": True, "rollback_errors": rollback_errors}
     after = read_snapshot(client)
     verified = verify_identity_repair_outcome(plan, after)
     if verified["status"] == "PASS":
