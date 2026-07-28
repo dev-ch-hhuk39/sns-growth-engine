@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import sys
+import os
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -151,6 +152,34 @@ def plan_x_fetch_adapter(src: dict[str, Any], *, include_x: bool) -> dict[str, A
         "reason": "X fetch is disabled by default; no API call is made",
         "installed": importlib.util.find_spec("tweepy") is not None,
     }
+
+
+def fetch_x_account_posts(src: dict[str, Any], *, limit: int) -> dict[str, Any]:
+    """Bounded read-only X v2 adapter; profile URLs are never persisted as posts."""
+    if not is_true(src.get("x_read_only")):
+        return {"status": "BLOCKED", "rows": [], "reason": "x_read_only_not_approved"}
+    token = os.environ.get("X_READ_ONLY_BEARER_TOKEN", "")
+    if not token or importlib.util.find_spec("tweepy") is None:
+        return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": "browser_export_or_manual_json_required"}
+    try:
+        import tweepy
+        handle = str(src.get("source_handle", "")).lstrip("@")
+        client = tweepy.Client(bearer_token=token, wait_on_rate_limit=False)
+        user = client.get_user(username=handle)
+        if not user or not user.data:
+            return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": "x_user_not_found"}
+        response = client.get_users_tweets(user.data.id, max_results=max(5, min(limit, 20)), tweet_fields=["created_at", "attachments"], expansions=["attachments.media_keys"], media_fields=["type", "url", "preview_image_url"])
+        media = {m.media_key: m for m in (response.includes or {}).get("media", [])}
+        rows = []
+        for tweet in response.data or []:
+            media_urls = []
+            for key in getattr(tweet, "attachments", {}).get("media_keys", []):
+                item = media.get(key); url = getattr(item, "url", "") or getattr(item, "preview_image_url", "")
+                if url: media_urls.append(url)
+            rows.append({"post_url": f"https://x.com/{handle}/status/{tweet.id}", "external_post_id": str(tweet.id), "text": tweet.text, "published_at": str(getattr(tweet, "created_at", "")), "media_urls": media_urls})
+        return {"status": "FETCHED", "rows": rows[:limit], "reason": ""}
+    except Exception as exc:
+        return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": f"x_api_{type(exc).__name__}"}
 
 
 def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: str, include_x: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -292,7 +321,14 @@ def main() -> int:
             # Account pages are discovery roots only. The real adapter accepts
             # only individual /status/ URLs (or browser/manual export) and
             # never turns a profile into a source post.
-            skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": "x_individual_post_or_browser_export_required"})
+            if args.include_x and args.fetch_real:
+                outcome = fetch_x_account_posts(src, limit=args.limit)
+                for item in outcome["rows"]:
+                    rows.append(normalize_source({**src, "source_url": item["post_url"]}, {"ok": True, "text": item["text"], "author_handle": str(src.get("source_handle", "")), "thumbnail_url": (item["media_urls"] or [""])[0], "error": ""}))
+                if outcome["status"] != "FETCHED":
+                    skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": outcome["reason"]})
+            else:
+                skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": "x_individual_post_or_browser_export_required"})
             continue
         elif src_platform == "threads" and not is_individual_post_url(url, "threads"):
             discovery = discover_threads_post_urls(url, limit=args.limit) if args.fetch_real else {"status": "PLAN_ONLY", "urls": [], "reason": "fetch_real_required"}

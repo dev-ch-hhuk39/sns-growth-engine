@@ -723,9 +723,9 @@
         "manual_json"
       ],
       "candidate_status": "candidate",
-      "active": false,
-      "fetch_enabled": false,
-      "allow_network_fetch": false,
+      "active": true,
+      "fetch_enabled": true,
+      "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
