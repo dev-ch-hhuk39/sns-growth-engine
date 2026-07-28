@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "passing_status": "PASS",
   "failing_statuses": [
     "FAIL",
@@ -52,6 +52,20 @@
     {"id": "cloudinary_idempotency", "category": "reliability", "requires": ["test", "asset_evidence"]},
     {"id": "text_fallback", "category": "reliability", "requires": ["test", "fallback_evidence"]},
     {"id": "text_pipeline_regression_free", "category": "reliability", "requires": ["night_result", "liver_result"]},
-    {"id": "all_required_tests_pass", "category": "reliability", "requires": ["test_count", "failed_count", "run_at"]}
+    {"id": "all_required_tests_pass", "category": "reliability", "requires": ["test_count", "failed_count", "run_at"]},
+
+    {"id": "dual_account_capability_matrix", "category": "completion", "requires": ["matrix_path", "matrix_verifier", "all_items_production_evidenced"]},
+    {"id": "account_persona_all_paths", "category": "completion", "requires": ["night_persona_validation", "liver_persona_validation", "all_generation_paths"]},
+    {"id": "independent_dual_account_schedules", "category": "completion", "requires": ["night_schedule_evidence", "liver_schedule_evidence", "independent_cap_cooldown_evidence"]},
+    {"id": "media_slots_no_text_fallback", "category": "completion", "requires": ["contract_test", "media_slot_results", "no_text_fallback_evidence"]},
+    {"id": "source_parent_identity_integrity", "category": "completion", "requires": ["parent_verifier", "repair_verifier", "failure_count_zero"]},
+    {"id": "direct_media_type_coverage", "category": "completion", "requires": ["image_evidence", "video_evidence", "carousel_evidence", "both_accounts"]},
+    {"id": "generated_clip_end_to_end", "category": "completion", "requires": ["approved_source_evidence", "transcript_evidence", "clip_evidence", "both_accounts"]},
+    {"id": "publisher_read_after_write", "category": "completion", "requires": ["container_evidence", "permalink_evidence", "media_type_verification"]},
+    {"id": "retry_and_slot_idempotency", "category": "completion", "requires": ["retry_test", "slot_test", "production_idempotency_evidence"]},
+    {"id": "metrics_lifecycle", "category": "completion", "requires": ["initial_collection", "plus_24h_collection", "plus_72h_collection", "unavailable_not_zero"]},
+    {"id": "pdca_uses_actual_metrics", "category": "completion", "requires": ["actual_metric_input", "suggestion_evidence", "no_fabricated_metric_test"]},
+    {"id": "production_repair_completion", "category": "completion", "requires": ["repair_plan", "before_after_verifier", "audit_trail"]},
+    {"id": "dual_account_canary_eight_posts", "category": "completion", "requires": ["night_canary_set", "liver_canary_set", "canary_stop_policy"]}
   ]
 }

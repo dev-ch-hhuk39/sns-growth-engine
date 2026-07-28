@@ -6,7 +6,8 @@
 SNS Growth Engine v2は、権利台帳に基づくソース取得、メディア理解、キャプション生成、および承認済みコンテンツのThreadsへの自動投稿を行うシステムです。
 
 ## 2. 最終Goal
-`GOAL.md` および `config/goal_acceptance.json` で定義された35の要件を完全に満たし、実環境での稼働証跡を得ること。
+`GOAL.md`、`config/goal_acceptance.json`、および
+`config/production_capability_matrix.json` で定義された要件を完全に満たし、実環境での稼働証跡を得ること。
 
 ## AIの役割と設計権限
 

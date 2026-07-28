@@ -1,5 +1,26 @@
 ## 2026-07-28 Codex Shared Persona Validator (In Progress)
 
+## 2026-07-28 Codex Completion Matrix And Additive Goal Contract (In Progress)
+
+### 本システムについて / 実装内容
+
+- ユーザー明示承認により、既存35項目を削除・緩和せず、13項目の本番完成要件を加えた。現在のGoalは48項目であり、両アカウントのtext/media/metrics/PDCA/personaを証跡なしにPASSにできない。
+- `config/production_capability_matrix.json` はNight Scout/Liver Managerそれぞれの22能力行を定義する。`docs/capability-matrix-status.json` は全行`UNVERIFIED`で開始し、dry-runやコード存在だけを証跡に使わない。
+- `scripts/evaluate_capability_matrix.py` は`PASS`に加えて`verified_at`、`evidence_type`、`evidence_ref`を必須にするfail-closed evaluatorである。
+
+### 変更ファイル一覧 / テスト結果
+
+- 更新: `AGENTS.md`, `GOAL.md`, `config/goal_acceptance.json`, `START_HERE.md`, `docs/goal-completion-implementation-plan.md`, `docs/ai-work-handoff.md`。
+- 追加: `config/production_capability_matrix.json`, `docs/capability-matrix-status.json`, `scripts/evaluate_capability_matrix.py`, matrix/既存35項目保持テスト。
+- focused PASS: matrix evaluatorの既定FAIL・完全fixture PASS、既存Goal evidence fail-closed。
+
+### 未完了事項 / 残WARN / 次AIへの引き継ぎ
+
+- matrixの全22行と追加13Goal項目は実証未取得。現時点で完成・production-readyとは主張しない。
+- 次の実装順: generic source identity repair planとbefore/after verifier、publisher read-after-write/retry、metrics lifecycle、actual-metrics PDCA。いずれも単独PRとCIを通し、外部mutationは人間承認境界まで止める。
+- 次に触ってよい: capability matrix/evaluator、source repair planner、publisher/metrics/PDCA contractと関連テスト/docs。
+- 触らない方がよい: `.env`, `data`, `output`, production credential files、X/beauty実行経路、外部媒体の実取得・実投稿。
+
 ### 本システムについて / 実装内容
 
 - `config/post_generation_rules.json` に Night Scout と Liver Manager の共通persona profileを追加した。Night Scoutは「僕」の相談者視点、Liver Managerは「私」の女性マネージャー視点を一元管理する。

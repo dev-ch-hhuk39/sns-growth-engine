@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "accounts": ["night_scout", "liver_manager"],
+  "allowed_states": ["PASS", "FAIL", "BLOCKED", "UNVERIFIED"],
+  "production_evidence_required": true,
+  "capabilities": ["original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "generated_clip", "scheduled_publish", "result_persistence", "metrics", "pdca", "persona"],
+  "required_evidence": ["verified_at", "evidence_type", "evidence_ref"],
+  "constraints": {
+    "x_operations": false,
+    "beauty_account_operations": false,
+    "media_slot_text_fallback": false,
+    "subtitle_burn_in": false,
+    "production_evidence_cannot_be_dry_run": true
+  }
+}

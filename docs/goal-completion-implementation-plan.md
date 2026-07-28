@@ -27,8 +27,14 @@
   verified by GitHub API; production canary and final evidence requirements
   remain unchanged.
 
-This document is the executable handoff for completing the 35-item Goal in
-`config/goal_acceptance.json`. The audit was performed on branch
+This document is the executable handoff for completing the original 35-item
+Goal plus the additive production capability requirements in
+`config/goal_acceptance.json`. The original 35 IDs are immutable and are
+protected by `scripts/test_goal_acceptance_preserves_existing_criteria.py`.
+`config/production_capability_matrix.json` defines both-account capability
+rows; `docs/capability-matrix-status.json` starts `UNVERIFIED` and only
+`scripts/evaluate_capability_matrix.py` can recognize evidence-backed PASS.
+The audit was performed on branch
 `feature/oss-github-actions-media-autopilot` at implementation HEAD
 `026ed40b65d2c708673313286c8bc9a914b1efe7` against `origin/main`
 `f89f6ed44bc2a00930f04601d5700230e25949d3` on 2026-07-22 JST.
@@ -36,8 +42,9 @@ This document is the executable handoff for completing the 35-item Goal in
 The current high-capability-model task stops after this design. Do not treat
 this document as a production completion claim. The implementation model must
 continue until `python3 scripts/evaluate_goal.py --json` reports exactly
-`35/35 PASS`, the change is merged to `main`, `origin/main` matches, and all
-four production canaries have independently verified evidence.
+`48/48 PASS`, `python3 scripts/evaluate_capability_matrix.py --json` passes,
+the change is merged to `main`, `origin/main` matches, and all required
+production canaries have independently verified evidence.
 
 ## Audited Truth
 

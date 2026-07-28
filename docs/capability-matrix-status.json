@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "implementation_head": "",
+  "completion_claim": false,
+  "accounts": {
+    "night_scout": {
+      "original_text": {"state": "UNVERIFIED", "evidence": {}}, "reference_text": {"state": "UNVERIFIED", "evidence": {}}, "direct_image": {"state": "UNVERIFIED", "evidence": {}}, "direct_video": {"state": "UNVERIFIED", "evidence": {}}, "direct_carousel": {"state": "UNVERIFIED", "evidence": {}}, "generated_clip": {"state": "UNVERIFIED", "evidence": {}}, "scheduled_publish": {"state": "UNVERIFIED", "evidence": {}}, "result_persistence": {"state": "UNVERIFIED", "evidence": {}}, "metrics": {"state": "UNVERIFIED", "evidence": {}}, "pdca": {"state": "UNVERIFIED", "evidence": {}}, "persona": {"state": "UNVERIFIED", "evidence": {}}
+    },
+    "liver_manager": {
+      "original_text": {"state": "UNVERIFIED", "evidence": {}}, "reference_text": {"state": "UNVERIFIED", "evidence": {}}, "direct_image": {"state": "UNVERIFIED", "evidence": {}}, "direct_video": {"state": "UNVERIFIED", "evidence": {}}, "direct_carousel": {"state": "UNVERIFIED", "evidence": {}}, "generated_clip": {"state": "UNVERIFIED", "evidence": {}}, "scheduled_publish": {"state": "UNVERIFIED", "evidence": {}}, "result_persistence": {"state": "UNVERIFIED", "evidence": {}}, "metrics": {"state": "UNVERIFIED", "evidence": {}}, "pdca": {"state": "UNVERIFIED", "evidence": {}}, "persona": {"state": "UNVERIFIED", "evidence": {}}
+    }
+  }
+}
