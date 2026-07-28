@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from source_identity_repair_executor import apply_plan_in_memory, production_apply_allowed
-from source_identity_repair_contract import verify_identity_repair_outcome
+from source_identity_repair_contract import row_fingerprint, verify_identity_repair_outcome
 
 TABLES = ("source_posts", "source_post_media")
 
@@ -21,15 +21,58 @@ def read_snapshot(client: Any) -> dict[str, list[dict[str, Any]]]:
     return {name: [dict(row) for row in client._ws(name).get_all_records()] for name in TABLES}
 
 
-def _update_cell_by_id(client: Any, audit: dict[str, Any]) -> None:
+def _worksheet_for_audit(client: Any, audit: dict[str, Any]):
     logical = audit["affected_row_type"] + "s" if audit["affected_row_type"] == "source_post" else "source_post_media"
-    key = "source_post_id" if logical == "source_posts" else "source_post_media_id"
-    ws = client._ws(logical)
-    headers = ws.row_values(1)
-    cell = ws.find(audit["affected_row_id"], in_column=headers.index(key) + 1)
-    if cell is None or audit["field"] not in headers:
+    return logical, client._ws(logical)
+
+
+def _find_sheet_row_by_fingerprint(ws: Any, fingerprint: str) -> tuple[int, list[str], list[str]]:
+    values = ws.get_all_values()
+    if not values:
+        raise RuntimeError("HEADER_ROW_MISSING")
+    headers = values[0]
+    matches = []
+    for row_number, values_row in enumerate(values[1:], start=2):
+        padded = list(values_row) + [""] * (len(headers) - len(values_row))
+        row = {header: padded[index] for index, header in enumerate(headers) if header}
+        if row_fingerprint(row) == fingerprint:
+            matches.append((row_number, headers, padded))
+    if len(matches) != 1:
+        raise RuntimeError("TARGET_ROW_FINGERPRINT_NOT_UNIQUELY_RESOLVABLE")
+    return matches[0]
+
+
+def _update_cell_by_audit(client: Any, audit: dict[str, Any]) -> None:
+    _, ws = _worksheet_for_audit(client, audit)
+    if not audit.get("row_fingerprint"):
+        raise RuntimeError("ROW_FINGERPRINT_REQUIRED_FOR_SHEETS_APPLY")
+    row_number, headers, _ = _find_sheet_row_by_fingerprint(ws, str(audit["row_fingerprint"]))
+    if audit["field"] not in headers:
         raise RuntimeError("TARGET_ROW_OR_FIELD_NOT_FOUND")
-    ws.update_cell(cell.row, headers.index(audit["field"]) + 1, audit["new_value"])
+    ws.update_cell(row_number, headers.index(audit["field"]) + 1, audit["new_value"])
+
+
+def _delete_row_by_audit(client: Any, audit: dict[str, Any]) -> dict[str, Any]:
+    _, ws = _worksheet_for_audit(client, audit)
+    row_number, headers, values = _find_sheet_row_by_fingerprint(ws, str(audit["row_fingerprint"]))
+    ws.delete_rows(row_number)
+    return {"logical": "source_posts" if audit["affected_row_type"] == "source_post" else "source_post_media", "row_number": row_number, "headers": headers, "values": values}
+
+
+def _rollback_applied(client: Any, applied: list[dict[str, Any]]) -> list[str]:
+    errors: list[str] = []
+    for item in reversed(applied):
+        try:
+            audit, receipt = item["audit"], item.get("receipt", {})
+            _, ws = _worksheet_for_audit(client, audit)
+            if audit["field"] == "__row__":
+                ws.insert_row(receipt["values"], index=receipt["row_number"], value_input_option="USER_ENTERED")
+            else:
+                row_number, headers, _ = _find_sheet_row_by_fingerprint(ws, str(audit["row_fingerprint"]))
+                ws.update_cell(row_number, headers.index(audit["field"]) + 1, audit["old_value"])
+        except Exception as exc:
+            errors.append(type(exc).__name__)
+    return errors
 
 
 def apply_to_sheets(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
@@ -40,12 +83,15 @@ def apply_to_sheets(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
     applied: list[dict[str, Any]] = []
     try:
         for audit in result["audit_records"]:
-            _update_cell_by_id(client, audit)
-            applied.append(audit)
+            receipt = _delete_row_by_audit(client, audit) if audit["field"] == "__row__" else _update_cell_by_audit(client, audit)
+            applied.append({"audit": audit, "receipt": receipt})
     except Exception as exc:
-        return {**result, "status": "PARTIAL_FAILED", "reason": type(exc).__name__, "applied_audit_records": applied}
+        rollback_errors = _rollback_applied(client, applied)
+        return {**result, "status": "PARTIAL_FAILED", "reason": type(exc).__name__, "applied_audit_records": [item["audit"] for item in applied], "rollback_attempted": True, "rollback_errors": rollback_errors}
     after = read_snapshot(client)
     verified = verify_identity_repair_outcome(plan, after)
+    if verified["status"] == "PASS":
+        client.log("source_identity_repair", "APPLIED", "Source identity repair verified", details=json.dumps({"repair_plan_id": plan.get("repair_plan_id", ""), "operation_count": len(result["audit_records"]), "before_hashes": [r.get("old_value", "") for r in result["audit_records"]], "after_verifier": "PASS"}, ensure_ascii=True))
     return {**result, "read_after_write": verified, "status": "APPLIED" if verified["status"] == "PASS" else "PARTIAL_FAILED"}
 
 
