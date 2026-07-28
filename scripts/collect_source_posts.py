@@ -117,6 +117,31 @@ def fetch_threads_post(url: str) -> dict[str, Any]:
         return {"ok": False, "text": "", "author_handle": "", "thumbnail_url": "", "raw": {"url": url}, "error": f"{type(exc).__name__}: {exc}"}
 
 
+def is_individual_post_url(url: str, platform: str) -> bool:
+    low = str(url).lower()
+    if platform == "threads":
+        return "/post/" in low
+    if platform == "x":
+        return "/status/" in low
+    return False
+
+
+def discover_threads_post_urls(account_url: str, *, limit: int) -> dict[str, Any]:
+    """Bounded public account-page discovery; never stores the account page as a post."""
+    req = urllib.request.Request(account_url, headers={"User-Agent": "Mozilla/5.0 (compatible; sns-growth-engine/2.0)"})
+    try:
+        with urllib.request.urlopen(req, timeout=PUBLIC_TIMEOUT_SECONDS) as res:
+            body = res.read(2_000_000).decode("utf-8", errors="replace")
+    except Exception as exc:
+        return {"status": "FALLBACK_REQUIRED", "urls": [], "reason": type(exc).__name__}
+    urls = []
+    for match in re.findall(r'https?://(?:www\.)?threads\.com/@[^\s"\\]+/post/[A-Za-z0-9_-]+', body):
+        clean = match.split("?")[0].rstrip("/\\")
+        if clean not in urls:
+            urls.append(clean)
+    return {"status": "DISCOVERED" if urls else "FALLBACK_REQUIRED", "urls": urls[:max(1, limit)], "reason": "" if urls else "browser_export_or_manual_json_required"}
+
+
 def plan_x_fetch_adapter(src: dict[str, Any], *, include_x: bool) -> dict[str, Any]:
     return {
         "source_id": src.get("source_id", ""),
@@ -264,7 +289,19 @@ def main() -> int:
         src_platform = str(src.get("source_platform", "")).lower()
         if src_platform == "x":
             x_adapter_plans.append(plan_x_fetch_adapter(src, include_x=args.include_x))
-            fetched = {}
+            # Account pages are discovery roots only. The real adapter accepts
+            # only individual /status/ URLs (or browser/manual export) and
+            # never turns a profile into a source post.
+            skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": "x_individual_post_or_browser_export_required"})
+            continue
+        elif src_platform == "threads" and not is_individual_post_url(url, "threads"):
+            discovery = discover_threads_post_urls(url, limit=args.limit) if args.fetch_real else {"status": "PLAN_ONLY", "urls": [], "reason": "fetch_real_required"}
+            for post_url in discovery["urls"]:
+                fetched = fetch_threads_post(post_url)
+                rows.append(normalize_source({**src, "source_url": post_url}, fetched))
+                archive_payloads.append(fetched.get("raw", {}))
+            skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": discovery["reason"] or "account_discovery_only"})
+            continue
         else:
             fetched = fetch_threads_post(url) if args.fetch_real and src_platform == "threads" else {}
         rows.append(normalize_source(src, fetched))

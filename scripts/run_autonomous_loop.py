@@ -372,7 +372,7 @@ def build_autonomous_plan(
     autonomous_sources = filter_autonomous_sources(pilot_plan, config)
     # The reference-analysis contract must retain approved video sources even
     # when the bounded text pilot selector chose other source types first.
-    for source in base_sources:
+    for source in base_sources if autonomous_sources["selected_count"] else []:
         if str(source.get("source_id", "")) != "src_lm_yt_cand_001":
             continue
         targets = source.get("target_account_ids") or []
