@@ -297,6 +297,12 @@ repair is outside this runner. Afterwards, use
 it emits old/new hashes, `applied_at`, and an independent verifier result. No
 plan or verifier command has a Sheets client or a write/apply mode.
 
+`scripts/apply_source_identity_repairs.py` is the only executor. It requires a
+reviewed plan, matching snapshot hashes, `ALLOW_SHEETS_IDENTITY_REPAIR=true`,
+`--apply`, and `--confirm-source-identity-repair`. It stops on a partial
+failure, emits a reverse rollback plan, and verifies a fresh post-apply
+snapshot. Do not invoke it until the single production-repair approval.
+
 Run on final `main`, with posting flags false.
 
 1. Verify Sheets schema and production integrity read-only.

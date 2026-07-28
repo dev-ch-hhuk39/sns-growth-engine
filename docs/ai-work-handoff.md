@@ -8,6 +8,20 @@
 
 ## 2026-07-28 Codex Metrics And PDCA Lifecycle (In Progress)
 
+## 2026-07-28 Codex Source Identity Repair Executor (In Progress)
+
+### 実装内容 / 安全境界
+
+- `apply_source_identity_repairs.py` を追加した。通常はread-only export JSONへのdry-runだけを行う。実Sheets applyはreviewed plan、`ALLOW_SHEETS_IDENTITY_REPAIR=true`、`--apply`、`--confirm-source-identity-repair`の全てが必要である。
+- apply前に全affected parentのbefore snapshot hashを検証する。不一致なら`BLOCKED_PRECONDITION`で一切書き込まない。
+- operationはplanにある親/child rowとfieldだけに限定する。部分失敗では残操作を止め、実行済み変更の逆順rollback planとauditを返す。apply後はfresh readでidentity verifierを実行する。
+
+### 変更 / テスト / 未完了
+
+- 追加: `scripts/source_identity_repair_executor.py`, `scripts/apply_source_identity_repairs.py`, executor contract test。
+- focused PASS: precondition match/mismatch、in-memory apply、before/after verifier、rollback plan、production gate、compile、diff check。
+- 未完了: production Sheetsへの修復は未実行。repair対象が最新read-only planで確定し、人間が一度承認した後のみapplyする。
+
 ### 実装内容 / 安全境界
 
 - `run_pdca_cycle.py --use-sheets` は`posted_results`をread-onlyで読み、`metrics_status=MEASURED`の結果だけをPDCA入力にする。PARTIAL/UNAVAILABLE/PENDINGとunknown値を0へ捏造しない。
