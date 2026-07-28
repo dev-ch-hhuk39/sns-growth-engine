@@ -30,7 +30,7 @@ def classify_no_post_reason(value: str) -> str:
         return "THREADS_API_RUNTIME_ERROR"
     return "OTHER_REDACTED"
 
-def extract_stale_slot_ids(values) -> list[str]:
+def extract_stale_slot_labels(values) -> list[str]:
     if not isinstance(values, list):
         return []
 
@@ -44,8 +44,10 @@ def extract_stale_slot_ids(values) -> list[str]:
         else:
             slot_id = ""
 
-        if slot_id and slot_id not in result:
-            result.append(slot_id)
+        if slot_id:
+            label = f"STALE_SLOT_{len(result) + 1}"
+            if label not in result:
+                result.append(label)
 
     return result
 
@@ -126,22 +128,20 @@ def build_safe_summary(report: dict) -> dict:
         if not isinstance(failure, dict):
             safe_reason = "UNKNOWN_PARENT_INTEGRITY_FAILURE"
             account_id = ""
-            failure_id = ""
         else:
             reason = str(failure.get("reason", ""))
             safe_reason = reason if reason in allowed_parent_integrity_reasons else "UNKNOWN_PARENT_INTEGRITY_FAILURE"
             account_id = str(failure.get("account_id", ""))
-            failure_id = str(failure.get("id", ""))
 
         parent_integrity_failures_safe.append({
-            "id": failure_id,
+            "failure_label": f"PARENT_FAILURE_{len(parent_integrity_failures_safe) + 1}",
             "reason": safe_reason,
             "account_id": account_id
         })
 
     # Process stale slots
     stale_slots_raw = ig.get("stale_inflight_slots", [])
-    stale_slots_safe = extract_stale_slot_ids(stale_slots_raw)
+    stale_slots_safe = extract_stale_slot_labels(stale_slots_raw)
     stale_slot_count = (
         len(stale_slots_raw)
         if isinstance(stale_slots_raw, list)
@@ -205,13 +205,13 @@ def build_safe_summary(report: dict) -> dict:
                 "status": night_pr.get("status", "BLOCKED"),
                 "required_count": len(night_pr.get("required_source_ids", [])),
                 "valid_count": len(night_pr.get("valid_source_ids", [])),
-                "missing_or_invalid_source_ids": night_pr.get("missing_or_invalid_source_ids", [])
+                "missing_or_invalid_count": len(night_pr.get("missing_or_invalid_source_ids", []))
             },
             "liver_manager": {
                 "status": liver_pr.get("status", "BLOCKED"),
                 "required_count": len(liver_pr.get("required_source_ids", [])),
                 "valid_count": len(liver_pr.get("valid_source_ids", [])),
-                "missing_or_invalid_source_ids": liver_pr.get("missing_or_invalid_source_ids", [])
+                "missing_or_invalid_count": len(liver_pr.get("missing_or_invalid_source_ids", []))
             }
         },
         "permission_warnings": permission_warnings,
@@ -229,7 +229,7 @@ def build_safe_summary(report: dict) -> dict:
         },
         "stale_slots": {
             "count": stale_slot_count,
-            "slot_run_ids": stale_slots_safe
+            "labels": stale_slots_safe
         },
         "missing_tabs": report.get("missing_tabs", []),
         "read_errors": [{"tab": e.get("tab", ""), "error_type": e.get("error_type", "")} for e in report.get("read_errors", [])]
@@ -262,16 +262,16 @@ def render_markdown_summary(summary: dict) -> str:
         "",
         "### Permissions",
         f"**Night permission status**: {summary.get('permission_requirements', {}).get('night_scout', {}).get('status')}",
-        f"**Night permission missing IDs**: {summary.get('permission_requirements', {}).get('night_scout', {}).get('missing_or_invalid_source_ids')}",
+        f"**Night permission missing count**: {summary.get('permission_requirements', {}).get('night_scout', {}).get('missing_or_invalid_count')}",
         f"**Liver permission status**: {summary.get('permission_requirements', {}).get('liver_manager', {}).get('status')}",
-        f"**Liver permission missing IDs**: {summary.get('permission_requirements', {}).get('liver_manager', {}).get('missing_or_invalid_source_ids')}",
+        f"**Liver permission missing count**: {summary.get('permission_requirements', {}).get('liver_manager', {}).get('missing_or_invalid_count')}",
         f"**Permission warnings**: {summary.get('permission_warnings', [])}",
         "",
         "### Integrity",
         f"**Duplicate queue count**: {summary.get('integrity', {}).get('duplicate_queue_count')}",
         f"**Duplicate slot count**: {summary.get('integrity', {}).get('duplicate_slot_key_count')}",
         f"**Stale slot count**: {summary.get('integrity', {}).get('stale_inflight_slot_count')}",
-        f"**Stale slot IDs**: {summary.get('stale_slots', {}).get('slot_run_ids')}",
+        f"**Stale slot labels**: {summary.get('stale_slots', {}).get('labels')}",
         f"**Unauthorized READY media count**: {summary.get('integrity', {}).get('unauthorized_ready_media_count')}",
         f"**Parent integrity failure count**: {summary.get('integrity', {}).get('parent_integrity_failure_count')}",
         f"**Parent integrity reason counts**: {summary.get('parent_integrity', {}).get('reason_counts')}",
