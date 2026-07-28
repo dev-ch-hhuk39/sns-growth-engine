@@ -20,6 +20,8 @@ class PublishResult:
     external_post_id: str | None = None
     message: str = ""
     raw_response: dict | None = None
+    delivery_state: str = "NOT_ATTEMPTED"
+    container_id: str | None = None
 
     @property
     def is_dry_run_ok(self) -> bool:

@@ -44,6 +44,7 @@ FINAL_OR_LOCKED_STATUSES = {
     "FAILED",
     "POSTED_SAVE_FAILED",
     "POSTED_SAVE_UNVERIFIED",
+    "PUBLISH_OUTCOME_UNVERIFIED",
     "DUPLICATE_BLOCKED",
 }
 BEAUTY_BLOCKED = {"beauty_account"}
@@ -621,6 +622,14 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )
     if not result.success:
+        if result.delivery_state == "CONTAINER_CREATED_PUBLISH_UNVERIFIED":
+            update_row(client, "queue", "queue_id", queue_id, {
+                "status": "PUBLISH_OUTCOME_UNVERIFIED",
+                "error": "CONTAINER_CREATED_PUBLISH_UNVERIFIED",
+                "processed_at": now_iso(),
+            })
+            log_event(client, account_id, "PUBLISH_OUTCOME_UNVERIFIED", "Container exists; do not retry before manual outcome verification", {"queue_id": queue_id, "container_created": True})
+            return {"status": "PUBLISH_OUTCOME_UNVERIFIED", "reason": "MANUAL_OUTCOME_VERIFICATION_REQUIRED", "queue_id": queue_id}
         update_row(client, "queue", "queue_id", queue_id, {
             "status": "FAILED",
             "error": f"THREADS_API_FAILED: {result.message}",

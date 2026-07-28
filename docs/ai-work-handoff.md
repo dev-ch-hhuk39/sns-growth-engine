@@ -12,6 +12,20 @@
 
 ## 2026-07-28 Codex Source Discovery Parent Integrity (In Progress)
 
+## 2026-07-28 Codex Unified Publisher Container State (In Progress)
+
+### 実装内容 / 安全境界
+
+- `PublishResult`は`delivery_state`と`container_id`を持つ。Threads publisherはtext/image/video/carouselのcontainer作成失敗、container作成済みpublish outcome未確定、publish成功を区別する。
+- `CONTAINER_CREATED_PUBLISH_UNVERIFIED`はworkerで`PUBLISH_OUTCOME_UNVERIFIED`へ固定し、既にremote publishされた可能性があるためretryしない。
+- image/video/carouselの既存gate、public text validator、X/beauty block、read-after-writeは維持している。今回実投稿は行っていない。
+
+### 変更 / テスト / 未完了
+
+- 更新: `src/publishers/base.py`, `src/publishers/threads_publisher.py`, `scripts/process_threads_queue.py`。追加: delivery state test。
+- focused PASS: container create failure、publish timeout ambiguity、media dry-run、queue worker、compile、diff check。
+- 未完了: Threads Graph APIの実canaryで各formatのcontainer/publish/read-after-write証跡を取得すること。
+
 ### 実装内容 / 安全境界
 
 - approved source discoveryはYouTube channel/TikTok account/Threads profileのトップURLを投稿recordに保存しない。個別`watch`/`shorts`/`video`/`post` URLだけをsource post候補として扱う。

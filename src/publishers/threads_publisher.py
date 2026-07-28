@@ -308,6 +308,7 @@ class ThreadsPublisher(BasePublisher):
             )
 
         # ---- 実投稿: 2ステップ ----
+        container_id = ""
         try:
             if carousel:
                 container_id = _create_carousel_container(user_id, access_token, text, urls, types)
@@ -317,7 +318,6 @@ class ThreadsPublisher(BasePublisher):
                 _wait_for_video_container(container_id, access_token)
             else:
                 time.sleep(1)
-            result = _publish_container(user_id, access_token, container_id)
         except Exception as exc:
             # requests exceptions may include a URL containing query credentials.
             # Never serialize the exception string into queue/log output.
@@ -327,6 +327,20 @@ class ThreadsPublisher(BasePublisher):
                 dry_run=False,
                 message=f"FAIL: Threads API エラー: {type(exc).__name__} (queue_id={queue_id})",
                 raw_response=None,
+                delivery_state="CONTAINER_CREATE_FAILED" if not container_id else "CONTAINER_CREATED_NOT_PUBLISHABLE",
+                container_id=container_id or None,
+            )
+        try:
+            result = _publish_container(user_id, access_token, container_id)
+        except Exception as exc:
+            return PublishResult(
+                platform="threads",
+                success=False,
+                dry_run=False,
+                message=f"FAIL: Threads publish outcome is unverified: {type(exc).__name__} (queue_id={queue_id})",
+                raw_response=None,
+                delivery_state="CONTAINER_CREATED_PUBLISH_UNVERIFIED",
+                container_id=container_id,
             )
 
         post_id = result.get("id", "")
@@ -357,4 +371,6 @@ class ThreadsPublisher(BasePublisher):
                 f"{url_note}"
             ),
             raw_response=result,
+            delivery_state="PUBLISHED",
+            container_id=container_id,
         )
