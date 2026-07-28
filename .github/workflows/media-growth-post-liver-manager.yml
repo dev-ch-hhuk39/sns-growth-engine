@@ -74,7 +74,7 @@ jobs:
         run: python3 scripts/check_schedule_window.py --slot-id lm_1800_clip_media --write-github-output
       - name: Dry-run saved media plan
         if: github.event.inputs.manual_e2e_proof != 'true'
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --post-saved-media --fallback-to-text --dry-run --use-sheets
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --post-saved-media --dry-run --use-sheets
       - name: Dry-run manual E2E saved media proof
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.manual_e2e_proof == 'true'
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --post-saved-media --dry-run --use-sheets
@@ -111,7 +111,7 @@ jobs:
           ALLOW_CLOUDINARY_UPLOAD: "false"
           ALLOW_TRANSCRIPTION_API: "false"
           FORCE_TEXT_ONLY_FALLBACK: ${{ steps.media_budget.outcome != 'success' }}
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --post-saved-media --fallback-to-text --apply --confirm-production-media --use-sheets
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --post-saved-media --apply --confirm-production-media --use-sheets
       - name: Post one manual E2E saved media proof
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.manual_e2e_proof == 'true' && github.event.inputs.dry_run_only != 'true'
         env:

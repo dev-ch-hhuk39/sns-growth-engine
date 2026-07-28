@@ -217,7 +217,7 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             cron = 'cron: "4 7 * * *"' if account_id == "liver_manager" else 'cron: "2 9 * * *"'
             checks.append((f"{name} [schedule] fixed direct-media account", f'ACCOUNT_ID: "{account_id}"' in text))
             checks.append((f"{name} [schedule] direct-media slot cron", cron in text))
-            checks.append((f"{name} [schedule] prepared-only dispatch and fallback", "Dry-run prepared inventory" in text and "--post-ready" in text and "--fallback-to-text" in text and "acquire_approved_source_posts.py" not in text and "ingest_direct_reference_media.py" not in text))
+            checks.append((f"{name} [schedule] prepared-only dispatch without text fallback", "Dry-run prepared inventory" in text and "--post-ready" in text and "--fallback-to-text" not in text and "acquire_approved_source_posts.py" not in text and "ingest_direct_reference_media.py" not in text))
             checks.append((f"{name} [schedule] delayed schedule remains dispatchable", "Diagnose schedule delay" in text and "steps.schedule_window.outputs.in_window" not in text))
             checks.append((f"{name} [schedule] scoped media posting gates", all(flag in text for flag in ['PUBLISH_ENABLED: "true"', 'ALLOW_REAL_THREADS_POST: "true"', 'ALLOW_MEDIA_POSTS: "true"', 'ALLOW_REAL_THREADS_VIDEO_POST: "true"'])))
             checks.append((f"{name} [schedule] no download/cut/upload", all(flag in text for flag in ['ALLOW_VIDEO_DOWNLOAD: "false"', 'ALLOW_VIDEO_CUT: "false"', 'ALLOW_CLOUDINARY_UPLOAD: "false"'])))

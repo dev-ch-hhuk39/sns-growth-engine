@@ -9,12 +9,9 @@
     "risk_score_max": 10,
     "similarity_to_source_max": 0.45
   },
-  "account_rotation": {
-    "account_rotation_enabled": true,
-    "rotation_accounts": ["night_scout", "liver_manager"],
-    "rotation_strategy": "alternate_by_last_posted_account",
-    "fallback_to_available_account": true,
-    "last_posted_account_hint_for_dry_run": "night_scout"
+  "account_execution": {
+    "independent_account_runs": true,
+    "cross_account_rotation": false
   },
   "accounts": {
     "night_scout": {

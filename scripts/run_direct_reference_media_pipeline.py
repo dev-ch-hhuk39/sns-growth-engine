@@ -683,7 +683,6 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-direct-media", action="store_true")
-    parser.add_argument("--fallback-to-text", action="store_true")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--prepare-only", action="store_true", help="create READY inventory; never call Threads")
     mode.add_argument("--post-ready", action="store_true", help="dispatch precomputed READY inventory only")
@@ -709,12 +708,13 @@ def main() -> int:
         if args.apply and client and plan.get("status") == "WILL_APPLY":
             plan = prepare(plan, client) if args.prepare_only else execute(plan, client)
     plan = normalize_prepare_only_outcome(plan, prepare_only=args.prepare_only)
-    if args.apply and client and plan.get("status") in {"NO_POST", "FAILED", "BLOCKED", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"} and args.fallback_to_text:
-        if args.manual_e2e_proof:
-            print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["manual_e2e_proof cannot use scheduled text fallback"]}, ensure_ascii=False)); return 1
-        from run_slot_text_fallback import build_plan as fallback_plan, execute as fallback_execute
-        fallback = fallback_execute(fallback_plan(args.account_id, args.slot_id, f"direct_reference_media_primary_{str(plan.get('status')).lower()}", apply=True), client)
-        plan = {**plan, "status": fallback.get("status", "FAILED"), "fallback": fallback}
+    if plan.get("status") in {"NO_POST", "FAILED", "BLOCKED", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"} and args.slot_id:
+        plan = {
+            **plan,
+            "status": "SKIPPED_NO_VALID_MEDIA",
+            "no_post_reason": "media_slot_has_no_ready_direct_media",
+            "would_post": False,
+        }
     def safe_output(value: Any) -> Any:
         if isinstance(value, dict):
             return {

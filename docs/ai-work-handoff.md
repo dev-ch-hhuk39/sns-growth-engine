@@ -1,3 +1,37 @@
+## 2026-07-28 Codex Independent Slot Contracts (In Progress)
+
+### 本システムについて
+
+- Night Scout と Liver Manager は、共通の安全ゲートを使いながら、投稿枠・日次上限・cooldownをアカウント単位で扱う。X と `beauty_account` は引き続き対象外。
+- メディア枠はメディア専用。READYメディアがなければ `SKIPPED_NO_VALID_MEDIA` を記録し、textへ自動変換しない。
+
+### 現在HEAD / 作業ブランチ
+
+- 開始main: `582e26303d38f4b59c99b6ce8405b1b47c8df98d`。
+- 作業ブランチ: `feature/independent-slot-contracts`。
+- PR #38 は通常マージ済み。post-merge CIは実行中であり、結果を次チェックポイントで確認する。
+
+### 変更ファイル一覧 / 実装内容
+
+- `config/autonomous_mode.json`, `config/post_generation_rules.json`: cross-account rotationを削除し、independent account runsを明示。
+- `config/content_schedule.json`: direct/clip media枠のtext fallbackを削除。
+- `scripts/run_autonomous_loop.py`, `scripts/public_post_quality.py`: account historyで他アカウントを後回しにしない実行順へ変更。
+- `scripts/run_slot_text_fallback.py`, `scripts/backfill_missed_content_slots.py`, media runners/workflows: media枠は `SKIPPED_NO_VALID_MEDIA` のみ。
+- 追加テストはmedia text fallback禁止と両アカウント独立実行を固定する。
+
+### 未完了事項 / 残WARN / スケール方針
+
+- completed capability matrix、shared persona validator、direct-media/clip E2E、metrics/PDCA、Sheets repairは未完了。コードがあるだけでは本番PASSにしない。
+- production Sheetsのidentity repair、source/permission実書込み、外部取得、文字起こし、cut、Cloudinary、Threads投稿は人間承認直前まで未実行。
+- Node 20 deprecation annotationは環境WARN。機能失敗ではない。
+
+### テスト結果 / 次AIへの引き継ぎ
+
+- focused: media-slot fallback、schedule/workflow safety、recovery、slot idempotency はPASS。full suite/PR CIは次に実行。
+- 次に触ってよい: `config/goal_acceptance.json`, capability matrix/evaluator, `scripts/public_post_quality.py`, generation/publisher/metrics contracts, relevant tests/docs。
+- 触らない方がよい: `.env`, `data`, `output`, production credential files、実行時の秘密情報、X/beauty運用コード。
+- 次AI: current branchのfocused testsとCIを終え通常merge後、Goalの拡張受入基準と機械可読matrixを先に実装すること。
+
 ## 2026-07-26 Antigravity WP3-C Production Repair Plan
 
 - design authority: ChatGPT lead review

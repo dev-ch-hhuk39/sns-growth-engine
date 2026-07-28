@@ -90,7 +90,7 @@ ACCOUNT_TERMS = {
 
 def load_post_generation_rules(path: Path = RULES_FILE) -> dict[str, Any]:
     if not path.exists():
-        return {"quality_thresholds": {}, "accounts": {}, "account_rotation": {}}
+        return {"quality_thresholds": {}, "accounts": {}, "account_execution": {}}
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -781,54 +781,15 @@ def reader_facing_template_count(account_id: str) -> int:
     return 25
 
 
-def last_posted_account(posted_rows: list[dict[str, Any]], rotation_accounts: list[str]) -> str:
-    latest: tuple[datetime, str] | None = None
-    allowed = set(rotation_accounts)
-    for row in posted_rows:
-        account_id = str(row.get("account_id", ""))
-        if account_id not in allowed:
-            continue
-        if str(row.get("platform", "")).lower() not in {"", "threads"}:
-            continue
-        if str(row.get("status", "")).upper() not in {"POSTED", "RECOVERED", ""}:
-            continue
-        raw = str(row.get("posted_at") or row.get("created_at") or row.get("collected_at") or "")
-        try:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            dt = datetime.min.replace(tzinfo=timezone.utc)
-        if latest is None or dt > latest[0]:
-            latest = (dt, account_id)
-    return latest[1] if latest else ""
-
-
-def account_rotation_order(
-    accounts: list[str],
-    config: dict[str, Any],
-    posted_rows: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    rotation = config.get("account_rotation_strategy", {})
-    enabled = bool(rotation.get("account_rotation_enabled", False))
-    rotation_accounts = [a for a in rotation.get("rotation_accounts", accounts) if a in accounts]
-    if not enabled or not rotation_accounts:
-        return {"enabled": False, "ordered_accounts": accounts, "selected_account": accounts[0] if accounts else "", "skipped_accounts": []}
-    last = last_posted_account(posted_rows or [], rotation_accounts)
-    if not last:
-        last = str(rotation.get("last_posted_account_hint_for_dry_run", ""))
-    if last in rotation_accounts and len(rotation_accounts) > 1:
-        preferred = [a for a in rotation_accounts if a != last] + [last]
-    else:
-        preferred = rotation_accounts
-    rest = [a for a in accounts if a not in preferred]
-    ordered = preferred + rest
+def independent_account_order(accounts: list[str]) -> dict[str, Any]:
+    """Keep account execution independent; posting history never reorders accounts."""
     return {
         "enabled": True,
-        "strategy": rotation.get("rotation_strategy", "alternate_by_last_posted_account"),
-        "last_posted_account": last,
-        "ordered_accounts": ordered,
-        "selected_account": ordered[0] if ordered else "",
-        "skipped_accounts": [{"account_id": a, "reason": "account_rotation_not_first"} for a in ordered[1:]],
-        "fallback_to_available_account": bool(rotation.get("fallback_to_available_account", True)),
+        "strategy": "independent_account_runs",
+        "ordered_accounts": list(accounts),
+        "selected_account": accounts[0] if len(accounts) == 1 else "",
+        "skipped_accounts": [],
+        "cross_account_rotation": False,
     }
 
 

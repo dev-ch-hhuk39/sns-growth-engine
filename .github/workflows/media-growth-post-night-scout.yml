@@ -64,7 +64,7 @@ jobs:
         continue-on-error: true
         run: python3 scripts/check_schedule_window.py --slot-id ns_2100_clip_media --write-github-output
       - name: Dry-run saved media plan
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --post-saved-media --fallback-to-text --dry-run --use-sheets
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --post-saved-media --dry-run --use-sheets
       - name: Check free-tier media budget
         id: media_budget
         continue-on-error: true
@@ -98,7 +98,7 @@ jobs:
           ALLOW_CLOUDINARY_UPLOAD: "false"
           ALLOW_TRANSCRIPTION_API: "false"
           FORCE_TEXT_ONLY_FALLBACK: ${{ steps.media_budget.outcome != 'success' }}
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --post-saved-media --fallback-to-text --apply --confirm-production-media --use-sheets
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --post-saved-media --apply --confirm-production-media --use-sheets
       - name: Health summary
         if: always()
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

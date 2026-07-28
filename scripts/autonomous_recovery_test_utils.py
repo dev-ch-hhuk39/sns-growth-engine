@@ -181,7 +181,7 @@ def test_account_specific_run_does_not_rotate_away() -> None:
     lm = build_autonomous_plan("liver_manager")
     assert ns["accounts"] == ["night_scout"]
     assert ns["selected_account"] == "night_scout"
-    assert ns["account_rotation"]["strategy"] == "fixed_account_override"
+    assert ns["account_execution"]["strategy"] == "fixed_account_override"
     assert lm["accounts"] == ["liver_manager"]
     assert lm["selected_account"] == "liver_manager"
 

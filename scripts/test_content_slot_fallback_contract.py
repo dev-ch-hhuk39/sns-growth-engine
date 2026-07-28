@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Focused regression checks for the five-slot fallback contract."""
+"""Text slots may recover with text; media slots must never do so."""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -14,5 +14,7 @@ for account, slots in schedule.items():
     for slot in slots:
         if slot["post_type"] in {"direct_reference_media", "generated_clip_media"}:
             plan = build_plan(account, slot["slot_id"], "asset_unavailable", apply=False)
-            assert plan["status"] == "PLAN_ONLY" and plan["public_post_preview"]
+            assert plan["status"] == "SKIPPED_NO_VALID_MEDIA", plan
+            assert plan["would_post"] is False, plan
+            assert "media_slot_text_fallback_forbidden" in plan["blocked_reasons"], plan
 print("PASS test_content_slot_fallback_contract.py")
