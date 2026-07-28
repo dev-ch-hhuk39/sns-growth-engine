@@ -1330,6 +1330,8 @@
       "clip_enabled": false, "transcript_enabled": false, "generated_clip_candidate_enabled": false,
       "target_platforms": ["threads"], "target_generation_modes": ["reference_based", "original_hypothesis"],
       "max_items_per_run": 10, "auto_priority_change_allowed": false,
+      "priority": 50,
+      "subject_policy": {"require_transform": true, "no_suspicious_income_claims": true, "no_aggressive_recruiting": true},
       "notes": "User-approved Liver Manager Threads reference. Direct media remains blocked unless matching approved media_permissions permits Liver Manager Threads use. Never use for transcript, clips, ffmpeg, generated clips, or X posting."
     },
     {
