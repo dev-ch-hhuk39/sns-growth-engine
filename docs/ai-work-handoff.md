@@ -39,6 +39,19 @@
 - focused PASS: 22 code path evidence、0 production evidence fail-closed、compile、diff check。
 - 未完了: 両account各4件のbounded canaryでpublic URL、Sheets read-after-write、Cloudinary/asset provenance、metrics evidenceを取得した時だけ該当production capabilityをPASSにする。
 
+## 2026-07-28 Codex Eight-Item Media Canary Plan (In Progress)
+
+### 実装内容 / 安全境界
+
+- `build_bounded_media_canary_plan.py`はNight Scout/Liver Manager各4件（direct image/direct video/direct carousel/generated clip）、合計8件を明示する。候補が無ければ`PENDING_EVIDENCE`で、placeholderを投稿候補にしない。
+- 各canaryはapproved rights、permission evidence、parent/source identity、public post text、read-after-write、24h/72h/7d metrics jobを要求する。出力は常にPLAN_ONLYでfetch/write/upload/postはfalse。
+
+### 変更 / テスト / 未完了
+
+- 追加: bounded canary plan CLIとfixture contract test。
+- focused PASS: 8件固定、evidence欠損BLOCK、approved candidate readiness、no-side-effect、compile、diff check。
+- 未完了: human-approved source/permission ledgerとcandidate recordをread-onlyで確定し、最終承認後に各canary最大1回だけを実行すること。
+
 ## 2026-07-28 Codex Shared Persona Validator (In Progress)
 
 ## 2026-07-28 Codex Completion Matrix And Additive Goal Contract (In Progress)
