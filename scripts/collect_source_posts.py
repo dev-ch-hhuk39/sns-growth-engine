@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Plan/apply safe reference-source collection.
 
-Only fetch_enabled=true sources are eligible. manual_only sources and X sources
-are skipped by default. This script does not download media.
+Only fetch_enabled=true sources are eligible. X remains skipped by default;
+the one explicitly approved bounded read-only source requires --include-x.
+This script does not download media.
 """
 from __future__ import annotations
 
@@ -66,7 +67,7 @@ def adapter_status() -> dict[str, str]:
         "agent_reach": "installed" if shutil.which("agent-reach") else "optional_not_installed",
         "cli_anything": "installed" if shutil.which("cli-anything") else "optional_not_installed",
         "threads_public_og": "wired",
-        "x_fetch": "blocked_by_default",
+        "x_fetch": "bounded_read_only_with_explicit_include_x",
     }
 
 
@@ -148,8 +149,8 @@ def plan_x_fetch_adapter(src: dict[str, Any], *, include_x: bool) -> dict[str, A
         "source_id": src.get("source_id", ""),
         "platform": "x",
         "adapter": "tweepy",
-        "status": "BLOCKED" if not include_x else "PLAN_ONLY",
-        "reason": "X fetch is disabled by default; no API call is made",
+        "status": "BLOCKED" if not include_x else "READY_FOR_BOUNDED_READ_ONLY_FETCH",
+        "reason": "--include-x is required; real collection also requires the read-only bearer token",
         "installed": importlib.util.find_spec("tweepy") is not None,
     }
 
@@ -169,7 +170,8 @@ def fetch_x_account_posts(src: dict[str, Any], *, limit: int) -> dict[str, Any]:
         if not user or not user.data:
             return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": "x_user_not_found"}
         response = client.get_users_tweets(user.data.id, max_results=max(5, min(limit, 20)), tweet_fields=["created_at", "attachments"], expansions=["attachments.media_keys"], media_fields=["type", "url", "preview_image_url"])
-        media = {m.media_key: m for m in (response.includes or {}).get("media", [])}
+        includes = getattr(response, "includes", None) or {}
+        media = {m.media_key: m for m in includes.get("media", [])}
         rows = []
         for tweet in response.data or []:
             media_urls = []
@@ -213,10 +215,14 @@ def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: 
 def normalize_source(src: dict[str, Any], fetched: dict[str, Any] | None = None) -> dict[str, Any]:
     url = src.get("url") or src.get("source_url") or src.get("canonical_url") or ""
     fetched = fetched or {}
-    digest = hashlib.sha1(url.encode("utf-8")).hexdigest()[:12] if url else datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-    media_urls = [fetched.get("thumbnail_url")] if fetched.get("thumbnail_url") else []
+    external_post_id = str(fetched.get("external_post_id", "")).strip()
+    digest_input = external_post_id or url
+    digest = hashlib.sha1(digest_input.encode("utf-8")).hexdigest()[:12] if digest_input else datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    media_urls = list(fetched.get("media_urls") or [])
+    if not media_urls and fetched.get("thumbnail_url"):
+        media_urls = [fetched["thumbnail_url"]]
     return {
-        "post_id": f"sap_{digest}",
+        "post_id": external_post_id or f"sap_{digest}",
         "source_id": src.get("source_id", ""),
         "account_id": ",".join(src.get("target_account_ids") or [src.get("target_account_id", "")]),
         "source_platform": src.get("source_platform", ""),
@@ -235,6 +241,9 @@ def normalize_source(src: dict[str, Any], fetched: dict[str, Any] | None = None)
         "status": "COLLECTED" if fetched.get("ok") else "UNAVAILABLE",
         "collected_at": now_iso(),
         "post_url": url,
+        "external_post_id": external_post_id,
+        "published_at": str(fetched.get("published_at", "")),
+        "media_order": json.dumps(list(range(len(media_urls))), ensure_ascii=False),
         "use_status": "REFERENCE_ONLY",
         "rights_status": THIRD_PARTY_REFERENCE_ONLY,
         "can_reuse_media": "false",
@@ -260,6 +269,65 @@ def dedupe_rows(rows: list[dict[str, Any]], existing_urls: set[str] | None = Non
     return deduped, skipped
 
 
+def source_post_bundle(row: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Preserve one fetched post and its ordered media under one parent id."""
+    canonical_url = str(row.get("post_url", "")).split("?")[0].rstrip("/")
+    external_id = str(row.get("external_post_id") or row.get("post_id") or "")
+    source_id = str(row.get("source_id", ""))
+    parent_id = f"sp_{source_id}_{external_id or hashlib.sha1(canonical_url.encode()).hexdigest()[:12]}"
+    urls = json.loads(str(row.get("media_urls") or "[]"))
+    parent = {
+        "source_post_id": parent_id, "source_id": source_id, "source_account_id": source_id,
+        "target_account_id": str(row.get("account_id", "")).split(",")[0],
+        "platform": row.get("source_platform", ""), "canonical_post_url": canonical_url,
+        "external_post_id": external_id, "original_post_text": row.get("post_text", ""),
+        "published_at": row.get("published_at", ""), "discovered_at": row.get("collected_at", now_iso()),
+        "media_count": str(len(urls)), "media_type": "mixed_carousel" if len(urls) > 1 else ("image_or_video" if urls else ""),
+        "author_handle": row.get("source_handle", ""), "media_items_json": row.get("media_urls", "[]"),
+        "rights_status": THIRD_PARTY_REFERENCE_ONLY, "permission_status": "unknown",
+        "permission_scope": "", "direct_media_reuse_allowed": "false", "collection_status": "COLLECTED",
+        "processing_status": "REFERENCE_ONLY", "content_hash": hashlib.sha256(str(row.get("post_text", "")).encode()).hexdigest(),
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    children = [{
+        "source_post_media_id": f"spm_{parent_id}_{index}", "source_post_id": parent_id,
+        "media_index": str(index), "original_media_url": media_url, "canonical_post_url": canonical_url,
+        "acquisition_method": "reference_metadata_only", "media_type": "unknown", "rights_status": THIRD_PARTY_REFERENCE_ONLY,
+        "permission_status": "unknown", "reuse_status": "REFERENCE_ONLY", "created_at": now_iso(), "updated_at": now_iso(),
+    } for index, media_url in enumerate(urls) if str(media_url).startswith("http")]
+    return parent, children
+
+
+def load_manual_export(path: str, *, platform: str) -> tuple[list[dict[str, Any]], str]:
+    """Load a bounded browser/manual export without accepting profile URLs.
+
+    The file is deliberately opt-in.  It may contain a JSON list, or an object
+    with ``posts``/``items``. Each item must carry an individual post URL.
+    """
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [], f"manual_json_invalid:{type(exc).__name__}"
+    items = payload if isinstance(payload, list) else payload.get("posts", payload.get("items", [])) if isinstance(payload, dict) else []
+    if not isinstance(items, list):
+        return [], "manual_json_posts_list_required"
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        post_url = str(item.get("post_url") or item.get("url") or "").split("?")[0].rstrip("/")
+        if not is_individual_post_url(post_url, platform):
+            continue
+        rows.append({
+            "post_url": post_url,
+            "external_post_id": str(item.get("external_post_id") or item.get("post_id") or ""),
+            "text": str(item.get("text") or item.get("post_text") or ""),
+            "published_at": str(item.get("published_at") or item.get("created_at") or ""),
+            "media_urls": list(item.get("media_urls") or []),
+        })
+    return rows, ""
+
+
 def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> int:
     if not rows:
         return 0
@@ -272,6 +340,24 @@ def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> int:
     return len(to_append)
 
 
+def _append_source_post_bundles(client: Any, rows: list[dict[str, Any]]) -> dict[str, int]:
+    """Append only missing source-post parents and their own ordered children."""
+    parents = [source_post_bundle(row)[0] for row in rows if is_individual_post_url(str(row.get("post_url", "")), str(row.get("source_platform", "")))]
+    children = [child for row in rows for child in source_post_bundle(row)[1] if is_individual_post_url(str(row.get("post_url", "")), str(row.get("source_platform", "")))]
+    post_ws = client._ws("source_posts")
+    media_ws = client._ws("source_post_media")
+    post_headers, media_headers = post_ws.row_values(1), media_ws.row_values(1)
+    known_posts = {str(item.get("canonical_post_url", "")) for item in post_ws.get_all_records()}
+    known_media = {str(item.get("source_post_media_id", "")) for item in media_ws.get_all_records()}
+    new_parents = [row for row in parents if str(row["canonical_post_url"]) not in known_posts]
+    new_children = [row for row in children if str(row["source_post_media_id"]) not in known_media]
+    if new_parents:
+        post_ws.append_rows([[str(row.get(header, "")) for header in post_headers] for row in new_parents], value_input_option="USER_ENTERED")
+    if new_children:
+        media_ws.append_rows([[str(row.get(header, "")) for header in media_headers] for row in new_children], value_input_option="USER_ENTERED")
+    return {"source_posts_appended": len(new_parents), "source_post_media_appended": len(new_children)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="collect reference source posts safely")
     parser.add_argument("--platform", default="all", choices=["threads", "x", "youtube", "tiktok", "all"])
@@ -279,6 +365,7 @@ def main() -> int:
     parser.add_argument("--include-x", action="store_true")
     parser.add_argument("--source-id", action="append", default=[])
     parser.add_argument("--source-url", action="append", default=[], help="Ephemeral Threads source URL for small dry-run/approved tests")
+    parser.add_argument("--manual-json", default="", help="bounded browser/manual JSON fallback; individual post URLs only")
     parser.add_argument("--fetch-real", action="store_true", help="Fetch public Threads page metadata/text")
     parser.add_argument("--show-adapter-status", action="store_true")
     parser.add_argument("--limit", type=int, default=4)
@@ -313,6 +400,12 @@ def main() -> int:
     rows = []
     archive_payloads = []
     x_adapter_plans = []
+    manual_rows: list[dict[str, Any]] = []
+    if args.manual_json:
+        manual_platform = args.platform if args.platform in {"x", "threads"} else "threads"
+        manual_rows, manual_reason = load_manual_export(args.manual_json, platform=manual_platform)
+        if manual_reason:
+            skipped.append({"source_id": "manual_json", "url": args.manual_json, "reason": manual_reason})
     for src in selected:
         url = src.get("url") or src.get("source_url") or src.get("canonical_url") or ""
         src_platform = str(src.get("source_platform", "")).lower()
@@ -324,7 +417,7 @@ def main() -> int:
             if args.include_x and args.fetch_real:
                 outcome = fetch_x_account_posts(src, limit=args.limit)
                 for item in outcome["rows"]:
-                    rows.append(normalize_source({**src, "source_url": item["post_url"]}, {"ok": True, "text": item["text"], "author_handle": str(src.get("source_handle", "")), "thumbnail_url": (item["media_urls"] or [""])[0], "error": ""}))
+                    rows.append(normalize_source({**src, "source_url": item["post_url"]}, {"ok": True, **item, "author_handle": str(src.get("source_handle", "")), "error": ""}))
                 if outcome["status"] != "FETCHED":
                     skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": outcome["reason"]})
             else:
@@ -343,6 +436,9 @@ def main() -> int:
         rows.append(normalize_source(src, fetched))
         if fetched:
             archive_payloads.append(fetched.get("raw", {}))
+    for item in manual_rows:
+        source = next((src for src in selected if str(src.get("source_platform", "")).lower() == args.platform), {"source_id": "manual_import", "source_platform": args.platform, "target_account_ids": [args.account_id]})
+        rows.append(normalize_source({**source, "source_url": item["post_url"]}, {"ok": True, **item, "author_handle": str(source.get("source_handle", ""))}))
     rows, duplicate_skipped = dedupe_rows(rows)
     plan = {
         "status": "PLAN_ONLY" if not args.apply else "WILL_APPLY",
@@ -353,6 +449,7 @@ def main() -> int:
         "media_download": False,
         "x_enabled": bool(args.include_x),
         "real_fetch": bool(args.fetch_real),
+        "manual_import_count": len(manual_rows),
         "adapter_status": adapter_status(),
         "x_adapter_plans": x_adapter_plans[:10],
         "rows": rows[:10],
@@ -370,7 +467,8 @@ def main() -> int:
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     appended = _append_many(client, "source_account_posts", rows)
-    print(json.dumps({"status": "APPLIED", "source_account_posts_appended": appended}, ensure_ascii=False))
+    bundles = _append_source_post_bundles(client, rows)
+    print(json.dumps({"status": "APPLIED", "source_account_posts_appended": appended, **bundles}, ensure_ascii=False))
     return 0
 
 

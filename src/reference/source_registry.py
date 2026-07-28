@@ -34,15 +34,17 @@ SUPPORTED_PLATFORMS = [
     "instagram_reels",
     "note",
     "query",
+    "local",
 ]
 
-RIGHTS_POLICIES = ["reference_only", "owned", "licensed", "unknown"]
-REUSE_POLICIES = ["reference_only", "transform_required", "no_reuse"]
+RIGHTS_POLICIES = ["reference_only", "third_party_reference_only", "owned", "licensed", "approved_creator_clip", "unknown"]
+REUSE_POLICIES = ["reference_only", "transform_required", "approved_creator_clip", "no_reuse"]
 MEDIA_POLICIES = [
     "do_not_download",
     "plan_only",
     "allow_download_with_confirmation",
     "allow_upload_with_confirmation",
+    "approved_gated",
 ]
 COLLECTION_METHODS = [
     "manual_json",
@@ -58,6 +60,9 @@ COLLECTION_METHODS = [
     "youtube_transcript",
     "browser_export",
     "api_disabled",
+    # Explicitly approved, bounded, read-only X API access. This method does
+    # not enable X publishing or media reuse and requires --include-x at run time.
+    "x_api_read_only",
 ]
 
 JST = timezone(timedelta(hours=9))

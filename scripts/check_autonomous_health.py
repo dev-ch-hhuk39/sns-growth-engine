@@ -75,11 +75,8 @@ def _source_registry_sanity() -> dict[str, Any]:
         for s in sources
         if "beauty_account" in s.get("target_account_ids", []) and str(s.get("active", "")).lower() == "true"
     ]
-    x_fetch = [
-        s.get("source_id", "")
-        for s in sources
-        if str(s.get("source_platform", "")).lower() == "x" and str(s.get("fetch_enabled", "")).lower() == "true"
-    ]
+    x_fetch = [s for s in sources if str(s.get("source_platform", "")).lower() == "x" and str(s.get("fetch_enabled", "")).lower() == "true"]
+    approved_x = [s for s in x_fetch if s.get("source_id") == "src_lm_x_cand_001" and s.get("x_read_only") is True and s.get("target_account_ids") == ["liver_manager"]]
     return {
         "source_count": len(sources),
         "chiishunin_s_present": bool(chi),
@@ -87,7 +84,9 @@ def _source_registry_sanity() -> dict[str, Any]:
         "beauty_active_count": len(beauty_active),
         "beauty_active_source_ids": beauty_active[:20],
         "x_fetch_enabled_count": len(x_fetch),
-        "x_fetch_enabled_source_ids": x_fetch[:20],
+        "x_fetch_enabled_source_ids": [str(s.get("source_id", "")) for s in x_fetch[:20]],
+        "approved_bounded_x_source_ids": [str(s.get("source_id", "")) for s in approved_x],
+        "unapproved_x_fetch_enabled_count": len(x_fetch) - len(approved_x),
     }
 
 
@@ -256,8 +255,8 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
         problems.append("chiishunin_s_source_missing")
     if source["beauty_active_count"]:
         problems.append("beauty_account_active_sources")
-    if source["x_fetch_enabled_count"]:
-        problems.append("x_fetch_enabled")
+    if source["unapproved_x_fetch_enabled_count"]:
+        problems.append("unapproved_x_fetch_enabled")
     if config.get("kill_switch"):
         problems.append("kill_switch_true")
     if not config.get("auto_post_enabled"):

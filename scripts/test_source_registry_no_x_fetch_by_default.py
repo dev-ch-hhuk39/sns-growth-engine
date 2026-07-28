@@ -9,8 +9,9 @@ violations = [
     for s in sources
     if str(s.get("source_platform") or s.get("platform") or "").lower() == "x"
     and (s.get("fetch_enabled") is True or str(s.get("fetch_enabled")).lower() == "true")
+    and not (s.get("source_id") == "src_lm_x_cand_001" and s.get("x_read_only") is True and s.get("target_account_ids") == ["liver_manager"])
 ]
-checks = [("x fetch disabled", not violations)]
+checks = [("unapproved x fetch disabled", not violations)]
 bad = [n for n, ok in checks if not ok]
 for n, ok in checks:
     print(f"  {'PASS' if ok else 'FAIL'} {n}")

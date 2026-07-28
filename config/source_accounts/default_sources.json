@@ -724,8 +724,8 @@
       ],
       "candidate_status": "candidate",
       "active": true,
-      "fetch_enabled": true,
-      "allow_network_fetch": true,
+      "fetch_enabled": false,
+      "allow_network_fetch": false,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
@@ -1251,7 +1251,7 @@
       "target_account_ids": [
         "liver_manager"
       ],
-      "collection_method": "manual_url",
+      "collection_method": "x_api_read_only",
       "fallback": [
         "browser_export",
         "manual_json"
@@ -1263,7 +1263,7 @@
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
-      "requires_local_login": true,
+      "requires_local_login": false,
       "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "do_not_download",
@@ -1308,7 +1308,8 @@
       "transcript_enabled": false,
       "generated_clip_candidate_enabled": false,
       "x_read_only": true,
-      "reference_autopilot_enabled": false,
+      "reference_autopilot_enabled": true,
+      "x_fetch_max_items": 10,
       "media_autopilot_enabled": false
     },
     {

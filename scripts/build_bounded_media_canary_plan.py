@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the final human-reviewed eight-item media canary plan.
+"""Build the final human-reviewed twelve-item production canary plan.
 
 This command never reads credentials, mutates Sheets, fetches media, or posts.
 It describes the exact evidence each approved candidate must have before a
@@ -13,12 +13,14 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-CANARY_TYPES = ("direct_image", "direct_video", "direct_carousel", "generated_clip")
+CANARY_TYPES = ("original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "generated_clip")
 ACCOUNTS = ("night_scout", "liver_manager")
 
 
 def required_fields(canary_type: str) -> tuple[str, ...]:
     common = ("account_id", "source_id", "rights_status", "permission_status", "permission_evidence", "public_post_text")
+    if canary_type in {"original_text", "reference_text"}:
+        return ("account_id", "public_post_text", "persona_validator_status", "final_public_post_validator_status")
     if canary_type == "generated_clip":
         return common + ("source_video_id", "clip_candidate_id", "local_path", "start_seconds", "end_seconds")
     if canary_type == "direct_carousel":
@@ -34,8 +36,9 @@ def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             candidate = dict(by_key.get((account_id, canary_type), {}))
             required = required_fields(canary_type)
             missing = [field for field in required if not candidate.get(field)]
-            rights_ok = str(candidate.get("rights_status", "")) in {"owned", "licensed", "approved_creator_clip"}
-            permission_ok = str(candidate.get("permission_status", "")) == "approved"
+            is_text = canary_type in {"original_text", "reference_text"}
+            rights_ok = is_text or str(candidate.get("rights_status", "")) in {"owned", "licensed", "approved_creator_clip"}
+            permission_ok = is_text or str(candidate.get("permission_status", "")) == "approved"
             status = "READY_FOR_HUMAN_CANARY" if candidate and not missing and rights_ok and permission_ok else "PENDING_EVIDENCE"
             rows.append({
                 "canary_id": f"canary_{account_id}_{canary_type}",
