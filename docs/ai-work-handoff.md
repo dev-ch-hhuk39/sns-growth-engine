@@ -6214,3 +6214,24 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 **次のAIへの申し送り事項:**
 - `ops/wp3b-diagnostic-fidelity` でのschema修正、boundary contractテスト追加、CI確認は完了している。
 - 次は指示に従ってPR #27をmergeし、本番read-only workflowを1回だけdispatchすることになるため、ユーザーの指示を待つ。
+## 2026-07-28 Codex Production Identity Repair Applied (In Progress)
+
+### 本システム / 実施済み
+
+- SNS Growth Engine はNight Scout / Liver ManagerのThreads text、approved direct media、generated clip、metrics/PDCAを段階的に運用する構成である。Xとbeautyは引き続きblockする。
+- main `cb38d359868f8f88424dbf063e9c5544e75ecf89` でPR #53/#54/#55を通常マージした。row fingerprint、明示confirm、before/after verifier、停止/rollbackを備えたidentity executorを追加した。
+- 本番Sheetsへ`source_identity_5d0728a96bb68150`を適用。5親・11操作がread-after-write `PASS`。source_postsは85→81、source_post_mediaは130→127、残identity repairは0。
+
+### 変更ファイル / テスト / WARN
+
+- 更新: `scripts/source_identity_repair_contract.py`, `scripts/source_identity_repair_executor.py`, `scripts/apply_source_identity_repairs.py`, `scripts/test_source_identity_repair_executor.py`。
+- PASS: executor/contract focused tests、PR #53/#54/#55 CI。main post-merge CI #55は実行中のため、次AIは完了状態を再確認すること。
+- 実fetch/download/transcription/cut/Cloudinary/Threads publishは未実行。Sheets identity repairのみ実施済み。
+- 残WARN: `check_autonomous_health`はNight Scout/Liver Managerのschedule mismatch、過去slot lease/posted-save履歴を報告する。canary前にslot/queue workerを修復・隔離する。
+
+### 未完了事項 / 次AI
+
+- Liver Managerの承認済みThreads reference URLはregistryに0件。推測・代替追加は禁止で、ユーザー提供の1 URLを待つ。
+- 次に触ってよい: account workflow schedule、content slots/queue、canary inventory、metrics scheduler、capability evidence、関連tests/docs。
+- 触らない: X/beauty、未承認source、permission evidenceなしのmedia。`config/autonomous_mode.json`のpublish/media activationは12 canary完了まで変更しない。
+- 次AIメモ: identity repairのrollback receiptは`/tmp/source_identity_repair_apply_live_v2.json`（repo外）。最新Sheets整合性は63/63 verification PASS、identity残件0。外部mutationはユーザー承認済みだが、canary毎にsource/permission/validator/read-after-writeを再確認すること。
