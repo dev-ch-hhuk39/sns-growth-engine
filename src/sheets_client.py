@@ -660,6 +660,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "reference_sources":              "動画収集元",
     "source_videos":                  "参照元動画",
     "metric_snapshots":                "計測スナップショット",
+    "metrics_collection_jobs":         "計測回収予約",
     "video_transcripts":              "動画文字起こし",
     "video_clip_candidates":          "動画クリップ候補",
     "transcription_runs":             "文字起こし実行履歴",
