@@ -2,6 +2,20 @@
 
 ## 2026-07-28 Codex Completion Matrix And Additive Goal Contract (In Progress)
 
+## 2026-07-28 Codex Generic Source Identity Repair Contract (In Progress)
+
+### 実装内容 / 安全境界
+
+- 固定の過去source/slot IDに依存しない`source_identity_repair_contract`を追加した。read-only exportからparent/child canonical URL、media count、media indexの不整合を検出する。
+- planは`repair_plan_id`、affected row、old hash、reason、`PENDING_HUMAN_APPROVAL`を出す。人間が実施した修復後の別exportをverifierへ渡すとnew hash、`applied_at`、verifier resultを記録する。
+- CLIはexport JSONのみを読み書きする。Sheets client・apply flag・mutation APIを持たず、本番修復自体は人間承認境界の外に置く。
+
+### 変更 / テスト / 未完了
+
+- 追加: `scripts/source_identity_repair_contract.py`, plan/verifier CLI、generic contract test。
+- focused PASS: defect検出、approval requirement、before/after hash、修復後PASS、未解消FAIL、compile、diff check。
+- 未完了: 最新production Sheetsのread-only exportでplanを生成し、人間承認後に修復とbefore/after verifierを実行すること。実際のSheets変更は未実行。
+
 ### 本システムについて / 実装内容
 
 - ユーザー明示承認により、既存35項目を削除・緩和せず、13項目の本番完成要件を加えた。現在のGoalは48項目であり、両アカウントのtext/media/metrics/PDCA/personaを証跡なしにPASSにできない。
