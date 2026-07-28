@@ -362,6 +362,14 @@ success. A missing or mismatched row is `POSTED_SAVE_UNVERIFIED`, never a
 retryable posting failure. Preserve the fallback evidence and resolve it with
 a human read-only check before considering another publish attempt.
 
+### Metrics and PDCA verification
+
+Use only `metrics_status=MEASURED` observations as production PDCA input.
+Partial, unavailable, and pending observations are data-quality states, not
+zero-valued metrics. PDCA writes require explicit non-dry-run confirmation and
+remain review-only; they must never auto-activate learning rules or alter
+source priority.
+
 Prerequisites: Work Packages 1-4 PASS, final-main CI PASS, 63/63 Sheets verifier,
 valid Threads tokens, and the evaluator has no unrelated failing criteria.
 
