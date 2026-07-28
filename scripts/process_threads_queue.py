@@ -30,6 +30,7 @@ from media_post_validator import validate_media_post  # noqa: E402
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
+from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
@@ -428,6 +429,20 @@ def save_posted_result(
     return result_id
 
 
+def schedule_metrics_after_post(client: SheetsClient, result_id: str) -> int:
+    """Persist 24h/72h/7d collection jobs after a verified Threads result.
+
+    The call is deliberately after read-after-write verification: an ambiguous
+    publisher outcome must never create a second observation lifecycle.
+    """
+    posted = records(client, "posted_results")
+    existing = records(client, "metrics_collection_jobs")
+    jobs = [job for job in build_metric_collection_jobs(posted, existing) if job["result_id"] == result_id]
+    for job in jobs:
+        append_row(client, "metrics_collection_jobs", job)
+    return len(jobs)
+
+
 def write_fallback(queue_row: dict[str, Any], social: dict[str, Any] | None = None, text: str = "", result: Any = None, *, dry_run: bool = False) -> Path | None:
     if dry_run:
         return None
@@ -694,7 +709,9 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         return {"status": "POSTED_SAVE_FAILED", "queue_id": queue_id, "fallback": str(fallback)}
 
     pdca_warning = ""
+    metrics_job_count = 0
     try:
+        metrics_job_count = schedule_metrics_after_post(client, result_id)
         save_pdca_initial(client, queue_row, result_id)
         log_event(client, account_id, "POSTED", "Threads post saved to posted_results", {"queue_id": queue_id, "result_id": result_id})
     except Exception as exc:
@@ -712,6 +729,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             external_post_id=result.external_post_id or "",
         ),
         "post_url": result.posted_url or "",
+        "metrics_collection_job_count": metrics_job_count,
         "warning": pdca_warning,
     }
 

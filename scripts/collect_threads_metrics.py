@@ -127,6 +127,7 @@ def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics
         status = "UNAVAILABLE"
     else:
         status = "PENDING"
+    collection_status = classify_collection_status(metrics=metrics, error_reason=error_reason)
     return {
         "snapshot_id": f"ms_{row.get('result_id', 'unknown')}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
         "result_id": row.get("result_id", ""),
@@ -137,10 +138,30 @@ def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics
         "source": source,
         "confidence": confidence,
         "metrics_status": status,
+        "collection_status": collection_status,
+        "collection_window_hours": row.get("collection_window_hours", ""),
+        "collection_job_id": row.get("collection_job_id", ""),
         "memo": memo,
         "error_reason": error_reason,
         **{k: metrics.get(k) for k in METRIC_KEYS},
     }
+
+
+def classify_collection_status(*, metrics: dict[str, int | None], error_reason: str) -> str:
+    """Describe adapter availability without treating unknown values as zero."""
+    known_count = sum(value is not None for value in metrics.values())
+    if known_count == len(METRIC_KEYS):
+        return "AVAILABLE"
+    if known_count:
+        return "PARTIAL"
+    reason = error_reason.lower()
+    if "401" in reason or "403" in reason or "auth" in reason or "storage_state" in reason:
+        return "AUTH_ERROR"
+    if "404" in reason or "post_url_missing" in reason or "not found" in reason:
+        return "POST_NOT_FOUND"
+    if reason in {"", "unavailable", "no_adapter_requested"} or "no_metrics" in reason:
+        return "NOT_AVAILABLE"
+    return "COLLECTION_ERROR"
 
 
 def collect_unavailable(row: dict[str, Any], source: str = "unavailable") -> dict[str, Any]:

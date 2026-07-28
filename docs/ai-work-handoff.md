@@ -12,6 +12,20 @@
 - focused PASS: schedule prepare-only contract、manual activation contract、全workflow safety flags、diff check。
 - 未完了: 実canaryでsource/Sheets/media/publisherを検証する前に、最終人間承認で`production_publish_activation_approved`をtrueへ変更すること。実際のexternal mutationは未実行。
 
+## 2026-07-28 Codex Metrics Collection Scheduling (In Progress)
+
+### 実装内容 / 安全境界
+
+- `posted_results`のverified save後に24h/72h/7dの`metrics_collection_jobs`を作る。Night Scout/Liver Managerとも同じcontractで、publish outcome未確定では予約しない。
+- `metric_snapshots`には既存の`metrics_status`（MEASURED/PARTIAL/UNAVAILABLE）を維持し、collector availabilityを`collection_status`（AVAILABLE/PARTIAL/NOT_AVAILABLE/AUTH_ERROR/POST_NOT_FOUND/COLLECTION_ERROR）として分離した。unknownはnullのままで0にしない。
+- `schedule_threads_metric_collection.py`はplan-only既定で、applyにはconfirm・環境gate・Sheets指定が必要である。現在のapply writerはfinal activationまで明示BLOCKする。実metrics取得/Sheets書込みは今回実行していない。
+
+### 変更 / テスト / 未完了
+
+- 更新: `src/sheets_client.py`, `scripts/collect_threads_metrics.py`, `scripts/process_threads_queue.py`。追加: metrics reservation contract/CLI/test。
+- focused PASS: 24h/72h/7d作成、重複排除、due判定、availability分類、collector dry-run、compile、diff check。
+- 未完了: 最終canary後、scheduled/workerのmanual-gated collection adapterを有効化して両accountの実snapshotを取得すること。MEASUREDのみPDCAへ渡す既存契約は維持。
+
 ## 2026-07-28 Codex Shared Persona Validator (In Progress)
 
 ## 2026-07-28 Codex Completion Matrix And Additive Goal Contract (In Progress)

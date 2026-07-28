@@ -139,10 +139,18 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
         "snapshot_id", "result_id", "account_id", "platform", "post_url",
-        "collected_at", "source", "confidence", "metrics_status",
+        "collected_at", "source", "confidence", "metrics_status", "collection_status",
+        "collection_window_hours", "collection_job_id",
         "views", "likes", "comments", "reposts", "quotes",
         "profile_clicks", "follows", "line_adds",
         "memo", "error_reason",
+    ],
+    # 投稿後の 24h / 72h / 7d metrics 回収予約。schedule はジョブを計画するだけで、
+    # 外部取得と Sheets mutation は明示confirm付きの別runnerに分離する。
+    "metrics_collection_jobs": [
+        "job_id", "result_id", "account_id", "platform", "post_url",
+        "window_hours", "scheduled_for", "status", "attempt_count",
+        "last_attempt_at", "last_error", "created_at", "updated_at",
     ],
     # カテゴリ別パフォーマンス集計。AIが投稿比率を調整するために参照。
     "category_scores": [
