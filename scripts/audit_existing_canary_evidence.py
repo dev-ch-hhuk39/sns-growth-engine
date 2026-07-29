@@ -10,6 +10,11 @@ from metrics_collection_schedule import build_metric_collection_jobs
 from process_threads_queue import append_row, records, update_row
 
 VALID_VERIFY={"PASS","VERIFIED","READ_AFTER_WRITE_PASS"}
+REQUIRED_CANARIES=tuple(
+ (account, kind)
+ for account in ("night_scout", "liver_manager")
+ for kind in ("original_text", "reference_text", "direct_image", "direct_carousel", "direct_video", "generated_clip")
+)
 def truthy(v: Any)->bool: return str(v).lower() in {"1","true","yes"}
 def token(account:str)->str: return os.getenv(f"THREADS_ACCESS_TOKEN_{account.upper()}","")
 def api_permalink(account:str, post_id:str)->str:
@@ -49,7 +54,8 @@ def main()->int:
  from config_loader import get_config
  from sheets_client import SheetsClient
  cfg=get_config(); client=SheetsClient(cfg["sheet_id"],cfg["sa_dict"],dry_run=not a.apply); data=live(client); inv=build_inventory(data)
- audit=[classify(c,data["posted_results"]) for c in inv["candidates"]]
+ candidates={(str(c.get("account_id", "")), str(c.get("canary_type", ""))): c for c in inv["candidates"]}
+ audit=[classify(candidates.get((account, kind), {"account_id":account,"canary_type":kind}), data["posted_results"]) for account, kind in REQUIRED_CANARIES]
  if a.apply and a.confirm_existing_evidence:
   for row in audit:
    if row["status"]!="EXISTING_CANARY_VALID": continue
