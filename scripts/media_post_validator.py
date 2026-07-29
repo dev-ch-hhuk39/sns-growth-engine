@@ -18,6 +18,18 @@ APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DIRECT_REFERENCE_MAX_VIDEO_SECONDS = 300
 
 
+def publisher_media_type(content_type: str, media_urls: list[str] | None = None) -> str:
+    """Normalize product content types before calling the Threads publisher."""
+    content_type = str(content_type or "").lower()
+    if content_type == "direct_carousel" or len(media_urls or []) > 1:
+        return "CAROUSEL"
+    if content_type in {"direct_video", "generated_clip"}:
+        return "VIDEO"
+    if content_type == "direct_image":
+        return "IMAGE"
+    return ""
+
+
 def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     reasons: list[str] = []
     rights = str(plan.get("rights_status", "")).lower()
@@ -28,6 +40,8 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     duration = float(plan.get("duration_seconds") or 0)
     aspect = str(plan.get("aspect_ratio", ""))
     media_origin = str(plan.get("media_origin", "generated_clip")).strip().lower()
+    content_type = str(plan.get("content_type", "")).strip().lower()
+    declared_publisher_type = str(plan.get("publisher_media_type", "")).strip().upper()
     alignment_status = str(plan.get("alignment_status", "")).upper()
     try:
         final_alignment = float(plan.get("final_alignment_score") or 0)
@@ -56,6 +70,11 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     media_type = str(plan.get("media_type", "video")).lower()
     if media_type not in {"video", "image"}:
         reasons.append("media_type_not_supported")
+    normalized_type = publisher_media_type(content_type, plan.get("media_urls") or [])
+    if content_type and not normalized_type:
+        reasons.append("content_type_not_supported")
+    if declared_publisher_type and normalized_type and declared_publisher_type != normalized_type:
+        reasons.append("publisher_media_type_mismatch")
     if media_type == "video":
         if media_origin == "direct_reference":
             # Original media and generated clips are different products.  The
@@ -95,6 +114,7 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         "blocked_reasons": sorted(set(reasons)),
         "text_validation": text_result["status"],
         "alignment_validation": "PASS" if not any(reason.startswith(("semantic_alignment", "final_alignment", "main_claim", "unsupported_claim", "source_copy", "recent_post")) for reason in reasons) else "BLOCKED",
+        "publisher_media_type": normalized_type,
     }
 
 
