@@ -11,7 +11,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
-from source_identity_repair_executor import apply_plan_in_memory, production_apply_allowed
+from source_identity_repair_executor import apply_plan_in_memory, production_apply_allowed, verify_applied_plan
 from source_identity_repair_contract import row_fingerprint, verify_identity_repair_outcome
 
 TABLES = ("source_posts", "source_post_media")
@@ -89,7 +89,7 @@ def apply_to_sheets(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
         rollback_errors = _rollback_applied(client, applied)
         return {**result, "status": "PARTIAL_FAILED", "reason": type(exc).__name__, "error": str(exc), "applied_audit_records": [item["audit"] for item in applied], "rollback_attempted": True, "rollback_errors": rollback_errors}
     after = read_snapshot(client)
-    verified = verify_identity_repair_outcome(plan, after)
+    verified = verify_applied_plan(plan, after)
     if verified["status"] == "PASS":
         client.log("source_identity_repair", "APPLIED", "Source identity repair verified", details=json.dumps({"repair_plan_id": plan.get("repair_plan_id", ""), "operation_count": len(result["audit_records"]), "before_hashes": [r.get("old_value", "") for r in result["audit_records"]], "after_verifier": "PASS"}, ensure_ascii=True))
     return {**result, "read_after_write": verified, "status": "APPLIED" if verified["status"] == "PASS" else "PARTIAL_FAILED"}

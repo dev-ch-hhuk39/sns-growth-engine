@@ -39,6 +39,23 @@ def _find_by_fingerprint(rows: list[dict[str, Any]], fingerprint: str) -> tuple[
     return matches[0] if len(matches) == 1 else None
 
 
+def verify_applied_plan(plan: dict[str, Any], datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """Use a narrow verifier when the approved plan explicitly limits scope."""
+    if plan.get("verification_scope") != "CANARY_DIRECT_VIDEO_URL_ONLY":
+        return verify_identity_repair_outcome(plan, datasets)
+    parents = {str(row.get("source_post_id", "")): row for row in datasets.get("source_posts", [])}
+    children = datasets.get("source_post_media", [])
+    records: list[dict[str, Any]] = []
+    for repair in plan.get("parent_repairs", []):
+        parent_id = str(repair.get("source_post_id", ""))
+        expected = next((op.get("to") for op in repair.get("operations", []) if op.get("operation") == "SET_PARENT_CANONICAL_URL"), "")
+        parent = parents.get(parent_id, {})
+        aligned = parent and str(parent.get("canonical_post_url", "")) == str(expected)
+        aligned = bool(aligned and all(str(row.get("canonical_post_url", "")) == str(expected) for row in children if str(row.get("source_post_id", "")) == parent_id))
+        records.append({"affected_row_id": parent_id, "verifier_result": "PASS" if aligned else "FAIL_REMAINING_IDENTITY_DEFECT"})
+    return {"status": "PASS" if records and all(item["verifier_result"] == "PASS" for item in records) else "FAIL", "affected_row_count": len(records), "audit_records": records}
+
+
 def apply_plan_in_memory(plan: dict[str, Any], datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     """Apply only plan operations to a snapshot, returning audit and rollback data.
 
@@ -63,8 +80,10 @@ def apply_plan_in_memory(plan: dict[str, Any], datasets: dict[str, list[dict[str
                 raise RuntimeError("PARENT_NOT_UNIQUELY_RESOLVABLE")
             for operation in repair.get("operations", []):
                 kind = str(operation.get("operation", ""))
-                if kind == "SET_PARENT_MEDIA_COUNT":
-                    row, field, target = parent, "media_count", operation.get("to")
+                if kind in {"SET_PARENT_MEDIA_COUNT", "SET_PARENT_CANONICAL_URL"}:
+                    row = parent
+                    field = "media_count" if kind == "SET_PARENT_MEDIA_COUNT" else "canonical_post_url"
+                    target = operation.get("to")
                     row_type, row_id = "source_post", parent_id
                 elif kind in {"SET_CHILD_CANONICAL_URL_FROM_PARENT", "SET_MEDIA_INDEX"}:
                     row_id = str(operation.get("source_post_media_id", ""))
@@ -105,7 +124,7 @@ def apply_plan_in_memory(plan: dict[str, Any], datasets: dict[str, list[dict[str
     except Exception as exc:
         return {"status": "PARTIAL_FAILED", "reason": type(exc).__name__, "error": str(exc), "datasets": working, "audit_records": audits, "rollback_plan": list(reversed(rollback))}
 
-    verification = verify_identity_repair_outcome(plan, working)
+    verification = verify_applied_plan(plan, working)
     for record in audits:
         record["verifier_result"] = verification["status"]
     return {"status": "APPLIED" if verification["status"] == "PASS" else "PARTIAL_FAILED", "datasets": working, "audit_records": audits, "rollback_plan": list(reversed(rollback)), "verification": verification}

@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 ACCOUNTS = ("night_scout", "liver_manager")
@@ -18,6 +19,32 @@ CANARY_TYPES = (
     "direct_carousel", "generated_clip",
 )
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
+
+
+def is_individual_source_post_url(platform: str, url: str) -> bool:
+    """Accept only a concrete external post/video URL for each supported source."""
+    parsed = urlsplit(str(url).strip())
+    host = parsed.netloc.lower().removeprefix("www.")
+    path = parsed.path.rstrip("/")
+    platform = str(platform).lower()
+    if not platform:
+        if "youtube" in host or host == "youtu.be":
+            platform = "youtube"
+        elif host.endswith("tiktok.com"):
+            platform = "tiktok"
+        elif host.endswith("threads.com"):
+            platform = "threads"
+        elif host in {"x.com", "twitter.com"}:
+            platform = "x"
+    if platform == "youtube":
+        return (host in {"youtube.com", "m.youtube.com"} and path == "/watch" and bool(parse_qs(parsed.query).get("v"))) or (host == "youtu.be" and bool(path.strip("/"))) or (host == "youtube.com" and path.startswith("/shorts/"))
+    if platform == "tiktok":
+        return host.endswith("tiktok.com") and "/video/" in path and bool(path.rsplit("/video/", 1)[-1])
+    if platform == "threads":
+        return host.endswith("threads.com") and "/post/" in path
+    if platform == "x":
+        return host in {"x.com", "twitter.com"} and "/status/" in path
+    return False
 
 
 def truthy(value: Any) -> bool:
@@ -117,7 +144,7 @@ def source_integrity_report(
         if str(parent.get("platform", "")) == "system_generated_owned":
             continue
         url = str(parent.get("canonical_post_url", ""))
-        if "/post/" not in url and "/status/" not in url:
+        if not is_individual_source_post_url(str(parent.get("platform", "")), url):
             failures.append({"source_post_id": parent_id, "reason": "parent_not_individual_post"})
     return {
         "status": "NO_EVIDENCE" if not by_id else "PASS" if not failures else "FAIL",
@@ -125,6 +152,49 @@ def source_integrity_report(
         "child_count": sum(1 for row in children if str(row.get("source_post_id", "")) in by_id),
         "failures": failures[:100],
     }
+
+
+def canary_source_integrity_report(datasets: dict[str, list[dict[str, Any]]], candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    """Verify only the selected canary sources; historic defects remain quarantine candidates."""
+    parents = {str(row.get("source_post_id", "")): row for row in datasets.get("source_posts", [])}
+    children_by_parent: dict[str, list[dict[str, Any]]] = {}
+    for child in datasets.get("source_post_media", []):
+        children_by_parent.setdefault(str(child.get("source_post_id", "")), []).append(child)
+    assets = {str(row.get("media_id") or row.get("media_asset_id") or ""): row for row in datasets.get("media_assets", [])}
+    checks: list[dict[str, Any]] = []
+    for candidate in candidates:
+        kind = str(candidate.get("canary_type", ""))
+        source_post_id = str(candidate.get("source_post_id", ""))
+        if not source_post_id:
+            checks.append({"canary_id": canary_id(str(candidate.get("account_id", "")), kind), "status": "PASS", "scope": "no_external_source_parent_required"})
+            continue
+        parent = parents.get(source_post_id)
+        reasons: list[str] = []
+        if not parent:
+            reasons.append("source_post_missing")
+        else:
+            platform = str(parent.get("platform") or parent.get("source_platform") or "")
+            if platform != "system_generated_owned" and not is_individual_source_post_url(platform, str(parent.get("canonical_post_url", ""))):
+                reasons.append("parent_not_individual_post")
+            children = children_by_parent.get(source_post_id, [])
+            if not children:
+                reasons.append("source_post_media_missing")
+            for child in children:
+                if str(child.get("source_post_id", "")) != source_post_id:
+                    reasons.append("child_parent_mismatch")
+                if platform != "system_generated_owned" and str(child.get("canonical_post_url", "")) != str(parent.get("canonical_post_url", "")):
+                    reasons.append("child_parent_url_mismatch")
+                if not str(child.get("original_media_url") or child.get("storage_url") or "").strip():
+                    reasons.append("original_media_url_missing")
+            if kind == "direct_video":
+                asset = assets.get(str(candidate.get("media_asset_id", "")), {})
+                if not str(asset.get("storage_url") or candidate.get("media_url") or "").strip():
+                    reasons.append("cloudinary_asset_missing")
+                if str(asset.get("source_post_id") or source_post_id) != source_post_id:
+                    reasons.append("cloudinary_asset_parent_mismatch")
+        checks.append({"canary_id": canary_id(str(candidate.get("account_id", "")), kind), "source_post_id": source_post_id, "status": "PASS" if not reasons else "FAIL", "reasons": sorted(set(reasons))})
+    failures = [check for check in checks if check["status"] != "PASS"]
+    return {"status": "PASS" if checks and not failures else "FAIL", "checked_canary_count": len(checks), "failures": failures, "checks": checks}
 
 
 def activation_evidence(
