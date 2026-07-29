@@ -6361,3 +6361,8 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Safe next files: final-preparation workflow/tests, owner importer/tests,
   readiness/inventory scripts, and this handoff. Do not touch publisher gates,
   activation config, or live media files until the owner input is supplied.
+- GitHub Actions evidence: run `30413397118` dry-run and run `30413509809`
+  explicit apply both succeeded on main. The apply recorded Threads collection
+  and stale isolation, with `source_read_after_write=PASS` for the prepared
+  scope and X as `BLOCKED_OPTIONAL` because its bearer credential is absent.
+  Neither run downloaded, cut, uploaded, activated, or posted media/text.
