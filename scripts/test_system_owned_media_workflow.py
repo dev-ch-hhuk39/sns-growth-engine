@@ -7,4 +7,5 @@ assert "GENERATE_SYSTEM_OWNED_MEDIA" in text
 assert "run_system_owned_media_canaries.py" in text
 assert 'PUBLISH_ENABLED: "false"' in text and 'ALLOW_REAL_THREADS_POST: "false"' in text
 assert 'ALLOW_CLOUDINARY_UPLOAD: ${{ inputs.mode == \'apply\'' in text
+assert "set -o pipefail" in text
 print("PASS")
