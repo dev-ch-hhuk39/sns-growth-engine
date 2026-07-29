@@ -70,7 +70,7 @@ jobs:
           fi
       - name: Render, upload, and register system-owned media
         env:
-          ALLOW_CLOUDINARY_UPLOAD: ${{ inputs.mode == 'apply' && 'true' || 'false' }}
+          ALLOW_CLOUDINARY_UPLOAD: ${{ inputs.mode == 'apply' && inputs.confirm_system_owned_media == 'GENERATE_SYSTEM_OWNED_MEDIA' && 'true' || 'false' }}
         run: |
           mkdir -p /tmp/system-owned-media
           if [ "$MODE" = "apply" ]; then
