@@ -6447,3 +6447,23 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   by posted-results read-after-write and 24h/72h/7d metric reservations.
   Do not alter publisher gates, use third-party reference-only media, or
   activate schedules before all 12 posts succeed.
+
+## 2026-07-29 Canary Direct-Video Source Identity Repair (In Progress)
+
+- Scope is deliberately limited to `sp_src_ns_yt_cand_001_8Xmkojfw90Q` and
+  `sp_src_lm_tt_user_001_7662652624092597522`, the two selected direct-video
+  canaries. The repair changes only each parent/child canonical post URL to
+  its individual YouTube/TikTok post; it never rewrites a media URL,
+  permission, Cloudinary asset, queue row, or historical source record.
+- Added a dispatch-only `Repair Canary Source Integrity` workflow. Apply is
+  gated by the exact confirmation string, uses production Sheets secrets, is
+  read-after-write verified, uploads a redacted receipt/readiness artifact,
+  and has all publication, download, cut, upload, and X flags disabled.
+- `final_production_readiness.py` now distinguishes selected-canary integrity
+  from historical `source_read_after_write` failures. Unselected legacy
+  defects are emitted only as `PLAN_ONLY` quarantine candidates and cannot
+  conceal a canary-source failure.
+- Local focused tests and compile checks pass. Pending only: merge this
+  narrowly scoped patch, dispatch the repair workflow, and verify Sheets
+  `READ_OK`, `canary_source_integrity=PASS`, and 12/12
+  `READY_FOR_HUMAN_CANARY`. No Threads post is authorized or performed.

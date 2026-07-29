@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from audit_media_permissions import build_report as permission_report
 from build_live_canary_inventory import _rows, build_inventory
-from final_production_contracts import activation_evidence, canary_required_permission_deficits, source_integrity_report
+from final_production_contracts import activation_evidence, canary_required_permission_deficits, canary_source_integrity_report, source_integrity_report
 from quarantine_stale_operational_rows import RULES, build_plan as stale_plan
 
 
@@ -49,14 +49,25 @@ def build_report(*, use_sheets: bool) -> dict[str, Any]:
             activation = {"status": "BLOCKED", "reason": type(exc).__name__, "evidence_source": "SCHEMA_MISSING" if type(exc).__name__ == "WorksheetNotFound" else type(exc).__name__}
     auto = _config("config/autonomous_mode.json")
     media = _config("config/media_growth_engine.json")
+    inventory = build_inventory(datasets)
+    source_integrity = source_integrity_report(parents, children)
+    canary_integrity = canary_source_integrity_report(datasets, inventory.get("candidates", []))
+    selected_parent_ids = {str(item.get("source_post_id", "")) for item in inventory.get("candidates", []) if str(item.get("source_post_id", ""))}
+    historical_failures = [item for item in source_integrity.get("failures", []) if str(item.get("source_post_id", "")) not in selected_parent_ids]
     return {
         "status": "READY" if activation.get("status") == "READY_FOR_ACTIVATION" else "NOT_READY",
         "sheets_status": sheets_status,
-        "source_read_after_write": source_integrity_report(parents, children),
+        "source_read_after_write": source_integrity,
+        "canary_source_integrity": canary_integrity,
+        "quarantine_candidates_excluding_canary": {
+            "status": "PLAN_ONLY",
+            "count": len(historical_failures),
+            "source_post_ids": sorted({str(item.get("source_post_id", "")) for item in historical_failures if str(item.get("source_post_id", ""))})[:100],
+        },
         "stale_operational_rows": stale_plan(operational, older_than_minutes=120),
         "permission_audit": permission_report(use_sheets=use_sheets),
         "canary_required_permission_deficits": canary_required_permission_deficits(datasets.get("media_permissions", [])),
-        "canary_inventory": build_inventory(datasets),
+        "canary_inventory": inventory,
         "activation_guard": activation,
         "safety": {
             "kill_switch": bool(auto.get("kill_switch")),
