@@ -6419,3 +6419,31 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   Pending: PR merge, then dispatch system-owned apply from GitHub Actions to
   generate/upload/register the remaining media canary assets before the single
   consolidated post approval request.
+
+## 2026-07-29 System-Owned Media Canary Preview Ready
+
+- Merged PRs #62 through #67. The generated-media workflow now scopes every
+  record to its actual account, repairs only unposted legacy `account_id=all`
+  records with bounded read-after-write, fails on pipeline errors, and accepts
+  `start_seconds=0` as a valid clip boundary.
+- GitHub Actions run `30421509588` generated and uploaded 14 system-owned
+  Cloudinary assets, registered their Sheets provenance and permissions, and
+  never published a Threads post. Scope-repair run `30422457523` completed
+  with read-after-write PASS for both accounts.
+- Final Production Preparation run `30422853390` read Sheets successfully and
+  reports all 12 canaries as `READY_FOR_HUMAN_CANARY`: original text,
+  reference text, direct image, direct carousel, direct video, and generated
+  clip for Night Scout and Liver Manager. Activation remains correctly
+  `NOT_READY` because no canary has been posted or measured yet.
+- PASS: focused PR gates for #62-#67; system-owned media/workflow/inventory
+  contracts; bounded canary `start_seconds=0` regression; workflow safety
+  contract (427 pass / 0 fail); compile and diff checks. No full regression was
+  run because the next boundary is human approval for the bounded canary.
+- No external source fetch, third-party media reuse, download, transcription,
+  cut, Threads post, X post, or scheduled-publish activation occurred in this
+  phase. Cloudinary use was limited to fully system-generated owned assets.
+- Next allowed operation: obtain one explicit approval for the listed 12
+  previews, then execute only the bounded Threads canary publisher, followed
+  by posted-results read-after-write and 24h/72h/7d metric reservations.
+  Do not alter publisher gates, use third-party reference-only media, or
+  activate schedules before all 12 posts succeed.
