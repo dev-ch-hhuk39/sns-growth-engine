@@ -6500,3 +6500,20 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   canaries have not been posted or measured. One unrelated historic source
   identity failure is a `PLAN_ONLY` quarantine candidate and is outside the
   canary selection.
+## 2026-07-29 Codex Fresh Canary Batch Preparation (In Progress)
+
+### 本システムについて / 今回の変更
+
+- 過去canaryは成功証跡に流用しない。existing evidence auditのapply時に、INVALIDの既存`posted_results`を`LEGACY_INVALID_CANARY`へ変更し、`manual_memo`へ`excluded_from_activation=true; excluded_from_metrics_baseline=true; repost_prohibited=true`を保存する。履歴は削除しない。
+- system-owned generatorとtext queue generatorはfresh batchごとの新しいcanary_id/queue_id/media ID/Cloudinary public IDを作る。旧static IDをskip・修復・再利用しない。
+- system-owned media workflowのapplyはCloudinary upload・Sheets保存・text queue作成までで、Threads投稿はfalseのまま。新規12件がREADYになった後にのみ人間一括承認を待つ。
+
+### 変更ファイル一覧 / テスト結果
+
+- 更新: system-owned media/text generation、live inventory、bounded canary preflight、existing evidence audit/final preparation workflow、focused tests、本handoff。
+- focused PASS: generator/inventory/bounded-plan/workflow/no-media-fallback tests、`py_compile`、`git diff --check`。
+
+### 未完了事項 / 残WARN / 次AIへの引き継ぎ
+
+- main反映後にFinal Production Preparationのaudit modeでlegacy INVALIDを隔離し、System Owned Media CanariesのapplyをGitHub Actionsから実行する。出力artifactが12/12 READYならpreviewで一度だけ人間承認を取る。実投稿・scheduled activationは未実行。
+- 次に触ってよい: fresh canary prep artifact、bounded preflight、canary publish。触らない方がよい: legacy contentの再投稿、第三者reference-only media、X/beauty投稿、`.env`、`data/`、`output/`、credential/cookie。

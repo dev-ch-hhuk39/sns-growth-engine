@@ -24,6 +24,11 @@ on:
         type: boolean
         required: false
         default: false
+      retire_legacy_invalid:
+        description: "When auditing, preserve invalid legacy evidence but exclude it from activation and metrics baseline."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -52,6 +57,7 @@ jobs:
       MODE: ${{ inputs.mode }}
       CONFIRM_PREPARATION: ${{ inputs.confirm_preparation }}
       AUDIT_EXISTING_CANARIES: ${{ inputs.audit_existing_canaries }}
+      RETIRE_LEGACY_INVALID: ${{ inputs.retire_legacy_invalid }}
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 }}
@@ -108,6 +114,7 @@ jobs:
           python3 scripts/audit_existing_canary_evidence.py \
             --apply \
             --confirm-existing-evidence \
+            $([ "$RETIRE_LEGACY_INVALID" = "true" ] && printf '%s' '--retire-invalid') \
             --output /tmp/existing-canary/audit.json
       - name: Create readiness evidence
         if: always()
