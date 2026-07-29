@@ -464,6 +464,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "use_status",                 # REFERENCE_ONLY（既定）/ IDEA_SEED。自動投稿対象にはしない。
         "rights_status",             # unknown / reference_only（既定）。許諾未確認は流用不可。
         "can_reuse_media",           # 第三者メディア流用可否。既定 false（許諾なしは流用禁止）。
+        "external_post_id",          # platform-native individual post id; never a profile id.
+        "published_at",              # original source timestamp when the adapter/export provides it.
+        "media_order",               # JSON media-index order preserved from the individual post.
     ],
     # 許可済み参照元の「投稿単位」registry。source_videoとは別に元本文と付属mediaを同一IDで保持する。
     "source_posts": [

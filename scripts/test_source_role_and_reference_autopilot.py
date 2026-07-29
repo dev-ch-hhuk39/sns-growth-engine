@@ -16,8 +16,8 @@ def main() -> int:
     reference_auto = [s for s in sources if s.get("reference_autopilot_enabled")]
     checks = [
         ("approved media has consistent gated policy", bool(approved) and all(s.get("rights_status") == "approved_creator_clip" and s.get("media_policy") == "approved_gated" and s.get("can_reuse_media") is True for s in approved)),
-        ("reference autopilot remains bounded Threads only", all(s.get("source_platform") == "threads" and s.get("fetch_enabled") is True and not s.get("manual_only") for s in reference_auto)),
-        ("x remains fetch disabled", all(not s.get("fetch_enabled") for s in x)),
+        ("reference autopilot remains bounded Threads or approved read-only X", all((s.get("source_platform") == "threads" and s.get("fetch_enabled") is True and not s.get("manual_only")) or (s.get("source_id") == "src_lm_x_cand_001" and s.get("x_read_only") is True) for s in reference_auto)),
+        ("X is disabled except the approved bounded reader", all(not s.get("fetch_enabled") or (s.get("source_id") == "src_lm_x_cand_001" and s.get("x_read_only") is True) for s in x)),
         ("beauty remains non-active/non-fetch", all(not s.get("active") and not s.get("fetch_enabled") for s in beauty)),
     ]
     failed = [name for name, ok in checks if not ok]

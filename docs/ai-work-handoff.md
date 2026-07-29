@@ -6034,8 +6034,9 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Formal schedule: night 14 reference, 16 original, 18 direct, 21 clip, 25
   PDCA; liver 10 original, 13 reference, 16 direct, 18 clip, 21 PDCA. Every
   worker has 0-1800 second jitter; account cap=5, media cap=2.
-- `saved_media_post_fallback=text_only_fallback` is now connected to the clip
-  post workflow. Direct media has the same safe fallback.
+- Direct-media and generated-clip slots never fall back to text. If their
+  approved inventory is absent, the slot is recorded as `NO_POST` and remains
+  available for later media-only recovery.
 - Remaining WARN: no `direct_media_reuse` permission-evidenced source post or
   uploaded asset is present, so direct-media E2E is correctly unavailable;
   generated clip E2E still needs an eligible individual video/asset. Carousel
@@ -6235,3 +6236,62 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 次に触ってよい: account workflow schedule、content slots/queue、canary inventory、metrics scheduler、capability evidence、関連tests/docs。
 - 触らない: X/beauty、未承認source、permission evidenceなしのmedia。`config/autonomous_mode.json`のpublish/media activationは12 canary完了まで変更しない。
 - 次AIメモ: identity repairのrollback receiptは`/tmp/source_identity_repair_apply_live_v2.json`（repo外）。最新Sheets整合性は63/63 verification PASS、identity残件0。外部mutationはユーザー承認済みだが、canary毎にsource/permission/validator/read-after-writeを再確認すること。
+## 2026-07-28 PR #57 Liver Reference Sources And Slot Safety (In Progress)
+
+- Liver Managerの`src_lm_x_cand_001` (`https://x.com/meg_lsm`) をread-only reference_postへ更新し、`src_lm_threads_user_me01_lsm` (`https://www.threads.com/@me01_lsm`) を追加した。両方はreference/direct-media candidateのみで、clip/transcript/ffmpeg/generated clip/X postはfalseまたは禁止。
+- direct mediaはsource registryだけで許可しない。`media_permissions`のapproved、rights、evidence、target account/platform、expiryを満たす場合だけ使用する。
+- health expected cronを実workflowへ整合し、expired content slot leaseは新規claimにせず`slot_lease_expired_requires_recovery`として隔離する。
+- focused PASS: source registry/transform guard、YouTube reference contract、health schedule、clip/direct claim contract。PR #57のGitHub CIは再実行中。
+- 未完了: bounded X real adapter、Threads post discovery、過去queue/posted-save inventoryの実Sheets隔離、canary inventory、external media/publish canary。実fetch/download/upload/postは未実行。
+## 2026-07-29 Codex PR #57 Source Collection And Canary Inventory (In Progress)
+
+### System / changes
+
+- `src_lm_x_cand_001` (`@meg_lsm`) is the only active X source: bounded,
+  read-only, `--include-x` opt-in, and limited to ten individual `/status/`
+  posts. X publishing, download, clipping, transcription, and media reuse
+  remain disabled.
+- `src_lm_threads_user_me01_lsm` remains an active Threads reference source.
+  Account pages are discovery roots only: collection stores only individual
+  posts, their native IDs, text, timestamp, and ordered media children.
+- `collect_source_posts.py` now has an X v2 adapter, bounded Threads account
+  discovery, and browser-export/manual-JSON fallback. Both write paths retain
+  a `source_posts` parent with ordered `source_post_media` children; direct
+  media reuse remains impossible without an approved ledger permission.
+- Added `quarantine_stale_operational_rows.py`: dry-run by default; live
+  isolation requires `--apply --confirm-quarantine --use-sheets` and never
+  deletes ambiguous queue, save, lease, or media history.
+- Canary planning is now 12 slots: original text, reference text, direct
+  image, direct video, direct carousel, and generated clip for each account.
+  Missing evidence is `PENDING_EVIDENCE`; media slots do not fall back to text.
+
+### Test result / WARN / safe boundaries
+
+- Focused PASS: source-registry validation, bounded X adapter shape, Threads
+  individual-post plan, manual JSON fallback, parent/media order, stale-row
+  planning, no media-to-text fallback, direct/clip dispatch guards, registry
+  safety, and compile/diff checks. Ruff is not installed in this environment.
+- No external fetch, Sheets mutation, download, transcription, cut, upload, or
+  Threads post was executed in this change set.
+- Pending external prerequisites: X read-only bearer credential for actual X
+  collection; publicly fetchable Threads posts or a browser export; approved
+  `media_permissions` entries for each direct asset; individual approved video
+  candidates for generated clips; then explicit production activation.
+- GitHub Actions manual full CI run `30404807702` passed (secret scan,
+  dependency audit, tests). PR #57 cannot be normally merged while main
+  requires PR-associated automatic checks: a `workflow_dispatch` result does
+  not satisfy that GitHub branch-protection condition. Do not bypass main
+  protection or weaken it without a new explicit owner authorization.
+
+### Next AI / file ownership
+
+- Safe next files: `scripts/collect_source_posts.py`,
+  `scripts/quarantine_stale_operational_rows.py`,
+  `scripts/build_bounded_media_canary_plan.py`, focused source/canary tests,
+  and this handoff.
+- Coordinate before changing: `src/sheets_client.py`, source registry JSON,
+  `config/autonomous_mode.json`, content schedules, publisher/workflow files.
+- Do not change: `.env`, `data/`, `output/`, credentials, cookies, or any
+  beauty/X publishing gates. Do not claim production capability until actual
+  source evidence, 12 canary permalinks, full CI, and scheduled-run evidence
+  exist.

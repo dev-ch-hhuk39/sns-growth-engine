@@ -219,6 +219,10 @@ def claim_slot_run(
             try:
                 if datetime.fromisoformat(expiry).astimezone(JST) > local:
                     return {"status": "SKIPPED", "reason": "slot_lease_active", "slot_run_id": expected}
+                # Never silently append a second row for an expired lease.
+                # A recovery worker must first reconcile publisher evidence;
+                # this prevents a stale lease from becoming a duplicate post.
+                return {"status": "SKIPPED", "reason": "slot_lease_expired_requires_recovery", "slot_run_id": expected}
             except ValueError:
                 return {"status": "SKIPPED", "reason": "slot_lease_invalid", "slot_run_id": expected}
     row = build_slot_run(account_id, slot_id, status="CLAIMED", now=local)

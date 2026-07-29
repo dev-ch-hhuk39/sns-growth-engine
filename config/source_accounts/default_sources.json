@@ -1251,26 +1251,27 @@
       "target_account_ids": [
         "liver_manager"
       ],
-      "collection_method": "manual_url",
+      "collection_method": "x_api_read_only",
       "fallback": [
         "browser_export",
         "manual_json"
       ],
       "candidate_status": "candidate",
-      "active": false,
-      "fetch_enabled": false,
-      "allow_network_fetch": false,
+      "active": true,
+      "fetch_enabled": true,
+      "allow_network_fetch": true,
       "allow_download": false,
       "allow_cut": false,
       "allow_upload": false,
-      "requires_local_login": true,
+      "requires_local_login": false,
       "rights_policy": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "do_not_download",
       "pdca_enabled": false,
-      "source_category": "text_reference",
+      "source_category": "text_reference,direct_media_reference",
       "source_categories": [
-        "text_reference"
+        "text_reference",
+        "direct_media_reference"
       ],
       "use_cases": [
         "structure_reference",
@@ -1282,7 +1283,6 @@
         "original_hypothesis"
       ],
       "target_platforms": [
-        "x",
         "threads"
       ],
       "subject_policy": {
@@ -1302,10 +1302,38 @@
       "review_notes": "旧repo X_autopost_yoru の monitor_accounts から移行 (2026-06-24)。candidate=WAITING_REVIEW。 | X reference-only manual_only (current phase, no posting/dev)",
       "use_policy": "REFERENCE_ONLY",
       "can_reuse_media": false,
-      "usage_scope": "reference_only",
-      "source_role": "reference_only",
-      "reference_autopilot_enabled": false,
+      "usage_scope": "reference_analysis,direct_media_candidate",
+      "source_role": "reference_post",
+      "clip_enabled": false,
+      "transcript_enabled": false,
+      "generated_clip_candidate_enabled": false,
+      "x_read_only": true,
+      "reference_autopilot_enabled": true,
+      "x_fetch_max_items": 10,
       "media_autopilot_enabled": false
+    },
+    {
+      "source_id": "src_lm_threads_user_me01_lsm",
+      "source_name": "liver_manager Threads reference (@me01_lsm)",
+      "source_platform": "threads",
+      "source_handle": "@me01_lsm",
+      "source_url": "https://www.threads.com/@me01_lsm",
+      "canonical_url": "https://www.threads.com/@me01_lsm",
+      "target_account_id": "liver_manager",
+      "target_account_ids": ["liver_manager"],
+      "collection_method": "approved_threads_adapter",
+      "fallback": ["browser_export", "manual_json"],
+      "candidate_status": "candidate", "active": true, "fetch_enabled": true, "allow_network_fetch": true, "manual_only": false,
+      "allow_download": false, "allow_cut": false, "allow_upload": false,
+      "rights_policy": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "can_reuse_media": false, "media_pipeline_eligible": false,
+      "source_role": "reference_post", "source_category": "text_reference,direct_media_reference", "source_categories": ["text_reference", "direct_media_reference"],
+      "usage_scope": "reference_analysis,direct_media_candidate", "use_policy": "REFERENCE_ONLY",
+      "clip_enabled": false, "transcript_enabled": false, "generated_clip_candidate_enabled": false,
+      "target_platforms": ["threads"], "target_generation_modes": ["reference_based", "original_hypothesis"],
+      "max_items_per_run": 10, "auto_priority_change_allowed": false,
+      "priority": 50,
+      "subject_policy": {"require_transform": true, "no_suspicious_income_claims": true, "no_aggressive_recruiting": true},
+      "notes": "User-approved Liver Manager Threads reference. Direct media remains blocked unless matching approved media_permissions permits Liver Manager Threads use. Never use for transcript, clips, ffmpeg, generated clips, or X posting."
     },
     {
       "source_id": "src_lm_x_cand_002",
