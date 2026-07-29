@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "assets": [
+    {
+      "asset_id": "owner_ns_direct_image_001",
+      "source_group_id": "owner_ns_direct_image_001",
+      "account_id": "night_scout",
+      "asset_purpose": "direct_image",
+      "local_path": "/absolute/path/to/owned-image.jpg",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "I own this asset and authorize the stated uses.",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": ["direct"],
+      "media_order": 0,
+      "clip_start_seconds": null,
+      "clip_end_seconds": null,
+      "public_post_text": "",
+      "queue_id": ""
+    }
+  ]
+}

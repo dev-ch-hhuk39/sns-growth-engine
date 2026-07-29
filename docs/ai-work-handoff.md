@@ -6319,3 +6319,45 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   beauty/X publishing gates. Do not claim production capability until actual
   source evidence, 12 canary permalinks, full CI, and scheduled-run evidence
   exist.
+
+## 2026-07-29 Codex PR #58 Final Preparation And Owner Asset Import (In Progress)
+
+### System / changed files
+
+- Added `.github/workflows/final-production-preparation.yml`. It is
+  `workflow_dispatch` only, accepts `all`/`night_scout`/`liver_manager` and
+  `dry-run`/`apply`, and requires `PREPARE_PRODUCTION` before the bounded
+  Sheets preparation mutation can run. It uploads only preparation/readiness
+  JSON evidence. All publish, X publish, download, cut, upload, transcription
+  and media-post flags remain false.
+- Added `scripts/import_owned_canary_assets.py` and
+  `docs/owned-canary-assets-template.json`. The importer registers explicit
+  owner-attested files or HTTPS assets into source parent/media, permissions,
+  media assets, and for an explicitly declared clip, source video/clip
+  candidate records. It can create `WAITING_REVIEW` media queues, but never
+  uploads or posts.
+- Apply requires `--apply --confirm-import-owned-assets --use-sheets`. It
+  requires `rights_status=owned`, owner declaration, Threads and Cloudinary
+  storage consent, one local file or HTTPS URL, content hash, duplicate guard,
+  read-after-write, and rollback receipt. No external post URL is invented for
+  owner files. A missing or unapproved field blocks the import rather than
+  inferring rights. Media slots remain media-only; no text fallback exists.
+
+### Tests / WARN / next safe boundary
+
+- PASS: `test_final_production_preparation_workflow.py`,
+  `test_import_owned_canary_assets_contract.py`,
+  `test_final_preparation_orchestrator.py`, `test_all_workflows_safety_flags.py`
+  (419 pass / 0 fail), `py_compile`, and `git diff --check`.
+- Next external action after PR merge: dispatch **Final Production
+  Preparation** in GitHub Actions. Missing X bearer token must surface as
+  `BLOCKED_OPTIONAL`; it does not halt Threads/manual preparation.
+- Remaining owner input: a completed copy of
+  `docs/owned-canary-assets-template.json` with real asset paths/HTTPS URLs,
+  SHA-256 for HTTPS, declarations, Cloudinary consent, and reader-facing
+  public text. Do not add source URLs, credentials, cookies, or media files to
+  git. Once owner material is imported and all 12 queues are READY, request
+  one consolidated approval before any real post.
+- Safe next files: final-preparation workflow/tests, owner importer/tests,
+  readiness/inventory scripts, and this handoff. Do not touch publisher gates,
+  activation config, or live media files until the owner input is supplied.

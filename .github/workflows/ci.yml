@@ -56,6 +56,8 @@ jobs:
           python3 scripts/test_scheduled_publish_activation_gate.py
           python3 scripts/test_activate_scheduled_publish.py
           python3 scripts/test_capability_matrix_evidence_updater.py
+          python3 scripts/test_final_production_preparation_workflow.py
+          python3 scripts/test_import_owned_canary_assets_contract.py
 
   tests:
     if: github.event_name == 'workflow_dispatch'

@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+from pathlib import Path
+
+text = (Path(__file__).resolve().parents[1] / ".github/workflows/final-production-preparation.yml").read_text(encoding="utf-8")
+checks = {
+    "dispatch only": "workflow_dispatch:" in text and "schedule:" not in text and "pull_request:" not in text,
+    "account scope": "options: [all, night_scout, liver_manager]" in text,
+    "apply confirmation": "PREPARE_PRODUCTION" in text,
+    "orchestrator": "run_final_production_preparation.py" in text,
+    "artifact": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in text,
+    "unsafe operations disabled": all(f'{key}: "false"' in text for key in ("PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_VIDEO_DOWNLOAD", "ALLOW_VIDEO_CUT", "ALLOW_CLOUDINARY_UPLOAD", "ALLOW_MEDIA_POSTS")),
+}
+failed = [name for name, ok in checks.items() if not ok]
+print("PASS" if not failed else "FAIL: " + ", ".join(failed))
+raise SystemExit(bool(failed))

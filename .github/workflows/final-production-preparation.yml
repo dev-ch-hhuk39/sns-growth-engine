@@ -1,0 +1,90 @@
+name: Final Production Preparation
+
+on:
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: Target account scope
+        type: choice
+        required: true
+        default: all
+        options: [all, night_scout, liver_manager]
+      mode:
+        description: Read-only dry-run or approved Sheets preparation
+        type: choice
+        required: true
+        default: dry-run
+        options: [dry-run, apply]
+      confirm_preparation:
+        description: "Required only for apply: type PREPARE_PRODUCTION"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-production-preparation-${{ inputs.account_id }}
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  ALLOW_MEDIA_POSTS: "false"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      ACCOUNT_ID: ${{ inputs.account_id }}
+      MODE: ${{ inputs.mode }}
+      CONFIRM_PREPARATION: ${{ inputs.confirm_preparation }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      X_READ_ONLY_BEARER_TOKEN: ${{ secrets.X_READ_ONLY_BEARER_TOKEN }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-acquisition.txt
+      - name: Install preparation dependencies
+        run: python3 -m pip install --requirement requirements-acquisition.txt
+      - name: Guard explicit apply confirmation
+        run: |
+          if [ "$MODE" = "apply" ] && [ "$CONFIRM_PREPARATION" != "PREPARE_PRODUCTION" ]; then
+            echo "BLOCKED: apply requires confirm_preparation=PREPARE_PRODUCTION"
+            exit 1
+          fi
+      - name: Run bounded production preparation
+        run: |
+          mkdir -p /tmp/final-production-preparation
+          if [ "$MODE" = "apply" ]; then
+            python3 scripts/run_final_production_preparation.py --account-id "$ACCOUNT_ID" --apply --confirm-production-preparation --output /tmp/final-production-preparation/preparation.json
+          else
+            python3 scripts/run_final_production_preparation.py --account-id "$ACCOUNT_ID" --dry-run --output /tmp/final-production-preparation/preparation.json
+          fi
+      - name: Create readiness evidence
+        if: always()
+        run: |
+          python3 scripts/final_production_readiness.py --use-sheets --output /tmp/final-production-preparation/readiness.json || true
+      - name: Upload readiness evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: final-production-readiness-${{ inputs.account_id }}-${{ github.run_id }}
+          path: /tmp/final-production-preparation/*.json
+          if-no-files-found: warn
+          retention-days: 14
