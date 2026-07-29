@@ -42,7 +42,8 @@ def classify(c:dict[str,Any], rows:list[dict[str,Any]])->dict[str,Any]:
         elif actual != str(r.get("post_url", "")): reasons.append("actual_permalink_mismatch")
     status="EXISTING_CANARY_VALID" if r and not reasons else ("VERIFY_REQUIRED" if "actual_permalink_verify_required" in reasons and len(reasons)==1 else "EXISTING_CANARY_INVALID")
     fields={k:r.get(k,"") for k in ("result_id","external_post_id","post_url","posted_at","posted_text","real_post","media_used","media_asset_id","media_url","source_post_id","source_video_id","clip_candidate_id")}
-    return {"canary_id":f"canary_{account}_{kind}","account_id":account,"canary_type":kind,"actual_post_type":"media" if truthy(r.get("media_used")) else "text","status":status,"reasons":reasons,**fields}
+    actual_type="text" if not truthy(r.get("media_used")) else ("generated_clip" if str(r.get("clip_candidate_id", "")) else kind)
+    return {"canary_id":f"canary_{account}_{kind}","account_id":account,"canary_type":kind,"actual_post_type":actual_type,"permalink":fields["post_url"],"status":status,"reasons":reasons,**fields}
 def main()->int:
  p=argparse.ArgumentParser();p.add_argument("--apply",action="store_true");p.add_argument("--confirm-existing-evidence",action="store_true");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
  from config_loader import get_config
@@ -53,13 +54,19 @@ def main()->int:
   for row in audit:
    if row["status"]!="EXISTING_CANARY_VALID": continue
    update_row(client,"posted_results","result_id",str(row["result_id"]),{"canary_id":row["canary_id"]})
-  after=records(client,"posted_results"); jobs=records(client,"metrics_collection_jobs")
+  after=records(client,"posted_results")
+  valid_ids={x["canary_id"] for x in audit if x["status"]=="EXISTING_CANARY_VALID"}
+  linked_ids={str(row.get("canary_id", "")) for row in after}
+  missing_links=sorted(valid_ids-linked_ids)
+  jobs=records(client,"metrics_collection_jobs")
   for job in build_metric_collection_jobs(after,jobs):
-   if str(job.get("canary_id", "")) in {x["canary_id"] for x in audit if x["status"]=="EXISTING_CANARY_VALID"}: append_row(client,"metrics_collection_jobs",job)
+   if str(job.get("canary_id", "")) in valid_ids: append_row(client,"metrics_collection_jobs",job)
   data["posted_results"]=records(client,"posted_results"); data["metrics_collection_jobs"]=records(client,"metrics_collection_jobs")
-  mode="APPLIED"
+  scheduled_ids={str(job.get("canary_id", "")) for job in data["metrics_collection_jobs"]}
+  missing_schedule=sorted(valid_ids-scheduled_ids)
+  mode="APPLIED" if not missing_links and not missing_schedule else "APPLY_READ_AFTER_WRITE_FAILED"
  else: mode="PLAN_ONLY"
- out={"status":mode,"sheets_status":"READ_OK","canaries":audit,"valid_count":sum(x["status"]=="EXISTING_CANARY_VALID" for x in audit),"invalid_count":sum(x["status"]=="EXISTING_CANARY_INVALID" for x in audit),"verify_required_count":sum(x["status"]=="VERIFY_REQUIRED" for x in audit),"would_post":False}
+ out={"status":mode,"sheets_status":"READ_OK","canaries":audit,"valid_count":sum(x["status"]=="EXISTING_CANARY_VALID" for x in audit),"invalid_count":sum(x["status"]=="EXISTING_CANARY_INVALID" for x in audit),"verify_required_count":sum(x["status"]=="VERIFY_REQUIRED" for x in audit),"apply_read_after_write":{"linked_canary_ids":sorted(valid_ids) if a.apply and a.confirm_existing_evidence else [],"missing_canary_links":missing_links if a.apply and a.confirm_existing_evidence else [],"missing_metric_schedules":missing_schedule if a.apply and a.confirm_existing_evidence else []},"would_post":False}
  a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(out,ensure_ascii=False,indent=2)+"\n",encoding="utf-8");print(json.dumps({k:out[k] for k in ("status","valid_count","invalid_count","verify_required_count","would_post")},ensure_ascii=False))
  return 0
 if __name__=="__main__":raise SystemExit(main())
