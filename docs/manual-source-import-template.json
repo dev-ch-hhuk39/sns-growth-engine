@@ -1,0 +1,14 @@
+{
+  "items": [
+    {
+      "post_url": "https://www.threads.com/@handle/post/POST_ID_OR_https://x.com/handle/status/POST_ID",
+      "external_post_id": "POST_ID",
+      "text": "Original post text",
+      "published_at": "2026-01-01T00:00:00Z",
+      "media_urls": [
+        "https://cdn.example.invalid/media-1.jpg"
+      ]
+    }
+  ],
+  "notes": "One item must represent one individual Threads /post/ or X /status/ URL. Keep media_urls in the source order. Do not put an account/profile URL here. This file is import data, not a permission grant."
+}

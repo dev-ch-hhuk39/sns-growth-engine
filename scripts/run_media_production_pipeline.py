@@ -442,7 +442,9 @@ def build_plan(
     media_cfg = _load(MEDIA_CONFIG)
     autonomous_cfg = _load(AUTONOMOUS_CONFIG)
     blocked = []
-    if _true(os.environ.get("FORCE_TEXT_ONLY_FALLBACK")):
+    # Never convert a generated-clip slot into text when a resource gate is
+    # unavailable. The caller receives a safe NO_POST instead.
+    if _true(os.environ.get("BLOCK_MEDIA_SLOT")):
         return {
             "status": "NO_POST",
             "account_id": account_id,
@@ -456,7 +458,7 @@ def build_plan(
             "prepare_only": prepare_only,
             "post_saved_media": post_saved_media,
             "slot_id": slot_id,
-            "blocked_reasons": ["resource_budget_text_only"],
+            "blocked_reasons": ["resource_budget_media_slot"],
         }
     if autonomous_cfg.get("kill_switch"):
         blocked.append("kill_switch=true")

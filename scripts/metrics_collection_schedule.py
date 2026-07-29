@@ -55,6 +55,7 @@ def build_metric_collection_jobs(
             jobs.append({
                 "job_id": job_id,
                 "result_id": result_id,
+                "canary_id": result.get("canary_id", ""),
                 "account_id": result.get("account_id", ""),
                 "platform": "threads",
                 "post_url": result.get("post_url", ""),

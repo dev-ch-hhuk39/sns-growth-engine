@@ -36,9 +36,8 @@ EXPECTED_CRONS = {
     "liver_manager": {"4 1 * * *", "4 4 * * *", "4 12 * * *"},
 }
 
-# Media preparation and posting are deliberately dispatch-only canaries until
-# current-scope inventory/evidence is complete.  A missing cron is healthy for
-# these workflows and must not be reported as an autonomous-posting incident.
+# Media schedules are wired to their own slots, but publish remains gated by
+# validate_production_activation.py until all twelve canaries have evidence.
 MEDIA_CANARY_WORKFLOWS = {
     "media_prepare_liver_manager",
     "media_prepare_night_scout",
@@ -46,6 +45,10 @@ MEDIA_CANARY_WORKFLOWS = {
     "media_post_night_scout",
     "direct_media_liver_manager",
     "direct_media_night_scout",
+}
+MEDIA_SCHEDULED_PUBLISH_WORKFLOWS = {
+    "media_post_liver_manager", "media_post_night_scout",
+    "direct_media_liver_manager", "direct_media_night_scout",
 }
 
 
@@ -230,14 +233,24 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
                 'ALLOW_TRANSCRIPTION_API: "false"',
             ]),
             "crons": sorted(_crons(text)),
-            "trigger_mode": "dispatch_only_canary" if key in MEDIA_CANARY_WORKFLOWS else "scheduled",
+            "trigger_mode": (
+                "scheduled_activation_guarded" if key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
+                else "dispatch_only_preparation" if key in MEDIA_CANARY_WORKFLOWS
+                else "scheduled"
+            ),
         }
         if key in EXPECTED_CRONS and set(wf["crons"]) != EXPECTED_CRONS[key]:
             problems.append(f"{key}:schedule_mismatch")
         if key == "manual" and wf["has_schedule"]:
             problems.append("manual_workflow_has_schedule")
-        if key in MEDIA_CANARY_WORKFLOWS and (wf["has_schedule"] or not wf["has_workflow_dispatch"]):
-            problems.append(f"{key}:dispatch_only_canary_contract_failed")
+        if key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS and (
+            not wf["has_schedule"]
+            or not wf["has_workflow_dispatch"]
+            or "validate_production_activation.py --use-sheets" not in text
+        ):
+            problems.append(f"{key}:scheduled_activation_guard_contract_failed")
+        if key in MEDIA_CANARY_WORKFLOWS - MEDIA_SCHEDULED_PUBLISH_WORKFLOWS and (wf["has_schedule"] or not wf["has_workflow_dispatch"]):
+            problems.append(f"{key}:dispatch_only_preparation_contract_failed")
         if key not in {"manual", *MEDIA_CANARY_WORKFLOWS} and not wf["has_schedule"]:
             problems.append(f"{key}:schedule_missing")
         if not wf["has_permissions_contents_read"] or not wf["has_permissions_actions_read"]:
@@ -298,13 +311,19 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
         "validator_sanity": {"final_public_post_validator": "EXPECTED_IN_RUNNER_AND_WORKER"},
         "media_schedule": {
             "text_only_schedule_on": True,
-            "media_schedule_on": False,
-            "media_execution_mode": "dispatch_only_canary",
+            "media_schedule_on": bool(config.get("scheduled_publish_enabled")),
+            "media_schedule_connected": True,
+            "media_execution_mode": "scheduled_activation_guarded",
             "media_canary_workflows_healthy": all(
-                workflow_results.get(key, {}).get("trigger_mode") == "dispatch_only_canary"
+                workflow_results.get(key, {}).get("trigger_mode") == "scheduled_activation_guarded"
+                and workflow_results.get(key, {}).get("has_workflow_dispatch", False)
+                and workflow_results.get(key, {}).get("has_schedule", False)
+                for key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
+            ) and all(
+                workflow_results.get(key, {}).get("trigger_mode") == "dispatch_only_preparation"
                 and workflow_results.get(key, {}).get("has_workflow_dispatch", False)
                 and not workflow_results.get(key, {}).get("has_schedule", False)
-                for key in MEDIA_CANARY_WORKFLOWS
+                for key in MEDIA_CANARY_WORKFLOWS - MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
             ),
             "media_growth_engine_enabled": bool(media_config.get("media_growth_engine_enabled")),
             "source_video_discovery_apply_enabled": bool(media_config.get("source_video_discovery_apply_enabled")),

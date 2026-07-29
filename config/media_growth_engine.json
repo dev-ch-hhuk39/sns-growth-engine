@@ -50,7 +50,7 @@
   "media_prepare_before_post_minutes": 120,
   "saved_media_post_enabled": true,
   "saved_media_post_requires_uploaded_unused_asset": true,
-  "saved_media_post_fallback": "text_only_fallback",
+  "saved_media_post_fallback": "NO_MEDIA_FALLBACK",
   "direct_reference_media_enabled": true,
   "asset_inventory_targets": {
     "night_scout": {"direct_reference_media": 3, "generated_clip_media": 3},

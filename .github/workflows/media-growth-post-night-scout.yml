@@ -1,7 +1,8 @@
 name: Media Growth Post Night Scout
 
 on:
-  # Canary gate: media publishing is dispatch-only until all four canaries pass.
+  schedule:
+    - cron: "2 12 * * *"
   workflow_dispatch:
     inputs:
       confirm_media_post:
@@ -65,13 +66,27 @@ jobs:
         run: python3 scripts/check_schedule_window.py --slot-id ns_2100_clip_media --write-github-output
       - name: Dry-run saved media plan
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --post-saved-media --dry-run --use-sheets
+      - name: Resolve scheduled activation gate
+        id: activation
+        run: |
+          allowed=false
+          if [ "${{ github.event_name }}" = "schedule" ] && python3 scripts/validate_production_activation.py --use-sheets >/dev/null 2>&1; then
+            if python3 - <<'PY'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("config/autonomous_mode.json").read_text())
+          raise SystemExit(0 if cfg.get("production_publish_activation_approved") and cfg.get("scheduled_publish_enabled") else 1)
+          PY
+            then allowed=true; fi
+          fi
+          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
       - name: Check free-tier media budget
         id: media_budget
         continue-on-error: true
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')
         run: python3 scripts/check_media_resource_budget.py --use-sheets --apply --confirm-resource-usage --enforce --purpose post
       - name: Guard media post and kill switch
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')
         run: |
           python3 - <<'PY'
           import json
@@ -86,7 +101,7 @@ jobs:
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Post one saved approved media asset
-        if: (github.event_name == 'schedule' || github.event.inputs.confirm_media_post == 'true') && github.event.inputs.dry_run_only != 'true'
+        if: ((github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')) && steps.media_budget.outcome == 'success'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -97,7 +112,6 @@ jobs:
           ALLOW_VIDEO_CUT: "false"
           ALLOW_CLOUDINARY_UPLOAD: "false"
           ALLOW_TRANSCRIPTION_API: "false"
-          FORCE_TEXT_ONLY_FALLBACK: ${{ steps.media_budget.outcome != 'success' }}
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --post-saved-media --apply --confirm-production-media --use-sheets
       - name: Health summary
         if: always()

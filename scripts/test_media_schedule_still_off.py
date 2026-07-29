@@ -13,12 +13,18 @@ def main() -> int:
         "media-growth-post-night-scout.yml",
     ]
     texts = [(ROOT / ".github/workflows" / name).read_text() for name in workflows]
+    guarded = [
+        "direct-reference-media-liver-manager.yml", "direct-reference-media-night-scout.yml",
+        "media-growth-post-liver-manager.yml", "media-growth-post-night-scout.yml",
+    ]
     ok = (
         cfg["source_video_discovery_apply_enabled"] is True
         and cfg["media_public_post_auto_enabled"] is True
-        and all("schedule:" not in text and "workflow_dispatch:" in text and "Canary gate" in text for text in texts)
+        and cfg["saved_media_post_fallback"] == "NO_MEDIA_FALLBACK"
+        and all("workflow_dispatch:" in text for text in texts)
+        and all("schedule:" in (ROOT / ".github/workflows" / name).read_text() and "validate_production_activation.py --use-sheets" in (ROOT / ".github/workflows" / name).read_text() for name in guarded)
     )
-    print(f"  {'PASS' if ok else 'FAIL'} media workflows stay dispatch-only before canaries")
+    print(f"  {'PASS' if ok else 'FAIL'} media schedules are activation-guarded before canaries")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1
 if __name__ == "__main__":

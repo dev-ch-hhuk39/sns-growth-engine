@@ -1,3 +1,27 @@
+## 2026-07-29 Codex Final Production Completion Branch (In Progress)
+
+### 本システムについて / 今回の統合
+
+- ブランチ: `feature/final-production-completion`。開始mainは`9a02728376a524ca7a8ba4ba9ab13723c85a93bc`。
+- `run_final_production_preparation.py`がThreads/X/manual JSONの収集計画、source parent/media整合、stale隔離、permission監査、12件canary在庫を一つのJSONにまとめる。X tokenが無い場合は`BLOCKED_OPTIONAL`であり、Threads/manual JSON/owner素材の準備を止めない。
+- `final_production_readiness.py`は、source read-after-write、stale rows、permission evidence、canary inventory、activation evidenceをread-onlyで集約する。`validate_production_activation.py`は両account x 6形式の投稿済みread-after-writeと24h/72h/7d予約を全て要求する。
+- mediaの4つのslot cronはNight Scout direct 18:00/clip 21:00、Liver Manager direct 16:00/clip 18:00（JST）に接続した。scheduleはactivation guardがPASSになるまでdry-runのみで、manual canaryだけが明示confirmで実行できる。
+- direct/clip mediaはtextへfallbackしない。予算・権利・証跡不足は`NO_POST`で停止する。`saved_media_post_fallback`は`NO_MEDIA_FALLBACK`へ変更した。
+
+### 変更ファイル一覧 / テスト結果
+
+- 追加: final preparation/readiness/permission audit/live canary inventory/activation guardのCLIとpure contracts、manual import template、required owner input template、focused tests。
+- 更新: Sheets canary/metrics provenance columns、metrics reservation、media workflow activation guards、health check、media pipelineのno-fallback contract。
+- focused PASS: final contracts、canary inventory、orchestrator static contract、media no-fallback/cron contract、metrics lifecycle、existing stale/source bundle/media safety/workflow safety tests、`py_compile`、`git diff --check`。
+
+### 未完了事項 / 残WARN / 次AIへの引き継ぎ
+
+- read-only Sheetsはこの作業環境で`TransportError`のため、実在庫・permission ledger・stale row再確認は未実証。`docs/required-owner-inputs.json`へ、両accountのdirect image/video/carousel/generated clipに必要な1回分のowner入力を集約した。
+- 実投稿は未実行。12件のcanaryは、Threads source/owner test mediaが個別に証跡化され、preflightがREADYになった後に一度だけまとめて人間承認を取る。
+- `X_READ_ONLY_BEARER_TOKEN`が無い場合、Xのみ`BLOCKED_OPTIONAL`。X以外のcanaryは停止しない。Threads HTMLが取得不可なら`docs/manual-source-import-template.json`をmanual JSONとして使う。
+- 次に触ってよい: final preparation/readiness CLI、permission ledger、owner inputs、canary preflight、activation evidence、metrics jobs、workflow health。
+- 触らない方がよい: `.env`、`data/`、`output/`、credential/cookie/storage state、beauty/X posting paths、第三者メディアの権利推測。
+
 ## 2026-07-28 Codex Scheduled Mutation Activation Gate (In Progress)
 
 ### 実装内容 / 安全境界
