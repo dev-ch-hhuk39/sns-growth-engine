@@ -116,11 +116,13 @@ def apply_plan(plan: dict[str, Any]) -> dict[str, Any]:
     tabs = {name: _records(client, name) for name in ("source_posts", "source_post_media", "media_permissions", "media_assets", "source_videos", "video_clip_candidates", "queue")}
     existing = {name: {str(row.get(key, "")) for row in rows} for name, (_, _, rows), key in (
         ("source_posts", tabs["source_posts"], "source_post_id"), ("source_post_media", tabs["source_post_media"], "source_post_media_id"),
-        ("media_permissions", tabs["media_permissions"], "permission_id"), ("media_assets", tabs["media_assets"], "media_asset_id"),
+        ("media_permissions", tabs["media_permissions"], "permission_id"), ("media_assets", tabs["media_assets"], "media_id"),
         ("source_videos", tabs["source_videos"], "source_video_id"), ("video_clip_candidates", tabs["video_clip_candidates"], "clip_candidate_id"), ("queue", tabs["queue"], "queue_id"))}
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    existing_hashes = {str(row.get("content_hash", "")) for row in tabs["media_assets"][2] if str(row.get("content_hash", ""))}
+    # media_assets predates the content_hash column; source_post_media is the
+    # canonical persisted hash ledger for imported source bundles.
+    existing_hashes = {str(row.get("content_hash", "")) for row in tabs["source_post_media"][2] if str(row.get("content_hash", ""))}
     duplicate_assets: list[dict[str, str]] = []
     receipt: dict[str, Any] = {"created_at": now, "operation": "import_owned_canary_assets", "rollback": {"delete_row_ids": defaultdict(list)}}
     for (account, group), members in plan["groups"].items():
@@ -131,7 +133,7 @@ def apply_plan(plan: dict[str, Any]) -> dict[str, Any]:
             receipt["rollback"]["delete_row_ids"]["source_posts"].append(source_post_id)
         if permission_id not in existing["media_permissions"]:
             declaration = members[0]["owner_declaration"]
-            rows["media_permissions"].append({"permission_id": permission_id, "source_id": source_id, "source_url": "", "account_id": account, "usage_mode": "direct_media", "permission_status": "approved", "rights_status": "owned", "allow_original_repost": True, "allow_derived_clip": any("clip" in member["allowed_operations"] for member in members), "allow_new_caption": True, "allow_cloudinary_storage": True, "allowed_platforms": "threads", "allowed_accounts": account, "evidence_type": "owner_declaration", "evidence_reference": declaration, "approval_status": "approved", "approved_by": "owner", "approved_at": now, "expires_at": "", "created_at": now, "updated_at": now})
+            rows["media_permissions"].append({"permission_id": permission_id, "source_id": source_id, "source_url": "", "account_id": account, "usage_mode": "direct_media", "permission_status": "approved", "rights_status": "owned", "allow_download": False, "allow_cloudinary_storage": True, "allow_original_repost": True, "allow_transcription": False, "allow_analysis": True, "allow_cut": any("clip" in member["allowed_operations"] for member in members), "allow_clip_repost": any("clip" in member["allowed_operations"] for member in members), "allow_new_caption": True, "allow_edit": any("clip" in member["allowed_operations"] for member in members), "attribution_required": False, "allowed_platforms": "threads", "allowed_accounts": account, "evidence_type": "owner_declaration", "evidence_reference": declaration, "approved_by": "owner", "approved_at": now, "expires_at": "", "revoked": False, "notes": "Owner-attested canary asset; no inferred third-party rights.", "updated_at": now})
             receipt["rollback"]["delete_row_ids"]["media_permissions"].append(permission_id)
         for member in members:
             media_id = f"owned_asset_{member['asset_id']}"; source_media_id = f"owned_source_media_{member['asset_id']}"
@@ -142,7 +144,7 @@ def apply_plan(plan: dict[str, Any]) -> dict[str, Any]:
             media_type = "video" if member["asset_purpose"] in {"direct_video", "generated_clip"} else "image"
             original = member["https_url"]
             rows["source_post_media"].append({"source_post_media_id": source_media_id, "source_post_id": source_post_id, "media_index": member["media_order"], "original_media_url": original, "canonical_post_url": "", "acquisition_method": "owner_asset_import", "resolver_backend": "owner_local_file" if member["local_path"] else "owner_https", "media_type": media_type, "content_hash": member["content_hash"], "download_status": "NOT_REQUESTED", "cloudinary_status": "PENDING", "rights_status": "owned", "permission_status": "approved", "reuse_status": "APPROVED", "media_asset_id": media_id, "created_at": now, "updated_at": now})
-            rows["media_assets"].append({"media_asset_id": media_id, "account_id": account, "reference_post_id": source_post_id, "source_platform": "owned_local", "source_post_url": "", "original_media_url": original, "local_path": member["local_path"], "media_type": media_type, "storage_provider": "", "storage_url": "", "rights_status": "owned", "permission_status": "approved", "reuse_policy": "approved_owner_asset", "media_policy": "manual_media_prepare", "can_reuse_media": True, "allow_download": False, "allow_cut": False, "allow_upload": False, "created_at": now, "updated_at": now})
+            rows["media_assets"].append({"media_id": media_id, "account_id": account, "reference_post_id": source_post_id, "source_platform": "owned_local", "source_post_url": "", "original_media_url": original, "local_path": member["local_path"], "media_type": media_type, "storage_provider": "", "storage_url": "", "rights_status": "owned", "permission_status": "approved", "reuse_status": "approved_owner_asset", "rights_policy": "owned", "reuse_policy": "approved_owner_asset", "media_policy": "manual_media_prepare", "allow_download": False, "allow_cut": False, "allow_upload": False, "upload_status": "PENDING", "notes": f"content_hash={member['content_hash']}", "downloaded_at": "", "uploaded_at": ""})
             existing_hashes.add(member["content_hash"])
             receipt["rollback"]["delete_row_ids"]["source_post_media"].append(source_media_id); receipt["rollback"]["delete_row_ids"]["media_assets"].append(media_id)
             if member["asset_purpose"] == "generated_clip":
@@ -166,7 +168,7 @@ def apply_plan(plan: dict[str, Any]) -> dict[str, Any]:
     verification = {}
     for logical, ids in receipt["rollback"]["delete_row_ids"].items():
         _, _, after = _records(client, logical)
-        key = {"source_posts": "source_post_id", "source_post_media": "source_post_media_id", "media_permissions": "permission_id", "media_assets": "media_asset_id", "source_videos": "source_video_id", "video_clip_candidates": "clip_candidate_id", "queue": "queue_id"}[logical]
+        key = {"source_posts": "source_post_id", "source_post_media": "source_post_media_id", "media_permissions": "permission_id", "media_assets": "media_id", "source_videos": "source_video_id", "video_clip_candidates": "clip_candidate_id", "queue": "queue_id"}[logical]
         present = {str(row.get(key, "")) for row in after}
         verification[logical] = {"expected": ids, "missing": [item for item in ids if item not in present], "status": "PASS" if all(item in present for item in ids) else "FAILED"}
     receipt["rollback"]["delete_row_ids"] = dict(receipt["rollback"]["delete_row_ids"])
