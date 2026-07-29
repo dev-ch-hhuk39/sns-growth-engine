@@ -188,9 +188,14 @@ def canary_source_integrity_report(datasets: dict[str, list[dict[str, Any]]], ca
                     reasons.append("original_media_url_missing")
             if kind == "direct_video":
                 asset = assets.get(str(candidate.get("media_asset_id", "")), {})
-                if not str(asset.get("storage_url") or candidate.get("media_url") or "").strip():
+                media_url = str(candidate.get("media_url", "")).strip()
+                if str(candidate.get("permission_status", "")).lower() != "approved" or str(candidate.get("rights_status", "")).lower() not in APPROVED_RIGHTS or not str(candidate.get("permission_evidence", "")).strip():
+                    reasons.append("permission_evidence_missing_or_inactive")
+                if not media_url:
                     reasons.append("cloudinary_asset_missing")
-                if str(asset.get("source_post_id") or source_post_id) != source_post_id:
+                if not any(str(child.get("storage_url", "")).strip() == media_url for child in children):
+                    reasons.append("cloudinary_asset_not_linked_to_source_post_media")
+                if asset and str(asset.get("source_post_id") or source_post_id) != source_post_id:
                     reasons.append("cloudinary_asset_parent_mismatch")
         checks.append({"canary_id": canary_id(str(candidate.get("account_id", "")), kind), "source_post_id": source_post_id, "status": "PASS" if not reasons else "FAIL", "reasons": sorted(set(reasons))})
     failures = [check for check in checks if check["status"] != "PASS"]
