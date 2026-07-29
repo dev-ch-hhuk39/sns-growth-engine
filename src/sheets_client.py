@@ -252,6 +252,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "duration_seconds",   # 動画長（秒）
         "rights_policy", "reuse_policy", "media_policy",
         "allow_download", "allow_cut", "allow_upload", "upload_status",
+        # System-owned generation provenance. Existing assets remain blank.
+        "media_origin", "provider_name", "provider_version", "input_hash", "generated_at",
     ],
     # 参考投稿のパフォーマンス分析結果。スコアリング・分類を保存する。
     "reference_post_scores": [

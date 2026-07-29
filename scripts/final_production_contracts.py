@@ -100,6 +100,11 @@ def source_integrity_report(
         parent = by_id.get(parent_id)
         if not parent:
             continue
+        owned_generated = str(parent.get("platform", "")) == "system_generated_owned"
+        if owned_generated:
+            # System-owned assets intentionally have no external post URL.
+            # They remain linked by their immutable local/source parent ID.
+            continue
         if str(child.get("canonical_post_url", "")) != str(parent.get("canonical_post_url", "")):
             failures.append({"source_post_id": parent_id, "reason": "child_parent_url_mismatch"})
         try:
@@ -109,6 +114,8 @@ def source_integrity_report(
         except (TypeError, ValueError):
             failures.append({"source_post_id": parent_id, "reason": "media_index_missing"})
     for parent_id, parent in by_id.items():
+        if str(parent.get("platform", "")) == "system_generated_owned":
+            continue
         url = str(parent.get("canonical_post_url", ""))
         if "/post/" not in url and "/status/" not in url:
             failures.append({"source_post_id": parent_id, "reason": "parent_not_individual_post"})

@@ -6397,3 +6397,25 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   precisely the owner-media slots. The readiness report now preserves the
   activation evidence source as `READ_OK` after this schema repair, rather
   than obscuring it as a generic worksheet exception.
+
+## 2026-07-29 System-Owned Media Canary Generation (In Progress)
+
+- Owner-attested material is now optional. `run_system_owned_media_canaries.py`
+  renders account-branded original PNG cards, a 3-5 card carousel, silent
+  9:16 MP4, and a separate 8-second system-generated clip from validated
+  public text. It does not download, transcribe, cut, or reuse third-party
+  content.
+- Generated records use `rights_status=owned`, `permission_status=approved`,
+  `evidence_type=system_generated`, input text hash, provider/version,
+  generated timestamp, Cloudinary and Threads consent, and
+  `media_origin=system_generated_owned`. `media_assets` now has append-only
+  provenance columns for those values.
+- The dispatch-only `System Owned Media Canaries` workflow uploads only after
+  explicit `GENERATE_SYSTEM_OWNED_MEDIA` confirmation. Publishing remains
+  disabled. Its output is a non-secret receipt artifact; the actual media
+  files stay in ignored `output/` and Cloudinary.
+- PASS locally: system-owned image/video/clip generation contract, workflow
+  contract, final production contracts, workflow safety, compile/diff checks.
+  Pending: PR merge, then dispatch system-owned apply from GitHub Actions to
+  generate/upload/register the remaining media canary assets before the single
+  consolidated post approval request.
