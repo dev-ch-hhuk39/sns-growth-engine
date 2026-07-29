@@ -9,6 +9,7 @@ checks = {
     "apply confirmation": "PREPARE_PRODUCTION" in text,
     "orchestrator": "run_final_production_preparation.py" in text,
     "text canaries": "create_missing_text_canaries.py" in text,
+    "publisher dry run": "prepare_bounded_canary_publish.py" in text and "--wave first_wave" in text and "--dry-run" in text,
     "existing canary audit": "audit_existing_canaries" in text and "audit_existing_canary_evidence.py" in text,
     "audit writes are scoped": "--confirm-existing-evidence" in text and "inputs.audit_existing_canaries == true" in text,
     "artifact": "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in text,

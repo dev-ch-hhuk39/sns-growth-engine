@@ -21,7 +21,7 @@ def required_fields(canary_type: str) -> tuple[str, ...]:
     common = ("account_id", "source_id", "rights_status", "permission_status", "permission_evidence", "public_post_text")
     if canary_type in {"original_text", "reference_text"}:
         return ("account_id", "public_post_text", "queue_id", "persona_validator_status", "final_public_post_validator_status", "internal_leak_status")
-    validated_media = ("queue_id", "persona_validator_status", "final_public_post_validator_status", "internal_leak_status", "publisher_media_type")
+    validated_media = ("queue_id", "persona_validator_status", "final_public_post_validator_status", "internal_leak_status", "publisher_media_type", "alignment_status", "final_alignment_score", "main_claim_coverage", "unsupported_claim_count", "source_copy_similarity", "recent_post_similarity")
     if canary_type == "generated_clip":
         return common + validated_media + ("source_video_id", "clip_candidate_id", "local_path", "start_seconds", "end_seconds")
     if canary_type == "direct_carousel":
@@ -47,13 +47,14 @@ def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             permission_ok = is_text or str(candidate.get("permission_status", "")) == "approved"
             validator_fields = ("persona_validator_status", "final_public_post_validator_status", "internal_leak_status")
             validators_ok = all(str(candidate.get(field, "")).upper() == "PASS" for field in validator_fields)
-            status = "READY_FOR_HUMAN_CANARY" if candidate and not missing and rights_ok and permission_ok and validators_ok else "PENDING_EVIDENCE"
+            alignment_ok = is_text or str(candidate.get("alignment_status", "")).upper() == "PASS"
+            status = "READY_FOR_HUMAN_CANARY" if candidate and not missing and rights_ok and permission_ok and validators_ok and alignment_ok else "PENDING_EVIDENCE"
             rows.append({
                 "canary_id": str(candidate.get("canary_id") or f"canary_{account_id}_{canary_type}"),
                 "account_id": account_id,
                 "canary_type": canary_type,
                 "status": status,
-                "missing_evidence": missing + ([] if rights_ok else ["approved_rights_status"]) + ([] if permission_ok else ["permission_status=approved"]) + ([] if validators_ok else ["media_validators=PASS"]),
+                "missing_evidence": missing + ([] if rights_ok else ["approved_rights_status"]) + ([] if permission_ok else ["permission_status=approved"]) + ([] if validators_ok else ["media_validators=PASS"]) + ([] if alignment_ok else ["alignment_status=PASS"]),
                 "publish_limit": 1,
                 "required_read_after_write": ["Threads post URL", "posted_results result_id", "media asset provenance", "metrics 24h/72h/7d jobs"],
                 "rollback": "set kill_switch=true; preserve posted result; do not retry the same idempotency key",

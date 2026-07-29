@@ -107,6 +107,14 @@ jobs:
           else
             python3 scripts/run_final_production_preparation.py --account-id "$ACCOUNT_ID" --dry-run --output /tmp/final-production-preparation/preparation.json
           fi
+      - name: Verify first-wave publisher preflight without posting
+        if: inputs.audit_existing_canaries != true
+        run: |
+          mkdir -p /tmp/final-production-preparation
+          python3 scripts/prepare_bounded_canary_publish.py \
+            --dry-run \
+            --wave first_wave \
+            --output /tmp/final-production-preparation/first-wave-publisher-preflight.json
       - name: Audit existing canary evidence
         if: inputs.audit_existing_canaries == true
         run: |
