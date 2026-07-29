@@ -20,12 +20,13 @@ ACCOUNTS = ("night_scout", "liver_manager")
 def required_fields(canary_type: str) -> tuple[str, ...]:
     common = ("account_id", "source_id", "rights_status", "permission_status", "permission_evidence", "public_post_text")
     if canary_type in {"original_text", "reference_text"}:
-        return ("account_id", "public_post_text", "persona_validator_status", "final_public_post_validator_status")
+        return ("account_id", "public_post_text", "queue_id", "persona_validator_status", "final_public_post_validator_status", "internal_leak_status")
+    validated_media = ("queue_id", "persona_validator_status", "final_public_post_validator_status", "internal_leak_status", "publisher_media_type")
     if canary_type == "generated_clip":
-        return common + ("source_video_id", "clip_candidate_id", "local_path", "start_seconds", "end_seconds")
+        return common + validated_media + ("source_video_id", "clip_candidate_id", "local_path", "start_seconds", "end_seconds")
     if canary_type == "direct_carousel":
-        return common + ("source_post_id", "media_asset_ids", "media_order")
-    return common + ("source_post_id", "media_asset_id", "media_url")
+        return common + validated_media + ("source_post_id", "media_asset_ids", "media_order")
+    return common + validated_media + ("source_post_id", "media_asset_id", "media_url")
 
 
 def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -44,13 +45,15 @@ def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             is_text = canary_type in {"original_text", "reference_text"}
             rights_ok = is_text or str(candidate.get("rights_status", "")) in {"owned", "licensed", "approved_creator_clip"}
             permission_ok = is_text or str(candidate.get("permission_status", "")) == "approved"
-            status = "READY_FOR_HUMAN_CANARY" if candidate and not missing and rights_ok and permission_ok else "PENDING_EVIDENCE"
+            validator_fields = ("persona_validator_status", "final_public_post_validator_status", "internal_leak_status")
+            validators_ok = all(str(candidate.get(field, "")).upper() == "PASS" for field in validator_fields)
+            status = "READY_FOR_HUMAN_CANARY" if candidate and not missing and rights_ok and permission_ok and validators_ok else "PENDING_EVIDENCE"
             rows.append({
                 "canary_id": str(candidate.get("canary_id") or f"canary_{account_id}_{canary_type}"),
                 "account_id": account_id,
                 "canary_type": canary_type,
                 "status": status,
-                "missing_evidence": missing + ([] if rights_ok else ["approved_rights_status"]) + ([] if permission_ok else ["permission_status=approved"]),
+                "missing_evidence": missing + ([] if rights_ok else ["approved_rights_status"]) + ([] if permission_ok else ["permission_status=approved"]) + ([] if validators_ok else ["media_validators=PASS"]),
                 "publish_limit": 1,
                 "required_read_after_write": ["Threads post URL", "posted_results result_id", "media asset provenance", "metrics 24h/72h/7d jobs"],
                 "rollback": "set kill_switch=true; preserve posted result; do not retry the same idempotency key",
