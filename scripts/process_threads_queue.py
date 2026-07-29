@@ -26,7 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from config_loader import get_config  # noqa: E402
-from media_post_validator import validate_media_post  # noqa: E402
+from media_post_validator import publisher_media_type, validate_media_post  # noqa: E402
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
@@ -549,7 +549,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=True,
         media_url=media["effective_media_url"] or None,
-        media_type="IMAGE" if media["media_type"] == "image" else "VIDEO",
+        media_type=publisher_media_type(str(queue_row.get("content_type", "")), media["effective_media_urls"]) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
         media_urls=media["effective_media_urls"],
         media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )
@@ -599,6 +599,9 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "platform": "threads",
             "account_id": account_id,
             "media_type": media["media_type"],
+            "content_type": queue_row.get("content_type", ""),
+            "publisher_media_type": queue_row.get("publisher_media_type", ""),
+            "media_urls": media["effective_media_urls"],
             "duration_seconds": queue_row.get("duration_seconds", "0"),
             "aspect_ratio": queue_row.get("aspect_ratio", ""),
             "public_post_text": text,
@@ -634,7 +637,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=False,
         media_url=media["effective_media_url"] or None,
-        media_type="IMAGE" if media["media_type"] == "image" else "VIDEO",
+        media_type=publisher_media_type(str(queue_row.get("content_type", "")), media["effective_media_urls"]) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
         media_urls=media["effective_media_urls"],
         media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )

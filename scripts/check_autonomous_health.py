@@ -36,8 +36,8 @@ EXPECTED_CRONS = {
     "liver_manager": {"4 1 * * *", "4 4 * * *", "4 12 * * *"},
 }
 
-# Media schedules are wired to their own slots, but publish remains gated by
-# validate_production_activation.py until all twelve canaries have evidence.
+# Media workflows remain dispatch-only until the canary evidence activates
+# scheduled media posting. Text schedules are intentionally independent.
 MEDIA_CANARY_WORKFLOWS = {
     "media_prepare_liver_manager",
     "media_prepare_night_scout",
@@ -46,10 +46,7 @@ MEDIA_CANARY_WORKFLOWS = {
     "direct_media_liver_manager",
     "direct_media_night_scout",
 }
-MEDIA_SCHEDULED_PUBLISH_WORKFLOWS = {
-    "media_post_liver_manager", "media_post_night_scout",
-    "direct_media_liver_manager", "direct_media_night_scout",
-}
+MEDIA_SCHEDULED_PUBLISH_WORKFLOWS: set[str] = set()
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -233,11 +230,7 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
                 'ALLOW_TRANSCRIPTION_API: "false"',
             ]),
             "crons": sorted(_crons(text)),
-            "trigger_mode": (
-                "scheduled_activation_guarded" if key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
-                else "dispatch_only_preparation" if key in MEDIA_CANARY_WORKFLOWS
-                else "scheduled"
-            ),
+            "trigger_mode": "dispatch_only_preparation" if key in MEDIA_CANARY_WORKFLOWS else "scheduled",
         }
         if key in EXPECTED_CRONS and set(wf["crons"]) != EXPECTED_CRONS[key]:
             problems.append(f"{key}:schedule_mismatch")
@@ -312,18 +305,13 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
         "media_schedule": {
             "text_only_schedule_on": True,
             "media_schedule_on": bool(config.get("scheduled_publish_enabled")),
-            "media_schedule_connected": True,
-            "media_execution_mode": "scheduled_activation_guarded",
+            "media_schedule_connected": bool(config.get("scheduled_publish_enabled")),
+            "media_execution_mode": "scheduled_activation_guarded" if config.get("scheduled_publish_enabled") else "manual_canary_only",
             "media_canary_workflows_healthy": all(
-                workflow_results.get(key, {}).get("trigger_mode") == "scheduled_activation_guarded"
-                and workflow_results.get(key, {}).get("has_workflow_dispatch", False)
-                and workflow_results.get(key, {}).get("has_schedule", False)
-                for key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
-            ) and all(
                 workflow_results.get(key, {}).get("trigger_mode") == "dispatch_only_preparation"
                 and workflow_results.get(key, {}).get("has_workflow_dispatch", False)
                 and not workflow_results.get(key, {}).get("has_schedule", False)
-                for key in MEDIA_CANARY_WORKFLOWS - MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
+                for key in MEDIA_CANARY_WORKFLOWS
             ),
             "media_growth_engine_enabled": bool(media_config.get("media_growth_engine_enabled")),
             "source_video_discovery_apply_enabled": bool(media_config.get("source_video_discovery_apply_enabled")),

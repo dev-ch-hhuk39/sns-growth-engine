@@ -75,6 +75,9 @@ jobs:
           if [ "${{ inputs.canary_wave }}" = "first_wave" ]; then expected=4; else expected=12; fi
           jq -e --argjson expected "$expected" '.status == "APPLIED" and .read_after_write == "PASS" and (.queue_ids | length == $expected)' /tmp/bounded-canary/preflight.json
       - name: Publish exact canaries sequentially
+        if: >-
+          (inputs.canary_wave == 'first_wave' && inputs.confirm_canary_publish == 'PUBLISH_FIRST_WAVE_APPROVED_CANARIES') ||
+          (inputs.canary_wave == 'all_12' && inputs.confirm_canary_publish == 'PUBLISH_12_APPROVED_CANARIES')
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -82,9 +85,33 @@ jobs:
           ALLOW_MEDIA_POSTS: "true"
           ALLOW_THREADS_CAROUSEL: "true"
         run: |
+          : > /tmp/bounded-canary/outcomes.jsonl
           jq -r '.plan.rows[] | [.account_id, .queue_id] | @tsv' /tmp/bounded-canary/preflight.json | while IFS=$'\t' read -r account_id queue_id; do
-            python3 scripts/process_threads_queue.py --account-id "$account_id" --queue-id "$queue_id" --confirm-real-post
+            python3 scripts/process_threads_queue.py --account-id "$account_id" --queue-id "$queue_id" --confirm-real-post | tee -a /tmp/bounded-canary/outcomes.raw
           done
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          requested = json.loads(Path("/tmp/bounded-canary/preflight.json").read_text())["queue_ids"]
+          outcomes = []
+          for line in Path("/tmp/bounded-canary/outcomes.raw").read_text().splitlines():
+              try:
+                  value = json.loads(line)
+              except json.JSONDecodeError:
+                  continue
+              if isinstance(value, dict) and value.get("queue_id") in requested:
+                  outcomes.append(value)
+          by_queue = {item["queue_id"]: item for item in outcomes}
+          summary = {
+              "requested_count": len(requested),
+              "posted_count": sum(item.get("status") == "POSTED" for item in by_queue.values()),
+              "outcomes": [by_queue.get(queue, {"queue_id": queue, "status": "MISSING_OUTCOME"}) for queue in requested],
+          }
+          Path("/tmp/bounded-canary/outcomes.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n")
+          if summary["posted_count"] != summary["requested_count"]:
+              raise SystemExit("requested_count != POSTED count")
+          PY
       - name: Verify posted results and metrics reservations
         if: always()
         run: |

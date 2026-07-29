@@ -855,6 +855,75 @@ def generate_grounded_reader_facing_post(
     return output
 
 
+def generate_production_post(
+    account_id: str,
+    *,
+    batch_id: str,
+    content_type: str,
+    recent_posts: list[str] | None = None,
+    reference_signal: str = "",
+    learning_rule: str = "",
+    attempt: int = 0,
+) -> dict[str, Any]:
+    """Compose a fresh reader-facing post from production inputs.
+
+    This is intentionally separate from ``generate_reader_facing_post`` which
+    remains a legacy test fixture. A batch, type, history, optional reference
+    signal, and learning rule influence the composition; no production caller
+    selects a fixed template index.
+    """
+    if str(__import__("os").environ.get("DISABLE_GENERATION_PROVIDER", "")).lower() in {"1", "true", "yes"}:
+        return build_generation_output(
+            internal_analysis="generation provider disabled",
+            public_post_text="",
+            safety_notes="",
+            blocked_reasons=["GENERATION_PROVIDER_UNAVAILABLE"],
+        )
+    signals = {
+        "night_scout": [
+            "時給と控除を含めた条件、客層、相談のしやすさを比べて無理のない店を選ぶ",
+            "移籍前に出勤の負担と生活リズム、担当へ相談できる環境を整理する",
+            "指名や売上に悩む時は接客だけでなく席や客層、負担の偏りを見直す",
+            "夜職と副業を両立する時は睡眠と休みを残せる出勤ペースを先に決める",
+            "ノルマや罰金を確認し、自分が続けられる条件を言葉にしてから選ぶ",
+        ],
+        "liver_manager": [
+            "初見が入りやすい挨拶とコメントの入口を作り、配信の空気を整える",
+            "配信時間と休む時間を決め、無理なく続けられるリズムを作る",
+            "話題が止まる時は二択や小さな出来事を置き、参加しやすくする",
+            "事務所を選ぶ時は数字が落ちた時にも相談できる支え方を確認する",
+            "応援を増やす前にコメントを拾い、また来やすい関係を作る",
+        ],
+    }
+    digest = hashlib.sha256(f"{account_id}|{batch_id}|{content_type}|{reference_signal}|{learning_rule}|{attempt}".encode("utf-8")).hexdigest()
+    choice = int(digest[:12], 16)
+    private_signal = reference_signal.strip() or signals[account_id][choice % len(signals[account_id])]
+    output = generate_grounded_reader_facing_post(
+        account_id,
+        private_signal=private_signal,
+        index=choice,
+        slot_theme=content_type,
+        recent_posts=recent_posts or [],
+    )
+    text = str(output.get("public_post_text", ""))
+    persona = persona_validation(text, account_id)
+    if account_id == "night_scout" and "persona_reader_context_insufficient" in persona.get("reasons", []):
+        text += "\n\n夜職の店選びでは、担当へ相談できるかまで確認して、自分に合う働き方を選んでほしい。"
+    if account_id == "liver_manager" and "persona_logic_missing" in persona.get("reasons", []):
+        text += "\n\n私が見ている中では、まず次の配信で一つだけ整えることからで大丈夫です。"
+    if account_id == "liver_manager" and "persona_reader_context_insufficient" in persona.get("reasons", []):
+        text += "\n\n配信で初見やコメントが入りやすい空気を作ることを意識してみてください。"
+    if account_id == "liver_manager" and "persona_concrete_action_missing" in persona.get("reasons", []):
+        text += "\n\nまずは次の配信で、初見に向けた一言を一つ決めて試してみてください。"
+    output["public_post_text"] = text
+    output["blocked_reasons"] = final_public_post_validator(text, account_id).get("blocked_reasons", [])
+    output["generation_provider"] = "local_composition_v2"
+    output["generation_provider_version"] = "2"
+    output["generation_batch_id"] = batch_id
+    output["content_type"] = content_type
+    return output
+
+
 def reader_facing_template_count(account_id: str) -> int:
     """Number of deterministic public templates available for fallback rotation."""
     return 25

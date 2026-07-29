@@ -10,6 +10,8 @@ assert "first_wave" in text
 assert "prepare_bounded_canary_publish.py --apply --confirm-bounded-canary" in text
 assert '--wave "${{ inputs.canary_wave }}"' in text
 assert "--queue-id \"$queue_id\" --confirm-real-post" in text
+assert "requested_count != POSTED count" in text
+assert "outcomes.json" in text
 assert 'ALLOW_REAL_X_POST: "false"' in text
 assert 'ALLOW_VIDEO_DOWNLOAD: "false"' in text
 assert 'ALLOW_CLOUDINARY_UPLOAD: "false"' in text

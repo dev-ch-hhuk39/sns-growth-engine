@@ -211,7 +211,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Media Growth Engine provenance. Text-only rows leave these blank.
         "source_post_id", "source_video_id", "clip_candidate_id",
         "slot_id", "business_date_jst",
-        "media_url", "media_status", "media_required", "media_type", "media_origin",
+        "media_url", "media_status", "media_required", "media_type", "content_type", "publisher_media_type", "media_origin",
         "duration_seconds", "aspect_ratio",
         # A direct source post may be a carousel.  These lists must all share
         # the same source_post_id and are never used to mix different posts.
@@ -253,7 +253,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_policy", "reuse_policy", "media_policy",
         "allow_download", "allow_cut", "allow_upload", "upload_status",
         # System-owned generation provenance. Existing assets remain blank.
-        "media_origin", "provider_name", "provider_version", "input_hash", "generated_at",
+        "media_origin", "provider_name", "provider_version", "input_hash", "content_hash", "generated_at",
+        "alignment_status", "final_alignment_score", "main_claim_coverage",
+        "unsupported_claim_count", "source_copy_similarity", "recent_post_similarity",
     ],
     # 参考投稿のパフォーマンス分析結果。スコアリング・分類を保存する。
     "reference_post_scores": [

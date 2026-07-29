@@ -1,10 +1,7 @@
 name: Direct Reference Media Night Scout
 
 on:
-  # A scheduled run prepares and audits its media slot. It can publish only
-  # after the twelve-canary activation guard reports READY.
-  schedule:
-    - cron: "2 9 * * *"
+  # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
       confirm_direct_media:

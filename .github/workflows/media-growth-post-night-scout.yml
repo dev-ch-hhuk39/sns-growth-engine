@@ -1,8 +1,7 @@
 name: Media Growth Post Night Scout
 
 on:
-  schedule:
-    - cron: "2 12 * * *"
+  # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
       confirm_media_post:

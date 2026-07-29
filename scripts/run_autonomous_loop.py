@@ -24,7 +24,7 @@ from content_slot_runs import build_slot_run, claim_slot_run, existing_slot_stat
 from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
 from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
-from public_post_quality import independent_account_order, final_public_post_validator, generate_reader_facing_post, public_preview  # noqa: E402
+from public_post_quality import generate_production_post, independent_account_order, final_public_post_validator, public_preview  # noqa: E402
 from content_schedule import TEXT_POST_TYPES, slot_by_id  # noqa: E402
 
 CONFIG_FILE = ROOT / "config/autonomous_mode.json"
@@ -462,9 +462,8 @@ def build_autonomous_plan(
         "blocked_reasons": blocked_reasons,
     }
     plan_result["video_reference_analysis"] = build_video_reference_analysis(plan_result, config, fetch_metadata=False)
-    slot_index = (sum(ord(char) for char in slot_id) % 20) + 1 if slot_id else 1
     preview_account = str(plan_result.get("selected_account") or (selected_accounts[0] if selected_accounts else "night_scout"))
-    preview_output = generate_reader_facing_post(preview_account, index=slot_index)
+    preview_output = generate_production_post(preview_account, batch_id=f"preview_{slot_id or 'manual'}", content_type=str((content_slot or {}).get("post_type", "original_text")))
     preview_text = str(preview_output["public_post_text"])
     preview_validation = final_public_post_validator(preview_text, preview_account)
     plan_result["public_post_preview"] = public_preview(preview_text)
@@ -819,48 +818,19 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         ])
         results.append(generation_result)
         if generation_result.get("returncode") != 0:
-            refill = _run([
-                sys.executable,
-                "scripts/refill_threads_queue.py",
-                "--account-id",
-                account,
-                "--count",
-                "1",
-            ])
-            results.append(refill)
-            if refill.get("returncode") != 0:
-                return results
-            generation_result["returncode"] = 0
-            generation_result["status"] = "RECOVERED_SAFE_ORIGINAL_FALLBACK"
-            generation_result["recovery_reason"] = "reference_generation_failed"
+            generation_result["status"] = "SAFE_NO_CANDIDATE"
+            generation_result["recovery_reason"] = "generation_failed_without_template_fallback"
+            return results
         approval = _run([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"])
         results.append(approval)
         if approval.get("returncode") != 0:
             return results
-        # A canonical scheduled slot must not silently become a NO_POST just
-        # because every retained queue candidate is stale or near-duplicate.
-        # The dedicated fallback has its own claim, daily-cap, duplicate, and
-        # final-public-validator checks, and posts at most one item.
+        # A stale or near-duplicate candidate is a safe no-post state. Do not
+        # silently replace a failed media or reference generation with a fixed
+        # text fallback; the next preparation run must generate a new asset.
         approval_payload = approval.get("payload") or {}
         if int(approval_payload.get("updated_count", 0) or 0) == 0 and slot.get("slot_id") and slot.get("post_type") in TEXT_POST_TYPES:
-            fallback_env = dict(os.environ)
-            fallback_env.setdefault("PUBLISH_ENABLED", "true")
-            fallback_env.setdefault("ALLOW_REAL_THREADS_POST", "true")
-            fallback = _run([
-                sys.executable,
-                "scripts/run_slot_text_fallback.py",
-                "--account-id", account,
-                "--slot-id", str(slot["slot_id"]),
-                "--reason", "auto_ready_rejected_all",
-                "--apply",
-                "--confirm-slot-fallback",
-                "--use-sheets",
-            ], env=fallback_env)
-            results.append(fallback)
-            if fallback.get("returncode") != 0:
-                return results
-            if str((fallback.get("payload") or {}).get("status", "")) == "POSTED":
-                posted_by_slot_fallback.add(account)
+            results.append({"cmd": "generation/approval", "returncode": 0, "status": "SAFE_NO_CANDIDATE", "reason": "AUTO_READY_REJECTED_ALL"})
     if getattr(args, "stop_before_post", False):
         results.append({
             "cmd": "scripts/process_threads_queue.py --stop-before-post",

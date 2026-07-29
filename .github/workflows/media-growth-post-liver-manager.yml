@@ -1,8 +1,7 @@
 name: Media Growth Post Liver Manager
 
 on:
-  schedule:
-    - cron: "4 9 * * *"
+  # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
       confirm_media_post:

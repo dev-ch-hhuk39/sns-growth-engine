@@ -6517,3 +6517,30 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 - main反映後にFinal Production Preparationのaudit modeでlegacy INVALIDを隔離し、System Owned Media CanariesのapplyをGitHub Actionsから実行する。出力artifactが12/12 READYならpreviewで一度だけ人間承認を取る。実投稿・scheduled activationは未実行。
 - 次に触ってよい: fresh canary prep artifact、bounded preflight、canary publish。触らない方がよい: legacy contentの再投稿、第三者reference-only media、X/beauty投稿、`.env`、`data/`、`output/`、credential/cookie。
+
+## 2026-07-29 Production Stabilization (In Progress)
+
+### 本システムについて
+
+- 本番・canary共通で、候補生成時に本文hash、pending queue、posted_results、最近投稿の類似度、media content hash、Cloudinary public IDを評価するfail-closed novelty contractへ移行中。重複はREADY前に再生成対象となり、最終publisherのidempotency checkは残す。
+- system-generated owned mediaは投稿形式ごとに別の本文とstoryboardで生成する。direct videoはdirect-video用のcardから、generated clipはclip用の別cardから作り、carouselの一枚目やimage assetを別本文の動画へ流用しない。
+- queueの`content_type`とpublisherの`publisher_media_type`を分離し、`direct_image -> IMAGE`、`direct_carousel -> CAROUSEL`、`direct_video/generated_clip -> VIDEO`として正規化する。
+
+### 変更ファイル一覧 / テスト結果
+
+- 更新: `scripts/public_post_quality.py`, `scripts/run_system_owned_media_canaries.py`, `scripts/create_missing_text_canaries.py`, `scripts/run_autonomous_loop.py`, `scripts/process_threads_queue.py`, `scripts/media_post_validator.py`, `src/sheets_client.py`, bounded publisher workflow、関連focused tests。
+- 追加: `scripts/production_novelty.py`, novelty/alignment/media-type tests。
+- focused PASS: novelty contract、system-owned generator/alignment、publisher media-type normalizer、bounded workflow contract、queue worker、media validator、no-text-fallback、all workflow safety flags (448/0)、`py_compile`、`git diff --check`。ローカルRuffは未導入で未実行。
+- full CIの初回失敗は、media workflowがcanary成功前にもscheduleを持つ旧設定、旧text-fallback契約、audit workflowのcheckout hardening不足による契約不整合だった。4本のmedia dispatch workflowをmanual-onlyへ戻し、fallbackを禁止する契約に統一し、checkoutを`persist-credentials: false`へ固定した。関連workflow/schedule/resource/self-hosted testsは全PASS。
+- health summaryとmedia-schedule regression testsもmanual-only stateを正として更新した。canary成功前にscheduleが存在することを「接続済み」と表示しない。full regressionの分割確認では711件にこの契約差分以外のFAILはない。
+
+### 未完了事項 / スケール方針 / 残WARN
+
+- stabilization PRが通常マージされるまで、Threads投稿、Cloudinary upload、Sheets apply、scheduled activationは実行しない。
+- media scheduleはcanary完了後のactivationまでmanual-only。text scheduleは既存gateのまま変更しない。
+- 全回帰/full CIはこのPRの最終確認時に一度だけ実行する。PR gate後、mainでproduction orchestratorのcanary modeを使って新規4件を準備し、READY artifactとpreviewを提示して人間承認を待つ。
+- 残WARN: 過去のlegacy posted text/mediaは新規性判定の参照対象だが、修復・再利用・再投稿対象外。Xとbeautyは引き続き無効。
+
+### 次AIへの引き継ぎメモ
+
+- 次に触ってよい: stabilization PRのfocused/full CI、通常マージ、main上のcanary preparation。触らない方がよい: legacy canary、第三者reference-only media、`.env`、`data/`、`output/`、secrets/cookies、scheduled activation。
