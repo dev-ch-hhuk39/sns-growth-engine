@@ -6532,6 +6532,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 追加: `scripts/production_novelty.py`, novelty/alignment/media-type tests。
 - focused PASS: novelty contract、system-owned generator/alignment、publisher media-type normalizer、bounded workflow contract、queue worker、media validator、no-text-fallback、all workflow safety flags (448/0)、`py_compile`、`git diff --check`。ローカルRuffは未導入で未実行。
 - full CIの初回失敗は、media workflowがcanary成功前にもscheduleを持つ旧設定、旧text-fallback契約、audit workflowのcheckout hardening不足による契約不整合だった。4本のmedia dispatch workflowをmanual-onlyへ戻し、fallbackを禁止する契約に統一し、checkoutを`persist-credentials: false`へ固定した。関連workflow/schedule/resource/self-hosted testsは全PASS。
+- health summaryとmedia-schedule regression testsもmanual-only stateを正として更新した。canary成功前にscheduleが存在することを「接続済み」と表示しない。full regressionの分割確認では711件にこの契約差分以外のFAILはない。
 
 ### 未完了事項 / スケール方針 / 残WARN
 
