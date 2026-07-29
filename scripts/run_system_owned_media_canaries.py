@@ -19,7 +19,6 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src")); sys.path.insert(0, str(ROOT / "scripts"))
-from media.cloudinary_client import upload_to_cloudinary
 from media.social_card import render_text_card
 from public_post_quality import final_public_post_validator, generate_reader_facing_post
 
@@ -91,6 +90,8 @@ def _upload(path: Path, account_id: str, public_id: str, allow_upload: bool) -> 
     if not allow_upload:
         return ""
     from config_loader import get_cloudinary_config
+    from media.cloudinary_client import upload_to_cloudinary
+
     config = get_cloudinary_config()
     mime = "video/mp4" if path.suffix.lower() == ".mp4" else "image/png"
     return upload_to_cloudinary(path.read_bytes(), mime, public_id, config)
@@ -118,10 +119,13 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
         urls = [_upload(path, account_id, f"sns-growth/{account_id}/{media_id}", upload) for path, media_id in zip(files, media_ids)]
         created["source_posts"].append({"source_post_id": parent_id, "source_id": source_id, "source_account_id": "system_generated", "target_account_id": account_id, "platform": "system_generated_owned", "original_post_text": spec["text"], "media_count": len(files), "media_type": "carousel" if len(files) > 1 else ("video" if files[0].suffix == ".mp4" else "image"), "discovered_at": now, "collection_backend": "system_owned_media", "rights_status": "owned", "permission_status": "approved", "permission_scope": "system_generated", "direct_media_reuse_allowed": True, "collection_status": "SYSTEM_GENERATED", "processing_status": "READY", "content_hash": hashlib.sha256(spec["text"].encode()).hexdigest(), "created_at": now, "updated_at": now})
         created["media_permissions"].append({"permission_id": permission_id, "source_id": source_id, "account_id": account_id, "usage_mode": "system_owned_media", "rights_status": "owned", "permission_status": "approved", "allow_download": False, "allow_cloudinary_storage": True, "allow_original_repost": True, "allow_transcription": False, "allow_analysis": True, "allow_cut": spec["kind"] in {"direct_video", "generated_clip"}, "allow_clip_repost": spec["kind"] in {"direct_video", "generated_clip"}, "allow_new_caption": True, "allow_edit": True, "evidence_type": "system_generated", "evidence_reference": spec["run_id"], "approved_by": "system", "approved_at": now, "revoked": False, "notes": "provider=pillow+ffmpeg; input_hash=" + hashlib.sha256(spec["text"].encode()).hexdigest(), "updated_at": now})
+        clip_id = f"clip_{source_id}" if spec["kind"] == "generated_clip" else ""
         for index, (path, media_id, url) in enumerate(zip(files, media_ids, urls)):
             media_type = "video" if path.suffix == ".mp4" else "image"; hash_value = _sha(path)
             created["source_post_media"].append({"source_post_media_id": f"spm_{source_id}_{index}", "source_post_id": parent_id, "media_index": index, "original_media_url": "", "canonical_post_url": "", "acquisition_method": "system_generated", "resolver_backend": "pillow_ffmpeg", "media_type": media_type, "mime_type": "video/mp4" if media_type == "video" else "image/png", "width": "1080", "height": "1920" if media_type == "video" else "1350", "aspect_ratio": "9:16" if media_type == "video" else "4:5", "duration_seconds": "8" if spec["kind"] == "generated_clip" else ("10" if media_type == "video" else ""), "content_hash": hash_value, "cloudinary_status": "UPLOADED" if url else "PENDING", "storage_url": url, "rights_status": "owned", "permission_status": "approved", "reuse_status": "APPROVED", "media_asset_id": media_id, "created_at": now, "updated_at": now})
             created["media_assets"].append({"media_id": media_id, "account_id": account_id, "reference_post_id": parent_id, "source_platform": "system_generated_owned", "source_post_url": "", "original_media_url": "", "storage_provider": "cloudinary" if url else "", "storage_url": url, "cloudinary_public_id": f"sns-growth/{account_id}/{media_id}" if url else "", "media_type": media_type, "mime_type": "video/mp4" if media_type == "video" else "image/png", "width": "1080", "height": "1920" if media_type == "video" else "1350", "duration": "8" if spec["kind"] == "generated_clip" else ("10" if media_type == "video" else ""), "reuse_status": "owned", "media_reuse_risk": "low", "imitation_risk": "low", "local_path": str(path), "rights_status": "owned", "permission_status": "approved", "aspect_ratio": "9:16" if media_type == "video" else "4:5", "duration_seconds": "8" if spec["kind"] == "generated_clip" else ("10" if media_type == "video" else ""), "rights_policy": "owned", "reuse_policy": "allow_reuse", "media_policy": "owned", "allow_upload": True, "upload_status": "UPLOADED" if url else "PENDING", "media_origin": "system_generated_owned", "provider_name": "pillow+ffmpeg", "provider_version": "v1", "input_hash": hashlib.sha256(spec["text"].encode()).hexdigest(), "generated_at": now, "notes": f"content_hash={hash_value}"})
+            if clip_id:
+                created["media_assets"][-1]["video_clip_id"] = clip_id
         if spec["kind"] == "generated_clip":
             clip_id = f"clip_{source_id}"; video_id = f"video_{source_id}"; created["source_videos"].append({"source_video_id": video_id, "source_id": source_id, "account_id": account_id, "platform": "system_generated_owned", "source_type": "generated", "video_id": video_id, "title": "System generated short video", "duration_seconds": "8", "rights_status": "owned", "permission_status": "approved", "discovery_status": "SYSTEM_GENERATED", "content_hash": _sha(files[0]), "local_path": str(files[0]), "discovered_at": now}); created["video_clip_candidates"].append({"clip_candidate_id": clip_id, "clip_id": clip_id, "source_video_id": video_id, "source_id": source_id, "account_id": account_id, "source_platform": "system_generated_owned", "start_seconds": "0", "end_seconds": "8", "duration_seconds": "8", "clip_status": "READY", "cut_status": "done", "local_clip_path": str(files[0]), "clip_media_asset_id": media_ids[0], "media_asset_id": media_ids[0], "storage_url": urls[0], "rights_status": "owned", "permission_status": "approved", "public_post_text": spec["text"], "public_post_validator_status": "PASS", "aspect_ratio": "9:16", "upload_status": "UPLOADED" if urls[0] else "PENDING", "post_status": "NOT_POSTED", "created_at": now})
         queue = {"queue_id": f"q_{source_id}", "account_id": account_id, "target_account_id": account_id, "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": "system_owned_media", "public_post_text": spec["text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS", "source_id": source_id, "source_post_id": parent_id, "media_asset_id": media_ids[0], "media_url": urls[0], "media_status": "ATTACHED" if urls[0] else "PENDING_UPLOAD", "media_required": True, "media_type": spec["kind"], "media_origin": "system_generated_owned", "canary_id": spec["canary_id"], "created_at": now, "updated_at": now}
@@ -129,7 +133,25 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
         created["queue"].append(queue)
     for logical, rows in created.items(): _append(tabs[logical][0], tabs[logical][1], rows)
     verify = {logical: len(rows) for logical, rows in created.items()}
-    return {"status": "APPLIED", "created": verify, "skipped_canaries": skipped, "cloudinary_uploaded": sum(1 for row in created["media_assets"] if row.get("storage_url")), "would_post": False, "read_after_write": "PASS"}
+    queue_ids = {str(row["queue_id"]) for row in created["queue"]}
+    media_ids = {str(row["media_id"]) for row in created["media_assets"]}
+    stored_queue_ids = {str(row.get("queue_id", "")) for row in client._ws("queue").get_all_records()}
+    stored_media_ids = {str(row.get("media_id", "")) for row in client._ws("media_assets").get_all_records()}
+    missing_queue_ids = sorted(queue_ids - stored_queue_ids)
+    missing_media_ids = sorted(media_ids - stored_media_ids)
+    read_after_write = {
+        "status": "PASS" if not missing_queue_ids and not missing_media_ids else "PARTIAL_FAILURE",
+        "missing_queue_ids": missing_queue_ids,
+        "missing_media_ids": missing_media_ids,
+    }
+    return {
+        "status": "APPLIED" if read_after_write["status"] == "PASS" else "PARTIAL_FAILURE",
+        "created": verify,
+        "skipped_canaries": skipped,
+        "cloudinary_uploaded": sum(1 for row in created["media_assets"] if row.get("storage_url")),
+        "would_post": False,
+        "read_after_write": read_after_write,
+    }
 
 
 def main() -> int:
