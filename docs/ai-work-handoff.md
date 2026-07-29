@@ -6563,3 +6563,4 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 - System Owned Media Canaries run `30440723109` は、限定した2画像と2テキストをCloudinary/Sheetsへ保存し、各media queueとtext queueのread-after-writeをPASSした。投稿数は0。
 - その後のread-only inventoryで、旧sheet row順が新規queueより優先される不具合を発見。`build_live_canary_inventory.py`は、`content_type`を正として最新fresh queueから親・assetを辿るよう修正中。旧canaryを再利用せず、新規queue/assetをpreview対象に固定する。
+- follow-upでは、media/text候補のqueue ID、persona/final/internal-leak validator、publisher media typeをinventoryへ持ち上げ、全validatorが`PASS`でない候補を`READY_FOR_HUMAN_CANARY`にしない契約へ修正中。
