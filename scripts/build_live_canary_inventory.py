@@ -76,8 +76,12 @@ def build_inventory(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]
             if not perm or not all(urls):
                 continue
             candidates.append({"account_id": account_id, "canary_type": "direct_carousel", "source_id": parent.get("source_id", ""), "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(next((q for q in account_queue if _public_text(q)), {})), "source_post_id": parent_id, "media_asset_ids": [item.get("media_asset_id") or item.get("source_post_media_id", "") for item in ordered], "media_order": [item.get("media_index", "") for item in ordered]})
-        for clip in clips:
-            if str(clip.get("account_id", "")) != account_id or str(clip.get("rights_status", "")).lower() not in APPROVED_RIGHTS:
+        account_clips = sorted(
+            (clip for clip in clips if str(clip.get("account_id", "")) == account_id),
+            key=lambda clip: str(clip.get("source_platform", "")) != "system_generated_owned",
+        )
+        for clip in account_clips:
+            if str(clip.get("rights_status", "")).lower() not in APPROVED_RIGHTS:
                 continue
             source_video = source_videos.get(str(clip.get("source_video_id", "")), {})
             source_id = str(clip.get("source_id") or source_video.get("source_id") or "")
