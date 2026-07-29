@@ -6544,3 +6544,17 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 ### 次AIへの引き継ぎメモ
 
 - 次に触ってよい: stabilization PRのfocused/full CI、通常マージ、main上のcanary preparation。触らない方がよい: legacy canary、第三者reference-only media、`.env`、`data/`、`output/`、secrets/cookies、scheduled activation。
+
+## 2026-07-29 First-Wave Canary Selection
+
+### 今回の変更 / 変更ファイル一覧
+
+- 作業ブランチ: `fix/first-wave-canary-selection`（base: stabilization merge `f8fd0c8`）。
+- 更新: `.github/workflows/system-owned-media-canaries.yml`、`scripts/run_system_owned_media_canaries.py`、`scripts/create_missing_text_canaries.py`、関連focused tests。
+- dispatch入力でmedia typeとtext targetを限定できるようにし、最初のapplyが次の4件以外を生成・保存しないことを保証する: Night Scout `original_text` / `direct_image`、Liver Manager `original_text` / `direct_image`。
+
+### テスト結果 / 未完了事項 / 安全境界
+
+- PASS: `py_compile`、system-owned generator / alignment / workflow / fresh-text / novelty focused tests、`git diff --check`。全workflow safety regressionは前段のstabilization mergeでPASS。
+- 未完了: この限定patchをPR・通常マージ後、GitHub Actionsのproduction Sheets/Cloudinary接続で4件だけをapplyし、read-after-write、novelty、alignment、publisher dry-runを確認してpreview承認で停止する。
+- 実行していない: Threads投稿、scheduled activation、X/beauty操作、第三者media取得。次に触ってよい: first-wave preparation workflowのartifact確認。触らない方がよい: legacy queue/media、`.env`、`data/`、`output/`、credential/cookie。

@@ -92,14 +92,24 @@ def _alignment(text: str, storyboard: str, recent_posts: list[str]) -> dict[str,
     }
 
 
-def build_specs(account_id: str, output_dir: Path, *, batch_id: str = "", recent_posts: list[str] | None = None) -> list[dict[str, Any]]:
+MEDIA_CONTENT_TYPES = ("direct_image", "direct_carousel", "direct_video", "generated_clip")
+
+
+def build_specs(
+    account_id: str,
+    output_dir: Path,
+    *,
+    batch_id: str = "",
+    recent_posts: list[str] | None = None,
+    kinds: tuple[str, ...] = MEDIA_CONTENT_TYPES,
+) -> list[dict[str, Any]]:
     run_id = batch_id or f"fresh_{account_id}_{os.environ.get('GITHUB_RUN_ID') or datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     base = output_dir / account_id / run_id; base.mkdir(parents=True, exist_ok=True)
     history = list(recent_posts or [])
     texts: dict[str, str] = {}
     generated: dict[str, dict[str, Any]] = {}
     history_before_kind: dict[str, list[str]] = {}
-    for kind in ("direct_image", "direct_carousel", "direct_video", "generated_clip"):
+    for kind in kinds:
         history_before_kind[kind] = list(history)
         selected = None
         for attempt in range(5):
@@ -117,29 +127,35 @@ def build_specs(account_id: str, output_dir: Path, *, batch_id: str = "", recent
             raise ValueError(f"NOVELTY_EXHAUSTED:{account_id}:{kind}")
         text, output = selected
         texts[kind] = text; generated[kind] = output; history.append(text)
-    direct_png = base / "direct.png"; _render(account_id, "direct", texts["direct_image"], direct_png)
-    carousel = []
-    for order in range(4):
-        card = base / f"carousel_{order + 1}.png"; _render(account_id, "carousel", texts["direct_carousel"], card, order + 1); carousel.append(card)
-    video_card = base / "video.png"; _render(account_id, "video", texts["direct_video"], video_card)
-    clip_card = base / "clip.png"; _render(account_id, "clip", texts["generated_clip"], clip_card)
-    video = base / "short.mp4"; _video(video_card, video, seconds=10)
-    clip = base / "clip.mp4"; _video(clip_card, clip, seconds=8, clip=True)
-    storyboards = {
-        "direct_image": "image card: " + texts["direct_image"],
-        "direct_carousel": "carousel hook, explanation, example, summary: " + texts["direct_carousel"],
-        "direct_video": "vertical video storyboard: hook, supporting points, closing: " + texts["direct_video"],
-        "generated_clip": "vertical clip storyboard: hook, key point, closing: " + texts["generated_clip"],
-    }
+    files_by_kind: dict[str, list[Path]] = {}
+    storyboards: dict[str, str] = {}
+    if "direct_image" in texts:
+        direct_png = base / "direct.png"; _render(account_id, "direct", texts["direct_image"], direct_png)
+        files_by_kind["direct_image"] = [direct_png]
+        storyboards["direct_image"] = "image card: " + texts["direct_image"]
+    if "direct_carousel" in texts:
+        carousel = []
+        for order in range(4):
+            card = base / f"carousel_{order + 1}.png"; _render(account_id, "carousel", texts["direct_carousel"], card, order + 1); carousel.append(card)
+        files_by_kind["direct_carousel"] = carousel
+        storyboards["direct_carousel"] = "carousel hook, explanation, example, summary: " + texts["direct_carousel"]
+    if "direct_video" in texts:
+        video_card = base / "video.png"; _render(account_id, "video", texts["direct_video"], video_card)
+        video = base / "short.mp4"; _video(video_card, video, seconds=10)
+        files_by_kind["direct_video"] = [video]
+        storyboards["direct_video"] = "vertical video storyboard: hook, supporting points, closing: " + texts["direct_video"]
+    if "generated_clip" in texts:
+        clip_card = base / "clip.png"; _render(account_id, "clip", texts["generated_clip"], clip_card)
+        clip = base / "clip.mp4"; _video(clip_card, clip, seconds=8, clip=True)
+        files_by_kind["generated_clip"] = [clip]
+        storyboards["generated_clip"] = "vertical clip storyboard: hook, key point, closing: " + texts["generated_clip"]
     alignments = {
         kind: _alignment(texts[kind], storyboards[kind], history_before_kind[kind])
         for kind in texts
     }
     return [
-        {"kind": "direct_image", "canary_id": f"canary_{run_id}_direct_image", "files": [direct_png], "text": texts["direct_image"], "run_id": run_id, "generation": generated["direct_image"], "alignment": alignments["direct_image"]},
-        {"kind": "direct_carousel", "canary_id": f"canary_{run_id}_direct_carousel", "files": carousel, "text": texts["direct_carousel"], "run_id": run_id, "generation": generated["direct_carousel"], "alignment": alignments["direct_carousel"]},
-        {"kind": "direct_video", "canary_id": f"canary_{run_id}_direct_video", "files": [video], "text": texts["direct_video"], "run_id": run_id, "generation": generated["direct_video"], "alignment": alignments["direct_video"]},
-        {"kind": "generated_clip", "canary_id": f"canary_{run_id}_generated_clip", "files": [clip], "text": texts["generated_clip"], "run_id": run_id, "generation": generated["generated_clip"], "alignment": alignments["generated_clip"]},
+        {"kind": kind, "canary_id": f"canary_{run_id}_{kind}", "files": files_by_kind[kind], "text": texts[kind], "run_id": run_id, "generation": generated[kind], "alignment": alignments[kind]}
+        for kind in kinds
     ]
 
 
@@ -278,6 +294,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-system-owned-media", action="store_true")
+    parser.add_argument("--content-types", default=",".join(MEDIA_CONTENT_TYPES), help="comma-separated media content types")
     args = parser.parse_args()
     if args.apply and not args.confirm_system_owned_media:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-system-owned-media", "would_post": False})); return 1
@@ -285,7 +302,10 @@ def main() -> int:
     if args.apply and not upload:
         print(json.dumps({"status": "BLOCKED", "reason": "ALLOW_CLOUDINARY_UPLOAD=true required for apply", "would_post": False})); return 1
     accounts = ACCOUNTS if args.account_id == "all" else (args.account_id,)
-    specs_by_account = {account: build_specs(account, ROOT / "output/system_owned_media") for account in accounts}
+    content_types = tuple(value.strip() for value in args.content_types.split(",") if value.strip())
+    if not content_types or any(value not in MEDIA_CONTENT_TYPES for value in content_types):
+        print(json.dumps({"status": "BLOCKED", "reason": "invalid_content_type", "would_post": False})); return 1
+    specs_by_account = {account: build_specs(account, ROOT / "output/system_owned_media", kinds=content_types) for account in accounts}
     all_specs = [spec for specs in specs_by_account.values() for spec in specs]
     if args.apply:
         account_results = {}
@@ -299,6 +319,7 @@ def main() -> int:
                     account,
                     ROOT / "output/system_owned_media",
                     batch_id=f"fresh_{account}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{attempt}",
+                    kinds=content_types,
                 )
                 result = apply_specs(specs, account, upload=True)
                 if result.get("status") != "NOVELTY_EXHAUSTED":

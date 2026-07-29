@@ -18,6 +18,8 @@ for account in ("night_scout", "liver_manager"):
     assert {item["kind"] for item in specs} == {"direct_image", "direct_carousel", "direct_video", "generated_clip"}
     assert all(item["text"] and item["canary_id"].startswith(f"canary_fresh_{account}_") for item in specs)
     assert len({item["text"] for item in specs}) == len(specs)
+    image_only = media_canaries.build_specs(account, Path("/tmp/system-owned-media-test"), batch_id=f"fresh_{account}_image_only", kinds=("direct_image",))
+    assert [item["kind"] for item in image_only] == ["direct_image"]
 assert [(seconds, clip) for _, _, seconds, clip in video_calls] == [(10, False), (8, True), (10, False), (8, True)]
 assert '"clip_candidate_id": clip_id' in Path(media_canaries.__file__).read_text(encoding="utf-8")
 print("PASS")

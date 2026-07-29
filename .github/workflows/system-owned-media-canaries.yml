@@ -19,6 +19,14 @@ on:
         description: "Required for apply: type GENERATE_SYSTEM_OWNED_MEDIA"
         required: false
         default: ""
+      media_content_types:
+        description: "Comma-separated media types; defaults to all owned-media types"
+        required: false
+        default: "direct_image,direct_carousel,direct_video,generated_clip"
+      text_targets:
+        description: "Comma-separated account_id:content_type values; defaults to the full fresh text set"
+        required: false
+        default: "night_scout:original_text,night_scout:reference_text,liver_manager:original_text,liver_manager:reference_text"
 
 permissions:
   contents: read
@@ -41,6 +49,8 @@ jobs:
       ACCOUNT_ID: ${{ inputs.account_id }}
       MODE: ${{ inputs.mode }}
       CONFIRM: ${{ inputs.confirm_system_owned_media }}
+      MEDIA_CONTENT_TYPES: ${{ inputs.media_content_types }}
+      TEXT_TARGETS: ${{ inputs.text_targets }}
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 }}
@@ -75,16 +85,16 @@ jobs:
           set -o pipefail
           mkdir -p /tmp/system-owned-media
           if [ "$MODE" = "apply" ]; then
-            python3 scripts/run_system_owned_media_canaries.py --account-id "$ACCOUNT_ID" --apply --confirm-system-owned-media | tee /tmp/system-owned-media/result.json
+            python3 scripts/run_system_owned_media_canaries.py --account-id "$ACCOUNT_ID" --content-types "$MEDIA_CONTENT_TYPES" --apply --confirm-system-owned-media | tee /tmp/system-owned-media/result.json
           else
-            python3 scripts/run_system_owned_media_canaries.py --account-id "$ACCOUNT_ID" --dry-run | tee /tmp/system-owned-media/result.json
+            python3 scripts/run_system_owned_media_canaries.py --account-id "$ACCOUNT_ID" --content-types "$MEDIA_CONTENT_TYPES" --dry-run | tee /tmp/system-owned-media/result.json
           fi
       - name: Create fresh text canary queues
         run: |
           if [ "$MODE" = "apply" ]; then
-            python3 scripts/create_missing_text_canaries.py --apply --confirm-text-canaries --use-sheets | tee /tmp/system-owned-media/text-canaries.json
+            python3 scripts/create_missing_text_canaries.py --targets "$TEXT_TARGETS" --apply --confirm-text-canaries --use-sheets | tee /tmp/system-owned-media/text-canaries.json
           else
-            python3 scripts/create_missing_text_canaries.py --dry-run --use-sheets | tee /tmp/system-owned-media/text-canaries.json
+            python3 scripts/create_missing_text_canaries.py --targets "$TEXT_TARGETS" --dry-run --use-sheets | tee /tmp/system-owned-media/text-canaries.json
           fi
       - name: Upload non-secret generation receipt
         if: always()
