@@ -1,6 +1,6 @@
 name: Audit Existing Canary Evidence
 on:
-  workflow_dispatch:
+  workflow_dispatch: {}
 permissions: {contents: read}
 jobs:
   audit:
