@@ -17,14 +17,19 @@ from production_novelty import evaluate_candidate_novelty
 TARGETS = (("night_scout", "original_text"), ("night_scout", "reference_text"), ("liver_manager", "original_text"), ("liver_manager", "reference_text"))
 
 
-def build_rows(existing: list[dict[str, Any]], posted_results: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def build_rows(
+    existing: list[dict[str, Any]],
+    posted_results: list[dict[str, Any]] | None = None,
+    *,
+    targets: tuple[tuple[str, str], ...] = TARGETS,
+) -> dict[str, Any]:
     existing_canaries = {str(row.get("canary_id", "")) for row in existing}
     rows: list[dict[str, Any]] = []; skipped: list[str] = []
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     batch = f"fresh_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     posted = list(posted_results or [])
     pending = [row for row in existing if str(row.get("status", "")).upper() in {"READY", "WAITING_REVIEW", "PROCESSING"}]
-    for account_id, generation_mode in TARGETS:
+    for account_id, generation_mode in targets:
         canary = f"canary_{batch}_{account_id}_{generation_mode}"
         if canary in existing_canaries:
             skipped.append(canary); continue
@@ -63,6 +68,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-text-canaries", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
+    parser.add_argument("--targets", default="", help="comma-separated account_id:content_type values; default is the full fresh text set")
     args = parser.parse_args()
     if not args.use_sheets:
         print(json.dumps({"status": "BLOCKED", "reason": "--use-sheets is required", "would_post": False})); return 1
@@ -76,7 +82,16 @@ def main() -> int:
         posted_results = client._ws("posted_results").get_all_records()
     except Exception:
         posted_results = []
-    result = build_rows(existing, posted_results)
+    targets = TARGETS
+    if args.targets:
+        parsed = []
+        for value in args.targets.split(","):
+            account_id, separator, content_type = value.strip().partition(":")
+            if not separator or (account_id, content_type) not in TARGETS:
+                print(json.dumps({"status": "BLOCKED", "reason": "invalid_target", "would_post": False})); return 1
+            parsed.append((account_id, content_type))
+        targets = tuple(parsed)
+    result = build_rows(existing, posted_results, targets=targets)
     if args.apply:
         if not args.confirm_text_canaries:
             result = {"status": "BLOCKED", "reason": "--apply requires --confirm-text-canaries", "would_post": False}
