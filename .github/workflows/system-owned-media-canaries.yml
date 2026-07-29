@@ -72,6 +72,7 @@ jobs:
         env:
           ALLOW_CLOUDINARY_UPLOAD: ${{ inputs.mode == 'apply' && inputs.confirm_system_owned_media == 'GENERATE_SYSTEM_OWNED_MEDIA' && 'true' || 'false' }}
         run: |
+          set -o pipefail
           mkdir -p /tmp/system-owned-media
           if [ "$MODE" = "apply" ]; then
             python3 scripts/run_system_owned_media_canaries.py --account-id "$ACCOUNT_ID" --apply --confirm-system-owned-media | tee /tmp/system-owned-media/result.json

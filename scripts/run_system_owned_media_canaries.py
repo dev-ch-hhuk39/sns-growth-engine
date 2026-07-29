@@ -124,15 +124,29 @@ def _repair_legacy_all_scope(tabs: dict[str, tuple[Any, list[str], list[dict[str
             if logical == "queue" and str(row.get("status", "")).upper() not in {"WAITING_REVIEW", "DRAFT", "PLANNED"}:
                 raise RuntimeError(f"legacy_generated_queue_not_safe_to_repair:{row.get('queue_id', '')}")
             ws.update_cell(row_index, column, account_id)
-            if str(ws.cell(row_index, column).value) != account_id:
-                raise RuntimeError(f"legacy_generated_scope_read_after_write_failed:{logical}:{row_index}")
             if logical == "queue" and "target_account_id" in headers:
                 target_column = headers.index("target_account_id") + 1
                 ws.update_cell(row_index, target_column, account_id)
-                if str(ws.cell(row_index, target_column).value) != account_id:
-                    raise RuntimeError(f"legacy_generated_target_read_after_write_failed:{row_index}")
             repairs += 1
     return repairs
+
+
+def _legacy_scope_remaining(tabs: dict[str, tuple[Any, list[str], list[dict[str, Any]]]], account_id: str) -> int:
+    targets = {
+        "source_posts": ("target_account_id", "source_id"),
+        "media_permissions": ("account_id", "source_id"),
+        "media_assets": ("account_id", "reference_post_id"),
+        "source_videos": ("account_id", "source_id"),
+        "video_clip_candidates": ("account_id", "source_id"),
+        "queue": ("account_id", "source_id"),
+    }
+    marker = f"system_owned_{account_id}_"
+    return sum(
+        1
+        for logical, (account_field, marker_field) in targets.items()
+        for row in tabs[logical][2]
+        if str(row.get(account_field, "")) == "all" and marker in str(row.get(marker_field, ""))
+    )
 
 
 def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -> dict[str, Any]:
@@ -148,6 +162,7 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
         for logical in logicals:
             ws, headers, _ = tabs[logical]
             tabs[logical] = (ws, headers, ws.get_all_records())
+    legacy_scope_remaining = _legacy_scope_remaining(tabs, account_id)
     existing_canaries = {str(row.get("canary_id", "")) for row in tabs["queue"][2]}
     now = _now(); created: dict[str, list[dict[str, Any]]] = {logical: [] for logical in logicals}; skipped = []
     for spec in specs:
@@ -179,9 +194,10 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
     missing_queue_ids = sorted(queue_ids - stored_queue_ids)
     missing_media_ids = sorted(media_ids - stored_media_ids)
     read_after_write = {
-        "status": "PASS" if not missing_queue_ids and not missing_media_ids else "PARTIAL_FAILURE",
+        "status": "PASS" if not missing_queue_ids and not missing_media_ids and not legacy_scope_remaining else "PARTIAL_FAILURE",
         "missing_queue_ids": missing_queue_ids,
         "missing_media_ids": missing_media_ids,
+        "legacy_scope_remaining": legacy_scope_remaining,
     }
     return {
         "status": "APPLIED" if read_after_write["status"] == "PASS" else "PARTIAL_FAILURE",
