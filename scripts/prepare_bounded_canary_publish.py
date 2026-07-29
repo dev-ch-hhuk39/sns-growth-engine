@@ -21,16 +21,12 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _canary_id(account_id: str, kind: str) -> str:
-    return f"canary_{account_id}_{kind}"
-
-
 def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
     media = kind not in {"original_text", "reference_text"}
     values = {
         "platform": "threads", "status": "READY", "public_post_text": candidate["public_post_text"],
         "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
-        "canary_id": _canary_id(candidate["account_id"], kind), "updated_at": _now(),
+        "canary_id": candidate["canary_id"], "updated_at": _now(),
     }
     if media:
         values.update({
@@ -54,17 +50,18 @@ def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
 
 def build_plan(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
     inventory = build_inventory(datasets)
-    ready = {str(row.get("canary_id", "")): row for row in inventory.get("canaries", []) if row.get("status") == "READY_FOR_HUMAN_CANARY"}
+    ready = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("canaries", []) if row.get("status") == "READY_FOR_HUMAN_CANARY"}
     candidates = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("candidates", [])}
     queues = {(str(row.get("account_id", "")), str(row.get("canary_id", ""))): row for row in datasets.get("queue", [])}
     rows: list[dict[str, Any]] = []
     for account_id in ACCOUNTS:
         for kind in CANARY_TYPES:
-            canary = _canary_id(account_id, kind); candidate = candidates.get((account_id, kind), {})
+            candidate = candidates.get((account_id, kind), {})
+            canary = str(candidate.get("canary_id", ""))
             existing = queues.get((account_id, canary))
             create_text_queue = existing is None and kind in {"original_text", "reference_text"} and bool(candidate)
             reasons: list[str] = []
-            if canary not in ready or not candidate:
+            if (account_id, kind) not in ready or not candidate or not canary:
                 reasons.append("CANARY_NOT_READY")
             if not existing and not create_text_queue:
                 reasons.append("CANARY_QUEUE_MISSING")
@@ -76,7 +73,7 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
                 media = resolve_queue_media(prospective)
                 if not media["media_usable"]:
                     reasons.append("MEDIA_REQUIRED_MISSING")
-            queue_id = str(existing.get("queue_id", "")) if existing else f"text_canary_{account_id}_{kind}"
+            queue_id = str(existing.get("queue_id", "")) if existing else f"text_{canary}"
             rows.append({"canary_id": canary, "account_id": account_id, "canary_type": kind, "queue_id": queue_id, "create_text_queue": create_text_queue, "status": "READY_TO_PROMOTE" if not reasons else "BLOCKED", "reasons": reasons, "updates": _field_update(candidate, kind) if candidate else {}})
     return {"status": "PASS" if len(rows) == 12 and all(row["status"] == "READY_TO_PROMOTE" for row in rows) else "BLOCKED", "rows": rows, "would_post": False}
 

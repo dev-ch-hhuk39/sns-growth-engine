@@ -32,6 +32,10 @@ def _public_text(row: dict[str, Any]) -> str:
     return str(row.get("public_post_text") or row.get("text") or "").strip()
 
 
+def _fresh(row: dict[str, Any]) -> bool:
+    return str(row.get("canary_id", "")).startswith("canary_fresh_") and str(row.get("status", "")).upper() not in {"LEGACY_INVALID_CANARY", "QUARANTINED"}
+
+
 def _permission(permissions: list[dict[str, Any]], source_id: str, account_id: str, operation: str) -> dict[str, Any] | None:
     return next((item for item in permissions if str(item.get("source_id", "")) == source_id and is_active_permission(item, account_id=account_id, operation=operation)), None)
 
@@ -42,12 +46,12 @@ def build_inventory(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]
     permissions = datasets["media_permissions"]; clips = datasets["video_clip_candidates"]; assets = datasets["media_assets"]
     source_videos = {str(row.get("source_video_id", "")): row for row in datasets["source_videos"]}
     for account_id in ACCOUNTS:
-        account_queue = [row for row in queue if str(row.get("account_id", "")) == account_id and str(row.get("status", "")).upper() in {"READY", "WAITING_REVIEW", "DRAFT"}]
+        account_queue = sorted((row for row in queue if str(row.get("account_id", "")) == account_id and _fresh(row)), key=lambda row: str(row.get("created_at", "")), reverse=True)
         original = next((row for row in account_queue if str(row.get("generation_mode", "")) in {"original_hypothesis", "original_text", "autonomous_original"} and _public_text(row)), None)
         reference = next((row for row in account_queue if str(row.get("generation_mode", "")) in {"reference_based", "reference_text", "manual_reference"} and _public_text(row)), None)
         for kind, selected in (("original_text", original), ("reference_text", reference)):
             if selected:
-                candidates.append({"account_id": account_id, "canary_type": kind, "public_post_text": _public_text(selected), "persona_validator_status": selected.get("account_fit_status", "PASS"), "final_public_post_validator_status": selected.get("validator_status", "PASS"), "queue_id": selected.get("queue_id", "")})
+                candidates.append({"account_id": account_id, "canary_type": kind, "canary_id": selected.get("canary_id", ""), "public_post_text": _public_text(selected), "persona_validator_status": selected.get("account_fit_status", "PASS"), "final_public_post_validator_status": selected.get("validator_status", "PASS"), "queue_id": selected.get("queue_id", "")})
         account_posts = {str(row.get("source_post_id", "")): row for row in posts if str(row.get("target_account_id") or row.get("account_id") or "") == account_id}
         for item in media:
             parent = account_posts.get(str(item.get("source_post_id", "")))
@@ -63,19 +67,21 @@ def build_inventory(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]
             if not url:
                 continue
             kind = "direct_video" if media_type == "video" else "direct_image"
-            if any(c.get("account_id") == account_id and c.get("canary_type") == kind for c in candidates):
+            matching_queue = next((q for q in account_queue if str(q.get("source_post_id", "")) == str(parent.get("source_post_id", "")) and str(q.get("media_type", "")) == kind), {})
+            if not matching_queue or any(c.get("account_id") == account_id and c.get("canary_type") == kind for c in candidates):
                 continue
-            candidates.append({"account_id": account_id, "canary_type": kind, "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(next((q for q in account_queue if _public_text(q)), {})), "source_post_id": parent.get("source_post_id", ""), "media_asset_id": asset.get("media_id") or item.get("media_asset_id") or item.get("source_post_media_id", ""), "media_url": url})
+            candidates.append({"account_id": account_id, "canary_type": kind, "canary_id": matching_queue.get("canary_id", ""), "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "source_post_id": parent.get("source_post_id", ""), "media_asset_id": asset.get("media_id") or item.get("media_asset_id") or item.get("source_post_media_id", ""), "media_url": url})
         for parent_id, parent in account_posts.items():
             bundle = [item for item in media if str(item.get("source_post_id", "")) == parent_id]
-            if len(bundle) < 2 or any(c.get("account_id") == account_id and c.get("canary_type") == "direct_carousel" for c in candidates):
+            matching_queue = next((q for q in account_queue if str(q.get("source_post_id", "")) == parent_id and str(q.get("media_type", "")) == "direct_carousel"), {})
+            if len(bundle) < 2 or not matching_queue or any(c.get("account_id") == account_id and c.get("canary_type") == "direct_carousel" for c in candidates):
                 continue
             perm = _permission(permissions, str(parent.get("source_id", "")), account_id, "direct")
             ordered = sorted(bundle, key=lambda item: int(item.get("media_index") or 0))
             urls = [str(item.get("storage_url") or "") for item in ordered]
             if not perm or not all(urls):
                 continue
-            candidates.append({"account_id": account_id, "canary_type": "direct_carousel", "source_id": parent.get("source_id", ""), "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(next((q for q in account_queue if _public_text(q)), {})), "source_post_id": parent_id, "media_asset_ids": [item.get("media_asset_id") or item.get("source_post_media_id", "") for item in ordered], "media_order": [item.get("media_index", "") for item in ordered]})
+            candidates.append({"account_id": account_id, "canary_type": "direct_carousel", "canary_id": matching_queue.get("canary_id", ""), "source_id": parent.get("source_id", ""), "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "source_post_id": parent_id, "media_asset_ids": [item.get("media_asset_id") or item.get("source_post_media_id", "") for item in ordered], "media_order": [item.get("media_index", "") for item in ordered]})
         account_clips = sorted(
             (clip for clip in clips if str(clip.get("account_id", "")) == account_id),
             key=lambda clip: str(clip.get("source_platform", "")) != "system_generated_owned",
@@ -91,7 +97,10 @@ def build_inventory(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]
             asset = next((a for a in assets if str(a.get("clip_candidate_id") or a.get("video_clip_id") or "") == str(clip.get("clip_candidate_id", ""))), {})
             if not perm or not str(asset.get("storage_url", "")):
                 continue
-            candidates.append({"account_id": account_id, "canary_type": "generated_clip", "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(clip), "source_video_id": clip.get("source_video_id", ""), "clip_candidate_id": clip.get("clip_candidate_id", ""), "local_path": asset.get("local_path", "ready"), "start_seconds": clip.get("start_seconds", ""), "end_seconds": clip.get("end_seconds", "")})
+            matching_queue = next((q for q in account_queue if str(q.get("clip_candidate_id", "")) == str(clip.get("clip_candidate_id", "")) and str(q.get("media_type", "")) == "generated_clip"), {})
+            if not matching_queue:
+                continue
+            candidates.append({"account_id": account_id, "canary_type": "generated_clip", "canary_id": matching_queue.get("canary_id", ""), "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "source_video_id": clip.get("source_video_id", ""), "clip_candidate_id": clip.get("clip_candidate_id", ""), "local_path": asset.get("local_path", "ready"), "start_seconds": clip.get("start_seconds", ""), "end_seconds": clip.get("end_seconds", "")})
             break
     plan = build_plan(candidates)
     return {**plan, "status": "LIVE_INVENTORY_PLAN", "candidate_count": len(candidates), "candidates": candidates, "would_write": False, "would_post": False}

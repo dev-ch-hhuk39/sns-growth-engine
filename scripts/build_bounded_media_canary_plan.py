@@ -46,7 +46,7 @@ def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
             permission_ok = is_text or str(candidate.get("permission_status", "")) == "approved"
             status = "READY_FOR_HUMAN_CANARY" if candidate and not missing and rights_ok and permission_ok else "PENDING_EVIDENCE"
             rows.append({
-                "canary_id": f"canary_{account_id}_{canary_type}",
+                "canary_id": str(candidate.get("canary_id") or f"canary_{account_id}_{canary_type}"),
                 "account_id": account_id,
                 "canary_type": canary_type,
                 "status": status,

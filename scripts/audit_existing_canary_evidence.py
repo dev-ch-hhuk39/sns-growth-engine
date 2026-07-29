@@ -50,7 +50,7 @@ def classify(c:dict[str,Any], rows:list[dict[str,Any]])->dict[str,Any]:
     actual_type="text" if not truthy(r.get("media_used")) else ("generated_clip" if str(r.get("clip_candidate_id", "")) else kind)
     return {"canary_id":f"canary_{account}_{kind}","account_id":account,"canary_type":kind,"actual_post_type":actual_type,"permalink":fields["post_url"],"status":status,"reasons":reasons,**fields}
 def main()->int:
- p=argparse.ArgumentParser();p.add_argument("--apply",action="store_true");p.add_argument("--confirm-existing-evidence",action="store_true");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument("--apply",action="store_true");p.add_argument("--confirm-existing-evidence",action="store_true");p.add_argument("--retire-invalid",action="store_true");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
  from config_loader import get_config
  from sheets_client import SheetsClient
  cfg=get_config(); client=SheetsClient(cfg["sheet_id"],cfg["sa_dict"],dry_run=not a.apply); data=live(client); inv=build_inventory(data)
@@ -60,6 +60,14 @@ def main()->int:
   for row in audit:
    if row["status"]!="EXISTING_CANARY_VALID": continue
    update_row(client,"posted_results","result_id",str(row["result_id"]),{"canary_id":row["canary_id"]})
+  retired=[]
+  if a.retire_invalid:
+   for row in audit:
+    if row["status"]!="EXISTING_CANARY_INVALID" or not str(row.get("result_id", "")):
+     continue
+    flags="excluded_from_activation=true; excluded_from_metrics_baseline=true; repost_prohibited=true"
+    update_row(client,"posted_results","result_id",str(row["result_id"]),{"status":"LEGACY_INVALID_CANARY","manual_memo":flags})
+    retired.append(str(row["result_id"]))
   after=records(client,"posted_results")
   valid_ids={x["canary_id"] for x in audit if x["status"]=="EXISTING_CANARY_VALID"}
   linked_ids={str(row.get("canary_id", "")) for row in after}
@@ -72,7 +80,7 @@ def main()->int:
   missing_schedule=sorted(valid_ids-scheduled_ids)
   mode="APPLIED" if not missing_links and not missing_schedule else "APPLY_READ_AFTER_WRITE_FAILED"
  else: mode="PLAN_ONLY"
- out={"status":mode,"sheets_status":"READ_OK","canaries":audit,"valid_count":sum(x["status"]=="EXISTING_CANARY_VALID" for x in audit),"invalid_count":sum(x["status"]=="EXISTING_CANARY_INVALID" for x in audit),"verify_required_count":sum(x["status"]=="VERIFY_REQUIRED" for x in audit),"apply_read_after_write":{"linked_canary_ids":sorted(valid_ids) if a.apply and a.confirm_existing_evidence else [],"missing_canary_links":missing_links if a.apply and a.confirm_existing_evidence else [],"missing_metric_schedules":missing_schedule if a.apply and a.confirm_existing_evidence else []},"would_post":False}
+ out={"status":mode,"sheets_status":"READ_OK","canaries":audit,"valid_count":sum(x["status"]=="EXISTING_CANARY_VALID" for x in audit),"invalid_count":sum(x["status"]=="EXISTING_CANARY_INVALID" for x in audit),"verify_required_count":sum(x["status"]=="VERIFY_REQUIRED" for x in audit),"retired_legacy_result_ids":retired if a.apply and a.confirm_existing_evidence else [],"apply_read_after_write":{"linked_canary_ids":sorted(valid_ids) if a.apply and a.confirm_existing_evidence else [],"missing_canary_links":missing_links if a.apply and a.confirm_existing_evidence else [],"missing_metric_schedules":missing_schedule if a.apply and a.confirm_existing_evidence else []},"would_post":False}
  a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(out,ensure_ascii=False,indent=2)+"\n",encoding="utf-8");print(json.dumps({k:out[k] for k in ("status","valid_count","invalid_count","verify_required_count","would_post")},ensure_ascii=False))
  return 0
 if __name__=="__main__":raise SystemExit(main())

@@ -13,22 +13,23 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from public_post_quality import final_public_post_validator, generate_reader_facing_post
 
-TARGETS = (("night_scout", "original_text", 2), ("night_scout", "reference_text", 3), ("liver_manager", "reference_text", 2))
+TARGETS = (("night_scout", "original_text", 13), ("night_scout", "reference_text", 14), ("liver_manager", "original_text", 13), ("liver_manager", "reference_text", 14))
 
 
 def build_rows(existing: list[dict[str, Any]]) -> dict[str, Any]:
     existing_canaries = {str(row.get("canary_id", "")) for row in existing}
     rows: list[dict[str, Any]] = []; skipped: list[str] = []
     now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    batch = f"fresh_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     for account_id, generation_mode, index in TARGETS:
-        canary = f"canary_{account_id}_{generation_mode}"
+        canary = f"canary_{batch}_{account_id}_{generation_mode}"
         if canary in existing_canaries:
             skipped.append(canary); continue
         text = str(generate_reader_facing_post(account_id, index).get("public_post_text", ""))
         validation = final_public_post_validator(text, account_id=account_id)
         if validation["status"] != "PASS":
             return {"status": "BLOCKED", "reason": "generated_text_failed_validator", "canary_id": canary, "validation": validation}
-        rows.append({"queue_id": f"text_canary_{account_id}_{generation_mode}", "account_id": account_id, "target_account_id": account_id, "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": generation_mode, "public_post_text": text, "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS", "public_post_quality_score": validation["public_post_quality_score"], "reader_value_score": validation["reader_value_score"], "naturalness_score": validation["naturalness_score"], "cta_pressure_score": validation["cta_pressure_score"], "canary_id": canary, "created_at": now, "updated_at": now})
+        rows.append({"queue_id": f"text_{canary}", "account_id": account_id, "target_account_id": account_id, "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": generation_mode, "public_post_text": text, "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS", "public_post_quality_score": validation["public_post_quality_score"], "reader_value_score": validation["reader_value_score"], "naturalness_score": validation["naturalness_score"], "cta_pressure_score": validation["cta_pressure_score"], "canary_id": canary, "created_at": now, "updated_at": now})
     return {"status": "PLAN_ONLY", "rows": rows, "skipped_existing": skipped, "would_post": False}
 
 

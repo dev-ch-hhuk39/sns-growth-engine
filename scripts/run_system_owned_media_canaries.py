@@ -69,20 +69,20 @@ def _video(image_path: Path, output_path: Path, *, seconds: int, clip: bool = Fa
 
 
 def build_specs(account_id: str, output_dir: Path) -> list[dict[str, Any]]:
-    text = _text(account_id, 4)
-    run_id = f"system_owned_{account_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    run_id = f"fresh_{account_id}_{os.environ.get('GITHUB_RUN_ID') or datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
     base = output_dir / account_id / run_id; base.mkdir(parents=True, exist_ok=True)
-    direct_png = base / "direct.png"; _render(account_id, "direct", text, direct_png)
+    texts = {kind: _text(account_id, index) for kind, index in (("direct_image", 9), ("direct_carousel", 10), ("direct_video", 11), ("generated_clip", 12))}
+    direct_png = base / "direct.png"; _render(account_id, "direct", texts["direct_image"], direct_png)
     carousel = []
     for order in range(4):
-        card = base / f"carousel_{order + 1}.png"; _render(account_id, "carousel", text, card, order + 1); carousel.append(card)
+        card = base / f"carousel_{order + 1}.png"; _render(account_id, "carousel", texts["direct_carousel"], card, order + 1); carousel.append(card)
     video = base / "short.mp4"; _video(direct_png, video, seconds=10)
     clip = base / "clip.mp4"; _video(carousel[0], clip, seconds=8, clip=True)
     return [
-        {"kind": "direct_image", "canary_id": f"canary_{account_id}_direct_image", "files": [direct_png], "text": text, "run_id": run_id},
-        {"kind": "direct_carousel", "canary_id": f"canary_{account_id}_direct_carousel", "files": carousel, "text": text, "run_id": run_id},
-        {"kind": "direct_video", "canary_id": f"canary_{account_id}_direct_video", "files": [video], "text": text, "run_id": run_id},
-        {"kind": "generated_clip", "canary_id": f"canary_{account_id}_generated_clip", "files": [clip], "text": text, "run_id": run_id},
+        {"kind": "direct_image", "canary_id": f"canary_{run_id}_direct_image", "files": [direct_png], "text": texts["direct_image"], "run_id": run_id},
+        {"kind": "direct_carousel", "canary_id": f"canary_{run_id}_direct_carousel", "files": carousel, "text": texts["direct_carousel"], "run_id": run_id},
+        {"kind": "direct_video", "canary_id": f"canary_{run_id}_direct_video", "files": [video], "text": texts["direct_video"], "run_id": run_id},
+        {"kind": "generated_clip", "canary_id": f"canary_{run_id}_generated_clip", "files": [clip], "text": texts["generated_clip"], "run_id": run_id},
     ]
 
 
@@ -157,12 +157,6 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
     tabs = {}
     for logical in logicals:
         client._ensure_tab(logical, TAB_DEFINITIONS[logical]); ws = client._ws(logical); tabs[logical] = (ws, ws.row_values(1), ws.get_all_records())
-    repaired_legacy_rows = _repair_legacy_all_scope(tabs, account_id)
-    if repaired_legacy_rows:
-        for logical in logicals:
-            ws, headers, _ = tabs[logical]
-            tabs[logical] = (ws, headers, ws.get_all_records())
-    legacy_scope_remaining = _legacy_scope_remaining(tabs, account_id)
     existing_canaries = {str(row.get("canary_id", "")) for row in tabs["queue"][2]}
     now = _now(); created: dict[str, list[dict[str, Any]]] = {logical: [] for logical in logicals}; skipped = []
     for spec in specs:
@@ -194,15 +188,14 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
     missing_queue_ids = sorted(queue_ids - stored_queue_ids)
     missing_media_ids = sorted(media_ids - stored_media_ids)
     read_after_write = {
-        "status": "PASS" if not missing_queue_ids and not missing_media_ids and not legacy_scope_remaining else "PARTIAL_FAILURE",
+        "status": "PASS" if not missing_queue_ids and not missing_media_ids else "PARTIAL_FAILURE",
         "missing_queue_ids": missing_queue_ids,
         "missing_media_ids": missing_media_ids,
-        "legacy_scope_remaining": legacy_scope_remaining,
     }
     return {
         "status": "APPLIED" if read_after_write["status"] == "PASS" else "PARTIAL_FAILURE",
         "created": verify,
-        "repaired_legacy_rows": repaired_legacy_rows,
+        "repaired_legacy_rows": 0,
         "skipped_canaries": skipped,
         "cloudinary_uploaded": sum(1 for row in created["media_assets"] if row.get("storage_url")),
         "would_post": False,

@@ -79,11 +79,18 @@ jobs:
           else
             python3 scripts/run_system_owned_media_canaries.py --account-id "$ACCOUNT_ID" --dry-run | tee /tmp/system-owned-media/result.json
           fi
+      - name: Create fresh text canary queues
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            python3 scripts/create_missing_text_canaries.py --apply --confirm-text-canaries --use-sheets | tee /tmp/system-owned-media/text-canaries.json
+          else
+            python3 scripts/create_missing_text_canaries.py --dry-run --use-sheets | tee /tmp/system-owned-media/text-canaries.json
+          fi
       - name: Upload non-secret generation receipt
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: system-owned-media-${{ github.run_id }}
-          path: /tmp/system-owned-media/result.json
+          path: /tmp/system-owned-media/*.json
           if-no-files-found: warn
           retention-days: 14
