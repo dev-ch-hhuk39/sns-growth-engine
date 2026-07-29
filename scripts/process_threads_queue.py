@@ -269,7 +269,7 @@ def duplicate_reason(
     return ""
 
 
-def select_candidates(client: SheetsClient, account_id: str | None, max_posts: int) -> list[dict[str, Any]]:
+def select_candidates(client: SheetsClient, account_id: str | None, max_posts: int, queue_ids: set[str] | None = None) -> list[dict[str, Any]]:
     rows = records(client, "queue")
     candidates: list[dict[str, Any]] = []
     for row in rows:
@@ -279,6 +279,8 @@ def select_candidates(client: SheetsClient, account_id: str | None, max_posts: i
         if row_account in BEAUTY_BLOCKED:
             continue
         if account_id and row_account != account_id:
+            continue
+        if queue_ids is not None and str(row.get("queue_id", "")) not in queue_ids:
             continue
         if platform != "threads":
             continue
@@ -740,6 +742,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Validate only; no post or Sheets mutation")
     parser.add_argument("--confirm-real-post", action="store_true", help="Required for real post")
     parser.add_argument("--max-posts", type=int, default=1, help="Max posts to process. Default 1")
+    parser.add_argument("--queue-id", action="append", default=[], help="Process only this approved queue ID; repeatable")
     args = parser.parse_args()
 
     if args.account_id == "beauty_account":
@@ -751,7 +754,7 @@ def main() -> int:
     if args.max_posts > 1 and not args.confirm_real_post and not args.dry_run:
         print("[BLOCKED] real multi-post requires --confirm-real-post")
         return 1
-    if args.max_posts > 2:
+    if args.max_posts > 2 and not args.queue_id:
         print("[BLOCKED] --max-posts is capped at 2")
         return 1
     if not args.dry_run and not args.confirm_real_post:
@@ -767,7 +770,14 @@ def main() -> int:
         # タブは recover_production_sheets_threads_first.py で既に初期化済みであること。
         print("[REAL_POST] setup_all をスキップします（本番タブは初期化済みを前提）")
 
-    candidates = select_candidates(client, args.account_id, args.max_posts)
+    requested_queue_ids = {item.strip() for item in args.queue_id if item.strip()}
+    if requested_queue_ids and args.max_posts != len(requested_queue_ids):
+        args.max_posts = len(requested_queue_ids)
+    candidates = select_candidates(client, args.account_id, args.max_posts, requested_queue_ids or None)
+    if requested_queue_ids and {str(row.get("queue_id", "")) for row in candidates} != requested_queue_ids:
+        missing = sorted(requested_queue_ids - {str(row.get("queue_id", "")) for row in candidates})
+        print(json.dumps({"status": "NO_POST", "reason": "REQUESTED_QUEUE_NOT_READY", "missing_queue_ids": missing}, ensure_ascii=False))
+        return 1
     print(f"[process_threads_queue] candidates={len(candidates)} dry_run={args.dry_run} max_posts={args.max_posts}")
     if not candidates:
         print("[DONE] no eligible Threads queue rows")
