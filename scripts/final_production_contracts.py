@@ -78,6 +78,17 @@ def permission_deficits(
     return rows
 
 
+def canary_required_permission_deficits(permissions: list[dict[str, Any]]) -> dict[str, Any]:
+    """Return only the six owner-media canary permission needs, never all sources."""
+    rows: list[dict[str, str]] = []
+    for account_id in ACCOUNTS:
+        for canary_type, operation in (("direct_image", "direct"), ("direct_carousel", "direct"), ("generated_clip", "clip")):
+            active = any(is_active_permission(item, account_id=account_id, operation=operation) for item in permissions)
+            if not active:
+                rows.append({"canary_id": canary_id(account_id, canary_type), "account_id": account_id, "canary_type": canary_type, "operation": operation, "reason": "active_evidence_bearing_permission_missing_for_canary"})
+    return {"scope": "six_owner_media_canary_slots_only", "required_slot_count": 6, "deficit_count": len(rows), "deficits": rows}
+
+
 def source_integrity_report(
     parents: list[dict[str, Any]], children: list[dict[str, Any]], *, source_ids: set[str] | None = None,
 ) -> dict[str, Any]:

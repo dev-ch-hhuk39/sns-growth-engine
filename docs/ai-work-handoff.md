@@ -6366,3 +6366,28 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   and stale isolation, with `source_read_after_write=PASS` for the prepared
   scope and X as `BLOCKED_OPTIONAL` because its bearer credential is absent.
   Neither run downloaded, cut, uploaded, activated, or posted media/text.
+
+## 2026-07-29 Final Activation Evidence Schema And Text Canary Patch (In Progress)
+
+- Added `scripts/ensure_activation_evidence_schema.py`: it inspects only
+  `posted_results` and `metrics_collection_jobs` during dry-run; apply requires
+  `--apply --confirm-schema --use-sheets`, adds only missing tabs/columns via
+  `TAB_DEFINITIONS`, and performs read-after-write. Existing data is never
+  deleted.
+- `Final Production Preparation` now invokes this initializer and creates only
+  the three missing text canaries in `WAITING_REVIEW`:
+  Night Scout original/reference and Liver Manager reference. Each goes through
+  account persona, internal leak, and final public-post validation. It never
+  calls a publisher.
+- `final_production_readiness.py` now reports
+  `canary_required_permission_deficits`: precisely the six owner-media slots
+  (direct image, direct carousel, generated clip for each account), not the
+  broad historic permission-audit list.
+- Updated `owned-canary-assets-template.json` to cover the minimal owner bundle
+  per account: three images for direct-image plus ordered carousel, and one
+  video for direct-video plus generated-clip only with explicit `clip` scope
+  and start/end range. Template placeholders must be replaced before apply.
+- PASS locally: schema/text/permission scope/import/workflow contracts,
+  `test_all_workflows_safety_flags.py` (419/0), compileall, diff check. The
+  next action is merge this patch, then dispatch Final Production Preparation
+  apply to create the missing Sheets tab and the three non-posting queue rows.
