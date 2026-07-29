@@ -36,6 +36,11 @@ def _fresh(row: dict[str, Any]) -> bool:
     return str(row.get("canary_id", "")).startswith("canary_fresh_") and str(row.get("status", "")).upper() not in {"LEGACY_INVALID_CANARY", "QUARANTINED"}
 
 
+def _queue_content_type(row: dict[str, Any]) -> str:
+    """Prefer the canonical content type; retain only the legacy fallback."""
+    return str(row.get("content_type") or row.get("media_type") or "").strip().lower()
+
+
 def _permission(permissions: list[dict[str, Any]], source_id: str, account_id: str, operation: str) -> dict[str, Any] | None:
     return next((item for item in permissions if str(item.get("source_id", "")) == source_id and is_active_permission(item, account_id=account_id, operation=operation)), None)
 
@@ -53,35 +58,33 @@ def build_inventory(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]
             if selected:
                 candidates.append({"account_id": account_id, "canary_type": kind, "canary_id": selected.get("canary_id", ""), "public_post_text": _public_text(selected), "persona_validator_status": selected.get("account_fit_status", "PASS"), "final_public_post_validator_status": selected.get("validator_status", "PASS"), "queue_id": selected.get("queue_id", "")})
         account_posts = {str(row.get("source_post_id", "")): row for row in posts if str(row.get("target_account_id") or row.get("account_id") or "") == account_id}
+        media_by_parent = {}
         for item in media:
-            parent = account_posts.get(str(item.get("source_post_id", "")))
-            if not parent:
+            media_by_parent.setdefault(str(item.get("source_post_id", "")), []).append(item)
+        assets_by_id = {str(row.get("media_id") or row.get("media_asset_id") or ""): row for row in assets}
+        # Queue selection is authoritative.  It preserves the fresh batch and
+        # avoids letting an older source-media row win merely by sheet order.
+        for kind in ("direct_image", "direct_video"):
+            matching_queue = next((row for row in account_queue if _queue_content_type(row) == kind), {})
+            parent = account_posts.get(str(matching_queue.get("source_post_id", "")))
+            if not matching_queue or not parent:
                 continue
-            source_id = str(parent.get("source_id", ""))
-            perm = _permission(permissions, source_id, account_id, "direct")
-            if not perm:
+            source_id = str(parent.get("source_id", "")); perm = _permission(permissions, source_id, account_id, "direct")
+            asset_id = str(matching_queue.get("media_asset_id", ""))
+            asset = assets_by_id.get(asset_id, {})
+            child = next((row for row in media_by_parent.get(str(parent.get("source_post_id", "")), []) if str(row.get("media_asset_id", "")) == asset_id), {})
+            url = str(matching_queue.get("media_url") or asset.get("storage_url") or child.get("storage_url") or "")
+            if not perm or not asset_id or not url:
                 continue
-            media_type = str(item.get("media_type", "")).lower()
-            asset = next((a for a in assets if str(a.get("media_id") or a.get("media_asset_id") or "") == str(item.get("media_asset_id") or item.get("source_post_media_id") or "")), {})
-            url = str(asset.get("storage_url") or item.get("storage_url") or "")
-            if not url:
-                continue
-            kind = "direct_video" if media_type == "video" else "direct_image"
-            matching_queue = next((q for q in account_queue if str(q.get("source_post_id", "")) == str(parent.get("source_post_id", "")) and str(q.get("media_type", "")) == kind), {})
-            if not matching_queue or any(c.get("account_id") == account_id and c.get("canary_type") == kind for c in candidates):
-                continue
-            candidates.append({"account_id": account_id, "canary_type": kind, "canary_id": matching_queue.get("canary_id", ""), "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "source_post_id": parent.get("source_post_id", ""), "media_asset_id": asset.get("media_id") or item.get("media_asset_id") or item.get("source_post_media_id", ""), "media_url": url})
-        for parent_id, parent in account_posts.items():
-            bundle = [item for item in media if str(item.get("source_post_id", "")) == parent_id]
-            matching_queue = next((q for q in account_queue if str(q.get("source_post_id", "")) == parent_id and str(q.get("media_type", "")) == "direct_carousel"), {})
-            if len(bundle) < 2 or not matching_queue or any(c.get("account_id") == account_id and c.get("canary_type") == "direct_carousel" for c in candidates):
-                continue
+            candidates.append({"account_id": account_id, "canary_type": kind, "canary_id": matching_queue.get("canary_id", ""), "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "source_post_id": parent.get("source_post_id", ""), "media_asset_id": asset_id, "media_url": url})
+        matching_queue = next((row for row in account_queue if _queue_content_type(row) == "direct_carousel"), {})
+        parent_id = str(matching_queue.get("source_post_id", "")); parent = account_posts.get(parent_id)
+        bundle = sorted(media_by_parent.get(parent_id, []), key=lambda item: int(item.get("media_index") or 0))
+        if matching_queue and parent and len(bundle) >= 2:
             perm = _permission(permissions, str(parent.get("source_id", "")), account_id, "direct")
-            ordered = sorted(bundle, key=lambda item: int(item.get("media_index") or 0))
-            urls = [str(item.get("storage_url") or "") for item in ordered]
-            if not perm or not all(urls):
-                continue
-            candidates.append({"account_id": account_id, "canary_type": "direct_carousel", "canary_id": matching_queue.get("canary_id", ""), "source_id": parent.get("source_id", ""), "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "source_post_id": parent_id, "media_asset_ids": [item.get("media_asset_id") or item.get("source_post_media_id", "") for item in ordered], "media_order": [item.get("media_index", "") for item in ordered]})
+            urls = [str(item.get("storage_url") or assets_by_id.get(str(item.get("media_asset_id", "")), {}).get("storage_url") or "") for item in bundle]
+            if perm and all(urls):
+                candidates.append({"account_id": account_id, "canary_type": "direct_carousel", "canary_id": matching_queue.get("canary_id", ""), "source_id": parent.get("source_id", ""), "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "source_post_id": parent_id, "media_asset_ids": [item.get("media_asset_id") or item.get("source_post_media_id", "") for item in bundle], "media_order": [item.get("media_index", "") for item in bundle]})
         account_clips = sorted(
             (clip for clip in clips if str(clip.get("account_id", "")) == account_id),
             key=lambda clip: str(clip.get("source_platform", "")) != "system_generated_owned",

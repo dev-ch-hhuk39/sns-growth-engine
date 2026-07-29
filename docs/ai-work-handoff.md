@@ -6558,3 +6558,8 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - PASS: `py_compile`、system-owned generator / alignment / workflow / fresh-text / novelty focused tests、`git diff --check`。全workflow safety regressionは前段のstabilization mergeでPASS。
 - 未完了: この限定patchをPR・通常マージ後、GitHub Actionsのproduction Sheets/Cloudinary接続で4件だけをapplyし、read-after-write、novelty、alignment、publisher dry-runを確認してpreview承認で停止する。
 - 実行していない: Threads投稿、scheduled activation、X/beauty操作、第三者media取得。次に触ってよい: first-wave preparation workflowのartifact確認。触らない方がよい: legacy queue/media、`.env`、`data/`、`output/`、credential/cookie。
+
+### Follow-up inventory fix
+
+- System Owned Media Canaries run `30440723109` は、限定した2画像と2テキストをCloudinary/Sheetsへ保存し、各media queueとtext queueのread-after-writeをPASSした。投稿数は0。
+- その後のread-only inventoryで、旧sheet row順が新規queueより優先される不具合を発見。`build_live_canary_inventory.py`は、`content_type`を正として最新fresh queueから親・assetを辿るよう修正中。旧canaryを再利用せず、新規queue/assetをpreview対象に固定する。

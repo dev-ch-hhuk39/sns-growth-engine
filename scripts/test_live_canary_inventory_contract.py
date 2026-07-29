@@ -17,4 +17,27 @@ assert row["status"] == "READY_FOR_HUMAN_CANARY"
 clip=next(item for item in result["canaries"] if item["canary_type"] == "generated_clip" and item["account_id"] == "night_scout")
 assert clip["status"] == "READY_FOR_HUMAN_CANARY"
 assert result["would_post"] is False
+
+# The newest fresh queue, not sheet row order, must choose its own linked asset.
+selection_data={key: [] for key in datasets}
+selection_data["queue"]=[
+    {"account_id":"night_scout","canary_id":"canary_fresh_old_image","status":"WAITING_REVIEW","content_type":"direct_image","source_post_id":"old_parent","media_asset_id":"old_asset","media_url":"https://example.invalid/old.png","public_post_text":"古い候補です。","created_at":"2026-07-01T00:00:00+00:00"},
+    {"account_id":"night_scout","canary_id":"canary_fresh_new_image","status":"WAITING_REVIEW","content_type":"direct_image","source_post_id":"new_parent","media_asset_id":"new_asset","media_url":"https://example.invalid/new.png","public_post_text":"新しい候補です。","created_at":"2026-07-29T00:00:00+00:00"},
+]
+selection_data["source_posts"]=[
+    {"source_post_id":"old_parent","source_id":"old_source","target_account_id":"night_scout"},
+    {"source_post_id":"new_parent","source_id":"new_source","target_account_id":"night_scout"},
+]
+selection_data["media_permissions"]=[
+    {"source_id":"old_source","account_id":"night_scout","rights_status":"owned","permission_status":"approved","evidence_reference":"old","allow_original_repost":True,"revoked":False},
+    {"source_id":"new_source","account_id":"night_scout","rights_status":"owned","permission_status":"approved","evidence_reference":"new","allow_original_repost":True,"revoked":False},
+]
+selection_data["media_assets"]=[
+    {"media_id":"old_asset","storage_url":"https://example.invalid/old.png"},
+    {"media_id":"new_asset","storage_url":"https://example.invalid/new.png"},
+]
+selected=build_inventory(selection_data)
+direct_image=next(item for item in selected["candidates"] if item["account_id"] == "night_scout" and item["canary_type"] == "direct_image")
+assert direct_image["canary_id"] == "canary_fresh_new_image"
+assert direct_image["media_asset_id"] == "new_asset"
 print("PASS test_live_canary_inventory_contract.py")
