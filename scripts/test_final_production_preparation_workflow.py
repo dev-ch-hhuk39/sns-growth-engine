@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from audit_existing_canary_evidence import REQUIRED_CANARIES
 
 text = (Path(__file__).resolve().parents[1] / ".github/workflows/final-production-preparation.yml").read_text(encoding="utf-8")
 checks = {
@@ -14,5 +18,7 @@ checks = {
     "unsafe operations disabled": all(f'{key}: "false"' in text for key in ("PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_VIDEO_DOWNLOAD", "ALLOW_VIDEO_CUT", "ALLOW_CLOUDINARY_UPLOAD", "ALLOW_MEDIA_POSTS")),
 }
 failed = [name for name, ok in checks.items() if not ok]
+if len(REQUIRED_CANARIES) != 12:
+    failed.append("fixed twelve-canary audit scope")
 print("PASS" if not failed else "FAIL: " + ", ".join(failed))
 raise SystemExit(bool(failed))
