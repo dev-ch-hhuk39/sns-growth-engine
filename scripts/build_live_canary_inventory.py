@@ -40,6 +40,7 @@ def build_inventory(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]
     candidates: list[dict[str, Any]] = []
     queue = datasets["queue"]; posts = datasets["source_posts"]; media = datasets["source_post_media"]
     permissions = datasets["media_permissions"]; clips = datasets["video_clip_candidates"]; assets = datasets["media_assets"]
+    source_videos = {str(row.get("source_video_id", "")): row for row in datasets["source_videos"]}
     for account_id in ACCOUNTS:
         account_queue = [row for row in queue if str(row.get("account_id", "")) == account_id and str(row.get("status", "")).upper() in {"READY", "WAITING_REVIEW", "DRAFT"}]
         original = next((row for row in account_queue if str(row.get("generation_mode", "")) in {"original_hypothesis", "original_text", "autonomous_original"} and _public_text(row)), None)
@@ -78,7 +79,11 @@ def build_inventory(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]
         for clip in clips:
             if str(clip.get("account_id", "")) != account_id or str(clip.get("rights_status", "")).lower() not in APPROVED_RIGHTS:
                 continue
-            source_id = str(clip.get("source_id", "")); perm = _permission(permissions, source_id, account_id, "clip")
+            source_video = source_videos.get(str(clip.get("source_video_id", "")), {})
+            source_id = str(clip.get("source_id") or source_video.get("source_id") or "")
+            if not source_id and str(clip.get("source_platform", "")) == "system_generated_owned":
+                source_id = str(clip.get("clip_id", "")).removeprefix("clip_")
+            perm = _permission(permissions, source_id, account_id, "clip")
             asset = next((a for a in assets if str(a.get("clip_candidate_id") or a.get("video_clip_id") or "") == str(clip.get("clip_candidate_id", ""))), {})
             if not perm or not str(asset.get("storage_url", "")):
                 continue
