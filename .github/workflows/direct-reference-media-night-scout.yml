@@ -77,14 +77,8 @@ jobs:
         id: activation
         run: |
           allowed=false
-          if [ "${{ github.event_name }}" = "schedule" ] && python3 scripts/validate_production_activation.py --use-sheets >/dev/null 2>&1; then
-            if python3 - <<'PY'
-          import json
-          from pathlib import Path
-          cfg = json.loads(Path("config/autonomous_mode.json").read_text())
-          raise SystemExit(0 if cfg.get("production_publish_activation_approved") and cfg.get("scheduled_publish_enabled") else 1)
-          PY
-            then allowed=true; fi
+          if [ "${{ github.event_name }}" = "schedule" ] && python3 scripts/scheduled_publish_activation_gate.py --use-sheets >/dev/null 2>&1; then
+            allowed=true
           fi
           echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
       - name: Check free-tier post budget

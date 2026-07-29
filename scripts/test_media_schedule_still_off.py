@@ -22,7 +22,7 @@ def main() -> int:
         and cfg["media_public_post_auto_enabled"] is True
         and cfg["saved_media_post_fallback"] == "NO_MEDIA_FALLBACK"
         and all("workflow_dispatch:" in text for text in texts)
-        and all("schedule:" in (ROOT / ".github/workflows" / name).read_text() and "validate_production_activation.py --use-sheets" in (ROOT / ".github/workflows" / name).read_text() for name in guarded)
+        and all("schedule:" in (ROOT / ".github/workflows" / name).read_text() and "scheduled_publish_activation_gate.py --use-sheets" in (ROOT / ".github/workflows" / name).read_text() for name in guarded)
     )
     print(f"  {'PASS' if ok else 'FAIL'} media schedules are activation-guarded before canaries")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")

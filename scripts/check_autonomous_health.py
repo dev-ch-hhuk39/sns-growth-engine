@@ -246,7 +246,7 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
         if key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS and (
             not wf["has_schedule"]
             or not wf["has_workflow_dispatch"]
-            or "validate_production_activation.py --use-sheets" not in text
+            or "scheduled_publish_activation_gate.py --use-sheets" not in text
         ):
             problems.append(f"{key}:scheduled_activation_guard_contract_failed")
         if key in MEDIA_CANARY_WORKFLOWS - MEDIA_SCHEDULED_PUBLISH_WORKFLOWS and (wf["has_schedule"] or not wf["has_workflow_dispatch"]):
