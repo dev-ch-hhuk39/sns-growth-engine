@@ -1,8 +1,7 @@
 name: Direct Reference Media Liver Manager
 
 on:
-  schedule:
-    - cron: "4 7 * * *"
+  # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
       confirm_direct_media:

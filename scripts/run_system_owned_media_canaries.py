@@ -98,9 +98,25 @@ def build_specs(account_id: str, output_dir: Path, *, batch_id: str = "", recent
     history = list(recent_posts or [])
     texts: dict[str, str] = {}
     generated: dict[str, dict[str, Any]] = {}
+    history_before_kind: dict[str, list[str]] = {}
     for kind in ("direct_image", "direct_carousel", "direct_video", "generated_clip"):
-        text, output = _text(account_id, batch_id=run_id, kind=kind, recent_posts=history)
-        texts[kind] = text; generated[kind] = output
+        history_before_kind[kind] = list(history)
+        selected = None
+        for attempt in range(5):
+            text, output = _text(account_id, batch_id=run_id, kind=kind, attempt=attempt, recent_posts=history)
+            novelty = evaluate_candidate_novelty(
+                account_id=account_id,
+                public_post_text=text,
+                recent_posts=history,
+                pending_queue=[],
+            )
+            if novelty["status"] == "PASS":
+                selected = (text, output)
+                break
+        if selected is None:
+            raise ValueError(f"NOVELTY_EXHAUSTED:{account_id}:{kind}")
+        text, output = selected
+        texts[kind] = text; generated[kind] = output; history.append(text)
     direct_png = base / "direct.png"; _render(account_id, "direct", texts["direct_image"], direct_png)
     carousel = []
     for order in range(4):
@@ -115,7 +131,10 @@ def build_specs(account_id: str, output_dir: Path, *, batch_id: str = "", recent
         "direct_video": "vertical video storyboard: hook, supporting points, closing: " + texts["direct_video"],
         "generated_clip": "vertical clip storyboard: hook, key point, closing: " + texts["generated_clip"],
     }
-    alignments = {kind: _alignment(texts[kind], storyboards[kind], history) for kind in texts}
+    alignments = {
+        kind: _alignment(texts[kind], storyboards[kind], history_before_kind[kind])
+        for kind in texts
+    }
     return [
         {"kind": "direct_image", "canary_id": f"canary_{run_id}_direct_image", "files": [direct_png], "text": texts["direct_image"], "run_id": run_id, "generation": generated["direct_image"], "alignment": alignments["direct_image"]},
         {"kind": "direct_carousel", "canary_id": f"canary_{run_id}_direct_carousel", "files": carousel, "text": texts["direct_carousel"], "run_id": run_id, "generation": generated["direct_carousel"], "alignment": alignments["direct_carousel"]},
@@ -269,7 +288,22 @@ def main() -> int:
     specs_by_account = {account: build_specs(account, ROOT / "output/system_owned_media") for account in accounts}
     all_specs = [spec for specs in specs_by_account.values() for spec in specs]
     if args.apply:
-        account_results = {account: apply_specs(specs, account, upload=True) for account, specs in specs_by_account.items()}
+        account_results = {}
+        for account in accounts:
+            result = None
+            # A collision with live Sheets state must be resolved before a
+            # queue row exists. Re-render with a new batch; never weaken the
+            # final publisher idempotency guard or reuse an existing asset.
+            for attempt in range(5):
+                specs = specs_by_account[account] if attempt == 0 else build_specs(
+                    account,
+                    ROOT / "output/system_owned_media",
+                    batch_id=f"fresh_{account}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{attempt}",
+                )
+                result = apply_specs(specs, account, upload=True)
+                if result.get("status") != "NOVELTY_EXHAUSTED":
+                    break
+            account_results[account] = result or {"status": "NOVELTY_EXHAUSTED", "would_post": False}
         result = {
             "status": "APPLIED" if all(item["status"] == "APPLIED" for item in account_results.values()) else "PARTIAL_FAILURE",
             "accounts": account_results,

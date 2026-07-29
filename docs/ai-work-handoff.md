@@ -6531,10 +6531,12 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 更新: `scripts/public_post_quality.py`, `scripts/run_system_owned_media_canaries.py`, `scripts/create_missing_text_canaries.py`, `scripts/run_autonomous_loop.py`, `scripts/process_threads_queue.py`, `scripts/media_post_validator.py`, `src/sheets_client.py`, bounded publisher workflow、関連focused tests。
 - 追加: `scripts/production_novelty.py`, novelty/alignment/media-type tests。
 - focused PASS: novelty contract、system-owned generator/alignment、publisher media-type normalizer、bounded workflow contract、queue worker、media validator、no-text-fallback、all workflow safety flags (448/0)、`py_compile`、`git diff --check`。ローカルRuffは未導入で未実行。
+- full CIの初回失敗は、media workflowがcanary成功前にもscheduleを持つ旧設定、旧text-fallback契約、audit workflowのcheckout hardening不足による契約不整合だった。4本のmedia dispatch workflowをmanual-onlyへ戻し、fallbackを禁止する契約に統一し、checkoutを`persist-credentials: false`へ固定した。関連workflow/schedule/resource/self-hosted testsは全PASS。
 
 ### 未完了事項 / スケール方針 / 残WARN
 
 - stabilization PRが通常マージされるまで、Threads投稿、Cloudinary upload、Sheets apply、scheduled activationは実行しない。
+- media scheduleはcanary完了後のactivationまでmanual-only。text scheduleは既存gateのまま変更しない。
 - 全回帰/full CIはこのPRの最終確認時に一度だけ実行する。PR gate後、mainでproduction orchestratorのcanary modeを使って新規4件を準備し、READY artifactとpreviewを提示して人間承認を待つ。
 - 残WARN: 過去のlegacy posted text/mediaは新規性判定の参照対象だが、修復・再利用・再投稿対象外。Xとbeautyは引き続き無効。
 
