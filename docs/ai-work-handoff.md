@@ -6391,3 +6391,9 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   `test_all_workflows_safety_flags.py` (419/0), compileall, diff check. The
   next action is merge this patch, then dispatch Final Production Preparation
   apply to create the missing Sheets tab and the three non-posting queue rows.
+- Production result after the patch workflow apply: `metrics_collection_jobs`
+  now exists, and six of twelve canary rows are `READY_FOR_HUMAN_CANARY`
+  (the three prior candidates plus the three text rows). The remaining six are
+  precisely the owner-media slots. The readiness report now preserves the
+  activation evidence source as `READ_OK` after this schema repair, rather
+  than obscuring it as a generic worksheet exception.
