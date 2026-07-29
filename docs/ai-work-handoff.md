@@ -6467,3 +6467,18 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   narrowly scoped patch, dispatch the repair workflow, and verify Sheets
   `READ_OK`, `canary_source_integrity=PASS`, and 12/12
   `READY_FOR_HUMAN_CANARY`. No Threads post is authorized or performed.
+
+### Applied Result
+
+- PRs #69 and #70 were merged normally after focused PR gates passed.
+  Workflow `30425592064` applied only the two approved direct-video parent and
+  child canonical URLs, with `APPLIED` and Sheets read-after-write `PASS`.
+- Final Production Preparation dry-run `30425775865` reports Sheets
+  `READ_OK`, 12/12 `READY_FOR_HUMAN_CANARY`, and
+  `canary_source_integrity=PASS`. Both selected direct-video candidates retain
+  approved `approved_creator_clip` permissions and evidence. No post,
+  download, cut, or upload was performed in this repair phase.
+- The global readiness status remains `NOT_READY` solely because the bounded
+  canaries have not been posted or measured. One unrelated historic source
+  identity failure is a `PLAN_ONLY` quarantine candidate and is outside the
+  canary selection.
