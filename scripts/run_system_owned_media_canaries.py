@@ -109,7 +109,7 @@ def _repair_legacy_all_scope(tabs: dict[str, tuple[Any, list[str], list[dict[str
         "media_permissions": ("account_id", "source_id"),
         "media_assets": ("account_id", "reference_post_id"),
         "source_videos": ("account_id", "source_id"),
-        "video_clip_candidates": ("account_id", "source_id"),
+        "video_clip_candidates": ("account_id", "clip_id"),
         "queue": ("account_id", "source_id"),
     }
     marker = f"system_owned_{account_id}_"
@@ -137,7 +137,7 @@ def _legacy_scope_remaining(tabs: dict[str, tuple[Any, list[str], list[dict[str,
         "media_permissions": ("account_id", "source_id"),
         "media_assets": ("account_id", "reference_post_id"),
         "source_videos": ("account_id", "source_id"),
-        "video_clip_candidates": ("account_id", "source_id"),
+        "video_clip_candidates": ("account_id", "clip_id"),
         "queue": ("account_id", "source_id"),
     }
     marker = f"system_owned_{account_id}_"
