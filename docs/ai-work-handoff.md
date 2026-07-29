@@ -1,3 +1,21 @@
+## 2026-07-29 Codex Existing Canary Evidence Dispatch Fallback (In Progress)
+
+### 本システムについて / 今回の変更
+
+- `audit-existing-canary-evidence.yml`はmain上で`workflow_dispatch: {}`、API上のpath/stateも正しいが、filename/ref指定のdispatchがGitHub APIの422で拒否された。新規workflowは作成せず、既存`Final Production Preparation`へ`audit_existing_canaries`入力だけを追加した。
+- audit modeは通常のschema/text-canary/preparation mutationをskipし、既存canary照合だけを`--apply --confirm-existing-evidence`で実行する。実投稿、メディア生成、scheduled activationは行わない。
+- VALIDに限り`posted_results.canary_id`を紐付け、24h/72h/7d metrics jobを補う。artifactには書込み後のcanary linkとmetrics schedule read-after-write結果を含める。
+
+### 変更ファイル一覧 / テスト結果
+
+- 更新: `.github/workflows/final-production-preparation.yml`, `scripts/audit_existing_canary_evidence.py`, `scripts/test_final_production_preparation_workflow.py`, 本handoff。
+- focused PASS: `python3 -m py_compile scripts/audit_existing_canary_evidence.py`, `python3 scripts/test_final_production_preparation_workflow.py`, `git diff --check`。
+
+### 未完了事項 / 残WARN / 次AIへの引き継ぎ
+
+- PRマージ後、`Final Production Preparation`を`audit_existing_canaries=true`でdispatchしartifactの12件分類を確定する。Threads Graph API/Sheetsの外部結果により`VALID/INVALID/VERIFY_REQUIRED`が決まるため、現時点で成功を推測しない。
+- 次に触ってよい: このaudit dispatch、artifact取得、VALID行のmetrics予約確認。触らない方がよい: 実投稿、schedule activation、第三者メディア、`.env`、`data/`、`output/`、credential/cookie。
+
 ## 2026-07-29 Codex Final Production Completion Branch (In Progress)
 
 ### 本システムについて / 今回の統合
