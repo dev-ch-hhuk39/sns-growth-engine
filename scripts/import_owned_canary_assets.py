@@ -44,6 +44,7 @@ def _validate_asset(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, list[st
     group = _text(item.get("source_group_id")) or asset_id
     account_id = _text(item.get("account_id"))
     purpose = _text(item.get("asset_purpose"))
+    canary_types = {str(value) for value in item.get("canary_types", [])} or {purpose}
     local_path = _text(item.get("local_path"))
     https_url = _text(item.get("https_url"))
     if not asset_id: errors.append("asset_id is required")
@@ -57,10 +58,13 @@ def _validate_asset(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, list[st
     if not _text(item.get("owner_declaration")): errors.append("owner_declaration is required")
     if item.get("threads_post_allowed") is not True: errors.append("threads_post_allowed must be true")
     if item.get("cloudinary_storage_allowed") is not True: errors.append("cloudinary_storage_allowed must be true")
+    if not canary_types <= PURPOSES: errors.append("canary_types contains an invalid type")
     operations = {str(v) for v in item.get("allowed_operations", [])}
-    needed = "clip" if purpose == "generated_clip" else ("carousel" if purpose == "direct_carousel" else "direct")
-    if needed not in operations: errors.append(f"allowed_operations must include {needed}")
-    if purpose == "generated_clip":
+    required_operations = set()
+    for canary_type in canary_types:
+        required_operations.add("clip" if canary_type == "generated_clip" else ("carousel" if canary_type == "direct_carousel" else "direct"))
+    if not required_operations <= operations: errors.append("allowed_operations does not cover canary_types")
+    if "generated_clip" in canary_types:
         try:
             if float(item.get("clip_end_seconds")) <= float(item.get("clip_start_seconds")):
                 errors.append("generated_clip requires clip_end_seconds greater than clip_start_seconds")
@@ -70,7 +74,7 @@ def _validate_asset(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, list[st
         errors.append("public_post_text or queue_id is required")
     if errors:
         return None, errors
-    item.update({"asset_id": asset_id, "source_group_id": group, "account_id": account_id, "asset_purpose": purpose, "local_path": local_path, "https_url": https_url, "allowed_operations": sorted(operations)})
+    item.update({"asset_id": asset_id, "source_group_id": group, "account_id": account_id, "asset_purpose": purpose, "canary_types": sorted(canary_types), "local_path": local_path, "https_url": https_url, "allowed_operations": sorted(operations)})
     item["content_hash"] = _sha256(local_path) if local_path else _text(item.get("content_sha256")).lower()
     return item, []
 
@@ -91,7 +95,7 @@ def build_plan(payload: dict[str, Any]) -> dict[str, Any]:
     groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for asset in assets: groups[(asset["account_id"], asset["source_group_id"])].append(asset)
     for (_, group), members in groups.items():
-        carousel = any(member["asset_purpose"] == "direct_carousel" for member in members)
+        carousel = any("direct_carousel" in member["canary_types"] for member in members)
         if carousel and len(members) < 2: errors.append(f"carousel group {group} requires at least two media items")
         if len({member["media_order"] for member in members}) != len(members): errors.append(f"group {group} has duplicate media_order")
     return {"status": "BLOCKED" if errors else "PLAN_ONLY", "assets": assets, "groups": groups, "errors": errors}
@@ -147,7 +151,7 @@ def apply_plan(plan: dict[str, Any]) -> dict[str, Any]:
             rows["media_assets"].append({"media_id": media_id, "account_id": account, "reference_post_id": source_post_id, "source_platform": "owned_local", "source_post_url": "", "original_media_url": original, "local_path": member["local_path"], "media_type": media_type, "storage_provider": "", "storage_url": "", "rights_status": "owned", "permission_status": "approved", "reuse_status": "approved_owner_asset", "rights_policy": "owned", "reuse_policy": "approved_owner_asset", "media_policy": "manual_media_prepare", "allow_download": False, "allow_cut": False, "allow_upload": False, "upload_status": "PENDING", "notes": f"content_hash={member['content_hash']}", "downloaded_at": "", "uploaded_at": ""})
             existing_hashes.add(member["content_hash"])
             receipt["rollback"]["delete_row_ids"]["source_post_media"].append(source_media_id); receipt["rollback"]["delete_row_ids"]["media_assets"].append(media_id)
-            if member["asset_purpose"] == "generated_clip":
+            if "generated_clip" in member["canary_types"]:
                 video_id = f"owned_video_{member['asset_id']}"; clip_id = f"owned_clip_{member['asset_id']}"
                 rows["source_videos"].append({"source_video_id": video_id, "source_id": source_id, "account_id": account, "platform": "owned_local", "source_url": "", "video_id": member["asset_id"], "canonical_video_url": "", "title": "Owner-attested canary video", "transcript_status": "NOT_REQUESTED", "analysis_status": "OWNER_DECLARED", "rights_status": "owned", "permission_status": "approved", "discovery_status": "OWNED_IMPORTED", "content_hash": member["content_hash"], "discovered_at": now, "last_seen_at": now})
                 rows["video_clip_candidates"].append({"clip_candidate_id": clip_id, "source_video_id": video_id, "source_id": source_id, "account_id": account, "platform": "owned_local", "start_seconds": member["clip_start_seconds"], "end_seconds": member["clip_end_seconds"], "duration_seconds": float(member["clip_end_seconds"]) - float(member["clip_start_seconds"]), "rights_status": "owned", "permission_status": "approved", "cut_status": "NOT_REQUESTED", "upload_status": "PENDING", "post_status": "NOT_POSTED", "reviewer_status": "WAITING_REVIEW", "created_at": now})
@@ -157,11 +161,17 @@ def apply_plan(plan: dict[str, Any]) -> dict[str, Any]:
             validation = final_public_post_validator(public_text, account_id=account)
             if validation.get("status") != "PASS":
                 raise ValueError(f"public_post_text failed validator for {group}: {validation.get('blocked_reasons')}")
-            queue_id = queue_id or f"owned_canary_{account}_{group}"
-            if queue_id not in existing["queue"]:
-                purpose = first["asset_purpose"]
-                rows["queue"].append({"queue_id": queue_id, "account_id": account, "platform": "threads", "status": "WAITING_REVIEW", "public_post_text": public_text, "source_post_id": source_post_id, "media_asset_id": f"owned_asset_{first['asset_id']}", "media_required": True, "media_type": purpose, "canary_id": f"canary_{account}_{purpose}", "created_at": now, "updated_at": now})
-                receipt["rollback"]["delete_row_ids"]["queue"].append(queue_id)
+            requested_types = sorted({kind for member in members for kind in member["canary_types"]})
+            for purpose in requested_types:
+                scoped_queue_id = queue_id or f"owned_canary_{account}_{group}_{purpose}"
+                if len(requested_types) > 1 and queue_id:
+                    scoped_queue_id = f"{queue_id}_{purpose}"
+                if scoped_queue_id in existing["queue"]: continue
+                queue_row = {"queue_id": scoped_queue_id, "account_id": account, "platform": "threads", "status": "WAITING_REVIEW", "public_post_text": public_text, "source_post_id": source_post_id, "media_asset_id": f"owned_asset_{first['asset_id']}", "media_required": True, "media_type": purpose, "canary_id": f"canary_{account}_{purpose}", "created_at": now, "updated_at": now}
+                if purpose == "direct_carousel":
+                    queue_row["media_asset_ids_json"] = json.dumps([f"owned_asset_{member['asset_id']}" for member in sorted(members, key=lambda item: int(item["media_order"]))])
+                rows["queue"].append(queue_row)
+                receipt["rollback"]["delete_row_ids"]["queue"].append(scoped_queue_id)
     for logical, entries in rows.items():
         if entries:
             ws, headers, _ = tabs[logical]; ws.append_rows([_row(headers, entry) for entry in entries], value_input_option="USER_ENTERED")

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from audit_media_permissions import build_report as permission_report
 from build_live_canary_inventory import _rows, build_inventory
-from final_production_contracts import activation_evidence, source_integrity_report
+from final_production_contracts import activation_evidence, canary_required_permission_deficits, source_integrity_report
 from quarantine_stale_operational_rows import RULES, build_plan as stale_plan
 
 
@@ -55,6 +55,7 @@ def build_report(*, use_sheets: bool) -> dict[str, Any]:
         "source_read_after_write": source_integrity_report(parents, children),
         "stale_operational_rows": stale_plan(operational, older_than_minutes=120),
         "permission_audit": permission_report(use_sheets=use_sheets),
+        "canary_required_permission_deficits": canary_required_permission_deficits(datasets.get("media_permissions", [])),
         "canary_inventory": build_inventory(datasets),
         "activation_guard": activation,
         "safety": {

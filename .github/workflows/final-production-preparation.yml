@@ -68,6 +68,20 @@ jobs:
             echo "BLOCKED: apply requires confirm_preparation=PREPARE_PRODUCTION"
             exit 1
           fi
+      - name: Ensure activation evidence schema
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            python3 scripts/ensure_activation_evidence_schema.py --apply --confirm-schema --use-sheets
+          else
+            python3 scripts/ensure_activation_evidence_schema.py --dry-run --use-sheets || true
+          fi
+      - name: Create missing text canary queue rows
+        run: |
+          if [ "$MODE" = "apply" ]; then
+            python3 scripts/create_missing_text_canaries.py --apply --confirm-text-canaries --use-sheets
+          else
+            python3 scripts/create_missing_text_canaries.py --dry-run --use-sheets || true
+          fi
       - name: Run bounded production preparation
         run: |
           mkdir -p /tmp/final-production-preparation

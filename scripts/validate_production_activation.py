@@ -23,7 +23,9 @@ def _live_rows(use_sheets: bool) -> tuple[list[dict[str, Any]], list[dict[str, A
         cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=True)
         return [dict(row) for row in client._ws("posted_results").get_all_records()], [dict(row) for row in client._ws("metrics_collection_jobs").get_all_records()], "READ_OK"
     except Exception as exc:
-        return [], [], type(exc).__name__
+        # This is intentionally distinct from missing canary evidence.  The
+        # initializer can repair it without touching existing operational rows.
+        return [], [], "SCHEMA_MISSING" if type(exc).__name__ == "WorksheetNotFound" else type(exc).__name__
 
 
 def main() -> int:
