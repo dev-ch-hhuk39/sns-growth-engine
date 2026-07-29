@@ -27,6 +27,15 @@ def is_individual_source_post_url(platform: str, url: str) -> bool:
     host = parsed.netloc.lower().removeprefix("www.")
     path = parsed.path.rstrip("/")
     platform = str(platform).lower()
+    if not platform:
+        if "youtube" in host or host == "youtu.be":
+            platform = "youtube"
+        elif host.endswith("tiktok.com"):
+            platform = "tiktok"
+        elif host.endswith("threads.com"):
+            platform = "threads"
+        elif host in {"x.com", "twitter.com"}:
+            platform = "x"
     if platform == "youtube":
         return (host in {"youtube.com", "m.youtube.com"} and path == "/watch" and bool(parse_qs(parsed.query).get("v"))) or (host == "youtu.be" and bool(path.strip("/"))) or (host == "youtube.com" and path.startswith("/shorts/"))
     if platform == "tiktok":
