@@ -176,6 +176,10 @@ with verified posted results and 24h/72h/7d metric reservations. Only then
 may `production_publish_activation_approved` and `scheduled_publish_enabled`
 be set through the separate approved activation change.
 
+That change is `python3 scripts/activate_scheduled_publish.py --apply
+--confirm-scheduled-activation --use-sheets`. It changes only the two tracked
+activation flags after the gate is `ALLOW`; it never creates a post itself.
+
 After canaries, run `python3 scripts/update_capability_matrix_from_evidence.py
 --use-sheets` first as a plan. It only promotes a matrix row when the relevant
 Threads/Sheets evidence exists; `--apply --confirm-capability-update` is the

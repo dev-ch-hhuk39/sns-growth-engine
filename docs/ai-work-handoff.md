@@ -5,7 +5,7 @@
 - ブランチ: `feature/final-production-completion`。開始mainは`9a02728376a524ca7a8ba4ba9ab13723c85a93bc`。
 - `run_final_production_preparation.py`がThreads/X/manual JSONの収集計画、source parent/media整合、stale隔離、permission監査、12件canary在庫を一つのJSONにまとめる。X tokenが無い場合は`BLOCKED_OPTIONAL`であり、Threads/manual JSON/owner素材の準備を止めない。
 - `final_production_readiness.py`は、source read-after-write、stale rows、permission evidence、canary inventory、activation evidenceをread-onlyで集約する。`validate_production_activation.py`は両account x 6形式の投稿済みread-after-writeと24h/72h/7d予約を全て要求する。`update_capability_matrix_from_evidence.py`は実投稿・snapshot・PDCA・scheduled slotの証跡だけでmatrixを更新する。
-- mediaの4つのslot cronはNight Scout direct 18:00/clip 21:00、Liver Manager direct 16:00/clip 18:00（JST）に接続した。scheduleはactivation guardがPASSになるまでdry-runのみで、manual canaryだけが明示confirmで実行できる。
+- mediaの4つのslot cronはNight Scout direct 18:00/clip 21:00、Liver Manager direct 16:00/clip 18:00（JST）に接続した。scheduleはactivation guardがPASSになるまでdry-runのみで、manual canaryだけが明示confirmで実行できる。12件の証跡が揃った後は`activate_scheduled_publish.py --apply --confirm-scheduled-activation --use-sheets`だけが2つのactivation flagを変更できる。
 - direct/clip mediaはtextへfallbackしない。予算・権利・証跡不足は`NO_POST`で停止する。`saved_media_post_fallback`は`NO_MEDIA_FALLBACK`へ変更した。
 
 ### 変更ファイル一覧 / テスト結果
