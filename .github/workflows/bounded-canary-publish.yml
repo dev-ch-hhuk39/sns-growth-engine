@@ -1,0 +1,86 @@
+name: Bounded Twelve Canary Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_canary_publish:
+        description: "Type PUBLISH_12_APPROVED_CANARIES to publish exactly the approved twelve canaries"
+        required: true
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bounded-twelve-canary-publish
+  cancel-in-progress: false
+
+env:
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: production
+    env:
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 }}
+      THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
+      THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
+      THREADS_APP_ID_NIGHT_SCOUT: ${{ secrets.THREADS_APP_ID_NIGHT_SCOUT }}
+      THREADS_APP_SECRET_NIGHT_SCOUT: ${{ secrets.THREADS_APP_SECRET_NIGHT_SCOUT }}
+      THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
+      THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
+      THREADS_APP_ID_LIVER_MANAGER: ${{ secrets.THREADS_APP_ID_LIVER_MANAGER }}
+      THREADS_APP_SECRET_LIVER_MANAGER: ${{ secrets.THREADS_APP_SECRET_LIVER_MANAGER }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Install runtime dependencies
+        run: python3 -m pip install --requirement requirements.txt
+      - name: Guard exact authorization and disabled surfaces
+        run: |
+          test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_12_APPROVED_CANARIES"
+          test "$ALLOW_REAL_X_POST" = "false"
+          test "$ALLOW_VIDEO_DOWNLOAD" = "false"
+          test "$ALLOW_VIDEO_CUT" = "false"
+          test "$ALLOW_CLOUDINARY_UPLOAD" = "false"
+      - name: Prepare exact approved queues and preflight
+        run: |
+          mkdir -p /tmp/bounded-canary
+          python3 scripts/prepare_bounded_canary_publish.py --apply --confirm-bounded-canary --output /tmp/bounded-canary/preflight.json
+          jq -e '.status == "APPLIED" and .read_after_write == "PASS" and (.queue_ids | length == 12)' /tmp/bounded-canary/preflight.json
+      - name: Publish exact canaries sequentially
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+          ALLOW_REAL_THREADS_VIDEO_POST: "true"
+          ALLOW_MEDIA_POSTS: "true"
+          ALLOW_THREADS_CAROUSEL: "true"
+        run: |
+          jq -r '.plan.rows[] | [.account_id, .queue_id] | @tsv' /tmp/bounded-canary/preflight.json | while IFS=$'\t' read -r account_id queue_id; do
+            python3 scripts/process_threads_queue.py --account-id "$account_id" --queue-id "$queue_id" --confirm-real-post
+          done
+      - name: Verify posted results and metrics reservations
+        if: always()
+        run: |
+          python3 scripts/final_production_readiness.py --use-sheets --output /tmp/bounded-canary/readiness.json || true
+          python3 scripts/update_capability_matrix_from_evidence.py --use-sheets --apply --confirm-capability-update > /tmp/bounded-canary/capability.json || true
+      - name: Upload bounded canary evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: bounded-twelve-canary-${{ github.run_id }}
+          path: /tmp/bounded-canary/*.json
+          retention-days: 30
