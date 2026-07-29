@@ -175,3 +175,8 @@ Media slots never fall back to text. Their cron jobs produce plans until
 with verified posted results and 24h/72h/7d metric reservations. Only then
 may `production_publish_activation_approved` and `scheduled_publish_enabled`
 be set through the separate approved activation change.
+
+After canaries, run `python3 scripts/update_capability_matrix_from_evidence.py
+--use-sheets` first as a plan. It only promotes a matrix row when the relevant
+Threads/Sheets evidence exists; `--apply --confirm-capability-update` is the
+separate recorded update step.
