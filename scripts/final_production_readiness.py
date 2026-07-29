@@ -33,7 +33,7 @@ def build_report(*, use_sheets: bool) -> dict[str, Any]:
             operational = {key: [dict(row) for row in client._ws(key).get_all_records()] for key in RULES}
         except Exception:
             pass
-    activation = activation_evidence(datasets.get("posted_results", []), [])
+    activation = {**activation_evidence(datasets.get("posted_results", []), []), "evidence_source": "DATASET_PARTIAL"}
     # build_live_canary_inventory intentionally reads only its dedicated tabs;
     # include posted/metric evidence if those extra rows are available later.
     if use_sheets and sheets_status == "READ_OK":
@@ -44,9 +44,9 @@ def build_report(*, use_sheets: bool) -> dict[str, Any]:
             cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=True)
             posted = [dict(row) for row in client._ws("posted_results").get_all_records()]
             jobs = [dict(row) for row in client._ws("metrics_collection_jobs").get_all_records()]
-            activation = activation_evidence(posted, jobs)
+            activation = {**activation_evidence(posted, jobs), "evidence_source": "READ_OK"}
         except Exception as exc:
-            activation = {"status": "BLOCKED", "reason": type(exc).__name__}
+            activation = {"status": "BLOCKED", "reason": type(exc).__name__, "evidence_source": "SCHEMA_MISSING" if type(exc).__name__ == "WorksheetNotFound" else type(exc).__name__}
     auto = _config("config/autonomous_mode.json")
     media = _config("config/media_growth_engine.json")
     return {
