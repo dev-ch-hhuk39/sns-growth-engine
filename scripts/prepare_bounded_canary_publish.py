@@ -62,10 +62,11 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
         for kind in CANARY_TYPES:
             canary = _canary_id(account_id, kind); candidate = candidates.get((account_id, kind), {})
             existing = queues.get((account_id, canary))
+            create_text_queue = existing is None and kind in {"original_text", "reference_text"} and bool(candidate)
             reasons: list[str] = []
             if canary not in ready or not candidate:
                 reasons.append("CANARY_NOT_READY")
-            if not existing:
+            if not existing and not create_text_queue:
                 reasons.append("CANARY_QUEUE_MISSING")
             text = str(candidate.get("public_post_text", ""))
             if final_public_post_validator(text, account_id)["status"] != "PASS":
@@ -75,7 +76,8 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
                 media = resolve_queue_media(prospective)
                 if not media["media_usable"]:
                     reasons.append("MEDIA_REQUIRED_MISSING")
-            rows.append({"canary_id": canary, "account_id": account_id, "canary_type": kind, "queue_id": str(existing.get("queue_id", "")) if existing else "", "status": "READY_TO_PROMOTE" if not reasons else "BLOCKED", "reasons": reasons, "updates": _field_update(candidate, kind) if candidate else {}})
+            queue_id = str(existing.get("queue_id", "")) if existing else f"text_canary_{account_id}_{kind}"
+            rows.append({"canary_id": canary, "account_id": account_id, "canary_type": kind, "queue_id": queue_id, "create_text_queue": create_text_queue, "status": "READY_TO_PROMOTE" if not reasons else "BLOCKED", "reasons": reasons, "updates": _field_update(candidate, kind) if candidate else {}})
     return {"status": "PASS" if len(rows) == 12 and all(row["status"] == "READY_TO_PROMOTE" for row in rows) else "BLOCKED", "rows": rows, "would_post": False}
 
 
@@ -83,6 +85,9 @@ def apply_plan(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
     if plan["status"] != "PASS":
         return {"status": "BLOCKED", "plan": plan}
     for row in plan["rows"]:
+        if row.get("create_text_queue"):
+            append_row(client, "queue", {"queue_id": row["queue_id"], "account_id": row["account_id"], "target_account_id": row["account_id"], "created_at": _now(), **row["updates"]})
+            continue
         if not update_row(client, "queue", "queue_id", row["queue_id"], row["updates"]):
             return {"status": "PARTIAL_FAILED", "failed_queue_id": row["queue_id"], "plan": plan}
     after = records(client, "queue")
