@@ -101,6 +101,40 @@ def _append(ws: Any, headers: list[str], rows: list[dict[str, Any]]) -> None:
     if rows: ws.append_rows([[str(row.get(header, "")) for header in headers] for row in rows], value_input_option="USER_ENTERED")
 
 
+def _repair_legacy_all_scope(tabs: dict[str, tuple[Any, list[str], list[dict[str, Any]]]], account_id: str) -> int:
+    """Repair only unposted generated rows from the initial all-account apply."""
+    repairs = 0
+    targets = {
+        "source_posts": ("target_account_id", "source_id"),
+        "media_permissions": ("account_id", "source_id"),
+        "media_assets": ("account_id", "reference_post_id"),
+        "source_videos": ("account_id", "source_id"),
+        "video_clip_candidates": ("account_id", "source_id"),
+        "queue": ("account_id", "source_id"),
+    }
+    marker = f"system_owned_{account_id}_"
+    for logical, (account_field, marker_field) in targets.items():
+        ws, headers, rows = tabs[logical]
+        if account_field not in headers:
+            continue
+        column = headers.index(account_field) + 1
+        for row_index, row in enumerate(rows, start=2):
+            if str(row.get(account_field, "")) != "all" or marker not in str(row.get(marker_field, "")):
+                continue
+            if logical == "queue" and str(row.get("status", "")).upper() not in {"WAITING_REVIEW", "DRAFT", "PLANNED"}:
+                raise RuntimeError(f"legacy_generated_queue_not_safe_to_repair:{row.get('queue_id', '')}")
+            ws.update_cell(row_index, column, account_id)
+            if str(ws.cell(row_index, column).value) != account_id:
+                raise RuntimeError(f"legacy_generated_scope_read_after_write_failed:{logical}:{row_index}")
+            if logical == "queue" and "target_account_id" in headers:
+                target_column = headers.index("target_account_id") + 1
+                ws.update_cell(row_index, target_column, account_id)
+                if str(ws.cell(row_index, target_column).value) != account_id:
+                    raise RuntimeError(f"legacy_generated_target_read_after_write_failed:{row_index}")
+            repairs += 1
+    return repairs
+
+
 def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -> dict[str, Any]:
     from config_loader import get_config
     from sheets_client import SheetsClient, TAB_DEFINITIONS
@@ -109,6 +143,11 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
     tabs = {}
     for logical in logicals:
         client._ensure_tab(logical, TAB_DEFINITIONS[logical]); ws = client._ws(logical); tabs[logical] = (ws, ws.row_values(1), ws.get_all_records())
+    repaired_legacy_rows = _repair_legacy_all_scope(tabs, account_id)
+    if repaired_legacy_rows:
+        for logical in logicals:
+            ws, headers, _ = tabs[logical]
+            tabs[logical] = (ws, headers, ws.get_all_records())
     existing_canaries = {str(row.get("canary_id", "")) for row in tabs["queue"][2]}
     now = _now(); created: dict[str, list[dict[str, Any]]] = {logical: [] for logical in logicals}; skipped = []
     for spec in specs:
@@ -147,6 +186,7 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
     return {
         "status": "APPLIED" if read_after_write["status"] == "PASS" else "PARTIAL_FAILURE",
         "created": verify,
+        "repaired_legacy_rows": repaired_legacy_rows,
         "skipped_canaries": skipped,
         "cloudinary_uploaded": sum(1 for row in created["media_assets"] if row.get("storage_url")),
         "would_post": False,
@@ -167,8 +207,16 @@ def main() -> int:
     if args.apply and not upload:
         print(json.dumps({"status": "BLOCKED", "reason": "ALLOW_CLOUDINARY_UPLOAD=true required for apply", "would_post": False})); return 1
     accounts = ACCOUNTS if args.account_id == "all" else (args.account_id,)
-    all_specs = [spec for account in accounts for spec in build_specs(account, ROOT / "output/system_owned_media")]
-    if args.apply: result = apply_specs(all_specs, args.account_id, upload=True)
+    specs_by_account = {account: build_specs(account, ROOT / "output/system_owned_media") for account in accounts}
+    all_specs = [spec for specs in specs_by_account.values() for spec in specs]
+    if args.apply:
+        account_results = {account: apply_specs(specs, account, upload=True) for account, specs in specs_by_account.items()}
+        result = {
+            "status": "APPLIED" if all(item["status"] == "APPLIED" for item in account_results.values()) else "PARTIAL_FAILURE",
+            "accounts": account_results,
+            "cloudinary_uploaded": sum(int(item["cloudinary_uploaded"]) for item in account_results.values()),
+            "would_post": False,
+        }
     else: result = {"status": "PLAN_ONLY", "account_id": args.account_id, "generated_specs": [{"canary_id": spec["canary_id"], "kind": spec["kind"], "files": [str(path) for path in spec["files"]], "content_hashes": [_sha(Path(path)) for path in spec["files"]]} for spec in all_specs], "would_upload": False, "would_post": False}
     print(json.dumps(result, ensure_ascii=False, indent=2)); return 0 if result["status"] in {"PLAN_ONLY", "APPLIED"} else 1
 
