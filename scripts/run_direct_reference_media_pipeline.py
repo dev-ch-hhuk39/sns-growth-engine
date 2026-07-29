@@ -420,13 +420,15 @@ def build_plan(
     slot = {"post_type": "direct_reference_media", "theme": "reader-facing account guidance"} if manual_e2e_proof else slot_by_id(account_id, slot_id)
     if not slot or slot.get("post_type") != "direct_reference_media":
         return {"status": "BLOCKED", "blocked_reasons": ["slot_id must be a direct_reference_media slot"]}
-    if _true(os.environ.get("FORCE_TEXT_ONLY_FALLBACK")):
+    # A media slot is never converted into a text slot.  Callers may block a
+    # slot because of a resource budget, but the only safe outcome is NO_POST.
+    if _true(os.environ.get("BLOCK_MEDIA_SLOT")):
         return {
             "status": "NO_POST",
             "account_id": account_id,
             "slot_id": slot_id,
             "would_post": False,
-            "blocked_reasons": ["resource_budget_text_only"],
+            "blocked_reasons": ["resource_budget_media_slot"],
         }
     if not client:
         return {"status": "PLAN_ONLY", "account_id": account_id, "slot_id": slot_id, "manual_e2e_proof": manual_e2e_proof, "would_post": False, "blocked_reasons": []}

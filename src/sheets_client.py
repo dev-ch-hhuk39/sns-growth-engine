@@ -134,7 +134,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "caption_provider", "caption_provider_version", "alignment_status",
         "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
         "source_copy_similarity", "recent_post_similarity", "source_content_hash",
-        "verification_status", "verification_checked_at",
+        "verification_status", "verification_checked_at", "canary_id",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -148,7 +148,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     # 投稿後の 24h / 72h / 7d metrics 回収予約。schedule はジョブを計画するだけで、
     # 外部取得と Sheets mutation は明示confirm付きの別runnerに分離する。
     "metrics_collection_jobs": [
-        "job_id", "result_id", "account_id", "platform", "post_url",
+        "job_id", "result_id", "canary_id", "account_id", "platform", "post_url",
         "window_hours", "scheduled_for", "status", "attempt_count",
         "last_attempt_at", "last_error", "created_at", "updated_at",
     ],
@@ -220,6 +220,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "alignment_status", "final_alignment_score", "main_claim_coverage",
         "unsupported_claim_count", "source_copy_similarity", "recent_post_similarity",
         "claim_support_json", "content_hash", "failure_signature",
+        # Final canaries are explicitly named so an activation gate can prove
+        # all twelve distinct formats without inferring from free-form notes.
+        "canary_id",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [

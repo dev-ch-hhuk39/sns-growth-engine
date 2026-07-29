@@ -152,3 +152,35 @@ Phase 9-11 テストも全て PASS。
 | ArticleFetcher | ✓ | requests+BS4 実装済み |
 | BrowserExportFetcher | ✓ | JSON/CSV import 実装済み |
 | YouTubeTranscriptFetcher | ✓ | youtube-transcript-api 実装済み |
+# Final Production Preparation Entry Point
+
+Run `python3 scripts/final_production_readiness.py --use-sheets` for a
+read-only, redacted final readiness JSON. It reports source post parent/media
+integrity, stale operational rows, permission gaps, twelve-format canary
+inventory, and the evidence required before schedule activation.
+
+Use `python3 scripts/run_final_production_preparation.py --account-id all
+--dry-run` to plan bounded Threads/X/manual JSON collection and stale-row
+review. Its apply mode never posts, downloads, cuts, or uploads; it still
+requires `--apply --confirm-production-preparation`.
+
+X is optional. Missing `X_READ_ONLY_BEARER_TOKEN` is reported as
+`BLOCKED_OPTIONAL`, while Threads, existing source posts, and manual JSON can
+continue. When public Threads discovery cannot see individual posts, use
+`docs/manual-source-import-template.json`; account/profile URLs are invalid
+source-post records.
+
+Media slots never fall back to text. Their cron jobs produce plans until
+`validate_production_activation.py --use-sheets` sees all twelve canary IDs
+with verified posted results and 24h/72h/7d metric reservations. Only then
+may `production_publish_activation_approved` and `scheduled_publish_enabled`
+be set through the separate approved activation change.
+
+That change is `python3 scripts/activate_scheduled_publish.py --apply
+--confirm-scheduled-activation --use-sheets`. It changes only the two tracked
+activation flags after the gate is `ALLOW`; it never creates a post itself.
+
+After canaries, run `python3 scripts/update_capability_matrix_from_evidence.py
+--use-sheets` first as a plan. It only promotes a matrix row when the relevant
+Threads/Sheets evidence exists; `--apply --confirm-capability-update` is the
+separate recorded update step.
