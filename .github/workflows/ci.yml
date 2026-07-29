@@ -49,6 +49,12 @@ jobs:
           python3 scripts/test_stale_operational_quarantine_plan.py
           python3 scripts/test_bounded_media_canary_plan.py
           python3 scripts/test_media_pipeline_never_falls_back_to_text.py
+          python3 scripts/test_final_production_contracts.py
+          python3 scripts/test_final_preparation_orchestrator.py
+          python3 scripts/test_live_canary_inventory_contract.py
+          python3 scripts/test_media_slots_no_text_fallback_final.py
+          python3 scripts/test_scheduled_publish_activation_gate.py
+          python3 scripts/test_capability_matrix_evidence_updater.py
 
   tests:
     if: github.event_name == 'workflow_dispatch'
