@@ -35,7 +35,12 @@ def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         for canary_type in CANARY_TYPES:
             candidate = dict(by_key.get((account_id, canary_type), {}))
             required = required_fields(canary_type)
-            missing = [field for field in required if not candidate.get(field)]
+            missing = [
+                field for field in required
+                if candidate.get(field) is None
+                or (isinstance(candidate.get(field), str) and not candidate.get(field).strip())
+                or candidate.get(field) == []
+            ]
             is_text = canary_type in {"original_text", "reference_text"}
             rights_ok = is_text or str(candidate.get("rights_status", "")) in {"owned", "licensed", "approved_creator_clip"}
             permission_ok = is_text or str(candidate.get("permission_status", "")) == "approved"
