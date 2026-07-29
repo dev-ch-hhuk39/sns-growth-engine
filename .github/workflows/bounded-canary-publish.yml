@@ -4,9 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       confirm_canary_publish:
-        description: "Type PUBLISH_12_APPROVED_CANARIES to publish exactly the approved twelve canaries"
+        description: "Type the exact approval phrase for the selected scope"
         required: true
         default: ""
+      canary_wave:
+        description: "Approved canary scope"
+        required: true
+        type: choice
+        options:
+          - first_wave
+          - all_12
+        default: all_12
 
 permissions:
   contents: read
@@ -51,7 +59,11 @@ jobs:
         run: python3 -m pip install --requirement requirements.txt
       - name: Guard exact authorization and disabled surfaces
         run: |
-          test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_12_APPROVED_CANARIES"
+          if [ "${{ inputs.canary_wave }}" = "first_wave" ]; then
+            test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_FIRST_WAVE_APPROVED_CANARIES"
+          else
+            test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_12_APPROVED_CANARIES"
+          fi
           test "$ALLOW_REAL_X_POST" = "false"
           test "$ALLOW_VIDEO_DOWNLOAD" = "false"
           test "$ALLOW_VIDEO_CUT" = "false"
@@ -59,8 +71,9 @@ jobs:
       - name: Prepare exact approved queues and preflight
         run: |
           mkdir -p /tmp/bounded-canary
-          python3 scripts/prepare_bounded_canary_publish.py --apply --confirm-bounded-canary --output /tmp/bounded-canary/preflight.json
-          jq -e '.status == "APPLIED" and .read_after_write == "PASS" and (.queue_ids | length == 12)' /tmp/bounded-canary/preflight.json
+          python3 scripts/prepare_bounded_canary_publish.py --apply --confirm-bounded-canary --wave "${{ inputs.canary_wave }}" --output /tmp/bounded-canary/preflight.json
+          if [ "${{ inputs.canary_wave }}" = "first_wave" ]; then expected=4; else expected=12; fi
+          jq -e --argjson expected "$expected" '.status == "APPLIED" and .read_after_write == "PASS" and (.queue_ids | length == $expected)' /tmp/bounded-canary/preflight.json
       - name: Publish exact canaries sequentially
         env:
           PUBLISH_ENABLED: "true"
@@ -76,7 +89,9 @@ jobs:
         if: always()
         run: |
           python3 scripts/final_production_readiness.py --use-sheets --output /tmp/bounded-canary/readiness.json || true
-          python3 scripts/update_capability_matrix_from_evidence.py --use-sheets --apply --confirm-capability-update > /tmp/bounded-canary/capability.json || true
+          if [ "${{ inputs.canary_wave }}" = "all_12" ]; then
+            python3 scripts/update_capability_matrix_from_evidence.py --use-sheets --apply --confirm-capability-update > /tmp/bounded-canary/capability.json || true
+          fi
       - name: Upload bounded canary evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
