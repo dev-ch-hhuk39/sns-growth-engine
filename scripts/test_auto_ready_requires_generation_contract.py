@@ -20,6 +20,7 @@ queue = {
     "platform": "threads",
     "status": "WAITING_REVIEW",
     "generation_mode": "original_text",
+    "public_post_text": text,
     "media_reuse_risk": "not_applicable",
     "feature_schema_version": "post_features_v1",
     "quality_gate_version": "generation_quality_v3",
@@ -32,7 +33,7 @@ queue = {
     "shared_hook_detected": "false",
     "shared_closing_detected": "false",
 }
-derivative = {"text": text, "platform": "threads"}
+derivative = None
 rules = {
     "auto_ready_enabled": True,
     "kill_switch": False,
