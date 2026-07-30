@@ -13,8 +13,8 @@ def main() -> int:
         ("night schedule block enabled", "schedule:" in night),
         ("liver schedule block enabled", "schedule:" in liver),
         ("workflow_dispatch still exists", "workflow_dispatch:" in night and "workflow_dispatch:" in liver),
-        ("schedule remains prepare-only", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" not in night and "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" not in liver),
-        ("manual apply activation gated", "production_publish_activation_approved" in night and "production_publish_activation_approved" in liver),
+        ("scheduled apply is activation gated", all(value in night and value in liver for value in ["Resolve autonomous execution mode", "scheduled_publish_enabled", "production_publish_activation_approved", "RUN_AUTONOMOUS_APPLY"])),
+        ("apply step uses resolved gate", "if: env.RUN_AUTONOMOUS_APPLY == 'true'" in night and "if: env.RUN_AUTONOMOUS_APPLY == 'true'" in liver),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

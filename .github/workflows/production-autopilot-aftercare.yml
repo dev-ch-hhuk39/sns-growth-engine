@@ -65,8 +65,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Resolve aftercare execution mode
+        run: |
+          apply=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            apply=true
+          elif [ "${{ github.event.inputs.confirm_aftercare }}" = "true" ] && [ "${{ github.event.inputs.dry_run_only }}" != "true" ]; then
+            apply=true
+          fi
+          echo "AFTERCARE_APPLY=$apply" >> "$GITHUB_ENV"
+          echo "aftercare_apply=$apply" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Guard aftercare config and secrets
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
+        if: env.AFTERCARE_APPLY == 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -95,7 +106,7 @@ jobs:
           python3 scripts/collect_threads_metrics.py --account-id all --source unavailable --dry-run
 
       - name: Apply metrics snapshots
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
+        if: env.AFTERCARE_APPLY == 'true'
         run: |
           # Metrics may legitimately be PARTIAL/UNAVAILABLE before a platform
           # exposes public numbers. Record the result, then continue to the
@@ -113,7 +124,7 @@ jobs:
           exit 0
 
       - name: Sync source registry and Sheets schema
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
+        if: env.AFTERCARE_APPLY == 'true'
         run: |
           python3 scripts/seed_source_registry.py \
             --apply \
@@ -122,8 +133,18 @@ jobs:
             --target-account all \
             --platform all
 
-      - name: Apply PDCA candidate generation
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_aftercare == 'true' && github.event.inputs.dry_run_only != 'true'
+      - name: Explain measured outcomes and update bounded strategy
+        if: env.AFTERCARE_APPLY == 'true'
+        run: |
+          python3 scripts/run_growth_attribution_cycle.py \
+            --account-id all \
+            --apply \
+            --confirm-attribution \
+            --use-sheets \
+            --output /tmp/growth-attribution.json
+
+      - name: Apply PDCA candidate generation (legacy human-review only)
+        if: env.AFTERCARE_APPLY == 'true' && github.event_name == 'workflow_dispatch'
         run: |
           python3 scripts/generate_next_queue_from_metrics.py \
             --account-id night_scout \

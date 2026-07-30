@@ -45,6 +45,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from public_post_quality import (  # noqa: E402
     final_public_post_validator,
     generate_grounded_reader_facing_post,
+    generate_production_post,
     generate_reader_facing_post,
     reader_facing_template_count,
 )
@@ -63,6 +64,10 @@ REAL_POST_GATES = ["--confirm-real-post", "PUBLISH_ENABLED=true", "ALLOW_REAL_TH
 READY_GATE = "approve_queue.py or auto_approve_queue.py"
 SIMILARITY_BLOCK_THRESHOLD = 0.62
 MAX_QUOTE_CHARS = 80
+from generation_quality_gates import evaluate_generation_quality, persisted_quality_evidence  # noqa: E402
+from learning.feature_attribution import preferred_primary_topics  # noqa: E402
+
+
 ALLOWED_TRANSFORMATION_TYPES = {
     "structure_reference",
     "hook_reference",
@@ -165,6 +170,38 @@ def build_rewritten_post_candidate(
     }
 
 
+def _reference_signal(account_id: str, post: dict[str, Any], score: dict[str, Any], index: int) -> str:
+    candidates = [
+        _post_text(post),
+        str(post.get("title", "")),
+        str(score.get("reusable_pattern", "")),
+        str(score.get("reason", "")),
+        str(post.get("category", "")),
+    ]
+    combined = " ".join(value.strip() for value in candidates if value and value.strip())
+    defaults = {
+        "night_scout": [
+            "時給と控除を含めた条件を比べて手取りを確認する",
+            "客層や店の雰囲気が自分の接客と合うか体験入店で確認する",
+            "夜職と副業を両立するために睡眠と休みを残せる出勤ペースを決める",
+        ],
+        "liver_manager": [
+            "初見が入りやすい挨拶とコメントの入口を作る",
+            "配信時間と休む時間を決めて無理なく継続できるリズムを作る",
+            "ライバー事務所を選ぶ時は数字が落ちた時にも相談できる支え方を確認する",
+        ],
+    }
+    values = defaults.get(account_id, ["読者が次に試せる具体策を一つ整理する"])
+    default_signal = values[(index - 1) % len(values)]
+    specific_terms = {
+        "night_scout": ("時給", "控除", "客層", "体験入店", "移籍", "出勤", "睡眠", "売上", "指名"),
+        "liver_manager": ("初見", "コメント", "配信", "事務所", "ギフト", "リスナー"),
+    }.get(account_id, ())
+    if combined and any(term in combined for term in specific_terms):
+        return combined
+    return f"{default_signal} {combined}".strip()
+
+
 def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, Any], index: int) -> str:
     """Build reader-facing public text only.
 
@@ -173,7 +210,7 @@ def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, An
     """
     output = generate_grounded_reader_facing_post(
         account_id,
-        private_signal=_post_text(post),
+        private_signal=_reference_signal(account_id, post, score, index),
         index=index,
     )
     body = str(output["public_post_text"])
@@ -181,6 +218,25 @@ def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, An
     if validation["status"] != "PASS":
         raise ValueError(f"public post template failed validation: {validation['blocked_reasons']}")
     return body
+
+
+def _feature_fields(output: dict[str, Any], quality: dict[str, Any]) -> dict[str, Any]:
+    design = dict(output.get("post_design") or {})
+    policy = dict(output.get("generation_policy") or {})
+    return {
+        "batch_id": output.get("generation_batch_id", ""),
+        "feature_schema_version": output.get("feature_schema_version", ""),
+        "hook_text": design.get("hook_text", ""),
+        "body_text": design.get("body_text", ""),
+        "closing_text": design.get("closing_text", ""),
+        "cta_intent": design.get("cta_intent", ""),
+        "key_claims_json": json.dumps(design.get("key_claims", []), ensure_ascii=False),
+        "post_design_json": json.dumps(design, ensure_ascii=False),
+        "generation_policy_json": json.dumps(policy, ensure_ascii=False),
+        "generation_attempt": output.get("generation_attempt", ""),
+        "generation_rule_version": output.get("generation_rule_version", ""),
+        **persisted_quality_evidence(quality),
+    }
 
 
 def build_generation_rows(
@@ -193,6 +249,7 @@ def build_generation_rows(
     post_type: str = "reference_text",
     theme: str = "",
     schedule_date_jst: str = "",
+    history: list[str] | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     posts_by_id = {str(p.get("post_id", "")): p for p in posts}
     usable_scores = [
@@ -205,6 +262,9 @@ def build_generation_rows(
     drafts: list[dict[str, Any]] = []
     derivatives: list[dict[str, Any]] = []
     queues: list[dict[str, Any]] = []
+    recent = [str(value) for value in (history or []) if str(value)]
+    accepted: list[dict[str, Any]] = []
+    batch_id = f"scheduled_{account_id}_{schedule_date_jst or datetime.now(timezone.utc).strftime('%Y%m%d')}_{slot_id or 'reference'}"
     for i, score in enumerate(usable_scores[:top_n], 1):
         ref_id = str(score.get("reference_post_id") or score.get("collected_post_id", ""))
         post = posts_by_id[ref_id]
@@ -212,7 +272,27 @@ def build_generation_rows(
         draft_id = f"idea_{stable}"
         derivative_id = f"sd_{stable}_threads"
         queue_id = f"q_{stable}_threads"
-        body = build_thread_body(account_id, post, score, i)
+        output = generate_grounded_reader_facing_post(
+            account_id,
+            private_signal=_reference_signal(account_id, post, score, i),
+            index=i,
+            slot_theme=post_type,
+            recent_posts=recent,
+            structure_variant=(i - 1) % 6,
+        )
+        body = str(output.get("public_post_text", ""))
+        validation = final_public_post_validator(body, account_id)
+        quality = evaluate_generation_quality(
+            account_id, body, recent + accepted, batch_compared=accepted,
+            structure_variant=output.get("grounding_summary", {}).get("structure_variant", ""),
+            primary_topic=output.get("grounding_summary", {}).get("quality_topic", ""),
+        )
+        if validation["status"] != "PASS" or quality["status"] != "PASS":
+            continue
+        output["generation_batch_id"] = batch_id
+        output["generation_attempt"] = i
+        output["generation_rule_version"] = "production_composition_v3"
+        feature_fields = _feature_fields(output, quality)
         candidate = build_rewritten_post_candidate(
             account_id=account_id,
             original_text=_post_text(post),
@@ -280,6 +360,7 @@ def build_generation_rows(
             "processed_at": "",
             "auto_publish": "false",
             "generation_mode": "reference_score_to_threads",
+            "content_type": post_type,
             "confidence_level": "medium",
             "ai_publish_recommendation": CANDIDATE_STATUS,
             "media_asset_id": "",
@@ -294,13 +375,25 @@ def build_generation_rows(
             "source_url": post.get("post_url", ""),
             "generated_by": CLI_NAME,
             "slot_id": slot_id, "theme": theme, "schedule_date_jst": schedule_date_jst,
-            "validator_status": "PENDING",
-            "internal_leak_status": "",
-            "account_fit_status": "",
+            "validator_status": validation["status"],
+            "internal_leak_status": validation["internal_leak_check"]["status"],
+            "account_fit_status": validation["account_fit_check"]["status"],
+            "public_post_quality_score": str(validation["public_post_quality_score"]),
+            "reader_value_score": str(validation["reader_value_score"]),
+            "naturalness_score": str(validation["naturalness_score"]),
+            "cta_pressure_score": str(validation["cta_pressure_score"]),
+            **feature_fields,
             "rejected_reason": "",
             "blocked_reason": "",
             "updated_at": created,
         })
+        accepted.append({
+            "account_id": account_id, "candidate_id": queue_id, "batch_id": batch_id,
+            "primary_topic": quality.get("primary_topic", ""),
+            "structure_variant": quality.get("structure_variant", ""),
+            "public_post_text": body,
+        })
+        recent.append(body)
     for q in queues:
         assert q["status"] not in ELIGIBLE_STATUSES, "generated queue must not be worker-selectable"
         assert q["auto_publish"] == "false"
@@ -318,7 +411,7 @@ def _fallback_template_index(offset: int, account_id: str, *, slot_id: str = "",
     return ((seed + offset * 7) % count) + 1
 
 
-def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str = "", post_type: str = "original_text", theme: str = "", schedule_date_jst: str = "", history: list[str] | None = None, fallback_reason: str = "reference_unavailable") -> dict[str, list[dict[str, Any]]]:
+def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str = "", post_type: str = "original_text", theme: str = "", schedule_date_jst: str = "", history: list[str] | None = None, fallback_reason: str = "reference_unavailable", preferred_topics: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
     """Build safe reader-facing original candidates when reference data is empty.
 
     This is the production recovery path for scheduled autonomous posting: it
@@ -330,13 +423,36 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str 
     drafts: list[dict[str, Any]] = []
     derivatives: list[dict[str, Any]] = []
     queues: list[dict[str, Any]] = []
+    recent = [str(value) for value in (history or []) if str(value)]
+    accepted: list[dict[str, Any]] = []
+    batch_id = f"scheduled_{account_id}_{schedule_date_jst or datetime.now(timezone.utc).strftime('%Y%m%d')}_{slot_id or fallback_reason}"
     for i in range(1, max(1, top_n) + 1):
-        variant_index = _fallback_template_index(i, account_id, slot_id=slot_id, schedule_date_jst=schedule_date_jst, history=history, reason=fallback_reason)
-        output = generate_reader_facing_post(account_id, index=variant_index)
-        body = str(output["public_post_text"])
-        validation = final_public_post_validator(body, account_id)
-        if validation["status"] != "PASS" or any(original_text_similarity_guard(old, body)["status"] == "BLOCKED" for old in (history or [])[-30:]):
+        selected = None
+        for attempt in range(5):
+            output = generate_production_post(
+                account_id,
+                batch_id=batch_id,
+                content_type=post_type,
+                recent_posts=recent,
+                attempt=attempt + i - 1,
+                excluded_topics=[str(row.get("primary_topic", "")) for row in accepted],
+                preferred_topics=preferred_topics or [],
+            )
+            body = str(output.get("public_post_text", ""))
+            validation = final_public_post_validator(body, account_id)
+            quality = evaluate_generation_quality(
+                account_id, body, recent + accepted, batch_compared=accepted,
+                structure_variant=output.get("grounding_summary", {}).get("structure_variant", ""),
+                primary_topic=output.get("grounding_summary", {}).get("quality_topic", ""),
+            )
+            duplicate = any(original_text_similarity_guard(old, body)["status"] == "BLOCKED" for old in recent[-30:])
+            if body and validation["status"] == "PASS" and quality["status"] == "PASS" and not duplicate:
+                selected = (output, body, validation, quality)
+                break
+        if selected is None:
             continue
+        output, body, validation, quality = selected
+        feature_fields = _feature_fields(output, quality)
         stable = _safe_id(f"{account_id}_fallback_{stamp}_{i}")
         draft_id = f"idea_{stable}"
         derivative_id = f"sd_{stable}_threads"
@@ -398,6 +514,7 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str 
             "processed_at": "",
             "auto_publish": "false",
             "generation_mode": post_type,
+            "content_type": post_type,
             "confidence_level": "medium",
             "ai_publish_recommendation": CANDIDATE_STATUS,
             "media_asset_id": "",
@@ -421,10 +538,18 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str 
             "reader_value_score": str(validation["reader_value_score"]),
             "naturalness_score": str(validation["naturalness_score"]),
             "cta_pressure_score": str(validation["cta_pressure_score"]),
+            **feature_fields,
             "rejected_reason": "",
             "blocked_reason": "",
             "updated_at": created,
         })
+        accepted.append({
+            "account_id": account_id, "candidate_id": queue_id, "batch_id": batch_id,
+            "primary_topic": quality.get("primary_topic", ""),
+            "structure_variant": quality.get("structure_variant", ""),
+            "public_post_text": body,
+        })
+        recent.append(body)
     return {"drafts": drafts, "social_derivatives": derivatives, "queue": queues}
 
 
@@ -493,6 +618,11 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
     posts = [dict(r) for r in client._ws("source_account_posts").get_all_records() if str(r.get("account_id", "")) == account_id]
     scores = [dict(r) for r in client._ws("reference_post_scores").get_all_records() if str(r.get("account_id", "")) == account_id]
     history = [str(row.get("posted_text", "")) for row in client._ws("posted_results").get_all_records() if str(row.get("account_id", "")) == account_id]
+    try:
+        strategy_rows = [dict(row) for row in client._ws("strategy_state").get_all_records()]
+    except Exception:
+        strategy_rows = []
+    preferred_topics = preferred_primary_topics(strategy_rows, account_id)
     metric_rows = [dict(row) for logical in ("metric_snapshots", "media_metrics") for row in client._ws(logical).get_all_records() if str(row.get("account_id", "")) == account_id]
     from generation.context_selector import select_generation_context
     category_scores = [dict(row) for row in client._ws("category_scores").get_all_records() if str(row.get("account_id", "")) == account_id]
@@ -509,13 +639,13 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
     measured = [row for row in metric_rows if str(row.get("metrics_status", "")).upper() == "MEASURED"]
     fallback_used = post_type == "original_text" or (post_type == "pdca_text" and not measured)
     if post_type == "original_text":
-        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=effective_theme, schedule_date_jst=schedule_date_jst, history=history, fallback_reason="original_text_slot")
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=effective_theme, schedule_date_jst=schedule_date_jst, history=history, fallback_reason="original_text_slot", preferred_topics=preferred_topics)
     elif post_type == "pdca_text" and not measured:
-        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text" if post_type != "reference_text" else post_type, theme=theme, schedule_date_jst=schedule_date_jst, history=history)
+        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text" if post_type != "reference_text" else post_type, theme=theme, schedule_date_jst=schedule_date_jst, history=history, preferred_topics=preferred_topics)
     else:
-        rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n, slot_id=slot_id, post_type=post_type, theme=effective_theme, schedule_date_jst=schedule_date_jst)
+        rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n, slot_id=slot_id, post_type=post_type, theme=effective_theme, schedule_date_jst=schedule_date_jst, history=history)
         if not rows["queue"]:
-            rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history)
+            rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history, preferred_topics=preferred_topics)
             fallback_used = True
     summary = {
         "status": "PLAN_ONLY",
@@ -535,6 +665,8 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
         "generation_context": {key: value for key, value in context.items() if key not in {"avoid_recent_texts"}},
         "measured_metric_count": len(measured),
         "pdca_fallback_to_original": post_type == "pdca_text" and not measured,
+        "preferred_primary_topics": preferred_topics,
+        "strategy_policy_active": bool(preferred_topics),
     }
     if not apply:
         return summary
@@ -549,7 +681,7 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
     fallback_topup_used = False
     fallback_ops: dict[str, dict[str, int]] = {}
     if queue_writes == 0:
-        fallback_rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history)
+        fallback_rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history, preferred_topics=preferred_topics)
         fallback_topup_used = bool(fallback_rows["queue"])
         fallback_ops = {
             "drafts": _append_missing(client, "drafts", "draft_id", fallback_rows["drafts"]),

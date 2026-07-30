@@ -202,14 +202,36 @@ def canary_source_integrity_report(datasets: dict[str, list[dict[str, Any]]], ca
     return {"status": "PASS" if checks and not failures else "FAIL", "checked_canary_count": len(checks), "failures": failures, "checks": checks}
 
 
+def _canary_slot(row: dict[str, Any]) -> tuple[str, str] | None:
+    """Resolve canonical account/type from fixed or batch-specific canary IDs."""
+    account = str(row.get("account_id", "")).strip()
+    kind = str(row.get("content_type") or row.get("generation_mode") or "").strip()
+    if account in ACCOUNTS and kind in CANARY_TYPES:
+        return account, kind
+    candidate = str(row.get("canary_id", "")).strip()
+    for expected_account in ACCOUNTS:
+        for expected_kind in CANARY_TYPES:
+            if candidate == canary_id(expected_account, expected_kind) or candidate.endswith(
+                f"_{expected_account}_{expected_kind}"
+            ):
+                return expected_account, expected_kind
+    return None
+
+
 def activation_evidence(
     posted_results: list[dict[str, Any]], metric_jobs: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    expected = {canary_id(account_id, kind) for account_id in ACCOUNTS for kind in CANARY_TYPES}
-    verified: set[str] = set()
+    """Require one verified post plus all metric windows for each of 12 slots.
+
+    Batch-specific canary IDs are accepted, but metrics must belong to the exact
+    verified canary ID. Evidence from different batches is never combined.
+    """
+    expected_slots = {(account_id, kind) for account_id in ACCOUNTS for kind in CANARY_TYPES}
+    verified_by_slot: dict[tuple[str, str], set[str]] = {}
     for row in posted_results:
-        candidate = str(row.get("canary_id", ""))
-        if candidate not in expected:
+        slot = _canary_slot(row)
+        candidate = str(row.get("canary_id", "")).strip()
+        if slot not in expected_slots or not candidate:
             continue
         if str(row.get("status", "")).upper() != "POSTED":
             continue
@@ -217,22 +239,41 @@ def activation_evidence(
             continue
         if str(row.get("verification_status", "")).upper() not in {"PASS", "VERIFIED", "READ_AFTER_WRITE_PASS"}:
             continue
-        verified.add(candidate)
+        verified_by_slot.setdefault(slot, set()).add(candidate)
+
     metrics_by_canary: dict[str, set[int]] = {}
     for row in metric_jobs:
-        candidate = str(row.get("canary_id", ""))
+        candidate = str(row.get("canary_id", "")).strip()
         try:
             window = int(row.get("window_hours", 0))
         except (TypeError, ValueError):
             continue
         if candidate and str(row.get("status", "")).upper() not in {"CANCELLED", "FAILED"}:
             metrics_by_canary.setdefault(candidate, set()).add(window)
-    missing_posts = sorted(expected - verified)
-    missing_metrics = sorted(item for item in expected if {24, 72, 168} - metrics_by_canary.get(item, set()))
+
+    required_windows = {24, 72, 168}
+    missing_posts = sorted(
+        canary_id(account, kind)
+        for account, kind in expected_slots
+        if not verified_by_slot.get((account, kind))
+    )
+    missing_metrics: list[str] = []
+    selected_evidence: dict[str, str] = {}
+    for account, kind in sorted(expected_slots):
+        slot_name = canary_id(account, kind)
+        candidates = sorted(verified_by_slot.get((account, kind), set()))
+        complete = [candidate for candidate in candidates if required_windows <= metrics_by_canary.get(candidate, set())]
+        if complete:
+            selected_evidence[slot_name] = complete[-1]
+        elif candidates:
+            missing_metrics.append(slot_name)
+
+    ready = not missing_posts and not missing_metrics
     return {
-        "status": "READY_FOR_ACTIVATION" if not missing_posts and not missing_metrics else "BLOCKED",
-        "expected_canary_count": len(expected),
-        "verified_canary_count": len(verified),
+        "status": "READY_FOR_ACTIVATION" if ready else "BLOCKED",
+        "expected_canary_count": len(expected_slots),
+        "verified_canary_count": len(verified_by_slot),
+        "selected_evidence_canary_ids": selected_evidence,
         "missing_posted_read_after_write": missing_posts,
         "missing_metric_windows": missing_metrics,
     }

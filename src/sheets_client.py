@@ -135,6 +135,19 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
         "source_copy_similarity", "recent_post_similarity", "source_content_hash",
         "verification_status", "verification_checked_at", "canary_id",
+        # Generation feature provenance copied from queue at publish time.
+        # These fields are required for post-level attribution and bounded PDCA.
+        "batch_id", "content_type", "feature_schema_version",
+        "primary_topic", "supporting_topics", "structure_variant",
+        "hook_text", "body_text", "closing_text", "cta_intent",
+        "key_claims_json", "post_design_json", "visual_plan_json",
+        "generation_policy_json", "quality_gate_version",
+        "batch_diversity_status", "topic_coherence_status",
+        "topic_confidence", "hook_topic_match", "closing_topic_match",
+        "shared_hook_detected", "shared_closing_detected",
+        "media_primary_topic", "visual_topic", "visual_topic_match",
+        "visual_cta_match", "visual_plan_version", "visual_text_hash",
+        "publisher_media_type", "media_type",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -207,6 +220,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "public_post_quality_score", "reader_value_score", "naturalness_score",
         "cta_pressure_score",
         "rejected_reason", "blocked_reason",
+        "excluded_from_activation", "excluded_from_metrics_baseline",
+        "repost_prohibited", "superseded_reason",
         "updated_at", "posted_at", "post_url", "result_id",
         # Media Growth Engine provenance. Text-only rows leave these blank.
         "source_post_id", "source_video_id", "clip_candidate_id",
@@ -220,6 +235,27 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "alignment_status", "final_alignment_score", "main_claim_coverage",
         "unsupported_claim_count", "source_copy_similarity", "recent_post_similarity",
         "claim_support_json", "content_hash", "failure_signature",
+        # Candidate-time diversity and single-topic evidence.  These gates
+        # are required before a canary or scheduled candidate can be READY.
+        "batch_id", "batch_diversity_status", "batch_similarity_score",
+        "hook_similarity_score", "closing_similarity_score", "structure_variant", "structure_similarity_score",
+        "shared_sentence_count", "shared_sentences", "shared_closing_detected",
+        "shared_hook_detected", "compared_candidate_ids",
+        "structure_compared_candidate_ids", "diversity_blocked_reasons",
+        "primary_topic", "supporting_topics", "topic_confidence",
+        "primary_topic_evidence_score", "primary_topic_direct_confidence", "topic_coherence_status",
+        "topic_coherence_score", "off_topic_sentence_count", "off_topic_sentences",
+        "hook_topic", "closing_topic", "visual_topic",
+        "hook_topic_match", "closing_topic_match", "visual_topic_match",
+        "topic_blocked_reasons", "quality_gate_version",
+        "generation_attempt", "generation_rule_version", "generation_policy_json",
+        # Structured post/media design evidence.  These fields are stored now
+        # so later PDCA attribution can explain which topic, hook, structure,
+        # claim set and CTA produced each result.
+        "feature_schema_version", "hook_text", "body_text", "closing_text",
+        "cta_intent", "key_claims_json", "post_design_json", "visual_plan_json",
+        "media_primary_topic", "visual_cta_match", "visual_plan_version",
+        "visual_plan_attempt", "visual_text_hash", "alignment_blocked_reasons",
         # Final canaries are explicitly named so an activation gate can prove
         # all twelve distinct formats without inferring from free-form notes.
         "canary_id",
@@ -256,6 +292,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "media_origin", "provider_name", "provider_version", "input_hash", "content_hash", "generated_at",
         "alignment_status", "final_alignment_score", "main_claim_coverage",
         "unsupported_claim_count", "source_copy_similarity", "recent_post_similarity",
+        "feature_schema_version", "media_primary_topic", "visual_topic",
+        "visual_topic_match", "visual_cta_match", "visual_plan_version",
+        "visual_plan_attempt", "visual_text_hash", "claim_support_json",
+        "post_design_json", "visual_plan_json",
     ],
     # 参考投稿のパフォーマンス分析結果。スコアリング・分類を保存する。
     "reference_post_scores": [
@@ -605,6 +645,25 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "best_content_type", "best_er",
         "created_at", "notes",
     ],
+    # Measured-result attribution. Explanations are association-based and keep
+    # metric evidence, reason codes and confidence for auditability.
+    "post_attributions": [
+        "attribution_id", "attribution_version", "result_id", "queue_id",
+        "canary_id", "account_id", "platform", "window_hours",
+        "metrics_status", "performance_score", "account_baseline_score",
+        "delta_vs_baseline", "outcome_label", "confidence",
+        "reason_codes_json", "explanation", "feature_evidence_json",
+        "metric_evidence_json", "created_at",
+    ],
+    # Bounded strategy state. ACTIVE rows can influence deterministic topic
+    # selection, but never rewrite prompts/code and always preserve exploration.
+    "strategy_state": [
+        "strategy_id", "strategy_version", "account_id", "dimension",
+        "feature_value", "sample_count", "account_sample_count",
+        "mean_performance_score", "delta_vs_account", "confidence",
+        "allocation_weight", "exploration_floor", "status",
+        "evidence_result_ids_json", "updated_at",
+    ],
     # Media postごとの結果・未取得metrics・clip別成績。値が未取得のmetricは空欄/PENDINGで保持する。
     "media_post_results": [
         "media_post_result_id", "result_id", "queue_id", "account_id", "platform",
@@ -699,6 +758,8 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "media_ingestion_runs":           "メディア取込履歴",
     "end_to_end_preflight_runs":      "投稿前チェック履歴",
     "pdca_runs":                      "PDCA実行履歴",
+    "post_attributions":              "投稿要因分析",
+    "strategy_state":                 "生成戦略状態",
     "media_post_results":             "メディア投稿結果",
     "media_metrics":                  "メディア計測",
     "resource_usage":                 "リソース使用量",

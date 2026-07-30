@@ -224,6 +224,30 @@ def evaluate_item(
     if public_validation["status"] != "PASS":
         reasons.append("final_public_post_validator_blocked")
         reasons.extend(str(r) for r in public_validation["blocked_reasons"])
+
+    # New production-composition candidates carry an auditable generation
+    # contract. Once present, every field must pass before AUTO_READY.
+    if str(queue.get("feature_schema_version", "")).strip():
+        if str(queue.get("feature_schema_version", "")) != "post_features_v1":
+            reasons.append("feature_schema_version_unsupported")
+        if str(queue.get("quality_gate_version", "")) != "generation_quality_v3":
+            reasons.append("quality_gate_version_missing_or_stale")
+        if str(queue.get("batch_diversity_status", "")).upper() != "PASS":
+            reasons.append("batch_diversity_not_pass")
+        if str(queue.get("topic_coherence_status", "")).upper() != "PASS":
+            reasons.append("topic_coherence_not_pass")
+        if not str(queue.get("primary_topic", "")).strip():
+            reasons.append("primary_topic_missing")
+        if not str(queue.get("structure_variant", "")).strip():
+            reasons.append("structure_variant_missing")
+        if str(queue.get("hook_topic_match", "")).lower() not in {"true", "1", "yes"}:
+            reasons.append("hook_topic_mismatch")
+        if str(queue.get("closing_topic_match", "")).lower() not in {"true", "1", "yes"}:
+            reasons.append("closing_topic_mismatch")
+        if str(queue.get("shared_hook_detected", "")).lower() in {"true", "1", "yes"}:
+            reasons.append("shared_hook_detected")
+        if str(queue.get("shared_closing_detected", "")).lower() in {"true", "1", "yes"}:
+            reasons.append("shared_closing_detected")
     if q_score < int(rules.get("min_quality_score", 75)):
         reasons.append("quality_below_threshold")
     if s_score < int(rules.get("min_safety_score", 90)):

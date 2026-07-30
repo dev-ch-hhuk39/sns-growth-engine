@@ -1,11 +1,23 @@
 #!/usr/bin/env python3
 from build_live_canary_inventory import build_inventory
 
+MEDIA_EVIDENCE = {
+    "feature_schema_version": "post_features_v1",
+    "media_primary_topic": "work_conditions",
+    "visual_topic": "work_conditions",
+    "visual_topic_match": "True",
+    "visual_cta_match": "True",
+    "visual_plan_version": "visual_plan_v1",
+    "visual_text_hash": "visual-hash",
+    "claim_support_json": "[{\"verified\": true}]",
+}
+
 datasets={key: [] for key in ("queue", "source_posts", "source_post_media", "media_permissions", "source_videos", "video_clip_candidates", "media_assets")}
 datasets["queue"]=[
-    {"account_id":"night_scout","canary_id":"canary_fresh_night_scout_original_text_x","queue_id":"q_text","status":"READY","generation_mode":"original_text","public_post_text":"読者が役立つ自然な投稿です。","validator_status":"PASS","account_fit_status":"PASS","internal_leak_status":"PASS"},
-    {"account_id":"night_scout","canary_id":"canary_fresh_night_scout_generated_clip_x","queue_id":"q_clip","status":"WAITING_REVIEW","media_type":"generated_clip","clip_candidate_id":"clip_system_owned_night_scout_run_generated_clip","public_post_text":"読者が役立つ自然な投稿です。","account_fit_status":"PASS","validator_status":"PASS","internal_leak_status":"PASS","publisher_media_type":"VIDEO","alignment_status":"PASS","final_alignment_score":"1","main_claim_coverage":"1","unsupported_claim_count":"0","source_copy_similarity":"0","recent_post_similarity":"0"},
+    {"account_id":"night_scout","canary_id":"canary_fresh_night_scout_original_text_x","queue_id":"q_text","status":"READY","generation_mode":"original_text","public_post_text":"読者が役立つ自然な投稿です。","validator_status":"PASS","account_fit_status":"PASS","internal_leak_status":"PASS","batch_id":"fresh_test","batch_diversity_status":"PASS","topic_coherence_status":"PASS","primary_topic":"work_conditions","topic_confidence":"0.75","structure_variant":"0","hook_topic_match":"True","closing_topic_match":"True","shared_hook_detected":"False","shared_closing_detected":"False","quality_gate_version":"generation_quality_v3"},
+    {"account_id":"night_scout","canary_id":"canary_fresh_night_scout_generated_clip_x","queue_id":"q_clip","status":"WAITING_REVIEW","media_type":"generated_clip","clip_candidate_id":"clip_system_owned_night_scout_run_generated_clip","public_post_text":"読者が役立つ自然な投稿です。","account_fit_status":"PASS","validator_status":"PASS","internal_leak_status":"PASS","publisher_media_type":"VIDEO","alignment_status":"PASS","final_alignment_score":"1","main_claim_coverage":"1","unsupported_claim_count":"0","source_copy_similarity":"0","recent_post_similarity":"0","batch_id":"fresh_test","batch_diversity_status":"PASS","topic_coherence_status":"PASS","primary_topic":"work_conditions","topic_confidence":"0.75","structure_variant":"0","hook_topic_match":"True","closing_topic_match":"True","shared_hook_detected":"False","shared_closing_detected":"False","quality_gate_version":"generation_quality_v3"},
 ]
+datasets["queue"][1].update(MEDIA_EVIDENCE)
 datasets["source_videos"]=[{"source_video_id":"video_system_owned_night_scout_run_generated_clip","source_id":"system_owned_night_scout_run_generated_clip"}]
 datasets["video_clip_candidates"]=[{"clip_id":"clip_system_owned_night_scout_run_generated_clip","clip_candidate_id":"clip_system_owned_night_scout_run_generated_clip","account_id":"night_scout","source_platform":"system_generated_owned","source_video_id":"video_system_owned_night_scout_run_generated_clip","rights_status":"owned","public_post_text":"読者が役立つ自然な投稿です。","start_seconds":"0","end_seconds":"8"}]
 datasets["media_permissions"]=[{"source_id":"system_owned_night_scout_run_generated_clip","account_id":"night_scout","rights_status":"owned","permission_status":"approved","evidence_reference":"run","allow_clip_repost":True,"revoked":False}]
