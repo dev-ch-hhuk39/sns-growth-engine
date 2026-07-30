@@ -33,7 +33,7 @@ queue = {
     "shared_hook_detected": "false",
     "shared_closing_detected": "false",
 }
-derivative = None
+derivative = {"text": "\u7d76\u5bfe\u7a3c\u3052\u308b\u3002\u4eca\u3059\u3050\u5fdc\u52df\u3002", "platform": "threads"}
 rules = {
     "auto_ready_enabled": True,
     "kill_switch": False,
