@@ -83,8 +83,19 @@ FIRST_WAVE_IMAGES = {
     ("liver_manager", "direct_image"),
 }
 
+REMAINING_EIGHT = {
+    (account_id, canary_type)
+    for account_id in ACCOUNTS
+    for canary_type in CANARY_TYPES
+    if canary_type not in {"original_text", "direct_image"}
+}
 
-def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") -> dict[str, Any]:
+
+def build_plan(
+    datasets: dict[str, list[dict[str, Any]]],
+    wave: str = "all_12",
+    batch_id: str = "",
+) -> dict[str, Any]:
     inventory_wave = "first_wave" if wave in {"first_wave", "first_wave_images"} else "all_12"
     inventory = build_inventory(datasets, wave=inventory_wave)
     ready = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("canaries", []) if row.get("status") == "READY_FOR_HUMAN_CANARY"}
@@ -97,11 +108,21 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") 
                 continue
             if wave == "first_wave_images" and (account_id, kind) not in FIRST_WAVE_IMAGES:
                 continue
+            if wave == "remaining_eight" and (account_id, kind) not in REMAINING_EIGHT:
+                continue
             candidate = candidates.get((account_id, kind), {})
             canary = str(candidate.get("canary_id", ""))
             existing = queues.get((account_id, canary))
             create_text_queue = existing is None and kind in {"original_text", "reference_text"} and bool(candidate)
             reasons: list[str] = []
+            if (
+                wave == "remaining_eight"
+                and (
+                    not batch_id
+                    or str(candidate.get("batch_id", "")).strip() != batch_id
+                )
+            ):
+                reasons.append("CANARY_BATCH_MISMATCH")
             if (account_id, kind) not in ready or not candidate or not canary:
                 reasons.append("CANARY_NOT_READY")
             if not existing and not create_text_queue:
@@ -116,8 +137,24 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") 
                     reasons.append("MEDIA_REQUIRED_MISSING")
             queue_id = str(existing.get("queue_id", "")) if existing else f"text_{canary}"
             rows.append({"canary_id": canary, "account_id": account_id, "canary_type": kind, "queue_id": queue_id, "create_text_queue": create_text_queue, "status": "READY_TO_PROMOTE" if not reasons else "BLOCKED", "reasons": reasons, "updates": _field_update(candidate, kind) if candidate else {}})
-    expected_count = 4 if wave == "first_wave" else 2 if wave == "first_wave_images" else 12
-    return {"status": "PASS" if len(rows) == expected_count and all(row["status"] == "READY_TO_PROMOTE" for row in rows) else "BLOCKED", "rows": rows, "would_post": False, "wave": wave}
+    expected_count = (
+        4 if wave == "first_wave"
+        else 2 if wave == "first_wave_images"
+        else 8 if wave == "remaining_eight"
+        else 12
+    )
+    return {
+        "status": (
+            "PASS"
+            if len(rows) == expected_count
+            and all(row["status"] == "READY_TO_PROMOTE" for row in rows)
+            else "BLOCKED"
+        ),
+        "rows": rows,
+        "would_post": False,
+        "wave": wave,
+        "batch_id": batch_id,
+    }
 
 
 def apply_plan(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
@@ -142,11 +179,40 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-bounded-canary", action="store_true")
-    parser.add_argument("--wave", choices=["first_wave", "first_wave_images", "all_12"], default="all_12")
+    parser.add_argument(
+        "--wave",
+        choices=[
+            "first_wave",
+            "first_wave_images",
+            "remaining_eight",
+            "all_12",
+        ],
+        default="all_12",
+    )
+    parser.add_argument("--batch-id", default="")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+
+    if args.wave == "remaining_eight" and not args.batch_id:
+        result = {
+            "status": "BLOCKED",
+            "reason": "--batch-id required for remaining_eight",
+            "would_post": False,
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(json.dumps(result, ensure_ascii=False))
+        return 1
+
     datasets, sheets_status = _rows(True)
-    plan = build_plan(datasets, args.wave)
+    plan = build_plan(
+        datasets,
+        args.wave,
+        args.batch_id,
+    )
     result: dict[str, Any] = {"sheets_status": sheets_status, "plan": plan, "would_post": False}
     if args.apply:
         if not args.confirm_bounded_canary:

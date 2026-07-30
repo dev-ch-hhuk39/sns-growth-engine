@@ -14,8 +14,13 @@ on:
         options:
           - first_wave
           - first_wave_images
+          - remaining_eight
           - all_12
         default: all_12
+      canary_batch_id:
+        description: "Exact batch id required for remaining_eight"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -64,6 +69,9 @@ jobs:
             test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_FIRST_WAVE_APPROVED_CANARIES"
           elif [ "${{ inputs.canary_wave }}" = "first_wave_images" ]; then
             test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_REMAINING_FIRST_WAVE_IMAGES"
+          elif [ "${{ inputs.canary_wave }}" = "remaining_eight" ]; then
+            test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_APPROVED_REMAINING_EIGHT"
+            test -n "${{ inputs.canary_batch_id }}"
           else
             test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_12_APPROVED_CANARIES"
           fi
@@ -74,11 +82,13 @@ jobs:
       - name: Prepare exact approved queues and preflight
         run: |
           mkdir -p /tmp/bounded-canary
-          python3 scripts/prepare_bounded_canary_publish.py --apply --confirm-bounded-canary --wave "${{ inputs.canary_wave }}" --output /tmp/bounded-canary/preflight.json
+          python3 scripts/prepare_bounded_canary_publish.py --apply --confirm-bounded-canary --wave "${{ inputs.canary_wave }}" --batch-id "${{ inputs.canary_batch_id }}" --output /tmp/bounded-canary/preflight.json
           if [ "${{ inputs.canary_wave }}" = "first_wave" ]; then
             expected=4
           elif [ "${{ inputs.canary_wave }}" = "first_wave_images" ]; then
             expected=2
+          elif [ "${{ inputs.canary_wave }}" = "remaining_eight" ]; then
+            expected=8
           else
             expected=12
           fi
@@ -87,6 +97,7 @@ jobs:
         if: >-
           (inputs.canary_wave == 'first_wave' && inputs.confirm_canary_publish == 'PUBLISH_FIRST_WAVE_APPROVED_CANARIES') ||
           (inputs.canary_wave == 'first_wave_images' && inputs.confirm_canary_publish == 'PUBLISH_REMAINING_FIRST_WAVE_IMAGES') ||
+          (inputs.canary_wave == 'remaining_eight' && inputs.confirm_canary_publish == 'PUBLISH_APPROVED_REMAINING_EIGHT') ||
           (inputs.canary_wave == 'all_12' && inputs.confirm_canary_publish == 'PUBLISH_12_APPROVED_CANARIES')
         env:
           PUBLISH_ENABLED: "true"
