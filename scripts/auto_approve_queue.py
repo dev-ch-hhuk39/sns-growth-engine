@@ -60,6 +60,9 @@ def normalize_text(text: str) -> str:
 
 
 def text_for_item(queue: dict[str, Any], draft: dict[str, Any] | None, derivative: dict[str, Any] | None) -> str:
+    # 新しい生成パイプラインは投稿本文をqueueへ直接保存する。
+    if str(queue.get("public_post_text", "")).strip():
+        return extract_public_post_text(queue.get("public_post_text", ""))
     if derivative and str(derivative.get("text", "")).strip():
         return extract_public_post_text(derivative.get("text", ""))
     if draft:
