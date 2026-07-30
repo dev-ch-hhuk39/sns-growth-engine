@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config/autonomous_mode.json"
 sys.path.insert(0, str(ROOT / "scripts"))
-from scheduled_publish_activation_gate import evaluate
+from scheduled_publish_activation_gate import evaluate_activation_readiness
 
 
 def main() -> int:
@@ -21,7 +21,7 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-scheduled-activation", action="store_true")
     args = parser.parse_args()
-    gate = evaluate(use_sheets=args.use_sheets)
+    gate = evaluate_activation_readiness(use_sheets=args.use_sheets)
     if not args.apply:
         print(json.dumps({"status": "PLAN_ONLY", "gate": gate, "would_change": {"production_publish_activation_approved": True, "scheduled_publish_enabled": True}, "would_post": False}, ensure_ascii=False, indent=2))
         return 0

@@ -53,8 +53,9 @@ REAL_ACTION_CMDS = [
 
 
 def _has_confirm(text: str) -> bool:
-    """if: 条件や run: 本文に confirm ゲートが含まれるか（大文字小文字無視）。"""
-    return "confirm" in (text or "").lower()
+    """Recognize direct confirmation or the pre-resolved persisted activation gate."""
+    normalized = (text or "").lower()
+    return "confirm" in normalized or "run_autonomous_apply" in normalized
 
 
 def _flag_value_str(value) -> str:
@@ -200,7 +201,7 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             checks.append((f"{name} [schedule] no idle delay", "random.randint" not in text and "time.sleep" not in text))
             checks.append((f"{name} [schedule] delayed event is diagnostic only", "Diagnose schedule delay" in text and "steps.schedule_window.outputs.in_window" not in text))
             checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))
-            checks.append((f"{name} [schedule] prepare-only until manual activation", "github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'" not in text and "production_publish_activation_approved" in text))
+            checks.append((f"{name} [schedule] apply only after persisted activation", all(value in text for value in ["Resolve autonomous execution mode", "scheduled_publish_enabled", "production_publish_activation_approved", "RUN_AUTONOMOUS_APPLY", "if: env.RUN_AUTONOMOUS_APPLY == 'true'"])))
             checks.append((f"{name} [schedule] X/media flags remain false", all(flag in text for flag in [
                 'ALLOW_REAL_X_POST: "false"',
                 'ALLOW_VIDEO_DOWNLOAD: "false"',

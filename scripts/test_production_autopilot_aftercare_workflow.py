@@ -15,6 +15,8 @@ checks = [
     ("transcription disabled", 'ALLOW_TRANSCRIPTION_API: "false"' in wf),
     ("metrics apply step", "collect_threads_metrics.py" in wf and "--confirm-metrics" in wf and "--use-sheets" in wf),
     ("pdca apply step", "generate_next_queue_from_metrics.py" in wf and "--confirm-generate" in wf),
+    ("scheduled aftercare applies", 'if [ "${{ github.event_name }}" = "schedule" ]' in wf and 'AFTERCARE_APPLY=$apply' in wf),
+    ("measured attribution applies", "run_growth_attribution_cycle.py" in wf and "--confirm-attribution" in wf),
     ("media discovery delegated", "discover_approved_source_videos.py" not in wf and "--confirm-discovery" not in wf),
     ("aftercare does not fetch media", "--fetch-real" not in wf),
     ("source registry sync step", "seed_source_registry.py" in wf and "--confirm-seed" in wf),

@@ -106,9 +106,34 @@ jobs:
       - name: Dry-run autonomous plan
         run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --dry-run
 
-      - name: Guard autonomous confirm and kill switch
-        # Schedules prepare and report only. Publishing remains a final human-approved action.
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_autonomous == 'true' && github.event.inputs.dry_run_only != 'true'
+      - name: Resolve autonomous execution mode
+        env:
+          MANUAL_CONFIRM: ${{ github.event.inputs.confirm_autonomous }}
+          MANUAL_DRY_RUN_ONLY: ${{ github.event.inputs.dry_run_only }}
+        run: |
+          apply=false
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            apply=$(python3 - <<'PYMODE'
+          import json
+          from pathlib import Path
+          cfg = json.loads(Path("config/autonomous_mode.json").read_text())
+          allowed = bool(
+              cfg.get("autonomous_mode_enabled")
+              and cfg.get("production_publish_activation_approved")
+              and cfg.get("scheduled_publish_enabled")
+              and not cfg.get("kill_switch")
+          )
+          print("true" if allowed else "false")
+          PYMODE
+            )
+          elif [ "$MANUAL_CONFIRM" = "true" ] && [ "$MANUAL_DRY_RUN_ONLY" != "true" ]; then
+            apply=true
+          fi
+          echo "RUN_AUTONOMOUS_APPLY=$apply" >> "$GITHUB_ENV"
+          echo "autonomous_apply=$apply" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guard autonomous activation, secrets, and kill switch
+        if: env.RUN_AUTONOMOUS_APPLY == 'true'
         run: |
           python3 - <<'PY'
           import json
@@ -130,7 +155,7 @@ jobs:
           fi
 
       - name: Apply autonomous Threads loop
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_autonomous == 'true' && github.event.inputs.dry_run_only != 'true'
+        if: env.RUN_AUTONOMOUS_APPLY == 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"

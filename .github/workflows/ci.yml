@@ -48,6 +48,13 @@ jobs:
           python3 scripts/test_collect_source_posts_parent_bundle.py
           python3 scripts/test_stale_operational_quarantine_plan.py
           python3 scripts/test_bounded_media_canary_plan.py
+          python3 scripts/test_generation_quality_gates.py
+          python3 scripts/test_system_owned_media_plan_contract.py
+          python3 scripts/test_first_wave_canary_contract.py
+          python3 scripts/test_generated_queue_lifecycle_status.py
+          python3 scripts/test_feature_attribution_cycle.py
+          python3 scripts/test_auto_ready_requires_generation_contract.py
+          python3 scripts/test_final_production_contracts.py
           python3 scripts/test_media_pipeline_never_falls_back_to_text.py
           python3 scripts/test_final_production_contracts.py
           python3 scripts/test_final_preparation_orchestrator.py

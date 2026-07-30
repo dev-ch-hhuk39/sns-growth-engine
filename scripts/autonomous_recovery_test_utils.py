@@ -68,11 +68,14 @@ def test_manual_workflow_has_no_schedule() -> None:
 def test_scheduled_workflows_prepare_only_until_activation() -> None:
     for wf in (NS_WF, LM_WF):
         text = read(wf)
-        assert "github.event_name == 'schedule'" in text
+        assert "Resolve autonomous execution mode" in text
+        assert 'scheduled_publish_enabled' in text
+        assert 'production_publish_activation_approved' in text
+        assert 'RUN_AUTONOMOUS_APPLY=$apply' in text
+        assert "if: env.RUN_AUTONOMOUS_APPLY == 'true'" in text
         assert "--apply" in text and "--confirm-autonomous" in text
-        assert "dry_run_only != 'true'" in text
-        assert "github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_autonomous == 'true'" in text
-        assert "production_publish_activation_approved" in text
+        assert 'PUBLISH_ENABLED: "true"' in text
+        assert 'ALLOW_REAL_THREADS_POST: "true"' in text
 
 
 def test_scheduled_workflows_have_jitter() -> None:
@@ -107,7 +110,8 @@ def test_scheduled_workflows_have_dry_run_only_dispatch() -> None:
         text = read(wf)
         assert "dry_run_only:" in text
         assert "Run dry-run and health summary only; never apply/post" in text
-        assert "dry_run_only != 'true'" in text
+        assert "MANUAL_DRY_RUN_ONLY" in text
+        assert '[ "$MANUAL_DRY_RUN_ONLY" != "true" ]' in text
 
 
 def test_scheduled_workflows_have_concurrency() -> None:
@@ -118,13 +122,14 @@ def test_scheduled_workflows_have_concurrency() -> None:
 
 
 def test_scheduled_workflows_schedule_event_does_not_apply() -> None:
+    """Schedules apply only after the persisted activation flags are true."""
     for wf in (NS_WF, LM_WF):
         text = read(wf)
-        assert "(github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true')" not in text
-        assert "github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_autonomous == 'true'" in text
-        assert "dry_run_only != 'true'" in text
-        assert "--apply" in text
-        assert "--confirm-autonomous" in text
+        assert 'if [ "${{ github.event_name }}" = "schedule" ]' in text
+        assert 'cfg.get("scheduled_publish_enabled")' in text
+        assert 'cfg.get("production_publish_activation_approved")' in text
+        assert 'and not cfg.get("kill_switch")' in text
+        assert "if: env.RUN_AUTONOMOUS_APPLY == 'true'" in text
 
 
 def test_manual_workflow_no_schedule() -> None:

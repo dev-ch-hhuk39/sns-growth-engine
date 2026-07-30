@@ -746,17 +746,254 @@ def _topic_from_signal(account_id: str, signal: str) -> str:
             (("副業", "出勤", "生活", "睡眠"), "balance"),
         ]
     else:
+        # 「コメント」は広すぎるため、具体的な主題を先に判定する。
         mapping = [
-            (("初見", "入室", "コメント"), "first_viewer"),
             (("ギフト", "応援", "投げ銭"), "support"),
             (("時間", "継続", "習慣"), "consistency"),
-            (("企画", "話題", "会話"), "conversation"),
+            (("企画", "話題", "会話", "二択"), "conversation"),
             (("事務所", "相談", "サポート"), "support_system"),
+            (("初見", "入室", "コメント"), "first_viewer"),
         ]
     for words, topic in mapping:
         if any(word in text for word in words):
             return topic
     return "general"
+
+
+PRODUCTION_COMPONENTS: dict[str, dict[str, dict[str, list[str]]]] = {
+    "night_scout": {
+        "conditions": {
+            "hooks": [
+                "求人の時給が高く見えても、実際の手取りは別に確認したい。",
+                "夜職の条件を見る時は、表示額より引かれる金額を先に整理したい。",
+                "同じ時給でも、控除やバックの仕組みで手元に残る金額は変わる。",
+            ],
+            "bodies": [
+                "ノルマ、罰金、控除、バックの計算方法を分けて聞くと、働いた後の金額を想像しやすい。",
+                "体験入店と本入後で条件が変わらないか、曖昧な費用がないかを入店前に質問しておく。",
+                "高い数字だけで比べず、提示時給と控除後の手取りまで同じ表に並べて見る。",
+            ],
+        },
+        "pressure": {
+            "hooks": [
+                "指名や売上が伸びない時、自分の接客だけを原因にしなくていい。",
+                "夜職で数字に追われ始めたら、努力量より負担の偏りを確認したい。",
+                "頑張っているのに苦しい時は、店の仕組みが自分に合っているかも見直したい。",
+            ],
+            "bodies": [
+                "席につける回数、客層との相性、連絡の負担、担当へ相談できるかを分けると、詰まっている場所が見えやすい。",
+                "売上だけを追う前に、無理な出勤や同伴が増えていないか、休める日が残っているかを確かめる。",
+                "数字が落ちた理由を接客、環境、出勤ペースに分けると、変えるべきことを選びやすくなる。",
+            ],
+        },
+        "fit": {
+            "hooks": [
+                "条件が似ている店でも、客層と雰囲気が違えば働きやすさは変わる。",
+                "長く続けられる店は、求人票より実際に働く場面を想像して選びたい。",
+                "店選びで迷ったら、時給だけでなく自分が自然に接客できる環境かを見たい。",
+            ],
+            "bodies": [
+                "客層、店内の空気、スタッフの対応、出勤相談のしやすさを体験入店で一つずつ確認する。",
+                "忙しい時間の雰囲気や女の子同士の距離感まで見ると、毎回の出勤で困りそうな点を想像しやすい。",
+                "自分の接客スタイルと店の客層が合うか、担当が希望を聞いてくれるかを判断材料にする。",
+            ],
+        },
+        "transfer": {
+            "hooks": [
+                "移籍を考えた時は、次の店を探す前に今の不満を分けておきたい。",
+                "店を変えても同じ悩みを繰り返さないために、辞めたい理由を言葉にしたい。",
+                "夜職の移籍は、条件を上げることより避けたい環境を明確にする方が大事。",
+            ],
+            "bodies": [
+                "客層、出勤の圧、担当との関係、生活への負担を分けると、次の店に求める条件が具体的になる。",
+                "今の店で変えられることと、移籍しないと変わらないことを整理してから候補を比べる。",
+                "次の店では何を増やしたいか、何を減らしたいかを三つずつ書くと判断しやすい。",
+            ],
+        },
+        "balance": {
+            "hooks": [
+                "副業で夜職を続けるなら、出勤日数より生活を崩さない設計が先。",
+                "稼ぐ予定を増やす時ほど、睡眠と休みを予定表に残しておきたい。",
+                "本業と夜職を両立する時は、働ける日ではなく回復できる日から決めたい。",
+            ],
+            "bodies": [
+                "睡眠時間、本業の繁忙日、移動時間まで含めて出勤ペースを決めると、短期間で消耗しにくい。",
+                "週の売上目標だけでなく、休む日と帰宅時間の上限も一緒に決めておく。",
+                "無理なく続いた週の出勤数を基準にして、忙しい時だけ増やす形の方が調整しやすい。",
+            ],
+        },
+        "general": {
+            "hooks": [
+                "夜職で迷った時は、不安を一つの悩みとしてまとめない方がいい。",
+                "店を決める前に、自分が続けられない条件から整理してみたい。",
+                "選択肢が多い時ほど、譲れない基準を少なく決めておくと選びやすい。",
+            ],
+            "bodies": [
+                "条件、客層、出勤、相談先を分けて考えると、自分が本当に確認したい点が見えてくる。",
+                "不安なことを質問に変えて担当へ確認すると、入店後の認識違いを減らしやすい。",
+                "良い点だけでなく、続ける時に負担になりそうな点も同じように比べる。",
+            ],
+        },
+    },
+    "liver_manager": {
+        "first_viewer": {
+            "hooks": [
+                "初見がすぐ抜ける時は、内容より最初に入りやすい説明があるかを見直したい。",
+                "配信の冒頭で今の話題が伝わると、初見は会話へ入りやすくなる。",
+                "初見が残る配信は、最初の数秒で何を話しているかがわかりやすい。",
+            ],
+            "bodies": [
+                "入室に気づき、今の話題を一言で伝え、答えやすい質問を置く。だから初見もコメントする理由を作りやすい。",
+                "名前を呼ぶ前に配信の状況を短く説明し、二択の質問を置くと会話へ参加しやすい。",
+                "冒頭の挨拶、話題の説明、最初の質問を固定すると、毎回の入り口を改善しやすい。",
+            ],
+        },
+        "support": {
+            "hooks": [
+                "ギフトを増やしたい時ほど、お願いする前に応援したくなる関係を作りたい。",
+                "配信の応援は、その場のお願いより次も来たいと思える積み重ねから生まれる。",
+                "投げ銭だけを目標にすると、リスナーが参加する理由を見失いやすい。",
+            ],
+            "bodies": [
+                "コメントを丁寧に拾い、常連だけで会話を固めず、初めて来た人にも参加できる余白を作る。",
+                "目標を伝える時は、達成したい理由と一緒に楽しめる企画を示すと応援の意味が伝わりやすい。",
+                "ギフトの有無に関係なく反応し、次回も話せる話題を残すことで関係を育てていく。",
+            ],
+        },
+        "consistency": {
+            "hooks": [
+                "ライバーが配信を続けるには、毎回の気合いより休んでも戻れる仕組みが必要。",
+                "ライバーが伸び悩む時ほど、長時間配信より続けられる時間帯を固定したい。",
+                "継続できるライバーは、配信する日だけでなく休む日も先に決めている。",
+            ],
+            "bodies": [
+                "無理のない開始時間、話しやすいテーマ、終了後の短い振り返りを決める。だから数字が揺れても立て直しやすい。",
+                "一週間単位で配信時間と休みを決め、終わった後に良かった点を一つだけ記録する。",
+                "長くできた日を基準にせず、疲れている日でも守れる最低ラインから習慣を作る。",
+            ],
+        },
+        "conversation": {
+            "hooks": [
+                "コメントが少ない時は、面白い話を増やすより答えやすい入口を作りたい。",
+                "話題が止まる配信ほど、自由回答ではなく小さな二択が使いやすい。",
+                "会話が続く配信は、リスナーが次に何を言えばいいかがわかりやすい。",
+            ],
+            "bodies": [
+                "今日の出来事を短く話し、二択で聞き、返ってきた答えを一つ深掘りする。まずこの流れを試してみる。",
+                "質問を連続させず、自分の答えも先に伝えると、リスナーはコメントの例を見つけやすい。",
+                "話題を三つ用意するより、一つのコメントから関連する質問を広げる方が自然な会話になりやすい。",
+            ],
+        },
+        "support_system": {
+            "hooks": [
+                "ライバー事務所を選ぶ時は、所属条件より伸びない時の支え方を確認したい。",
+                "配信を始める前に、数字が落ちた時も相談できる事務所かを見ておきたい。",
+                "事務所選びでは、案件の多さだけでなく日々の配信改善を誰と進めるかが大事。",
+            ],
+            "bodies": [
+                "生活に合う配信設計、数字の振り返り、困った時の相談方法まで聞く。だから所属後の動きを想像しやすい。",
+                "担当者との連絡頻度や改善提案の内容を確認し、自分が必要なサポートと合うかを比べる。",
+                "始める時の説明だけでなく、伸び悩んだ時に何を一緒に見直すのかまで質問しておく。",
+            ],
+        },
+        "general": {
+            "hooks": [
+                "配信が伸びない時は、才能より参加しにくい場所がないかを見直したい。",
+                "ライバーとして迷った時は、変えることを一度に増やしすぎない方がいい。",
+                "配信改善は、大きな企画より次回に試せる一つの行動へ落とし込みたい。",
+            ],
+            "bodies": [
+                "初見への説明、コメントの拾い方、終わり方を分けて確認し、まず一つだけ変えて反応を見る。",
+                "数字が落ちた場面を振り返り、原因の仮説と次に試すことを一つずつ決める。",
+                "続けやすさと参加しやすさを分けて考えると、今の配信で直す場所を選びやすい。",
+            ],
+        },
+    },
+}
+
+PRODUCTION_CLOSINGS: dict[str, dict[str, list[str]]] = {
+    "night_scout": {
+        "conditions": [
+            "店を比べる時は、表示された時給ではなく控除後の手取りで判断したい。",
+            "入店前に費用を質問できるかどうかも、条件を選ぶための大切な確認になる。",
+            "最後は、働いた日数ごとに手元へ残る金額を並べて店を決めたい。",
+        ],
+        "pressure": [
+            "数字だけで自分を責めず、どこに負担が偏っているかを担当と整理してみてほしい。",
+            "売上を増やす前に、無理な出勤や接客の負担を減らせるか確認したい。",
+            "指名の悩みは一人で抱えず、店の環境と接客の両方を見直して決めたい。",
+        ],
+        "fit": [
+            "店を選ぶ時は、条件より自分が自然に接客できる客層かを確認したい。",
+            "体験入店では、働く自分を想像できる雰囲気かどうかまで見てほしい。",
+            "長く続けるなら、時給と同じくらい店との相性を判断材料にしたい。",
+        ],
+        "transfer": [
+            "移籍先は、今の店で困った理由を繰り返さない条件で選びたい。",
+            "次の店へ求めることと避けたいことを整理してから候補を比べてみてほしい。",
+            "移籍を急ぐより、辞めたい理由に合った環境かを確認して決めたい。",
+        ],
+        "balance": [
+            "副業と夜職を続けるなら、出勤後も生活を戻せるペースかを確認したい。",
+            "休みと睡眠を削らずに守れる出勤数を、自分の基準として決めてほしい。",
+            "短期の売上より、翌週も無理なく出勤できる働き方を選びたい。",
+        ],
+        "general": [
+            "不安を質問に変えてから、無理なく続けられる店かを確認したい。",
+            "良い点と負担になる点を同じように整理して、自分の基準で選んでほしい。",
+            "急いで決めず、毎週続ける姿を想像できる環境かを見てみたい。",
+        ],
+    },
+    "liver_manager": {
+        "first_viewer": [
+            "次の配信では、初見へ伝える最初の一言を一つ決めて試してみてください。",
+            "初見がコメントしやすい入口を一つ整え、配信後に反応を確認してみましょう。",
+            "まずは冒頭の説明と質問だけを変えて、初見の滞在がどう変わるか見てください。",
+        ],
+        "support": [
+            "次の配信では、ギフトのお願いよりリスナーとの会話を一つ増やしてみてください。",
+            "応援される理由を作るために、コメントへの反応と次回の約束を整えてみましょう。",
+            "まずはリスナーがまた参加したくなる会話を一つ残して配信を終えてください。",
+        ],
+        "consistency": [
+            "次の一週間は、ライバーとして守れる配信時間と休む日を先に決めてみてください。",
+            "配信後の振り返りを一つだけ残し、続けられるリズムへ少しずつ整えましょう。",
+            "長時間できた日ではなく、無理なく継続できた配信を基準にしてみてください。",
+        ],
+        "conversation": [
+            "次の配信では、リスナーが答えやすい質問を一つ決めてコメントの反応を見てください。",
+            "まずは一つのコメントを深掘りし、会話が続く流れを試してみましょう。",
+            "話題を増やすより、リスナーが参加できる質問の置き方を一つ整えてください。",
+        ],
+        "support_system": [
+            "ライバー事務所を選ぶ時は、配信が伸びない時の相談方法まで確認してください。",
+            "所属前に、担当者とどの数字を振り返り、何を改善するのか質問してみましょう。",
+            "事務所の説明だけで決めず、ライバーの配信をどう支えるかまで比べてください。",
+        ],
+        "general": [
+            "次の配信では、一つだけ変えてリスナーの反応を確認してみてください。",
+            "全部を直そうとせず、まず一番困っている場所から整えてみましょう。",
+            "小さく試して配信後に振り返ると、自分に合う改善方法を選びやすくなります。",
+        ],
+    },
+}
+
+QUALITY_TOPIC_MAP: dict[str, dict[str, str]] = {
+    "night_scout": {
+        "conditions": "work_conditions",
+        "pressure": "performance_pressure",
+        "fit": "workplace_fit",
+        "transfer": "transfer",
+        "balance": "schedule_balance",
+    },
+    "liver_manager": {
+        "first_viewer": "first_viewer_retention",
+        "support": "community_building",
+        "consistency": "continuity",
+        "conversation": "comment_activation",
+        "support_system": "agency_selection",
+    },
+}
 
 
 def generate_grounded_reader_facing_post(
@@ -767,87 +1004,123 @@ def generate_grounded_reader_facing_post(
     media_metadata: dict[str, Any] | None = None,
     slot_theme: str = "",
     recent_posts: list[str] | None = None,
+    structure_variant: int | None = None,
 ) -> dict[str, Any]:
     """Build a new public caption from private evidence without exposing it."""
     topic = _topic_from_signal(account_id, private_signal)
     metadata = dict(media_metadata or {})
     recent = [extract_public_post_text(item) for item in (recent_posts or []) if extract_public_post_text(item)]
     seed = hashlib.sha256(
-        f"{account_id}|{topic}|{slot_theme}|{private_signal}|{index}".encode("utf-8")
+        f"composition_v3|{account_id}|{topic}|{slot_theme}|{private_signal}|{index}".encode("utf-8")
     ).hexdigest()
-    choice = int(seed[:8], 16)
-    if account_id == "night_scout":
-        hooks = {
-            "conditions": ["夜職の店選びは、時給だけ高ければ安心とは限らない。", "条件が良く見える店ほど、数字の外側も確認しておきたい。"],
-            "pressure": ["売上や指名が苦しい時、全部を自分の努力不足にしなくていい。", "夜職で気持ちが削られる時は、頑張り方より環境を見直したい。"],
-            "fit": ["続けやすい店かどうかは、条件表だけではわからない。", "店選びで後悔しにくい子は、働く場面まで想像している。"],
-            "transfer": ["移籍を考え始めたら、次の店より先に今の悩みを整理したい。", "店を変えたい理由が曖昧なままだと、同じ悩みを繰り返しやすい。"],
-            "balance": ["副業で夜職を続けるなら、出勤数より生活を守れるかが大事。", "稼ぐ予定を立てる時ほど、休める予定も一緒に決めたい。"],
-            "general": ["夜職で迷った時は、不安を曖昧なままにしない方がいい。", "店を決める前に、自分が続けられる条件を整理しておきたい。"],
-        }
-        criteria = {
-            "conditions": "ノルマや控除の扱い、出勤の自由度、客層との相性まで見ると、手元に残るものと続けやすさが見えてくる。",
-            "pressure": "相談できる担当がいるか、無理な出勤になっていないか、売上以外の負担が増えていないかを一つずつ見る。",
-            "fit": "客層、店の空気、出勤相談のしやすさ。毎回の出勤で困りそうな場面を先に確かめる。",
-            "transfer": "客層、出勤の圧、相談しづらさなど、今つらい理由を分けると、次に避けたい条件がはっきりする。",
-            "balance": "睡眠、本業、休む日まで含めて無理のないペースを決めると、短期で消耗しにくい。",
-            "general": "条件、客層、出勤、相談のしやすさを分けて考えると、自分に必要な基準が見えやすい。",
-        }
-        endings = [
-            "焦って決めるより、自分が無理なく続けられるかを入る前に確認した方がいい。",
-            "良い条件を探すだけでなく、自分に合う働き方を選ぶことが長く続ける近道になる。",
-        ]
-        text = f"{hooks.get(topic, hooks['general'])[choice % 2]}\n\n{criteria.get(topic, criteria['general'])}\n\n{endings[(choice // 2) % 2]}"
-        concepts = {
-            "conditions": ["compensation", "work_conditions", "fit"], "pressure": ["pressure", "support", "workload"],
-            "fit": ["customers", "workplace_fit", "consultation"], "transfer": ["transfer", "decision_criteria", "fit"],
-            "balance": ["side_job", "sleep", "sustainable_schedule"], "general": ["anxiety", "decision_criteria", "sustainability"],
-        }
+    choice = int(seed[:12], 16)
+    account_components = PRODUCTION_COMPONENTS.get(account_id, {})
+    component = account_components.get(topic, account_components.get("general", {}))
+    hooks = list(component.get("hooks", []))
+    bodies = list(component.get("bodies", []))
+    closings = PRODUCTION_CLOSINGS.get(account_id, {}).get(
+        topic,
+        PRODUCTION_CLOSINGS.get(account_id, {}).get("general", []),
+    )
+    if not hooks or not bodies or not closings:
+        return build_generation_output(
+            internal_analysis=f"missing production components account={account_id}; topic={topic}",
+            public_post_text="",
+            safety_notes="",
+            blocked_reasons=["GENERATION_COMPONENTS_UNAVAILABLE"],
+        )
+
+    hook = hooks[choice % len(hooks)]
+    body = bodies[(choice // max(1, len(hooks))) % len(bodies)]
+    closing = closings[(choice // max(1, len(hooks) * len(bodies))) % len(closings)]
+    structure = (
+        int(structure_variant) % 6
+        if structure_variant is not None
+        else (choice // max(1, len(hooks) * len(bodies) * len(closings))) % 6
+    )
+    body_parts = [part.strip() for part in body.split("。") if part.strip()]
+    if structure == 0:
+        text = f"{hook}\n\n{body}\n\n{closing}"
+    elif structure == 1:
+        text = f"{hook}\n\nまず、{body}\n\n最後に、{closing}"
+    elif structure == 2:
+        if len(body_parts) >= 2:
+            text = f"{hook}\n\n{body_parts[0]}。\n\n{body_parts[1]}。\n\n{closing}"
+        else:
+            text = f"{hook}\n\n確認することは一つ。\n\n{body}\n\n{closing}"
+    elif structure == 3:
+        text = f"{hook}\n\n見るポイントは次の通り。\n・{body}\n\n{closing}"
+    elif structure == 4:
+        text = f"{hook}\n\n{body}\n\n次に試すこと：\n{closing}"
     else:
-        hooks = {
-            "first_viewer": ["初見がすぐ抜ける時は、面白さより入りやすさを見直したい。", "配信の最初の数秒で、初見が会話に入れるかは大きく変わる。"],
-            "support": ["応援を増やしたい時ほど、お願いより関係づくりを先にしたい。", "ギフトの前に、また来たいと思える配信になっているかを見直したい。"],
-            "consistency": ["配信を続けられる人は、毎回の気合いだけに頼っていない。", "伸び悩む時ほど、続けられる配信の型を作ることが大事。"],
-            "conversation": ["話題が続かない時、すごい話を用意する必要はない。", "コメントが少ない時は、会話へ入る入口を増やしてみたい。"],
-            "support_system": ["ライバー事務所は、条件より困った時に相談できるかを見たい。", "配信を始める前に、数字が落ちた時の支え方まで確認しておきたい。"],
-            "general": ["配信が伸びない時は、才能より参加しやすい空気を見直したい。", "初見が残る配信は、入りやすさの小さな工夫ができている。"],
-        }
-        criteria = {
-            "first_viewer": "入室に気づく、今の話題を短く伝える、答えやすい質問を置く。この3つで初見は会話へ入りやすくなる。",
-            "support": "コメントを丁寧に拾い、常連だけで固めず、次も参加しやすい空気を作ると応援は育ちやすい。",
-            "consistency": "無理のない時間帯、話しやすいテーマ、終了後の短い振り返りを決めると数字が揺れても続けやすい。",
-            "conversation": "今日の小さな出来事や答えやすい質問を置くと、見る側も話すきっかけを作りやすい。",
-            "support_system": "生活に合う配信設計や、伸びない時の改善を一緒に考えてくれるかまで見ると選びやすい。",
-            "general": "初見への声かけ、コメントの拾い方、次回につながる終わり方を一つずつ整える。",
-        }
-        endings = [
-            "配信は一人で話し切る場ではなく、見ている人が参加できる余白を作る場。",
-            "大きく変えなくても、入りやすさを一つ改善するだけで次の配信は変わっていく。",
-        ]
-        text = f"{hooks.get(topic, hooks['general'])[choice % 2]}\n\n{criteria.get(topic, criteria['general'])}\n\n{endings[(choice // 2) % 2]}"
-        concepts = {
-            "first_viewer": ["first_viewer", "participation", "comments"], "support": ["community", "support", "retention"],
-            "consistency": ["schedule", "reflection", "sustainability"], "conversation": ["conversation", "questions", "participation"],
-            "support_system": ["agency_selection", "consultation", "improvement"], "general": ["entry_experience", "comments", "retention"],
-        }
+        text = f"{hook}\n\n{body}\n\nこの順番で考える理由はシンプル。\n{closing}"
+
+    concepts = {
+        "night_scout": {
+            "conditions": ["compensation", "work_conditions", "take_home_pay"],
+            "pressure": ["performance_pressure", "support", "workload"],
+            "fit": ["customers", "workplace_fit", "consultation"],
+            "transfer": ["transfer", "decision_criteria", "fit"],
+            "balance": ["side_job", "sleep", "sustainable_schedule"],
+            "general": ["anxiety", "decision_criteria", "sustainability"],
+        },
+        "liver_manager": {
+            "first_viewer": ["first_viewer", "participation", "comments"],
+            "support": ["community", "support", "retention"],
+            "consistency": ["schedule", "reflection", "sustainability"],
+            "conversation": ["conversation", "questions", "participation"],
+            "support_system": ["agency_selection", "consultation", "improvement"],
+            "general": ["entry_experience", "comments", "retention"],
+        },
+    }
     source_similarity = round(difflib.SequenceMatcher(None, str(private_signal or ""), text).ratio(), 4)
     recent_similarity = round(max((difflib.SequenceMatcher(None, item, text).ratio() for item in recent), default=0.0), 4)
     validation = final_public_post_validator(text, account_id)
     output = build_generation_output(
-        internal_analysis=f"grounded topic={topic}; account={account_id}; composition={choice % 4}",
+        internal_analysis=f"grounded topic={topic}; account={account_id}; composition_v3={choice % 54}",
         public_post_text=text,
         safety_notes="Private evidence was reduced to safe concepts. Raw evidence and identifiers are excluded.",
         blocked_reasons=validation.get("blocked_reasons", []),
     )
+    quality_topic = QUALITY_TOPIC_MAP.get(account_id, {}).get(topic, "")
+    topic_concepts = concepts.get(account_id, {}).get(
+        topic,
+        concepts.get(account_id, {}).get("general", []),
+    )
+    cta_intent = "decision_support" if account_id == "night_scout" else "small_next_action"
+    post_design = {
+        "design_version": "post_design_v1",
+        "feature_schema_version": "post_features_v1",
+        "account_id": account_id,
+        "content_type": str(slot_theme or "general"),
+        "source_topic": topic,
+        "primary_topic": quality_topic,
+        "supporting_concepts": topic_concepts,
+        "hook_text": hook,
+        "body_text": body,
+        "closing_text": closing,
+        "key_claims": [hook, body, closing],
+        "cta_intent": cta_intent,
+        "structure_variant": str(structure),
+    }
     output.update({
         "grounding_summary": {
             "topic": topic,
-            "concepts": concepts.get(topic, concepts["general"]),
+            "quality_topic": quality_topic,
+            "concepts": topic_concepts,
             "signal_length_bucket": "long" if len(str(private_signal or "")) >= 400 else "medium" if len(str(private_signal or "")) >= 120 else "short",
             "media_type": str(metadata.get("media_type", "unknown")),
             "slot_theme": str(slot_theme or "general"),
+            "structure_variant": structure,
         },
-        "transformation_summary": "abstracted concepts, recomposed hook, criteria, rationale and reader action",
+        "post_design": post_design,
+        "feature_schema_version": post_design["feature_schema_version"],
+        "hook_text": hook,
+        "body_text": body,
+        "closing_text": closing,
+        "key_claims": list(post_design["key_claims"]),
+        "cta_intent": cta_intent,
+        "transformation_summary": "abstracted concepts, recomposed distinct hook, body, structure and reader action",
         "similarity_score": source_similarity,
         "recent_post_similarity_score": recent_similarity,
         "validator_result": validation["status"],
@@ -864,14 +1137,10 @@ def generate_production_post(
     reference_signal: str = "",
     learning_rule: str = "",
     attempt: int = 0,
+    excluded_topics: list[str] | None = None,
+    preferred_topics: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Compose a fresh reader-facing post from production inputs.
-
-    This is intentionally separate from ``generate_reader_facing_post`` which
-    remains a legacy test fixture. A batch, type, history, optional reference
-    signal, and learning rule influence the composition; no production caller
-    selects a fixed template index.
-    """
+    """Compose a fresh reader-facing post through the shared production path."""
     if str(__import__("os").environ.get("DISABLE_GENERATION_PROVIDER", "")).lower() in {"1", "true", "yes"}:
         return build_generation_output(
             internal_analysis="generation provider disabled",
@@ -881,48 +1150,98 @@ def generate_production_post(
         )
     signals = {
         "night_scout": [
-            "時給と控除を含めた条件、客層、相談のしやすさを比べて無理のない店を選ぶ",
-            "移籍前に出勤の負担と生活リズム、担当へ相談できる環境を整理する",
-            "指名や売上に悩む時は接客だけでなく席や客層、負担の偏りを見直す",
-            "夜職と副業を両立する時は睡眠と休みを残せる出勤ペースを先に決める",
-            "ノルマや罰金を確認し、自分が続けられる条件を言葉にしてから選ぶ",
+            "時給と控除を含めた条件を比べて手取りを確認する",
+            "移籍前に今の店を辞めたい理由と次の店で避けたい条件を整理する",
+            "指名や売上に悩む時は接客だけでなく負担の偏りを見直す",
+            "夜職と副業を両立するために睡眠と休みを残せる出勤ペースを決める",
+            "客層や店の雰囲気が自分の接客と合うか体験入店で確認する",
+            "ノルマや罰金、バックの条件を入店前に質問する",
         ],
         "liver_manager": [
-            "初見が入りやすい挨拶とコメントの入口を作り、配信の空気を整える",
-            "配信時間と休む時間を決め、無理なく続けられるリズムを作る",
-            "話題が止まる時は二択や小さな出来事を置き、参加しやすくする",
-            "事務所を選ぶ時は数字が落ちた時にも相談できる支え方を確認する",
-            "応援を増やす前にコメントを拾い、また来やすい関係を作る",
+            "初見が入りやすい挨拶とコメントの入口を作る",
+            "配信時間と休む時間を決めて無理なく継続できるリズムを作る",
+            "話題が止まる時は二択や小さな出来事を置いてコメントしやすくする",
+            "ライバー事務所を選ぶ時は数字が落ちた時にも相談できる支え方を確認する",
+            "ギフトを増やす前にコメントを拾ってリスナーとの関係を作る",
         ],
     }
-    digest = hashlib.sha256(f"{account_id}|{batch_id}|{content_type}|{reference_signal}|{learning_rule}|{attempt}".encode("utf-8")).hexdigest()
-    choice = int(digest[:12], 16)
-    private_signal = reference_signal.strip() or signals[account_id][choice % len(signals[account_id])]
+    if account_id not in signals:
+        return build_generation_output(
+            internal_analysis=f"unsupported account={account_id}",
+            public_post_text="",
+            safety_notes="",
+            blocked_reasons=["GENERATION_ACCOUNT_UNSUPPORTED"],
+        )
+    base_digest = hashlib.sha256(
+        f"production_composition_v3|{account_id}|{batch_id}|{content_type}|{reference_signal}|{learning_rule}".encode("utf-8")
+    ).hexdigest()
+    base_choice = int(base_digest[:12], 16)
+    signal_values = signals[account_id]
+    excluded = {str(value) for value in (excluded_topics or []) if str(value)}
+    eligible_signals = [
+        signal for signal in signal_values
+        if QUALITY_TOPIC_MAP.get(account_id, {}).get(_topic_from_signal(account_id, signal), "") not in excluded
+    ]
+    if not eligible_signals:
+        eligible_signals = signal_values
+    preferred = [str(value) for value in (preferred_topics or []) if str(value)]
+    preferred_signals = [
+        signal for topic in preferred
+        for signal in eligible_signals
+        if QUALITY_TOPIC_MAP.get(account_id, {}).get(_topic_from_signal(account_id, signal), "") == topic
+    ]
+    # Four of five deterministic choices exploit measured strategy; one remains
+    # exploration so the system can detect drift and discover better topics.
+    policy_mode = "explore"
+    selection_pool = eligible_signals
+    if preferred_signals and base_choice % 5 != 0:
+        selection_pool = preferred_signals
+        policy_mode = "bounded_exploit"
+    private_signal = reference_signal.strip() or selection_pool[(base_choice + attempt) % len(selection_pool)]
+    composition_index = base_choice + (attempt * 104729)
+    selected_structure_variant = (base_choice + attempt) % 6
     output = generate_grounded_reader_facing_post(
         account_id,
         private_signal=private_signal,
-        index=choice,
+        index=composition_index,
         slot_theme=content_type,
         recent_posts=recent_posts or [],
+        structure_variant=selected_structure_variant,
     )
     text = str(output.get("public_post_text", ""))
+    if not text:
+        output.setdefault("blocked_reasons", []).append("GENERATION_EMPTY_TEXT")
+        return output
+
     persona = persona_validation(text, account_id)
-    if account_id == "night_scout" and "persona_reader_context_insufficient" in persona.get("reasons", []):
-        text += "\n\n夜職の店選びでは、担当へ相談できるかまで確認して、自分に合う働き方を選んでほしい。"
-    if account_id == "liver_manager" and "persona_logic_missing" in persona.get("reasons", []):
-        text += "\n\n私が見ている中では、まず次の配信で一つだけ整えることからで大丈夫です。"
-    if account_id == "liver_manager" and "persona_reader_context_insufficient" in persona.get("reasons", []):
-        text += "\n\n配信で初見やコメントが入りやすい空気を作ることを意識してみてください。"
-    if account_id == "liver_manager" and "persona_concrete_action_missing" in persona.get("reasons", []):
-        text += "\n\nまずは次の配信で、初見に向けた一言を一つ決めて試してみてください。"
     output["public_post_text"] = text
+    from generation_quality_gates import evaluate_generation_quality
+    quality_topic = str(output.get("grounding_summary", {}).get("quality_topic", ""))
+    quality = evaluate_generation_quality(
+        account_id,
+        text,
+        recent_posts or [],
+        structure_variant=output.get("grounding_summary", {}).get("structure_variant", ""),
+        primary_topic=quality_topic,
+    )
     output["blocked_reasons"] = final_public_post_validator(text, account_id).get("blocked_reasons", [])
-    output["generation_provider"] = "local_composition_v2"
-    output["generation_provider_version"] = "2"
+    if quality["status"] != "PASS":
+        output["blocked_reasons"].append("GENERATION_QUALITY_BLOCKED")
+    output["generation_quality"] = quality
+    output["generation_provider"] = "local_composition_v3"
+    output["generation_provider_version"] = "3"
     output["generation_batch_id"] = batch_id
+    output["generation_attempt"] = attempt + 1
+    output["generation_rule_version"] = "production_composition_v3"
+    output["generation_policy"] = {
+        "policy_version": "bounded_strategy_v1",
+        "mode": policy_mode,
+        "preferred_topics": preferred,
+        "exploration_rate": 0.20,
+        "selected_primary_topic": quality_topic,
+    }
     output["content_type"] = content_type
     return output
-
 
 def reader_facing_template_count(account_id: str) -> int:
     """Number of deterministic public templates available for fallback rotation."""
