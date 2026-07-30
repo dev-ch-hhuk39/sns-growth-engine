@@ -6,6 +6,7 @@ from prepare_remaining_eight_canaries import (
     MEDIA_KINDS,
     REMAINING_TYPES,
     _contract,
+    _generation_history,
 )
 
 
@@ -119,5 +120,42 @@ assert _contract(
     "fresh_remaining_eight_test",
     wrong_video,
 )["status"] == "BLOCKED"
+
+history = _generation_history(
+    "night_scout",
+    [
+        {
+            "account_id": "night_scout",
+            "posted_text": "posted text",
+        },
+    ],
+    [
+        {
+            "account_id": "night_scout",
+            "status": "WAITING_REVIEW",
+            "public_post_text": "pending text",
+        },
+        {
+            "account_id": "night_scout",
+            "status": "READY",
+            "public_post_text": "posted text",
+        },
+        {
+            "account_id": "night_scout",
+            "status": "SUPERSEDED_QUALITY",
+            "public_post_text": "excluded text",
+        },
+        {
+            "account_id": "liver_manager",
+            "status": "WAITING_REVIEW",
+            "public_post_text": "other account text",
+        },
+    ],
+)
+
+assert history == [
+    "posted text",
+    "pending text",
+], history
 
 print("PASS test_remaining_eight_canary_contract.py")
