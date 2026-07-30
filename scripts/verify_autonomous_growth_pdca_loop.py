@@ -14,6 +14,7 @@ TESTS = (
     "test_generation_quality_gates.py",
     "test_system_owned_media_plan_contract.py",
     "test_first_wave_canary_contract.py",
+    "test_remaining_eight_canary_contract.py",
     "test_bounded_media_canary_plan.py",
     "test_live_canary_inventory_contract.py",
     "test_final_production_contracts.py",
