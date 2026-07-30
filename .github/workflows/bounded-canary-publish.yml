@@ -13,6 +13,7 @@ on:
         type: choice
         options:
           - first_wave
+          - first_wave_images
           - all_12
         default: all_12
 
@@ -61,6 +62,8 @@ jobs:
         run: |
           if [ "${{ inputs.canary_wave }}" = "first_wave" ]; then
             test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_FIRST_WAVE_APPROVED_CANARIES"
+          elif [ "${{ inputs.canary_wave }}" = "first_wave_images" ]; then
+            test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_REMAINING_FIRST_WAVE_IMAGES"
           else
             test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_12_APPROVED_CANARIES"
           fi
@@ -72,11 +75,18 @@ jobs:
         run: |
           mkdir -p /tmp/bounded-canary
           python3 scripts/prepare_bounded_canary_publish.py --apply --confirm-bounded-canary --wave "${{ inputs.canary_wave }}" --output /tmp/bounded-canary/preflight.json
-          if [ "${{ inputs.canary_wave }}" = "first_wave" ]; then expected=4; else expected=12; fi
+          if [ "${{ inputs.canary_wave }}" = "first_wave" ]; then
+            expected=4
+          elif [ "${{ inputs.canary_wave }}" = "first_wave_images" ]; then
+            expected=2
+          else
+            expected=12
+          fi
           jq -e --argjson expected "$expected" '.status == "APPLIED" and .read_after_write == "PASS" and (.queue_ids | length == $expected)' /tmp/bounded-canary/preflight.json
       - name: Publish exact canaries sequentially
         if: >-
           (inputs.canary_wave == 'first_wave' && inputs.confirm_canary_publish == 'PUBLISH_FIRST_WAVE_APPROVED_CANARIES') ||
+          (inputs.canary_wave == 'first_wave_images' && inputs.confirm_canary_publish == 'PUBLISH_REMAINING_FIRST_WAVE_IMAGES') ||
           (inputs.canary_wave == 'all_12' && inputs.confirm_canary_publish == 'PUBLISH_12_APPROVED_CANARIES')
         env:
           PUBLISH_ENABLED: "true"

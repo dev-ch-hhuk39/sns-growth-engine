@@ -43,12 +43,17 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     content_type = str(plan.get("content_type", "")).strip().lower()
     declared_publisher_type = str(plan.get("publisher_media_type", "")).strip().upper()
     alignment_status = str(plan.get("alignment_status", "")).upper()
+    def numeric(value: Any, default: float) -> float:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return default
+        return float(value)
+
     try:
-        final_alignment = float(plan.get("final_alignment_score") or 0)
-        claim_coverage = float(plan.get("main_claim_coverage") or 0)
-        unsupported_claims = int(float(plan.get("unsupported_claim_count") or 0))
-        copy_similarity = float(plan.get("source_copy_similarity") or 1)
-        recent_similarity = float(plan.get("recent_post_similarity") or 1)
+        final_alignment = numeric(plan.get("final_alignment_score"), 0.0)
+        claim_coverage = numeric(plan.get("main_claim_coverage"), 0.0)
+        unsupported_claims = int(numeric(plan.get("unsupported_claim_count"), 0.0))
+        copy_similarity = numeric(plan.get("source_copy_similarity"), 1.0)
+        recent_similarity = numeric(plan.get("recent_post_similarity"), 1.0)
     except (TypeError, ValueError):
         final_alignment = claim_coverage = 0.0
         unsupported_claims = 1
