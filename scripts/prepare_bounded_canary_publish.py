@@ -13,12 +13,33 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts")); sys.path.insert(0, str(ROOT / "src"))
 from build_live_canary_inventory import _rows, build_inventory
 from final_production_contracts import ACCOUNTS, CANARY_TYPES
-from process_threads_queue import append_row, records, resolve_queue_media, update_row
 from public_post_quality import final_public_post_validator
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _json_list(value: Any) -> list[str]:
+    try:
+        parsed = json.loads(str(value or "[]"))
+    except (TypeError, json.JSONDecodeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [str(item).strip() for item in parsed if str(item).strip()]
+
+
+def _resolve_queue_media(queue_row: dict[str, Any]) -> dict[str, Any]:
+    media_url = str(queue_row.get("media_url", "")).strip()
+    media_urls = _json_list(queue_row.get("media_urls_json")) or (
+        [media_url] if media_url else []
+    )
+    media_status = str(queue_row.get("media_status", "")).strip().upper()
+    return {
+        "media_usable": bool(media_urls)
+        and media_status in {"ATTACHED", "UPLOADED"},
+    }
 
 
 def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
@@ -90,7 +111,7 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") 
                 reasons.append("PUBLIC_POST_VALIDATOR_BLOCKED")
             if existing and kind not in {"original_text", "reference_text"}:
                 prospective = {**existing, **_field_update(candidate, kind)}
-                media = resolve_queue_media(prospective)
+                media = _resolve_queue_media(prospective)
                 if not media["media_usable"]:
                     reasons.append("MEDIA_REQUIRED_MISSING")
             queue_id = str(existing.get("queue_id", "")) if existing else f"text_{canary}"
@@ -100,6 +121,8 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") 
 
 
 def apply_plan(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
+    from process_threads_queue import append_row, records, update_row
+
     if plan["status"] != "PASS":
         return {"status": "BLOCKED", "plan": plan}
     for row in plan["rows"]:
