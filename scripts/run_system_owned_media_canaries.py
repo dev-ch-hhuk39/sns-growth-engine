@@ -340,7 +340,9 @@ def build_specs(
     for kind in kinds:
         history_before_kind[kind] = list(history)
         selected = None
-        for attempt in range(5):
+        # 5主題 × 6構造の決定論的な候補空間を探索する。
+        # 5回だけではbatch hash次第で有効候補を発見できない。
+        for attempt in range(30):
             text, output = _text(
                 account_id,
                 batch_id=shared_batch_id,

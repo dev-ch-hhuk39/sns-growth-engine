@@ -746,12 +746,13 @@ def _topic_from_signal(account_id: str, signal: str) -> str:
             (("副業", "出勤", "生活", "睡眠"), "balance"),
         ]
     else:
+        # 「コメント」は広すぎるため、具体的な主題を先に判定する。
         mapping = [
-            (("初見", "入室", "コメント"), "first_viewer"),
             (("ギフト", "応援", "投げ銭"), "support"),
             (("時間", "継続", "習慣"), "consistency"),
-            (("企画", "話題", "会話"), "conversation"),
+            (("企画", "話題", "会話", "二択"), "conversation"),
             (("事務所", "相談", "サポート"), "support_system"),
+            (("初見", "入室", "コメント"), "first_viewer"),
         ]
     for words, topic in mapping:
         if any(word in text for word in words):
