@@ -33,7 +33,9 @@ def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
             "source_id": candidate.get("source_id", ""), "source_post_id": candidate.get("source_post_id", ""),
             "source_video_id": candidate.get("source_video_id", ""), "clip_candidate_id": candidate.get("clip_candidate_id", ""),
             "rights_status": candidate.get("rights_status", ""), "permission_status": candidate.get("permission_status", ""),
-            "media_required": "true", "media_status": "ATTACHED", "media_type": kind,
+            "media_required": "true",
+            "media_status": "ATTACHED",
+            "media_type": "video" if kind in {"direct_video", "generated_clip"} else "image",
         })
         if candidate.get("media_asset_id"):
             values["media_asset_id"] = candidate["media_asset_id"]
@@ -55,9 +57,15 @@ FIRST_WAVE = {
     ("liver_manager", "direct_image"),
 }
 
+FIRST_WAVE_IMAGES = {
+    ("night_scout", "direct_image"),
+    ("liver_manager", "direct_image"),
+}
+
 
 def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") -> dict[str, Any]:
-    inventory = build_inventory(datasets)
+    inventory_wave = "first_wave" if wave in {"first_wave", "first_wave_images"} else "all_12"
+    inventory = build_inventory(datasets, wave=inventory_wave)
     ready = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("canaries", []) if row.get("status") == "READY_FOR_HUMAN_CANARY"}
     candidates = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("candidates", [])}
     queues = {(str(row.get("account_id", "")), str(row.get("canary_id", ""))): row for row in datasets.get("queue", [])}
@@ -65,6 +73,8 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") 
     for account_id in ACCOUNTS:
         for kind in CANARY_TYPES:
             if wave == "first_wave" and (account_id, kind) not in FIRST_WAVE:
+                continue
+            if wave == "first_wave_images" and (account_id, kind) not in FIRST_WAVE_IMAGES:
                 continue
             candidate = candidates.get((account_id, kind), {})
             canary = str(candidate.get("canary_id", ""))
@@ -85,7 +95,7 @@ def build_plan(datasets: dict[str, list[dict[str, Any]]], wave: str = "all_12") 
                     reasons.append("MEDIA_REQUIRED_MISSING")
             queue_id = str(existing.get("queue_id", "")) if existing else f"text_{canary}"
             rows.append({"canary_id": canary, "account_id": account_id, "canary_type": kind, "queue_id": queue_id, "create_text_queue": create_text_queue, "status": "READY_TO_PROMOTE" if not reasons else "BLOCKED", "reasons": reasons, "updates": _field_update(candidate, kind) if candidate else {}})
-    expected_count = 4 if wave == "first_wave" else 12
+    expected_count = 4 if wave == "first_wave" else 2 if wave == "first_wave_images" else 12
     return {"status": "PASS" if len(rows) == expected_count and all(row["status"] == "READY_TO_PROMOTE" for row in rows) else "BLOCKED", "rows": rows, "would_post": False, "wave": wave}
 
 
@@ -109,7 +119,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-bounded-canary", action="store_true")
-    parser.add_argument("--wave", choices=["first_wave", "all_12"], default="all_12")
+    parser.add_argument("--wave", choices=["first_wave", "first_wave_images", "all_12"], default="all_12")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     datasets, sheets_status = _rows(True)

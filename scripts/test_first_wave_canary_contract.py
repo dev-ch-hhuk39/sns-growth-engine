@@ -4,6 +4,8 @@ from pathlib import Path
 from build_bounded_media_canary_plan import build_plan
 from build_live_canary_inventory import _latest_complete_first_wave_batch, build_inventory
 from prepare_first_wave_canaries import _contract, build_first_wave
+from prepare_bounded_canary_publish import _field_update, build_plan as build_publish_plan
+from media_post_validator import validate_media_post
 
 
 def check(condition: bool, name: str) -> None:
@@ -96,10 +98,15 @@ for account, text_topic, image_topic in (
     ("night_scout", "work_conditions", "performance_pressure"),
     ("liver_manager", "continuity", "agency_selection"),
 ):
+    prepared_text = {
+        row["content_type"]: row["public_post_text"]
+        for row in first["candidates"]
+        if row["account_id"] == account
+    }
     datasets["queue"].append({
         "account_id": account, "target_account_id": account, "batch_id": batch_id,
         "canary_id": f"canary_fresh_{batch_id}_{account}_original_text", "queue_id": f"q_{account}_text",
-        "status": "WAITING_REVIEW", "generation_mode": "original_text", "public_post_text": f"{account} text",
+        "status": "WAITING_REVIEW", "generation_mode": "original_text", "public_post_text": prepared_text["original_text"],
         "validator_status": "PASS", "account_fit_status": "PASS", "internal_leak_status": "PASS",
         "primary_topic": text_topic, "structure_variant": "1", **quality_fields,
     })
@@ -111,7 +118,7 @@ for account, text_topic, image_topic in (
         "account_id": account, "target_account_id": account, "batch_id": batch_id,
         "canary_id": f"canary_fresh_{batch_id}_{account}_direct_image", "queue_id": f"q_{account}_image",
         "status": "WAITING_REVIEW", "generation_mode": "system_owned_media", "content_type": "direct_image",
-        "public_post_text": f"{account} image", "validator_status": "PASS", "account_fit_status": "PASS",
+        "public_post_text": prepared_text["direct_image"], "validator_status": "PASS", "account_fit_status": "PASS",
         "internal_leak_status": "PASS", "publisher_media_type": "IMAGE", "source_post_id": parent_id,
         "media_asset_id": asset_id, "media_url": media_url, "primary_topic": image_topic,
         "media_primary_topic": image_topic, "visual_topic": image_topic, "structure_variant": "2",
@@ -128,5 +135,44 @@ check(live["selected_batch_id"] == batch_id, "inventory preserves approved batch
 check(live["candidate_count"] == 4, "inventory exposes exact four candidates")
 check(live["same_batch_contract"] == "PASS", "inventory same-batch contract")
 check(live["ready_canaries"] == 4, "inventory 4/4 ready")
+
+recovery = build_publish_plan(datasets, wave="first_wave_images")
+check(recovery["status"] == "PASS", "remaining image recovery plan passes")
+check(len(recovery["rows"]) == 2, "remaining image recovery is exactly two")
+check(
+    all(row["canary_type"] == "direct_image" for row in recovery["rows"]),
+    "recovery contains images only",
+)
+check(
+    all(row["updates"]["media_type"] == "image" for row in recovery["rows"]),
+    "direct image is normalized to image",
+)
+
+generated_image = next(
+    row
+    for row in first["candidates"]
+    if row["account_id"] == "night_scout" and row["content_type"] == "direct_image"
+)
+alignment = generated_image["alignment"]
+validation = validate_media_post({
+    "rights_status": "owned",
+    "permission_status": "approved",
+    "media_url": "https://example.invalid/image.png",
+    "media_asset_id": "ma_test",
+    "platform": "threads",
+    "account_id": "night_scout",
+    "media_type": "image",
+    "content_type": "direct_image",
+    "publisher_media_type": "IMAGE",
+    "public_post_text": generated_image["public_post_text"],
+    "media_origin": "system_generated_owned",
+    "alignment_status": alignment["alignment_status"],
+    "final_alignment_score": alignment["final_alignment_score"],
+    "main_claim_coverage": alignment["main_claim_coverage"],
+    "unsupported_claim_count": alignment["unsupported_claim_count"],
+    "source_copy_similarity": 0,
+    "recent_post_similarity": alignment["recent_post_similarity"],
+})
+check(validation["status"] == "PASS", "zero similarity image validator passes")
 
 print("PASS test_first_wave_canary_contract.py")
