@@ -48,6 +48,48 @@ def _row_text(row: dict[str, Any]) -> str:
     ).strip()
 
 
+ACTIVE_GENERATION_STATUSES = {
+    "READY",
+    "WAITING_REVIEW",
+    "PROCESSING",
+}
+
+
+def _generation_history(
+    account_id: str,
+    posted_results: list[dict[str, Any]],
+    existing_queue: list[dict[str, Any]],
+) -> list[str]:
+    """Combine posted and active pending text without duplicates."""
+    history: list[str] = []
+    seen: set[str] = set()
+
+    sources = (
+        (posted_results, False),
+        (existing_queue, True),
+    )
+
+    for rows, require_active in sources:
+        for row in rows:
+            if str(row.get("account_id", "")) != account_id:
+                continue
+            if (
+                require_active
+                and str(row.get("status", "")).upper()
+                not in ACTIVE_GENERATION_STATUSES
+            ):
+                continue
+
+            value = _row_text(row)
+            if not value or value in seen:
+                continue
+
+            seen.add(value)
+            history.append(value)
+
+    return history
+
+
 def _sha(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -397,12 +439,11 @@ def build_remaining_eight(
         text_rows.append(text_row)
         candidates.append(_text_candidate(text_row))
 
-        account_recent = [
-            _row_text(row)
-            for row in posted_results
-            if str(row.get("account_id", "")) == account
-            and _row_text(row)
-        ]
+        account_recent = _generation_history(
+            account,
+            posted_results,
+            generation_existing,
+        )
 
         specs = build_specs(
             account,
