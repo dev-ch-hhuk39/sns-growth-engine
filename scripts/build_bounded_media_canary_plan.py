@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-CANARY_TYPES = ("original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "generated_clip")
+CANARY_TYPES = ("original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip")
 FIRST_WAVE_TYPES = ("original_text", "direct_image")
 ACCOUNTS = ("night_scout", "liver_manager")
 QUALITY_GATE_VERSION = "generation_quality_v3"
@@ -55,7 +55,7 @@ def required_fields(canary_type: str) -> tuple[str, ...]:
         "visual_topic_match", "visual_cta_match", "visual_plan_version",
         "visual_text_hash", "claim_support_json",
     ) + quality
-    if canary_type == "generated_clip":
+    if canary_type == "approved_source_clip":
         return common + validated_media + ("source_video_id", "clip_candidate_id", "local_path", "start_seconds", "end_seconds")
     if canary_type == "direct_carousel":
         return common + validated_media + ("source_post_id", "media_asset_ids", "media_order")

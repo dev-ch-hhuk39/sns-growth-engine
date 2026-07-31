@@ -10,7 +10,7 @@ assert integrity["status"] == "PASS"
 assert source_integrity_report([], [])["status"] == "NO_EVIDENCE"
 posted=[]; jobs=[]
 for account in ("night_scout", "liver_manager"):
-    for kind in ("original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "generated_clip"):
+    for kind in ("original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip"):
         cid=canary_id(account, kind); result_id=f"r_{cid}"
         posted.append({"canary_id": cid, "result_id": result_id, "status": "POSTED", "post_url": "https://www.threads.com/@a/post/b", "external_post_id": "1", "verification_status": "READ_AFTER_WRITE_PASS"})
         jobs.extend({"canary_id": cid, "window_hours": hours, "status": "SCHEDULED"} for hours in (24,72,168))
@@ -20,7 +20,7 @@ assert activation_evidence(posted[:-1], jobs)["status"] == "BLOCKED"
 # Batch-specific canary IDs must satisfy the same canonical 12-slot contract.
 fresh_posted=[]; fresh_jobs=[]
 for account in ("night_scout", "liver_manager"):
-    for kind in ("original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "generated_clip"):
+    for kind in ("original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip"):
         cid=f"canary_fresh_batch_001_{account}_{kind}"
         fresh_posted.append({"canary_id": cid, "account_id": account, "content_type": kind, "status": "POSTED", "post_url": "https://www.threads.com/@a/post/b", "external_post_id": "1", "verification_status": "READ_AFTER_WRITE_PASS"})
         fresh_jobs.extend({"canary_id": cid, "window_hours": hours, "status": "SCHEDULED"} for hours in (24,72,168))

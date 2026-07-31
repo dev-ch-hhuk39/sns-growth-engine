@@ -3,7 +3,7 @@
   "accounts": ["night_scout", "liver_manager"],
   "allowed_states": ["PASS", "FAIL", "BLOCKED", "UNVERIFIED"],
   "production_evidence_required": true,
-  "capabilities": ["original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "generated_clip", "scheduled_publish", "result_persistence", "metrics", "pdca", "persona"],
+  "capabilities": ["original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip", "scheduled_publish", "result_persistence", "metrics", "pdca", "persona"],
   "required_evidence": ["verified_at", "evidence_type", "evidence_ref"],
   "code_evidence": {
     "original_text": ["scripts/generate_threads_ideas_from_references.py", "scripts/public_post_quality.py"],
@@ -11,7 +11,7 @@
     "direct_image": ["scripts/run_direct_reference_media_pipeline.py", "scripts/media_post_validator.py"],
     "direct_video": ["scripts/run_direct_reference_media_pipeline.py", "scripts/media_post_validator.py"],
     "direct_carousel": ["scripts/run_direct_reference_media_pipeline.py", "src/publishers/threads_publisher.py"],
-    "generated_clip": ["scripts/run_media_production_pipeline.py", "scripts/cut_approved_clips.py"],
+    "approved_source_clip": ["scripts/run_media_production_pipeline.py", "scripts/cut_approved_clips.py"],
     "scheduled_publish": [".github/workflows/autonomous-growth-loop-night-scout.yml", ".github/workflows/autonomous-growth-loop-liver-manager.yml"],
     "result_persistence": ["scripts/process_threads_queue.py", "scripts/publisher_delivery_contract.py"],
     "metrics": ["scripts/collect_threads_metrics.py", "scripts/metrics_collection_schedule.py"],

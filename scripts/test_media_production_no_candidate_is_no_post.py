@@ -27,9 +27,22 @@ def main() -> int:
         os.environ[name] = "true"
     plan = build_plan(apply=True, confirm=True, client=EmptyClient())
     checks = [
-        ("status is NO_POST", plan["status"] == "NO_POST"),
-        ("reason is visible", "no_eligible_media_candidate" in plan["blocked_reasons"]),
-        ("no external actions", not plan["would_download"] and not plan["would_cut"] and not plan["would_upload"] and not plan["would_post_video"]),
+        (
+            "status is BLOCKED_NO_SOURCE_MEDIA",
+            plan["status"] == "BLOCKED_NO_SOURCE_MEDIA",
+        ),
+        (
+            "reason is visible",
+            "no_eligible_media_candidate"
+            in plan["blocked_reasons"],
+        ),
+        (
+            "no external actions",
+            not plan["would_download"]
+            and not plan["would_cut"]
+            and not plan["would_upload"]
+            and not plan["would_post_video"],
+        ),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

@@ -725,7 +725,7 @@ def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, An
     if "persona_decision_support_missing" in persona["reasons"]:
         text += "\n\n僕なら、条件だけで決めずに無理なく続けられるかを先に確認する。"
     if "persona_concrete_action_missing" in persona["reasons"]:
-        text += "\n\n私が見ている中では、まず次の配信で一つだけ試してみることからで大丈夫です。"
+        text += "\n\n僕が見ている中では、まず次の配信で一つだけ試してみることからで大丈夫です。"
     return build_generation_output(
         internal_analysis=f"account={account_id}; deterministic reader-facing template; index={index}",
         public_post_text=text,
@@ -838,7 +838,7 @@ PRODUCTION_COMPONENTS: dict[str, dict[str, dict[str, list[str]]]] = {
     "liver_manager": {
         "first_viewer": {
             "hooks": [
-                "初見がすぐ抜ける時は、内容より最初に入りやすい説明があるかを見直したい。",
+                "初見がすぐ抜ける配信は、内容より最初に入りやすい説明があるかを見直したい。",
                 "配信の冒頭で今の話題が伝わると、初見は会話へ入りやすくなる。",
                 "初見が残る配信は、最初の数秒で何を話しているかがわかりやすい。",
             ],

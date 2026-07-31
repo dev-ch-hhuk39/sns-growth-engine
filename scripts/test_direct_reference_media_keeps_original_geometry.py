@@ -38,7 +38,7 @@ def main() -> int:
         "media_type": "video",
         "duration_seconds": 96,
         "aspect_ratio": "16:9",
-        "media_origin": "generated_clip",
+        "media_origin": "approved_source_clip",
         "public_post_text": GOOD_TEXT,
         **ALIGNMENT,
     })

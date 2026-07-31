@@ -38,7 +38,7 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
     slot = slot_by_id(account_id, slot_id)
     if not slot:
         return {"status": "BLOCKED", "blocked_reasons": ["unknown_content_slot"]}
-    if slot["post_type"] in {"direct_reference_media", "generated_clip_media"}:
+    if slot["post_type"] in {"direct_reference_media", "approved_source_clip"}:
         return {
             "status": "SKIPPED_NO_VALID_MEDIA",
             "account_id": account_id,

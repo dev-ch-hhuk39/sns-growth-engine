@@ -251,7 +251,7 @@ def evaluate_ready_media_row(row: dict, media_assets: dict, permissions: dict, i
         is_clip = False
         for k in ["clip_candidate_id", "source_video_id", "video_clip_id"]:
             if str(row.get(k, "")): is_clip = True
-        if str(row.get("media_origin", "")) == "generated_clip" or "clip" in str(row.get("generation_mode", "")):
+        if str(row.get("media_origin", "")) == "approved_source_clip" or "clip" in str(row.get("generation_mode", "")):
             is_clip = True
 
         if is_clip:

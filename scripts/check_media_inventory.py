@@ -19,7 +19,7 @@ def main() -> int:
     inventory = {}
     for account in accounts:
         candidates = [r for r in rows if str(r.get("account_id", "")) == account and str(r.get("status", "")) in {"MEDIA_READY", "WAITING_REVIEW", "READY"}]
-        inventory[account] = {"direct_media": sum(str(r.get("generation_mode", "")) == "direct_reference_media" for r in candidates), "generated_clip": sum("clip" in str(r.get("generation_mode", "")) for r in candidates)}
+        inventory[account] = {"direct_media": sum(str(r.get("generation_mode", "")) == "direct_reference_media" for r in candidates), "approved_source_clip": sum("clip" in str(r.get("generation_mode", "")) for r in candidates)}
     deficits = {a: {k: args.minimum - v for k, v in kinds.items() if v < args.minimum} for a, kinds in inventory.items()}
     print(json.dumps({"status": "PLAN_ONLY", "minimum_per_type": args.minimum, "inventory": inventory, "deficits": deficits, "would_fetch": False, "would_download": False, "would_upload": False}, ensure_ascii=False, indent=2))
     return 0

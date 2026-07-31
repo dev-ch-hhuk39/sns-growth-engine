@@ -109,12 +109,12 @@ missing. `BLOCKED` means a permitted human or platform operation is required.
 | night_account_url_discovery | UNVERIFIED | Account URL, real source post URL and ID |
 | night_source_bundle | UNVERIFIED | Same-post text hash, media ID, parent-integrity PASS |
 | night_direct_media_post | UNVERIFIED | New Threads permalink and Cloudinary media evidence |
-| night_generated_clip_post | UNVERIFIED | New permalink, Cloudinary URL, clip candidate ID |
+| night_approved_source_clip_post | UNVERIFIED | New permalink, Cloudinary URL, clip candidate ID |
 | night_caption_alignment | UNVERIFIED | Alignment threshold PASS and unsupported claims = 0 |
 | liver_account_url_discovery | BLOCKED | Human-approved Threads source account URL and real post |
 | liver_source_bundle | UNVERIFIED | Same-post text hash, media ID, parent-integrity PASS |
 | liver_direct_media_post | UNVERIFIED | New Threads permalink and Cloudinary media evidence |
-| liver_generated_clip_post | UNVERIFIED | New permalink, Cloudinary URL, clip candidate ID |
+| liver_approved_source_clip_post | UNVERIFIED | New permalink, Cloudinary URL, clip candidate ID |
 | liver_caption_alignment | UNVERIFIED | Alignment threshold PASS and unsupported claims = 0 |
 | permission_single_authority | PASS | Sheets `media_permissions` authority and contradiction tests |
 | backend_failover | PASS | Routing tests and backend routing rows |
@@ -354,7 +354,7 @@ Generated-clip rules:
 
 Acceptance:
 
-- Inventory checker reports direct=1 and generated_clip=1 for each account.
+- Inventory checker reports direct=1 and approved_source_clip=1 for each account.
 - Every asset has permission evidence, Cloudinary public ID and secure URL,
   content hash, parent source ID, alignment evidence, and unused status.
 - No post has occurred.

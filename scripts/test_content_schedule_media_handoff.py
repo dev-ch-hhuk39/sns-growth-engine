@@ -17,8 +17,8 @@ def main() -> int:
         ("subtitle rendering disabled", media.get("subtitle_enabled") is False),
         ("night has five canonical slots", len(night) == 5),
         ("liver has five canonical slots", len(liver) == 5),
-        ("night direct and clip slots are explicit", {s["post_type"] for s in night} >= {"direct_reference_media", "generated_clip_media"}),
-        ("liver direct and clip slots are explicit", {s["post_type"] for s in liver} >= {"direct_reference_media", "generated_clip_media"}),
+        ("night direct and clip slots are explicit", {s["post_type"] for s in night} >= {"direct_reference_media", "approved_source_clip"}),
+        ("liver direct and clip slots are explicit", {s["post_type"] for s in liver} >= {"direct_reference_media", "approved_source_clip"}),
         ("media cap permits both formal media slots", media.get("media_daily_post_cap") == 2),
         ("each account has unique cron slots", len({s["cron_utc"] for s in night}) == 5 and len({s["cron_utc"] for s in liver}) == 5),
     ]

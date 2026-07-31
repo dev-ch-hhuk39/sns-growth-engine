@@ -22,7 +22,7 @@ def classify_no_post_reason(value: str) -> str:
         return "EMPTY_TEXT"
     if "ALLOW_MEDIA_POSTS=true and ALLOW_REAL_THREADS_VIDEO_POST=true are required" in value:
         return "MEDIA_POST_GATES_DISABLED"
-    if "generated_clip_recovery_no_eligible_media_candidate" in value:
+    if "approved_source_clip_recovery_no_eligible_media_candidate" in value:
         return "NO_ELIGIBLE_MEDIA_CANDIDATE"
     if "TimeoutError" in value:
         return "THREADS_API_TIMEOUT"

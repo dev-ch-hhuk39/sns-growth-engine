@@ -26,17 +26,61 @@ def _decision(
     reasons: list[str] = []
     if config.get("kill_switch"):
         reasons.append("kill_switch_enabled")
-    if evidence.get("status") != "READY_FOR_ACTIVATION":
-        reasons.append("twelve_canary_activation_evidence_incomplete")
+    evidence_is_live = evidence_source == "READ_OK"
+
+    if not evidence_is_live:
+        reasons.append(
+            "production_evidence_source_not_live"
+        )
+
+    if evidence.get("DELIVERY_READY") != "YES":
+        reasons.append("delivery_evidence_incomplete")
+
+    if evidence.get("CONTENT_READY") != "YES":
+        reasons.append("content_evidence_incomplete")
     if require_persisted_activation:
         if not config.get("production_publish_activation_approved"):
             reasons.append("production_publish_activation_not_approved")
         if not config.get("scheduled_publish_enabled"):
             reasons.append("scheduled_publish_not_enabled")
+    allowed = not reasons
+
     return {
-        "status": "ALLOW" if not reasons else "BLOCKED",
-        "mode": "RUNTIME" if require_persisted_activation else "ACTIVATION_READINESS",
+        "status": (
+            "ALLOW"
+            if allowed
+            else "BLOCKED"
+        ),
+        "mode": (
+            "RUNTIME"
+            if require_persisted_activation
+            else "ACTIVATION_READINESS"
+        ),
         "evidence_source": evidence_source,
+        "DELIVERY_READY": (
+            "YES"
+            if evidence_is_live
+            and evidence.get("DELIVERY_READY") == "YES"
+            else "NO"
+        ),
+        "CONTENT_READY": (
+            "YES"
+            if evidence_is_live
+            and evidence.get("CONTENT_READY") == "YES"
+            else "NO"
+        ),
+        "AUTONOMOUS_PRODUCTION_READY": (
+            "YES"
+            if allowed and require_persisted_activation
+            else "NO"
+        ),
+        "SCHEDULED_PUBLISH": (
+            "ON"
+            if allowed
+            and require_persisted_activation
+            and config.get("scheduled_publish_enabled")
+            else "OFF"
+        ),
         "activation_evidence": evidence,
         "blocked_reasons": reasons,
         "would_post": False,

@@ -49,8 +49,10 @@ jobs:
           python3 scripts/test_stale_operational_quarantine_plan.py
           python3 scripts/test_bounded_media_canary_plan.py
           python3 scripts/test_generation_quality_gates.py
-          python3 scripts/test_system_owned_media_plan_contract.py
-          python3 scripts/test_first_wave_canary_contract.py
+          python3 scripts/test_no_synthetic_media_entrypoints.py
+          python3 scripts/test_approved_source_clip_contract.py
+          python3 scripts/test_readiness_and_fail_closed_contract.py
+          python3 scripts/test_final_media_caption_after_asset_ready.py
           python3 scripts/test_generated_queue_lifecycle_status.py
           python3 scripts/test_feature_attribution_cycle.py
           python3 scripts/test_auto_ready_requires_generation_contract.py
@@ -69,8 +71,6 @@ jobs:
           python3 scripts/test_missing_text_canaries_contract.py
           python3 scripts/test_canary_permission_deficits_scope.py
           python3 scripts/test_final_readiness_activation_evidence_source.py
-          python3 scripts/test_system_owned_media_canaries.py
-          python3 scripts/test_system_owned_media_workflow.py
 
   tests:
     if: github.event_name == 'workflow_dispatch'

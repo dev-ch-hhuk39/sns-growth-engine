@@ -1,14 +1,206 @@
 {
   "schema_version": 1,
-  "instructions": "Fill paths, declarations, hashes and public text. Do not add credentials or external URLs you do not own. The first carousel image is also used for the direct-image canary. The video is also used for generated_clip only because clip is explicitly allowed.",
+  "instructions": "Fill paths, declarations, hashes and public text. Do not add credentials or external URLs you do not own. The first carousel image is also used for the direct-image canary. The video is also used for approved_source_clip only because clip is explicitly allowed.",
   "assets": [
-    {"asset_id":"owner_ns_image_001","source_group_id":"owner_ns_images","account_id":"night_scout","asset_purpose":"direct_carousel","canary_types":["direct_image","direct_carousel"],"local_path":"/absolute/path/to/night-image-001.jpg","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["direct","carousel"],"media_order":0,"clip_start_seconds":null,"clip_end_seconds":null,"public_post_text":"REPLACE_WITH_READER_FACING_NIGHT_POST","queue_id":""},
-    {"asset_id":"owner_ns_image_002","source_group_id":"owner_ns_images","account_id":"night_scout","asset_purpose":"direct_carousel","canary_types":["direct_carousel"],"local_path":"/absolute/path/to/night-image-002.jpg","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["carousel"],"media_order":1,"clip_start_seconds":null,"clip_end_seconds":null,"public_post_text":"REPLACE_WITH_READER_FACING_NIGHT_POST","queue_id":""},
-    {"asset_id":"owner_ns_image_003","source_group_id":"owner_ns_images","account_id":"night_scout","asset_purpose":"direct_carousel","canary_types":["direct_carousel"],"local_path":"/absolute/path/to/night-image-003.jpg","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["carousel"],"media_order":2,"clip_start_seconds":null,"clip_end_seconds":null,"public_post_text":"REPLACE_WITH_READER_FACING_NIGHT_POST","queue_id":""},
-    {"asset_id":"owner_ns_video_001","source_group_id":"owner_ns_video_001","account_id":"night_scout","asset_purpose":"direct_video","canary_types":["direct_video","generated_clip"],"local_path":"/absolute/path/to/night-video-001.mp4","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["direct","clip"],"media_order":0,"clip_start_seconds":10,"clip_end_seconds":35,"public_post_text":"REPLACE_WITH_READER_FACING_NIGHT_POST","queue_id":""},
-    {"asset_id":"owner_lm_image_001","source_group_id":"owner_lm_images","account_id":"liver_manager","asset_purpose":"direct_carousel","canary_types":["direct_image","direct_carousel"],"local_path":"/absolute/path/to/liver-image-001.jpg","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["direct","carousel"],"media_order":0,"clip_start_seconds":null,"clip_end_seconds":null,"public_post_text":"REPLACE_WITH_READER_FACING_LIVER_POST","queue_id":""},
-    {"asset_id":"owner_lm_image_002","source_group_id":"owner_lm_images","account_id":"liver_manager","asset_purpose":"direct_carousel","canary_types":["direct_carousel"],"local_path":"/absolute/path/to/liver-image-002.jpg","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["carousel"],"media_order":1,"clip_start_seconds":null,"clip_end_seconds":null,"public_post_text":"REPLACE_WITH_READER_FACING_LIVER_POST","queue_id":""},
-    {"asset_id":"owner_lm_image_003","source_group_id":"owner_lm_images","account_id":"liver_manager","asset_purpose":"direct_carousel","canary_types":["direct_carousel"],"local_path":"/absolute/path/to/liver-image-003.jpg","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["carousel"],"media_order":2,"clip_start_seconds":null,"clip_end_seconds":null,"public_post_text":"REPLACE_WITH_READER_FACING_LIVER_POST","queue_id":""},
-    {"asset_id":"owner_lm_video_001","source_group_id":"owner_lm_video_001","account_id":"liver_manager","asset_purpose":"direct_video","canary_types":["direct_video","generated_clip"],"local_path":"/absolute/path/to/liver-video-001.mp4","https_url":"","content_sha256":"","rights_status":"owned","owner_declaration":"REPLACE_WITH_OWNER_DECLARATION","threads_post_allowed":true,"cloudinary_storage_allowed":true,"allowed_operations":["direct","clip"],"media_order":0,"clip_start_seconds":10,"clip_end_seconds":35,"public_post_text":"REPLACE_WITH_READER_FACING_LIVER_POST","queue_id":""}
+    {
+      "asset_id": "owner_ns_image_001",
+      "source_group_id": "owner_ns_images",
+      "account_id": "night_scout",
+      "asset_purpose": "direct_carousel",
+      "canary_types": [
+        "direct_image",
+        "direct_carousel"
+      ],
+      "local_path": "/absolute/path/to/night-image-001.jpg",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "direct",
+        "carousel"
+      ],
+      "media_order": 0,
+      "clip_start_seconds": null,
+      "clip_end_seconds": null,
+      "public_post_text": "REPLACE_WITH_READER_FACING_NIGHT_POST",
+      "queue_id": ""
+    },
+    {
+      "asset_id": "owner_ns_image_002",
+      "source_group_id": "owner_ns_images",
+      "account_id": "night_scout",
+      "asset_purpose": "direct_carousel",
+      "canary_types": [
+        "direct_carousel"
+      ],
+      "local_path": "/absolute/path/to/night-image-002.jpg",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "carousel"
+      ],
+      "media_order": 1,
+      "clip_start_seconds": null,
+      "clip_end_seconds": null,
+      "public_post_text": "REPLACE_WITH_READER_FACING_NIGHT_POST",
+      "queue_id": ""
+    },
+    {
+      "asset_id": "owner_ns_image_003",
+      "source_group_id": "owner_ns_images",
+      "account_id": "night_scout",
+      "asset_purpose": "direct_carousel",
+      "canary_types": [
+        "direct_carousel"
+      ],
+      "local_path": "/absolute/path/to/night-image-003.jpg",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "carousel"
+      ],
+      "media_order": 2,
+      "clip_start_seconds": null,
+      "clip_end_seconds": null,
+      "public_post_text": "REPLACE_WITH_READER_FACING_NIGHT_POST",
+      "queue_id": ""
+    },
+    {
+      "asset_id": "owner_ns_video_001",
+      "source_group_id": "owner_ns_video_001",
+      "account_id": "night_scout",
+      "asset_purpose": "direct_video",
+      "canary_types": [
+        "direct_video",
+        "approved_source_clip"
+      ],
+      "local_path": "/absolute/path/to/night-video-001.mp4",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "direct",
+        "clip"
+      ],
+      "media_order": 0,
+      "clip_start_seconds": 10,
+      "clip_end_seconds": 35,
+      "public_post_text": "REPLACE_WITH_READER_FACING_NIGHT_POST",
+      "queue_id": ""
+    },
+    {
+      "asset_id": "owner_lm_image_001",
+      "source_group_id": "owner_lm_images",
+      "account_id": "liver_manager",
+      "asset_purpose": "direct_carousel",
+      "canary_types": [
+        "direct_image",
+        "direct_carousel"
+      ],
+      "local_path": "/absolute/path/to/liver-image-001.jpg",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "direct",
+        "carousel"
+      ],
+      "media_order": 0,
+      "clip_start_seconds": null,
+      "clip_end_seconds": null,
+      "public_post_text": "REPLACE_WITH_READER_FACING_LIVER_POST",
+      "queue_id": ""
+    },
+    {
+      "asset_id": "owner_lm_image_002",
+      "source_group_id": "owner_lm_images",
+      "account_id": "liver_manager",
+      "asset_purpose": "direct_carousel",
+      "canary_types": [
+        "direct_carousel"
+      ],
+      "local_path": "/absolute/path/to/liver-image-002.jpg",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "carousel"
+      ],
+      "media_order": 1,
+      "clip_start_seconds": null,
+      "clip_end_seconds": null,
+      "public_post_text": "REPLACE_WITH_READER_FACING_LIVER_POST",
+      "queue_id": ""
+    },
+    {
+      "asset_id": "owner_lm_image_003",
+      "source_group_id": "owner_lm_images",
+      "account_id": "liver_manager",
+      "asset_purpose": "direct_carousel",
+      "canary_types": [
+        "direct_carousel"
+      ],
+      "local_path": "/absolute/path/to/liver-image-003.jpg",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "carousel"
+      ],
+      "media_order": 2,
+      "clip_start_seconds": null,
+      "clip_end_seconds": null,
+      "public_post_text": "REPLACE_WITH_READER_FACING_LIVER_POST",
+      "queue_id": ""
+    },
+    {
+      "asset_id": "owner_lm_video_001",
+      "source_group_id": "owner_lm_video_001",
+      "account_id": "liver_manager",
+      "asset_purpose": "direct_video",
+      "canary_types": [
+        "direct_video",
+        "approved_source_clip"
+      ],
+      "local_path": "/absolute/path/to/liver-video-001.mp4",
+      "https_url": "",
+      "content_sha256": "",
+      "rights_status": "owned",
+      "owner_declaration": "REPLACE_WITH_OWNER_DECLARATION",
+      "threads_post_allowed": true,
+      "cloudinary_storage_allowed": true,
+      "allowed_operations": [
+        "direct",
+        "clip"
+      ],
+      "media_order": 0,
+      "clip_start_seconds": 10,
+      "clip_end_seconds": 35,
+      "public_post_text": "REPLACE_WITH_READER_FACING_LIVER_POST",
+      "queue_id": ""
+    }
   ]
 }

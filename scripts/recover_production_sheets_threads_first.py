@@ -1257,7 +1257,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "direct_reference_media",
         "approved_saved_media",
         "approved_media_growth",
-        "generated_clip_media",
+        "approved_source_clip",
         "video_clip_reference",
     }
     generated_ready_unapproved = [

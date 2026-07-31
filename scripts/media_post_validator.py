@@ -23,7 +23,7 @@ def publisher_media_type(content_type: str, media_urls: list[str] | None = None)
     content_type = str(content_type or "").lower()
     if content_type == "direct_carousel" or len(media_urls or []) > 1:
         return "CAROUSEL"
-    if content_type in {"direct_video", "generated_clip"}:
+    if content_type in {"direct_video", "approved_source_clip"}:
         return "VIDEO"
     if content_type == "direct_image":
         return "IMAGE"
@@ -39,7 +39,7 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     text_result = final_public_post_validator(text, account_id)
     duration = float(plan.get("duration_seconds") or 0)
     aspect = str(plan.get("aspect_ratio", ""))
-    media_origin = str(plan.get("media_origin", "generated_clip")).strip().lower()
+    media_origin = str(plan.get("media_origin", "approved_source_clip")).strip().lower()
     content_type = str(plan.get("content_type", "")).strip().lower()
     declared_publisher_type = str(plan.get("publisher_media_type", "")).strip().upper()
     alignment_status = str(plan.get("alignment_status", "")).upper()

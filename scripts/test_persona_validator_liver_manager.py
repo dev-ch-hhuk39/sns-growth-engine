@@ -10,13 +10,21 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from public_post_quality import final_public_post_validator
 
+from public_post_quality import load_post_generation_rules
+
+profile = load_post_generation_rules()["persona_profiles"]["liver_manager"]
+
+assert profile["first_person"] == "僕"
+assert "私" in profile["forbidden_first_person"]
+assert "僕" not in profile["forbidden_first_person"]
+
 good = (
     "実際に配信を見ていると、初見さんが残らない子ほど入室後の声かけで損をしていることが多いんですよね。\n\n"
     "今の話題を短く伝えて、答えやすい質問を一つ置くと、コメントの入口が作れます。\n\n"
-    "私なら、まず次の配信でこの一つだけ試してみるのがおすすめです。"
+    "僕なら、まず次の配信でこの一つだけ試してみるのがおすすめです。"
 )
 wrong_voice = (
-    "俺は配信で重要なのは初見対応だ。\n改善する必要がある。\n準備も重要だ。\n"
+    "私は配信で重要なのは初見対応だ。\n改善する必要がある。\n準備も重要だ。\n"
     "配信時間\n初見への挨拶\nコメントの回収\nギフト導線\n根性\n継続"
 )
 

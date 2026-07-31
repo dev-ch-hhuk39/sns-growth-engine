@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ACCOUNTS = ("night_scout", "liver_manager")
 CANARY_TYPES = (
     "original_text", "reference_text", "direct_image", "direct_video",
-    "direct_carousel", "generated_clip",
+    "direct_carousel", "approved_source_clip",
 )
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 
@@ -101,7 +101,7 @@ def permission_deficits(
             if not direct_ok:
                 rows.append({"account_id": account_id, "source_id": source_id, "requirement": "direct_media_permission", "reason": "active_evidence_bearing_direct_permission_missing"})
             if platform in {"youtube", "tiktok"} and not clip_ok:
-                rows.append({"account_id": account_id, "source_id": source_id, "requirement": "generated_clip_permission", "reason": "active_evidence_bearing_clip_permission_missing"})
+                rows.append({"account_id": account_id, "source_id": source_id, "requirement": "approved_source_clip_permission", "reason": "active_evidence_bearing_clip_permission_missing"})
     return rows
 
 
@@ -109,7 +109,7 @@ def canary_required_permission_deficits(permissions: list[dict[str, Any]]) -> di
     """Return only the six owner-media canary permission needs, never all sources."""
     rows: list[dict[str, str]] = []
     for account_id in ACCOUNTS:
-        for canary_type, operation in (("direct_image", "direct"), ("direct_carousel", "direct"), ("generated_clip", "clip")):
+        for canary_type, operation in (("direct_image", "direct"), ("direct_carousel", "direct"), ("approved_source_clip", "clip")):
             active = any(is_active_permission(item, account_id=account_id, operation=operation) for item in permissions)
             if not active:
                 rows.append({"canary_id": canary_id(account_id, canary_type), "account_id": account_id, "canary_type": canary_type, "operation": operation, "reason": "active_evidence_bearing_permission_missing_for_canary"})
@@ -127,11 +127,6 @@ def source_integrity_report(
         parent = by_id.get(parent_id)
         if not parent:
             continue
-        owned_generated = str(parent.get("platform", "")) == "system_generated_owned"
-        if owned_generated:
-            # System-owned assets intentionally have no external post URL.
-            # They remain linked by their immutable local/source parent ID.
-            continue
         if str(child.get("canonical_post_url", "")) != str(parent.get("canonical_post_url", "")):
             failures.append({"source_post_id": parent_id, "reason": "child_parent_url_mismatch"})
         try:
@@ -141,8 +136,6 @@ def source_integrity_report(
         except (TypeError, ValueError):
             failures.append({"source_post_id": parent_id, "reason": "media_index_missing"})
     for parent_id, parent in by_id.items():
-        if str(parent.get("platform", "")) == "system_generated_owned":
-            continue
         url = str(parent.get("canonical_post_url", ""))
         if not is_individual_source_post_url(str(parent.get("platform", "")), url):
             failures.append({"source_post_id": parent_id, "reason": "parent_not_individual_post"})
@@ -174,7 +167,10 @@ def canary_source_integrity_report(datasets: dict[str, list[dict[str, Any]]], ca
             reasons.append("source_post_missing")
         else:
             platform = str(parent.get("platform") or parent.get("source_platform") or "")
-            if platform != "system_generated_owned" and not is_individual_source_post_url(platform, str(parent.get("canonical_post_url", ""))):
+            if not is_individual_source_post_url(
+                platform,
+                str(parent.get("canonical_post_url", "")),
+            ):
                 reasons.append("parent_not_individual_post")
             children = children_by_parent.get(source_post_id, [])
             if not children:
@@ -182,7 +178,9 @@ def canary_source_integrity_report(datasets: dict[str, list[dict[str, Any]]], ca
             for child in children:
                 if str(child.get("source_post_id", "")) != source_post_id:
                     reasons.append("child_parent_mismatch")
-                if platform != "system_generated_owned" and str(child.get("canonical_post_url", "")) != str(parent.get("canonical_post_url", "")):
+                if str(child.get("canonical_post_url", "")) != str(
+                    parent.get("canonical_post_url", "")
+                ):
                     reasons.append("child_parent_url_mismatch")
                 if not str(child.get("original_media_url") or child.get("storage_url") or "").strip():
                     reasons.append("original_media_url_missing")
@@ -268,9 +266,31 @@ def activation_evidence(
         elif candidates:
             missing_metrics.append(slot_name)
 
-    ready = not missing_posts and not missing_metrics
+    delivery_ready = not missing_posts
+    content_ready = delivery_ready and not missing_metrics
+
     return {
-        "status": "READY_FOR_ACTIVATION" if ready else "BLOCKED",
+        # Compatibility status for existing callers. New activation
+        # decisions must inspect the explicit readiness dimensions below.
+        "status": (
+            "READY_FOR_ACTIVATION"
+            if content_ready
+            else "BLOCKED"
+        ),
+        "DELIVERY_READY": (
+            "YES"
+            if delivery_ready
+            else "NO"
+        ),
+        "CONTENT_READY": (
+            "YES"
+            if content_ready
+            else "NO"
+        ),
+        # activation_evidence alone cannot prove safe autonomous
+        # production. Live evidence and persisted activation switches
+        # are evaluated by scheduled_publish_activation_gate.
+        "AUTONOMOUS_PRODUCTION_READY": "NO",
         "expected_canary_count": len(expected_slots),
         "verified_canary_count": len(verified_by_slot),
         "selected_evidence_canary_ids": selected_evidence,
@@ -302,9 +322,9 @@ def required_owner_inputs(deficits: list[dict[str, str]]) -> dict[str, Any]:
                 "required": ["one individual source_post URL", "ordered image/video URLs", "media_permissions evidence", "Threads carousel permission"],
             },
             {
-                "input_id": f"{account_id}_owned_generated_clip",
+                "input_id": f"{account_id}_owned_approved_source_clip",
                 "account_id": account_id,
-                "canary_type": "generated_clip",
+                "canary_type": "approved_source_clip",
                 "required": ["individual owned/licensed video URL or local file", "permission evidence", "allowed clip range", "Threads repost permission"],
             },
         ])

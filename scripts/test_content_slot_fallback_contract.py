@@ -12,7 +12,7 @@ schedule = load_content_schedule()["accounts"]
 for account, slots in schedule.items():
     assert len(slots) == 5
     for slot in slots:
-        if slot["post_type"] in {"direct_reference_media", "generated_clip_media"}:
+        if slot["post_type"] in {"direct_reference_media", "approved_source_clip"}:
             plan = build_plan(account, slot["slot_id"], "asset_unavailable", apply=False)
             assert plan["status"] == "SKIPPED_NO_VALID_MEDIA", plan
             assert plan["would_post"] is False, plan

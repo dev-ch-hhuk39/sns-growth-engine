@@ -143,8 +143,8 @@ def _media_asset_inventory(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     return {
         "account_counts": _account_counts(rows),
-        "generated_clip_asset_count": len(generated),
-        "generated_clip_account_counts": _account_counts(generated),
+        "approved_source_clip_asset_count": len(generated),
+        "approved_source_clip_account_counts": _account_counts(generated),
         "direct_reference_asset_count": len(direct),
         "direct_reference_account_counts": _account_counts(direct),
         "uploaded_asset_count": len(uploaded),
