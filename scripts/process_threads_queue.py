@@ -72,7 +72,13 @@ def get_ws(client: SheetsClient, logical: str):
 
 
 def records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
-    return [dict(r) for r in get_ws(client, logical).get_all_records()]
+    return _call_with_rate_limit_retry(
+        f"get_all_records:{logical}",
+        lambda: [
+            dict(row)
+            for row in get_ws(client, logical).get_all_records()
+        ],
+    )
 
 
 def row_by_key(rows: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:

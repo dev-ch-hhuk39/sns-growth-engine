@@ -36,6 +36,33 @@ def _get_credentials(account_id: str) -> tuple[str, str]:
     return creds["access_token"], creds["user_id"]
 
 
+def _safe_api_error(exc: Exception) -> str:
+    """Return API diagnostics without URLs, tokens or response text."""
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", "")
+    code = ""
+    subcode = ""
+    error_type = ""
+
+    if response is not None:
+        try:
+            payload = response.json()
+            error = payload.get("error", {}) if isinstance(payload, dict) else {}
+            code = error.get("code", "")
+            subcode = error.get("error_subcode", "")
+            error_type = error.get("type", "")
+        except Exception:
+            pass
+
+    return (
+        f"{type(exc).__name__}"
+        f":http_status={status}"
+        f":code={code}"
+        f":subcode={subcode}"
+        f":type={error_type}"
+    )
+
+
 def _create_container(
     user_id: str,
     access_token: str,
@@ -86,8 +113,9 @@ def _create_carousel_container(
         child = str(response.json().get("id") or "")
         if not child:
             raise RuntimeError("Threads carousel child container missing id")
-        if media_type == "VIDEO":
-            _wait_for_video_container(child, access_token)
+        # Parent creation can fail while a child is still ingesting.
+        # Wait for image and video children before creating the parent.
+        _wait_for_media_container(child, access_token)
         children.append(child)
     response = requests.post(
         f"{THREADS_API_BASE}/{user_id}/threads",
@@ -119,8 +147,8 @@ def _publish_container(
     return resp.json()
 
 
-def _wait_for_video_container(container_id: str, access_token: str, *, attempts: int = 20) -> None:
-    """Wait until Threads finishes ingesting a public video URL."""
+def _wait_for_media_container(container_id: str, access_token: str, *, attempts: int = 20) -> None:
+    """Wait until Threads finishes ingesting a media container."""
     import requests
 
     url = f"{THREADS_API_BASE}/{container_id}"
@@ -136,9 +164,9 @@ def _wait_for_video_container(container_id: str, access_token: str, *, attempts:
         if status in {"FINISHED", "PUBLISHED"}:
             return
         if status in {"ERROR", "EXPIRED"}:
-            raise RuntimeError("Threads video container processing failed")
+            raise RuntimeError("Threads media container processing failed")
         time.sleep(3)
-    raise TimeoutError("Threads video container processing timed out")
+    raise TimeoutError("Threads media container processing timed out")
 
 
 def _try_fetch_permalink(post_id: str, access_token: str) -> str | None:
@@ -315,7 +343,7 @@ class ThreadsPublisher(BasePublisher):
             else:
                 container_id = _create_container(user_id, access_token, text, media_type=types[0] if has_media else "TEXT", media_url=urls[0] if has_media else None)
             if has_media and not carousel and types[0] == "VIDEO":
-                _wait_for_video_container(container_id, access_token)
+                _wait_for_media_container(container_id, access_token)
             else:
                 time.sleep(1)
         except Exception as exc:
@@ -325,7 +353,11 @@ class ThreadsPublisher(BasePublisher):
                 platform="threads",
                 success=False,
                 dry_run=False,
-                message=f"FAIL: Threads API エラー: {type(exc).__name__} (queue_id={queue_id})",
+                message=(
+                    "FAIL: Threads API エラー: "
+                    f"{_safe_api_error(exc)} "
+                    f"(queue_id={queue_id})"
+                ),
                 raw_response=None,
                 delivery_state="CONTAINER_CREATE_FAILED" if not container_id else "CONTAINER_CREATED_NOT_PUBLISHABLE",
                 container_id=container_id or None,
@@ -337,7 +369,11 @@ class ThreadsPublisher(BasePublisher):
                 platform="threads",
                 success=False,
                 dry_run=False,
-                message=f"FAIL: Threads publish outcome is unverified: {type(exc).__name__} (queue_id={queue_id})",
+                message=(
+                    "FAIL: Threads publish outcome is unverified: "
+                    f"{_safe_api_error(exc)} "
+                    f"(queue_id={queue_id})"
+                ),
                 raw_response=None,
                 delivery_state="CONTAINER_CREATED_PUBLISH_UNVERIFIED",
                 container_id=container_id,
