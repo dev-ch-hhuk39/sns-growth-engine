@@ -2,3 +2,5 @@ ruff==0.12.10
 mypy==1.17.1
 PyYAML==6.0.2
 Pillow==12.3.0
+gspread==6.2.1
+requests==2.34.2
