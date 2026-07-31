@@ -97,7 +97,11 @@ def build_plan(
     batch_id: str = "",
 ) -> dict[str, Any]:
     inventory_wave = "first_wave" if wave in {"first_wave", "first_wave_images"} else "all_12"
-    inventory = build_inventory(datasets, wave=inventory_wave)
+    inventory = build_inventory(
+        datasets,
+        wave=inventory_wave,
+        batch_id=batch_id if wave == "remaining_eight" else "",
+    )
     ready = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("canaries", []) if row.get("status") == "READY_FOR_HUMAN_CANARY"}
     candidates = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("candidates", [])}
     queues = {(str(row.get("account_id", "")), str(row.get("canary_id", ""))): row for row in datasets.get("queue", [])}

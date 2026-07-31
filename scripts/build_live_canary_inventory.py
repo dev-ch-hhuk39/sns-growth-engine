@@ -110,7 +110,14 @@ def build_inventory(
         raise ValueError("unsupported_wave")
     candidates: list[dict[str, Any]] = []
     queue = datasets["queue"]; posts = datasets["source_posts"]; media = datasets["source_post_media"]
-    selected_batch_id = (batch_id or _latest_complete_first_wave_batch(queue)) if wave == "first_wave" else ""
+    selected_batch_id = (
+        batch_id
+        or (
+            _latest_complete_first_wave_batch(queue)
+            if wave == "first_wave"
+            else ""
+        )
+    )
     permissions = datasets["media_permissions"]; clips = datasets["video_clip_candidates"]; assets = datasets["media_assets"]
     source_videos = {str(row.get("source_video_id", "")): row for row in datasets["source_videos"]}
     for account_id in ACCOUNTS:
@@ -119,7 +126,10 @@ def build_inventory(
                 row for row in queue
                 if str(row.get("account_id", "")) == account_id
                 and _fresh(row)
-                and (wave != "first_wave" or (selected_batch_id and str(row.get("batch_id", "")) == selected_batch_id))
+                and (
+                    not selected_batch_id
+                    or str(row.get("batch_id", "")) == selected_batch_id
+                )
             ),
             key=lambda row: str(row.get("created_at", "")),
             reverse=True,
