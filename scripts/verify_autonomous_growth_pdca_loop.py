@@ -19,6 +19,7 @@ TESTS = (
     "test_bounded_media_canary_plan.py",
     "test_live_canary_inventory_contract.py",
     "test_final_production_contracts.py",
+    "test_reconcile_canary_read_after_write.py",
     "test_scheduled_publish_activation_gate.py",
     "test_activate_scheduled_publish.py",
     "test_autonomous_workflow_schedule_safe.py",
