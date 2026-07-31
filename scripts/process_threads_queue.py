@@ -730,6 +730,62 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
                 "retry_disposition": retry_disposition(publish_succeeded=True, persisted=False, api_outcome_known=True),
             })
             return {"status": "POSTED_SAVE_UNVERIFIED", "queue_id": queue_id, "fallback": str(fallback), "reason": persistence["reason"]}
+
+        verification_checked_at = now_iso()
+        verification_saved = update_row(
+            client,
+            "posted_results",
+            "result_id",
+            result_id,
+            {
+                "verification_status": "READ_AFTER_WRITE_PASS",
+                "verification_checked_at": verification_checked_at,
+            },
+        )
+
+        verified_result = next(
+            (
+                row
+                for row in records(client, "posted_results")
+                if str(row.get("result_id", "")) == result_id
+            ),
+            {},
+        )
+
+        if (
+            not verification_saved
+            or str(
+                verified_result.get("verification_status", "")
+            ).upper() != "READ_AFTER_WRITE_PASS"
+        ):
+            fallback = write_fallback(queue_row, social, text, result)
+            update_row(client, "queue", "queue_id", queue_id, {
+                "status": "POSTED_SAVE_UNVERIFIED",
+                "error": "READ_AFTER_WRITE_STATUS_NOT_PERSISTED",
+                "processed_at": now_iso(),
+            })
+            log_event(
+                client,
+                account_id,
+                "POSTED_SAVE_UNVERIFIED",
+                "Posted result verification status was not persisted",
+                {
+                    "queue_id": queue_id,
+                    "result_id": result_id,
+                    "retry_disposition": retry_disposition(
+                        publish_succeeded=True,
+                        persisted=True,
+                        api_outcome_known=True,
+                    ),
+                },
+            )
+            return {
+                "status": "POSTED_SAVE_UNVERIFIED",
+                "queue_id": queue_id,
+                "fallback": str(fallback),
+                "reason": "READ_AFTER_WRITE_STATUS_NOT_PERSISTED",
+            }
+
         update_row(client, "queue", "queue_id", queue_id, {
             "status": "POSTED",
             "error": "",
