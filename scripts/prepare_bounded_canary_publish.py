@@ -56,8 +56,27 @@ def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
             "rights_status": candidate.get("rights_status", ""), "permission_status": candidate.get("permission_status", ""),
             "media_required": "true",
             "media_status": "ATTACHED",
-            "media_type": "video" if kind in {"direct_video", "generated_clip"} else "image",
+            "media_type": (
+                "video"
+                if kind in {"direct_video", "generated_clip"}
+                else "image"
+            ),
+            "content_type": kind,
+            "publisher_media_type": (
+                candidate.get("publisher_media_type")
+                or (
+                    "CAROUSEL"
+                    if kind == "direct_carousel"
+                    else "VIDEO"
+                    if kind in {"direct_video", "generated_clip"}
+                    else "IMAGE"
+                )
+            ),
         })
+        if candidate.get("duration_seconds") not in {None, ""}:
+            values["duration_seconds"] = candidate["duration_seconds"]
+        if candidate.get("aspect_ratio"):
+            values["aspect_ratio"] = candidate["aspect_ratio"]
         if candidate.get("media_asset_id"):
             values["media_asset_id"] = candidate["media_asset_id"]
         if candidate.get("media_url"):
@@ -90,6 +109,17 @@ REMAINING_EIGHT = {
     if canary_type not in {"original_text", "direct_image"}
 }
 
+# Run 30595271520 already posted this exact slot successfully.
+# It must never be returned to READY or published again.
+REMAINING_SEVEN_RECOVERY = REMAINING_EIGHT - {
+    ("night_scout", "reference_text"),
+}
+
+BATCH_SCOPED_WAVES = {
+    "remaining_eight",
+    "remaining_seven_recovery",
+}
+
 
 def build_plan(
     datasets: dict[str, list[dict[str, Any]]],
@@ -100,7 +130,7 @@ def build_plan(
     inventory = build_inventory(
         datasets,
         wave=inventory_wave,
-        batch_id=batch_id if wave == "remaining_eight" else "",
+        batch_id=batch_id if wave in BATCH_SCOPED_WAVES else "",
     )
     ready = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("canaries", []) if row.get("status") == "READY_FOR_HUMAN_CANARY"}
     candidates = {(str(row.get("account_id", "")), str(row.get("canary_type", ""))): row for row in inventory.get("candidates", [])}
@@ -112,7 +142,15 @@ def build_plan(
                 continue
             if wave == "first_wave_images" and (account_id, kind) not in FIRST_WAVE_IMAGES:
                 continue
-            if wave == "remaining_eight" and (account_id, kind) not in REMAINING_EIGHT:
+            if (
+                wave in BATCH_SCOPED_WAVES
+                and (account_id, kind) not in REMAINING_EIGHT
+            ):
+                continue
+            if (
+                wave == "remaining_seven_recovery"
+                and (account_id, kind) not in REMAINING_SEVEN_RECOVERY
+            ):
                 continue
             candidate = candidates.get((account_id, kind), {})
             canary = str(candidate.get("canary_id", ""))
@@ -145,6 +183,7 @@ def build_plan(
         4 if wave == "first_wave"
         else 2 if wave == "first_wave_images"
         else 8 if wave == "remaining_eight"
+        else 7 if wave == "remaining_seven_recovery"
         else 12
     )
     return {
@@ -189,6 +228,7 @@ def main() -> int:
             "first_wave",
             "first_wave_images",
             "remaining_eight",
+            "remaining_seven_recovery",
             "all_12",
         ],
         default="all_12",
@@ -197,10 +237,10 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
-    if args.wave == "remaining_eight" and not args.batch_id:
+    if args.wave in BATCH_SCOPED_WAVES and not args.batch_id:
         result = {
             "status": "BLOCKED",
-            "reason": "--batch-id required for remaining_eight",
+            "reason": "--batch-id required for selected batch scope",
             "would_post": False,
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)

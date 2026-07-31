@@ -548,6 +548,15 @@ def apply_specs(specs: list[dict[str, Any]], account_id: str, *, upload: bool) -
         publisher_media_type = "CAROUSEL" if spec["kind"] == "direct_carousel" else ("VIDEO" if spec["kind"] in {"direct_video", "generated_clip"} else "IMAGE")
         quality_evidence = persisted_quality_evidence(spec["quality"])
         queue = {"queue_id": f"q_{source_id}", "batch_id": spec.get("batch_id", spec["run_id"]), "account_id": account_id, "target_account_id": account_id, "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": "system_owned_media", "public_post_text": spec["text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS", "source_id": source_id, "source_post_id": parent_id, "clip_candidate_id": clip_id, "media_asset_id": media_ids[0], "media_url": urls[0], "media_status": "ATTACHED" if urls[0] else "PENDING_UPLOAD", "media_required": True, "media_type": "video" if publisher_media_type == "VIDEO" else "image", "content_type": spec["kind"], "publisher_media_type": publisher_media_type, "media_origin": "system_generated_owned", "canary_id": spec["canary_id"], "content_hash": novelty["text_hash"], "alignment_status": spec["alignment"]["alignment_status"], "final_alignment_score": spec["alignment"]["final_alignment_score"], "main_claim_coverage": spec["alignment"]["main_claim_coverage"], "unsupported_claim_count": spec["alignment"]["unsupported_claim_count"], "source_copy_similarity": spec["alignment"]["source_copy_similarity"], "recent_post_similarity": spec["alignment"]["recent_post_similarity"], "caption_provider": spec["generation"]["generation_provider"], "caption_provider_version": spec["generation"]["generation_provider_version"], "generation_attempt": spec["generation"].get("generation_attempt", ""), "generation_rule_version": spec["generation"].get("generation_rule_version", ""), "generation_policy_json": json.dumps(spec["generation"].get("generation_policy", {}), ensure_ascii=False), "created_at": now, "updated_at": now, **quality_evidence}
+        if publisher_media_type == "VIDEO":
+            queue.update({
+                "aspect_ratio": "9:16",
+                "duration_seconds": (
+                    "8"
+                    if spec["kind"] == "generated_clip"
+                    else "10"
+                ),
+            })
         queue.update({
             "feature_schema_version": spec["alignment"].get("feature_schema_version", ""),
             "hook_text": spec.get("post_design", {}).get("hook_text", ""),

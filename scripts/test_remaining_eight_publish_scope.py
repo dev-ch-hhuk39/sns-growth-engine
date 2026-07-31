@@ -145,6 +145,23 @@ assert all(
     for row in plan["rows"]
 )
 
+recovery = module.build_plan(
+    datasets,
+    "remaining_seven_recovery",
+    BATCH_ID,
+)
+
+assert recovery["status"] == "PASS", recovery
+assert len(recovery["rows"]) == 7
+assert {
+    (row["account_id"], row["canary_type"])
+    for row in recovery["rows"]
+} == module.REMAINING_SEVEN_RECOVERY
+assert (
+    "night_scout",
+    "reference_text",
+) not in module.REMAINING_SEVEN_RECOVERY
+
 wrong_batch = module.build_plan(
     datasets,
     "remaining_eight",
@@ -165,5 +182,24 @@ assert "remaining_eight" in workflow
 assert "PUBLISH_APPROVED_REMAINING_EIGHT" in workflow
 assert "expected=8" in workflow
 assert "canary_batch_id" in workflow
+assert "remaining_seven_recovery" in workflow
+assert "PUBLISH_APPROVED_REMAINING_SEVEN_RECOVERY" in workflow
+assert "expected=7" in workflow
+assert 'mapfile -t queue_ids' in workflow
+assert '--max-posts "${#queue_ids[@]}"' in workflow
+
+publisher = Path(
+    "src/publishers/threads_publisher.py"
+).read_text(encoding="utf-8")
+
+assert "_wait_for_media_container(child, access_token)" in publisher
+assert "_safe_api_error" in publisher
+
+processor = Path(
+    "scripts/process_threads_queue.py"
+).read_text(encoding="utf-8")
+
+assert "get_all_records:" in processor
+assert "_call_with_rate_limit_retry" in processor
 
 print("PASS test_remaining_eight_publish_scope.py")

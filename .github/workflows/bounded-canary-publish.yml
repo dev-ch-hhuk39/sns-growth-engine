@@ -15,6 +15,7 @@ on:
           - first_wave
           - first_wave_images
           - remaining_eight
+          - remaining_seven_recovery
           - all_12
         default: all_12
       canary_batch_id:
@@ -72,6 +73,9 @@ jobs:
           elif [ "${{ inputs.canary_wave }}" = "remaining_eight" ]; then
             test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_APPROVED_REMAINING_EIGHT"
             test -n "${{ inputs.canary_batch_id }}"
+          elif [ "${{ inputs.canary_wave }}" = "remaining_seven_recovery" ]; then
+            test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_APPROVED_REMAINING_SEVEN_RECOVERY"
+            test -n "${{ inputs.canary_batch_id }}"
           else
             test "${{ inputs.confirm_canary_publish }}" = "PUBLISH_12_APPROVED_CANARIES"
           fi
@@ -89,6 +93,8 @@ jobs:
             expected=2
           elif [ "${{ inputs.canary_wave }}" = "remaining_eight" ]; then
             expected=8
+          elif [ "${{ inputs.canary_wave }}" = "remaining_seven_recovery" ]; then
+            expected=7
           else
             expected=12
           fi
@@ -98,6 +104,7 @@ jobs:
           (inputs.canary_wave == 'first_wave' && inputs.confirm_canary_publish == 'PUBLISH_FIRST_WAVE_APPROVED_CANARIES') ||
           (inputs.canary_wave == 'first_wave_images' && inputs.confirm_canary_publish == 'PUBLISH_REMAINING_FIRST_WAVE_IMAGES') ||
           (inputs.canary_wave == 'remaining_eight' && inputs.confirm_canary_publish == 'PUBLISH_APPROVED_REMAINING_EIGHT') ||
+          (inputs.canary_wave == 'remaining_seven_recovery' && inputs.confirm_canary_publish == 'PUBLISH_APPROVED_REMAINING_SEVEN_RECOVERY') ||
           (inputs.canary_wave == 'all_12' && inputs.confirm_canary_publish == 'PUBLISH_12_APPROVED_CANARIES')
         env:
           PUBLISH_ENABLED: "true"
@@ -106,10 +113,31 @@ jobs:
           ALLOW_MEDIA_POSTS: "true"
           ALLOW_THREADS_CAROUSEL: "true"
         run: |
-          : > /tmp/bounded-canary/outcomes.jsonl
-          jq -r '.plan.rows[] | [.account_id, .queue_id] | @tsv' /tmp/bounded-canary/preflight.json | while IFS=$'\t' read -r account_id queue_id; do
-            python3 scripts/process_threads_queue.py --account-id "$account_id" --queue-id "$queue_id" --confirm-real-post | tee -a /tmp/bounded-canary/outcomes.raw
+          : > /tmp/bounded-canary/outcomes.raw
+
+          mapfile -t queue_ids < <(
+            jq -r '.queue_ids[]' /tmp/bounded-canary/preflight.json
+          )
+
+          test "${#queue_ids[@]}" -gt 0
+
+          worker=(
+            python3 scripts/process_threads_queue.py
+            --confirm-real-post
+            --max-posts "${#queue_ids[@]}"
+          )
+
+          for queue_id in "${queue_ids[@]}"; do
+            worker+=(--queue-id "$queue_id")
           done
+
+          set +e
+          "${worker[@]}" | tee /tmp/bounded-canary/outcomes.raw
+          worker_status=${PIPESTATUS[0]}
+          set -e
+
+          echo "worker_status=$worker_status"
+
           python3 - <<'PY'
           import json
           from pathlib import Path
