@@ -89,19 +89,19 @@
   "goal_media_inventory": {
     "night_scout": {
       "direct_media_ready": 0,
-      "generated_clip_ready": 0
+      "approved_source_clip_ready": 0
     },
     "liver_manager": {
       "direct_media_ready": 0,
-      "generated_clip_ready": 0
+      "approved_source_clip_ready": 0
     },
     "source": "last successful live inventory audit; current local refresh unavailable due DNS"
   },
   "production_canaries": {
     "night_direct_media": "NOT_RUN",
-    "night_generated_clip": "NOT_RUN",
+    "night_approved_source_clip": "NOT_RUN",
     "liver_direct_media": "NOT_RUN",
-    "liver_generated_clip": "NOT_RUN"
+    "liver_approved_source_clip": "NOT_RUN"
   },
   "latest_main_schedule_observation": {
     "head": "f89f6ed44bc2a00930f04601d5700230e25949d3",

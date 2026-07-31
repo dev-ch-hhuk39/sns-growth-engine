@@ -9,7 +9,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 SCHEDULE_FILE = ROOT / "config/content_schedule.json"
 TEXT_POST_TYPES = {"original_text", "reference_text", "pdca_text"}
-MEDIA_POST_TYPES = {"direct_reference_media", "generated_clip_media"}
+MEDIA_POST_TYPES = {"direct_reference_media", "approved_source_clip"}
 POST_TYPES = TEXT_POST_TYPES | MEDIA_POST_TYPES
 EXPECTED_SLOTS_PER_ACCOUNT = 5
 

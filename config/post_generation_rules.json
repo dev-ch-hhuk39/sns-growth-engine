@@ -12,21 +12,100 @@
   "persona_profiles": {
     "night_scout": {
       "first_person": "僕",
-      "forbidden_first_person": ["私", "俺", "わたし"],
-      "reader_terms": ["夜職", "店", "移籍", "時給", "ノルマ", "担当", "出勤", "副業", "将来", "指名", "同伴", "客層", "お客さん"],
-      "decision_markers": ["確認", "整理", "選ぶ", "続け", "相談", "無理", "見直", "考える", "決める"],
-      "blocked_terms": ["今すぐ応募", "絶対稼げる", "必ず稼げる", "紹介します"],
+      "forbidden_first_person": [
+        "私",
+        "俺",
+        "わたし"
+      ],
+      "reader_terms": [
+        "夜職",
+        "店",
+        "移籍",
+        "時給",
+        "ノルマ",
+        "担当",
+        "出勤",
+        "副業",
+        "将来",
+        "指名",
+        "同伴",
+        "客層",
+        "お客さん"
+      ],
+      "decision_markers": [
+        "確認",
+        "整理",
+        "選ぶ",
+        "続け",
+        "相談",
+        "無理",
+        "見直",
+        "考える",
+        "決める"
+      ],
+      "blocked_terms": [
+        "今すぐ応募",
+        "絶対稼げる",
+        "必ず稼げる",
+        "紹介します"
+      ],
       "minimum_reader_terms": 2,
       "minimum_decision_markers": 1
     },
     "liver_manager": {
-      "first_person": "私",
-      "forbidden_first_person": ["僕", "俺", "おれ"],
-      "reader_terms": ["配信", "ライバー", "初見", "コメント", "リスナー", "TikTok LIVE", "事務所", "ギフト"],
-      "action_markers": ["まず", "試して", "変える", "整える", "見直", "決める", "拾う", "作る", "増やす", "確認", "減らす"],
-      "logic_markers": ["理由", "だから", "この状態", "すると", "だけでも", "なぜ", "でも", "方が", "ほど"],
-      "manager_markers": ["私が", "実際に配信を", "見ていると", "相談", "一緒に"],
-      "masculine_endings": ["だ。", "する必要がある。", "重要だ。"],
+      "first_person": "僕",
+      "forbidden_first_person": [
+        "私",
+        "わたし",
+        "俺",
+        "おれ"
+      ],
+      "reader_terms": [
+        "配信",
+        "ライバー",
+        "初見",
+        "コメント",
+        "リスナー",
+        "TikTok LIVE",
+        "事務所",
+        "ギフト"
+      ],
+      "action_markers": [
+        "まず",
+        "試して",
+        "変える",
+        "整える",
+        "見直",
+        "決める",
+        "拾う",
+        "作る",
+        "増やす",
+        "確認",
+        "減らす"
+      ],
+      "logic_markers": [
+        "理由",
+        "だから",
+        "この状態",
+        "すると",
+        "だけでも",
+        "なぜ",
+        "でも",
+        "方が",
+        "ほど"
+      ],
+      "manager_markers": [
+        "僕が",
+        "実際に配信を",
+        "見ていると",
+        "相談",
+        "一緒に"
+      ],
+      "masculine_endings": [
+        "だ。",
+        "する必要がある。",
+        "重要だ。"
+      ],
       "minimum_reader_terms": 2,
       "minimum_action_markers": 1,
       "minimum_logic_markers": 1

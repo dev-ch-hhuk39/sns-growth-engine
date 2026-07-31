@@ -643,7 +643,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "duration_seconds": queue_row.get("duration_seconds", "0"),
             "aspect_ratio": queue_row.get("aspect_ratio", ""),
             "public_post_text": text,
-            "media_origin": "direct_reference" if str(queue_row.get("generation_mode", "")) == "direct_reference_media" else "generated_clip",
+            "media_origin": "direct_reference" if str(queue_row.get("generation_mode", "")) == "direct_reference_media" else "approved_source_clip",
             "alignment_status": queue_row.get("alignment_status", ""),
             "final_alignment_score": queue_row.get("final_alignment_score", ""),
             "main_claim_coverage": queue_row.get("main_claim_coverage", ""),

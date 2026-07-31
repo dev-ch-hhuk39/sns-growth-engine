@@ -27,6 +27,16 @@ from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
 from media_growth_schemas import build_media_pdca_records, extract_video_id  # noqa: E402
+from acquisition.models import (  # noqa: E402
+    SourceMediaItem,
+    SourcePostBundle,
+    stable_content_hash,
+)
+from generation.source_grounded_caption import (  # noqa: E402
+    DeterministicGroundedProvider,
+    GitHubModelsGroundedProvider,
+    SourceGroundedCaptionService,
+)
 from process_threads_queue import process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -156,7 +166,7 @@ def _record_media_slot_result(plan: dict[str, Any], client: SheetsClient, result
         str(plan["account_id"]),
         slot_id,
         status="POSTED_PRIMARY" if posted else "FAILED",
-        actual_post_type="generated_clip_media",
+        actual_post_type="approved_source_clip",
         fallback_level=0,
         no_post_reason="" if posted else str(result.get("reason", result.get("status", "media_post_failed"))),
         queue_id=result.get("queue_id", ""),
@@ -267,6 +277,551 @@ def _today_posts(rows: list[dict[str, Any]], account_id: str) -> list[dict[str, 
     return result
 
 
+
+def _recent_public_posts(
+    posted_results: list[dict[str, Any]],
+    account_id: str,
+) -> list[str]:
+    texts: list[str] = []
+
+    for row in posted_results:
+        if str(row.get("account_id", "")) != account_id:
+            continue
+
+        if str(row.get("status", "")).upper() != "POSTED":
+            continue
+
+        public_text = str(
+            row.get("posted_text")
+            or row.get("public_post_text")
+            or ""
+        ).strip()
+
+        if public_text:
+            texts.append(public_text)
+
+    return texts[-20:]
+
+
+def _build_final_caption_bundle(
+    *,
+    clip: dict[str, Any],
+    source_video: dict[str, Any],
+    account_id: str,
+    media_asset: dict[str, Any] | None = None,
+) -> tuple[SourcePostBundle | None, str, list[str]]:
+    """Build one exact clip evidence packet for final captioning."""
+    reasons: list[str] = []
+
+    if not _true(clip.get("transcript_grounded")):
+        reasons.append("transcript_grounding_required")
+
+    transcript_excerpt = str(
+        clip.get("transcript_excerpt")
+        or ""
+    ).strip()
+
+    if not transcript_excerpt:
+        reasons.append("transcript_excerpt_missing")
+
+    start_seconds = str(
+        clip.get("start_seconds")
+        or clip.get("start_time")
+        or ""
+    ).strip()
+    end_seconds = str(
+        clip.get("end_seconds")
+        or clip.get("end_time")
+        or ""
+    ).strip()
+
+    if not start_seconds or not end_seconds:
+        reasons.append("final_clip_time_range_missing")
+
+    video_url = str(
+        source_video.get("canonical_video_url")
+        or source_video.get("source_video_url")
+        or ""
+    ).strip()
+
+    if not is_individual_video_url(video_url):
+        reasons.append("individual_video_url_required")
+
+    if reasons:
+        return None, transcript_excerpt, reasons
+
+    source_video_id = str(
+        source_video.get("source_video_id")
+        or clip.get("source_video_id")
+        or ""
+    )
+
+    final_asset = media_asset or {}
+
+    media = SourceMediaItem(
+        source_post_media_id=(
+            f"spm_{source_video_id}_final_clip"
+        ),
+        source_post_id=source_video_id,
+        media_index=0,
+        media_type="video",
+        canonical_post_url=video_url,
+        original_media_url=video_url,
+        resolver_backend="approved_source_clip",
+        duration_seconds=str(
+            final_asset.get("duration_seconds")
+            or final_asset.get("duration")
+            or clip.get("duration_seconds")
+            or ""
+        ),
+        width=str(final_asset.get("width", "")),
+        height=str(final_asset.get("height", "")),
+    )
+
+    source_text = "\n".join(filter(None, [
+        str(source_video.get("title", "")).strip(),
+        str(
+            source_video.get("description_preview", "")
+        ).strip(),
+    ]))
+
+    clip_identity = "\n".join([
+        transcript_excerpt,
+        f"start_seconds={start_seconds}",
+        f"end_seconds={end_seconds}",
+    ])
+
+    content_hash = str(
+        source_video.get("content_hash")
+        or ""
+    ).strip()
+
+    if not content_hash:
+        content_hash = stable_content_hash(
+            clip_identity,
+            [video_url],
+        )
+
+    bundle = SourcePostBundle(
+        source_post_id=source_video_id,
+        source_id=str(source_video.get("source_id", "")),
+        target_account_id=account_id,
+        platform=str(source_video.get("platform", "")),
+        profile_url=str(
+            source_video.get("source_url")
+            or source_video.get("profile_url")
+            or ""
+        ),
+        canonical_post_url=video_url,
+        external_post_id=str(
+            source_video.get("video_id")
+            or extract_video_id(
+                video_url,
+                str(source_video.get("platform", "")),
+            )
+        ),
+        original_post_text=source_text,
+        published_at=str(
+            source_video.get("published_at", "")
+        ),
+        author_name=str(
+            source_video.get("author_name", "")
+        ),
+        author_handle=str(
+            source_video.get("author_handle", "")
+        ),
+        media_items=(media,),
+        content_hash=content_hash,
+    )
+
+    return bundle, transcript_excerpt, []
+
+
+def _default_final_caption_service(
+) -> SourceGroundedCaptionService:
+    """Use the canonical provider with only a grounded fallback."""
+    return SourceGroundedCaptionService(
+        generation_provider=GitHubModelsGroundedProvider(),
+        fallback_provider=DeterministicGroundedProvider(),
+        allow_deterministic_fallback=True,
+        # The production pipeline owns the explicit three-attempt
+        # contract. One service call therefore equals one attempt.
+        retry_primary_on_alignment_failure=False,
+    )
+
+
+def _finalize_generated_caption(text: Any) -> str:
+    """Apply final formatting before the public validator."""
+    raw = str(text or "").replace("\r\n", "\n").strip()
+
+    lines = [
+        line.rstrip()
+        for line in raw.splitlines()
+    ]
+
+    compact: list[str] = []
+    previous_blank = False
+
+    for line in lines:
+        blank = not line.strip()
+
+        if blank and previous_blank:
+            continue
+
+        compact.append(line.strip() if not blank else "")
+        previous_blank = blank
+
+    return "\n".join(compact).strip()
+
+
+def _generate_final_media_caption(
+    *,
+    clip: dict[str, Any],
+    source_video: dict[str, Any],
+    media_asset: dict[str, Any],
+    account_id: str,
+    recent_posts: list[str],
+    caption_service: Any | None = None,
+    max_attempts: int = 3,
+) -> dict[str, Any]:
+    """Generate only from the final clip packet, at most three times."""
+    bundle, transcript_excerpt, grounding_reasons = (
+        _build_final_caption_bundle(
+            clip=clip,
+            source_video=source_video,
+            account_id=account_id,
+            media_asset=media_asset,
+        )
+    )
+
+    if grounding_reasons or bundle is None:
+        return {
+            "status": "REVIEW_REQUIRED",
+            "public_post_text": "",
+            "caption_attempt_count": 0,
+            "caption_attempts": [],
+            "blocked_reasons": grounding_reasons,
+            "caption_provider": "",
+            "caption_provider_version": "",
+            "alignment_status": "BLOCKED",
+            "final_alignment_score": 0,
+            "main_claim_coverage": 0,
+            "unsupported_claim_count": 1,
+            "source_copy_similarity": 1,
+            "recent_post_similarity": 1,
+            "claim_support_json": "[]",
+        }
+
+    service = (
+        caption_service
+        if caption_service is not None
+        else _default_final_caption_service()
+    )
+
+    attempt_limit = min(
+        3,
+        max(1, int(max_attempts or 3)),
+    )
+
+    attempts: list[dict[str, Any]] = []
+    all_reasons: list[str] = []
+
+    for attempt in range(1, attempt_limit + 1):
+        try:
+            output = service.generate(
+                bundle,
+                account_id=account_id,
+                recent_posts=recent_posts,
+                transcript_excerpt=transcript_excerpt,
+            )
+        except Exception as exc:
+            output = {
+                "status": "BLOCKED",
+                "public_post_text": "",
+                "blocked_reasons": [
+                    (
+                        f"{type(exc).__name__}:"
+                        "final_caption_generation_failed"
+                    )
+                ],
+                "provider_name": "",
+                "provider_version": "",
+                "provider_status": "FAILED",
+                "semantic_alignment": {
+                    "status": "BLOCKED",
+                    "blocked_reasons": [
+                        "caption_service_exception"
+                    ],
+                },
+                "claim_support": [],
+            }
+
+        finalized_text = _finalize_generated_caption(
+            output.get("public_post_text", "")
+        )
+
+        validation = final_public_post_validator(
+            finalized_text,
+            account_id,
+        )
+
+        semantic = (
+            output.get("semantic_alignment")
+            if isinstance(
+                output.get("semantic_alignment"),
+                dict,
+            )
+            else {}
+        )
+
+        attempt_reasons = [
+            str(reason)
+            for reason in output.get(
+                "blocked_reasons",
+                [],
+            )
+            if str(reason)
+        ]
+
+        attempt_reasons.extend(
+            str(reason)
+            for reason in validation.get(
+                "blocked_reasons",
+                [],
+            )
+            if str(reason)
+        )
+
+        if semantic.get("status") != "PASS":
+            attempt_reasons.extend(
+                str(reason)
+                for reason in semantic.get(
+                    "blocked_reasons",
+                    ["semantic_alignment_failed"],
+                )
+                if str(reason)
+            )
+
+        attempt_reasons = sorted(
+            set(attempt_reasons)
+        )
+
+        attempts.append({
+            "attempt": attempt,
+            "provider_name": str(
+                output.get("provider_name", "")
+            ),
+            "provider_version": str(
+                output.get("provider_version", "")
+            ),
+            "provider_status": str(
+                output.get("provider_status", "")
+            ),
+            "generation_status": str(
+                output.get("status", "")
+            ),
+            "semantic_alignment_status": str(
+                semantic.get("status", "BLOCKED")
+            ),
+            "final_validator_status": str(
+                validation.get("status", "BLOCKED")
+            ),
+            "blocked_reasons": attempt_reasons,
+        })
+
+        passed = (
+            output.get("status") == "PASS"
+            and semantic.get("status") == "PASS"
+            and validation.get("status") == "PASS"
+            and bool(finalized_text)
+        )
+
+        if passed:
+            return {
+                "status": "PASS",
+                "public_post_text": finalized_text,
+                "caption_attempt_count": attempt,
+                "caption_attempts": attempts,
+                "blocked_reasons": [],
+                "caption_provider": str(
+                    output.get("provider_name", "")
+                ),
+                "caption_provider_version": str(
+                    output.get("provider_version", "")
+                ),
+                "alignment_status": "PASS",
+                "final_alignment_score": (
+                    semantic.get(
+                        "final_alignment_score",
+                        0,
+                    )
+                ),
+                "main_claim_coverage": (
+                    semantic.get(
+                        "main_claim_coverage",
+                        0,
+                    )
+                ),
+                "unsupported_claim_count": (
+                    semantic.get(
+                        "unsupported_claim_count",
+                        0,
+                    )
+                ),
+                "source_copy_similarity": (
+                    semantic.get(
+                        "source_copy_similarity",
+                        0,
+                    )
+                ),
+                "recent_post_similarity": (
+                    semantic.get(
+                        "recent_post_similarity",
+                        0,
+                    )
+                ),
+                "claim_support_json": json.dumps(
+                    output.get("claim_support", []),
+                    ensure_ascii=False,
+                ),
+                "final_validation": validation,
+            }
+
+        all_reasons.extend(attempt_reasons)
+
+    return {
+        "status": "REVIEW_REQUIRED",
+        # Never reuse the pre-generated candidate caption.
+        "public_post_text": "",
+        "caption_attempt_count": attempt_limit,
+        "caption_attempts": attempts,
+        "blocked_reasons": sorted(set(
+            all_reasons
+            + ["caption_retry_limit_reached"]
+        )),
+        "caption_provider": str(
+            attempts[-1].get("provider_name", "")
+            if attempts
+            else ""
+        ),
+        "caption_provider_version": str(
+            attempts[-1].get(
+                "provider_version",
+                "",
+            )
+            if attempts
+            else ""
+        ),
+        "alignment_status": "BLOCKED",
+        "final_alignment_score": 0,
+        "main_claim_coverage": 0,
+        "unsupported_claim_count": 1,
+        "source_copy_similarity": 1,
+        "recent_post_similarity": 1,
+        "claim_support_json": "[]",
+    }
+
+
+def _caption_clip_fields(
+    caption: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "public_post_text": (
+            caption.get("public_post_text", "")
+        ),
+        "public_post_validator_status": (
+            "PASS"
+            if caption.get("status") == "PASS"
+            else "BLOCKED"
+        ),
+        "caption_provider": (
+            caption.get("caption_provider", "")
+        ),
+        "caption_provider_version": (
+            caption.get(
+                "caption_provider_version",
+                "",
+            )
+        ),
+        "alignment_status": (
+            caption.get("alignment_status", "")
+        ),
+        "final_alignment_score": (
+            caption.get("final_alignment_score", "")
+        ),
+        "main_claim_coverage": (
+            caption.get("main_claim_coverage", "")
+        ),
+        "unsupported_claim_count": (
+            caption.get(
+                "unsupported_claim_count",
+                "",
+            )
+        ),
+        "source_copy_similarity": (
+            caption.get(
+                "source_copy_similarity",
+                "",
+            )
+        ),
+        "recent_post_similarity": (
+            caption.get(
+                "recent_post_similarity",
+                "",
+            )
+        ),
+        "claim_support_json": (
+            caption.get("claim_support_json", "[]")
+        ),
+        "text_generation_status": (
+            "done"
+            if caption.get("status") == "PASS"
+            else "failed"
+        ),
+        "generated_at": (
+            datetime.now(timezone.utc).isoformat()
+        ),
+        "notes": (
+            "final_caption_attempts="
+            + json.dumps(
+                caption.get("caption_attempts", []),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )[:4500]
+        ),
+    }
+
+
+def _mark_caption_review_required(
+    client: SheetsClient,
+    *,
+    clip_id: str,
+    caption: dict[str, Any],
+) -> None:
+    fields = _caption_clip_fields(caption)
+
+    fields.update({
+        "public_post_text": "",
+        "post_status": "REVIEW_REQUIRED",
+        "reviewer_status": "REVIEW_REQUIRED",
+        "clip_status": "REVIEW_REQUIRED",
+        "last_error": (
+            "caption:"
+            + "|".join(
+                str(reason)
+                for reason in caption.get(
+                    "blocked_reasons",
+                    [],
+                )[:12]
+            )
+        ),
+    })
+
+    client.update_video_clip_candidate(
+        clip_id,
+        **fields,
+    )
+
 def select_candidate(
     clips: list[dict[str, Any]],
     source_videos: list[dict[str, Any]],
@@ -319,9 +874,6 @@ def select_candidate(
         if not _true(clip.get("transcript_grounded")):
             reasons.append(f"{clip_id}:transcript_grounding_required")
             continue
-        if str(clip.get("alignment_status", "")).upper() != "PASS":
-            reasons.append(f"{clip_id}:semantic_alignment_required")
-            continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")
             continue
@@ -341,10 +893,6 @@ def select_candidate(
             continue
         if str(source_video.get("platform", "")).lower() == "tiktok" and not video_id.isdigit():
             reasons.append(f"{clip_id}:planned_or_invalid_video_id")
-            continue
-        text = str(clip.get("public_post_text") or "")
-        if final_public_post_validator(text, account_id)["status"] != "PASS":
-            reasons.append(f"{clip_id}:public_post_validator_blocked")
             continue
         eligible.append((clip, source_video))
     if not eligible:
@@ -414,12 +962,6 @@ def select_saved_media_candidate(
         if str(asset.get("permission_status") or clip.get("permission_status") or "").lower() != "approved":
             reasons.append(f"{media_id}:permission_blocked")
             continue
-        if str(clip.get("alignment_status", "")).upper() != "PASS":
-            reasons.append(f"{media_id}:semantic_alignment_required")
-            continue
-        if final_public_post_validator(clip.get("public_post_text", ""), account_id)["status"] != "PASS":
-            reasons.append(f"{media_id}:public_post_validator_blocked")
-            continue
         candidates.append((clip, source_video, asset))
     if not candidates:
         return None, None, None, reasons
@@ -427,6 +969,94 @@ def select_saved_media_candidate(
     clip, source_video, asset = candidates[0]
     return clip, source_video, asset, reasons
 
+
+
+def _candidate_block_status(
+    reasons: list[str],
+) -> str:
+    """Map an empty candidate set to an explicit fail-closed state."""
+    normalized = "|".join(
+        str(reason).lower()
+        for reason in reasons
+    )
+
+    if "public_post_validator_blocked" in normalized:
+        return "BLOCKED_TONE_FAILED"
+
+    if any(
+        marker in normalized
+        for marker in (
+            "rights_or_permission_blocked",
+            "rights_blocked",
+            "permission_blocked",
+        )
+    ):
+        return "BLOCKED_NO_APPROVED_SOURCE"
+
+    if any(
+        marker in normalized
+        for marker in (
+            "source_video_missing",
+            "clip_or_source_video_missing",
+            "individual_video_url_required",
+            "planned_or_invalid_video_id",
+            "not_uploaded",
+        )
+    ):
+        return "BLOCKED_NO_SOURCE_MEDIA"
+
+    if any(
+        marker in normalized
+        for marker in (
+            "clip_not_ready",
+            "transcript_grounding_required",
+            "semantic_alignment_required",
+            "quarantined",
+        )
+    ):
+        return "REVIEW_REQUIRED"
+
+    if not reasons:
+        return "BLOCKED_NO_SOURCE_MEDIA"
+
+    return "NO_POST"
+
+
+def _validation_failure_status(
+    validation: dict[str, Any],
+) -> str:
+    """Separate caption/tone failure from non-text review failures."""
+    reasons = [
+        str(reason).lower()
+        for reason in validation.get(
+            "blocked_reasons",
+            [],
+        )
+    ]
+
+    tone_markers = (
+        "public_post_validator",
+        "account_fit",
+        "persona_",
+        "quality_",
+        "naturalness_",
+        "reader_value_",
+        "cta_pressure_",
+        "risk_score_",
+        "internal_terms",
+        "source_metadata",
+        "too_short",
+        "too_long",
+    )
+
+    if any(
+        marker in reason
+        for reason in reasons
+        for marker in tone_markers
+    ):
+        return "BLOCKED_TONE_FAILED"
+
+    return "REVIEW_REQUIRED"
 
 def build_plan(
     *,
@@ -514,12 +1144,30 @@ def build_plan(
         )
         selected_asset = None
     no_candidate = not clip or not source_video
+    candidate_status = ""
+
     if no_candidate:
         blocked.append("no_eligible_media_candidate")
-    fatal_blocked = [reason for reason in blocked if reason != "no_eligible_media_candidate"]
-    text = str((clip or {}).get("public_post_text") or "")
+        candidate_status = _candidate_block_status(
+            skipped
+        )
+
+    fatal_blocked = [
+        reason
+        for reason in blocked
+        if reason != "no_eligible_media_candidate"
+    ]
+    # The final caption is generated only after the real media asset is confirmed.
+    text = ""
+
     return {
-        "status": "BLOCKED" if fatal_blocked and apply else "NO_POST" if no_candidate else "PLAN_ONLY",
+        "status": (
+            "BLOCKED"
+            if fatal_blocked and apply
+            else candidate_status
+            if no_candidate
+            else "PLAN_ONLY"
+        ),
         "account_id": account_id,
         "apply": apply,
         "selected_clip_candidate_id": str((clip or {}).get("clip_candidate_id") or (clip or {}).get("clip_id") or ""),
@@ -554,7 +1202,50 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
     account_id = str(plan["account_id"])
     media_id = str(asset.get("media_asset_id") or asset.get("media_id") or "")
     media_url = str(asset.get("storage_url") or asset.get("cloudinary_url") or "")
-    text = str(clip.get("public_post_text") or "")
+    caption = _generate_final_media_caption(
+        clip=clip,
+        source_video=source_video,
+        media_asset=asset,
+        account_id=account_id,
+        recent_posts=_recent_public_posts(
+            _records(client, "posted_results"),
+            account_id,
+        ),
+        max_attempts=3,
+    )
+
+    if caption.get("status") != "PASS":
+        _mark_caption_review_required(
+            client,
+            clip_id=clip_id,
+            caption=caption,
+        )
+
+        return {
+            **plan,
+            "status": "REVIEW_REQUIRED",
+            "selected_clip": {
+                **clip,
+                **_caption_clip_fields(caption),
+            },
+            "public_post_preview": "",
+            "caption_result": caption,
+            "retryable_candidate_failure": False,
+            "would_post_video": False,
+        }
+
+    caption_fields = _caption_clip_fields(caption)
+    clip.update(caption_fields)
+
+    client.update_video_clip_candidate(
+        clip_id,
+        **caption_fields,
+    )
+
+    text = str(
+        caption.get("public_post_text", "")
+    )
+
     validation = validate_media_post({
         "rights_status": asset.get("rights_status") or clip.get("rights_status", ""),
         "permission_status": asset.get("permission_status") or clip.get("permission_status", ""),
@@ -573,7 +1264,10 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
         return {
             **plan,
-            "status": "BLOCKED_MEDIA_VALIDATOR",
+            "status": _validation_failure_status(validation),
+            "selected_clip": clip,
+            "public_post_preview": public_preview(text),
+            "caption_result": caption,
             "media_validation": validation,
             "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
@@ -621,7 +1315,7 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "media_status": "UPLOADED",
         "media_required": "true",
         "media_type": "video",
-        "media_origin": "generated_clip",
+        "media_origin": "approved_source_clip",
         "duration_seconds": asset.get("duration_seconds") or asset.get("duration", ""),
         "aspect_ratio": asset.get("aspect_ratio", "9:16"),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -664,13 +1358,30 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
     else:
         media_pdca = {"saved": 0, "skipped": 3}
     slot_record = _record_media_slot_result(plan, client, {**result, "media_asset_id": media_id})
-    return {**plan, "status": final_status, "queue_id": queue_id, "media_asset_id": media_id, "post_result": result,
-            "media_pdca": media_pdca, "content_slot_run": slot_record,
+    return {
+        **plan,
+        "status": final_status,
+        "selected_clip": clip,
+        "public_post_preview": public_preview(text),
+        "caption_result": caption,
+        "queue_id": queue_id,
+        "media_asset_id": media_id,
+        "post_result": result,
+        "media_pdca": media_pdca,
+        "content_slot_run": slot_record,
             "would_download": False, "would_cut": False, "would_upload": False, "would_post_video": False}
 
 
 def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
-    if plan.get("status") == "BLOCKED":
+    plan_status = str(plan.get("status", ""))
+
+    if (
+        plan_status.startswith("BLOCKED")
+        or plan_status in {
+            "REVIEW_REQUIRED",
+            "NO_POST",
+        }
+    ):
         return plan
     slot_id = str(plan.get("slot_id", ""))
     if slot_id and existing_slot_status(client, str(plan["account_id"]), slot_id) in POSTED_SLOT_STATUSES:
@@ -699,7 +1410,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
         client.save_source_video({**source_video, "download_status": "FAILED", "skip_reason": reason})
         return {
-            **plan, "status": "FAILED_DOWNLOAD", "download_result": download,
+            **plan, "status": "BLOCKED_MEDIA_DOWNLOAD_FAILED", "download_result": download,
             "would_download": False, "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
         }
@@ -726,7 +1437,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
         client.update_video_clip_candidate(clip_id, cut_status="FAILED", notes=reason)
         return {
-            **plan, "status": "FAILED_CUT", "cut_result": cut,
+            **plan, "status": "BLOCKED_CLIP_FAILED", "cut_result": cut,
             "would_cut": False, "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
         }
@@ -783,7 +1494,60 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     if media_id not in existing_media_ids:
         _append(client, "media_assets", media_row)
 
-    text = str(clip.get("public_post_text") or "")
+    caption = _generate_final_media_caption(
+        clip=clip,
+        source_video=source_video,
+        media_asset={
+            **asset,
+            **uploaded,
+            "media_asset_id": media_id,
+            "storage_url": media_url,
+            "upload_status": "UPLOADED",
+        },
+        account_id=account_id,
+        recent_posts=_recent_public_posts(
+            _records(client, "posted_results"),
+            account_id,
+        ),
+        max_attempts=3,
+    )
+
+    if caption.get("status") != "PASS":
+        _mark_caption_review_required(
+            client,
+            clip_id=clip_id,
+            caption=caption,
+        )
+
+        return {
+            **plan,
+            "status": "REVIEW_REQUIRED",
+            "selected_clip": {
+                **clip,
+                **_caption_clip_fields(caption),
+            },
+            "media_asset_id": media_id,
+            "public_post_preview": "",
+            "caption_result": caption,
+            "retryable_candidate_failure": False,
+            "would_download": False,
+            "would_cut": False,
+            "would_upload": False,
+            "would_post_video": False,
+        }
+
+    caption_fields = _caption_clip_fields(caption)
+    clip.update(caption_fields)
+
+    client.update_video_clip_candidate(
+        clip_id,
+        **caption_fields,
+    )
+
+    text = str(
+        caption.get("public_post_text", "")
+    )
+
     validation = validate_media_post({
         "rights_status": clip.get("rights_status", ""),
         "permission_status": clip.get("permission_status", ""),
@@ -802,7 +1566,12 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
         client.update_video_clip_candidate(clip_id, cut_status="DONE", upload_status="UPLOADED", storage_url=media_url, post_status="BLOCKED")
         return {
-            **plan, "status": "BLOCKED_MEDIA_VALIDATOR", "media_validation": validation,
+            **plan,
+            "status": _validation_failure_status(validation),
+            "selected_clip": clip,
+            "public_post_preview": public_preview(text),
+            "caption_result": caption,
+            "media_validation": validation,
             "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
         }
@@ -825,6 +1594,9 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         return {
             **plan,
             "status": "MEDIA_READY",
+            "selected_clip": clip,
+            "public_post_preview": public_preview(text),
+            "caption_result": caption,
             "media_asset_id": media_id,
             "queue_id": "",
             "would_download": False,
@@ -914,6 +1686,9 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     return {
         **plan,
         "status": final_status,
+        "selected_clip": clip,
+        "public_post_preview": public_preview(text),
+        "caption_result": caption,
         "queue_id": queue_id,
         "media_asset_id": media_id,
         "post_result": result,
@@ -935,7 +1710,7 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--prepare-only", action="store_true", help="download/cut/upload one approved clip, but never post it")
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
-    parser.add_argument("--slot-id", default="", help="canonical generated_clip_media slot for idempotency and reporting")
+    parser.add_argument("--slot-id", default="", help="canonical approved_source_clip slot for idempotency and reporting")
     args = parser.parse_args()
     if args.prepare_only and args.post_saved_media:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["prepare_only_and_post_saved_media_are_mutually_exclusive"]}, ensure_ascii=False))
@@ -958,11 +1733,16 @@ def main() -> int:
     )
     if args.slot_id:
         slot = slot_by_id(args.account_id, args.slot_id)
-        if not slot or slot.get("post_type") != "generated_clip_media":
-            plan = {**plan, "status": "BLOCKED", "blocked_reasons": ["slot_id must be a generated_clip_media slot"]}
+        if not slot or slot.get("post_type") != "approved_source_clip":
+            plan = {**plan, "status": "BLOCKED", "blocked_reasons": ["slot_id must be a approved_source_clip slot"]}
         else:
             plan["slot_id"] = args.slot_id
-    if args.apply and args.confirm_production_media and client and plan.get("status") not in {"BLOCKED", "NO_POST"}:
+    if (
+        args.apply
+        and args.confirm_production_media
+        and client
+        and plan.get("status") == "PLAN_ONLY"
+    ):
         candidate_attempts: list[dict[str, Any]] = []
         max_attempts = min(3, int(_load(MEDIA_CONFIG).get("max_clip_candidates_per_video", 3) or 3))
         for _ in range(max_attempts):
@@ -986,7 +1766,7 @@ def main() -> int:
                 slot_id=args.slot_id,
                 excluded_clip_ids=excluded_clip_ids,
             )
-            if next_plan.get("status") in {"BLOCKED", "NO_POST"}:
+            if next_plan.get("status") != "PLAN_ONLY":
                 plan = {
                     **result,
                     "candidate_attempts": candidate_attempts,
@@ -996,17 +1776,39 @@ def main() -> int:
                 break
             plan = next_plan
         else:
-            plan = {**plan, "status": "NO_POST", "candidate_attempts": candidate_attempts, "blocked_reasons": ["candidate_attempt_limit_reached"]}
-    if args.slot_id and plan.get("status") in {"NO_POST", "FAILED_DOWNLOAD", "FAILED_CUT", "FAILED_UPLOAD", "BLOCKED_MEDIA_VALIDATOR", "SAFETY_STOP_MEDIA_GATE", "SAFETY_STOP_MEDIA_VALIDATOR"}:
+            plan = {
+                **plan,
+                "status": "REVIEW_REQUIRED",
+                "candidate_attempts": candidate_attempts,
+                "blocked_reasons": [
+                    "candidate_attempt_limit_reached"
+                ],
+            }
+    if args.slot_id and (
+        str(plan.get("status", "")).startswith(
+            ("BLOCKED", "FAILED")
+        )
+        or plan.get("status") in {
+            "NO_POST",
+            "REVIEW_REQUIRED",
+            "SAFETY_STOP_MEDIA_GATE",
+            "SAFETY_STOP_MEDIA_VALIDATOR",
+        }
+    ):
         plan = {
             **plan,
             "status": "SKIPPED_NO_VALID_MEDIA",
-            "no_post_reason": "media_slot_has_no_ready_generated_clip",
+            "no_post_reason": "media_slot_has_no_ready_approved_source_clip",
             "would_post": False,
         }
     safe = {k: v for k, v in plan.items() if k not in {"selected_clip", "selected_source_video"}}
     print(json.dumps(safe, ensure_ascii=False, indent=2))
-    return 1 if str(plan.get("status", "")).startswith(("FAILED", "BLOCKED")) else 0
+    final_status = str(plan.get("status", ""))
+
+    return 1 if (
+        final_status.startswith(("FAILED", "BLOCKED"))
+        or final_status == "REVIEW_REQUIRED"
+    ) else 0
 
 
 if __name__ == "__main__":

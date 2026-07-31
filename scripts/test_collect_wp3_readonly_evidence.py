@@ -292,18 +292,18 @@ def test_29_direct_media_unauthorized():
     report = _run_with_mocks(fake_client_factory(db), MockArgs())
     assert "ORIGINAL_REPOST_NOT_ALLOWED" in report["integrity"]["unauthorized_ready_media"][0]["reasons"]
 
-def test_30_generated_clip_authorized():
+def test_30_approved_source_clip_authorized():
     db = {
-        "queue": [{"queue_id": "q1", "status": "READY", "platform": "threads", "target_account_id": "all", "media_required": "true", "media_asset_id": "m1", "validator_status": "PASS", "alignment_status": "PASS", "unsupported_claim_count": 0, "source_id": "s1", "media_origin": "generated_clip"}],
+        "queue": [{"queue_id": "q1", "status": "READY", "platform": "threads", "target_account_id": "all", "media_required": "true", "media_asset_id": "m1", "validator_status": "PASS", "alignment_status": "PASS", "unsupported_claim_count": 0, "source_id": "s1", "media_origin": "approved_source_clip"}],
         "media_assets": [{"media_id": "m1"}],
         "media_permissions": [{"source_id": "s1", "permission_status": "approved", "rights_status": "allowed", "evidence_type": "x", "evidence_reference": "y", "allow_clip_repost": "true"}]
     }
     report = _run_with_mocks(fake_client_factory(db), MockArgs())
     assert len(report["integrity"]["unauthorized_ready_media"]) == 0
 
-def test_31_generated_clip_unauthorized():
+def test_31_approved_source_clip_unauthorized():
     db = {
-        "queue": [{"queue_id": "q1", "status": "READY", "platform": "threads", "target_account_id": "all", "media_required": "true", "media_asset_id": "m1", "validator_status": "PASS", "alignment_status": "PASS", "unsupported_claim_count": 0, "source_id": "s1", "media_origin": "generated_clip"}],
+        "queue": [{"queue_id": "q1", "status": "READY", "platform": "threads", "target_account_id": "all", "media_required": "true", "media_asset_id": "m1", "validator_status": "PASS", "alignment_status": "PASS", "unsupported_claim_count": 0, "source_id": "s1", "media_origin": "approved_source_clip"}],
         "media_assets": [{"media_id": "m1"}],
         "media_permissions": [{"source_id": "s1", "permission_status": "approved", "rights_status": "allowed", "evidence_type": "x", "evidence_reference": "y", "allow_clip_repost": "false"}]
     }

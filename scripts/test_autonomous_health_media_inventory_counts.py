@@ -38,8 +38,8 @@ rows = [
 inventory = _media_asset_inventory(rows)
 checks = [
     ("all accounts counted", inventory["account_counts"] == {"liver_manager": 2, "night_scout": 2}),
-    ("generated clips counted", inventory["generated_clip_asset_count"] == 3),
-    ("generated clips grouped", inventory["generated_clip_account_counts"] == {"liver_manager": 1, "night_scout": 2}),
+    ("generated clips counted", inventory["approved_source_clip_asset_count"] == 3),
+    ("generated clips grouped", inventory["approved_source_clip_account_counts"] == {"liver_manager": 1, "night_scout": 2}),
     ("direct assets counted", inventory["direct_reference_asset_count"] == 1),
     ("uploaded assets counted", inventory["uploaded_asset_count"] == 4),
     ("no media URLs exposed", not any("url" in key for key in inventory)),

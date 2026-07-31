@@ -128,7 +128,7 @@ def recover_slot(
             "reason": f"direct_media_recovery_{str(preflight.get('reason') or preflight.get('status') or 'unavailable').lower()}",
         }
 
-    if expected == "generated_clip_media":
+    if expected == "approved_source_clip":
         from run_media_production_pipeline import build_plan as build_media_plan, execute as execute_media
 
         media_plan = build_media_plan(
@@ -143,13 +143,13 @@ def recover_slot(
             if not apply:
                 return {
                     "status": "PLAN_ONLY",
-                    "path": "saved_generated_clip_media",
+                    "path": "saved_approved_source_clip",
                     "selected_clip_candidate_id": media_plan.get("selected_clip_candidate_id", ""),
                 }
             if not _media_post_gates_enabled():
                 return {
                     "status": "BLOCKED_MEDIA_GATE",
-                    "path": "saved_generated_clip_media",
+                    "path": "saved_approved_source_clip",
                     "reason": "ready_media_exists_but_media_post_gates_are_disabled",
                 }
             apply_plan = build_media_plan(
@@ -163,16 +163,16 @@ def recover_slot(
             posted = execute_media(apply_plan, client)
             return {
                 "status": posted.get("status", "FAILED"),
-                "path": "saved_generated_clip_media",
+                "path": "saved_approved_source_clip",
                 "selected_clip_candidate_id": posted.get("selected_clip_candidate_id", ""),
                 "post_url": (posted.get("post_result") or {}).get("post_url", ""),
             }
-        reason = "generated_clip_recovery_" + str(
+        reason = "approved_source_clip_recovery_" + str(
             (media_plan.get("blocked_reasons") or [media_plan.get("status", "unavailable")])[0]
         ).lower()
         return {
             "status": "SKIPPED_NO_VALID_MEDIA",
-            "path": "saved_generated_clip_media",
+            "path": "saved_approved_source_clip",
             "reason": reason,
         }
 

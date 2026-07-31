@@ -58,7 +58,7 @@ def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
             "media_status": "ATTACHED",
             "media_type": (
                 "video"
-                if kind in {"direct_video", "generated_clip"}
+                if kind in {"direct_video", "approved_source_clip"}
                 else "image"
             ),
             "content_type": kind,
@@ -68,7 +68,7 @@ def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
                     "CAROUSEL"
                     if kind == "direct_carousel"
                     else "VIDEO"
-                    if kind in {"direct_video", "generated_clip"}
+                    if kind in {"direct_video", "approved_source_clip"}
                     else "IMAGE"
                 )
             ),

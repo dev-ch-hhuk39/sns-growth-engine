@@ -15,18 +15,18 @@ MEDIA_EVIDENCE = {
 datasets={key: [] for key in ("queue", "source_posts", "source_post_media", "media_permissions", "source_videos", "video_clip_candidates", "media_assets")}
 datasets["queue"]=[
     {"account_id":"night_scout","canary_id":"canary_fresh_night_scout_original_text_x","queue_id":"q_text","status":"READY","generation_mode":"original_text","public_post_text":"読者が役立つ自然な投稿です。","validator_status":"PASS","account_fit_status":"PASS","internal_leak_status":"PASS","batch_id":"fresh_test","batch_diversity_status":"PASS","topic_coherence_status":"PASS","primary_topic":"work_conditions","topic_confidence":"0.75","structure_variant":"0","hook_topic_match":"True","closing_topic_match":"True","shared_hook_detected":"False","shared_closing_detected":"False","quality_gate_version":"generation_quality_v3"},
-    {"account_id":"night_scout","canary_id":"canary_fresh_night_scout_generated_clip_x","queue_id":"q_clip","status":"WAITING_REVIEW","media_type":"generated_clip","clip_candidate_id":"clip_system_owned_night_scout_run_generated_clip","public_post_text":"読者が役立つ自然な投稿です。","account_fit_status":"PASS","validator_status":"PASS","internal_leak_status":"PASS","publisher_media_type":"VIDEO","alignment_status":"PASS","final_alignment_score":"1","main_claim_coverage":"1","unsupported_claim_count":"0","source_copy_similarity":"0","recent_post_similarity":"0","batch_id":"fresh_test","batch_diversity_status":"PASS","topic_coherence_status":"PASS","primary_topic":"work_conditions","topic_confidence":"0.75","structure_variant":"0","hook_topic_match":"True","closing_topic_match":"True","shared_hook_detected":"False","shared_closing_detected":"False","quality_gate_version":"generation_quality_v3"},
+    {"account_id":"night_scout","canary_id":"canary_fresh_night_scout_approved_source_clip_x","queue_id":"q_clip","status":"WAITING_REVIEW","media_type":"approved_source_clip","clip_candidate_id":"clip_ns_yt_contract_001","public_post_text":"読者が役立つ自然な投稿です。","account_fit_status":"PASS","validator_status":"PASS","internal_leak_status":"PASS","publisher_media_type":"VIDEO","alignment_status":"PASS","final_alignment_score":"1","main_claim_coverage":"1","unsupported_claim_count":"0","source_copy_similarity":"0","recent_post_similarity":"0","batch_id":"fresh_test","batch_diversity_status":"PASS","topic_coherence_status":"PASS","primary_topic":"work_conditions","topic_confidence":"0.75","structure_variant":"0","hook_topic_match":"True","closing_topic_match":"True","shared_hook_detected":"False","shared_closing_detected":"False","quality_gate_version":"generation_quality_v3"},
 ]
 datasets["queue"][1].update(MEDIA_EVIDENCE)
-datasets["source_videos"]=[{"source_video_id":"video_system_owned_night_scout_run_generated_clip","source_id":"system_owned_night_scout_run_generated_clip"}]
-datasets["video_clip_candidates"]=[{"clip_id":"clip_system_owned_night_scout_run_generated_clip","clip_candidate_id":"clip_system_owned_night_scout_run_generated_clip","account_id":"night_scout","source_platform":"system_generated_owned","source_video_id":"video_system_owned_night_scout_run_generated_clip","rights_status":"owned","public_post_text":"読者が役立つ自然な投稿です。","start_seconds":"0","end_seconds":"8"}]
-datasets["media_permissions"]=[{"source_id":"system_owned_night_scout_run_generated_clip","account_id":"night_scout","rights_status":"owned","permission_status":"approved","evidence_reference":"run","allow_clip_repost":True,"revoked":False}]
-datasets["media_assets"]=[{"media_id":"clip_asset","video_clip_id":"clip_system_owned_night_scout_run_generated_clip","storage_url":"https://example.invalid/clip.mp4","local_path":"/tmp/clip.mp4"}]
+datasets["source_videos"]=[{"source_video_id":"video_ns_yt_contract_001","source_id":"src_ns_yt_contract_001"}]
+datasets["video_clip_candidates"]=[{"clip_id":"clip_ns_yt_contract_001","clip_candidate_id":"clip_ns_yt_contract_001","account_id":"night_scout","source_platform":"youtube","source_video_id":"video_ns_yt_contract_001","rights_status":"owned","public_post_text":"読者が役立つ自然な投稿です。","start_seconds":"0","end_seconds":"8"}]
+datasets["media_permissions"]=[{"source_id":"src_ns_yt_contract_001","account_id":"night_scout","rights_status":"owned","permission_status":"approved","evidence_reference":"run","allow_clip_repost":True,"revoked":False}]
+datasets["media_assets"]=[{"media_id":"clip_asset","video_clip_id":"clip_ns_yt_contract_001","storage_url":"https://example.invalid/clip.mp4","local_path":"/tmp/clip.mp4"}]
 result=build_inventory(datasets)
 assert result["total_canaries"] == 12
 row=next(item for item in result["canaries"] if item["canary_type"] == "original_text" and item["account_id"] == "night_scout")
 assert row["status"] == "READY_FOR_HUMAN_CANARY"
-clip=next(item for item in result["canaries"] if item["canary_type"] == "generated_clip" and item["account_id"] == "night_scout")
+clip=next(item for item in result["canaries"] if item["canary_type"] == "approved_source_clip" and item["account_id"] == "night_scout")
 assert clip["status"] == "READY_FOR_HUMAN_CANARY"
 assert result["would_post"] is False
 
@@ -71,10 +71,10 @@ batch_data = {
 batch_data["queue"] = [
     {
         "account_id": "night_scout",
-        "canary_id": "canary_fresh_old_generated_clip",
-        "queue_id": "q_old_generated_clip",
+        "canary_id": "canary_fresh_old_approved_source_clip",
+        "queue_id": "q_old_approved_source_clip",
         "status": "WAITING_REVIEW",
-        "content_type": "generated_clip",
+        "content_type": "approved_source_clip",
         "clip_candidate_id": "clip_old",
         "public_post_text": "Old generated clip.",
         "batch_id": "fresh_old_batch",
@@ -82,10 +82,10 @@ batch_data["queue"] = [
     },
     {
         "account_id": "night_scout",
-        "canary_id": "canary_fresh_target_generated_clip",
-        "queue_id": "q_target_generated_clip",
+        "canary_id": "canary_fresh_target_approved_source_clip",
+        "queue_id": "q_target_approved_source_clip",
         "status": "WAITING_REVIEW",
-        "content_type": "generated_clip",
+        "content_type": "approved_source_clip",
         "clip_candidate_id": "clip_target",
         "public_post_text": "Target generated clip.",
         "batch_id": "fresh_target_batch",
@@ -109,7 +109,7 @@ batch_data["video_clip_candidates"] = [
         "clip_id": "clip_old",
         "clip_candidate_id": "clip_old",
         "account_id": "night_scout",
-        "source_platform": "system_generated_owned",
+        "source_platform": "youtube",
         "source_video_id": "video_old",
         "rights_status": "owned",
         "start_seconds": "0",
@@ -119,7 +119,7 @@ batch_data["video_clip_candidates"] = [
         "clip_id": "clip_target",
         "clip_candidate_id": "clip_target",
         "account_id": "night_scout",
-        "source_platform": "system_generated_owned",
+        "source_platform": "youtube",
         "source_video_id": "video_target",
         "rights_status": "owned",
         "start_seconds": "0",
@@ -172,13 +172,13 @@ selected_clip = next(
     item
     for item in batch_result["candidates"]
     if item["account_id"] == "night_scout"
-    and item["canary_type"] == "generated_clip"
+    and item["canary_type"] == "approved_source_clip"
 )
 
 assert selected_clip["canary_id"] == (
-    "canary_fresh_target_generated_clip"
+    "canary_fresh_target_approved_source_clip"
 )
-assert selected_clip["queue_id"] == "q_target_generated_clip"
+assert selected_clip["queue_id"] == "q_target_approved_source_clip"
 assert batch_result["selected_batch_id"] == "fresh_target_batch"
 
 print("PASS test_live_canary_inventory_contract.py")

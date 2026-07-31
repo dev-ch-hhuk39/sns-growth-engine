@@ -15,7 +15,7 @@ for account, files in checks.items():
     autonomous = texts[files[0]]
     media = "\n".join(texts[name] for name in files[1:])
     for slot in schedule[account]:
-        if slot["post_type"] in {"direct_reference_media", "generated_clip_media"}:
+        if slot["post_type"] in {"direct_reference_media", "approved_source_clip"}:
             assert slot["slot_id"] in media, (account, slot["slot_id"], "manual media mapping missing")
             assert f'cron: "{slot["cron_utc"]}"' not in media, (account, slot["slot_id"], "media schedule must stay off before canaries")
         else:

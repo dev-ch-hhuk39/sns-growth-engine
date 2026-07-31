@@ -35,7 +35,7 @@ def _public_text(row: dict[str, Any]) -> str:
 def _fresh(row: dict[str, Any]) -> bool:
     return (
         str(row.get("canary_id", "")).startswith("canary_fresh_")
-        and str(row.get("status", "")).upper() not in {"LEGACY_INVALID_CANARY", "QUARANTINED", "SUPERSEDED_QUALITY"}
+        and str(row.get("status", "")).upper() not in {"INVALID_CONTENT_CANARY", "LEGACY_INVALID_CANARY", "QUARANTINED", "SUPERSEDED_QUALITY"}
         and str(row.get("excluded_from_activation", "")).strip().lower() not in {"1", "true", "yes"}
         and str(row.get("repost_prohibited", "")).strip().lower() not in {"1", "true", "yes"}
     )
@@ -170,24 +170,46 @@ def build_inventory(
             if perm and all(urls):
                 candidates.append({"account_id": account_id, "canary_type": "direct_carousel", "canary_id": matching_queue.get("canary_id", ""), "queue_id": matching_queue.get("queue_id", ""), "source_id": parent.get("source_id", ""), "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "persona_validator_status": matching_queue.get("account_fit_status", ""), "final_public_post_validator_status": matching_queue.get("validator_status", ""), "internal_leak_status": matching_queue.get("internal_leak_status", ""), "publisher_media_type": matching_queue.get("publisher_media_type", ""), "source_post_id": parent_id, "media_asset_ids": [item.get("media_asset_id") or item.get("source_post_media_id", "") for item in bundle], "media_order": [item.get("media_index", "") for item in bundle], "content_hash": matching_queue.get("content_hash", ""), "recent_post_similarity": matching_queue.get("recent_post_similarity", ""), "alignment_status": matching_queue.get("alignment_status", ""), "final_alignment_score": matching_queue.get("final_alignment_score", ""), "main_claim_coverage": matching_queue.get("main_claim_coverage", ""), "unsupported_claim_count": matching_queue.get("unsupported_claim_count", ""), "source_copy_similarity": matching_queue.get("source_copy_similarity", ""), "media_urls": urls, **_quality_fields(matching_queue)})
         account_clips = sorted(
-            (clip for clip in clips if wave != "first_wave" and str(clip.get("account_id", "")) == account_id),
-            key=lambda clip: str(clip.get("source_platform", "")) != "system_generated_owned",
+            (
+                clip
+                for clip in clips
+                if wave != "first_wave"
+                and str(clip.get("account_id", "")) == account_id
+            ),
+            key=lambda clip: (
+                str(clip.get("created_at", "")),
+                str(
+                    clip.get("clip_candidate_id")
+                    or clip.get("clip_id")
+                    or ""
+                ),
+            ),
+            reverse=True,
         )
         for clip in account_clips:
             if str(clip.get("rights_status", "")).lower() not in APPROVED_RIGHTS:
                 continue
             source_video = source_videos.get(str(clip.get("source_video_id", "")), {})
-            source_id = str(clip.get("source_id") or source_video.get("source_id") or "")
-            if not source_id and str(clip.get("source_platform", "")) == "system_generated_owned":
-                source_id = str(clip.get("clip_id", "")).removeprefix("clip_")
-            perm = _permission(permissions, source_id, account_id, "clip")
+            source_id = str(
+                clip.get("source_id")
+                or source_video.get("source_id")
+                or ""
+            )
+            if not source_id:
+                continue
+            perm = _permission(
+                permissions,
+                source_id,
+                account_id,
+                "clip",
+            )
             asset = next((a for a in assets if str(a.get("clip_candidate_id") or a.get("video_clip_id") or "") == str(clip.get("clip_candidate_id", ""))), {})
             if not perm or not str(asset.get("storage_url", "")):
                 continue
-            matching_queue = next((q for q in account_queue if str(q.get("clip_candidate_id", "")) == str(clip.get("clip_candidate_id", "")) and _queue_content_type(q) == "generated_clip"), {})
+            matching_queue = next((q for q in account_queue if str(q.get("clip_candidate_id", "")) == str(clip.get("clip_candidate_id", "")) and _queue_content_type(q) == "approved_source_clip"), {})
             if not matching_queue:
                 continue
-            candidates.append({"account_id": account_id, "canary_type": "generated_clip", "canary_id": matching_queue.get("canary_id", ""), "queue_id": matching_queue.get("queue_id", ""), "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "persona_validator_status": matching_queue.get("account_fit_status", ""), "final_public_post_validator_status": matching_queue.get("validator_status", ""), "internal_leak_status": matching_queue.get("internal_leak_status", ""), "publisher_media_type": matching_queue.get("publisher_media_type", ""), "source_video_id": clip.get("source_video_id", ""), "clip_candidate_id": clip.get("clip_candidate_id", ""), "local_path": asset.get("local_path", "ready"), "start_seconds": clip.get("start_seconds", ""), "end_seconds": clip.get("end_seconds", ""), "content_hash": matching_queue.get("content_hash", ""), "recent_post_similarity": matching_queue.get("recent_post_similarity", ""), "alignment_status": matching_queue.get("alignment_status", ""), "final_alignment_score": matching_queue.get("final_alignment_score", ""), "main_claim_coverage": matching_queue.get("main_claim_coverage", ""), "unsupported_claim_count": matching_queue.get("unsupported_claim_count", ""), "source_copy_similarity": matching_queue.get("source_copy_similarity", ""), "media_asset_id": asset.get("media_id") or asset.get("media_asset_id", ""), "media_url": asset.get("storage_url", ""), "duration_seconds": matching_queue.get("duration_seconds") or clip.get("duration_seconds") or asset.get("duration_seconds") or asset.get("duration", ""), "aspect_ratio": matching_queue.get("aspect_ratio") or clip.get("aspect_ratio") or asset.get("aspect_ratio", ""), **_quality_fields(matching_queue)})
+            candidates.append({"account_id": account_id, "canary_type": "approved_source_clip", "canary_id": matching_queue.get("canary_id", ""), "queue_id": matching_queue.get("queue_id", ""), "source_id": source_id, "rights_status": perm.get("rights_status", ""), "permission_status": perm.get("permission_status", ""), "permission_evidence": perm.get("evidence_reference", ""), "public_post_text": _public_text(matching_queue), "persona_validator_status": matching_queue.get("account_fit_status", ""), "final_public_post_validator_status": matching_queue.get("validator_status", ""), "internal_leak_status": matching_queue.get("internal_leak_status", ""), "publisher_media_type": matching_queue.get("publisher_media_type", ""), "source_video_id": clip.get("source_video_id", ""), "clip_candidate_id": clip.get("clip_candidate_id", ""), "local_path": asset.get("local_path", "ready"), "start_seconds": clip.get("start_seconds", ""), "end_seconds": clip.get("end_seconds", ""), "content_hash": matching_queue.get("content_hash", ""), "recent_post_similarity": matching_queue.get("recent_post_similarity", ""), "alignment_status": matching_queue.get("alignment_status", ""), "final_alignment_score": matching_queue.get("final_alignment_score", ""), "main_claim_coverage": matching_queue.get("main_claim_coverage", ""), "unsupported_claim_count": matching_queue.get("unsupported_claim_count", ""), "source_copy_similarity": matching_queue.get("source_copy_similarity", ""), "media_asset_id": asset.get("media_id") or asset.get("media_asset_id", ""), "media_url": asset.get("storage_url", ""), "duration_seconds": matching_queue.get("duration_seconds") or clip.get("duration_seconds") or asset.get("duration_seconds") or asset.get("duration", ""), "aspect_ratio": matching_queue.get("aspect_ratio") or clip.get("aspect_ratio") or asset.get("aspect_ratio", ""), **_quality_fields(matching_queue)})
             break
     plan = build_plan(candidates, wave=wave)
     return {

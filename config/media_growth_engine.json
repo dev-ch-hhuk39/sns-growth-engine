@@ -53,8 +53,8 @@
   "saved_media_post_fallback": "NO_MEDIA_FALLBACK",
   "direct_reference_media_enabled": true,
   "asset_inventory_targets": {
-    "night_scout": {"direct_reference_media": 3, "generated_clip_media": 3},
-    "liver_manager": {"direct_reference_media": 3, "generated_clip_media": 3}
+    "night_scout": {"direct_reference_media": 3, "approved_source_clip": 3},
+    "liver_manager": {"direct_reference_media": 3, "approved_source_clip": 3}
   },
   "auto_save_discovered_videos": true,
   "auto_save_clip_candidates": true,

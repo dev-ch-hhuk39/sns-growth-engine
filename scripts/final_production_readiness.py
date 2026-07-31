@@ -54,8 +54,58 @@ def build_report(*, use_sheets: bool) -> dict[str, Any]:
     canary_integrity = canary_source_integrity_report(datasets, inventory.get("candidates", []))
     selected_parent_ids = {str(item.get("source_post_id", "")) for item in inventory.get("candidates", []) if str(item.get("source_post_id", ""))}
     historical_failures = [item for item in source_integrity.get("failures", []) if str(item.get("source_post_id", "")) not in selected_parent_ids]
+
+    evidence_is_live = (
+        activation.get("evidence_source") == "READ_OK"
+    )
+    delivery_ready = (
+        evidence_is_live
+        and activation.get("DELIVERY_READY") == "YES"
+    )
+    content_ready = (
+        evidence_is_live
+        and activation.get("CONTENT_READY") == "YES"
+    )
+    scheduled_publish_on = bool(
+        auto.get("scheduled_publish_enabled")
+    )
+    autonomous_ready = (
+        content_ready
+        and bool(
+            auto.get(
+                "production_publish_activation_approved"
+            )
+        )
+        and scheduled_publish_on
+        and not bool(auto.get("kill_switch"))
+    )
+
     return {
-        "status": "READY" if activation.get("status") == "READY_FOR_ACTIVATION" else "NOT_READY",
+        "status": (
+            "AUTONOMOUS_PRODUCTION_READY"
+            if autonomous_ready
+            else "NOT_READY"
+        ),
+        "DELIVERY_READY": (
+            "YES"
+            if delivery_ready
+            else "NO"
+        ),
+        "CONTENT_READY": (
+            "YES"
+            if content_ready
+            else "NO"
+        ),
+        "AUTONOMOUS_PRODUCTION_READY": (
+            "YES"
+            if autonomous_ready
+            else "NO"
+        ),
+        "SCHEDULED_PUBLISH": (
+            "ON"
+            if autonomous_ready and scheduled_publish_on
+            else "OFF"
+        ),
         "sheets_status": sheets_status,
         "source_read_after_write": source_integrity,
         "canary_source_integrity": canary_integrity,

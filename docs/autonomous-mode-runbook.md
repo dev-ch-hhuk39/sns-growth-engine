@@ -556,10 +556,10 @@ Text, direct-reference media, and generated-clip media have separate owners.
 This avoids a media preparation failure turning into an empty scheduled slot.
 
 - `night_scout`: `reference_text` 14:00, `original_text` 16:00,
-  `direct_reference_media` 18:00, `generated_clip_media` 21:00, `pdca_text`
+  `direct_reference_media` 18:00, `approved_source_clip` 21:00, `pdca_text`
   25:00 JST.
 - `liver_manager`: `original_text` 10:00, `reference_text` 13:00,
-  `direct_reference_media` 16:00, `generated_clip_media` 18:00, `pdca_text`
+  `direct_reference_media` 16:00, `approved_source_clip` 18:00, `pdca_text`
   21:00 JST.
 - Direct and clip workflows use their named slot's text fallback when no
   eligible asset exists, and write `content_slot_runs` as `POSTED_FALLBACK`.

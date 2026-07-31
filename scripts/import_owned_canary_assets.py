@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 ACCOUNTS = {"night_scout", "liver_manager"}
-PURPOSES = {"direct_image", "direct_video", "direct_carousel", "generated_clip"}
+PURPOSES = {"direct_image", "direct_video", "direct_carousel", "approved_source_clip"}
 
 
 def _sha256(value: str | Path) -> str:
@@ -62,14 +62,14 @@ def _validate_asset(raw: dict[str, Any]) -> tuple[dict[str, Any] | None, list[st
     operations = {str(v) for v in item.get("allowed_operations", [])}
     required_operations = set()
     for canary_type in canary_types:
-        required_operations.add("clip" if canary_type == "generated_clip" else ("carousel" if canary_type == "direct_carousel" else "direct"))
+        required_operations.add("clip" if canary_type == "approved_source_clip" else ("carousel" if canary_type == "direct_carousel" else "direct"))
     if not required_operations <= operations: errors.append("allowed_operations does not cover canary_types")
-    if "generated_clip" in canary_types:
+    if "approved_source_clip" in canary_types:
         try:
             if float(item.get("clip_end_seconds")) <= float(item.get("clip_start_seconds")):
-                errors.append("generated_clip requires clip_end_seconds greater than clip_start_seconds")
+                errors.append("approved_source_clip requires clip_end_seconds greater than clip_start_seconds")
         except (TypeError, ValueError):
-            errors.append("generated_clip requires numeric clip_start_seconds and clip_end_seconds")
+            errors.append("approved_source_clip requires numeric clip_start_seconds and clip_end_seconds")
     if not (_text(item.get("public_post_text")) or _text(item.get("queue_id"))):
         errors.append("public_post_text or queue_id is required")
     if errors:
@@ -145,13 +145,13 @@ def apply_plan(plan: dict[str, Any]) -> dict[str, Any]:
                 duplicate_assets.append({"asset_id": member["asset_id"], "reason": "media_asset_id_exists"}); continue
             if member["content_hash"] in existing_hashes:
                 duplicate_assets.append({"asset_id": member["asset_id"], "reason": "content_hash_exists"}); continue
-            media_type = "video" if member["asset_purpose"] in {"direct_video", "generated_clip"} else "image"
+            media_type = "video" if member["asset_purpose"] in {"direct_video", "approved_source_clip"} else "image"
             original = member["https_url"]
             rows["source_post_media"].append({"source_post_media_id": source_media_id, "source_post_id": source_post_id, "media_index": member["media_order"], "original_media_url": original, "canonical_post_url": "", "acquisition_method": "owner_asset_import", "resolver_backend": "owner_local_file" if member["local_path"] else "owner_https", "media_type": media_type, "content_hash": member["content_hash"], "download_status": "NOT_REQUESTED", "cloudinary_status": "PENDING", "rights_status": "owned", "permission_status": "approved", "reuse_status": "APPROVED", "media_asset_id": media_id, "created_at": now, "updated_at": now})
             rows["media_assets"].append({"media_id": media_id, "account_id": account, "reference_post_id": source_post_id, "source_platform": "owned_local", "source_post_url": "", "original_media_url": original, "local_path": member["local_path"], "media_type": media_type, "storage_provider": "", "storage_url": "", "rights_status": "owned", "permission_status": "approved", "reuse_status": "approved_owner_asset", "rights_policy": "owned", "reuse_policy": "approved_owner_asset", "media_policy": "manual_media_prepare", "allow_download": False, "allow_cut": False, "allow_upload": False, "upload_status": "PENDING", "notes": f"content_hash={member['content_hash']}", "downloaded_at": "", "uploaded_at": ""})
             existing_hashes.add(member["content_hash"])
             receipt["rollback"]["delete_row_ids"]["source_post_media"].append(source_media_id); receipt["rollback"]["delete_row_ids"]["media_assets"].append(media_id)
-            if "generated_clip" in member["canary_types"]:
+            if "approved_source_clip" in member["canary_types"]:
                 video_id = f"owned_video_{member['asset_id']}"; clip_id = f"owned_clip_{member['asset_id']}"
                 rows["source_videos"].append({"source_video_id": video_id, "source_id": source_id, "account_id": account, "platform": "owned_local", "source_url": "", "video_id": member["asset_id"], "canonical_video_url": "", "title": "Owner-attested canary video", "transcript_status": "NOT_REQUESTED", "analysis_status": "OWNER_DECLARED", "rights_status": "owned", "permission_status": "approved", "discovery_status": "OWNED_IMPORTED", "content_hash": member["content_hash"], "discovered_at": now, "last_seen_at": now})
                 rows["video_clip_candidates"].append({"clip_candidate_id": clip_id, "source_video_id": video_id, "source_id": source_id, "account_id": account, "platform": "owned_local", "start_seconds": member["clip_start_seconds"], "end_seconds": member["clip_end_seconds"], "duration_seconds": float(member["clip_end_seconds"]) - float(member["clip_start_seconds"]), "rights_status": "owned", "permission_status": "approved", "cut_status": "NOT_REQUESTED", "upload_status": "PENDING", "post_status": "NOT_POSTED", "reviewer_status": "WAITING_REVIEW", "created_at": now})

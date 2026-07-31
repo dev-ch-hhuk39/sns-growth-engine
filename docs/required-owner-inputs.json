@@ -17,7 +17,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_001",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -29,7 +29,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_cand_001",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -125,7 +125,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_002",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -137,7 +137,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_003",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -149,7 +149,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_004",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -161,7 +161,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_005",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -173,7 +173,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_006",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -185,7 +185,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_007",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -197,7 +197,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_008",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -209,7 +209,7 @@
     {
       "account_id": "night_scout",
       "source_id": "src_ns_yt_cand_009",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -221,7 +221,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_cand_002",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -233,7 +233,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_cand_003",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -245,7 +245,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_cand_004",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -257,7 +257,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_cand_005",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -269,7 +269,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_cand_006",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -281,7 +281,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_cand_007",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -293,7 +293,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_yt_user_001",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -305,7 +305,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_tt_user_001",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -317,7 +317,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_tt_user_002",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -329,7 +329,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "src_lm_tt_user_003",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -365,7 +365,7 @@
     {
       "account_id": "night_scout",
       "source_id": "youtube_night_scout_reference_todo",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -377,7 +377,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "youtube_liver_reference_todo",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -389,7 +389,7 @@
     {
       "account_id": "night_scout",
       "source_id": "tiktok_night_scout_reference_todo",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     },
     {
@@ -401,7 +401,7 @@
     {
       "account_id": "liver_manager",
       "source_id": "tiktok_liver_reference_todo",
-      "requirement": "generated_clip_permission",
+      "requirement": "approved_source_clip_permission",
       "reason": "active_evidence_bearing_clip_permission_missing"
     }
   ],
@@ -440,9 +440,9 @@
       ]
     },
     {
-      "input_id": "night_scout_owned_generated_clip",
+      "input_id": "night_scout_owned_approved_source_clip",
       "account_id": "night_scout",
-      "canary_type": "generated_clip",
+      "canary_type": "approved_source_clip",
       "required": [
         "individual owned/licensed video URL or local file",
         "permission evidence",
@@ -484,9 +484,9 @@
       ]
     },
     {
-      "input_id": "liver_manager_owned_generated_clip",
+      "input_id": "liver_manager_owned_approved_source_clip",
       "account_id": "liver_manager",
-      "canary_type": "generated_clip",
+      "canary_type": "approved_source_clip",
       "required": [
         "individual owned/licensed video URL or local file",
         "permission evidence",

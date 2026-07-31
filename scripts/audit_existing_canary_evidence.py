@@ -13,7 +13,7 @@ VALID_VERIFY={"PASS","VERIFIED","READ_AFTER_WRITE_PASS"}
 REQUIRED_CANARIES=tuple(
  (account, kind)
  for account in ("night_scout", "liver_manager")
- for kind in ("original_text", "reference_text", "direct_image", "direct_carousel", "direct_video", "generated_clip")
+ for kind in ("original_text", "reference_text", "direct_image", "direct_carousel", "direct_video", "approved_source_clip")
 )
 def truthy(v: Any)->bool: return str(v).lower() in {"1","true","yes"}
 def token(account:str)->str: return os.getenv(f"THREADS_ACCESS_TOKEN_{account.upper()}","")
@@ -40,14 +40,14 @@ def classify(c:dict[str,Any], rows:list[dict[str,Any]])->dict[str,Any]:
         if media and not truthy(r.get("media_used")): reasons.append("media_missing")
         if not media and truthy(r.get("media_used")): reasons.append("unexpected_media")
         if kind=="direct_video" and str(r.get("source_post_id", "")) != str(c.get("source_post_id", "")): reasons.append("direct_video_source_mismatch")
-        if kind=="generated_clip" and str(r.get("clip_candidate_id", "")) != str(c.get("clip_candidate_id", "")): reasons.append("clip_candidate_mismatch")
+        if kind=="approved_source_clip" and str(r.get("clip_candidate_id", "")) != str(c.get("clip_candidate_id", "")): reasons.append("clip_candidate_mismatch")
         if kind in {"direct_image","direct_video"} and str(c.get("media_asset_id", "")) and str(r.get("media_asset_id", "")) != str(c.get("media_asset_id", "")): reasons.append("media_asset_mismatch")
         actual=api_permalink(account, str(r.get("external_post_id", "")))
         if not actual: reasons.append("actual_permalink_verify_required")
         elif actual != str(r.get("post_url", "")): reasons.append("actual_permalink_mismatch")
     status="EXISTING_CANARY_VALID" if r and not reasons else ("VERIFY_REQUIRED" if "actual_permalink_verify_required" in reasons and len(reasons)==1 else "EXISTING_CANARY_INVALID")
     fields={k:r.get(k,"") for k in ("result_id","external_post_id","post_url","posted_at","posted_text","real_post","media_used","media_asset_id","media_url","source_post_id","source_video_id","clip_candidate_id")}
-    actual_type="text" if not truthy(r.get("media_used")) else ("generated_clip" if str(r.get("clip_candidate_id", "")) else kind)
+    actual_type="text" if not truthy(r.get("media_used")) else ("approved_source_clip" if str(r.get("clip_candidate_id", "")) else kind)
     return {"canary_id":f"canary_{account}_{kind}","account_id":account,"canary_type":kind,"actual_post_type":actual_type,"permalink":fields["post_url"],"status":status,"reasons":reasons,**fields}
 def main()->int:
  p=argparse.ArgumentParser();p.add_argument("--apply",action="store_true");p.add_argument("--confirm-existing-evidence",action="store_true");p.add_argument("--retire-invalid",action="store_true");p.add_argument("--output",type=Path,required=True);a=p.parse_args()
@@ -66,7 +66,7 @@ def main()->int:
     if row["status"]!="EXISTING_CANARY_INVALID" or not str(row.get("result_id", "")):
      continue
     flags="excluded_from_activation=true; excluded_from_metrics_baseline=true; repost_prohibited=true"
-    update_row(client,"posted_results","result_id",str(row["result_id"]),{"status":"LEGACY_INVALID_CANARY","manual_memo":flags})
+    update_row(client,"posted_results","result_id",str(row["result_id"]),{"status":"INVALID_CONTENT_CANARY","manual_memo":flags})
     retired.append(str(row["result_id"]))
   after=records(client,"posted_results")
   valid_ids={x["canary_id"] for x in audit if x["status"]=="EXISTING_CANARY_VALID"}
