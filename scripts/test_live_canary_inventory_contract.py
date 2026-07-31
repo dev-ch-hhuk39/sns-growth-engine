@@ -53,4 +53,132 @@ direct_image=next(item for item in selected["candidates"] if item["account_id"] 
 assert direct_image["canary_id"] == "canary_fresh_new_image"
 assert direct_image["media_asset_id"] == "new_asset"
 assert direct_image["queue_id"] == "q_new"
+
+# An explicit batch id must prevent an older generated clip from winning.
+batch_data = {
+    key: []
+    for key in (
+        "queue",
+        "source_posts",
+        "source_post_media",
+        "media_permissions",
+        "source_videos",
+        "video_clip_candidates",
+        "media_assets",
+    )
+}
+
+batch_data["queue"] = [
+    {
+        "account_id": "night_scout",
+        "canary_id": "canary_fresh_old_generated_clip",
+        "queue_id": "q_old_generated_clip",
+        "status": "WAITING_REVIEW",
+        "content_type": "generated_clip",
+        "clip_candidate_id": "clip_old",
+        "public_post_text": "Old generated clip.",
+        "batch_id": "fresh_old_batch",
+        "created_at": "2026-07-31T00:00:00+00:00",
+    },
+    {
+        "account_id": "night_scout",
+        "canary_id": "canary_fresh_target_generated_clip",
+        "queue_id": "q_target_generated_clip",
+        "status": "WAITING_REVIEW",
+        "content_type": "generated_clip",
+        "clip_candidate_id": "clip_target",
+        "public_post_text": "Target generated clip.",
+        "batch_id": "fresh_target_batch",
+        "created_at": "2026-07-30T00:00:00+00:00",
+    },
+]
+
+batch_data["source_videos"] = [
+    {
+        "source_video_id": "video_old",
+        "source_id": "source_old",
+    },
+    {
+        "source_video_id": "video_target",
+        "source_id": "source_target",
+    },
+]
+
+batch_data["video_clip_candidates"] = [
+    {
+        "clip_id": "clip_old",
+        "clip_candidate_id": "clip_old",
+        "account_id": "night_scout",
+        "source_platform": "system_generated_owned",
+        "source_video_id": "video_old",
+        "rights_status": "owned",
+        "start_seconds": "0",
+        "end_seconds": "8",
+    },
+    {
+        "clip_id": "clip_target",
+        "clip_candidate_id": "clip_target",
+        "account_id": "night_scout",
+        "source_platform": "system_generated_owned",
+        "source_video_id": "video_target",
+        "rights_status": "owned",
+        "start_seconds": "0",
+        "end_seconds": "8",
+    },
+]
+
+batch_data["media_permissions"] = [
+    {
+        "source_id": "source_old",
+        "account_id": "night_scout",
+        "rights_status": "owned",
+        "permission_status": "approved",
+        "evidence_reference": "old",
+        "allow_clip_repost": True,
+        "revoked": False,
+    },
+    {
+        "source_id": "source_target",
+        "account_id": "night_scout",
+        "rights_status": "owned",
+        "permission_status": "approved",
+        "evidence_reference": "target",
+        "allow_clip_repost": True,
+        "revoked": False,
+    },
+]
+
+batch_data["media_assets"] = [
+    {
+        "media_id": "asset_old",
+        "video_clip_id": "clip_old",
+        "storage_url": "https://example.invalid/old.mp4",
+        "local_path": "/tmp/old.mp4",
+    },
+    {
+        "media_id": "asset_target",
+        "video_clip_id": "clip_target",
+        "storage_url": "https://example.invalid/target.mp4",
+        "local_path": "/tmp/target.mp4",
+    },
+]
+
+batch_result = build_inventory(
+    batch_data,
+    batch_id="fresh_target_batch",
+)
+
+selected_clip = next(
+    item
+    for item in batch_result["candidates"]
+    if item["account_id"] == "night_scout"
+    and item["canary_type"] == "generated_clip"
+)
+
+assert selected_clip["canary_id"] == (
+    "canary_fresh_target_generated_clip"
+)
+assert selected_clip["queue_id"] == "q_target_generated_clip"
+assert batch_result["selected_batch_id"] == "fresh_target_batch"
+
 print("PASS test_live_canary_inventory_contract.py")

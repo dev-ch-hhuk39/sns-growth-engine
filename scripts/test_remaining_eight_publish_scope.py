@@ -12,8 +12,18 @@ MEDIA_TYPES = {
 }
 
 
-def fake_inventory(_datasets, wave="all_12"):
+def fake_inventory(
+    _datasets,
+    wave="all_12",
+    batch_id="",
+):
     assert wave == "all_12"
+
+    if batch_id != BATCH_ID:
+        return {
+            "candidates": [],
+            "canaries": [],
+        }
 
     candidates = []
     canaries = []
