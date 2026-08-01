@@ -244,11 +244,45 @@ def select_pending_media_id(
             )
         ).upper()
 
-        if download_status in {
-            "FAILED",
-            "BLOCKED",
-            "SKIPPED_EXTERNAL_UNAVAILABLE",
-        }:
+        recoverable_identical_failure = (
+            download_status == "FAILED"
+            and str(
+                media.get(
+                    "understanding_status",
+                    "",
+                )
+            ).upper()
+            == "PASS"
+            and bool(
+                str(
+                    media.get(
+                        "understanding_id",
+                        "",
+                    )
+                ).strip()
+            )
+            and str(
+                media.get(
+                    "last_error",
+                    "",
+                )
+            )
+            in {
+                "ingest_failed:RuntimeError",
+                "ingest_failed:media_asset_contract_conflict",
+                "ingest_failed:identical_media_asset_contract_conflict",
+            }
+        )
+
+        if (
+            download_status
+            in {
+                "FAILED",
+                "BLOCKED",
+                "SKIPPED_EXTERNAL_UNAVAILABLE",
+            }
+            and not recoverable_identical_failure
+        ):
             continue
 
         url = str(
