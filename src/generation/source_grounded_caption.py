@@ -148,22 +148,53 @@ class GitHubModelsGroundedProvider:
 class DeterministicGroundedProvider:
     """Bounded source-derived fallback for transient model unavailability.
 
-    It never invents source facts: an account-relevant evidence sentence must
-    exist, and the generated public template is still subjected to the same
-    semantic and public-post validators as a model result.
+    It searches a finite set of deterministic compositions and accepts only a
+    candidate that passes the same semantic-alignment and recent-post dedupe
+    gate used by the outer service. Thresholds are never relaxed.
     """
 
     provider_name = "deterministic_grounded_fallback"
-    provider_version = "1"
+    provider_version = "2"
+
+    MAX_GENERATION_ATTEMPTS = 64
+    MAX_DISTINCT_CANDIDATES = 18
 
     EVIDENCE_TERMS = {
-        "night_scout": ("夜職", "店", "時給", "ノルマ", "客層", "出勤", "移籍", "副業", "相談"),
-        "liver_manager": ("配信", "初見", "コメント", "リスナー", "ギフト", "事務所", "継続", "話題"),
+        "night_scout": (
+            "夜職",
+            "店",
+            "時給",
+            "ノルマ",
+            "客層",
+            "出勤",
+            "移籍",
+            "副業",
+            "相談",
+        ),
+        "liver_manager": (
+            "配信",
+            "初見",
+            "コメント",
+            "リスナー",
+            "ギフト",
+            "事務所",
+            "継続",
+            "話題",
+        ),
     }
 
     @staticmethod
-    def _sentences(text: str) -> list[str]:
-        return [item.strip() for item in re.split(r"[。！？!?\n]+", str(text or "")) if item.strip()]
+    def _sentences(
+        text: str,
+    ) -> list[str]:
+        return [
+            item.strip()
+            for item in re.split(
+                r"[。！？!?\n]+",
+                str(text or ""),
+            )
+            if item.strip()
+        ]
 
     def generate(
         self,
@@ -173,41 +204,330 @@ class DeterministicGroundedProvider:
         recent_posts: list[str],
         transcript_excerpt: str = "",
     ) -> ProviderResult[dict[str, Any]]:
-        signal = "\n".join(filter(None, [transcript_excerpt, post.original_post_text])).strip()
-        terms = self.EVIDENCE_TERMS.get(account_id, ())
-        evidence_candidates = [sentence for sentence in self._sentences(signal) if any(term in sentence for term in terms)]
-        if not evidence_candidates:
-            return ProviderResult(self.provider_name, self.provider_version, "UNAVAILABLE", reason="account_relevant_source_evidence_missing")
-        evidence = max(evidence_candidates, key=lambda sentence: (sum(term in sentence for term in terms), len(sentence)))[:300]
-        try:
-            from public_post_quality import generate_grounded_reader_facing_post
-        except ImportError:
-            return ProviderResult(self.provider_name, self.provider_version, "UNAVAILABLE", reason="public_post_generator_unavailable")
-        generated = generate_grounded_reader_facing_post(
+        signal = "\n".join(
+            filter(
+                None,
+                [
+                    transcript_excerpt,
+                    post.original_post_text,
+                ],
+            )
+        ).strip()
+
+        terms = self.EVIDENCE_TERMS.get(
             account_id,
-            private_signal=signal,
-            index=max(1, int(post.content_hash[:4], 16) % 25 + 1) if post.content_hash else 1,
-            media_metadata={"media_type": post.media_type},
-            recent_posts=recent_posts,
+            (),
         )
-        public_text = str(generated.get("public_post_text", "")).strip()
-        public_sentences = self._sentences(public_text)
-        if not public_text or not public_sentences:
-            return ProviderResult(self.provider_name, self.provider_version, "FAILED", reason="deterministic_caption_empty")
-        caption_claim = max(public_sentences, key=lambda sentence: lexical_similarity(sentence, evidence))
-        if lexical_similarity(caption_claim, evidence) < 0.08:
-            return ProviderResult(self.provider_name, self.provider_version, "BLOCKED", reason="deterministic_claim_not_grounded")
-        return ProviderResult(self.provider_name, self.provider_version, "PASS", data={
-            "internal_analysis": {
-                "main_claims": [evidence],
-                "topic": generated.get("grounding_summary", {}).get("topic", ""),
-                "audience": ACCOUNT_RULES[account_id]["audience"],
+
+        evidence_candidates = [
+            sentence
+            for sentence in self._sentences(signal)
+            if any(
+                term in sentence
+                for term in terms
+            )
+        ]
+
+        if not evidence_candidates:
+            return ProviderResult(
+                self.provider_name,
+                self.provider_version,
+                "UNAVAILABLE",
+                reason=(
+                    "account_relevant_source_evidence_missing"
+                ),
+            )
+
+        evidence = max(
+            evidence_candidates,
+            key=lambda sentence: (
+                sum(
+                    term in sentence
+                    for term in terms
+                ),
+                len(sentence),
+            ),
+        )[:300]
+
+        try:
+            from public_post_quality import (
+                generate_grounded_reader_facing_post,
+            )
+        except ImportError:
+            return ProviderResult(
+                self.provider_name,
+                self.provider_version,
+                "UNAVAILABLE",
+                reason=(
+                    "public_post_generator_unavailable"
+                ),
+            )
+
+        content_hash = str(
+            getattr(
+                post,
+                "content_hash",
+                "",
+            )
+            or ""
+        )
+
+        base_index = (
+            max(
+                1,
+                int(
+                    content_hash[:8],
+                    16,
+                ),
+            )
+            if content_hash
+            else 1
+        )
+
+        alignment_provider = (
+            LocalSemanticAlignmentProvider()
+        )
+
+        seen_texts: set[str] = set()
+        evaluated_count = 0
+        rejection_reasons: set[str] = set()
+
+        for attempt in range(
+            self.MAX_GENERATION_ATTEMPTS
+        ):
+            composition_index = (
+                base_index
+                + attempt * 104729
+            )
+
+            structure_variant = (
+                base_index
+                + attempt
+            ) % 6
+
+            generated = (
+                generate_grounded_reader_facing_post(
+                    account_id,
+                    private_signal=signal,
+                    index=composition_index,
+                    media_metadata={
+                        "media_type": post.media_type,
+                    },
+                    recent_posts=recent_posts,
+                    structure_variant=(
+                        structure_variant
+                    ),
+                )
+            )
+
+            public_text = str(
+                generated.get(
+                    "public_post_text",
+                    "",
+                )
+            ).strip()
+
+            if not public_text:
+                rejection_reasons.add(
+                    "deterministic_caption_empty"
+                )
+                continue
+
+            if public_text in seen_texts:
+                continue
+
+            if (
+                evaluated_count
+                >= self.MAX_DISTINCT_CANDIDATES
+            ):
+                break
+
+            seen_texts.add(public_text)
+            evaluated_count += 1
+
+            public_sentences = self._sentences(
+                public_text
+            )
+
+            if not public_sentences:
+                rejection_reasons.add(
+                    "deterministic_caption_empty"
+                )
+                continue
+
+            caption_claim = max(
+                public_sentences,
+                key=lambda sentence: (
+                    lexical_similarity(
+                        sentence,
+                        evidence,
+                    )
+                ),
+            )
+
+            if (
+                lexical_similarity(
+                    caption_claim,
+                    evidence,
+                )
+                < 0.08
+            ):
+                rejection_reasons.add(
+                    "deterministic_claim_not_grounded"
+                )
+                continue
+
+            claim_support = [
+                {
+                    "caption_claim": caption_claim,
+                    "source_evidence": evidence,
+                }
+            ]
+
+            alignment = (
+                alignment_provider.evaluate(
+                    source_text=signal,
+                    public_post_text=public_text,
+                    main_claims=[evidence],
+                    claim_support=claim_support,
+                    recent_posts=recent_posts,
+                )
+            )
+
+            alignment_data = (
+                alignment.data
+                if isinstance(
+                    alignment.data,
+                    dict,
+                )
+                else {}
+            )
+
+            generated_blocked = [
+                str(reason)
+                for reason in generated.get(
+                    "blocked_reasons",
+                    [],
+                )
+                if str(reason)
+            ]
+
+            alignment_blocked = [
+                str(reason)
+                for reason in alignment_data.get(
+                    "blocked_reasons",
+                    [],
+                )
+                if str(reason)
+            ]
+
+            candidate_blocked = sorted(
+                set(
+                    generated_blocked
+                    + alignment_blocked
+                )
+            )
+
+            if (
+                alignment.status == "PASS"
+                and not candidate_blocked
+            ):
+                grounding_summary = (
+                    generated.get(
+                        "grounding_summary",
+                        {},
+                    )
+                )
+
+                topic = (
+                    str(
+                        grounding_summary.get(
+                            "topic",
+                            "",
+                        )
+                    )
+                    if isinstance(
+                        grounding_summary,
+                        dict,
+                    )
+                    else ""
+                )
+
+                return ProviderResult(
+                    self.provider_name,
+                    self.provider_version,
+                    "PASS",
+                    data={
+                        "internal_analysis": {
+                            "main_claims": [
+                                evidence
+                            ],
+                            "topic": topic,
+                            "audience": (
+                                ACCOUNT_RULES[
+                                    account_id
+                                ][
+                                    "audience"
+                                ]
+                            ),
+                            "fallback_candidate_count": (
+                                evaluated_count
+                            ),
+                            "fallback_structure_variant": (
+                                structure_variant
+                            ),
+                        },
+                        "public_post_text": (
+                            public_text
+                        ),
+                        "claim_support": (
+                            claim_support
+                        ),
+                        "safety_notes": (
+                            "Deterministic "
+                            "source-grounded fallback; "
+                            "raw source stays private."
+                        ),
+                        "blocked_reasons": [],
+                    },
+                    metadata={
+                        "generation_attempt_count": (
+                            attempt + 1
+                        ),
+                        "distinct_candidate_count": (
+                            evaluated_count
+                        ),
+                    },
+                )
+
+            rejection_reasons.update(
+                candidate_blocked
+                or [
+                    alignment.reason
+                    or "semantic_alignment_not_passed"
+                ]
+            )
+
+        return ProviderResult(
+            self.provider_name,
+            self.provider_version,
+            "BLOCKED",
+            reason=(
+                "deterministic_distinct_"
+                "candidate_exhausted"
+            ),
+            metadata={
+                "generation_attempt_count": (
+                    self.MAX_GENERATION_ATTEMPTS
+                ),
+                "distinct_candidate_count": (
+                    evaluated_count
+                ),
+                "rejection_reason_count": len(
+                    rejection_reasons
+                ),
             },
-            "public_post_text": public_text,
-            "claim_support": [{"caption_claim": caption_claim, "source_evidence": evidence}],
-            "safety_notes": "Deterministic source-grounded fallback; raw source stays private.",
-            "blocked_reasons": list(generated.get("blocked_reasons", [])),
-        })
+        )
 
 
 @dataclass
