@@ -33,6 +33,7 @@ jobs:
     timeout-minutes: 55
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - account_id: night_scout
