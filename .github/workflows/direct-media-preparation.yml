@@ -110,6 +110,8 @@ jobs:
         run: python3 scripts/ingest_direct_reference_media_reliable.py --account-id "$ACCOUNT_ID" --max-assets 10 --apply --confirm-ingest
       - name: Persist validator-approved READY inventory
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
+        env:
+          REQUIRE_PREPARED: "true"
         run: python3 scripts/run_direct_reference_media_pipeline_batched.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-direct-media --use-sheets
       - name: Clean expired transient media
         if: always()

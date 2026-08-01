@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,9 @@ SNAPSHOT_LOGICALS = (
 )
 
 _ORIGINAL_RECORDS = core._records
+_ORIGINAL_NORMALIZE_PREPARE_ONLY = (
+    core.normalize_prepare_only_outcome
+)
 
 
 def _col_letter(index: int) -> str:
@@ -187,7 +191,64 @@ def _batched_records(
     ]
 
 
+def _require_prepared_enabled() -> bool:
+    return str(
+        os.environ.get(
+            "REQUIRE_PREPARED",
+            "",
+        )
+    ).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _normalize_prepare_only_outcome(
+    plan: dict[str, Any],
+    *,
+    prepare_only: bool,
+) -> dict[str, Any]:
+    result = _ORIGINAL_NORMALIZE_PREPARE_ONLY(
+        plan,
+        prepare_only=prepare_only,
+    )
+
+    if (
+        prepare_only
+        and _require_prepared_enabled()
+        and str(result.get("status", "")) != "PREPARED"
+    ):
+        prior_status = str(
+            result.get("preparation_status")
+            or result.get("status")
+            or "UNKNOWN"
+        )
+
+        blocked_reasons = list(
+            result.get("blocked_reasons")
+            or []
+        )
+
+        blocked_reasons.append(
+            "confirmed_preparation_did_not_create_ready_inventory"
+        )
+
+        return {
+            **result,
+            "status": "FAILED_READY_REQUIRED",
+            "preparation_status": prior_status,
+            "blocked_reasons": blocked_reasons[:30],
+            "would_post": False,
+        }
+
+    return result
+
+
 core._records = _batched_records
+core.normalize_prepare_only_outcome = (
+    _normalize_prepare_only_outcome
+)
 
 
 if __name__ == "__main__":

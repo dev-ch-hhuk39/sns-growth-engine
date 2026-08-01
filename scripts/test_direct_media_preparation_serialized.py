@@ -26,6 +26,8 @@ assert (
     "run_direct_reference_media_pipeline_batched.py"
 ) in workflow
 
+assert 'REQUIRE_PREPARED: "true"' in workflow
+
 assert 'PUBLISH_ENABLED: "false"' in workflow
 assert 'ALLOW_REAL_THREADS_POST: "false"' in workflow
 assert 'ALLOW_MEDIA_POSTS: "false"' in workflow
