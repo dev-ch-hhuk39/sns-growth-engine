@@ -358,6 +358,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "rights_status", "permission_status", "discovery_status",
         "discovered_at", "last_seen_at", "processed_at", "skip_reason",
         "content_hash", "duplicate_key",
+        "source_position", "discovery_mode",
         "local_path", "downloaded_at",
         "approved_storage_url", "approved_storage_media_asset_id",
         "subject_policy_status", "subject_policy_reason",
@@ -496,6 +497,17 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "canonical_url", "post_url", "author_handle",
         "manual_only", "target_account_id", "category",
         "collection_mode", "source_type",
+    ],
+    # アカウント・チャンネルごとの増分取得状態。
+    # append-onlyで保存し、updated_atが最新の行を現在状態として扱う。
+    "source_discovery_state": [
+        "state_id", "source_id", "account_id", "platform",
+        "item_type", "latest_seen_item_id",
+        "latest_seen_published_at", "backfill_cursor",
+        "last_scanned_position", "last_scan_mode",
+        "last_scan_at", "last_new_count",
+        "last_duplicate_count", "consecutive_no_new_runs",
+        "updated_at",
     ],
     # source account別の収集した投稿記録
     "source_account_posts": [
@@ -766,6 +778,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "clip_performance":               "クリップ成績",
     "autonomous_health":              "自動運用ヘルス",
     "content_slot_runs":              "投稿枠実行履歴",
+    "source_discovery_state": "ソース取得状態",
 }
 
 SCOPES = [

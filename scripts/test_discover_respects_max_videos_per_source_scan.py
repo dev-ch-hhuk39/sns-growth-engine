@@ -4,6 +4,9 @@ import discover_approved_source_videos as d
 def main() -> int:
     cfg = d.load_config()
     cfg["max_videos_per_source_scan"] = 2
+    cfg["initial_source_scan_limit"] = 2
+    cfg["incremental_source_scan_limit"] = 2
+    cfg["backfill_source_scan_limit"] = 2
     cfg["max_new_videos_per_source_per_run"] = 10
     original = d.load_config
     d.load_config = lambda: cfg

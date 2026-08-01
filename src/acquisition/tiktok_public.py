@@ -5,6 +5,7 @@ canonical individual video URLs from the public profile HTML when the primary
 backend cannot enumerate a profile.  It never scrolls indefinitely, logs in,
 persists browser state, or attempts to bypass platform controls.
 """
+
 from __future__ import annotations
 
 import html
@@ -82,55 +83,118 @@ class TikTokPublicProfileAdapter:
         except Exception as exc:
             raise BackendFailure(f"tiktok_public_page_failed:{type(exc).__name__}") from exc
 
-    def acquire(self, source: dict[str, Any], *, limit: int) -> list[NormalizedSourcePost]:
+    def acquire(
+        self,
+        source: dict[str, Any],
+        *,
+        limit: int,
+    ) -> list[NormalizedSourcePost]:
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
+
         if platform != "tiktok":
-            raise BackendFailure(f"tiktok_public_unsupported_platform:{platform}")
-        profile_url = canonical_url(str(source.get("canonical_url") or source.get("source_url") or ""))
+            raise BackendFailure("tiktok_public_" f"unsupported_platform:{platform}")
+
+        profile_url = canonical_url(
+            str(source.get("canonical_url") or source.get("source_url") or "")
+        )
+
         if not TIKTOK_PROFILE.match(profile_url):
             raise BackendFailure("tiktok_profile_url_required")
-        bounded = max(1, min(int(limit), MAX_PUBLIC_PROFILE_POSTS))
-        urls = extract_profile_video_urls(self._load(profile_url), profile_url, limit=bounded)
+
+        try:
+            start_position = max(
+                1,
+                int(
+                    source.get(
+                        "_discovery_start_position",
+                        1,
+                    )
+                ),
+            )
+        except (TypeError, ValueError):
+            start_position = 1
+
+        bounded = max(
+            1,
+            min(
+                int(limit),
+                MAX_PUBLIC_PROFILE_POSTS,
+            ),
+        )
+
+        requested = min(
+            MAX_PUBLIC_PROFILE_POSTS,
+            start_position - 1 + bounded,
+        )
+
+        discovered_urls = extract_profile_video_urls(
+            self._load(profile_url),
+            profile_url,
+            limit=requested,
+        )
+
+        urls = discovered_urls[start_position - 1 : start_position - 1 + bounded]
+
         if not urls:
             raise BackendFailure("tiktok_profile_video_links_unavailable")
 
         source_id = str(source.get("source_id") or "")
+
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
+
         account_id = str(targets[0] if targets else "")
-        handle = TIKTOK_PROFILE.match(profile_url).group("handle")  # validated above
+
+        handle_match = TIKTOK_PROFILE.match(profile_url)
+
+        handle = handle_match.group("handle") if handle_match else ""
+
         posts: list[NormalizedSourcePost] = []
+
         for post_url in urls:
             post_external_id = external_post_id(post_url)
-            post_id = f"sp_{source_id}_{post_external_id}"
+
+            post_id = f"sp_{source_id}_" f"{post_external_id}"
+
             media = NormalizedMediaItem(
-                source_post_media_id=f"spm_{post_id}_0",
+                source_post_media_id=(f"spm_{post_id}_0"),
                 source_post_id=post_id,
                 media_index=0,
                 media_type="video",
-                canonical_post_url=post_url,
-                original_media_url=post_url,
-                resolver_backend=self.backend_name,
+                canonical_post_url=(post_url),
+                original_media_url=(post_url),
+                resolver_backend=(self.backend_name),
             )
-            posts.append(NormalizedSourcePost(
-                source_post_id=post_id,
-                source_id=source_id,
-                target_account_id=account_id,
-                platform="tiktok",
-                profile_url=profile_url,
-                canonical_post_url=post_url,
-                external_post_id=post_external_id,
-                original_post_text="",
-                published_at="",
-                author_handle=handle,
-                media_items=(media,),
-                collection_backend=self.backend_name,
-                backend_version=self.backend_version,
-                content_hash=stable_content_hash("", [post_url]),
-                discovered_at=utc_now(),
-            ))
+
+            posts.append(
+                NormalizedSourcePost(
+                    source_post_id=post_id,
+                    source_id=source_id,
+                    target_account_id=(account_id),
+                    platform="tiktok",
+                    profile_url=profile_url,
+                    canonical_post_url=(post_url),
+                    external_post_id=(post_external_id),
+                    original_post_text="",
+                    published_at="",
+                    author_handle=handle,
+                    media_items=(media,),
+                    collection_backend=(self.backend_name),
+                    backend_version=(self.backend_version),
+                    content_hash=(
+                        stable_content_hash(
+                            "",
+                            [post_url],
+                        )
+                    ),
+                    discovered_at=utc_now(),
+                )
+            )
+
         return posts
 
-    def discover_profile(self, source: dict[str, Any], *, limit: int) -> ProviderResult[list[NormalizedSourcePost]]:
+    def discover_profile(
+        self, source: dict[str, Any], *, limit: int
+    ) -> ProviderResult[list[NormalizedSourcePost]]:
         bounded = max(1, min(int(limit), MAX_PUBLIC_PROFILE_POSTS))
         try:
             posts = self.acquire(source, limit=bounded)

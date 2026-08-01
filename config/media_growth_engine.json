@@ -2,9 +2,22 @@
   "media_growth_engine_enabled": true,
   "production_autopilot_enabled": true,
   "target_account_id": "liver_manager",
-  "allowed_target_account_ids": ["liver_manager", "night_scout"],
-  "allowed_rights_statuses": ["owned", "licensed", "approved_creator_clip"],
-  "blocked_rights_statuses": ["third_party_reference_only", "reference_only", "unknown", "restricted", "not_allowed"],
+  "allowed_target_account_ids": [
+    "liver_manager",
+    "night_scout"
+  ],
+  "allowed_rights_statuses": [
+    "owned",
+    "licensed",
+    "approved_creator_clip"
+  ],
+  "blocked_rights_statuses": [
+    "third_party_reference_only",
+    "reference_only",
+    "unknown",
+    "restricted",
+    "not_allowed"
+  ],
   "allowed_source_ids": [
     "src_lm_yt_user_001",
     "src_lm_tt_user_001",
@@ -53,12 +66,21 @@
   "saved_media_post_fallback": "NO_MEDIA_FALLBACK",
   "direct_reference_media_enabled": true,
   "asset_inventory_targets": {
-    "night_scout": {"direct_reference_media": 3, "approved_source_clip": 3},
-    "liver_manager": {"direct_reference_media": 3, "approved_source_clip": 3}
+    "night_scout": {
+      "direct_reference_media": 3,
+      "approved_source_clip": 3
+    },
+    "liver_manager": {
+      "direct_reference_media": 3,
+      "approved_source_clip": 3
+    }
   },
   "auto_save_discovered_videos": true,
   "auto_save_clip_candidates": true,
-  "allowed_source_types_for_discovery": ["channel", "account"],
+  "allowed_source_types_for_discovery": [
+    "channel",
+    "account"
+  ],
   "max_videos_per_source_scan": 12,
   "max_new_videos_per_source_per_run": 3,
   "max_total_new_videos_per_run": 12,
@@ -103,5 +125,15 @@
     "transient_media_retention_hours": 24,
     "max_failed_retries_per_run": 5
   },
-  "dry_run_default": true
+  "dry_run_default": true,
+  "source_discovery_state_enabled": true,
+  "initial_source_scan_limit": 30,
+  "incremental_source_scan_limit": 12,
+  "backfill_source_scan_limit": 30,
+  "consecutive_existing_stop": 5,
+  "backfill_overlap_items": 3,
+  "min_unprocessed_source_inventory_per_account": 12,
+  "source_post_discovery_state_enabled": true,
+  "max_new_source_posts_per_source_per_run": 3,
+  "max_total_new_source_posts_per_run": 12
 }

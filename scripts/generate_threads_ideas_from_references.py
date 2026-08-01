@@ -411,6 +411,12 @@ def _fallback_template_index(offset: int, account_id: str, *, slot_id: str = "",
     return ((seed + offset * 7) % count) + 1
 
 
+# Keep fallback generation bounded while allowing the strict validator,
+# topic-coherence, diversity and duplicate gates to reject unsuitable
+# local compositions. No quality threshold is relaxed.
+FALLBACK_ATTEMPTS_PER_SLOT = 64
+
+
 def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str = "", post_type: str = "original_text", theme: str = "", schedule_date_jst: str = "", history: list[str] | None = None, fallback_reason: str = "reference_unavailable", preferred_topics: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
     """Build safe reader-facing original candidates when reference data is empty.
 
@@ -428,7 +434,7 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str 
     batch_id = f"scheduled_{account_id}_{schedule_date_jst or datetime.now(timezone.utc).strftime('%Y%m%d')}_{slot_id or fallback_reason}"
     for i in range(1, max(1, top_n) + 1):
         selected = None
-        for attempt in range(5):
+        for attempt in range(FALLBACK_ATTEMPTS_PER_SLOT):
             output = generate_production_post(
                 account_id,
                 batch_id=batch_id,
