@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from public_post_quality import final_public_post_validator
 from generation.semantic_alignment import ALIGNMENT_THRESHOLDS
+from generation.source_copyedit import validate_source_preserving_public_post
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DIRECT_REFERENCE_MAX_VIDEO_SECONDS = 300
@@ -36,7 +37,27 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     account_id = str(plan.get("account_id", ""))
     platform = str(plan.get("platform", "")).lower()
     text = plan.get("public_post_text", "")
-    text_result = final_public_post_validator(text, account_id)
+    caption_mode = str(
+        plan.get(
+            "caption_mode",
+            "transform",
+        )
+    ).strip().lower()
+    source_preserving = (
+        caption_mode
+        == "source_copyedit"
+    )
+    text_result = (
+        validate_source_preserving_public_post(
+            text,
+            account_id,
+        )
+        if source_preserving
+        else final_public_post_validator(
+            text,
+            account_id,
+        )
+    )
     duration = float(plan.get("duration_seconds") or 0)
     aspect = str(plan.get("aspect_ratio", ""))
     media_origin = str(plan.get("media_origin", "approved_source_clip")).strip().lower()
@@ -48,11 +69,28 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
             return default
         return float(value)
 
+    copy_similarity_raw = plan.get(
+        "source_copy_similarity"
+    )
+    copy_similarity_present = not (
+        copy_similarity_raw is None
+        or (
+            isinstance(
+                copy_similarity_raw,
+                str,
+            )
+            and not copy_similarity_raw.strip()
+        )
+    )
+
     try:
         final_alignment = numeric(plan.get("final_alignment_score"), 0.0)
         claim_coverage = numeric(plan.get("main_claim_coverage"), 0.0)
         unsupported_claims = int(numeric(plan.get("unsupported_claim_count"), 0.0))
-        copy_similarity = numeric(plan.get("source_copy_similarity"), 1.0)
+        copy_similarity = numeric(
+            copy_similarity_raw,
+            1.0,
+        )
         recent_similarity = numeric(plan.get("recent_post_similarity"), 1.0)
     except (TypeError, ValueError):
         final_alignment = claim_coverage = 0.0
@@ -110,16 +148,39 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         reasons.append("main_claim_coverage_below_threshold")
     if unsupported_claims != ALIGNMENT_THRESHOLDS["unsupported_claim_count"]:
         reasons.append("unsupported_claims_present")
-    if copy_similarity > ALIGNMENT_THRESHOLDS["source_copy_similarity"]:
-        reasons.append("source_copy_similarity_above_threshold")
+    if source_preserving:
+        if not copy_similarity_present:
+            reasons.append(
+                "source_preservation_similarity_missing"
+            )
+        elif (
+            copy_similarity
+            < ALIGNMENT_THRESHOLDS[
+                "source_preservation_similarity"
+            ]
+        ):
+            reasons.append(
+                "source_preservation_similarity_below_threshold"
+            )
+    elif (
+        copy_similarity
+        > ALIGNMENT_THRESHOLDS[
+            "source_copy_similarity"
+        ]
+    ):
+        reasons.append(
+            "source_copy_similarity_above_threshold"
+        )
     if recent_similarity > ALIGNMENT_THRESHOLDS["recent_post_similarity"]:
         reasons.append("recent_post_similarity_above_threshold")
     return {
         "status": "PASS" if not reasons else "BLOCKED",
         "blocked_reasons": sorted(set(reasons)),
         "text_validation": text_result["status"],
-        "alignment_validation": "PASS" if not any(reason.startswith(("semantic_alignment", "final_alignment", "main_claim", "unsupported_claim", "source_copy", "recent_post")) for reason in reasons) else "BLOCKED",
+        "alignment_validation": "PASS" if not any(reason.startswith(("semantic_alignment", "final_alignment", "main_claim", "unsupported_claim", "source_copy", "source_preservation", "recent_post")) for reason in reasons) else "BLOCKED",
         "publisher_media_type": normalized_type,
+        "caption_mode": caption_mode,
+        "source_preserving": source_preserving,
     }
 
 

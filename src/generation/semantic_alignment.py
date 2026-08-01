@@ -14,6 +14,7 @@ ALIGNMENT_THRESHOLDS = {
     "main_claim_coverage": 0.70,
     "unsupported_claim_count": 0,
     "source_copy_similarity": 0.65,
+    "source_preservation_similarity": 0.55,
     "recent_post_similarity": 0.75,
 }
 
@@ -93,7 +94,7 @@ class JapaneseEmbeddingSimilarityProvider:
 
 class LocalSemanticAlignmentProvider:
     provider_name = "local_semantic_alignment"
-    provider_version = "1"
+    provider_version = "2"
 
     def evaluate(
         self,
@@ -103,65 +104,297 @@ class LocalSemanticAlignmentProvider:
         main_claims: list[str],
         claim_support: list[dict[str, str]],
         recent_posts: list[str],
+        alignment_mode: str = "transform",
     ) -> ProviderResult[dict[str, Any]]:
-        verified_support: list[dict[str, Any]] = []
+        verified_support: list[
+            dict[str, Any]
+        ] = []
+
         for item in claim_support:
-            caption_claim = str(item.get("caption_claim", "")).strip()
-            evidence = str(item.get("source_evidence", "")).strip()
-            evidence_in_source = bool(evidence) and (
-                _compact(evidence) in _compact(source_text)
-                or _best_sentence_similarity(evidence, source_text) >= 0.58
+            caption_claim = str(
+                item.get(
+                    "caption_claim",
+                    "",
+                )
+            ).strip()
+
+            evidence = str(
+                item.get(
+                    "source_evidence",
+                    "",
+                )
+            ).strip()
+
+            evidence_in_source = bool(
+                evidence
+            ) and (
+                _compact(evidence)
+                in _compact(source_text)
+                or _best_sentence_similarity(
+                    evidence,
+                    source_text,
+                )
+                >= 0.58
             )
-            claim_in_caption = bool(caption_claim) and (
-                _compact(caption_claim) in _compact(public_post_text)
-                or _best_sentence_similarity(caption_claim, public_post_text) >= 0.28
+
+            claim_in_caption = bool(
+                caption_claim
+            ) and (
+                _compact(caption_claim)
+                in _compact(public_post_text)
+                or _best_sentence_similarity(
+                    caption_claim,
+                    public_post_text,
+                )
+                >= 0.28
             )
-            claim_evidence_similarity = lexical_similarity(caption_claim, evidence)
+
+            claim_evidence_similarity = (
+                lexical_similarity(
+                    caption_claim,
+                    evidence,
+                )
+            )
+
             verified_support.append({
                 "caption_claim": caption_claim,
                 "source_evidence": evidence,
-                "claim_evidence_similarity": claim_evidence_similarity,
-                "verified": evidence_in_source and claim_in_caption and claim_evidence_similarity >= 0.08,
+                "claim_evidence_similarity": (
+                    claim_evidence_similarity
+                ),
+                "verified": (
+                    evidence_in_source
+                    and claim_in_caption
+                    and (
+                        claim_evidence_similarity
+                        >= 0.08
+                    )
+                ),
             })
 
         covered = 0
+
         for claim in main_claims:
-            if any(item["verified"] and lexical_similarity(claim, item["source_evidence"]) >= 0.22 for item in verified_support):
+            if any(
+                item["verified"]
+                and lexical_similarity(
+                    claim,
+                    item[
+                        "source_evidence"
+                    ],
+                )
+                >= 0.22
+                for item
+                in verified_support
+            ):
                 covered += 1
-        coverage = covered / max(1, len(main_claims)) if main_claims else 0.0
-        unsupported = sum(1 for item in verified_support if not item["verified"])
+
+        coverage = (
+            covered
+            / max(
+                1,
+                len(main_claims),
+            )
+            if main_claims
+            else 0.0
+        )
+
+        unsupported = sum(
+            1
+            for item
+            in verified_support
+            if not item["verified"]
+        )
+
         if not verified_support:
             unsupported = 1
 
-        copy_score = source_copy_similarity(source_text, public_post_text)
-        recent_score = max((lexical_similarity(public_post_text, row) for row in recent_posts if row), default=0.0)
-        support_ratio = sum(1 for item in verified_support if item["verified"]) / max(1, len(verified_support))
-        final_score = (
-            0.50 * coverage
-            + 0.25 * support_ratio
-            + 0.15 * max(0.0, 1.0 - copy_score)
-            + 0.10 * max(0.0, 1.0 - recent_score)
+        copy_score = (
+            source_copy_similarity(
+                source_text,
+                public_post_text,
+            )
         )
-        final_score = round(min(1.0, max(0.0, final_score)), 4)
+
+        recent_score = max(
+            (
+                lexical_similarity(
+                    public_post_text,
+                    row,
+                )
+                for row in recent_posts
+                if row
+            ),
+            default=0.0,
+        )
+
+        support_ratio = (
+            sum(
+                1
+                for item
+                in verified_support
+                if item["verified"]
+            )
+            / max(
+                1,
+                len(verified_support),
+            )
+        )
+
+        copyedit_mode = (
+            alignment_mode
+            == "source_copyedit"
+        )
+
+        if copyedit_mode:
+            final_score = (
+                0.45 * coverage
+                + 0.25 * support_ratio
+                + 0.20 * copy_score
+                + 0.10
+                * max(
+                    0.0,
+                    1.0 - recent_score,
+                )
+            )
+        else:
+            final_score = (
+                0.50 * coverage
+                + 0.25 * support_ratio
+                + 0.15
+                * max(
+                    0.0,
+                    1.0 - copy_score,
+                )
+                + 0.10
+                * max(
+                    0.0,
+                    1.0 - recent_score,
+                )
+            )
+
+        final_score = round(
+            min(
+                1.0,
+                max(
+                    0.0,
+                    final_score,
+                ),
+            ),
+            4,
+        )
+
         metrics = {
-            "final_alignment_score": final_score,
-            "main_claim_coverage": round(coverage, 4),
-            "unsupported_claim_count": unsupported,
-            "source_copy_similarity": copy_score,
-            "recent_post_similarity": round(recent_score, 4),
-            "verified_claim_support": verified_support,
+            "alignment_mode": (
+                alignment_mode
+            ),
+            "final_alignment_score": (
+                final_score
+            ),
+            "main_claim_coverage": round(
+                coverage,
+                4,
+            ),
+            "unsupported_claim_count": (
+                unsupported
+            ),
+            "source_copy_similarity": (
+                copy_score
+            ),
+            "source_preservation_similarity": (
+                copy_score
+                if copyedit_mode
+                else ""
+            ),
+            "recent_post_similarity": round(
+                recent_score,
+                4,
+            ),
+            "verified_claim_support": (
+                verified_support
+            ),
         }
-        blocked = []
-        if final_score < ALIGNMENT_THRESHOLDS["final_alignment_score"]:
-            blocked.append("final_alignment_score_below_threshold")
-        if coverage < ALIGNMENT_THRESHOLDS["main_claim_coverage"]:
-            blocked.append("main_claim_coverage_below_threshold")
-        if unsupported != 0:
-            blocked.append("unsupported_claims_present")
-        if copy_score > ALIGNMENT_THRESHOLDS["source_copy_similarity"]:
-            blocked.append("source_copy_similarity_above_threshold")
-        if recent_score > ALIGNMENT_THRESHOLDS["recent_post_similarity"]:
-            blocked.append("recent_post_similarity_above_threshold")
-        metrics["status"] = "PASS" if not blocked else "BLOCKED"
-        metrics["blocked_reasons"] = blocked
-        return ProviderResult(self.provider_name, self.provider_version, "PASS" if not blocked else "BLOCKED", data=metrics, reason=",".join(blocked))
+
+        blocked: list[str] = []
+
+        if (
+            final_score
+            < ALIGNMENT_THRESHOLDS[
+                "final_alignment_score"
+            ]
+        ):
+            blocked.append(
+                "final_alignment_score_below_threshold"
+            )
+
+        if (
+            coverage
+            < ALIGNMENT_THRESHOLDS[
+                "main_claim_coverage"
+            ]
+        ):
+            blocked.append(
+                "main_claim_coverage_below_threshold"
+            )
+
+        if (
+            unsupported
+            != ALIGNMENT_THRESHOLDS[
+                "unsupported_claim_count"
+            ]
+        ):
+            blocked.append(
+                "unsupported_claims_present"
+            )
+
+        if copyedit_mode:
+            if (
+                copy_score
+                < ALIGNMENT_THRESHOLDS[
+                    "source_preservation_similarity"
+                ]
+            ):
+                blocked.append(
+                    "source_preservation_similarity_below_threshold"
+                )
+        elif (
+            copy_score
+            > ALIGNMENT_THRESHOLDS[
+                "source_copy_similarity"
+            ]
+        ):
+            blocked.append(
+                "source_copy_similarity_above_threshold"
+            )
+
+        if (
+            recent_score
+            > ALIGNMENT_THRESHOLDS[
+                "recent_post_similarity"
+            ]
+        ):
+            blocked.append(
+                "recent_post_similarity_above_threshold"
+            )
+
+        metrics["status"] = (
+            "PASS"
+            if not blocked
+            else "BLOCKED"
+        )
+
+        metrics["blocked_reasons"] = (
+            blocked
+        )
+
+        return ProviderResult(
+            self.provider_name,
+            self.provider_version,
+            (
+                "PASS"
+                if not blocked
+                else "BLOCKED"
+            ),
+            data=metrics,
+            reason=",".join(blocked),
+        )

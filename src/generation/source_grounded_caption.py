@@ -18,6 +18,10 @@ import requests
 from acquisition.contracts import ProviderResult
 from acquisition.models import SourcePostBundle
 from generation.semantic_alignment import LocalSemanticAlignmentProvider, lexical_similarity
+from generation.source_copyedit import (
+    DeterministicSourceCopyeditProvider,
+    evaluate_source_copyedit_contract,
+)
 
 ACCOUNT_RULES = {
     "night_scout": {
@@ -25,12 +29,14 @@ ACCOUNT_RULES = {
         "purpose": "不安を言語化し、続けられる店や働き方の判断材料を渡す",
         "cta": "必要な場合だけ、相談余地を最後に一言添える",
         "banned": "誇大な収入断定、強い求人、説教、店舗名の羅列",
+        "voice": "原文の意味と順番を維持し、なんよな・かな・僕なら等は必要な箇所だけ使う",
     },
     "liver_manager": {
         "audience": "配信初心者、伸び悩むライバー、事務所選びで迷う人",
         "purpose": "配信のつまずきを具体化し、今日変えられる行動を示す",
         "cta": "必要な場合だけ、相談余地を最後に一言添える",
         "banned": "楽して稼げる断定、ギフト要求、他社批判、精神論だけの助言",
+        "voice": "原文の意味と面白さを維持し、標準的な話し言葉と現場視点を自然に使う",
     },
 }
 
@@ -65,6 +71,7 @@ class GitHubModelsGroundedProvider:
         account_id: str,
         recent_posts: list[str],
         transcript_excerpt: str = "",
+        source_mode: str = "transform",
     ) -> ProviderResult[dict[str, Any]]:
         if not self.available:
             return ProviderResult(self.provider_name, self.provider_version, "UNAVAILABLE", reason="github_models_not_enabled_or_token_missing")
@@ -83,17 +90,45 @@ class GitHubModelsGroundedProvider:
                 for item in post.media_items
             ],
         }
-        developer_prompt = (
-            "あなたはSNS編集者です。入力された1件の参照投稿だけを根拠に、日本語Threads本文を作成してください。"
-            "出力はJSONオブジェクトのみ。元投稿名、URL、source、reference、metadata、transcript、AI、内部処理語を公開文に書かない。"
-            "数値・事実・経験を捏造しない。元文の長いコピーを避け、1投稿1テーマ、80〜500文字の自然な読者向け文章にする。"
-            "public_post_textの各実質的主張をclaim_supportへ列挙し、source_evidenceは入力中の根拠文を短く正確に引用する。"
-            "internal_analysisにはcore_topic, main_claim, hook, supporting_points, concrete_example, conclusion, "
-            "intended_audience, media_role, factual_constraints, prohibited_inferences, main_claimsを必ず含める。"
-            "JSON keys: internal_analysis, public_post_text, claim_support[{caption_claim,source_evidence}], safety_notes, blocked_reasons。"
-        )
+        if source_mode == "source_copyedit":
+            developer_prompt = (
+                "あなたはSNSの校正編集者です。出力はJSONオブジェクトのみ。"
+                "original_post_textを別テーマの記事へ作り替えず、意味、主張、固有名詞、"
+                "数値、話の順番、ユーモアを維持したまま校正する。"
+                "変更できるのは誤字、句読点、改行、一人称、不要なURL、"
+                "メンション、ハッシュタグ、軽い口調調整だけ。"
+                "元文にない判断基準、助言、数字、体験、結論を追加しない。"
+                "transcript_excerptは同じ親投稿のメディア確認用であり、"
+                "original_post_textより優先しない。"
+                "夜職スカウトでは、なんよな・かな・僕なら等を必要な箇所だけ使い、"
+                "毎文繰り返さない。"
+                "ライバーマネージャーでは、標準的な話し言葉を使い、"
+                "元投稿にない教育論や改善策を追加しない。"
+                "確認することは一つ、この順番で考える理由はシンプル、"
+                "見るポイントは次の通り、次に試すこと、という固定文を使わない。"
+                "元投稿名、URL、source、reference、metadata、transcript、AI、"
+                "内部処理語を公開文に書かない。"
+                "public_post_textの主張をclaim_supportへ列挙し、"
+                "source_evidenceはoriginal_post_textから正確に引用する。"
+                "internal_analysisにはcore_topic, main_claim, hook, supporting_points, "
+                "concrete_example, conclusion, intended_audience, media_role, "
+                "factual_constraints, prohibited_inferences, main_claimsを含める。"
+                "JSON keys: internal_analysis, public_post_text, "
+                "claim_support[{caption_claim,source_evidence}], safety_notes, blocked_reasons。"
+            )
+        else:
+            developer_prompt = (
+                "あなたはSNS編集者です。入力された1件の参照投稿だけを根拠に、日本語Threads本文を作成してください。"
+                "出力はJSONオブジェクトのみ。元投稿名、URL、source、reference、metadata、transcript、AI、内部処理語を公開文に書かない。"
+                "数値・事実・経験を捏造しない。元文の長いコピーを避け、1投稿1テーマ、80〜500文字の自然な読者向け文章にする。"
+                "public_post_textの各実質的主張をclaim_supportへ列挙し、source_evidenceは入力中の根拠文を短く正確に引用する。"
+                "internal_analysisにはcore_topic, main_claim, hook, supporting_points, concrete_example, conclusion, "
+                "intended_audience, media_role, factual_constraints, prohibited_inferences, main_claimsを必ず含める。"
+                "JSON keys: internal_analysis, public_post_text, claim_support[{caption_claim,source_evidence}], safety_notes, blocked_reasons。"
+            )
         user_prompt = json.dumps({
             "account_rules": rules,
+            "caption_mode": source_mode,
             "source_bundle": source_payload,
             "recent_public_posts_for_dedupe": [text[:600] for text in recent_posts[-20:]],
         }, ensure_ascii=False)
@@ -535,14 +570,31 @@ class SourceGroundedCaptionService:
     generation_provider: Any
     alignment_provider: Any = None
     fallback_provider: Any = None
+    copyedit_fallback_provider: Any = None
     allow_deterministic_fallback: bool = False
     retry_primary_on_alignment_failure: bool = True
 
     def __post_init__(self) -> None:
         if self.alignment_provider is None:
-            self.alignment_provider = LocalSemanticAlignmentProvider()
-        if self.fallback_provider is None and self.allow_deterministic_fallback:
-            self.fallback_provider = DeterministicGroundedProvider()
+            self.alignment_provider = (
+                LocalSemanticAlignmentProvider()
+            )
+
+        if (
+            self.fallback_provider is None
+            and self.allow_deterministic_fallback
+        ):
+            self.fallback_provider = (
+                DeterministicGroundedProvider()
+            )
+
+        if (
+            self.copyedit_fallback_provider is None
+            and self.allow_deterministic_fallback
+        ):
+            self.copyedit_fallback_provider = (
+                DeterministicSourceCopyeditProvider()
+            )
 
     def generate(
         self,
@@ -551,104 +603,419 @@ class SourceGroundedCaptionService:
         account_id: str,
         recent_posts: list[str] | None = None,
         transcript_excerpt: str = "",
+        source_mode: str = "transform",
     ) -> dict[str, Any]:
-        recent_posts = list(recent_posts or [])
-        generated = self.generation_provider.generate(
-            post,
-            account_id=account_id,
-            recent_posts=recent_posts,
-            transcript_excerpt=transcript_excerpt,
-        )
-        primary_failure = generated.reason if not generated.ok else ""
-        if (not generated.ok or not generated.data) and self.fallback_provider is not None:
-            fallback = self.fallback_provider.generate(
-                post,
-                account_id=account_id,
-                recent_posts=recent_posts,
-                transcript_excerpt=transcript_excerpt,
-            )
-            if fallback.ok and fallback.data:
-                generated = fallback
-        if not generated.ok or not generated.data:
+        if source_mode not in {
+            "transform",
+            "source_copyedit",
+        }:
             return {
                 "status": "BLOCKED",
+                "source_mode": source_mode,
                 "public_post_text": "",
                 "internal_analysis": {},
                 "safety_notes": "",
-                "blocked_reasons": [generated.reason or "caption_provider_unavailable"],
-                "provider_status": generated.status,
-                "primary_provider_failure": primary_failure,
+                "blocked_reasons": [
+                    "unsupported_source_mode"
+                ],
+                "provider_status": "BLOCKED",
+                "primary_provider_failure": "",
             }
-        def evaluate_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str], list[dict[str, Any]], str, ProviderResult[dict[str, Any]], dict[str, Any], list[str]]:
-            internal = payload.get("internal_analysis") if isinstance(payload.get("internal_analysis"), dict) else {}
-            main_claims = [str(item).strip() for item in internal.get("main_claims", []) if str(item).strip()]
-            support = [item for item in payload.get("claim_support", []) if isinstance(item, dict)]
-            public_text = str(payload.get("public_post_text", "")).strip()
-            alignment = self.alignment_provider.evaluate(
-                source_text="\n".join(filter(None, [post.original_post_text, transcript_excerpt])),
-                public_post_text=public_text,
-                main_claims=main_claims,
-                claim_support=support,
-                recent_posts=recent_posts,
+
+        recent_posts = list(
+            recent_posts
+            or []
+        )
+
+        selected_fallback = (
+            self.copyedit_fallback_provider
+            if source_mode == "source_copyedit"
+            else self.fallback_provider
+        )
+
+        def invoke_provider(
+            provider: Any,
+        ) -> ProviderResult[dict[str, Any]]:
+            try:
+                return provider.generate(
+                    post,
+                    account_id=account_id,
+                    recent_posts=recent_posts,
+                    transcript_excerpt=(
+                        transcript_excerpt
+                    ),
+                    source_mode=source_mode,
+                )
+            except TypeError as exc:
+                if "source_mode" not in str(exc):
+                    raise
+
+                return provider.generate(
+                    post,
+                    account_id=account_id,
+                    recent_posts=recent_posts,
+                    transcript_excerpt=(
+                        transcript_excerpt
+                    ),
+                )
+
+        generated = invoke_provider(
+            self.generation_provider
+        )
+
+        primary_failure = (
+            generated.reason
+            if not generated.ok
+            else ""
+        )
+
+        if (
+            (
+                not generated.ok
+                or not generated.data
             )
-            alignment_data = alignment.data or {
+            and selected_fallback is not None
+        ):
+            fallback = invoke_provider(
+                selected_fallback
+            )
+
+            if (
+                fallback.ok
+                and fallback.data
+            ):
+                generated = fallback
+
+        if (
+            not generated.ok
+            or not generated.data
+        ):
+            return {
                 "status": "BLOCKED",
-                "blocked_reasons": [alignment.reason or "semantic_alignment_failed"],
+                "source_mode": source_mode,
+                "public_post_text": "",
+                "internal_analysis": {},
+                "safety_notes": "",
+                "blocked_reasons": [
+                    generated.reason
+                    or "caption_provider_unavailable"
+                ],
+                "provider_status": (
+                    generated.status
+                ),
+                "primary_provider_failure": (
+                    primary_failure
+                ),
             }
-            blocked = [str(item) for item in payload.get("blocked_reasons", []) if str(item)]
-            blocked.extend(alignment_data.get("blocked_reasons", []))
-            return internal, main_claims, support, public_text, alignment, alignment_data, blocked
+
+        def evaluate_payload(
+            payload: dict[str, Any],
+        ):
+            internal = (
+                dict(
+                    payload.get(
+                        "internal_analysis",
+                        {},
+                    )
+                )
+                if isinstance(
+                    payload.get(
+                        "internal_analysis"
+                    ),
+                    dict,
+                )
+                else {}
+            )
+
+            public_text = str(
+                payload.get(
+                    "public_post_text",
+                    "",
+                )
+            ).strip()
+
+            contract: dict[str, Any] = {}
+
+            if source_mode == "source_copyedit":
+                contract = (
+                    evaluate_source_copyedit_contract(
+                        source_text=(
+                            post.original_post_text
+                        ),
+                        public_post_text=(
+                            public_text
+                        ),
+                        account_id=account_id,
+                        recent_posts=(
+                            recent_posts
+                        ),
+                    )
+                )
+
+                source_text = str(
+                    contract.get(
+                        "source_text",
+                        "",
+                    )
+                )
+
+                internal["main_claims"] = [
+                    source_text
+                ]
+
+                internal["topic"] = (
+                    "source_copyedit"
+                )
+
+                internal[
+                    "copyedit_strategy"
+                ] = (
+                    "preserve_source_then_polish"
+                )
+
+                main_claims = [
+                    source_text
+                ]
+
+                support = [
+                    {
+                        "caption_claim": (
+                            public_text
+                        ),
+                        "source_evidence": (
+                            source_text
+                        ),
+                    }
+                ]
+
+            else:
+                source_text = "\n".join(
+                    filter(
+                        None,
+                        [
+                            post.original_post_text,
+                            transcript_excerpt,
+                        ],
+                    )
+                )
+
+                main_claims = [
+                    str(item).strip()
+                    for item in internal.get(
+                        "main_claims",
+                        [],
+                    )
+                    if str(item).strip()
+                ]
+
+                support = [
+                    item
+                    for item in payload.get(
+                        "claim_support",
+                        [],
+                    )
+                    if isinstance(
+                        item,
+                        dict,
+                    )
+                ]
+
+            try:
+                alignment = (
+                    self.alignment_provider
+                    .evaluate(
+                        source_text=source_text,
+                        public_post_text=(
+                            public_text
+                        ),
+                        main_claims=main_claims,
+                        claim_support=support,
+                        recent_posts=recent_posts,
+                        alignment_mode=(
+                            source_mode
+                        ),
+                    )
+                )
+            except TypeError as exc:
+                if "alignment_mode" not in str(exc):
+                    raise
+
+                alignment = (
+                    self.alignment_provider
+                    .evaluate(
+                        source_text=source_text,
+                        public_post_text=(
+                            public_text
+                        ),
+                        main_claims=main_claims,
+                        claim_support=support,
+                        recent_posts=recent_posts,
+                    )
+                )
+
+            alignment_data = (
+                alignment.data
+                or {
+                    "status": "BLOCKED",
+                    "blocked_reasons": [
+                        alignment.reason
+                        or "semantic_alignment_failed"
+                    ],
+                }
+            )
+
+            blocked = [
+                str(item)
+                for item in payload.get(
+                    "blocked_reasons",
+                    [],
+                )
+                if str(item)
+            ]
+
+            blocked.extend(
+                alignment_data.get(
+                    "blocked_reasons",
+                    [],
+                )
+            )
+
+            blocked.extend(
+                contract.get(
+                    "blocked_reasons",
+                    [],
+                )
+            )
+
+            return (
+                internal,
+                support,
+                public_text,
+                alignment,
+                alignment_data,
+                sorted(set(blocked)),
+                contract,
+            )
 
         data = generated.data
-        internal, _main_claims, support, public_text, alignment, alignment_data, blocked = evaluate_payload(data)
 
-        # The model can produce a natural caption while returning malformed or
-        # insufficient claim-support pairs.  Do not weaken alignment.  Retry
-        # the same provider once with the exact same source bundle before a
-        # bounded fallback is considered; this keeps provider variance from
-        # needlessly consuming a media candidate.
+        (
+            internal,
+            support,
+            public_text,
+            alignment,
+            alignment_data,
+            blocked,
+            contract,
+        ) = evaluate_payload(data)
+
         primary_attempt_count = 1
-        if self.retry_primary_on_alignment_failure and (blocked or alignment.status != "PASS"):
-            primary_retry = self.generation_provider.generate(
-                post,
-                account_id=account_id,
-                recent_posts=recent_posts,
-                transcript_excerpt=transcript_excerpt,
+
+        if (
+            self.retry_primary_on_alignment_failure
+            and (
+                blocked
+                or alignment.status != "PASS"
             )
+        ):
+            primary_retry = invoke_provider(
+                self.generation_provider
+            )
+
             primary_attempt_count = 2
-            if primary_retry.ok and primary_retry.data:
+
+            if (
+                primary_retry.ok
+                and primary_retry.data
+            ):
                 generated = primary_retry
                 data = primary_retry.data
-                internal, _main_claims, support, public_text, alignment, alignment_data, blocked = evaluate_payload(data)
 
-        # The same evidence packet failed twice, so use the explicitly
-        # registered bounded fallback.  Its sole claim is still derived from
-        # the source bundle and remains subject to the unchanged evaluator.
-        if (blocked or alignment.status != "PASS") and self.fallback_provider is not None:
-            fallback = self.fallback_provider.generate(
-                post,
-                account_id=account_id,
-                recent_posts=recent_posts,
-                transcript_excerpt=transcript_excerpt,
+                (
+                    internal,
+                    support,
+                    public_text,
+                    alignment,
+                    alignment_data,
+                    blocked,
+                    contract,
+                ) = evaluate_payload(data)
+
+        if (
+            (
+                blocked
+                or alignment.status != "PASS"
             )
-            if fallback.ok and fallback.data:
+            and selected_fallback is not None
+        ):
+            fallback = invoke_provider(
+                selected_fallback
+            )
+
+            if (
+                fallback.ok
+                and fallback.data
+            ):
                 generated = fallback
                 data = fallback.data
-                internal, _main_claims, support, public_text, alignment, alignment_data, blocked = evaluate_payload(data)
+
+                (
+                    internal,
+                    support,
+                    public_text,
+                    alignment,
+                    alignment_data,
+                    blocked,
+                    contract,
+                ) = evaluate_payload(data)
+
         return {
-            "status": "PASS" if not blocked and alignment.status == "PASS" else "BLOCKED",
+            "status": (
+                "PASS"
+                if (
+                    not blocked
+                    and alignment.status == "PASS"
+                )
+                else "BLOCKED"
+            ),
+            "source_mode": source_mode,
+            "source_copyedit_contract": (
+                contract
+            ),
             "internal_analysis": internal,
-            "public_post_text": public_text,
+            "public_post_text": (
+                public_text
+            ),
             "claim_support": support,
-            "safety_notes": str(data.get("safety_notes", "")),
-            "blocked_reasons": sorted(set(blocked)),
-            "semantic_alignment": alignment_data,
-            "provider_name": generated.provider_name,
-            "provider_version": generated.provider_version,
-            "provider_status": generated.status,
-            "primary_provider_failure": primary_failure,
-            "primary_attempt_count": primary_attempt_count,
+            "safety_notes": str(
+                data.get(
+                    "safety_notes",
+                    "",
+                )
+            ),
+            "blocked_reasons": sorted(
+                set(blocked)
+            ),
+            "semantic_alignment": (
+                alignment_data
+            ),
+            "provider_name": (
+                generated.provider_name
+            ),
+            "provider_version": (
+                generated.provider_version
+            ),
+            "provider_status": (
+                generated.status
+            ),
+            "primary_provider_failure": (
+                primary_failure
+            ),
+            "primary_attempt_count": (
+                primary_attempt_count
+            ),
         }
+
 
 
 def build_source_post_bundle(row: dict[str, Any], media_rows: list[dict[str, Any]] | None = None) -> SourcePostBundle:

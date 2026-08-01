@@ -29,6 +29,7 @@ from config_loader import get_config  # noqa: E402
 from media_post_validator import publisher_media_type, validate_media_post  # noqa: E402
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
+from generation.source_copyedit import validate_source_preserving_public_post  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
@@ -502,6 +503,112 @@ def write_fallback(queue_row: dict[str, Any], social: dict[str, Any] | None = No
     return path
 
 
+
+def build_media_validation_plan(
+    queue_row: dict[str, Any],
+    account_id: str,
+    media: dict[str, Any],
+    text: str,
+) -> dict[str, Any]:
+    direct_reference = (
+        str(
+            queue_row.get(
+                "generation_mode",
+                "",
+            )
+        )
+        == "direct_reference_media"
+    )
+
+    return {
+        "rights_status": queue_row.get(
+            "rights_status",
+            "",
+        ),
+        "permission_status": queue_row.get(
+            "permission_status",
+            "",
+        ),
+        "media_url": media[
+            "effective_media_url"
+        ],
+        "media_asset_id": media[
+            "media_asset_id"
+        ],
+        "platform": "threads",
+        "account_id": account_id,
+        "media_type": media[
+            "media_type"
+        ],
+        "content_type": queue_row.get(
+            "content_type",
+            "",
+        ),
+        "publisher_media_type": (
+            queue_row.get(
+                "publisher_media_type",
+                "",
+            )
+        ),
+        "media_urls": media[
+            "effective_media_urls"
+        ],
+        "duration_seconds": queue_row.get(
+            "duration_seconds",
+            "0",
+        ),
+        "aspect_ratio": queue_row.get(
+            "aspect_ratio",
+            "",
+        ),
+        "public_post_text": text,
+        "media_origin": (
+            "direct_reference"
+            if direct_reference
+            else "approved_source_clip"
+        ),
+        "caption_mode": (
+            "source_copyedit"
+            if direct_reference
+            else "transform"
+        ),
+        "alignment_status": queue_row.get(
+            "alignment_status",
+            "",
+        ),
+        "final_alignment_score": (
+            queue_row.get(
+                "final_alignment_score",
+                "",
+            )
+        ),
+        "main_claim_coverage": (
+            queue_row.get(
+                "main_claim_coverage",
+                "",
+            )
+        ),
+        "unsupported_claim_count": (
+            queue_row.get(
+                "unsupported_claim_count",
+                "",
+            )
+        ),
+        "source_copy_similarity": (
+            queue_row.get(
+                "source_copy_similarity",
+                "",
+            )
+        ),
+        "recent_post_similarity": (
+            queue_row.get(
+                "recent_post_similarity",
+                "",
+            )
+        ),
+    }
+
+
 def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: bool, confirm_real_post: bool) -> dict[str, Any]:
     account_id = str(queue_row.get("account_id", ""))
     queue_id = str(queue_row.get("queue_id", ""))
@@ -524,6 +631,24 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         return {"status": "FAILED", "reason": "EMPTY_TEXT", "queue_id": queue_id}
 
     public_validation = final_public_post_validator(text, account_id)
+    direct_reference = (
+        str(
+            queue_row.get(
+                "generation_mode",
+                "",
+            )
+        )
+        == "direct_reference_media"
+    )
+
+    if direct_reference:
+        public_validation = (
+            validate_source_preserving_public_post(
+                text,
+                account_id,
+            )
+        )
+
     if public_validation["status"] != "PASS":
         reason = "FINAL_PUBLIC_POST_VALIDATOR_BLOCKED:" + ",".join(public_validation["blocked_reasons"])
         if not dry_run:
@@ -561,6 +686,78 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "media_asset_id": media["media_asset_id"],
             "media_status": media["media_status"],
         }
+
+
+    direct_media_validation: dict[str, Any] | None = None
+
+    if (
+        direct_reference
+        and media["effective_media_url"]
+    ):
+        direct_media_validation = (
+            validate_media_post(
+                build_media_validation_plan(
+                    queue_row,
+                    account_id,
+                    media,
+                    text,
+                )
+            )
+        )
+
+        if (
+            direct_media_validation[
+                "status"
+            ]
+            != "PASS"
+        ):
+            status = (
+                "DRY_RUN_BLOCKED"
+                if dry_run
+                else "SAFETY_STOP_MEDIA_VALIDATOR"
+            )
+
+            if not dry_run:
+                log_event(
+                    client,
+                    account_id,
+                    status,
+                    "direct-reference media validator blocked post",
+                    {
+                        "queue_id": queue_id,
+                        "blocked_reasons": (
+                            direct_media_validation[
+                                "blocked_reasons"
+                            ]
+                        ),
+                    },
+                )
+
+            return {
+                "status": status,
+                "reason": ",".join(
+                    direct_media_validation[
+                        "blocked_reasons"
+                    ]
+                ),
+                "queue_id": queue_id,
+                "media_asset_id": media[
+                    "media_asset_id"
+                ],
+                "media_status": media[
+                    "media_status"
+                ],
+                "media_planned": bool(
+                    media[
+                        "effective_media_url"
+                    ]
+                ),
+                "final_public_post_validator": (
+                    public_validation[
+                        "status"
+                    ]
+                ),
+            }
 
     duplicate = duplicate_reason(
         queue_row=queue_row,
@@ -629,28 +826,18 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
                 "queue_id": queue_id,
                 "media_asset_id": media["media_asset_id"],
             }
-        media_validation = validate_media_post({
-            "rights_status": queue_row.get("rights_status", ""),
-            "permission_status": queue_row.get("permission_status", ""),
-            "media_url": media["effective_media_url"],
-            "media_asset_id": media["media_asset_id"],
-            "platform": "threads",
-            "account_id": account_id,
-            "media_type": media["media_type"],
-            "content_type": queue_row.get("content_type", ""),
-            "publisher_media_type": queue_row.get("publisher_media_type", ""),
-            "media_urls": media["effective_media_urls"],
-            "duration_seconds": queue_row.get("duration_seconds", "0"),
-            "aspect_ratio": queue_row.get("aspect_ratio", ""),
-            "public_post_text": text,
-            "media_origin": "direct_reference" if str(queue_row.get("generation_mode", "")) == "direct_reference_media" else "approved_source_clip",
-            "alignment_status": queue_row.get("alignment_status", ""),
-            "final_alignment_score": queue_row.get("final_alignment_score", ""),
-            "main_claim_coverage": queue_row.get("main_claim_coverage", ""),
-            "unsupported_claim_count": queue_row.get("unsupported_claim_count", ""),
-            "source_copy_similarity": queue_row.get("source_copy_similarity", ""),
-            "recent_post_similarity": queue_row.get("recent_post_similarity", ""),
-        })
+        media_validation = (
+            direct_media_validation
+            if direct_media_validation is not None
+            else validate_media_post(
+                build_media_validation_plan(
+                    queue_row,
+                    account_id,
+                    media,
+                    text,
+                )
+            )
+        )
         if media_validation["status"] != "PASS":
             log_event(client, account_id, "SAFETY_STOP_MEDIA_VALIDATOR", "media validator blocked post", {"queue_id": queue_id, "blocked_reasons": media_validation["blocked_reasons"]})
             return {
