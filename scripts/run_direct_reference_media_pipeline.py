@@ -42,6 +42,7 @@ from acquisition.reliability import (  # noqa: E402
     is_quarantined,
     register_failure,
 )
+from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
@@ -87,9 +88,9 @@ def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     if logical in cache:
         return [dict(row) for row in cache[logical]]
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
-    rows = client._call_with_rate_limit_retry(
-        f"get_all_records:{logical}",
-        lambda: client._ws(logical).get_all_records(),
+    rows = read_records_safely(
+        client,
+        logical,
     )
     cache[logical] = [dict(row) for row in rows]
     return [dict(row) for row in cache[logical]]
@@ -601,9 +602,203 @@ def build_plan(
     }
 
 
+
+def _queue_identity_suffix(
+    plan: dict[str, Any],
+) -> str:
+    """Return a stable identity for one exact caption/media combination."""
+
+    post = plan["source_post"]
+
+    media_asset_ids = [
+        str(item)
+        for item in (
+            plan.get("media_asset_ids")
+            or []
+        )
+        if str(item)
+    ]
+
+    if not media_asset_ids:
+        media_asset_ids = [
+            str(
+                plan.get(
+                    "media_asset_id",
+                    "",
+                )
+            )
+        ]
+
+    identity = {
+        "account_id": str(
+            plan.get(
+                "account_id",
+                "",
+            )
+        ),
+        "source_post_id": str(
+            post.get(
+                "source_post_id",
+                "",
+            )
+        ),
+        "media_asset_ids": media_asset_ids,
+        "public_post_text": str(
+            plan.get(
+                "public_post_text",
+                "",
+            )
+        ).strip(),
+        "caption_mode": str(
+            plan.get(
+                "caption_mode",
+                "source_copyedit",
+            )
+        ),
+    }
+
+    encoded = json.dumps(
+        identity,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+    return hashlib.sha256(
+        encoded
+    ).hexdigest()[:12]
+
+
+
+def _queue_media_identity(
+    row: dict[str, Any],
+) -> tuple[str, ...]:
+    """Read an ordered media identity from old or new queue rows."""
+
+    raw = str(
+        row.get(
+            "media_asset_ids_json",
+            "",
+        )
+        or ""
+    ).strip()
+
+    parsed: Any = []
+
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except (
+            TypeError,
+            json.JSONDecodeError,
+        ):
+            parsed = []
+
+    media_ids = (
+        [
+            str(item).strip()
+            for item in parsed
+            if str(item).strip()
+        ]
+        if isinstance(parsed, list)
+        else []
+    )
+
+    if not media_ids:
+        single = str(
+            row.get(
+                "media_asset_id",
+                "",
+            )
+            or ""
+        ).strip()
+
+        if single:
+            media_ids = [single]
+
+    return tuple(media_ids)
+
+
+def _queue_equivalence_key(
+    row: dict[str, Any],
+) -> tuple[Any, ...]:
+    """Compare content identity independently of queue-ID format."""
+
+    return (
+        str(
+            row.get("account_id")
+            or row.get("target_account_id")
+            or ""
+        ).strip(),
+        str(
+            row.get(
+                "platform",
+                "",
+            )
+            or ""
+        ).strip().lower(),
+        str(
+            row.get(
+                "generation_mode",
+                "",
+            )
+            or ""
+        ).strip(),
+        str(
+            row.get(
+                "business_date_jst",
+                "",
+            )
+            or ""
+        ).strip(),
+        str(
+            row.get(
+                "source_post_id",
+                "",
+            )
+            or ""
+        ).strip(),
+        _queue_media_identity(row),
+        str(
+            row.get(
+                "public_post_text",
+                "",
+            )
+            or ""
+        ).strip(),
+    )
+
+
+def _find_equivalent_queue(
+    rows: list[dict[str, Any]],
+    candidate: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Find the same caption/media row across legacy and hashed IDs."""
+
+    target = _queue_equivalence_key(
+        candidate
+    )
+
+    for row in rows:
+        if (
+            _queue_equivalence_key(row)
+            == target
+        ):
+            return dict(row)
+
+    return None
+
+
 def _build_queue(plan: dict[str, Any]) -> dict[str, Any]:
     post, media = plan["source_post"], plan["source_post_media"]
-    queue_id = f"direct_media_{business_date().replace('-', '')}_{plan['account_id']}_{post['source_post_id']}_{plan['media_asset_id']}"
+    queue_id = (
+        f"direct_media_"
+        f"{business_date().replace('-', '')}_"
+        f"{plan['account_id']}_"
+        f"{post['source_post_id']}_"
+        f"{plan['media_asset_id']}_"
+        f"{_queue_identity_suffix(plan)}"
+    )
     return {
         "queue_id": queue_id, "account_id": plan["account_id"], "target_account_id": plan["account_id"], "platform": "threads",
         "priority": "1", "status": "READY", "auto_publish": "true", "generation_mode": "direct_reference_media",
@@ -631,20 +826,84 @@ def _build_queue(plan: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def prepare(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
+def prepare(
+    plan: dict[str, Any],
+    client: SheetsClient,
+) -> dict[str, Any]:
     """Persist one validated READY item without invoking a publisher."""
+
     queue = _build_queue(plan)
-    existing = {str(row.get("queue_id", "")) for row in _records(client, "queue")}
-    if queue["queue_id"] not in existing:
-        append_row(client, "queue", queue)
-        _invalidate_records(client, "queue")
+    rows = _records(
+        client,
+        "queue",
+    )
+
+    existing_ids = {
+        str(
+            row.get(
+                "queue_id",
+                "",
+            )
+        )
+        for row in rows
+    }
+
+    equivalent = _find_equivalent_queue(
+        rows,
+        queue,
+    )
+
+    exact_exists = (
+        queue["queue_id"]
+        in existing_ids
+    )
+
+    already_prepared = (
+        exact_exists
+        or equivalent is not None
+    )
+
+    effective_queue_id = (
+        str(
+            equivalent.get(
+                "queue_id",
+                "",
+            )
+        )
+        if equivalent is not None
+        else queue["queue_id"]
+    )
+
+    if not already_prepared:
+        append_row(
+            client,
+            "queue",
+            queue,
+        )
+
+        _invalidate_records(
+            client,
+            "queue",
+        )
+
     return {
         **plan,
         "status": "PREPARED",
-        "queue_id": queue["queue_id"],
-        "already_prepared": queue["queue_id"] in existing,
+        "queue_id": effective_queue_id,
+        "generated_queue_id": (
+            queue["queue_id"]
+        ),
+        "already_prepared": (
+            already_prepared
+        ),
+        "matched_legacy_queue": (
+            equivalent is not None
+            and effective_queue_id
+            != queue["queue_id"]
+        ),
         "would_post": False,
     }
+
 
 
 def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
@@ -672,11 +931,15 @@ def dispatch_ready(
     slot_id: str,
     *,
     dry_run: bool,
+    queue_id: str = "",
 ) -> dict[str, Any]:
     """Post only precomputed READY inventory for this canonical slot."""
     if existing_slot_status(client, account_id, slot_id) in POSTED_SLOT_STATUSES:
         return {"status": "SKIPPED", "reason": "slot_already_posted", "account_id": account_id, "slot_id": slot_id, "would_post": False}
     target_date = business_date()
+    requested_queue_id = str(
+        queue_id or ""
+    ).strip()
     candidates = [
         row for row in _records(client, "queue")
         if str(row.get("account_id") or row.get("target_account_id") or "") == account_id
@@ -685,10 +948,26 @@ def dispatch_ready(
         and str(row.get("generation_mode", "")) == "direct_reference_media"
         and str(row.get("slot_id", "")) == slot_id
         and str(row.get("business_date_jst", "")) == target_date
+        and (
+            not requested_queue_id
+            or str(row.get("queue_id", ""))
+            == requested_queue_id
+        )
     ]
     candidates.sort(key=lambda row: (int(str(row.get("priority", "100") or "100")), str(row.get("created_at", ""))))
     if not candidates:
-        return {"status": "NO_POST", "reason": "NO_READY_DIRECT_MEDIA", "account_id": account_id, "slot_id": slot_id, "would_post": False}
+        return {
+            "status": "NO_POST",
+            "reason": (
+                "REQUESTED_QUEUE_NOT_READY"
+                if requested_queue_id
+                else "NO_READY_DIRECT_MEDIA"
+            ),
+            "account_id": account_id,
+            "slot_id": slot_id,
+            "requested_queue_id": requested_queue_id,
+            "would_post": False,
+        }
     attempts: list[dict[str, Any]] = []
     selected: dict[str, Any] | None = None
     for queue in candidates:
@@ -730,6 +1009,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="post an explicitly permitted direct-reference media slot")
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
     parser.add_argument("--slot-id", default="")
+    parser.add_argument(
+        "--queue-id",
+        default="",
+        help="Dispatch only this exact READY queue ID",
+    )
     parser.add_argument("--manual-e2e-proof", action="store_true", help="workflow_dispatch-only proof; never claims a scheduled slot")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
@@ -749,8 +1033,28 @@ def main() -> int:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires confirmation and all Threads media gates"]}, ensure_ascii=False)); return 1
     if not args.slot_id and not args.manual_e2e_proof:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["--slot-id or --manual-e2e-proof is required"]}, ensure_ascii=False)); return 1
+    if args.queue_id and not args.post_ready:
+        print(json.dumps({
+            "status": "BLOCKED",
+            "blocked_reasons": [
+                "--queue-id requires --post-ready"
+            ],
+        }, ensure_ascii=False))
+        return 1
     if args.post_ready:
-        plan = dispatch_ready(client, args.account_id, args.slot_id, dry_run=not args.apply) if client else {"status": "PLAN_ONLY", "account_id": args.account_id, "slot_id": args.slot_id, "would_post": False}
+        plan = dispatch_ready(
+            client,
+            args.account_id,
+            args.slot_id,
+            dry_run=not args.apply,
+            queue_id=args.queue_id,
+        ) if client else {
+            "status": "PLAN_ONLY",
+            "account_id": args.account_id,
+            "slot_id": args.slot_id,
+            "requested_queue_id": args.queue_id,
+            "would_post": False,
+        }
     else:
         plan = build_plan(
             args.account_id, args.slot_id, client, apply=args.apply,
