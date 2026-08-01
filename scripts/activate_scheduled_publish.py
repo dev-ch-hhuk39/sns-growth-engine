@@ -23,18 +23,65 @@ def main() -> int:
     args = parser.parse_args()
     gate = evaluate_activation_readiness(use_sheets=args.use_sheets)
     if not args.apply:
-        print(json.dumps({"status": "PLAN_ONLY", "gate": gate, "would_change": {"production_publish_activation_approved": True, "scheduled_publish_enabled": True}, "would_post": False}, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {
+                    "status": "PLAN_ONLY",
+                    "gate": gate,
+                    "would_change": {
+                        "production_publish_activation_approved": True,
+                        "scheduled_publish_enabled": True,
+                    },
+                    "would_post": False,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return 0
     if not args.confirm_scheduled_activation or not args.use_sheets:
-        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-scheduled-activation --use-sheets", "gate": gate}, ensure_ascii=False)); return 1
+        print(
+            json.dumps(
+                {
+                    "status": "BLOCKED",
+                    "reason": "--apply requires --confirm-scheduled-activation --use-sheets",
+                    "gate": gate,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 1
     if gate["status"] != "ALLOW":
-        print(json.dumps({"status": "BLOCKED", "reason": "twelve_canary_activation_evidence_incomplete", "gate": gate}, ensure_ascii=False)); return 1
+        print(
+            json.dumps(
+                {
+                    "status": "BLOCKED",
+                    "reason": "activation_evidence_or_canary_integrity_incomplete",
+                    "gate": gate,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 1
     config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     config["production_publish_activation_approved"] = True
     config["scheduled_publish_enabled"] = True
     config["scheduled_publish_activated_at"] = datetime.now(timezone.utc).isoformat()
-    CONFIG_PATH.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"status": "APPLIED", "gate": gate, "config_path": str(CONFIG_PATH), "would_post": False}, ensure_ascii=False)); return 0
+    CONFIG_PATH.write_text(
+        json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(
+        json.dumps(
+            {
+                "status": "APPLIED",
+                "gate": gate,
+                "config_path": str(CONFIG_PATH),
+                "would_post": False,
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
 
 
 if __name__ == "__main__":
