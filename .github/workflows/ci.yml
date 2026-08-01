@@ -41,6 +41,7 @@ jobs:
         run: |
           python3 scripts/validate_source_registry.py
           python3 scripts/test_acquisition_observability_fail_soft.py
+          python3 scripts/test_direct_media_preparation_serialized.py
           python3 scripts/test_no_fetch_enabled_added.py
           python3 scripts/test_source_registry_no_x_fetch_by_default.py
           python3 scripts/test_collect_source_posts_x_bounded_adapter.py
