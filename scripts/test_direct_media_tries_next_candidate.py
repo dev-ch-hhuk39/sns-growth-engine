@@ -11,11 +11,7 @@ sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 import run_direct_reference_media_pipeline as pipeline
 
 
-GOOD_TEXT = """夜職で店を選ぶとき、時給だけで決めると続かないことがあります。
-
-客層、出勤ペース、ノルマ、担当への相談しやすさまで確認して、自分が無理なく続けられる環境かを見ることが大切です。
-
-条件を比べる前に、譲れないことを三つだけ整理しておくと判断しやすくなります。"""
+GOOD_TEXT = """店選びでは、条件だけでなく相性と相談しやすさも確認する。"""
 
 
 def post(post_id: str) -> dict:
@@ -72,12 +68,13 @@ class CaptionService:
             "blocked_reasons": [],
             "provider_name": "fixture",
             "provider_version": "1",
+            "source_mode": "source_copyedit",
             "semantic_alignment": {
                 "status": "PASS",
                 "final_alignment_score": 0.90,
                 "main_claim_coverage": 0.90,
                 "unsupported_claim_count": 0,
-                "source_copy_similarity": 0.20,
+                "source_copy_similarity": 0.88,
                 "recent_post_similarity": 0.10,
             },
         }

@@ -50,7 +50,24 @@
         "紹介します"
       ],
       "minimum_reader_terms": 2,
-      "minimum_decision_markers": 1
+      "minimum_decision_markers": 1,
+      "source_copyedit": {
+        "strategy": "preserve_source_then_polish",
+        "preferred_markers": [
+          "なんよな",
+          "よな",
+          "かな",
+          "と思う",
+          "僕なら"
+        ],
+        "maximum_conversational_endings": 2,
+        "forbidden_template_phrases": [
+          "確認することは一つ。",
+          "この順番で考える理由はシンプル。",
+          "見るポイントは次の通り。",
+          "次に試すこと："
+        ]
+      }
     },
     "liver_manager": {
       "first_person": "僕",
@@ -108,7 +125,25 @@
       ],
       "minimum_reader_terms": 2,
       "minimum_action_markers": 1,
-      "minimum_logic_markers": 1
+      "minimum_logic_markers": 1,
+      "source_copyedit": {
+        "strategy": "preserve_source_then_polish",
+        "preferred_markers": [
+          "なんですよね",
+          "ですよね",
+          "だよね",
+          "と思います",
+          "僕",
+          "じゃなくて"
+        ],
+        "maximum_conversational_endings": 2,
+        "forbidden_template_phrases": [
+          "確認することは一つ。",
+          "この順番で考える理由はシンプル。",
+          "見るポイントは次の通り。",
+          "次に試すこと："
+        ]
+      }
     }
   },
   "account_execution": {

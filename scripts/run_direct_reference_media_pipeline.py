@@ -33,6 +33,10 @@ from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService,
     build_source_post_bundle,
 )
+from generation.source_copyedit import (  # noqa: E402
+    source_text_is_usable,
+    validate_source_preserving_public_post,
+)
 from acquisition.reliability import (  # noqa: E402
     build_quarantine_record,
     is_quarantined,
@@ -455,7 +459,39 @@ def build_plan(
     )
     attempted: list[dict[str, Any]] = []
     for post, media, _source in candidates:
-        # Never expose original_post_text publicly. A source-specific provider
+        if not source_text_is_usable(
+            str(
+                post.get(
+                    "original_post_text",
+                    "",
+                )
+            )
+        ):
+            attempted.append({
+                "source_post_id": (
+                    post.get(
+                        "source_post_id",
+                        "",
+                    )
+                ),
+                "media_asset_id": str(
+                    media.get(
+                        "media_asset_id"
+                    )
+                    or media.get(
+                        "source_post_media_id"
+                    )
+                    or ""
+                ),
+                "blocked_reasons": [
+                    "source_post_text_unusable"
+                ],
+                "quarantined": False,
+            })
+            continue
+
+        # Direct reference media keeps its exact parent post text as the
+        # primary caption source. OCR/transcripts verify it, not replace it.
         # maps every public claim back to this exact source_post_id.
         carousel_media = list(media.get("carousel_media") or [media])
         bundle = build_source_post_bundle(post, carousel_media)
@@ -479,9 +515,20 @@ def build_plan(
             account_id=account_id,
             recent_posts=recent_posts,
             transcript_excerpt=media_evidence,
+            source_mode="source_copyedit",
         )
-        text = str(grounded.get("public_post_text", ""))
-        validation = final_public_post_validator(text, account_id)
+        text = str(
+            grounded.get(
+                "public_post_text",
+                "",
+            )
+        )
+        validation = (
+            validate_source_preserving_public_post(
+                text,
+                account_id,
+            )
+        )
         alignment = grounded.get("semantic_alignment", {})
         carousel_urls = [str(item.get("storage_url", "")) for item in carousel_media]
         carousel_asset_ids = [str(item.get("media_asset_id") or item.get("media_id") or item.get("source_post_media_id") or "") for item in carousel_media]
@@ -493,6 +540,7 @@ def build_plan(
             "account_id": account_id, "media_type": str(media.get("media_type", "video")), "duration_seconds": media.get("duration_seconds", 0),
             "aspect_ratio": str(media.get("aspect_ratio", "")), "public_post_text": text,
             "media_origin": "direct_reference",
+            "caption_mode": "source_copyedit",
             "alignment_status": alignment.get("status", "BLOCKED"),
             "final_alignment_score": alignment.get("final_alignment_score", 0),
             "main_claim_coverage": alignment.get("main_claim_coverage", 0),
@@ -521,6 +569,7 @@ def build_plan(
                 "claim_support": grounded.get("claim_support", []),
                 "caption_provider": grounded.get("provider_name", ""),
                 "caption_provider_version": grounded.get("provider_version", ""),
+                "source_mode": grounded.get("source_mode", "source_copyedit"),
                 "semantic_alignment": alignment,
                 "media_validator": validator["status"], "would_post": bool(apply and not prepare_only),
                 "prepare_only": prepare_only,
