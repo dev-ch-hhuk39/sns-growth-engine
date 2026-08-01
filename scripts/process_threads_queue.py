@@ -32,6 +32,7 @@ from public_post_quality import extract_public_post_text, final_public_post_vali
 from generation.source_copyedit import validate_source_preserving_public_post  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
+from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
@@ -73,12 +74,9 @@ def get_ws(client: SheetsClient, logical: str):
 
 
 def records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
-    return _call_with_rate_limit_retry(
-        f"get_all_records:{logical}",
-        lambda: [
-            dict(row)
-            for row in get_ws(client, logical).get_all_records()
-        ],
+    return read_records_safely(
+        client,
+        logical,
     )
 
 

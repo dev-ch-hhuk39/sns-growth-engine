@@ -11,6 +11,10 @@ on:
       dry_run_only:
         required: false
         default: "false"
+      queue_id:
+        description: "Optional exact READY queue ID"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -69,7 +73,7 @@ jobs:
         continue-on-error: true
         run: python3 scripts/check_schedule_window.py --slot-id "$CONTENT_SLOT_ID"
       - name: Dry-run prepared inventory
-        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --post-ready --dry-run --use-sheets
+        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --post-ready --dry-run --use-sheets
       - name: Resolve scheduled activation gate
         id: activation
         run: |
@@ -109,7 +113,7 @@ jobs:
           ALLOW_VIDEO_DOWNLOAD: "false"
           ALLOW_VIDEO_CUT: "false"
           ALLOW_CLOUDINARY_UPLOAD: "false"
-        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --post-ready --apply --confirm-direct-media --use-sheets
+        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --post-ready --apply --confirm-direct-media --use-sheets
       - name: Health summary
         if: always()
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

@@ -16,6 +16,7 @@ sys.path[:0] = [
 ]
 
 import run_direct_reference_media_pipeline as core
+from sheets_record_reader import records_from_values
 
 
 SNAPSHOT_LOGICALS = (
@@ -55,29 +56,11 @@ def _sheet_range(worksheet: Any) -> str:
     return f"'{title}'!A1:{_col_letter(col_count)}{row_count}"
 
 
-def _records_from_values(values: list[list[Any]]) -> list[dict[str, Any]]:
-    if not values:
-        return []
+def _records_from_values(
+    values: list[list[Any]],
+) -> list[dict[str, Any]]:
+    return records_from_values(values)
 
-    headers = [str(value or "") for value in values[0]]
-    nonempty_headers = [header for header in headers if header]
-
-    if len(nonempty_headers) != len(set(nonempty_headers)):
-        raise RuntimeError("direct_media_batch_snapshot_duplicate_headers")
-
-    records: list[dict[str, Any]] = []
-
-    for raw_row in values[1:]:
-        record = {
-            header: raw_row[index] if index < len(raw_row) else ""
-            for index, header in enumerate(headers)
-            if header
-        }
-
-        if any(str(value or "").strip() for value in record.values()):
-            records.append(record)
-
-    return records
 
 
 def _prime_snapshot(client: Any, *, force: bool = False) -> None:
