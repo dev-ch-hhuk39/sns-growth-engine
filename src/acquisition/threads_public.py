@@ -5,6 +5,7 @@ stored browser state and CAPTCHA workarounds.  It reads only public HTML from
 one browser context at a time and reports an ordinary backend failure when a
 profile no longer exposes post links.
 """
+
 from __future__ import annotations
 
 import html
@@ -15,11 +16,21 @@ from typing import Any, Callable
 from urllib.parse import urljoin
 
 from .contracts import ProviderResult
-from .models import NormalizedMediaItem, NormalizedSourcePost, canonical_url, external_post_id, stable_content_hash, utc_now
+from .models import (
+    NormalizedMediaItem,
+    NormalizedSourcePost,
+    canonical_url,
+    external_post_id,
+    stable_content_hash,
+    utc_now,
+)
 from .router import BackendFailure
 
 POST_HREF = re.compile(r"/(?:@[^/]+/)?post/[A-Za-z0-9_-]+")
-META = re.compile(r"<meta[^>]+(?:property|name)=[\"'](?P<key>[^\"']+)[\"'][^>]+content=[\"'](?P<value>[^\"']+)[\"'][^>]*>", re.I)
+META = re.compile(
+    r"<meta[^>]+(?:property|name)=[\"'](?P<key>[^\"']+)[\"'][^>]+content=[\"'](?P<value>[^\"']+)[\"'][^>]*>",
+    re.I,
+)
 
 
 def _meta_values(page_html: str, key: str) -> list[str]:
@@ -137,27 +148,35 @@ def parse_public_post_html(
     external = external_post_id(canonical_post)
     source_id = str(source["source_id"])
     post_id = f"sp_{source_id}_{external}"
-    description = _meta_values(page_html, "og:description") or _meta_values(page_html, "description")
+    description = _meta_values(page_html, "og:description") or _meta_values(
+        page_html, "description"
+    )
     original_text = description[0] if description else ""
     author = _meta_values(page_html, "og:title")
     image_urls = _meta_values(page_html, "og:image")
-    video_urls = _meta_values(page_html, "og:video") + _meta_values(page_html, "og:video:secure_url")
+    video_urls = _meta_values(page_html, "og:video") + _meta_values(
+        page_html, "og:video:secure_url"
+    )
     media: list[NormalizedMediaItem] = []
     ordered = extract_ordered_post_media(page_html)
     if not ordered:
         ordered = [("image", url) for url in image_urls] + [("video", url) for url in video_urls]
     for index, (media_type, media_url) in enumerate(dict.fromkeys(ordered)):
-        media.append(NormalizedMediaItem(
-            source_post_media_id=f"spm_{post_id}_{index}",
-            source_post_id=post_id,
-            media_index=index,
-            media_type=media_type,
-            canonical_post_url=canonical_post,
-            original_media_url=canonical_url(media_url),
-            resolver_backend=backend_name,
-            thumbnail_url=image_urls[0] if media_type == "video" and image_urls else "",
-        ))
-    account_id = str((source.get("target_account_ids") or [source.get("target_account_id")])[0] or "")
+        media.append(
+            NormalizedMediaItem(
+                source_post_media_id=f"spm_{post_id}_{index}",
+                source_post_id=post_id,
+                media_index=index,
+                media_type=media_type,
+                canonical_post_url=canonical_post,
+                original_media_url=canonical_url(media_url),
+                resolver_backend=backend_name,
+                thumbnail_url=image_urls[0] if media_type == "video" and image_urls else "",
+            )
+        )
+    account_id = str(
+        (source.get("target_account_ids") or [source.get("target_account_id")])[0] or ""
+    )
     handle = ""
     match = re.search(r"/@([^/]+)/post/", canonical_post)
     if match:
@@ -178,7 +197,9 @@ def parse_public_post_html(
         engagement={},
         collection_backend=backend_name,
         backend_version=backend_version,
-        content_hash=stable_content_hash(original_text, [item.original_media_url for item in media]),
+        content_hash=stable_content_hash(
+            original_text, [item.original_media_url for item in media]
+        ),
         discovered_at=utc_now(),
     )
 
@@ -211,25 +232,74 @@ class ThreadsPublicProfileAdapter:
         except Exception as exc:
             raise BackendFailure(f"threads_public_page_failed:{type(exc).__name__}") from exc
 
-    def acquire(self, source: dict[str, Any], *, limit: int) -> list[NormalizedSourcePost]:
+    def acquire(
+        self,
+        source: dict[str, Any],
+        *,
+        limit: int,
+    ) -> list[NormalizedSourcePost]:
         profile_url = canonical_url(str(source.get("source_url") or ""))
+
         if not profile_url.startswith("https://www.threads.com/@"):
             raise BackendFailure("threads_profile_url_required")
+
+        try:
+            start_position = max(
+                1,
+                int(
+                    source.get(
+                        "_discovery_start_position",
+                        1,
+                    )
+                ),
+            )
+        except (TypeError, ValueError):
+            start_position = 1
+
+        bounded = max(
+            1,
+            int(limit),
+        )
+
+        requested = start_position - 1 + bounded
+
         profile_html = self._load(profile_url)
-        post_urls = extract_profile_post_urls(profile_html, profile_url, limit=limit)
+
+        discovered_urls = extract_profile_post_urls(
+            profile_html,
+            profile_url,
+            limit=requested,
+        )
+
+        post_urls = discovered_urls[start_position - 1 : start_position - 1 + bounded]
+
         if not post_urls:
             raise BackendFailure("threads_profile_post_links_unavailable")
+
         posts = []
+
         for post_url in post_urls:
             try:
-                posts.append(parse_public_post_html(source, post_url, self._load(post_url), backend_name=self.backend_name, backend_version=self.backend_version))
+                posts.append(
+                    parse_public_post_html(
+                        source,
+                        post_url,
+                        self._load(post_url),
+                        backend_name=(self.backend_name),
+                        backend_version=(self.backend_version),
+                    )
+                )
             except BackendFailure:
                 continue
+
         if not posts:
             raise BackendFailure("threads_post_detail_unavailable")
+
         return posts
 
-    def discover_profile(self, source: dict[str, Any], *, limit: int) -> ProviderResult[list[NormalizedSourcePost]]:
+    def discover_profile(
+        self, source: dict[str, Any], *, limit: int
+    ) -> ProviderResult[list[NormalizedSourcePost]]:
         try:
             posts = self.acquire(source, limit=limit)
             return ProviderResult(self.backend_name, self.backend_version, "PASS", data=posts)
@@ -254,7 +324,10 @@ class ThreadsPublicHttpAdapter(ThreadsPublicProfileAdapter):
             return self._html_loader(url)
         try:
             from urllib.request import Request, urlopen
-            request = Request(url, headers={"User-Agent": "SNSGrowthEngine/1.0 public-source-collector"})
+
+            request = Request(
+                url, headers={"User-Agent": "SNSGrowthEngine/1.0 public-source-collector"}
+            )
             with urlopen(request, timeout=20) as response:
                 if response.status != 200:
                     raise BackendFailure(f"threads_http_status:{response.status}")

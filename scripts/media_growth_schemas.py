@@ -42,6 +42,7 @@ SOURCE_VIDEO_FIELDS = [
     "rights_status", "permission_status", "discovery_status",
     "discovered_at", "last_seen_at", "processed_at", "skip_reason",
     "content_hash", "duplicate_key",
+    "source_position", "discovery_mode",
     "subject_policy_status", "subject_policy_reason",
 ]
 

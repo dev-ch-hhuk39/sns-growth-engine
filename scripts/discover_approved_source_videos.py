@@ -30,6 +30,11 @@ from media_growth_schemas import (  # noqa: E402
 )
 from config_loader import get_config  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from source_discovery_policy import (  # noqa: E402
+    build_state_update,
+    plan_source_scan,
+    select_unique_candidates,
+)
 
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 CONFIG_FILE = ROOT / "config/media_growth_engine.json"
@@ -51,48 +56,378 @@ def load_existing_source_videos(path: str = "") -> list[dict[str, Any]]:
     return json.loads(candidate.read_text(encoding="utf-8"))
 
 
-def load_existing_source_videos_from_sheets() -> tuple[SheetsClient, list[dict[str, Any]]]:
+def _read_sheet_rows(
+    client: SheetsClient,
+    tab_name: str,
+    operation: str,
+) -> list[dict[str, Any]]:
+    """Read an existing tab without creating it."""
+
+    try:
+        rows = client._call_with_rate_limit_retry(
+            operation,
+            lambda: client._ws(tab_name).get_all_records(),
+        )
+    except Exception as exc:
+        if type(exc).__name__ == "WorksheetNotFound":
+            return []
+
+        raise
+
+    return [dict(row) for row in rows]
+
+
+def load_discovery_data_from_sheets(
+    *,
+    ensure_tabs: bool = False,
+) -> tuple[
+    SheetsClient,
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    """Read source videos and discovery state."""
+
     cfg = get_config()
-    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    client._ensure_tab("source_videos", TAB_DEFINITIONS["source_videos"])
-    rows = client._call_with_rate_limit_retry(
-        "get_all_records:source_videos:discovery",
-        lambda: client._ws("source_videos").get_all_records(),
+
+    client = SheetsClient(
+        cfg["sheet_id"],
+        cfg["sa_dict"],
+        dry_run=False,
     )
-    return client, [dict(r) for r in rows]
+
+    if ensure_tabs:
+        for tab_name in (
+            "source_videos",
+            "source_discovery_state",
+        ):
+            client._ensure_tab(
+                tab_name,
+                TAB_DEFINITIONS[tab_name],
+            )
+
+    videos = _read_sheet_rows(
+        client,
+        "source_videos",
+        ("get_all_records:" "source_videos:discovery"),
+    )
+
+    state_rows = _read_sheet_rows(
+        client,
+        "source_discovery_state",
+        ("get_all_records:" "source_discovery_state:" "discovery"),
+    )
+
+    return client, videos, state_rows
 
 
-def append_source_videos_to_sheets(client: SheetsClient, rows: list[dict[str, Any]]) -> int:
+def load_existing_source_videos_from_sheets() -> tuple[
+    SheetsClient,
+    list[dict[str, Any]],
+]:
+    """Compatibility wrapper for existing callers."""
+
+    client, videos, _ = load_discovery_data_from_sheets(ensure_tabs=False)
+
+    return client, videos
+
+
+def is_persistable_source_video(
+    row: dict[str, Any],
+) -> bool:
+    """Allow only verified individual-video metadata into source_videos."""
+
+    platform = str(row.get("platform", "")).lower()
+
+    if platform not in {
+        "youtube",
+        "tiktok",
+    }:
+        return False
+
+    if (
+        str(
+            row.get(
+                "discovery_status",
+                "",
+            )
+        )
+        != "DISCOVERED"
+    ):
+        return False
+
+    if not rights_allows_media_use(
+        str(
+            row.get(
+                "rights_status",
+                "",
+            )
+        )
+    ):
+        return False
+
+    if (
+        str(
+            row.get(
+                "permission_status",
+                "",
+            )
+        )
+        != "approved"
+    ):
+        return False
+
+    if not str(
+        row.get(
+            "source_id",
+            "",
+        )
+    ):
+        return False
+
+    if not str(
+        row.get(
+            "account_id",
+            "",
+        )
+    ):
+        return False
+
+    original_url = str(
+        row.get(
+            "original_video_url",
+            "",
+        )
+    )
+
+    stored_canonical = str(
+        row.get(
+            "canonical_video_url",
+            "",
+        )
+    )
+
+    if not original_url or not stored_canonical:
+        return False
+
+    canonical_url = canonicalize_video_url(
+        original_url,
+        platform,
+    )
+
+    if canonical_url != canonicalize_video_url(
+        stored_canonical,
+        platform,
+    ):
+        return False
+
+    video_id = extract_video_id(
+        canonical_url,
+        platform,
+    )
+
+    if not video_id:
+        return False
+
+    if video_id != str(
+        row.get(
+            "video_id",
+            "",
+        )
+    ):
+        return False
+
+    if platform == "youtube":
+        return len(video_id) == 11
+
+    return video_id.isdigit()
+
+
+def append_source_videos_to_sheets(
+    client: SheetsClient,
+    rows: list[dict[str, Any]],
+) -> int:
+    """Append only real, validated individual-video discovery rows."""
+
     if not rows:
         return 0
+
+    invalid_ids = [
+        str(
+            row.get(
+                "source_video_id",
+                "",
+            )
+        )
+        or f"row_{index}"
+        for index, row in enumerate(
+            rows,
+            start=1,
+        )
+        if not is_persistable_source_video(row)
+    ]
+
+    if invalid_ids:
+        raise ValueError("non_persistable_source_videos:" + ",".join(invalid_ids))
+
     ws = client._ws("source_videos")
+
     headers = client._call_with_rate_limit_retry(
         "row_values:source_videos:discovery",
         lambda: ws.row_values(1),
     )
+
     existing = [
-        dict(r)
-        for r in client._call_with_rate_limit_retry(
-            "get_all_records:source_videos:discovery_append",
+        dict(row)
+        for row in client._call_with_rate_limit_retry(
+            "get_all_records:" "source_videos:" "discovery_append",
             lambda: ws.get_all_records(),
         )
     ]
-    to_add = [row for row in rows if not is_duplicate_source_video(row, existing)]
+
+    to_add = [
+        row
+        for row in rows
+        if not is_duplicate_source_video(
+            row,
+            existing,
+        )
+    ]
+
     if not to_add:
         return 0
+
     client._call_with_rate_limit_retry(
         "append_rows:source_videos:discovery",
         lambda: ws.append_rows(
-            [[str(row.get(h, "")) for h in headers] for row in to_add],
+            [
+                [
+                    str(
+                        row.get(
+                            header,
+                            "",
+                        )
+                    )
+                    for header in headers
+                ]
+                for row in to_add
+            ],
             value_input_option="USER_ENTERED",
         ),
     )
+
+    return len(to_add)
+
+
+def append_discovery_state_to_sheets(
+    client: SheetsClient,
+    rows: list[dict[str, Any]],
+) -> int:
+    """Append discovery-state snapshots idempotently."""
+
+    if not rows:
+        return 0
+
+    client._ensure_tab(
+        "source_discovery_state",
+        TAB_DEFINITIONS["source_discovery_state"],
+    )
+
+    ws = client._ws("source_discovery_state")
+
+    headers = client._call_with_rate_limit_retry(
+        ("row_values:" "source_discovery_state:" "discovery"),
+        lambda: ws.row_values(1),
+    )
+
+    existing = [
+        dict(row)
+        for row in client._call_with_rate_limit_retry(
+            ("get_all_records:" "source_discovery_state:" "discovery_append"),
+            lambda: ws.get_all_records(),
+        )
+    ]
+
+    existing_keys = {
+        (
+            str(
+                row.get(
+                    "state_id",
+                    "",
+                )
+            ),
+            str(
+                row.get(
+                    "last_scan_at",
+                    "",
+                )
+            ),
+            str(
+                row.get(
+                    "updated_at",
+                    "",
+                )
+            ),
+        )
+        for row in existing
+    }
+
+    to_add = [
+        row
+        for row in rows
+        if (
+            str(
+                row.get(
+                    "state_id",
+                    "",
+                )
+            ),
+            str(
+                row.get(
+                    "last_scan_at",
+                    "",
+                )
+            ),
+            str(
+                row.get(
+                    "updated_at",
+                    "",
+                )
+            ),
+        )
+        not in existing_keys
+    ]
+
+    if not to_add:
+        return 0
+
+    client._call_with_rate_limit_retry(
+        ("append_rows:" "source_discovery_state:" "discovery"),
+        lambda: ws.append_rows(
+            [
+                [
+                    str(
+                        row.get(
+                            header,
+                            "",
+                        )
+                    )
+                    for header in headers
+                ]
+                for row in to_add
+            ],
+            value_input_option=("USER_ENTERED"),
+        ),
+    )
+
     return len(to_add)
 
 
 def permission_ok(source: dict[str, Any]) -> bool:
     evidence_type = str(source.get("permission_evidence_type", ""))
-    if evidence_type == "owner_attestation" and str(source.get("permission_evidence_reference", "")) != "global_owner_attestation_v1":
+    if (
+        evidence_type == "owner_attestation"
+        and str(source.get("permission_evidence_reference", "")) != "global_owner_attestation_v1"
+    ):
         return False
     return (
         source.get("permission_status") == "approved"
@@ -117,7 +452,9 @@ def select_discovery_sources(account_id: str, config: dict[str, Any]) -> list[di
             continue
         if source.get("source_type") not in allowed_types:
             continue
-        if config.get("require_source_media_autopilot_enabled") and not source.get("media_autopilot_enabled"):
+        if config.get("require_source_media_autopilot_enabled") and not source.get(
+            "media_autopilot_enabled"
+        ):
             continue
         rows.append(source)
     return rows
@@ -133,7 +470,10 @@ def order_sources_for_discovery(
     for row in existing_source_videos:
         source_id = str(row.get("source_id", ""))
         counts[source_id] = counts.get(source_id, 0) + 1
-        latest[source_id] = max(latest.get(source_id, ""), str(row.get("last_seen_at") or row.get("discovered_at") or ""))
+        latest[source_id] = max(
+            latest.get(source_id, ""),
+            str(row.get("last_seen_at") or row.get("discovered_at") or ""),
+        )
     return sorted(
         sources,
         key=lambda source: (
@@ -144,15 +484,71 @@ def order_sources_for_discovery(
     )
 
 
-def build_source_video_candidates(source: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return bounded planned candidates without network fetch."""
-    scan_limit = int(config.get("max_videos_per_source_scan", 50))
-    per_source_limit = int(config.get("max_new_videos_per_source_per_run", 10))
-    planned_count = min(scan_limit, per_source_limit)
-    videos = []
-    for index in range(1, planned_count + 1):
-        videos.append(build_source_video(source, index=index, discovery_status="PLANNED_ONLY"))
-    return videos
+def build_source_video_candidates(
+    source: dict[str, Any],
+    config: dict[str, Any],
+    scan_plan: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Build bounded dry-run candidates for one scan range."""
+
+    if scan_plan is None:
+        scan_plan = {
+            "mode": "initial",
+            "start_position": 1,
+            "scan_limit": int(
+                config.get(
+                    "max_videos_per_source_scan",
+                    50,
+                )
+            ),
+        }
+
+    start_position = max(
+        1,
+        int(
+            scan_plan.get(
+                "start_position",
+                1,
+            )
+        ),
+    )
+
+    scan_limit = max(
+        1,
+        int(
+            scan_plan.get(
+                "scan_limit",
+                config.get(
+                    "max_videos_per_source_scan",
+                    50,
+                ),
+            )
+        ),
+    )
+
+    rows = []
+
+    for position in range(
+        start_position,
+        start_position + scan_limit,
+    ):
+        row = build_source_video(
+            source,
+            index=position,
+            discovery_status="PLANNED_ONLY",
+        )
+
+        row["source_position"] = position
+        row["discovery_mode"] = str(
+            scan_plan.get(
+                "mode",
+                "initial",
+            )
+        )
+
+        rows.append(row)
+
+    return rows
 
 
 def _entry_video_url(source: dict[str, Any], entry: dict[str, Any]) -> str:
@@ -183,7 +579,9 @@ def _bounded_public_comments(
         try:
             from youtube_comment_downloader import SORT_BY_POPULAR, YoutubeCommentDownloader
 
-            raw = YoutubeCommentDownloader().get_comments_from_url(video_url, sort_by=SORT_BY_POPULAR)
+            raw = YoutubeCommentDownloader().get_comments_from_url(
+                video_url, sort_by=SORT_BY_POPULAR
+            )
             rows = []
             for item in islice(raw, bounded):
                 text = str(item.get("text", "")).strip()
@@ -205,82 +603,206 @@ def _bounded_public_comments(
     return []
 
 
-def discover_source_videos_real(source: dict[str, Any], config: dict[str, Any]) -> tuple[list[dict[str, Any]], str]:
-    """Use yt-dlp flat extraction with strict per-source limits and no media download."""
+def discover_source_videos_real(
+    source: dict[str, Any],
+    config: dict[str, Any],
+    scan_plan: dict[str, Any] | None = None,
+) -> tuple[
+    list[dict[str, Any]],
+    str,
+]:
+    """Discover one bounded account range without downloading media."""
+
     if importlib.util.find_spec("yt_dlp") is None:
         return [], "yt_dlp_not_installed"
+
     import yt_dlp  # type: ignore[import]
 
-    scan_limit = max(1, int(config.get("max_videos_per_source_scan", 50)))
-    per_source_limit = max(1, int(config.get("max_new_videos_per_source_per_run", 10)))
-    platform = str(source.get("source_platform", "")).lower()
-    opts = metadata_options(platform, {
-        "extract_flat": "in_playlist",
-        "playlistend": scan_limit,
-        "skip_download": True,
-        "quiet": True,
-        "no_warnings": True,
-        "ignoreerrors": True,
-        "socket_timeout": 20,
-    })
+    if scan_plan is None:
+        scan_plan = {
+            "mode": "initial",
+            "start_position": 1,
+            "scan_limit": int(
+                config.get(
+                    "max_videos_per_source_scan",
+                    50,
+                )
+            ),
+        }
+
+    start_position = max(
+        1,
+        int(
+            scan_plan.get(
+                "start_position",
+                1,
+            )
+        ),
+    )
+
+    scan_limit = max(
+        1,
+        int(
+            scan_plan.get(
+                "scan_limit",
+                config.get(
+                    "max_videos_per_source_scan",
+                    50,
+                ),
+            )
+        ),
+    )
+
+    end_position = start_position + scan_limit - 1
+
+    platform = str(
+        source.get(
+            "source_platform",
+            "",
+        )
+    ).lower()
+
+    opts = metadata_options(
+        platform,
+        {
+            "extract_flat": "in_playlist",
+            "playliststart": start_position,
+            "playlistend": end_position,
+            "skip_download": True,
+            "quiet": True,
+            "no_warnings": True,
+            "ignoreerrors": True,
+            "socket_timeout": 20,
+        },
+    )
+
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(str(source.get("source_url", "")), download=False)
-    except Exception as exc:  # noqa: BLE001
-        return [], f"{type(exc).__name__}: discovery_failed"
+            info = ydl.extract_info(
+                str(
+                    source.get(
+                        "source_url",
+                        "",
+                    )
+                ),
+                download=False,
+            )
+    except Exception as exc:
+        return (
+            [],
+            f"{type(exc).__name__}: " "discovery_failed",
+        )
+
     if not info:
         return [], "metadata_unavailable"
+
     entries = info.get("entries") if isinstance(info, dict) else None
+
     if entries is None:
         entries = [info]
+
     rows: list[dict[str, Any]] = []
-    for index, entry in enumerate((e for e in entries if isinstance(e, dict)), start=1):
-        if len(rows) >= min(scan_limit, per_source_limit):
+
+    valid_entries = (entry for entry in entries if isinstance(entry, dict))
+
+    for fallback_position, entry in enumerate(
+        valid_entries,
+        start=start_position,
+    ):
+        if len(rows) >= scan_limit:
             break
-        video_url = _entry_video_url(source, entry)
-        platform = str(source.get("source_platform", ""))
-        video_id = extract_video_id(video_url, platform)
+
+        try:
+            source_position = int(
+                entry.get(
+                    "playlist_index",
+                    fallback_position,
+                )
+            )
+        except (TypeError, ValueError):
+            source_position = fallback_position
+
+        video_url = _entry_video_url(
+            source,
+            entry,
+        )
+
+        video_id = extract_video_id(
+            video_url,
+            platform,
+        )
+
         if not video_url or not video_id:
             continue
+
         if platform == "youtube" and len(video_id) != 11:
             continue
+
         if platform == "tiktok" and not video_id.isdigit():
             continue
-        metadata = dict(entry)
-        if not metadata.get("duration"):
-            detail_opts = metadata_options(platform, {
-                "skip_download": True,
-                "quiet": True,
-                "no_warnings": True,
-                "noplaylist": True,
-                "socket_timeout": 20,
-            })
-            try:
-                with yt_dlp.YoutubeDL(detail_opts) as detail_ydl:
-                    detail = detail_ydl.extract_info(video_url, download=False)
-                if isinstance(detail, dict):
-                    metadata.update(detail)
-            except Exception:  # noqa: BLE001
-                pass
+
+        # Discovery deliberately uses flat metadata only.
+        # Per-video detail retrieval is deferred until the
+        # candidate survives dedupe and is processed later.
         row = build_source_video(
             source,
-            index=index,
+            index=source_position,
             video_url=video_url,
-            title=str(metadata.get("title") or ""),
-            duration_seconds=metadata.get("duration") or 0,
-            description=str(metadata.get("description") or ""),
+            title=str(entry.get("title") or ""),
+            duration_seconds=(entry.get("duration") or 0),
+            description=str(entry.get("description") or ""),
             discovery_status="DISCOVERED",
         )
-        row["author_handle"] = str(metadata.get("uploader_id") or metadata.get("channel_id") or source.get("source_handle") or "")
-        row["published_at"] = str(metadata.get("upload_date") or metadata.get("timestamp") or "")
-        row["view_count"] = metadata.get("view_count") or ""
-        row["like_count"] = metadata.get("like_count") or ""
-        row["comment_count"] = metadata.get("comment_count") or ""
-        comments = _bounded_public_comments(platform, video_url, metadata, limit=20)
-        row["comments_json"] = json.dumps(comments, ensure_ascii=False)
+
+        row["source_position"] = source_position
+
+        row["discovery_mode"] = str(
+            scan_plan.get(
+                "mode",
+                "initial",
+            )
+        )
+
+        row["author_handle"] = str(
+            entry.get("uploader_id") or entry.get("channel_id") or source.get("source_handle") or ""
+        )
+
+        row["published_at"] = str(entry.get("upload_date") or entry.get("timestamp") or "")
+
+        row["view_count"] = entry.get("view_count") or ""
+
+        row["like_count"] = entry.get("like_count") or ""
+
+        row["comment_count"] = entry.get("comment_count") or ""
+
+        raw_comments = entry.get("comments") if platform == "tiktok" else []
+
+        comments = (
+            _bounded_public_comments(
+                platform,
+                video_url,
+                {
+                    "comments": raw_comments,
+                },
+                limit=20,
+            )
+            if raw_comments
+            else []
+        )
+
+        row["comments_json"] = json.dumps(
+            comments,
+            ensure_ascii=False,
+        )
+
         row["comment_count_collected"] = str(len(comments))
+
         rows.append(row)
-    return rows, "REAL_DISCOVERY" if rows else "NO_INDIVIDUAL_VIDEOS"
+
+    return (
+        rows,
+        ("REAL_DISCOVERY" if rows else "NO_INDIVIDUAL_VIDEOS"),
+    )
 
 
 def _source_discovery_status(source: dict[str, Any]) -> str:
@@ -298,158 +820,524 @@ def build_discovery_plan(
     apply: bool = False,
     confirm_discovery: bool = False,
     existing_source_videos: list[dict[str, Any]] | None = None,
+    discovery_state_rows: list[dict[str, Any]] | None = None,
     fetch_real: bool = False,
 ) -> dict[str, Any]:
     config = load_config()
-    existing = existing_source_videos if existing_source_videos is not None else load_existing_source_videos()
-    selected = order_sources_for_discovery(select_discovery_sources(account_id, config), existing)
+
+    existing = (
+        existing_source_videos
+        if existing_source_videos is not None
+        else load_existing_source_videos()
+    )
+
+    state_rows = discovery_state_rows if discovery_state_rows is not None else []
+
+    selected_sources = order_sources_for_discovery(
+        select_discovery_sources(
+            account_id,
+            config,
+        ),
+        existing,
+    )
+
     blocked: list[str] = []
+
     if not config.get("source_video_discovery_enabled"):
         blocked.append("source_video_discovery_disabled")
+
     if apply and not confirm_discovery:
-        blocked.append("--apply requires --confirm-discovery")
+        blocked.append("--apply requires " "--confirm-discovery")
+    if apply and not fetch_real:
+        blocked.append("--apply requires --fetch-real")
+
     if apply and not config.get("source_video_discovery_apply_enabled"):
         blocked.append("source_video_discovery_apply_disabled")
 
-    max_total = int(config.get("max_total_new_videos_per_run", 20))
+    max_total = int(
+        config.get(
+            "max_total_new_videos_per_run",
+            20,
+        )
+    )
+
     source_results = []
     new_videos: list[dict[str, Any]] = []
+    state_updates: list[dict[str, Any]] = []
+
     duplicate_count = 0
     skipped_count = 0
-    discovered_count = 0
+    scanned_count = 0
 
-    for source in selected:
+    for source in selected_sources:
         source_blocked: list[str] = []
-        rights = str(source.get("rights_status", ""))
+
+        source_id = str(
+            source.get(
+                "source_id",
+                "",
+            )
+        )
+
+        platform = str(
+            source.get(
+                "source_platform",
+                "",
+            )
+        )
+
+        rights = str(
+            source.get(
+                "rights_status",
+                "",
+            )
+        )
+
         if not rights_allows_media_use(rights):
             source_blocked.append("rights_status_not_media_approved")
+
         if not permission_ok(source):
             source_blocked.append("permission_evidence_missing")
 
+        targets = source.get("target_account_ids") or [source.get("target_account_id")]
+
+        target_account_id = str(
+            next(
+                (target for target in targets if target),
+                (account_id if account_id != "all" else ""),
+            )
+        )
+
+        scan_plan = plan_source_scan(
+            source_id=source_id,
+            account_id=target_account_id,
+            item_type="video",
+            existing_rows=existing,
+            state_rows=state_rows,
+            config=config,
+        )
+
         discovery_status = _source_discovery_status(source)
+
         if len(new_videos) >= max_total:
-            source_results.append({
-                "source_id": source.get("source_id"),
-                "platform": source.get("source_platform"),
-                "source_type": source.get("source_type"),
-                "source_url": canonicalize_video_url(source.get("source_url", ""), source.get("source_platform", "")),
-                "rights_status": rights,
-                "permission_status": source.get("permission_status", ""),
-                "discovery_status": "MAX_TOTAL_LIMIT_REACHED",
-                "scan_limit": int(config.get("max_videos_per_source_scan", 50)),
-                "new_limit": int(config.get("max_new_videos_per_source_per_run", 10)),
-                "discovered_video_count": 0,
-                "new_video_count": 0,
-                "duplicate_video_count": 0,
-                "blocked_reasons": [],
-            })
+            source_results.append(
+                {
+                    "source_id": source_id,
+                    "account_id": target_account_id,
+                    "platform": platform,
+                    "source_type": source.get("source_type"),
+                    "source_url": (
+                        canonicalize_video_url(
+                            source.get(
+                                "source_url",
+                                "",
+                            ),
+                            platform,
+                        )
+                    ),
+                    "rights_status": rights,
+                    "permission_status": (
+                        source.get(
+                            "permission_status",
+                            "",
+                        )
+                    ),
+                    "discovery_status": ("MAX_TOTAL_LIMIT_REACHED"),
+                    "scan_mode": (scan_plan["mode"]),
+                    "start_position": (scan_plan["start_position"]),
+                    "scan_limit": (scan_plan["scan_limit"]),
+                    "inventory_count": (scan_plan["inventory_count"]),
+                    "inventory_target": (scan_plan["inventory_target"]),
+                    "new_limit": (scan_plan["per_source_new_limit"]),
+                    "adapter_candidate_count": 0,
+                    "discovered_video_count": 0,
+                    "new_video_count": 0,
+                    "duplicate_video_count": 0,
+                    "max_duplicate_streak": 0,
+                    "stop_reason": ("max_total_new_reached"),
+                    "state_update_planned": False,
+                    "blocked_reasons": [],
+                }
+            )
+
             skipped_count += 1
             continue
+
         if source_blocked:
             candidates = []
         elif fetch_real:
-            candidates, discovery_status = discover_source_videos_real(source, config)
+            (
+                candidates,
+                discovery_status,
+            ) = discover_source_videos_real(
+                source,
+                config,
+                scan_plan,
+            )
         else:
-            candidates = build_source_video_candidates(source, config)
-        discovered_count += len(candidates)
-        source_new = []
-        source_duplicates = 0
-        for candidate in candidates:
-            if is_duplicate_source_video(candidate, existing + new_videos):
-                duplicate_count += 1
-                source_duplicates += 1
-                continue
-            if len(new_videos) >= max_total:
-                skipped_count += 1
-                continue
-            source_new.append(candidate)
-            new_videos.append(candidate)
+            candidates = build_source_video_candidates(
+                source,
+                config,
+                scan_plan,
+            )
 
-        source_results.append({
-            "source_id": source.get("source_id"),
-            "platform": source.get("source_platform"),
-            "source_type": source.get("source_type"),
-            "source_url": canonicalize_video_url(source.get("source_url", ""), source.get("source_platform", "")),
-            "rights_status": rights,
-            "permission_status": source.get("permission_status", ""),
-            "discovery_status": discovery_status,
-            "scan_limit": int(config.get("max_videos_per_source_scan", 50)),
-            "new_limit": int(config.get("max_new_videos_per_source_per_run", 10)),
-            "discovered_video_count": len(candidates),
-            "new_video_count": len(source_new),
-            "duplicate_video_count": source_duplicates,
-            "blocked_reasons": source_blocked,
-        })
+        if source_blocked:
+            selection = {
+                "selected": [],
+                "new_count": 0,
+                "duplicate_count": 0,
+                "scanned_count": 0,
+                "max_duplicate_streak": 0,
+                "max_scanned_position": (int(scan_plan["start_position"]) - 1),
+                "stop_reason": ("source_blocked"),
+            }
+        else:
+            selection = select_unique_candidates(
+                candidates=candidates,
+                existing_rows=existing,
+                selected_this_run=(new_videos),
+                duplicate_checker=(is_duplicate_source_video),
+                scan_plan=scan_plan,
+            )
+
+        selected_rows = list(
+            selection.get(
+                "selected",
+                [],
+            )
+        )
+
+        new_videos.extend(selected_rows)
+
+        source_duplicates = int(
+            selection.get(
+                "duplicate_count",
+                0,
+            )
+        )
+
+        source_scanned = int(
+            selection.get(
+                "scanned_count",
+                0,
+            )
+        )
+
+        duplicate_count += source_duplicates
+
+        scanned_count += source_scanned
+
+        skipped_count += max(
+            0,
+            len(candidates) - source_scanned,
+        )
+
+        scan_completed = not source_blocked and (
+            not fetch_real
+            or discovery_status
+            in {
+                "REAL_DISCOVERY",
+                "NO_INDIVIDUAL_VIDEOS",
+            }
+        )
+
+        state_update = {}
+
+        if scan_completed:
+            latest_candidate = {}
+
+            if (
+                scan_plan["mode"]
+                in {
+                    "initial",
+                    "incremental",
+                }
+                and candidates
+            ):
+                latest_candidate = candidates[0]
+
+            state_update = build_state_update(
+                scan_plan=scan_plan,
+                selection=selection,
+                latest_seen_item_id=str(
+                    latest_candidate.get(
+                        "video_id",
+                        "",
+                    )
+                ),
+                latest_seen_published_at=str(
+                    latest_candidate.get(
+                        "published_at",
+                        "",
+                    )
+                ),
+                platform=platform,
+            )
+
+            state_updates.append(state_update)
+
+        source_results.append(
+            {
+                "source_id": source_id,
+                "account_id": target_account_id,
+                "platform": platform,
+                "source_type": source.get("source_type"),
+                "source_url": (
+                    canonicalize_video_url(
+                        source.get(
+                            "source_url",
+                            "",
+                        ),
+                        platform,
+                    )
+                ),
+                "rights_status": rights,
+                "permission_status": (
+                    source.get(
+                        "permission_status",
+                        "",
+                    )
+                ),
+                "discovery_status": (discovery_status),
+                "scan_mode": (scan_plan["mode"]),
+                "start_position": (scan_plan["start_position"]),
+                "scan_limit": (scan_plan["scan_limit"]),
+                "inventory_count": (scan_plan["inventory_count"]),
+                "inventory_target": (scan_plan["inventory_target"]),
+                "new_limit": (scan_plan["per_source_new_limit"]),
+                "adapter_candidate_count": (len(candidates)),
+                "discovered_video_count": (source_scanned),
+                "new_video_count": (len(selected_rows)),
+                "duplicate_video_count": (source_duplicates),
+                "max_duplicate_streak": (
+                    selection.get(
+                        "max_duplicate_streak",
+                        0,
+                    )
+                ),
+                "stop_reason": (
+                    selection.get(
+                        "stop_reason",
+                        "",
+                    )
+                ),
+                "state_update_planned": (bool(state_update)),
+                "blocked_reasons": (source_blocked),
+            }
+        )
 
     plan = {
-        "status": "BLOCKED" if blocked else "PLAN_ONLY",
+        "status": ("BLOCKED" if blocked else "PLAN_ONLY"),
         "account_id": account_id,
         "selected_sources": [
-            {"source_id": s.get("source_id"), "platform": s.get("source_platform"), "source_type": s.get("source_type")}
-            for s in selected
+            {
+                "source_id": source.get("source_id"),
+                "platform": source.get("source_platform"),
+                "source_type": source.get("source_type"),
+            }
+            for source in selected_sources
         ],
         "discovery_enabled": bool(config.get("source_video_discovery_enabled")),
-        "source_video_discovery_apply_enabled": bool(config.get("source_video_discovery_apply_enabled")),
+        "source_video_discovery_apply_enabled": (
+            bool(config.get("source_video_discovery_apply_enabled"))
+        ),
+        "source_discovery_state_enabled": (bool(config.get("source_discovery_state_enabled"))),
         "limits": {
-            "max_videos_per_source_scan": int(config.get("max_videos_per_source_scan", 50)),
-            "max_new_videos_per_source_per_run": int(config.get("max_new_videos_per_source_per_run", 10)),
-            "max_total_new_videos_per_run": max_total,
+            "initial_source_scan_limit": int(
+                config.get(
+                    "initial_source_scan_limit",
+                    30,
+                )
+            ),
+            "incremental_source_scan_limit": int(
+                config.get(
+                    "incremental_source_scan_limit",
+                    12,
+                )
+            ),
+            "backfill_source_scan_limit": int(
+                config.get(
+                    "backfill_source_scan_limit",
+                    30,
+                )
+            ),
+            "consecutive_existing_stop": int(
+                config.get(
+                    "consecutive_existing_stop",
+                    5,
+                )
+            ),
+            "max_new_videos_per_source_per_run": (
+                int(
+                    config.get(
+                        "max_new_videos_per_source_per_run",
+                        10,
+                    )
+                )
+            ),
+            "max_total_new_videos_per_run": (max_total),
         },
-        "dedupe_keys": config.get("dedupe_keys", []),
-        "source_videos_schema": SOURCE_VIDEO_FIELDS,
+        "dedupe_keys": config.get(
+            "dedupe_keys",
+            [],
+        ),
+        "source_videos_schema": (SOURCE_VIDEO_FIELDS),
+        "discovery_state_schema": (TAB_DEFINITIONS["source_discovery_state"]),
         "adapter_status": {
-            "yt_dlp": "installed" if importlib.util.find_spec("yt_dlp") else "not_installed",
-            "network_fetch": "not_invoked",
-            "tiktok_account_expansion": "limited_manual_safe",
+            "yt_dlp": ("installed" if importlib.util.find_spec("yt_dlp") else "not_installed"),
+            "network_fetch": ("invoked_bounded" if fetch_real else "not_invoked"),
+            "tiktok_account_expansion": ("limited_manual_safe"),
         },
         "source_results": source_results,
-        "discovered_video_count": discovered_count,
-        "new_video_count": len(new_videos),
-        "duplicate_video_count": duplicate_count,
-        "skipped_video_count": skipped_count,
+        "discovered_video_count": (scanned_count),
+        "new_video_count": (len(new_videos)),
+        "duplicate_video_count": (duplicate_count),
+        "skipped_video_count": (skipped_count),
         "new_videos": new_videos,
-        "new_videos_preview": new_videos[:5],
-        "would_save_source_videos": bool(apply and confirm_discovery and not blocked),
+        "new_videos_preview": (new_videos[:5]),
+        "discovery_state_updates": (state_updates),
+        "would_save_source_videos": (
+            bool(apply and confirm_discovery and not blocked and new_videos)
+        ),
+        "would_save_discovery_state": (
+            bool(
+                apply
+                and confirm_discovery
+                and not blocked
+                and config.get("source_discovery_state_enabled")
+                and state_updates
+            )
+        ),
         "blocked_reasons": blocked,
         "fetch_real": fetch_real,
     }
-    plan["adapter_status"]["network_fetch"] = "invoked_bounded" if fetch_real else "not_invoked"
+
     return plan
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="discover approved source videos")
-    parser.add_argument("--account-id", default="liver_manager")
-    parser.add_argument("--dry-run", action="store_true", default=True)
-    parser.add_argument("--apply", action="store_true")
-    parser.add_argument("--confirm-discovery", action="store_true")
-    parser.add_argument("--existing-source-videos-json", default="")
-    parser.add_argument("--use-sheets", action="store_true", help="read/write source_videos tab when applying")
-    parser.add_argument("--fetch-real", action="store_true", help="bounded yt-dlp metadata discovery; never downloads media")
+    parser = argparse.ArgumentParser(description=("discover approved source videos"))
+
+    parser.add_argument(
+        "--account-id",
+        default="liver_manager",
+    )
+
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=True,
+    )
+
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--confirm-discovery",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--existing-source-videos-json",
+        default="",
+    )
+
+    parser.add_argument(
+        "--use-sheets",
+        action="store_true",
+        help=("read inventory and cursor state; " "write only with explicit apply"),
+    )
+
+    parser.add_argument(
+        "--fetch-real",
+        action="store_true",
+        help=("bounded metadata discovery; " "never downloads media"),
+    )
+
     args = parser.parse_args()
 
     client = None
     existing = None
-    if args.use_sheets and (args.apply or args.dry_run):
-        client, existing = load_existing_source_videos_from_sheets()
+    state_rows = None
+
+    if args.use_sheets:
+        (
+            client,
+            existing,
+            state_rows,
+        ) = load_discovery_data_from_sheets(ensure_tabs=(args.apply and args.confirm_discovery))
+
     elif args.existing_source_videos_json:
         existing = load_existing_source_videos(args.existing_source_videos_json)
+
     plan = build_discovery_plan(
         args.account_id,
         apply=args.apply,
-        confirm_discovery=args.confirm_discovery,
+        confirm_discovery=(args.confirm_discovery),
         existing_source_videos=existing,
+        discovery_state_rows=state_rows,
         fetch_real=args.fetch_real,
     )
-    if args.apply and args.confirm_discovery and args.use_sheets and client and plan["status"] != "BLOCKED":
-        added = append_source_videos_to_sheets(client, plan.get("new_videos", []))
+
+    if (
+        args.apply
+        and args.confirm_discovery
+        and args.use_sheets
+        and client
+        and plan["status"] != "BLOCKED"
+    ):
+        added = append_source_videos_to_sheets(
+            client,
+            plan.get(
+                "new_videos",
+                [],
+            ),
+        )
+
+        state_added = 0
+
+        if plan.get("source_discovery_state_enabled"):
+            state_added = append_discovery_state_to_sheets(
+                client,
+                plan.get(
+                    "discovery_state_updates",
+                    [],
+                ),
+            )
+
         plan["saved_source_video_count"] = added
+
+        plan["saved_discovery_state_count"] = state_added
+
         plan["would_save_source_videos"] = False
+
+        plan["would_save_discovery_state"] = False
+
         plan["source_videos_save_status"] = "SAVED" if added else "NO_NEW_ROWS"
-    elif args.apply and args.confirm_discovery and not args.use_sheets and plan["status"] != "BLOCKED":
+
+        plan["discovery_state_save_status"] = "SAVED" if state_added else "NO_NEW_STATE"
+
+    elif (
+        args.apply
+        and args.confirm_discovery
+        and not args.use_sheets
+        and plan["status"] != "BLOCKED"
+    ):
         plan["source_videos_save_status"] = "SKIPPED_USE_SHEETS_REQUIRED"
-    print(json.dumps(plan, ensure_ascii=False, indent=2))
-    return 1 if plan["status"] == "BLOCKED" and args.apply else 0
+
+        plan["discovery_state_save_status"] = "SKIPPED_USE_SHEETS_REQUIRED"
+
+    print(
+        json.dumps(
+            plan,
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+    return 1 if (plan["status"] == "BLOCKED" and args.apply) else 0
 
 
 if __name__ == "__main__":
