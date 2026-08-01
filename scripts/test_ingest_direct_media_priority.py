@@ -176,6 +176,38 @@ try:
 
     assert selected == "media-tiktok"
 
+    recoverable_threads = FakeClient(
+        posts,
+        [
+            {
+                **next(
+                    row
+                    for row in media
+                    if row[
+                        "source_post_media_id"
+                    ]
+                    == "media-threads"
+                ),
+                "download_status": "FAILED",
+                "last_error": (
+                    "ingest_failed:RuntimeError"
+                ),
+                "understanding_status": "PASS",
+                "understanding_id": (
+                    "smu-media-threads"
+                ),
+            }
+        ],
+    )
+
+    selected = module.select_pending_media_id(
+        recoverable_threads,
+        "night_scout",
+        permissions=permissions,
+    )
+
+    assert selected == "media-threads"
+
 finally:
     module.core.safe_https_url = (
         original_safe_url

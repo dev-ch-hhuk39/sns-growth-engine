@@ -18,6 +18,87 @@ from acquisition.ytdlp_runtime import metadata_options
 
 def truthy(v: Any) -> bool: return str(v or "").lower() in {"1", "true", "yes"}
 
+_SAFE_INGEST_ERROR_CODES = {
+    "redirect_media_url_blocked",
+    "direct_media_url_blocked",
+    "media_size_limit_exceeded",
+    "resolved_media_url_blocked",
+    "yt_dlp_metadata_missing",
+    "yt_dlp_output_missing",
+    "source_post_media_row_missing",
+    "media_asset_contract_conflict",
+    "identical_media_asset_contract_conflict",
+    "media_asset_read_after_write_failed",
+    "source_media_understanding_read_after_write_failed",
+    "magic_bytes_or_mime_mismatch",
+    "media_content_understanding_blocked",
+    "cloudinary_secure_url_missing",
+    "source_post_media_read_after_write_failed",
+}
+
+
+def _safe_ingest_error_code(
+    exc: Exception,
+) -> str:
+    """Expose only bounded internal error codes in operational state."""
+
+    if isinstance(exc, RuntimeError):
+        code = str(exc).split(
+            ":",
+            1,
+        )[0].strip()
+
+        if code in _SAFE_INGEST_ERROR_CODES:
+            return code
+
+    return type(exc).__name__
+
+
+def _normalized_content_hash(
+    value: Any,
+) -> str:
+    text = str(
+        value or ""
+    ).strip().lower()
+
+    if (
+        len(text) == 64
+        and all(
+            character
+            in "0123456789abcdef"
+            for character in text
+        )
+    ):
+        return text
+
+    return ""
+
+
+def _content_hash_from_asset(
+    asset: dict[str, Any],
+) -> str:
+    direct = _normalized_content_hash(
+        asset.get("content_hash")
+    )
+
+    if direct:
+        return direct
+
+    public_id = str(
+        asset.get(
+            "cloudinary_public_id",
+            "",
+        )
+    ).strip()
+
+    return _normalized_content_hash(
+        public_id.rsplit(
+            "/",
+            1,
+        )[-1]
+    )
+
+
 def record(client: SheetsClient, logical: str, key: str, value: str) -> dict[str, Any] | None:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     rows = client._call_with_rate_limit_retry(f"get_all_records:{logical}", lambda: client._ws(logical).get_all_records())
@@ -206,29 +287,244 @@ def update_media_row(client: SheetsClient, source_post_media_id: str, fields: di
             lambda: ws.batch_update(updates, value_input_option="USER_ENTERED"),
         )
 
-def _media_asset_contract_issues(existing: dict[str, Any], expected: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """Return missing and conflicting immutable asset-contract fields.
+def _media_asset_contract_issues(
+    existing: dict[str, Any],
+    expected: dict[str, Any],
+) -> tuple[list[str], list[str]]:
+    """Validate immutable content identity without rewriting provenance.
 
-    A content hash is deterministic, so a pre-existing ``media_id`` must point
-    to the same source post and Cloudinary object.  We may fill a genuinely
-    blank cell from the current, permissioned ingest, but never overwrite a
-    non-empty conflicting value or guess a parent relationship.
+    A media asset is content-addressed. The first source-post provenance stays
+    on the asset row, while additional approved parent posts retain their own
+    provenance on source_post_media rows.
     """
-    required = (
-        "media_id", "account_id", "reference_post_id", "source_post_url",
-        "original_media_url", "storage_url", "cloudinary_public_id",
-        "storage_provider", "upload_status",
+
+    identity_fields = (
+        "media_id",
+        "account_id",
+        "source_platform",
+        "storage_url",
+        "cloudinary_public_id",
+        "storage_provider",
+        "media_type",
+        "mime_type",
+        "upload_status",
+        "content_hash",
     )
+
+    provenance_alias_fields = (
+        "reference_post_id",
+        "source_post_url",
+        "original_media_url",
+    )
+
     missing: list[str] = []
     conflicting: list[str] = []
-    for field in required:
-        actual = str(existing.get(field, "")).strip()
-        wanted = str(expected.get(field, "")).strip()
+
+    for field in (
+        identity_fields
+        + provenance_alias_fields
+    ):
+        actual = str(
+            existing.get(
+                field,
+                "",
+            )
+        ).strip()
+
+        wanted = str(
+            expected.get(
+                field,
+                "",
+            )
+        ).strip()
+
         if not actual:
             missing.append(field)
-        elif actual != wanted:
+            continue
+
+        if field in provenance_alias_fields:
+            continue
+
+        if actual != wanted:
             conflicting.append(field)
+
     return missing, conflicting
+
+
+def _reusable_identical_asset_issues(
+    existing: dict[str, Any],
+    post: dict[str, Any],
+    media: dict[str, Any],
+    digest: str,
+) -> list[str]:
+    issues: list[str] = []
+
+    expected_asset_id = (
+        f"ma_{digest[:24]}"
+    )
+
+    expected_public_id = (
+        f"sns-growth/direct/{digest}"
+    )
+
+    checks = {
+        "media_id": expected_asset_id,
+        "account_id": str(
+            post.get(
+                "target_account_id",
+                "",
+            )
+        ),
+        "source_platform": str(
+            post.get(
+                "platform",
+                "",
+            )
+        ),
+        "media_type": str(
+            media.get(
+                "media_type",
+                "",
+            )
+        ),
+        "cloudinary_public_id": (
+            expected_public_id
+        ),
+        "upload_status": "UPLOADED",
+    }
+
+    for field, expected in checks.items():
+        actual = str(
+            existing.get(
+                field,
+                "",
+            )
+        ).strip()
+
+        if field == "upload_status":
+            actual = actual.upper()
+
+        if actual != expected:
+            issues.append(field)
+
+    storage_url = str(
+        existing.get(
+            "storage_url",
+            "",
+        )
+    ).strip()
+
+    if not storage_url.startswith(
+        "https://res.cloudinary.com/"
+    ):
+        issues.append(
+            "storage_url"
+        )
+
+    stored_digest = (
+        _content_hash_from_asset(
+            existing
+        )
+    )
+
+    if stored_digest != digest:
+        issues.append(
+            "content_hash"
+        )
+
+    mime_type = str(
+        existing.get(
+            "mime_type",
+            "",
+        )
+    ).strip().lower()
+
+    media_type = str(
+        media.get(
+            "media_type",
+            "",
+        )
+    ).strip().lower()
+
+    if (
+        not mime_type
+        or not mime_type.startswith(
+            media_type + "/"
+        )
+    ):
+        issues.append(
+            "mime_type"
+        )
+
+    return sorted(
+        set(issues)
+    )
+
+
+def find_reusable_identical_asset(
+    client: SheetsClient,
+    post: dict[str, Any],
+    media: dict[str, Any],
+    understanding: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    understanding = dict(
+        understanding or {}
+    )
+
+    if (
+        str(
+            understanding.get(
+                "status",
+                "",
+            )
+        ).upper()
+        != "PASS"
+    ):
+        return None
+
+    digest = _normalized_content_hash(
+        understanding.get(
+            "content_hash"
+        )
+    )
+
+    if not digest:
+        return None
+
+    asset_id = (
+        f"ma_{digest[:24]}"
+    )
+
+    existing = record(
+        client,
+        "media_assets",
+        "media_id",
+        asset_id,
+    )
+
+    if not existing:
+        return None
+
+    issues = (
+        _reusable_identical_asset_issues(
+            existing,
+            post,
+            media,
+            digest,
+        )
+    )
+
+    if issues:
+        raise RuntimeError(
+            "identical_media_asset_contract_conflict:"
+            + ",".join(issues)
+        )
+
+    return {
+        **existing,
+        "resolved_content_hash": digest,
+    }
+
 
 
 def upsert_media_asset(client: SheetsClient, post: dict[str, Any], media: dict[str, Any], *, storage_url: str, public_id: str, digest: str, mime: str, local_path: Path) -> str:
@@ -236,7 +532,7 @@ def upsert_media_asset(client: SheetsClient, post: dict[str, Any], media: dict[s
     headers = client._call_with_rate_limit_retry("read_headers:media_assets", lambda: ws.row_values(1))
     rows = client._call_with_rate_limit_retry("get_all_records:media_assets", lambda: ws.get_all_records())
     now = datetime.now(timezone.utc).isoformat()
-    row = {"media_id": asset_id, "account_id": post.get("target_account_id", ""), "reference_post_id": post.get("source_post_id", ""), "source_platform": post.get("platform", ""), "source_post_url": post.get("canonical_post_url", ""), "original_media_url": media.get("original_media_url", ""), "storage_provider": "cloudinary", "storage_url": storage_url, "cloudinary_public_id": public_id, "media_type": media.get("media_type", ""), "mime_type": mime, "width": media.get("width", ""), "height": media.get("height", ""), "aspect_ratio": media.get("aspect_ratio", ""), "duration_seconds": media.get("duration_seconds", ""), "reuse_status": "APPROVED", "media_reuse_risk": "low", "downloaded_at": now, "uploaded_at": now, "used_count": "0", "local_path": str(local_path), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""), "allow_download": "true", "allow_upload": "true", "upload_status": "UPLOADED"}
+    row = {"media_id": asset_id, "account_id": post.get("target_account_id", ""), "reference_post_id": post.get("source_post_id", ""), "source_platform": post.get("platform", ""), "source_post_url": post.get("canonical_post_url", ""), "original_media_url": media.get("original_media_url", ""), "storage_provider": "cloudinary", "storage_url": storage_url, "cloudinary_public_id": public_id, "media_type": media.get("media_type", ""), "mime_type": mime, "width": media.get("width", ""), "height": media.get("height", ""), "aspect_ratio": media.get("aspect_ratio", ""), "duration_seconds": media.get("duration_seconds", ""), "reuse_status": "APPROVED", "media_reuse_risk": "low", "downloaded_at": now, "uploaded_at": now, "used_count": "0", "local_path": str(local_path), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""), "allow_download": "true", "allow_upload": "true", "upload_status": "UPLOADED", "content_hash": digest}
 
     existing_number = next(
         (index for index, item in enumerate(rows, start=2) if str(item.get("media_id", "")) == asset_id),
@@ -426,6 +722,154 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
     suffix = ".mp4" if media_type == "video" else ".jpg"
     local_path = target_dir / f"{source_post_media_id}{suffix}"
     try:
+        reusable_asset = (
+            find_reusable_identical_asset(
+                client,
+                post,
+                media,
+                existing_understanding,
+            )
+        )
+
+        if reusable_asset:
+            reusable_asset_id = str(
+                reusable_asset.get(
+                    "media_id",
+                    "",
+                )
+            )
+
+            reusable_storage_url = str(
+                reusable_asset.get(
+                    "storage_url",
+                    "",
+                )
+            )
+
+            reusable_public_id = str(
+                reusable_asset.get(
+                    "cloudinary_public_id",
+                    "",
+                )
+            )
+
+            reusable_digest = str(
+                reusable_asset.get(
+                    "resolved_content_hash",
+                    "",
+                )
+            )
+
+            reusable_mime = str(
+                reusable_asset.get(
+                    "mime_type",
+                    "",
+                )
+            )
+
+            understanding_id = str(
+                existing_understanding.get(
+                    "understanding_id",
+                    "",
+                )
+            )
+
+            update_media_row(
+                client,
+                source_post_media_id,
+                {
+                    "download_status": (
+                        "REUSED_IDENTICAL"
+                    ),
+                    "cloudinary_status": (
+                        "UPLOADED"
+                    ),
+                    "cloudinary_public_id": (
+                        reusable_public_id
+                    ),
+                    "storage_url": (
+                        reusable_storage_url
+                    ),
+                    "content_hash": (
+                        reusable_digest
+                    ),
+                    "mime_type": reusable_mime,
+                    "media_asset_id": (
+                        reusable_asset_id
+                    ),
+                    "understanding_status": (
+                        "PASS"
+                    ),
+                    "understanding_id": (
+                        understanding_id
+                    ),
+                    "last_error": "",
+                    "updated_at": (
+                        datetime.now(
+                            timezone.utc
+                        ).isoformat()
+                    ),
+                },
+            )
+
+            verified = record(
+                client,
+                "source_post_media",
+                "source_post_media_id",
+                source_post_media_id,
+            )
+
+            if (
+                not verified
+                or str(
+                    verified.get(
+                        "media_asset_id",
+                        "",
+                    )
+                )
+                != reusable_asset_id
+                or str(
+                    verified.get(
+                        "cloudinary_status",
+                        "",
+                    )
+                ).upper()
+                != "UPLOADED"
+            ):
+                raise RuntimeError(
+                    "source_post_media_read_after_write_failed"
+                )
+
+            return {
+                "status": (
+                    "REUSED_IDENTICAL"
+                ),
+                "source_post_media_id": (
+                    source_post_media_id
+                ),
+                "media_asset_id": (
+                    reusable_asset_id
+                ),
+                "media_index": str(
+                    media.get(
+                        "media_index",
+                        "",
+                    )
+                ),
+                "content_hash": (
+                    reusable_digest
+                ),
+                "understanding_status": (
+                    "PASS"
+                ),
+                "understanding_provider": str(
+                    existing_understanding.get(
+                        "provider_name",
+                        "",
+                    )
+                ),
+            }
+
         platform = str(post.get("platform", "")).lower()
         is_direct_cdn = url != str(media.get("canonical_post_url", "")) or platform == "threads"
         if is_direct_cdn:
@@ -464,6 +908,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             "transcript_hash": analysis.get("transcript_hash", ""),
             "representative_frame_count": analysis.get("representative_frame_count", "0"),
             "understanding_id": understanding_id,
+            "content_hash": digest_text,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         })
         if analysis.get("status") != "PASS":
@@ -541,6 +986,9 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             "http error 429",
         ))
         status = "SKIPPED_EXTERNAL_UNAVAILABLE" if external_unavailable else "FAILED"
+        error_code = _safe_ingest_error_code(
+            exc
+        )
         try:
             update_media_row(
                 client,
@@ -548,7 +996,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
                 {
                     "download_status": "SKIPPED_EXTERNAL_UNAVAILABLE" if external_unavailable else "FAILED",
                     "cloudinary_status": "UPLOADED" if already_uploaded else ("SKIPPED" if external_unavailable else "FAILED"),
-                    "last_error": f"ingest_{'skipped' if external_unavailable else 'failed'}:{type(exc).__name__}",
+                    "last_error": f"ingest_{'skipped' if external_unavailable else 'failed'}:{error_code}",
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 },
             )
@@ -558,7 +1006,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             "status": status,
             "source_post_media_id": source_post_media_id,
             "media_index": str(media.get("media_index", "")),
-            "reason": f"ingest_{'skipped' if external_unavailable else 'failed'}:{type(exc).__name__}",
+            "reason": f"ingest_{'skipped' if external_unavailable else 'failed'}:{error_code}",
         }
     finally:
         local_path.unlink(missing_ok=True)

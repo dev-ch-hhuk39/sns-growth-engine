@@ -44,6 +44,7 @@ jobs:
           python3 scripts/test_direct_media_preparation_serialized.py
           python3 scripts/test_direct_media_batch_snapshot.py
           python3 scripts/test_ingest_direct_media_priority.py
+          python3 scripts/test_direct_media_identical_content_reuse.py
           python3 scripts/test_direct_media_permission_normalization.py
           python3 scripts/test_direct_media_requires_prepared.py
           python3 scripts/test_bounded_distinct_caption_fallback.py
