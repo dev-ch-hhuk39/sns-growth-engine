@@ -46,6 +46,107 @@ def _filter_results(
     return filtered
 
 
+def _content_route_value(
+    row: dict[str, Any],
+) -> str:
+    return str(
+        row.get("content_route")
+        or row.get("content_type")
+        or row.get("generation_mode")
+        or "unknown"
+    )
+
+
+def _compare_content_routes(
+    results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Compare scheduled routes independently from generation mode."""
+    by_route: dict[
+        str,
+        list[dict[str, Any]],
+    ] = {}
+
+    for row in results:
+        route = _content_route_value(row)
+        by_route.setdefault(route, []).append(row)
+
+    summary: dict[str, Any] = {}
+
+    for route, items in by_route.items():
+        likes = [
+            int(item.get("likes") or 0)
+            for item in items
+        ]
+        views = [
+            int(
+                item.get("views")
+                or item.get("impressions")
+                or 0
+            )
+            for item in items
+        ]
+        reposts = [
+            int(item.get("reposts") or 0)
+            for item in items
+        ]
+        replies = [
+            int(
+                item.get("replies")
+                or item.get("comments")
+                or 0
+            )
+            for item in items
+        ]
+
+        count = len(items)
+
+        average_er = (
+            sum(
+                (
+                    likes[index]
+                    + reposts[index]
+                    + replies[index]
+                )
+                / max(views[index], 1)
+                for index in range(count)
+            )
+            / count
+            if count
+            else 0
+        )
+
+        generation_modes = sorted({
+            str(
+                item.get("generation_mode")
+                or "unknown"
+            )
+            for item in items
+        })
+
+        summary[route] = {
+            "count": count,
+            "avg_likes": round(
+                sum(likes) / count
+                if count
+                else 0,
+                2,
+            ),
+            "avg_views": round(
+                sum(views) / count
+                if count
+                else 0,
+                2,
+            ),
+            "avg_engagement_rate": round(
+                average_er,
+                6,
+            ),
+            "generation_modes": generation_modes,
+        }
+
+    return summary
+
+
 def _compare_content_types(results: list[dict[str, Any]]) -> dict[str, Any]:
     """single_post / thread_series / reference_based / video_clip_reference を比較する。"""
     by_type: dict[str, list[dict]] = {}
@@ -87,6 +188,48 @@ def _generate_improvement_suggestions(
 ) -> list[dict[str, Any]]:
     """分析結果から improvement_suggestions（WAITING_REVIEW）を生成する。"""
     suggestions: list[dict[str, Any]] = []
+
+    route_comparison = analysis.get(
+        "content_route_comparison",
+        {},
+    )
+
+    best_route = ""
+    best_route_er = -1.0
+
+    for route, stats in route_comparison.items():
+        route_er = float(
+            stats.get(
+                "avg_engagement_rate",
+                0,
+            )
+            or 0
+        )
+
+        if route_er > best_route_er:
+            best_route_er = route_er
+            best_route = route
+
+    if best_route:
+        suggestions.append({
+            "suggestion_id": f"sug_{_short_uuid()}",
+            "account_id": account_id,
+            "platform": platform,
+            "type": "content_route_mix",
+            "title": (
+                f"{best_route}ルートを継続検証する"
+            ),
+            "body": (
+                f"{best_route}の平均ERが"
+                f"{best_route_er:.4f}で最も高い。"
+                "生成方法とは分けて、"
+                "投稿ルートとして継続検証する。"
+            ),
+            "status": "WAITING_REVIEW",
+            "active": False,
+            "created_at": _now_jst(),
+        })
+
     content_comparison = analysis.get("content_type_comparison", {})
 
     best_type = ""
@@ -222,6 +365,7 @@ class PDCAOrchestrator:
         filtered = _filter_results(results, account_id, platform, days)
 
         content_comparison = _compare_content_types(filtered)
+        content_route_comparison = _compare_content_routes(filtered)
 
         # hook / dropoff 分析（thread_series のみ）
         hook_analysis: dict[str, Any] = {}
@@ -249,6 +393,7 @@ class PDCAOrchestrator:
             "days": days,
             "total_results": len(filtered),
             "content_type_comparison": content_comparison,
+            "content_route_comparison": content_route_comparison,
             "hook_analysis": hook_analysis,
             "dropoff": dropoff,
         }

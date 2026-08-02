@@ -61,6 +61,7 @@ class PostResultAnalyzer:
                 "top_posts": [],
                 "bottom_posts": [],
                 "by_generation_mode": {},
+                "by_content_route": {},
                 "pv_metrics": {},
                 "cv_metrics": {},
             }
@@ -68,6 +69,7 @@ class PostResultAnalyzer:
         metrics = self._aggregate_metrics(filtered)
         top, bottom = self._rank_posts(filtered)
         by_mode = self._by_generation_mode(filtered)
+        by_route = self._by_content_route(filtered)
         pv_metrics, cv_metrics = self._split_pv_cv(metrics)
 
         return {
@@ -78,6 +80,7 @@ class PostResultAnalyzer:
             "top_posts": top[:5],
             "bottom_posts": bottom[:5],
             "by_generation_mode": by_mode,
+            "by_content_route": by_route,
             "pv_metrics": pv_metrics,
             "cv_metrics": cv_metrics,
         }
@@ -149,6 +152,40 @@ class PostResultAnalyzer:
         return {
             mode: self._aggregate_metrics(items)
             for mode, items in by_mode.items()
+        }
+
+    def _by_content_route(
+        self,
+        results: list[dict[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
+        """Aggregate results by scheduled route.
+
+        content_route represents the scheduled role such as
+        original_text, reference_text, or pdca_text. It is
+        intentionally separate from generation_mode, which
+        records the actual generation implementation used.
+        """
+        by_route: dict[
+            str,
+            list[dict[str, Any]],
+        ] = {}
+
+        for row in results:
+            route = str(
+                row.get("content_route", "")
+                or row.get("content_type", "")
+                or row.get("generation_mode", "")
+                or "unknown"
+            )
+
+            by_route.setdefault(
+                route,
+                [],
+            ).append(row)
+
+        return {
+            route: self._aggregate_metrics(items)
+            for route, items in by_route.items()
         }
 
     def _split_pv_cv(

@@ -65,6 +65,11 @@
   "saved_media_post_requires_uploaded_unused_asset": true,
   "saved_media_post_fallback": "NO_MEDIA_FALLBACK",
   "direct_reference_media_enabled": true,
+  "direct_media_preferred_type": "video",
+  "direct_media_preference_mode": "video_first_soft",
+  "direct_media_image_fallback_enabled": true,
+  "direct_media_video_target_share_min": 0.9,
+  "direct_media_video_target_share_max": 0.95,
   "asset_inventory_targets": {
     "night_scout": {
       "direct_reference_media": 3,

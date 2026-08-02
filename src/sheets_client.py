@@ -91,7 +91,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "ai_review", "rewrite_count", "post_mode",
         "notes",
         # Phase 2.13-2.15 追加
-        "generation_mode", "hypothesis", "media_strategy",
+        "generation_mode", "content_route",
+        "source_content_route", "source_generation_mode", "source_result_id",
+        "hypothesis", "media_strategy",
         "imitation_risk", "media_reuse_risk",
         "buzz_potential_score", "conversion_potential_score",
         "confidence_level", "ai_publish_recommendation",
@@ -128,7 +130,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "real_post", "media_used", "posted_text",
         "source_queue_status", "save_source", "created_by",
         # Autonomous text/media posting provenance and validator state.
-        "source_id", "source_url", "generation_mode", "validator_status",
+        "source_id", "source_url", "generation_mode", "content_route",
+        "source_content_route", "source_generation_mode", "source_result_id",
+        "validator_status",
         "media_asset_id", "media_url", "media_status",
         "source_post_id", "source_video_id", "clip_candidate_id",
         "caption_provider", "caption_provider_version", "alignment_status",
@@ -198,7 +202,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "status", "error", "created_at", "processed_at",
         "auto_publish",
         # Phase 2.13-2.15 追加
-        "generation_mode", "confidence_level", "ai_publish_recommendation",
+        "generation_mode", "content_route",
+        "source_content_route", "source_generation_mode", "source_result_id",
+        "confidence_level", "ai_publish_recommendation",
         "media_asset_id", "text_policy_status",
         # Phase 2.21-2.24 追加
         "video_clip_id",      # クリップ候補 clip_id

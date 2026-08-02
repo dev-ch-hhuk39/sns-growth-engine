@@ -117,6 +117,52 @@ def _parse_time(value: Any) -> datetime | None:
         return None
 
 
+def _media_type_preference_rank(
+    row: dict[str, Any],
+    preferred_type: str = "video",
+) -> int:
+    """Prefer video while preserving image as a safe fallback."""
+
+    normalized_preferred = str(
+        preferred_type or "video"
+    ).strip().lower()
+
+    raw_bundle = row.get(
+        "carousel_media",
+        [],
+    )
+
+    bundle = (
+        raw_bundle
+        if isinstance(raw_bundle, list)
+        and raw_bundle
+        else [row]
+    )
+
+    media_types = [
+        str(item.get("media_type", "")).strip().lower()
+        for item in bundle
+        if isinstance(item, dict)
+        and str(
+            item.get(
+                "media_type",
+                "",
+            )
+        ).strip()
+    ]
+
+    if normalized_preferred in media_types:
+        if all(
+            media_type == normalized_preferred
+            for media_type in media_types
+        ):
+            return 0
+
+        return 1
+
+    return 2
+
+
 def _today_posts(rows: list[dict[str, Any]], account_id: str) -> list[dict[str, Any]]:
     target = business_date()
     result: list[dict[str, Any]] = []
@@ -160,6 +206,24 @@ def select_direct_candidates(
     account_id: str,
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]], list[str]]:
     """Return complete parent-preserving candidates in deterministic order."""
+    media_config = _load(MEDIA_CONFIG)
+    preferred_media_type = str(
+        media_config.get(
+            "direct_media_preferred_type",
+            "video",
+        )
+    ).strip().lower()
+    if preferred_media_type not in {
+        "video",
+        "image",
+    }:
+        preferred_media_type = "video"
+    image_fallback_enabled = _true(
+        media_config.get(
+            "direct_media_image_fallback_enabled",
+            True,
+        )
+    )
     posts = {str(row.get("source_post_id", "")): row for row in _records(client, "source_posts")}
     sources = _source_map(client)
     permissions = _permission_map(client)
@@ -260,18 +324,66 @@ def select_direct_candidates(
             continue
         # A mixed carousel can be supported only by an explicit official API
         # gate later in the publisher.  Keep its parent intact either way.
-        primary = {**resolved[0], "carousel_media": resolved}
+        primary = {
+            **resolved[0],
+            "carousel_media": resolved,
+        }
+        if (
+            not image_fallback_enabled
+            and _media_type_preference_rank(
+                primary,
+                preferred_media_type,
+            ) == 2
+        ):
+            reasons.append(
+                f"{post_id}:image_fallback_disabled"
+            )
+            continue
         candidates.append((post, primary, source))
-    def candidate_key(candidate: tuple[dict[str, Any], dict[str, Any], dict[str, Any]]):
-        post, _media, source = candidate
-        source_id = str(post.get("source_id", ""))
+    def candidate_key(
+        candidate: tuple[
+            dict[str, Any],
+            dict[str, Any],
+            dict[str, Any],
+        ],
+    ) -> tuple[Any, ...]:
+        post, media, source = candidate
+        source_id = str(
+            post.get(
+                "source_id",
+                "",
+            )
+        )
         try:
-            priority = float(source.get("priority") or 0)
+            priority = float(
+                source.get("priority")
+                or 0
+            )
         except (TypeError, ValueError):
             priority = 0.0
-        published = _parse_time(post.get("published_at"))
-        published_rank = -(published.timestamp()) if published else 0.0
-        return source_usage.get(source_id, 0), -priority, published_rank, str(post.get("source_post_id", ""))
+        published = _parse_time(
+            post.get("published_at")
+        )
+        published_rank = (
+            -published.timestamp()
+            if published
+            else 0.0
+        )
+        return (
+            _media_type_preference_rank(
+                media,
+                preferred_media_type,
+            ),
+            source_usage.get(source_id, 0),
+            -priority,
+            published_rank,
+            str(
+                post.get(
+                    "source_post_id",
+                    "",
+                )
+            ),
+        )
     candidates.sort(key=candidate_key)
     return candidates, reasons
 
@@ -954,7 +1066,35 @@ def dispatch_ready(
             == requested_queue_id
         )
     ]
-    candidates.sort(key=lambda row: (int(str(row.get("priority", "100") or "100")), str(row.get("created_at", ""))))
+    preferred_media_type = str(
+        _load(MEDIA_CONFIG).get(
+            "direct_media_preferred_type",
+            "video",
+        )
+    ).strip().lower()
+    candidates.sort(
+        key=lambda row: (
+            _media_type_preference_rank(
+                row,
+                preferred_media_type,
+            ),
+            int(
+                str(
+                    row.get(
+                        "priority",
+                        "100",
+                    )
+                    or "100"
+                )
+            ),
+            str(
+                row.get(
+                    "created_at",
+                    "",
+                )
+            ),
+        )
+    )
     if not candidates:
         return {
             "status": "NO_POST",

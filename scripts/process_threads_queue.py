@@ -407,6 +407,14 @@ def save_posted_result(
         "source_video_id": queue_row.get("source_video_id", ""),
         "clip_candidate_id": queue_row.get("clip_candidate_id", ""),
         "generation_mode": queue_row.get("generation_mode", ""),
+        "content_route": (
+            queue_row.get("content_route", "")
+            or queue_row.get("content_type", "")
+            or queue_row.get("generation_mode", "")
+        ),
+        "source_content_route": queue_row.get("source_content_route", ""),
+        "source_generation_mode": queue_row.get("source_generation_mode", ""),
+        "source_result_id": queue_row.get("source_result_id", ""),
         "validator_status": validator_status,
         "caption_provider": queue_row.get("caption_provider", ""),
         "caption_provider_version": queue_row.get("caption_provider_version", ""),

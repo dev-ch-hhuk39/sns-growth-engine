@@ -22,6 +22,8 @@ STRATEGY_DIMENSIONS = (
     "primary_topic",
     "structure_variant",
     "cta_intent",
+    "content_route",
+    "generation_mode",
     "content_type",
     "media_format",
 )
@@ -84,14 +86,46 @@ def _percentile(values: list[float], value: float) -> float:
     return round((below + max(0, equal - 1) / 2) / (len(values) - 1), 4)
 
 
-def _feature_value(row: dict[str, Any], dimension: str) -> str:
+def _feature_value(
+    row: dict[str, Any],
+    dimension: str,
+) -> str:
+    if dimension == "content_route":
+        return _text(
+            row.get("content_route")
+            or row.get("content_type")
+            or row.get("generation_mode")
+            or "unknown"
+        )
+
+    if dimension == "generation_mode":
+        return _text(
+            row.get("generation_mode")
+            or row.get("content_type")
+            or "unknown"
+        )
+
     if dimension == "content_type":
-        return _text(row.get("content_type") or row.get("generation_mode") or "unknown")
+        return _text(
+            row.get("content_type")
+            or row.get("generation_mode")
+            or "unknown"
+        )
+
     if dimension == "media_format":
         if _bool(row.get("media_used")):
-            return _text(row.get("publisher_media_type") or row.get("media_type") or row.get("content_type") or "media")
+            return _text(
+                row.get("publisher_media_type")
+                or row.get("media_type")
+                or row.get("content_type")
+                or "media"
+            )
+
         return "text_only"
-    return _text(row.get(dimension) or "unknown")
+
+    return _text(
+        row.get(dimension) or "unknown"
+    )
 
 
 def _metric_payload(row: dict[str, Any]) -> dict[str, float | None]:

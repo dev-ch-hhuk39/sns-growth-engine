@@ -62,7 +62,27 @@ def normalize_result(raw: dict, account_id: str) -> dict:
         "post_url": _str(raw.get("post_url", raw.get("url", ""))),
         "posted_at": _str(raw.get("posted_at", raw.get("created_at", ""))),
         "content_type": _str(raw.get("content_type", raw.get("type", ""))),
-        "generation_mode": _str(raw.get("generation_mode", raw.get("generation_type", ""))),
+        "generation_mode": _str(
+            raw.get(
+                "generation_mode",
+                raw.get("generation_type", ""),
+            )
+        ),
+        "content_route": _str(
+            raw.get("content_route", "")
+            or raw.get("content_type", "")
+            or raw.get("generation_mode", "")
+            or raw.get("generation_type", "")
+        ),
+        "source_content_route": _str(
+            raw.get("source_content_route", "")
+        ),
+        "source_generation_mode": _str(
+            raw.get("source_generation_mode", "")
+        ),
+        "source_result_id": _str(
+            raw.get("source_result_id", "")
+        ),
         "source_id": _str(raw.get("source_id", "")),
         "source_platform": _str(raw.get("source_platform", "")),
         "hook_style": _str(raw.get("hook_style", "")),

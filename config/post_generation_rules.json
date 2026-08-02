@@ -70,10 +70,10 @@
       }
     },
     "liver_manager": {
-      "first_person": "僕",
+      "first_person": "私",
       "forbidden_first_person": [
-        "私",
-        "わたし",
+        "僕",
+        "ぼく",
         "俺",
         "おれ"
       ],
@@ -112,7 +112,8 @@
         "ほど"
       ],
       "manager_markers": [
-        "僕が",
+        "私が",
+        "私なら",
         "実際に配信を",
         "見ていると",
         "相談",
@@ -123,6 +124,28 @@
         "する必要がある。",
         "重要だ。"
       ],
+      "soft_markers": [
+        "ですよね",
+        "大丈夫です",
+        "してみてください",
+        "おすすめです",
+        "かもしれません",
+        "と思います",
+        "うれしいです",
+        "一緒に"
+      ],
+      "emoji_policy": {
+        "required": false,
+        "maximum": 2,
+        "allowed": [
+          "☺️",
+          "💡",
+          "✨",
+          "🌱",
+          "🫶"
+        ]
+      },
+      "full_stop_policy": "prefer_line_breaks",
       "minimum_reader_terms": 2,
       "minimum_action_markers": 1,
       "minimum_logic_markers": 1,
@@ -131,9 +154,10 @@
         "preferred_markers": [
           "なんですよね",
           "ですよね",
-          "だよね",
+          "大丈夫です",
+          "してみてください",
           "と思います",
-          "僕",
+          "私なら",
           "じゃなくて"
         ],
         "maximum_conversational_endings": 2,
