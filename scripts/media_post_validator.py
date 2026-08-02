@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from public_post_quality import final_public_post_validator
 from generation.semantic_alignment import ALIGNMENT_THRESHOLDS
 from generation.source_copyedit import validate_source_preserving_public_post
+from media.media_probe import asset_has_video_evidence
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DIRECT_REFERENCE_MAX_VIDEO_SECONDS = 300
@@ -111,6 +112,17 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     if account_id == "beauty_account" or platform == "x":
         reasons.append("x_or_beauty_blocked")
     media_type = str(plan.get("media_type", "video")).lower()
+    enforce_stream_evidence = str(
+        plan.get(
+            "enforce_video_stream_evidence",
+            "",
+        )
+    ).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
     if media_type not in {"video", "image"}:
         reasons.append("media_type_not_supported")
     normalized_type = publisher_media_type(content_type, plan.get("media_urls") or [])
@@ -118,6 +130,17 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         reasons.append("content_type_not_supported")
     if declared_publisher_type and normalized_type and declared_publisher_type != normalized_type:
         reasons.append("publisher_media_type_mismatch")
+    if (
+        media_type == "video"
+        and enforce_stream_evidence
+        and not asset_has_video_evidence(
+            plan
+        )
+    ):
+        reasons.append(
+            "media_stream_evidence_missing"
+        )
+
     if media_type == "video":
         if media_origin == "direct_reference":
             # Original media and generated clips are different products.  The

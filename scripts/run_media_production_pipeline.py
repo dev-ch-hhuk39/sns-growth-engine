@@ -26,6 +26,7 @@ from content_slot_runs import business_date, build_slot_run, claim_slot_run, exi
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
+from media.media_probe import asset_has_video_evidence  # noqa: E402
 from media_growth_schemas import build_media_pdca_records, extract_video_id  # noqa: E402
 from acquisition.models import (  # noqa: E402
     SourceMediaItem,
@@ -37,7 +38,7 @@ from generation.source_grounded_caption import (  # noqa: E402
     GitHubModelsGroundedProvider,
     SourceGroundedCaptionService,
 )
-from process_threads_queue import process_one  # noqa: E402
+from process_threads_queue import process_one, update_row  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 from upload_media_assets import build_upload_plan, execute_cloudinary_uploads  # noqa: E402
@@ -378,12 +379,9 @@ def _build_final_caption_bundle(
         height=str(final_asset.get("height", "")),
     )
 
-    source_text = "\n".join(filter(None, [
-        str(source_video.get("title", "")).strip(),
-        str(
-            source_video.get("description_preview", "")
-        ).strip(),
-    ]))
+    # A generated clip caption must be grounded in the selected time
+    # range, not in the broader parent-video title or description.
+    source_text = transcript_excerpt
 
     clip_identity = "\n".join([
         transcript_excerpt,
@@ -391,16 +389,12 @@ def _build_final_caption_bundle(
         f"end_seconds={end_seconds}",
     ])
 
-    content_hash = str(
-        source_video.get("content_hash")
-        or ""
-    ).strip()
-
-    if not content_hash:
-        content_hash = stable_content_hash(
-            clip_identity,
-            [video_url],
-        )
+    # Different clips from the same parent video are distinct evidence
+    # packets and must never share the parent's content hash.
+    content_hash = stable_content_hash(
+        clip_identity,
+        [video_url],
+    )
 
     bundle = SourcePostBundle(
         source_post_id=source_video_id,
@@ -833,13 +827,32 @@ def select_candidate(
     sources = {str(row.get("source_video_id", "")): row for row in source_videos}
     posted_clip_ids = {str(row.get("clip_candidate_id", "")) for row in posted_results if row.get("clip_candidate_id")}
     prepared_clip_ids = {
-        str(row.get("clip_candidate_id") or row.get("video_clip_id") or "")
-        for row in (media_assets or [])
-        if (row.get("clip_candidate_id") or row.get("video_clip_id"))
-        and (
-            str(row.get("upload_status", "")).upper() == "UPLOADED"
-            or bool(row.get("storage_url") or row.get("cloudinary_url"))
+        str(
+            row.get("clip_candidate_id")
+            or row.get("video_clip_id")
+            or ""
         )
+        for row in (media_assets or [])
+        if (
+            row.get("clip_candidate_id")
+            or row.get("video_clip_id")
+        )
+        and (
+            str(
+                row.get(
+                    "upload_status",
+                    "",
+                )
+            ).upper()
+            == "UPLOADED"
+            or bool(
+                row.get("storage_url")
+                or row.get(
+                    "cloudinary_url"
+                )
+            )
+        )
+        and asset_has_video_evidence(row)
     }
     reasons: list[str] = []
     eligible = []
@@ -868,7 +881,7 @@ def select_candidate(
         if rights not in APPROVED_RIGHTS or permission != "approved":
             reasons.append(f"{clip_id}:rights_or_permission_blocked")
             continue
-        if status not in {"READY", "AUTO_APPROVED"}:
+        if status not in {"READY", "AUTO_APPROVED", "MEDIA_READY"}:
             reasons.append(f"{clip_id}:clip_not_ready")
             continue
         if not _true(clip.get("transcript_grounded")):
@@ -877,12 +890,13 @@ def select_candidate(
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")
             continue
-        if (
-            clip_id in prepared_clip_ids
-            or str(clip.get("upload_status", "")).upper() == "UPLOADED"
-            or bool(clip.get("media_asset_id") or clip.get("clip_media_asset_id") or clip.get("storage_url"))
-        ):
-            reasons.append(f"{clip_id}:already_prepared")
+        # Clip-row upload fields can be stale or falsely declared.
+        # Only a linked media_assets row with persisted AV-stream
+        # evidence proves that the clip is already prepared.
+        if clip_id in prepared_clip_ids:
+            reasons.append(
+                f"{clip_id}:already_prepared"
+            )
             continue
         if not is_individual_video_url(url):
             reasons.append(f"{clip_id}:individual_video_url_required")
@@ -1012,6 +1026,15 @@ def select_saved_media_candidate(
                 "final_caption_evidence_missing"
             ]:
                 reasons.append(f"{media_id}:{reason}")
+            continue
+
+        if not asset_has_video_evidence(
+            asset
+        ):
+            reasons.append(
+                f"{media_id}:"
+                "media_stream_evidence_missing"
+            )
             continue
 
         candidates.append((clip, source_video, asset))
@@ -1195,6 +1218,35 @@ def build_plan(
             clips, source_videos, posted, account_id, media_assets, excluded_clip_ids,
         )
         selected_asset = None
+
+    selected_clip_id = str(
+        (clip or {}).get(
+            "clip_candidate_id"
+        )
+        or (clip or {}).get("clip_id")
+        or ""
+    )
+
+    repair_invalid_saved_asset = bool(
+        selected_clip_id
+        and any(
+            str(
+                row.get(
+                    "clip_candidate_id"
+                )
+                or row.get(
+                    "video_clip_id"
+                )
+                or ""
+            )
+            == selected_clip_id
+            and not asset_has_video_evidence(
+                row
+            )
+            for row in media_assets
+        )
+    )
+
     no_candidate = not clip or not source_video
     candidate_status = ""
 
@@ -1227,6 +1279,9 @@ def build_plan(
         "selected_clip": clip or {},
         "selected_source_video": source_video or {},
         "selected_media_asset": selected_asset or {},
+        "repair_invalid_saved_asset": (
+            repair_invalid_saved_asset
+        ),
         "prepare_only": prepare_only,
         "post_saved_media": post_saved_media,
         "slot_id": slot_id,
@@ -1308,6 +1363,21 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "media_type": "video",
         "duration_seconds": asset.get("duration_seconds") or asset.get("duration", 0),
         "aspect_ratio": asset.get("aspect_ratio", "9:16"),
+        "width": asset.get("width", ""),
+        "height": asset.get("height", ""),
+        "video_stream_count": asset.get(
+            "video_stream_count",
+            0,
+        ),
+        "audio_stream_count": asset.get(
+            "audio_stream_count",
+            0,
+        ),
+        "media_probe_status": asset.get(
+            "media_probe_status",
+            "",
+        ),
+        "enforce_video_stream_evidence": True,
         "public_post_text": text,
         **_alignment_fields(clip),
     })
@@ -1370,6 +1440,21 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         "media_origin": "approved_source_clip",
         "duration_seconds": asset.get("duration_seconds") or asset.get("duration", ""),
         "aspect_ratio": asset.get("aspect_ratio", "9:16"),
+        "width": asset.get("width", ""),
+        "height": asset.get("height", ""),
+        "video_stream_count": asset.get(
+            "video_stream_count",
+            0,
+        ),
+        "audio_stream_count": asset.get(
+            "audio_stream_count",
+            0,
+        ),
+        "media_probe_status": asset.get(
+            "media_probe_status",
+            "",
+        ),
+        "enforce_video_stream_evidence": "true",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     existing_queue_ids = {str(row.get("queue_id", "")) for row in _records(client, "queue")}
@@ -1469,9 +1554,24 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     local_source = str(download["download_result"]["local_path"])
     client.save_source_video({**source_video, "download_status": "DOWNLOADED", "local_path": local_source, "downloaded_at": datetime.now(timezone.utc).isoformat()})
 
+    clip_for_cut = dict(clip)
+
+    if plan.get(
+        "repair_invalid_saved_asset"
+    ):
+        clip_for_cut.update({
+            "cut_status": "",
+            "local_clip_path": "",
+            "storage_url": "",
+            "upload_status": "",
+            "post_status": "",
+            "reviewer_status": "READY",
+            "clip_status": "READY",
+        })
+
     cut_args = SimpleNamespace(
         clip_candidate_id=clip_id,
-        clip_candidate_row=clip,
+        clip_candidate_row=clip_for_cut,
         clip_candidates_json="",
         input_path=local_source,
         rights_status=clip.get("rights_status", ""),
@@ -1496,6 +1596,11 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     asset = dict(cut["media_asset_result"])
     asset["account_id"] = account_id
     asset["clip_candidate_id"] = clip_id
+    asset["replace_existing_asset"] = bool(
+        plan.get(
+            "repair_invalid_saved_asset"
+        )
+    )
 
     upload_args = SimpleNamespace(upload=True, confirm_upload=True, dry_run=False)
     upload = execute_cloudinary_uploads(build_upload_plan(upload_args, [asset]))
@@ -1528,11 +1633,71 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "media_type": "video",
         "mime_type": "video/mp4",
         "duration": asset.get("duration_seconds", ""),
-        "duration_seconds": asset.get("duration_seconds", ""),
+        "duration_seconds": (
+            uploaded.get(
+                "duration_seconds"
+            )
+            or asset.get(
+                "duration_seconds",
+                "",
+            )
+        ),
+        "width": uploaded.get(
+            "width",
+            asset.get("width", ""),
+        ),
+        "height": uploaded.get(
+            "height",
+            asset.get("height", ""),
+        ),
+        "video_stream_count": (
+            uploaded.get(
+                "video_stream_count",
+                asset.get(
+                    "video_stream_count",
+                    0,
+                ),
+            )
+        ),
+        "audio_stream_count": (
+            uploaded.get(
+                "audio_stream_count",
+                asset.get(
+                    "audio_stream_count",
+                    0,
+                ),
+            )
+        ),
+        "media_probe_status": (
+            uploaded.get(
+                "media_probe_status",
+                asset.get(
+                    "media_probe_status",
+                    "",
+                ),
+            )
+        ),
+        "media_probe_reason": (
+            uploaded.get(
+                "media_probe_reason",
+                asset.get(
+                    "media_probe_reason",
+                    "",
+                ),
+            )
+        ),
         "reuse_status": "approved_creator_clip",
         "rights_status": clip.get("rights_status", ""),
         "permission_status": clip.get("permission_status", ""),
-        "aspect_ratio": "9:16",
+        "aspect_ratio": (
+            uploaded.get(
+                "aspect_ratio"
+            )
+            or asset.get(
+                "aspect_ratio",
+                "",
+            )
+        ),
         "video_clip_id": clip_id,
         "local_path": asset.get("local_path", ""),
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
@@ -1542,9 +1707,30 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "allow_upload": "true",
         "notes": "Approved creator clip produced by production media pipeline.",
     }
-    existing_media_ids = {str(row.get("media_id", "")) for row in _records(client, "media_assets")}
+    existing_media_ids = {
+        str(row.get("media_id", ""))
+        for row in _records(
+            client,
+            "media_assets",
+        )
+    }
+
     if media_id not in existing_media_ids:
-        _append(client, "media_assets", media_row)
+        _append(
+            client,
+            "media_assets",
+            media_row,
+        )
+    elif plan.get(
+        "repair_invalid_saved_asset"
+    ):
+        update_row(
+            client,
+            "media_assets",
+            "media_id",
+            media_id,
+            media_row,
+        )
 
     caption = _generate_final_media_caption(
         clip=clip,
@@ -1609,7 +1795,25 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "account_id": account_id,
         "media_type": "video",
         "duration_seconds": asset.get("duration_seconds", 0),
-        "aspect_ratio": "9:16",
+        "aspect_ratio": asset.get(
+            "aspect_ratio",
+            "",
+        ),
+        "width": asset.get("width", ""),
+        "height": asset.get("height", ""),
+        "video_stream_count": asset.get(
+            "video_stream_count",
+            0,
+        ),
+        "audio_stream_count": asset.get(
+            "audio_stream_count",
+            0,
+        ),
+        "media_probe_status": asset.get(
+            "media_probe_status",
+            "",
+        ),
+        "enforce_video_stream_evidence": True,
         "public_post_text": text,
         **_alignment_fields(clip),
     })
@@ -1689,7 +1893,25 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         "media_status": "UPLOADED",
         "media_required": "true",
         "duration_seconds": asset.get("duration_seconds", ""),
-        "aspect_ratio": "9:16",
+        "aspect_ratio": asset.get(
+            "aspect_ratio",
+            "",
+        ),
+        "width": asset.get("width", ""),
+        "height": asset.get("height", ""),
+        "video_stream_count": asset.get(
+            "video_stream_count",
+            0,
+        ),
+        "audio_stream_count": asset.get(
+            "audio_stream_count",
+            0,
+        ),
+        "media_probe_status": asset.get(
+            "media_probe_status",
+            "",
+        ),
+        "enforce_video_stream_evidence": "true",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     existing_queue_ids = {str(row.get("queue_id", "")) for row in _records(client, "queue")}

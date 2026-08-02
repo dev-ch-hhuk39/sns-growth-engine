@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import build_rights_decision
+from media.media_probe import probe_video_file
 
 
 def _load_clip_candidates(path: str) -> list[dict]:
@@ -123,14 +124,85 @@ def execute_cut(plan: dict) -> dict:
         completed = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=False)
         if completed.returncode != 0 or not output_path.exists():
             return {**plan, "status": "FAILED", "would_cut": False, "blocked_reasons": ["ffmpeg_cut_failed"]}
+
+        media_probe = probe_video_file(
+            output_path
+        )
+
+        if (
+            media_probe.get(
+                "media_probe_status"
+            )
+            != "PASS"
+        ):
+            output_path.unlink(
+                missing_ok=True
+            )
+
+            return {
+                **plan,
+                "status": "FAILED",
+                "would_cut": False,
+                "blocked_reasons": [
+                    "cut_output_missing_av_streams",
+                    str(
+                        media_probe.get(
+                            "media_probe_reason",
+                            "",
+                        )
+                    ),
+                ],
+                "media_probe": media_probe,
+            }
+
         media_asset = dict(plan.get("media_asset_result") or {})
         media_asset.update({
             "media_asset_id": f"ma_{plan.get('clip_candidate_id') or output_path.stem}",
             "local_path": str(output_path),
             "status": "APPROVED",
             "upload_status": "NOT_UPLOADED",
-            "aspect_ratio": "9:16" if plan.get("vertical_9x16") else "source",
-            "duration_seconds": duration,
+            "aspect_ratio": media_probe.get(
+                "aspect_ratio",
+                "",
+            ),
+            "duration_seconds": (
+                media_probe.get(
+                    "duration_seconds"
+                )
+                or duration
+            ),
+            "width": media_probe.get(
+                "width",
+                0,
+            ),
+            "height": media_probe.get(
+                "height",
+                0,
+            ),
+            "video_stream_count": (
+                media_probe.get(
+                    "video_stream_count",
+                    0,
+                )
+            ),
+            "audio_stream_count": (
+                media_probe.get(
+                    "audio_stream_count",
+                    0,
+                )
+            ),
+            "media_probe_status": (
+                media_probe.get(
+                    "media_probe_status",
+                    "BLOCKED",
+                )
+            ),
+            "media_probe_reason": (
+                media_probe.get(
+                    "media_probe_reason",
+                    "",
+                )
+            ),
         })
         return {**plan, "status": "CUT", "would_cut": False, "media_asset_result": media_asset}
     except Exception as exc:  # noqa: BLE001

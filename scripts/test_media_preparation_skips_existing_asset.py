@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepared clip assets are never rebuilt; the next eligible clip is selected."""
+"""Verified prepared assets are skipped; stale clip metadata is repairable."""
 from __future__ import annotations
 
 from run_media_production_pipeline import select_candidate
@@ -46,6 +46,11 @@ def main() -> int:
         "account_id": "liver_manager",
         "upload_status": "UPLOADED",
         "storage_url": "https://media.example.invalid/clip_01.mp4",
+        "width": "1080",
+        "height": "1920",
+        "video_stream_count": "1",
+        "audio_stream_count": "1",
+        "media_probe_status": "PASS",
     }]
     selected, _, reasons = select_candidate(clips, videos, [], "liver_manager", assets)
 
@@ -59,11 +64,48 @@ def main() -> int:
         [clip_with_persisted_state, clips[1]], videos, [], "liver_manager", [],
     )
     checks = [
-        ("existing media asset skips first clip", selected and selected["clip_candidate_id"] == "clip_02"),
-        ("skip reason is observable", any(reason == "clip_01:already_prepared" for reason in reasons)),
-        ("persisted clip state also skips first clip", persisted_selected and persisted_selected["clip_candidate_id"] == "clip_02"),
-        ("persisted-state reason is observable", any(reason == "clip_01:already_prepared" for reason in persisted_reasons)),
-        ("no duplicate media asset selected", selected and selected["clip_candidate_id"] != "clip_01"),
+        (
+            "verified existing asset skips first clip",
+            (
+                selected
+                and selected["clip_candidate_id"]
+                == "clip_02"
+            ),
+        ),
+        (
+            "verified-asset skip reason is observable",
+            any(
+                reason
+                == "clip_01:already_prepared"
+                for reason in reasons
+            ),
+        ),
+        (
+            "persisted clip state alone remains repairable",
+            (
+                persisted_selected
+                and persisted_selected[
+                    "clip_candidate_id"
+                ]
+                == "clip_01"
+            ),
+        ),
+        (
+            "stale persisted state is not preparation proof",
+            not any(
+                reason
+                == "clip_01:already_prepared"
+                for reason in persisted_reasons
+            ),
+        ),
+        (
+            "verified asset is not prepared twice",
+            (
+                selected
+                and selected["clip_candidate_id"]
+                != "clip_01"
+            ),
+        ),
     ]
     for name, passed in checks:
         print(f"  {'PASS' if passed else 'FAIL'} {name}")

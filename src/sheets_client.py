@@ -234,6 +234,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "slot_id", "business_date_jst",
         "media_url", "media_status", "media_required", "media_type", "content_type", "publisher_media_type", "media_origin",
         "duration_seconds", "aspect_ratio",
+        "width", "height",
+        "video_stream_count", "audio_stream_count",
+        "media_probe_status", "enforce_video_stream_evidence",
         # A direct source post may be a carousel.  These lists must all share
         # the same source_post_id and are never used to mix different posts.
         "media_asset_ids_json", "media_urls_json", "media_types_json",
@@ -282,6 +285,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "cloudinary_public_id",
         "media_type", "mime_type",
         "width", "height", "duration",
+        "video_stream_count", "audio_stream_count",
+        "media_probe_status", "media_probe_reason",
         "reuse_status", "media_reuse_risk", "imitation_risk",
         "downloaded_at", "uploaded_at",
         "used_count", "notes",

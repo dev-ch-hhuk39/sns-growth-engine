@@ -144,6 +144,9 @@ def main() -> int:
             "duration_seconds": "27",
             "width": "1080",
             "height": "1920",
+            "video_stream_count": "1",
+            "audio_stream_count": "1",
+            "media_probe_status": "PASS",
             "created_at": "2026-07-03T00:00:00+00:00",
         },
     ]

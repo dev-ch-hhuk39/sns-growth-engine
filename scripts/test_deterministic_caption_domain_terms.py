@@ -172,7 +172,8 @@ def main() -> int:
         ),
         description="風俗嬢からキャバ嬢への転身を考える対談",
         transcript_excerpt=(
-            "夏に向けて何を大切にするかを話している。"
+            "風俗嬢からキャバ嬢への転身について、"
+            "働き方の違いを話している。"
         ),
     )
 
@@ -197,6 +198,49 @@ def main() -> int:
         night_caption.get("caption_provider")
         == "deterministic_grounded_fallback",
         "night_scout uses deterministic fallback",
+    )
+
+    parent_only_caption = build_caption(
+        account_id="night_scout",
+        clip_id="clip_test_parent_metadata_only",
+        source_video_id="sv_test_parent_metadata_only",
+        source_id="src_test_parent_metadata_only",
+        platform="youtube",
+        source_url=(
+            "https://www.youtube.com/watch?v=8Xmkojfw90Q"
+        ),
+        title=(
+            "国内NO.1風俗嬢VSクイーン "
+            "キャバ嬢転身を巡り大激論"
+        ),
+        description=(
+            "風俗嬢からキャバ嬢への転身を考える対談"
+        ),
+        transcript_excerpt=(
+            "夏に向けたボディメイクについて"
+            "話している。"
+        ),
+    )
+
+    check(
+        parent_only_caption.get("status")
+        == "REVIEW_REQUIRED",
+        (
+            "parent title cannot enable an "
+            "unrelated clip caption"
+        ),
+    )
+
+    check(
+        "account_relevant_source_evidence_missing"
+        in parent_only_caption.get(
+            "blocked_reasons",
+            [],
+        ),
+        (
+            "parent-only grounding failure "
+            "is auditable"
+        ),
     )
 
     liver_caption = build_caption(

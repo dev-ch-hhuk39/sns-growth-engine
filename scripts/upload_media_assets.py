@@ -14,6 +14,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_ROOT, "src"))
 
 from media.cloudinary_uploader import plan_cloudinary_uploads
+from media.media_probe import probe_video_file
 from media.rights_policy import build_rights_decision, rights_allows_media_use
 
 
@@ -109,13 +110,48 @@ def execute_cloudinary_uploads(plan: dict[str, Any]) -> dict[str, Any]:
         uploaded = list(plan.get("already_uploaded_assets", []))
         newly_uploaded = 0
         for asset in plan.get("assets", []):
+            media_probe = probe_video_file(
+                str(asset.get("local_path", ""))
+            )
+
+            if (
+                media_probe.get(
+                    "media_probe_status"
+                )
+                != "PASS"
+            ):
+                return {
+                    **plan,
+                    "status": "FAILED",
+                    "uploaded_count": 0,
+                    "blocked_reasons": [
+                        "local_media_missing_av_streams",
+                        str(
+                            media_probe.get(
+                                "media_probe_reason",
+                                "",
+                            )
+                        ),
+                    ],
+                    "media_probe": media_probe,
+                }
+
             media_id = str(asset.get("media_asset_id") or Path(str(asset.get("local_path", ""))).stem)
             response = cloudinary.uploader.upload(
                 str(asset["local_path"]),
                 resource_type="video",
                 folder=f"sns-growth-engine/{asset.get('account_id', 'liver_manager')}",
                 public_id=media_id,
-                overwrite=False,
+                overwrite=bool(
+                    asset.get(
+                        "replace_existing_asset"
+                    )
+                ),
+                invalidate=bool(
+                    asset.get(
+                        "replace_existing_asset"
+                    )
+                ),
                 unique_filename=False,
             )
             secure_url = str(response.get("secure_url") or "")
@@ -127,6 +163,7 @@ def execute_cloudinary_uploads(plan: dict[str, Any]) -> dict[str, Any]:
                 "storage_url": secure_url,
                 "cloudinary_public_id": str(response.get("public_id") or ""),
                 "upload_status": "UPLOADED",
+                **media_probe,
             })
             newly_uploaded += 1
         return {

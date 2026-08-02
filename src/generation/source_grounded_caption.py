@@ -689,6 +689,11 @@ class SourceGroundedCaptionService:
             else ""
         )
 
+        # Preserve a failed fallback's exact reason for auditing. Previously,
+        # when both providers were unavailable, only the primary-provider
+        # reason survived and clip-level grounding failures were hidden.
+        fallback_failure = ""
+
         if (
             (
                 not generated.ok
@@ -705,6 +710,11 @@ class SourceGroundedCaptionService:
                 and fallback.data
             ):
                 generated = fallback
+            else:
+                fallback_failure = (
+                    fallback.reason
+                    or "caption_fallback_unavailable"
+                )
 
         if (
             not generated.ok
@@ -716,10 +726,17 @@ class SourceGroundedCaptionService:
                 "public_post_text": "",
                 "internal_analysis": {},
                 "safety_notes": "",
-                "blocked_reasons": [
-                    generated.reason
-                    or "caption_provider_unavailable"
-                ],
+                "blocked_reasons": list(
+                    dict.fromkeys(
+                        reason
+                        for reason in (
+                            generated.reason
+                            or "caption_provider_unavailable",
+                            fallback_failure,
+                        )
+                        if reason
+                    )
+                ),
                 "provider_status": (
                     generated.status
                 ),

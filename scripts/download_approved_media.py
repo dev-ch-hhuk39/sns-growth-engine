@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from media.rights_policy import build_rights_decision
+from media.media_probe import probe_video_file
 from acquisition.ytdlp_runtime import metadata_options
 from discover_approved_source_videos import load_existing_source_videos
 
@@ -109,6 +110,13 @@ def execute_download(plan: dict) -> dict:
     output_dir = Path(str(plan["output_dir"]))
     output_dir.mkdir(parents=True, exist_ok=True)
     template = str(output_dir / f"{safe_id}.%(ext)s")
+
+    # GitHub runners and local retries may retain an older partial output.
+    # Never let glob ordering select a stale audio-only .mp4.
+    for stale in output_dir.glob(f"{safe_id}.*"):
+        if stale.is_file():
+            stale.unlink()
+
     platform = "youtube" if "youtu" in str(plan["source_url"]).lower() else "tiktok"
     opts = metadata_options(platform, {
         "outtmpl": template,
@@ -122,10 +130,42 @@ def execute_download(plan: dict) -> dict:
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             ydl.download([str(plan["source_url"])])
-        matches = sorted(output_dir.glob(f"{safe_id}.*"))
-        local = next((p for p in matches if p.suffix.lower() in {".mp4", ".mov", ".webm", ".mkv"}), None)
+        matches = sorted(
+            path
+            for path in output_dir.glob(
+                f"{safe_id}.*"
+            )
+            if path.suffix.lower()
+            in {
+                ".mp4",
+                ".mov",
+                ".webm",
+                ".mkv",
+            }
+        )
+
+        local = None
+        media_probe: dict[str, object] = {}
+
+        for candidate in matches:
+            candidate_probe = probe_video_file(
+                candidate
+            )
+
+            if (
+                candidate_probe.get(
+                    "media_probe_status"
+                )
+                == "PASS"
+            ):
+                local = candidate
+                media_probe = candidate_probe
+                break
+
         if local is None:
-            raise RuntimeError("download_output_missing")
+            raise RuntimeError(
+                "downloaded_media_missing_av_streams"
+            )
         return {
             **plan,
             "status": "DOWNLOADED",
@@ -135,6 +175,7 @@ def execute_download(plan: dict) -> dict:
                 "media_asset_id": f"download_{safe_id}",
                 "local_path": str(local),
                 "file_size_bytes": local.stat().st_size,
+                **media_probe,
             },
         }
     except Exception as exc:  # noqa: BLE001
