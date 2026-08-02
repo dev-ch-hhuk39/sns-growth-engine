@@ -17,7 +17,11 @@ import requests
 
 from acquisition.contracts import ProviderResult
 from acquisition.models import SourcePostBundle
-from generation.semantic_alignment import LocalSemanticAlignmentProvider, lexical_similarity
+from generation.semantic_alignment import (
+    ALIGNMENT_THRESHOLDS,
+    LocalSemanticAlignmentProvider,
+    lexical_similarity,
+)
 from generation.source_copyedit import (
     DeterministicSourceCopyeditProvider,
     evaluate_source_copyedit_contract,
@@ -189,7 +193,7 @@ class DeterministicGroundedProvider:
     """
 
     provider_name = "deterministic_grounded_fallback"
-    provider_version = "2"
+    provider_version = "4"
 
     MAX_GENERATION_ATTEMPTS = 64
     MAX_DISTINCT_CANDIDATES = 18
@@ -410,40 +414,63 @@ class DeterministicGroundedProvider:
                 )
                 continue
 
-            caption_claim = max(
-                public_sentences,
-                key=lambda sentence: (
-                    lexical_similarity(
-                        sentence,
-                        evidence,
-                    )
-                ),
-            )
+            # Every substantive public sentence is a claim.
+            # A single weakly related sentence must never be used
+            # to validate an otherwise unrelated template.
+            caption_claims = [
+                sentence
+                for sentence in public_sentences
+                if len(sentence.strip()) >= 8
+            ]
 
-            if (
-                lexical_similarity(
-                    caption_claim,
-                    evidence,
+            if not caption_claims:
+                rejection_reasons.add(
+                    "deterministic_caption_has_no_claims"
                 )
-                < 0.08
+                continue
+
+            # Match each public claim to the most relevant
+            # exact sentence from the source packet. Comparing
+            # every claim with one shared sentence creates both
+            # false positives and false negatives.
+            claim_support = []
+
+            for caption_claim in caption_claims:
+                best_evidence = max(
+                    evidence_candidates,
+                    key=lambda candidate: (
+                        lexical_similarity(
+                            caption_claim,
+                            candidate,
+                        )
+                    ),
+                )
+
+                claim_support.append({
+                    "caption_claim": caption_claim,
+                    "source_evidence": best_evidence,
+                })
+
+            if any(
+                lexical_similarity(
+                    item["caption_claim"],
+                    item["source_evidence"],
+                )
+                < ALIGNMENT_THRESHOLDS[
+                    "claim_evidence_similarity"
+                ]
+                for item in claim_support
             ):
                 rejection_reasons.add(
                     "deterministic_claim_not_grounded"
                 )
                 continue
 
-            claim_support = [
-                {
-                    "caption_claim": caption_claim,
-                    "source_evidence": evidence,
-                }
-            ]
-
             alignment = (
                 alignment_provider.evaluate(
                     source_text=signal,
                     public_post_text=public_text,
-                    main_claims=[evidence],
+                    main_claims=caption_claims,
                     claim_support=claim_support,
                     recent_posts=recent_posts,
                 )
@@ -514,9 +541,9 @@ class DeterministicGroundedProvider:
                     "PASS",
                     data={
                         "internal_analysis": {
-                            "main_claims": [
-                                evidence
-                            ],
+                            "main_claims": (
+                                caption_claims
+                            ),
                             "topic": topic,
                             "audience": (
                                 ACCOUNT_RULES[

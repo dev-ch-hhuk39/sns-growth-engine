@@ -13,6 +13,7 @@ ALIGNMENT_THRESHOLDS = {
     "final_alignment_score": 0.72,
     "main_claim_coverage": 0.70,
     "unsupported_claim_count": 0,
+    "claim_evidence_similarity": 0.22,
     "source_copy_similarity": 0.65,
     "source_preservation_similarity": 0.55,
     "recent_post_similarity": 0.75,
@@ -94,7 +95,7 @@ class JapaneseEmbeddingSimilarityProvider:
 
 class LocalSemanticAlignmentProvider:
     provider_name = "local_semantic_alignment"
-    provider_version = "2"
+    provider_version = "3"
 
     def evaluate(
         self,
@@ -167,7 +168,9 @@ class LocalSemanticAlignmentProvider:
                     and claim_in_caption
                     and (
                         claim_evidence_similarity
-                        >= 0.08
+                        >= ALIGNMENT_THRESHOLDS[
+                            "claim_evidence_similarity"
+                        ]
                     )
                 ),
             })
@@ -180,10 +183,12 @@ class LocalSemanticAlignmentProvider:
                 and lexical_similarity(
                     claim,
                     item[
-                        "source_evidence"
+                        "caption_claim"
                     ],
                 )
-                >= 0.22
+                >= ALIGNMENT_THRESHOLDS[
+                    "claim_evidence_similarity"
+                ]
                 for item
                 in verified_support
             ):
