@@ -13,16 +13,21 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-ROOT = Path(__file__).resolve().parents[1]
-ACCOUNTS = ("night_scout", "liver_manager")
-CANARY_TYPES = (
-    "original_text",
-    "reference_text",
-    "direct_image",
-    "direct_video",
-    "direct_carousel",
-    "approved_source_clip",
+from activation_route_contract import (
+    ACCOUNTS,
+    ACTIVATION_CANARY_TYPES,
+    LEGACY_CANARY_TYPES,
+    TEXT_ACTIVATION_CANARY_TYPES,
+    activation_canary_id,
+    activation_slot,
+    canonical_activation_type,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+# Backward-compatible runtime subtype export.
+# Activation code uses ACTIVATION_CANARY_TYPES.
+CANARY_TYPES = LEGACY_CANARY_TYPES
+
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 
 
@@ -145,35 +150,64 @@ def permission_deficits(
     return rows
 
 
-def canary_required_permission_deficits(permissions: list[dict[str, Any]]) -> dict[str, Any]:
-    """Return only the six owner-media canary permission needs, never all sources."""
+def canary_required_permission_deficits(
+    permissions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Return only route-level media permission deficits."""
+
     rows: list[dict[str, str]] = []
+
     for account_id in ACCOUNTS:
         for canary_type, operation in (
-            ("direct_image", "direct"),
-            ("direct_carousel", "direct"),
-            ("approved_source_clip", "clip"),
+            (
+                "direct_reference_media",
+                "direct",
+            ),
+            (
+                "approved_source_clip",
+                "clip",
+            ),
         ):
             active = any(
-                is_active_permission(item, account_id=account_id, operation=operation)
+                is_active_permission(
+                    item,
+                    account_id=account_id,
+                    operation=operation,
+                )
                 for item in permissions
             )
-            if not active:
-                rows.append(
-                    {
-                        "canary_id": canary_id(account_id, canary_type),
-                        "account_id": account_id,
-                        "canary_type": canary_type,
-                        "operation": operation,
-                        "reason": "active_evidence_bearing_permission_missing_for_canary",
-                    }
-                )
+
+            if active:
+                continue
+
+            rows.append(
+                {
+                    "canary_id": (
+                        activation_canary_id(
+                            account_id,
+                            canary_type,
+                        )
+                    ),
+                    "account_id": account_id,
+                    "canary_type": canary_type,
+                    "operation": operation,
+                    "reason": (
+                        "active_evidence_bearing_"
+                        "permission_missing_for_canary"
+                    ),
+                }
+            )
+
     return {
-        "scope": "six_owner_media_canary_slots_only",
-        "required_slot_count": 6,
+        "scope": (
+            "four_route_level_media_"
+            "canary_slots_only"
+        ),
+        "required_slot_count": 4,
         "deficit_count": len(rows),
         "deficits": rows,
     }
+
 
 
 def source_integrity_report(
@@ -213,103 +247,399 @@ def source_integrity_report(
 
 
 def canary_source_integrity_report(
-    datasets: dict[str, list[dict[str, Any]]], candidates: list[dict[str, Any]]
+    datasets: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+    candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Verify only the selected canary sources; historic defects remain quarantine candidates."""
-    parents = {str(row.get("source_post_id", "")): row for row in datasets.get("source_posts", [])}
-    children_by_parent: dict[str, list[dict[str, Any]]] = {}
-    for child in datasets.get("source_post_media", []):
-        children_by_parent.setdefault(str(child.get("source_post_id", "")), []).append(child)
-    assets = {
-        str(row.get("media_id") or row.get("media_asset_id") or ""): row
-        for row in datasets.get("media_assets", [])
+    """Verify selected route-level canary sources."""
+
+    parents = {
+        str(
+            row.get(
+                "source_post_id",
+                "",
+            )
+        ): row
+        for row in datasets.get(
+            "source_posts",
+            [],
+        )
     }
+
+    children_by_parent: dict[
+        str,
+        list[dict[str, Any]],
+    ] = {}
+
+    for child in datasets.get(
+        "source_post_media",
+        [],
+    ):
+        children_by_parent.setdefault(
+            str(
+                child.get(
+                    "source_post_id",
+                    "",
+                )
+            ),
+            [],
+        ).append(child)
+
     checks: list[dict[str, Any]] = []
+
     for candidate in candidates:
-        kind = str(candidate.get("canary_type", ""))
-        source_post_id = str(candidate.get("source_post_id", ""))
-        if not source_post_id:
+        account_id = str(
+            candidate.get(
+                "account_id",
+                "",
+            )
+        )
+
+        kind = canonical_activation_type(
+            candidate.get(
+                "canary_type",
+                "",
+            ),
+            content_route=candidate.get(
+                "content_route",
+                "",
+            ),
+        )
+
+        canonical_id = (
+            activation_canary_id(
+                account_id,
+                kind,
+            )
+            if kind
+            else str(
+                candidate.get(
+                    "canary_id",
+                    "",
+                )
+            )
+        )
+
+        reasons: list[str] = []
+
+        if not kind:
+            reasons.append(
+                "unknown_activation_route"
+            )
+
+        if kind in (
+            TEXT_ACTIVATION_CANARY_TYPES
+        ):
             checks.append(
                 {
-                    "canary_id": canary_id(str(candidate.get("account_id", "")), kind),
-                    "status": "PASS",
-                    "scope": "no_external_source_parent_required",
+                    "canary_id": canonical_id,
+                    "account_id": account_id,
+                    "canary_type": kind,
+                    "status": (
+                        "PASS"
+                        if not reasons
+                        else "FAIL"
+                    ),
+                    "scope": (
+                        "no_external_source_"
+                        "parent_required"
+                    ),
+                    "reasons": sorted(
+                        set(reasons)
+                    ),
                 }
             )
             continue
-        parent = parents.get(source_post_id)
-        reasons: list[str] = []
-        if not parent:
-            reasons.append("source_post_missing")
+
+        if kind == "approved_source_clip":
+            if not str(
+                candidate.get(
+                    "source_video_id",
+                    "",
+                )
+            ).strip():
+                reasons.append(
+                    "source_video_id_missing"
+                )
+
+            if not str(
+                candidate.get(
+                    "clip_candidate_id",
+                    "",
+                )
+            ).strip():
+                reasons.append(
+                    "clip_candidate_id_missing"
+                )
+
+            if not str(
+                candidate.get(
+                    "media_url",
+                    "",
+                )
+                or candidate.get(
+                    "local_path",
+                    "",
+                )
+            ).strip():
+                reasons.append(
+                    "clip_media_missing"
+                )
+
+            if (
+                str(
+                    candidate.get(
+                        "permission_status",
+                        "",
+                    )
+                ).lower()
+                != "approved"
+                or str(
+                    candidate.get(
+                        "rights_status",
+                        "",
+                    )
+                ).lower()
+                not in APPROVED_RIGHTS
+                or not str(
+                    candidate.get(
+                        "permission_evidence",
+                        "",
+                    )
+                ).strip()
+            ):
+                reasons.append(
+                    "permission_evidence_"
+                    "missing_or_inactive"
+                )
+
+            checks.append(
+                {
+                    "canary_id": canonical_id,
+                    "account_id": account_id,
+                    "canary_type": kind,
+                    "status": (
+                        "PASS"
+                        if not reasons
+                        else "FAIL"
+                    ),
+                    "scope": (
+                        "approved_source_clip"
+                    ),
+                    "reasons": sorted(
+                        set(reasons)
+                    ),
+                }
+            )
+            continue
+
+        source_post_id = str(
+            candidate.get(
+                "source_post_id",
+                "",
+            )
+        ).strip()
+
+        parent = parents.get(
+            source_post_id
+        )
+
+        if not source_post_id or not parent:
+            reasons.append(
+                "source_post_missing"
+            )
         else:
-            platform = str(parent.get("platform") or parent.get("source_platform") or "")
+            platform = str(
+                parent.get("platform")
+                or parent.get(
+                    "source_platform"
+                )
+                or ""
+            )
+
+            parent_url = str(
+                parent.get(
+                    "canonical_post_url",
+                    "",
+                )
+            )
+
             if not is_individual_source_post_url(
                 platform,
-                str(parent.get("canonical_post_url", "")),
+                parent_url,
             ):
-                reasons.append("parent_not_individual_post")
-            children = children_by_parent.get(source_post_id, [])
+                reasons.append(
+                    "parent_not_individual_post"
+                )
+
+            children = (
+                children_by_parent.get(
+                    source_post_id,
+                    [],
+                )
+            )
+
             if not children:
-                reasons.append("source_post_media_missing")
-            for child in children:
-                if str(child.get("source_post_id", "")) != source_post_id:
-                    reasons.append("child_parent_mismatch")
-                if str(child.get("canonical_post_url", "")) != str(
-                    parent.get("canonical_post_url", "")
-                ):
-                    reasons.append("child_parent_url_mismatch")
-                if not str(
-                    child.get("original_media_url") or child.get("storage_url") or ""
-                ).strip():
-                    reasons.append("original_media_url_missing")
-            if kind == "direct_video":
-                asset = assets.get(str(candidate.get("media_asset_id", "")), {})
-                media_url = str(candidate.get("media_url", "")).strip()
+                reasons.append(
+                    "source_post_media_missing"
+                )
+
+            linked_urls = {
+                str(
+                    child.get(
+                        "storage_url",
+                        "",
+                    )
+                ).strip()
+                for child in children
+            } | {
+                str(
+                    child.get(
+                        "original_media_url",
+                        "",
+                    )
+                ).strip()
+                for child in children
+            }
+
+            linked_urls.discard("")
+
+            candidate_urls: list[str] = []
+
+            single_url = str(
+                candidate.get(
+                    "media_url",
+                    "",
+                )
+            ).strip()
+
+            if single_url:
+                candidate_urls.append(
+                    single_url
+                )
+
+            multiple = candidate.get(
+                "media_urls",
+                [],
+            )
+
+            if isinstance(
+                multiple,
+                list,
+            ):
+                candidate_urls.extend(
+                    str(item).strip()
+                    for item in multiple
+                    if str(item).strip()
+                )
+
+            if not candidate_urls:
+                reasons.append(
+                    "direct_media_missing"
+                )
+
+            for media_url in (
+                candidate_urls
+            ):
                 if (
-                    str(candidate.get("permission_status", "")).lower() != "approved"
-                    or str(candidate.get("rights_status", "")).lower() not in APPROVED_RIGHTS
-                    or not str(candidate.get("permission_evidence", "")).strip()
+                    media_url
+                    not in linked_urls
                 ):
-                    reasons.append("permission_evidence_missing_or_inactive")
-                if not media_url:
-                    reasons.append("cloudinary_asset_missing")
-                if not any(
-                    str(child.get("storage_url", "")).strip() == media_url for child in children
+                    reasons.append(
+                        "direct_media_not_linked_"
+                        "to_source_post_media"
+                    )
+
+            for child in children:
+                if (
+                    str(
+                        child.get(
+                            "canonical_post_url",
+                            "",
+                        )
+                    )
+                    != parent_url
                 ):
-                    reasons.append("cloudinary_asset_not_linked_to_source_post_media")
-                if asset and str(asset.get("source_post_id") or source_post_id) != source_post_id:
-                    reasons.append("cloudinary_asset_parent_mismatch")
+                    reasons.append(
+                        "child_parent_url_mismatch"
+                    )
+
+        if (
+            str(
+                candidate.get(
+                    "permission_status",
+                    "",
+                )
+            ).lower()
+            != "approved"
+            or str(
+                candidate.get(
+                    "rights_status",
+                    "",
+                )
+            ).lower()
+            not in APPROVED_RIGHTS
+            or not str(
+                candidate.get(
+                    "permission_evidence",
+                    "",
+                )
+            ).strip()
+        ):
+            reasons.append(
+                "permission_evidence_"
+                "missing_or_inactive"
+            )
+
         checks.append(
             {
-                "canary_id": canary_id(str(candidate.get("account_id", "")), kind),
-                "source_post_id": source_post_id,
-                "status": "PASS" if not reasons else "FAIL",
-                "reasons": sorted(set(reasons)),
+                "canary_id": canonical_id,
+                "account_id": account_id,
+                "canary_type": kind,
+                "source_post_id": (
+                    source_post_id
+                ),
+                "status": (
+                    "PASS"
+                    if not reasons
+                    else "FAIL"
+                ),
+                "reasons": sorted(
+                    set(reasons)
+                ),
             }
         )
-    failures = [check for check in checks if check["status"] != "PASS"]
+
+    failures = [
+        check
+        for check in checks
+        if check["status"] != "PASS"
+    ]
+
     return {
-        "status": "PASS" if checks and not failures else "FAIL",
-        "checked_canary_count": len(checks),
+        "status": (
+            "PASS"
+            if checks and not failures
+            else "FAIL"
+        ),
+        "checked_canary_count": len(
+            checks
+        ),
         "failures": failures,
         "checks": checks,
     }
 
 
-def _canary_slot(row: dict[str, Any]) -> tuple[str, str] | None:
-    """Resolve canonical account/type from fixed or batch-specific canary IDs."""
-    account = str(row.get("account_id", "")).strip()
-    kind = str(row.get("content_type") or row.get("generation_mode") or "").strip()
-    if account in ACCOUNTS and kind in CANARY_TYPES:
-        return account, kind
-    candidate = str(row.get("canary_id", "")).strip()
-    for expected_account in ACCOUNTS:
-        for expected_kind in CANARY_TYPES:
-            if candidate == canary_id(expected_account, expected_kind) or candidate.endswith(
-                f"_{expected_account}_{expected_kind}"
-            ):
-                return expected_account, expected_kind
-    return None
+
+def _canary_slot(
+    row: dict[str, Any],
+) -> tuple[str, str] | None:
+    """Resolve one canonical activation route."""
+
+    return activation_slot(row)
+
 
 
 def activation_evidence(
@@ -332,7 +662,7 @@ def activation_evidence(
             kind,
         )
         for account_id in ACCOUNTS
-        for kind in CANARY_TYPES
+        for kind in ACTIVATION_CANARY_TYPES
     }
 
     integrity_required = canary_integrity is not None
@@ -580,60 +910,80 @@ def activation_evidence(
     }
 
 
-def required_owner_inputs(deficits: list[dict[str, str]]) -> dict[str, Any]:
+def required_owner_inputs(
+    deficits: list[dict[str, str]],
+) -> dict[str, Any]:
+    """Describe only current route-level media inputs."""
+
     needs: list[dict[str, Any]] = []
+
     for account_id in ACCOUNTS:
         needs.extend(
             [
                 {
-                    "input_id": f"{account_id}_owned_direct_image",
+                    "input_id": (
+                        f"{account_id}_"
+                        "direct_reference_media"
+                    ),
                     "account_id": account_id,
-                    "canary_type": "direct_image",
+                    "canary_type": (
+                        "direct_reference_media"
+                    ),
                     "required": [
-                        "individual_source_post_url",
-                        "image_file_or_https_url",
-                        "media_permissions evidence",
-                        "Threads repost permission",
+                        (
+                            "one individual "
+                            "source-post URL"
+                        ),
+                        (
+                            "approved original "
+                            "media URL or file"
+                        ),
+                        (
+                            "media_permissions "
+                            "evidence"
+                        ),
+                        (
+                            "Threads original "
+                            "repost permission"
+                        ),
                     ],
+                    "preference": (
+                        "video first; image or "
+                        "carousel may be runtime "
+                        "fallbacks"
+                    ),
                 },
                 {
-                    "input_id": f"{account_id}_owned_direct_video",
+                    "input_id": (
+                        f"{account_id}_"
+                        "approved_source_clip"
+                    ),
                     "account_id": account_id,
-                    "canary_type": "direct_video",
+                    "canary_type": (
+                        "approved_source_clip"
+                    ),
                     "required": [
-                        "individual_source_post_url",
-                        "video_file_or_https_url",
-                        "media_permissions evidence",
-                        "Threads repost permission",
-                    ],
-                },
-                {
-                    "input_id": f"{account_id}_owned_direct_carousel",
-                    "account_id": account_id,
-                    "canary_type": "direct_carousel",
-                    "required": [
-                        "one individual source_post URL",
-                        "ordered image/video URLs",
-                        "media_permissions evidence",
-                        "Threads carousel permission",
-                    ],
-                },
-                {
-                    "input_id": f"{account_id}_owned_approved_source_clip",
-                    "account_id": account_id,
-                    "canary_type": "approved_source_clip",
-                    "required": [
-                        "individual owned/licensed video URL or local file",
+                        (
+                            "individual owned or "
+                            "licensed video URL"
+                        ),
                         "permission evidence",
                         "allowed clip range",
-                        "Threads repost permission",
+                        (
+                            "Threads clip repost "
+                            "permission"
+                        ),
                     ],
                 },
             ]
         )
+
     return {
-        "schema_version": 1,
-        "purpose": "single owner-input bundle for final media canaries; no permission is inferred",
+        "schema_version": 2,
+        "purpose": (
+            "route-level final media canary "
+            "inputs; no permission is inferred"
+        ),
         "permission_deficits": deficits,
         "required_owner_inputs": needs,
     }

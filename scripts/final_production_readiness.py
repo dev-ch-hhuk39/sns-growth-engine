@@ -33,6 +33,8 @@ def build_report(*, use_sheets: bool) -> dict[str, Any]:
             operational = {key: [dict(row) for row in client._ws(key).get_all_records()] for key in RULES}
         except Exception:
             pass
+    posted: list[dict[str, Any]] = []
+    jobs: list[dict[str, Any]] = []
     activation = {**activation_evidence(datasets.get("posted_results", []), []), "evidence_source": "DATASET_PARTIAL"}
     # build_live_canary_inventory intentionally reads only its dedicated tabs;
     # include posted/metric evidence if those extra rows are available later.
@@ -52,6 +54,15 @@ def build_report(*, use_sheets: bool) -> dict[str, Any]:
     inventory = build_inventory(datasets)
     source_integrity = source_integrity_report(parents, children)
     canary_integrity = canary_source_integrity_report(datasets, inventory.get("candidates", []))
+    if activation.get("evidence_source") == "READ_OK":
+        activation = {
+            **activation_evidence(
+                posted,
+                jobs,
+                canary_integrity=canary_integrity,
+            ),
+            "evidence_source": "READ_OK",
+        }
     selected_parent_ids = {str(item.get("source_post_id", "")) for item in inventory.get("candidates", []) if str(item.get("source_post_id", ""))}
     historical_failures = [item for item in source_integrity.get("failures", []) if str(item.get("source_post_id", "")) not in selected_parent_ids]
 
@@ -138,7 +149,7 @@ def main() -> int:
     args = parser.parse_args(); report = build_report(use_sheets=args.use_sheets)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True); args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"); report["output_path"] = str(args.output)
-    print(json.dumps(report, ensure_ascii=False, indent=2)); return 0 if report["status"] == "READY" else 1
+    print(json.dumps(report, ensure_ascii=False, indent=2)); return 0 if report["status"] == "AUTONOMOUS_PRODUCTION_READY" else 1
 
 
 if __name__ == "__main__":

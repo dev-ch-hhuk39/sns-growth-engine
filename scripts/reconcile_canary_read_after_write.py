@@ -13,18 +13,20 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from config_loader import get_config
-from final_production_contracts import (
+from activation_route_contract import (
     ACCOUNTS,
-    CANARY_TYPES,
+    ACTIVATION_CANARY_TYPES,
+    activation_slot,
+)
+from final_production_contracts import (
     activation_evidence,
-    canary_id,
 )
 from process_threads_queue import now_iso, records, update_row
 from sheets_client import SheetsClient
 
 FIRST_WAVE_TYPES = {
     "original_text",
-    "direct_image",
+    "direct_reference_media",
 }
 ACCEPTED_VERIFICATION = {
     "PASS",
@@ -34,32 +36,13 @@ ACCEPTED_VERIFICATION = {
 REQUIRED_WINDOWS = {24, 72, 168}
 
 
-def _slot(row: dict[str, Any]) -> tuple[str, str] | None:
-    account_id = str(row.get("account_id", "")).strip()
-    content_type = str(
-        row.get("content_type")
-        or row.get("generation_mode")
-        or ""
-    ).strip()
+def _slot(
+    row: dict[str, Any],
+) -> tuple[str, str] | None:
+    """Resolve legacy and current evidence to one route."""
 
-    if account_id in ACCOUNTS and content_type in CANARY_TYPES:
-        return account_id, content_type
+    return activation_slot(row)
 
-    candidate = str(row.get("canary_id", "")).strip()
-    for expected_account in ACCOUNTS:
-        for expected_type in CANARY_TYPES:
-            if (
-                candidate == canary_id(
-                    expected_account,
-                    expected_type,
-                )
-                or candidate.endswith(
-                    f"_{expected_account}_{expected_type}"
-                )
-            ):
-                return expected_account, expected_type
-
-    return None
 
 
 def _window(value: Any) -> int:
@@ -79,7 +62,7 @@ def build_plan(
     expected_slots = [
         (account_id, content_type)
         for account_id in ACCOUNTS
-        for content_type in CANARY_TYPES
+        for content_type in ACTIVATION_CANARY_TYPES
     ]
 
     metrics_by_canary: dict[str, set[int]] = {}
@@ -185,14 +168,14 @@ def build_plan(
     return {
         "status": (
             "PASS"
-            if len(plan_rows) == 12
+            if len(plan_rows) == len(expected_slots)
             and all(
                 row["status"] == "READY_TO_RECONCILE"
                 for row in plan_rows
             )
             else "BLOCKED"
         ),
-        "expected_count": 12,
+        "expected_count": len(expected_slots),
         "row_count": len(plan_rows),
         "first_wave_batch_id": first_wave_batch_id,
         "remaining_batch_id": remaining_batch_id,

@@ -1,39 +1,62 @@
 #!/usr/bin/env python3
+
 from pathlib import Path
 
-from final_production_contracts import (
+from activation_route_contract import (
     ACCOUNTS,
-    CANARY_TYPES,
+    ACTIVATION_CANARY_TYPES,
 )
-from reconcile_canary_read_after_write import build_plan
+from reconcile_canary_read_after_write import (
+    build_plan,
+)
 
-FIRST_BATCH = "fresh_first_wave_20260730021819"
-REMAINING_BATCH = "fresh_remaining_eight_20260730225046"
+
+FIRST_BATCH = (
+    "fresh_first_wave_20260730021819"
+)
+REMAINING_BATCH = (
+    "fresh_remaining_routes_20260730225046"
+)
+
+FIRST_WAVE_TYPES = {
+    "original_text",
+    "direct_reference_media",
+}
 
 posted = []
 jobs = []
 
 for account_id in ACCOUNTS:
-    for content_type in CANARY_TYPES:
+    for content_route in (
+        ACTIVATION_CANARY_TYPES
+    ):
         batch_id = (
             FIRST_BATCH
-            if content_type
-            in {"original_text", "direct_image"}
+            if content_route
+            in FIRST_WAVE_TYPES
             else REMAINING_BATCH
         )
+
         canary_id = (
-            f"canary_{batch_id}_{account_id}_{content_type}"
+            f"canary_{batch_id}_"
+            f"{account_id}_{content_route}"
         )
-        result_id = f"result_{account_id}_{content_type}"
+
+        result_id = (
+            f"result_{account_id}_"
+            f"{content_route}"
+        )
 
         posted.append(
             {
                 "result_id": result_id,
                 "queue_id": (
-                    f"queue_{account_id}_{content_type}"
+                    f"queue_{account_id}_"
+                    f"{content_route}"
                 ),
                 "account_id": account_id,
-                "content_type": content_type,
+                "content_route": content_route,
+                "content_type": content_route,
                 "canary_id": canary_id,
                 "batch_id": batch_id,
                 "status": "POSTED",
@@ -42,19 +65,28 @@ for account_id in ACCOUNTS:
                     "@example/post/test"
                 ),
                 "external_post_id": result_id,
-                "verification_status": "PENDING",
+                "verification_status": (
+                    "PENDING"
+                ),
             }
         )
 
-        for window_hours in (24, 72, 168):
+        for window_hours in (
+            24,
+            72,
+            168,
+        ):
             jobs.append(
                 {
                     "result_id": result_id,
                     "canary_id": canary_id,
-                    "window_hours": window_hours,
+                    "window_hours": (
+                        window_hours
+                    ),
                     "status": "SCHEDULED",
                 }
             )
+
 
 plan = build_plan(
     posted,
@@ -64,11 +96,15 @@ plan = build_plan(
 )
 
 assert plan["status"] == "PASS", plan
-assert plan["row_count"] == 12
+assert plan["expected_count"] == 10
+assert plan["row_count"] == 10
+
 assert all(
-    row["action"] == "UPDATE_VERIFICATION"
+    row["action"]
+    == "UPDATE_VERIFICATION"
     for row in plan["rows"]
 )
+
 
 already_verified = [
     {
@@ -88,10 +124,13 @@ verified_plan = build_plan(
 )
 
 assert verified_plan["status"] == "PASS"
+
 assert all(
-    row["action"] == "SKIP_ALREADY_VERIFIED"
+    row["action"]
+    == "SKIP_ALREADY_VERIFIED"
     for row in verified_plan["rows"]
 )
+
 
 missing_metric_plan = build_plan(
     posted,
@@ -100,20 +139,29 @@ missing_metric_plan = build_plan(
     remaining_batch_id=REMAINING_BATCH,
 )
 
-assert missing_metric_plan["status"] == "BLOCKED"
+assert (
+    missing_metric_plan["status"]
+    == "BLOCKED"
+)
+
 assert any(
-    "METRIC_WINDOWS_INCOMPLETE" in row["reasons"]
+    "METRIC_WINDOWS_INCOMPLETE"
+    in row["reasons"]
     for row in missing_metric_plan["rows"]
 )
+
 
 wrong_batch_plan = build_plan(
     posted,
     jobs,
-    first_wave_batch_id="wrong_first_batch",
+    first_wave_batch_id=(
+        "wrong_first_batch"
+    ),
     remaining_batch_id=REMAINING_BATCH,
 )
 
 assert wrong_batch_plan["status"] == "BLOCKED"
+
 
 processor = Path(
     "scripts/process_threads_queue.py"
@@ -123,7 +171,11 @@ assert (
     '"verification_status": '
     '"READ_AFTER_WRITE_PASS"'
 ) in processor
-assert "READ_AFTER_WRITE_STATUS_NOT_PERSISTED" in processor
+
+assert (
+    "READ_AFTER_WRITE_STATUS_NOT_PERSISTED"
+    in processor
+)
 
 print(
     "PASS "

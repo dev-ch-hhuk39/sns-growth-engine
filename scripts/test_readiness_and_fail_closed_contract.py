@@ -21,10 +21,9 @@ from scheduled_publish_activation_gate import _decision
 KINDS = (
     "original_text",
     "reference_text",
-    "direct_image",
-    "direct_video",
-    "direct_carousel",
+    "direct_reference_media",
     "approved_source_clip",
+    "pdca_text",
 )
 
 empty = activation_evidence([], [])

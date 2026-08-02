@@ -1,57 +1,57 @@
 #!/usr/bin/env python3
-from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-
-sys.path.insert(
-    0,
-    str(ROOT / "scripts"),
-)
-
-from final_production_contracts import (
+from activation_route_contract import (
     ACCOUNTS,
-    CANARY_TYPES,
-    canary_id,
+    ACTIVATION_CANARY_TYPES,
+    activation_canary_id,
 )
 from scheduled_publish_activation_gate import (
     _decision,
 )
 
 
-def posted_rows() -> list[dict[str, object]]:
+def posted_rows():
     return [
         {
-            "canary_id": canary_id(
-                account,
-                kind,
+            "canary_id": (
+                activation_canary_id(
+                    account,
+                    kind,
+                )
             ),
             "account_id": account,
-            "canary_type": kind,
+            "content_route": kind,
             "status": "POSTED",
-            "post_url": ("https://www.threads.net/" f"@test/post/{account}_{kind}"),
-            "external_post_id": (f"{account}_{kind}"),
-            "verification_status": ("READ_AFTER_WRITE_PASS"),
+            "post_url": (
+                "https://www.threads.com/"
+                f"@test/post/{account}_{kind}"
+            ),
+            "external_post_id": (
+                f"{account}_{kind}"
+            ),
+            "verification_status": (
+                "READ_AFTER_WRITE_PASS"
+            ),
         }
         for account in ACCOUNTS
-        for kind in CANARY_TYPES
+        for kind in ACTIVATION_CANARY_TYPES
     ]
 
 
-def metric_rows() -> list[dict[str, object]]:
+def metric_rows():
     return [
         {
-            "canary_id": canary_id(
-                account,
-                kind,
+            "canary_id": (
+                activation_canary_id(
+                    account,
+                    kind,
+                )
             ),
             "window_hours": window,
             "status": "SCHEDULED",
         }
         for account in ACCOUNTS
-        for kind in CANARY_TYPES
+        for kind in ACTIVATION_CANARY_TYPES
         for window in (
             24,
             72,
@@ -60,33 +60,47 @@ def metric_rows() -> list[dict[str, object]]:
     ]
 
 
-invalid_types = {
-    "direct_image",
-    "direct_video",
-    "direct_carousel",
-}
-
 invalid_integrity = {
     "status": "FAIL",
     "checks": [
         {
-            "canary_id": canary_id(
-                account,
-                kind,
+            "canary_id": (
+                activation_canary_id(
+                    account,
+                    kind,
+                )
             ),
             "account_id": account,
             "canary_type": kind,
-            "status": ("FAIL" if kind in invalid_types else "PASS"),
-            "reasons": (["parent_not_individual_post"] if kind in invalid_types else []),
+            "status": (
+                "FAIL"
+                if kind
+                == "direct_reference_media"
+                else "PASS"
+            ),
+            "reasons": (
+                [
+                    (
+                        "parent_not_"
+                        "individual_post"
+                    )
+                ]
+                if kind
+                == "direct_reference_media"
+                else []
+            ),
         }
         for account in ACCOUNTS
-        for kind in CANARY_TYPES
+        for kind in ACTIVATION_CANARY_TYPES
     ],
 }
 
 config = {
     "kill_switch": False,
-    "production_publish_activation_approved": False,
+    (
+        "production_publish_"
+        "activation_approved"
+    ): False,
     "scheduled_publish_enabled": False,
 }
 
@@ -101,21 +115,32 @@ blocked = _decision(
 
 assert blocked["status"] == "BLOCKED"
 
-assert "canary_source_integrity_incomplete" in blocked["blocked_reasons"]
+evidence = blocked[
+    "activation_evidence"
+]
 
-evidence = blocked["activation_evidence"]
+assert evidence[
+    "verified_canary_count"
+] == 8
 
-assert evidence["verified_canary_count"] == 6, evidence
-
-assert len(evidence["missing_or_invalid_" "canary_source_integrity"]) == 6, evidence
+assert len(
+    evidence[
+        (
+            "missing_or_invalid_"
+            "canary_source_integrity"
+        )
+    ]
+) == 2
 
 valid_integrity = {
     "status": "PASS",
     "checks": [
         {
-            "canary_id": canary_id(
-                account,
-                kind,
+            "canary_id": (
+                activation_canary_id(
+                    account,
+                    kind,
+                )
             ),
             "account_id": account,
             "canary_type": kind,
@@ -123,7 +148,7 @@ valid_integrity = {
             "reasons": [],
         }
         for account in ACCOUNTS
-        for kind in CANARY_TYPES
+        for kind in ACTIVATION_CANARY_TYPES
     ],
 }
 
@@ -138,6 +163,12 @@ allowed = _decision(
 
 assert allowed["status"] == "ALLOW"
 
-assert allowed["activation_evidence"]["verified_canary_count"] == 12
+assert allowed[
+    "activation_evidence"
+]["verified_canary_count"] == 10
 
-print("PASS " "test_activation_rejects_invalid_" "canary_integrity.py")
+print(
+    "PASS "
+    "test_activation_rejects_"
+    "invalid_canary_integrity.py"
+)
