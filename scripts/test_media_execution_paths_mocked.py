@@ -45,6 +45,19 @@ class FakeCloudinary:
         return None
 
 
+def passing_media_probe(_path):
+    return {
+        "media_probe_status": "PASS",
+        "media_probe_reason": "",
+        "video_stream_count": 1,
+        "audio_stream_count": 1,
+        "width": 1080,
+        "height": 1920,
+        "duration_seconds": 12,
+        "aspect_ratio": "9:16",
+    }
+
+
 checks = []
 with TemporaryDirectory() as tmp:
     download_plan = {
@@ -55,8 +68,25 @@ with TemporaryDirectory() as tmp:
         "output_dir": tmp,
         "blocked_reasons": [],
     }
-    with patch.object(downloader.importlib.util, "find_spec", return_value=True), patch.dict(sys.modules, {"yt_dlp": FakeYtDlp()}):
-        downloaded = downloader.execute_download(download_plan)
+    with (
+        patch.object(
+            downloader.importlib.util,
+            "find_spec",
+            return_value=True,
+        ),
+        patch.object(
+            downloader,
+            "probe_video_file",
+            side_effect=passing_media_probe,
+        ),
+        patch.dict(
+            sys.modules,
+            {"yt_dlp": FakeYtDlp()},
+        ),
+    ):
+        downloaded = downloader.execute_download(
+            download_plan
+        )
     checks.append(downloaded["status"] == "DOWNLOADED" and Path(downloaded["download_result"]["local_path"]).exists())
 
     cut_output = Path(tmp) / "clip.mp4"
@@ -76,7 +106,18 @@ with TemporaryDirectory() as tmp:
         "clip_candidate_id": "clip_test",
         "media_asset_result": {"rights_status": "approved_creator_clip"},
     }
-    with patch.object(cutter.subprocess, "run", side_effect=fake_run):
+    with (
+        patch.object(
+            cutter.subprocess,
+            "run",
+            side_effect=fake_run,
+        ),
+        patch.object(
+            cutter,
+            "probe_video_file",
+            side_effect=passing_media_probe,
+        ),
+    ):
         cut = cutter.execute_cut(cut_plan)
     checks.append(cut["status"] == "CUT" and cut["media_asset_result"]["aspect_ratio"] == "9:16")
 
@@ -88,7 +129,19 @@ with TemporaryDirectory() as tmp:
         "CLOUDINARY_API_KEY": "present",
         "CLOUDINARY_API_SECRET": "present",
     }, clear=False):
-        uploaded = uploader.execute_cloudinary_uploads(uploader.build_upload_plan(args, [asset]))
+        with patch.object(
+            uploader,
+            "probe_video_file",
+            side_effect=passing_media_probe,
+        ):
+            uploaded = (
+                uploader.execute_cloudinary_uploads(
+                    uploader.build_upload_plan(
+                        args,
+                        [asset],
+                    )
+                )
+            )
     checks.append(uploaded["status"] == "UPLOADED" and uploaded["uploaded_count"] == 1)
 
 print(f"PASS: {sum(checks)} / FAIL: {len(checks)-sum(checks)}")

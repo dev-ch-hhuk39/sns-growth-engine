@@ -567,6 +567,38 @@ def build_media_validation_plan(
             "aspect_ratio",
             "",
         ),
+        "width": queue_row.get(
+            "width",
+            "",
+        ),
+        "height": queue_row.get(
+            "height",
+            "",
+        ),
+        "video_stream_count": (
+            queue_row.get(
+                "video_stream_count",
+                0,
+            )
+        ),
+        "audio_stream_count": (
+            queue_row.get(
+                "audio_stream_count",
+                0,
+            )
+        ),
+        "media_probe_status": (
+            queue_row.get(
+                "media_probe_status",
+                "",
+            )
+        ),
+        "enforce_video_stream_evidence": (
+            queue_row.get(
+                "enforce_video_stream_evidence",
+                "false",
+            )
+        ),
         "public_post_text": text,
         "media_origin": (
             "direct_reference"
