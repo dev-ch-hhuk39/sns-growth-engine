@@ -198,6 +198,7 @@ class DeterministicGroundedProvider:
         "night_scout": (
             "夜職",
             "店",
+            "店舗",
             "時給",
             "ノルマ",
             "客層",
@@ -205,9 +206,18 @@ class DeterministicGroundedProvider:
             "移籍",
             "副業",
             "相談",
+            "風俗",
+            "風俗嬢",
+            "キャバ",
+            "キャバ嬢",
+            "ラウンジ",
+            "ホスト",
+            "スカウト",
+            "ナイトワーク",
         ),
         "liver_manager": (
             "配信",
+            "配信者",
             "初見",
             "コメント",
             "リスナー",
@@ -215,6 +225,16 @@ class DeterministicGroundedProvider:
             "事務所",
             "継続",
             "話題",
+            "ライバー",
+            "ライブ",
+            "TikTok LIVE",
+            "tiktoklive",
+            "バトル",
+            "配信枠",
+            "団結",
+            "コイン",
+            "投げる",
+            "投げ",
         ),
     }
 
@@ -258,7 +278,7 @@ class DeterministicGroundedProvider:
             sentence
             for sentence in self._sentences(signal)
             if any(
-                term in sentence
+                term.casefold() in sentence.casefold()
                 for term in terms
             )
         ]
@@ -277,7 +297,7 @@ class DeterministicGroundedProvider:
             evidence_candidates,
             key=lambda sentence: (
                 sum(
-                    term in sentence
+                    term.casefold() in sentence.casefold()
                     for term in terms
                 ),
                 len(sentence),
