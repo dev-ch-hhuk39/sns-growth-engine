@@ -647,7 +647,247 @@ def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, An
     return {"added": added, "skipped": skipped, "refreshed": refreshed}
 
 
-def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_id: str = "", post_type: str = "reference_text", theme: str = "", schedule_date_jst: str = "") -> dict[str, Any]:
+def measured_pdca_snapshots(
+    metric_snapshots: list[dict[str, Any]],
+    posted_results: list[dict[str, Any]],
+    *,
+    account_id: str,
+) -> list[dict[str, Any]]:
+    """Return only measured snapshots tied to valid Threads posts."""
+
+    valid_results = {
+        str(
+            row.get(
+                "result_id",
+                "",
+            )
+        )
+        for row in posted_results
+        if (
+            str(
+                row.get(
+                    "account_id",
+                    "",
+                )
+            )
+            == account_id
+            and str(
+                row.get(
+                    "platform",
+                    "threads",
+                )
+            ).lower()
+            == "threads"
+            and str(
+                row.get(
+                    "status",
+                    "",
+                )
+            ).upper()
+            == "POSTED"
+            and str(
+                row.get(
+                    "result_id",
+                    "",
+                )
+            ).strip()
+        )
+    }
+
+    required_metrics = (
+        "views",
+        "likes",
+        "comments",
+    )
+
+    selected = [
+        dict(row)
+        for row in metric_snapshots
+        if (
+            str(
+                row.get(
+                    "account_id",
+                    "",
+                )
+            )
+            == account_id
+            and str(
+                row.get(
+                    "platform",
+                    "threads",
+                )
+            ).lower()
+            == "threads"
+            and str(
+                row.get(
+                    "metrics_status",
+                    "",
+                )
+            ).upper()
+            == "MEASURED"
+            and str(
+                row.get(
+                    "result_id",
+                    "",
+                )
+            )
+            in valid_results
+            and all(
+                str(
+                    row.get(
+                        metric,
+                        "",
+                    )
+                ).strip()
+                != ""
+                for metric in required_metrics
+            )
+        )
+    ]
+
+    selected.sort(
+        key=lambda row: (
+            str(
+                row.get(
+                    "collected_at",
+                    "",
+                )
+            ),
+            str(
+                row.get(
+                    "snapshot_id",
+                    "",
+                )
+            ),
+        ),
+        reverse=True,
+    )
+
+    return selected
+
+
+def attach_pdca_activation_evidence(
+    rows: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+    *,
+    account_id: str,
+    measured_rows: list[dict[str, Any]],
+    posted_results: list[dict[str, Any]],
+    stamp: str,
+) -> dict[str, list[dict[str, Any]]]:
+    """Attach fresh canary identity and measured-result lineage."""
+
+    copied = {
+        key: [
+            dict(row)
+            for row in value
+        ]
+        for key, value in rows.items()
+    }
+
+    if not measured_rows:
+        return copied
+
+    latest = max(
+        measured_rows,
+        key=lambda row: (
+            str(
+                row.get(
+                    "collected_at",
+                    "",
+                )
+            ),
+            str(
+                row.get(
+                    "snapshot_id",
+                    "",
+                )
+            ),
+        ),
+    )
+
+    source_result_id = str(
+        latest.get(
+            "result_id",
+            "",
+        )
+    )
+
+    source_result = next(
+        (
+            row
+            for row in posted_results
+            if str(
+                row.get(
+                    "result_id",
+                    "",
+                )
+            )
+            == source_result_id
+        ),
+        {},
+    )
+
+    for index, row in enumerate(
+        copied.get("queue", []),
+        1,
+    ):
+        row["canary_id"] = (
+            f"canary_fresh_{account_id}_"
+            f"pdca_text_{stamp}_"
+            f"{index:02d}"
+        )
+
+        row["content_type"] = (
+            "pdca_text"
+        )
+
+        row["content_route"] = (
+            "pdca_text"
+        )
+
+        row["generation_mode"] = (
+            "metrics_driven_pdca_text"
+        )
+
+        row["source_result_id"] = (
+            source_result_id
+        )
+
+        row["source_content_route"] = (
+            source_result.get(
+                "content_route",
+                "",
+            )
+            or source_result.get(
+                "content_type",
+                "",
+            )
+        )
+
+        row[
+            "source_generation_mode"
+        ] = source_result.get(
+            "generation_mode",
+            "",
+        )
+
+    return copied
+
+
+def run_reference_generation(
+    account_id: str,
+    top_n: int,
+    *,
+    apply: bool,
+    slot_id: str = "",
+    post_type: str = "reference_text",
+    theme: str = "",
+    schedule_date_jst: str = "",
+    require_measured_pdca: bool = False,
+) -> dict[str, Any]:
     from config_loader import get_config
     from sheets_client import SheetsClient
 
@@ -655,13 +895,66 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     posts = [dict(r) for r in client._ws("source_account_posts").get_all_records() if str(r.get("account_id", "")) == account_id]
     scores = [dict(r) for r in client._ws("reference_post_scores").get_all_records() if str(r.get("account_id", "")) == account_id]
-    history = [str(row.get("posted_text", "")) for row in client._ws("posted_results").get_all_records() if str(row.get("account_id", "")) == account_id]
+    posted_results = [
+        dict(row)
+        for row in client._ws(
+            "posted_results"
+        ).get_all_records()
+        if str(
+            row.get(
+                "account_id",
+                "",
+            )
+        )
+        == account_id
+    ]
+
+    history = [
+        str(
+            row.get(
+                "posted_text",
+                "",
+            )
+        )
+        for row in posted_results
+    ]
     try:
         strategy_rows = [dict(row) for row in client._ws("strategy_state").get_all_records()]
     except Exception:
         strategy_rows = []
     preferred_topics = preferred_primary_topics(strategy_rows, account_id)
-    metric_rows = [dict(row) for logical in ("metric_snapshots", "media_metrics") for row in client._ws(logical).get_all_records() if str(row.get("account_id", "")) == account_id]
+    metric_snapshots = [
+        dict(row)
+        for row in client._ws(
+            "metric_snapshots"
+        ).get_all_records()
+        if str(
+            row.get(
+                "account_id",
+                "",
+            )
+        )
+        == account_id
+    ]
+
+    media_metric_rows = [
+        dict(row)
+        for row in client._ws(
+            "media_metrics"
+        ).get_all_records()
+        if str(
+            row.get(
+                "account_id",
+                "",
+            )
+        )
+        == account_id
+    ]
+
+    metric_rows = [
+        *metric_snapshots,
+        *media_metric_rows,
+    ]
     from generation.context_selector import select_generation_context
     category_scores = [dict(row) for row in client._ws("category_scores").get_all_records() if str(row.get("account_id", "")) == account_id]
     learning_rules = [dict(row) for row in client._ws("learning_rules").get_all_records() if str(row.get("account_id", "")) == account_id]
@@ -674,8 +967,38 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
         requested_theme=theme,
     )
     effective_theme = str(context["selected_theme"])
-    measured = [row for row in metric_rows if str(row.get("metrics_status", "")).upper() == "MEASURED"]
-    fallback_used = post_type == "original_text" or (post_type == "pdca_text" and not measured)
+    measured = measured_pdca_snapshots(
+        metric_snapshots,
+        posted_results,
+        account_id=account_id,
+    )
+
+    if (
+        post_type == "pdca_text"
+        and require_measured_pdca
+        and not measured
+    ):
+        return {
+            "status": "NO_DATA",
+            "account_id": account_id,
+            "post_type": post_type,
+            "candidate_count": 0,
+            "measured_metric_count": 0,
+            "reason": (
+                "measured_metrics_required_"
+                "for_pdca_activation"
+            ),
+            "worker_selectable": False,
+            "real_post_possible_now": False,
+        }
+
+    fallback_used = (
+        post_type == "original_text"
+        or (
+            post_type == "pdca_text"
+            and not measured
+        )
+    )
     if post_type == "original_text":
         rows = build_fallback_generation_rows(
             account_id=account_id,
@@ -718,6 +1041,26 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
                 preferred_topics=preferred_topics,
             )
             fallback_used = True
+    if (
+        post_type == "pdca_text"
+        and require_measured_pdca
+    ):
+        rows = (
+            attach_pdca_activation_evidence(
+                rows,
+                account_id=account_id,
+                measured_rows=measured,
+                posted_results=(
+                    posted_results
+                ),
+                stamp=datetime.now(
+                    timezone.utc
+                ).strftime(
+                    "%Y%m%d%H%M%S"
+                ),
+            )
+        )
+
     summary = {
         "status": "PLAN_ONLY",
         "account_id": account_id,
@@ -745,6 +1088,9 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
         "effective_theme": effective_theme,
         "generation_context": {key: value for key, value in context.items() if key not in {"avoid_recent_texts"}},
         "measured_metric_count": len(measured),
+        "require_measured_pdca": (
+            require_measured_pdca
+        ),
         "pdca_fallback_to_original": post_type == "pdca_text" and not measured,
         "preferred_primary_topics": preferred_topics,
         "strategy_policy_active": bool(preferred_topics),
@@ -860,6 +1206,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--post-type", default="reference_text", choices=["original_text", "reference_text", "pdca_text"])
     parser.add_argument("--theme", default="")
     parser.add_argument("--schedule-date-jst", default="")
+    parser.add_argument(
+        "--require-measured-pdca",
+        action="store_true",
+        help=(
+            "Do not create pdca_text "
+            "activation candidates until "
+            "MEASURED evidence exists."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -870,13 +1225,39 @@ def main() -> int:
     if plan["status"] == "BLOCKED":
         return 1
     if plan["status"] == "PLAN_ONLY" and args.dry_run and plan["source"] == "references":
-        result = run_reference_generation(plan["account_id"], args.top_n, apply=False, slot_id=args.slot_id, post_type=args.post_type, theme=args.theme, schedule_date_jst=args.schedule_date_jst)
+        result = run_reference_generation(
+            plan["account_id"],
+            args.top_n,
+            apply=False,
+            slot_id=args.slot_id,
+            post_type=args.post_type,
+            theme=args.theme,
+            schedule_date_jst=(
+                args.schedule_date_jst
+            ),
+            require_measured_pdca=(
+                args.require_measured_pdca
+            ),
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     if plan["status"] != "WILL_RUN":
         return 0
     if plan["source"] == "references":
-        result = run_reference_generation(plan["account_id"], args.top_n, apply=True, slot_id=args.slot_id, post_type=args.post_type, theme=args.theme, schedule_date_jst=args.schedule_date_jst)
+        result = run_reference_generation(
+            plan["account_id"],
+            args.top_n,
+            apply=True,
+            slot_id=args.slot_id,
+            post_type=args.post_type,
+            theme=args.theme,
+            schedule_date_jst=(
+                args.schedule_date_jst
+            ),
+            require_measured_pdca=(
+                args.require_measured_pdca
+            ),
+        )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["status"] in {"GENERATED", "NO_DATA"} else 1
     # Clip generation remains delegated; it does not post.
