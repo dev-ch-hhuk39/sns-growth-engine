@@ -46,6 +46,8 @@ jobs:
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
+      THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -88,9 +90,10 @@ jobs:
               raise SystemExit("[BLOCKED] production_autopilot_enabled=false")
           if auto.get("kill_switch"):
               raise SystemExit("[BLOCKED] autonomous kill_switch=true")
-          if not auto.get("production_publish_activation_approved", False):
-              raise SystemExit("[BLOCKED] production_publish_activation_approved=false")
-          print("[OK] aftercare accepted: production_autopilot_enabled=true kill_switch=false")
+          print(
+              "[OK] aftercare accepted before publish activation: "
+              "production_autopilot_enabled=true kill_switch=false"
+          )
           PY
           if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
             echo "[BLOCKED] Sheets spreadsheet secret is missing."
@@ -103,7 +106,11 @@ jobs:
 
       - name: Dry-run aftercare plan
         run: |
-          python3 scripts/collect_threads_metrics.py --account-id all --source unavailable --dry-run
+          python3 scripts/process_threads_metric_jobs.py \
+            --account-id all \
+            --max-jobs 20 \
+            --dry-run \
+            --use-sheets
 
       - name: Apply metrics snapshots
         if: env.AFTERCARE_APPLY == 'true'
@@ -112,10 +119,9 @@ jobs:
           # exposes public numbers. Record the result, then continue to the
           # PDCA and registry steps instead of making the whole aftercare fail.
           set +e
-          python3 scripts/collect_threads_metrics.py \
+          python3 scripts/process_threads_metric_jobs.py \
             --account-id all \
-            --source browser \
-            --browser-engine public \
+            --max-jobs 20 \
             --apply \
             --confirm-metrics \
             --use-sheets
@@ -143,21 +149,25 @@ jobs:
             --use-sheets \
             --output /tmp/growth-attribution.json
 
-      - name: Apply PDCA candidate generation (legacy human-review only)
-        if: env.AFTERCARE_APPLY == 'true' && github.event_name == 'workflow_dispatch'
+      - name: Apply PDCA candidate generation (activation route)
+        if: env.AFTERCARE_APPLY == 'true'
         run: |
-          python3 scripts/generate_next_queue_from_metrics.py \
-            --account-id night_scout \
-            --count 2 \
-            --apply \
-            --confirm-generate \
-            --use-sheets || true
-          python3 scripts/generate_next_queue_from_metrics.py \
-            --account-id liver_manager \
-            --count 2 \
-            --apply \
-            --confirm-generate \
-            --use-sheets || true
+          set +e
+          for account in night_scout liver_manager; do
+            python3 scripts/generate_threads_ideas_from_references.py \
+              --account-id "$account" \
+              --platform threads \
+              --source references \
+              --top-n 1 \
+              --slot-id activation_pdca \
+              --post-type pdca_text \
+              --require-measured-pdca \
+              --apply \
+              --confirm-generate
+            pdca_exit=$?
+            echo "${account}_pdca_exit=$pdca_exit" >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit 0
 
       - name: Health summary
         if: always()

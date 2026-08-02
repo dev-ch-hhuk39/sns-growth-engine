@@ -2,32 +2,224 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-wf = (ROOT / ".github/workflows/production-autopilot-aftercare.yml").read_text(encoding="utf-8")
+
+workflow = (
+    ROOT
+    / ".github/workflows/"
+    "production-autopilot-aftercare.yml"
+).read_text(
+    encoding="utf-8"
+)
 
 checks = [
-    ("workflow has schedule", "schedule:" in wf and 'cron: "40 14 * * *"' in wf),
-    ("workflow dispatch exists", "workflow_dispatch:" in wf and "confirm_aftercare" in wf),
-    ("publish disabled globally", 'PUBLISH_ENABLED: "false"' in wf),
-    ("threads real post disabled", 'ALLOW_REAL_THREADS_POST: "false"' in wf),
-    ("x disabled", 'ALLOW_REAL_X_POST: "false"' in wf),
-    ("media post disabled", 'ALLOW_MEDIA_POSTS: "false"' in wf and 'ALLOW_REAL_THREADS_VIDEO_POST: "false"' in wf),
-    ("download cut upload disabled", 'ALLOW_VIDEO_DOWNLOAD: "false"' in wf and 'ALLOW_VIDEO_CUT: "false"' in wf and 'ALLOW_CLOUDINARY_UPLOAD: "false"' in wf),
-    ("transcription disabled", 'ALLOW_TRANSCRIPTION_API: "false"' in wf),
-    ("metrics apply step", "collect_threads_metrics.py" in wf and "--confirm-metrics" in wf and "--use-sheets" in wf),
-    ("pdca apply step", "generate_next_queue_from_metrics.py" in wf and "--confirm-generate" in wf),
-    ("scheduled aftercare applies", 'if [ "${{ github.event_name }}" = "schedule" ]' in wf and 'AFTERCARE_APPLY=$apply' in wf),
-    ("measured attribution applies", "run_growth_attribution_cycle.py" in wf and "--confirm-attribution" in wf),
-    ("media discovery delegated", "discover_approved_source_videos.py" not in wf and "--confirm-discovery" not in wf),
-    ("aftercare does not fetch media", "--fetch-real" not in wf),
-    ("source registry sync step", "seed_source_registry.py" in wf and "--confirm-seed" in wf),
-    ("source registry sync skips quota-heavy setup", "--skip-setup" in wf),
-    ("media growth delegated", "run_media_growth_engine.py" not in wf and "--confirm-media-growth" not in wf),
-    ("no real post command", "--confirm-real-post" not in wf),
-    ("no upload/download/cut confirm", "--confirm-upload" not in wf and "--confirm-download" not in wf and "--confirm-cut" not in wf),
+    (
+        "workflow has schedule",
+        (
+            "schedule:" in workflow
+            and 'cron: "40 14 * * *"'
+            in workflow
+        ),
+    ),
+    (
+        "workflow dispatch exists",
+        (
+            "workflow_dispatch:"
+            in workflow
+            and "confirm_aftercare"
+            in workflow
+        ),
+    ),
+    (
+        "publish disabled globally",
+        (
+            'PUBLISH_ENABLED: "false"'
+            in workflow
+        ),
+    ),
+    (
+        "threads real post disabled",
+        (
+            'ALLOW_REAL_THREADS_POST: "false"'
+            in workflow
+        ),
+    ),
+    (
+        "x disabled",
+        (
+            'ALLOW_REAL_X_POST: "false"'
+            in workflow
+        ),
+    ),
+    (
+        "media post disabled",
+        (
+            'ALLOW_MEDIA_POSTS: "false"'
+            in workflow
+            and (
+                'ALLOW_REAL_THREADS_VIDEO_POST: '
+                '"false"'
+                in workflow
+            )
+        ),
+    ),
+    (
+        "download cut upload disabled",
+        (
+            'ALLOW_VIDEO_DOWNLOAD: "false"'
+            in workflow
+            and 'ALLOW_VIDEO_CUT: "false"'
+            in workflow
+            and (
+                'ALLOW_CLOUDINARY_UPLOAD: '
+                '"false"'
+                in workflow
+            )
+        ),
+    ),
+    (
+        "transcription disabled",
+        (
+            'ALLOW_TRANSCRIPTION_API: "false"'
+            in workflow
+        ),
+    ),
+    (
+        "account metric tokens wired",
+        (
+            "THREADS_ACCESS_TOKEN_"
+            "NIGHT_SCOUT"
+            in workflow
+            and (
+                "THREADS_ACCESS_TOKEN_"
+                "LIVER_MANAGER"
+                in workflow
+            )
+        ),
+    ),
+    (
+        "due metric worker applies",
+        (
+            "process_threads_metric_jobs.py"
+            in workflow
+            and "--confirm-metrics"
+            in workflow
+            and "--use-sheets"
+            in workflow
+            and "--max-jobs 20"
+            in workflow
+        ),
+    ),
+    (
+        "aftercare breaks activation cycle",
+        (
+            "production_publish_activation_"
+            "approved=false"
+            not in workflow
+        ),
+    ),
+    (
+        "pdca uses production generator",
+        (
+            "generate_threads_ideas_"
+            "from_references.py"
+            in workflow
+            and "--post-type pdca_text"
+            in workflow
+            and (
+                "--require-measured-pdca"
+                in workflow
+            )
+        ),
+    ),
+    (
+        "scheduled aftercare applies",
+        (
+            'if [ "${{ github.event_name }}" '
+            '= "schedule" ]'
+            in workflow
+            and "AFTERCARE_APPLY=$apply"
+            in workflow
+        ),
+    ),
+    (
+        "measured attribution applies",
+        (
+            "run_growth_attribution_cycle.py"
+            in workflow
+            and "--confirm-attribution"
+            in workflow
+        ),
+    ),
+    (
+        "media discovery delegated",
+        (
+            "discover_approved_source_videos.py"
+            not in workflow
+            and "--confirm-discovery"
+            not in workflow
+        ),
+    ),
+    (
+        "aftercare does not fetch media",
+        "--fetch-real" not in workflow,
+    ),
+    (
+        "source registry sync step",
+        (
+            "seed_source_registry.py"
+            in workflow
+            and "--confirm-seed"
+            in workflow
+        ),
+    ),
+    (
+        "source registry setup bounded",
+        "--skip-setup" in workflow,
+    ),
+    (
+        "media growth delegated",
+        (
+            "run_media_growth_engine.py"
+            not in workflow
+            and "--confirm-media-growth"
+            not in workflow
+        ),
+    ),
+    (
+        "no real post command",
+        "--confirm-real-post"
+        not in workflow,
+    ),
+    (
+        "no upload download cut confirm",
+        (
+            "--confirm-upload"
+            not in workflow
+            and "--confirm-download"
+            not in workflow
+            and "--confirm-cut"
+            not in workflow
+        ),
+    ),
 ]
 
-failed = [name for name, ok in checks if not ok]
+failed = [
+    name
+    for name, ok in checks
+    if not ok
+]
+
 for name, ok in checks:
-    print(f"  {'PASS' if ok else 'FAIL'} {name}")
-print(f"PASS: {len(checks)-len(failed)} / FAIL: {len(failed)}")
-raise SystemExit(1 if failed else 0)
+    print(
+        f"  {'PASS' if ok else 'FAIL'} "
+        f"{name}"
+    )
+
+print(
+    f"PASS: {len(checks) - len(failed)} "
+    f"/ FAIL: {len(failed)}"
+)
+
+raise SystemExit(
+    1 if failed else 0
+)

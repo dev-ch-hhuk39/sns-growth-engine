@@ -13,6 +13,8 @@ import importlib.util
 import json
 import re
 import sys
+import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,9 +24,42 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
-METRIC_KEYS = ("views", "likes", "comments", "reposts", "quotes", "profile_clicks", "follows", "line_adds")
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+from publishers.threads_credentials import resolve_credentials  # noqa: E402
+
+METRIC_KEYS = (
+    "views",
+    "likes",
+    "comments",
+    "reposts",
+    "quotes",
+    "profile_clicks",
+    "follows",
+    "line_adds",
+)
+
+PDCA_REQUIRED_METRIC_KEYS = (
+    "views",
+    "likes",
+    "comments",
+)
+
+THREADS_POST_INSIGHT_METRICS = (
+    "views",
+    "likes",
+    "replies",
+    "reposts",
+    "quotes",
+)
+
+ALLOWED_ACCOUNTS = {
+    "night_scout",
+    "liver_manager",
+}
+
 PUBLIC_TIMEOUT_SECONDS = 15
+THREADS_API_BASE = (
+    "https://graph.threads.net/v1.0"
+)
 
 
 def now_iso() -> str:
@@ -58,8 +93,15 @@ def _first_int(patterns: list[str], text: str) -> int | None:
 
 def dependency_status() -> dict[str, str]:
     return {
-        "playwright": "installed" if importlib.util.find_spec("playwright") else "not_installed",
+        "playwright": (
+            "installed"
+            if importlib.util.find_spec(
+                "playwright"
+            )
+            else "not_installed"
+        ),
         "public_html_og": "wired",
+        "threads_insights_api": "wired",
     }
 
 
@@ -80,6 +122,235 @@ def collect_public_threads_metrics(row: dict[str, Any], source: str) -> tuple[di
     if any(v is not None for v in metrics.values()):
         return metrics, "low", "public_html_partial"
     return metrics, "none", "public_html_no_metrics"
+
+
+
+def _empty_metrics() -> dict[str, int | None]:
+    return {
+        key: None
+        for key in METRIC_KEYS
+    }
+
+
+def _metric_value(
+    insight: dict[str, Any],
+) -> int | None:
+    candidates: list[Any] = []
+
+    total = insight.get("total_value")
+
+    if isinstance(total, dict):
+        candidates.append(
+            total.get("value")
+        )
+
+    values = insight.get("values")
+
+    if (
+        isinstance(values, list)
+        and values
+        and isinstance(
+            values[-1],
+            dict,
+        )
+    ):
+        candidates.append(
+            values[-1].get("value")
+        )
+
+    candidates.append(
+        insight.get("value")
+    )
+
+    for value in candidates:
+        if value is None or value == "":
+            continue
+
+        try:
+            parsed = int(
+                float(value)
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            continue
+
+        if parsed >= 0:
+            return parsed
+
+    return None
+
+
+def parse_threads_insights_payload(
+    payload: dict[str, Any],
+) -> dict[str, int | None]:
+    metrics = _empty_metrics()
+
+    for insight in payload.get(
+        "data",
+        [],
+    ):
+        if not isinstance(
+            insight,
+            dict,
+        ):
+            continue
+
+        name = str(
+            insight.get("name", "")
+        ).strip().lower()
+
+        destination = (
+            "comments"
+            if name == "replies"
+            else name
+        )
+
+        if destination not in metrics:
+            continue
+
+        value = _metric_value(
+            insight
+        )
+
+        if value is not None:
+            metrics[destination] = (
+                value
+            )
+
+    return metrics
+
+
+def collect_api_threads_metrics(
+    row: dict[str, Any],
+    access_token: str,
+) -> tuple[
+    dict[str, int | None],
+    str,
+    str,
+]:
+    """Read official post insights without exposing credentials."""
+
+    metrics = _empty_metrics()
+
+    post_id = str(
+        row.get(
+            "external_post_id",
+            "",
+        )
+    ).strip()
+
+    if not post_id:
+        return (
+            metrics,
+            "none",
+            "external_post_id_missing",
+        )
+
+    if not access_token:
+        return (
+            metrics,
+            "none",
+            "threads_access_token_missing",
+        )
+
+    query = urllib.parse.urlencode(
+        {
+            "metric": ",".join(
+                THREADS_POST_INSIGHT_METRICS
+            )
+        }
+    )
+
+    url = (
+        f"{THREADS_API_BASE}/"
+        f"{urllib.parse.quote(post_id, safe='')}"
+        f"/insights?{query}"
+    )
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": (
+                f"Bearer {access_token}"
+            ),
+            "Accept": "application/json",
+            "User-Agent": (
+                "sns-growth-engine/"
+                "threads-insights"
+            ),
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=PUBLIC_TIMEOUT_SECONDS,
+        ) as response:
+            payload = json.loads(
+                response.read().decode(
+                    "utf-8"
+                )
+            )
+    except urllib.error.HTTPError as exc:
+        return (
+            metrics,
+            "none",
+            f"HTTPError:{exc.code}",
+        )
+    except urllib.error.URLError as exc:
+        return (
+            metrics,
+            "none",
+            (
+                "URLError:"
+                f"{type(exc.reason).__name__}"
+            ),
+        )
+    except (
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ) as exc:
+        return (
+            metrics,
+            "none",
+            type(exc).__name__,
+        )
+    except Exception as exc:
+        return (
+            metrics,
+            "none",
+            type(exc).__name__,
+        )
+
+    metrics = parse_threads_insights_payload(
+        payload
+    )
+
+    required_known = all(
+        metrics[key] is not None
+        for key in PDCA_REQUIRED_METRIC_KEYS
+    )
+
+    if required_known:
+        return metrics, "high", ""
+
+    if any(
+        value is not None
+        for value in metrics.values()
+    ):
+        return (
+            metrics,
+            "medium",
+            "threads_api_partial",
+        )
+
+    return (
+        metrics,
+        "none",
+        "threads_api_no_metrics",
+    )
 
 
 def collect_playwright_threads_metrics(row: dict[str, Any], storage_state: str = "") -> tuple[dict[str, int | None], str, str]:
@@ -118,8 +389,18 @@ def collect_playwright_threads_metrics(row: dict[str, Any], storage_state: str =
 
 
 def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics: dict[str, int | None], memo: str, error_reason: str = "") -> dict[str, Any]:
-    known = {k: v for k, v in metrics.items() if v is not None}
-    if len(known) == len(METRIC_KEYS):
+    known = {
+        key: value
+        for key, value in metrics.items()
+        if value is not None
+    }
+
+    pdca_required_known = all(
+        metrics.get(key) is not None
+        for key in PDCA_REQUIRED_METRIC_KEYS
+    )
+
+    if pdca_required_known:
         status = "MEASURED"
     elif known:
         status = "PARTIAL"
@@ -149,9 +430,19 @@ def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics
 
 def classify_collection_status(*, metrics: dict[str, int | None], error_reason: str) -> str:
     """Describe adapter availability without treating unknown values as zero."""
-    known_count = sum(value is not None for value in metrics.values())
-    if known_count == len(METRIC_KEYS):
+    known_count = sum(
+        value is not None
+        for value in metrics.values()
+    )
+
+    required_known = all(
+        metrics.get(key) is not None
+        for key in PDCA_REQUIRED_METRIC_KEYS
+    )
+
+    if required_known:
         return "AVAILABLE"
+
     if known_count:
         return "PARTIAL"
     reason = error_reason.lower()
@@ -191,23 +482,150 @@ def _append_row(client, logical: str, row: dict[str, Any]) -> bool:
     return True
 
 
-def _update_posted_result(client, result_id: str, snapshot: dict[str, Any]) -> None:
-    ws = client._ws("posted_results")
+def _update_posted_result(
+    client,
+    result_id: str,
+    snapshot: dict[str, Any],
+) -> None:
+    """Merge new evidence without downgrading an existing measured row."""
+
+    ws = client._ws(
+        "posted_results"
+    )
+
     headers = _headers(ws)
-    cell = ws.find(result_id, in_column=headers.index("result_id") + 1)
+
+    cell = ws.find(
+        result_id,
+        in_column=(
+            headers.index(
+                "result_id"
+            )
+            + 1
+        ),
+    )
+
     if cell is None:
-        raise KeyError(f"result_id={result_id!r} not found")
-    for key in [*METRIC_KEYS, "metrics_status", "collected_at", "manual_memo"]:
+        raise KeyError(
+            f"result_id={result_id!r} "
+            "not found"
+        )
+
+    existing_status = ""
+
+    if "metrics_status" in headers:
+        existing_status = str(
+            ws.cell(
+                cell.row,
+                headers.index(
+                    "metrics_status"
+                )
+                + 1,
+            ).value
+            or ""
+        ).upper()
+
+    for key in METRIC_KEYS:
         if key not in headers:
             continue
-        if key == "manual_memo":
-            value = snapshot.get("memo", "")
-        elif key == "collected_at":
-            value = snapshot.get("collected_at", "")
-        else:
-            value = snapshot.get(key, "")
-        if value is not None:
-            ws.update_cell(cell.row, headers.index(key) + 1, str(value))
+
+        value = snapshot.get(key)
+
+        if value is None:
+            continue
+
+        ws.update_cell(
+            cell.row,
+            headers.index(key) + 1,
+            str(value),
+        )
+
+    incoming_status = str(
+        snapshot.get(
+            "metrics_status",
+            "",
+        )
+    ).upper()
+
+    should_write_status = (
+        incoming_status == "MEASURED"
+        or (
+            incoming_status == "PARTIAL"
+            and existing_status
+            != "MEASURED"
+        )
+    )
+
+    if (
+        should_write_status
+        and "metrics_status" in headers
+    ):
+        ws.update_cell(
+            cell.row,
+            headers.index(
+                "metrics_status"
+            )
+            + 1,
+            incoming_status,
+        )
+
+    if "collected_at" in headers:
+        ws.update_cell(
+            cell.row,
+            headers.index(
+                "collected_at"
+            )
+            + 1,
+            str(
+                snapshot.get(
+                    "collected_at",
+                    "",
+                )
+            ),
+        )
+
+    if "measurement_window" in headers:
+        window = snapshot.get(
+            "collection_window_hours",
+            "",
+        )
+
+        if window != "":
+            ws.update_cell(
+                cell.row,
+                headers.index(
+                    "measurement_window"
+                )
+                + 1,
+                f"{window}h",
+            )
+
+    if "manual_memo" in headers:
+        memo = str(
+            snapshot.get("memo", "")
+        )
+
+        error_reason = str(
+            snapshot.get(
+                "error_reason",
+                "",
+            )
+        )
+
+        if error_reason:
+            memo = (
+                f"{memo} "
+                f"error={error_reason}"
+            ).strip()
+
+        ws.update_cell(
+            cell.row,
+            headers.index(
+                "manual_memo"
+            )
+            + 1,
+            memo,
+        )
 
 
 def load_rows(use_sheets: bool, result_id: str | None, account_id: str) -> tuple[Any | None, list[dict[str, Any]]]:
@@ -276,13 +694,80 @@ def main() -> int:
             source = args.source
             confidence = args.confidence
             memo = args.memo or "operator supplied metrics"
-        elif args.source in {"api", "browser"}:
-            if args.source == "browser" and args.browser_engine == "playwright":
-                metrics, confidence, error_reason = collect_playwright_threads_metrics(row, args.storage_state)
+        elif args.source == "api":
+            account = str(
+                row.get(
+                    "account_id",
+                    args.account_id,
+                )
+            )
+
+            credentials = (
+                resolve_credentials(
+                    account
+                )
+            )
+
+            (
+                metrics,
+                confidence,
+                error_reason,
+            ) = collect_api_threads_metrics(
+                row,
+                str(
+                    credentials.get(
+                        "access_token",
+                        "",
+                    )
+                ),
+            )
+
+            source = "api"
+            memo = (
+                args.memo
+                or (
+                    "Official Threads post "
+                    "insights; optional "
+                    "conversion metrics remain "
+                    "unknown."
+                )
+            )
+        elif args.source == "browser":
+            if (
+                args.browser_engine
+                == "playwright"
+            ):
+                (
+                    metrics,
+                    confidence,
+                    error_reason,
+                ) = (
+                    collect_playwright_threads_metrics(
+                        row,
+                        args.storage_state,
+                    )
+                )
             else:
-                metrics, confidence, error_reason = collect_public_threads_metrics(row, args.source)
-            source = args.source
-            memo = args.memo or f"public Threads {args.source} adapter; unknowns left null"
+                (
+                    metrics,
+                    confidence,
+                    error_reason,
+                ) = (
+                    collect_public_threads_metrics(
+                        row,
+                        args.source,
+                    )
+                )
+
+            source = "browser"
+            memo = (
+                args.memo
+                or (
+                    "Public Threads browser "
+                    "adapter; unknowns left "
+                    "null."
+                )
+            )
         else:
             metrics = {k: None for k in METRIC_KEYS}
             source = "unavailable"
