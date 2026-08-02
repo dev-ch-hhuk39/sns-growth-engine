@@ -14,6 +14,7 @@ sys.path.insert(
     str(ROOT / "src"),
 )
 
+from activation_route_contract import ACTIVATION_CANARY_TYPES
 from build_live_canary_inventory import build_inventory
 from final_production_contracts import (
     ACCOUNTS,
@@ -103,16 +104,13 @@ def evaluate_canary_integrity(
 
     inventory = build_inventory(
         datasets,
-        wave="all_12",
+        wave="all_10",
     )
 
     inventory_candidates = list(
         inventory.get(
-            "canaries",
-            inventory.get(
-                "candidates",
-                [],
-            ),
+            "candidates",
+            [],
         )
     )
 
@@ -122,7 +120,7 @@ def evaluate_canary_integrity(
             kind,
         )
         for account_id in ACCOUNTS
-        for kind in CANARY_TYPES
+        for kind in ACTIVATION_CANARY_TYPES
     }
 
     selected_candidates: list[dict[str, Any]] = []

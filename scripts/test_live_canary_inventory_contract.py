@@ -23,7 +23,7 @@ datasets["video_clip_candidates"]=[{"clip_id":"clip_ns_yt_contract_001","clip_ca
 datasets["media_permissions"]=[{"source_id":"src_ns_yt_contract_001","account_id":"night_scout","rights_status":"owned","permission_status":"approved","evidence_reference":"run","allow_clip_repost":True,"revoked":False}]
 datasets["media_assets"]=[{"media_id":"clip_asset","video_clip_id":"clip_ns_yt_contract_001","storage_url":"https://example.invalid/clip.mp4","local_path":"/tmp/clip.mp4"}]
 result=build_inventory(datasets)
-assert result["total_canaries"] == 12
+assert result["total_canaries"] == 10
 row=next(item for item in result["canaries"] if item["canary_type"] == "original_text" and item["account_id"] == "night_scout")
 assert row["status"] == "READY_FOR_HUMAN_CANARY"
 clip=next(item for item in result["canaries"] if item["canary_type"] == "approved_source_clip" and item["account_id"] == "night_scout")
@@ -49,7 +49,7 @@ selection_data["media_assets"]=[
     {"media_id":"new_asset","storage_url":"https://example.invalid/new.png"},
 ]
 selected=build_inventory(selection_data)
-direct_image=next(item for item in selected["candidates"] if item["account_id"] == "night_scout" and item["canary_type"] == "direct_image")
+direct_image=next(item for item in selected["candidates"] if item["account_id"] == "night_scout" and item["canary_type"] == "direct_reference_media")
 assert direct_image["canary_id"] == "canary_fresh_new_image"
 assert direct_image["media_asset_id"] == "new_asset"
 assert direct_image["queue_id"] == "q_new"
