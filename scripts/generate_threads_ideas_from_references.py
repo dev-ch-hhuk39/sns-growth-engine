@@ -603,7 +603,33 @@ def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, An
         return {"added": 0, "skipped": 0, "refreshed": 0}
     from gspread.utils import rowcol_to_a1
 
-    ws = client._ws(logical)
+    # Keep the physical Sheets schema synchronized before serializing a
+    # generated row. Without this, fields present in the row dictionary but
+    # absent from the header are silently discarded.
+    ensure_tab = getattr(
+        client,
+        "_ensure_tab",
+        None,
+    )
+
+    if callable(ensure_tab):
+        from sheets_client import (
+            TAB_DEFINITIONS,
+        )
+
+        if logical not in TAB_DEFINITIONS:
+            raise KeyError(
+                f"unknown logical tab: {logical}"
+            )
+
+        ws = ensure_tab(
+            logical,
+            TAB_DEFINITIONS[logical],
+        )
+    else:
+        # Minimal test adapters may expose only _ws.
+        ws = client._ws(logical)
+
     headers = ws.row_values(1)
     existing_rows: dict[str, tuple[int, dict[str, Any]]] = {}
     for row_number, existing in enumerate(ws.get_all_records(), start=2):
