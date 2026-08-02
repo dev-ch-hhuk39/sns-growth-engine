@@ -20,8 +20,6 @@ sys.path[:0] = [
 
 from collect_threads_metrics import (  # noqa: E402
     METRIC_KEYS,
-    _append_row,
-    _update_posted_result,
     build_snapshot,
     collect_api_threads_metrics,
 )
@@ -352,6 +350,257 @@ def _headers(ws) -> list[str]:
     return ws.row_values(1)
 
 
+def _column_name(
+    column: int,
+) -> str:
+    if column < 1:
+        raise ValueError(
+            "column must be >= 1"
+        )
+
+    letters: list[str] = []
+
+    while column:
+        column, remainder = divmod(
+            column - 1,
+            26,
+        )
+
+        letters.append(
+            chr(
+                ord("A")
+                + remainder
+            )
+        )
+
+    return "".join(
+        reversed(letters)
+    )
+
+
+def _worksheet_table(
+    ws,
+) -> tuple[
+    list[str],
+    list[list[str]],
+]:
+    values = ws.get_all_values()
+
+    if not values:
+        return [], []
+
+    headers = [
+        str(value)
+        for value in values[0]
+    ]
+
+    rows = []
+
+    for values_row in values[1:]:
+        padded = list(values_row) + [
+            ""
+        ] * max(
+            0,
+            len(headers)
+            - len(values_row),
+        )
+
+        rows.append(
+            padded[:len(headers)]
+        )
+
+    return headers, rows
+
+
+def _indexed_rows(
+    ws,
+    key_header: str,
+) -> tuple[
+    list[str],
+    dict[
+        str,
+        tuple[
+            int,
+            dict[str, str],
+        ],
+    ],
+]:
+    headers, rows = (
+        _worksheet_table(ws)
+    )
+
+    if key_header not in headers:
+        raise KeyError(
+            f"{key_header} header missing"
+        )
+
+    indexed = {}
+
+    for row_number, values in enumerate(
+        rows,
+        start=2,
+    ):
+        row = {
+            header: values[index]
+            for index, header
+            in enumerate(headers)
+        }
+
+        key = str(
+            row.get(
+                key_header,
+                "",
+            )
+        ).strip()
+
+        if key:
+            indexed[key] = (
+                row_number,
+                row,
+            )
+
+    return headers, indexed
+
+
+def _batch_update_cells(
+    ws,
+    cells: dict[
+        tuple[int, int],
+        str,
+    ],
+) -> int:
+    if not cells:
+        return 0
+
+    batch_update = getattr(
+        ws,
+        "batch_update",
+        None,
+    )
+
+    if not callable(
+        batch_update
+    ):
+        raise RuntimeError(
+            "worksheet batch_update "
+            "is required"
+        )
+
+    payload = [
+        {
+            "range": (
+                f"{_column_name(column)}"
+                f"{row_number}"
+            ),
+            "values": [
+                [str(value)]
+            ],
+        }
+        for (
+            row_number,
+            column,
+        ), value in sorted(
+            cells.items()
+        )
+    ]
+
+    batch_update(
+        payload,
+        value_input_option=(
+            "USER_ENTERED"
+        ),
+    )
+
+    return len(payload)
+
+
+def batch_update_collection_jobs(
+    client,
+    updates: list[dict[str, Any]],
+) -> int:
+    if not updates:
+        return 0
+
+    ws = client._ws(
+        "metrics_collection_jobs"
+    )
+
+    headers, indexed = _indexed_rows(
+        ws,
+        "job_id",
+    )
+
+    cells: dict[
+        tuple[int, int],
+        str,
+    ] = {}
+
+    updated_job_ids = set()
+
+    for update in updates:
+        job_id = str(
+            update.get(
+                "job_id",
+                "",
+            )
+        ).strip()
+
+        if job_id not in indexed:
+            raise KeyError(
+                f"job_id={job_id!r} "
+                "not found"
+            )
+
+        row_number, row = (
+            indexed[job_id]
+        )
+
+        for field in (
+            "status",
+            "attempt_count",
+            "last_attempt_at",
+            "last_error",
+            "updated_at",
+        ):
+            if field not in headers:
+                continue
+
+            value = str(
+                update.get(
+                    field,
+                    "",
+                )
+            )
+
+            row[field] = value
+
+            cells[
+                (
+                    row_number,
+                    headers.index(field)
+                    + 1,
+                )
+            ] = value
+
+        indexed[job_id] = (
+            row_number,
+            row,
+        )
+
+        updated_job_ids.add(
+            job_id
+        )
+
+    _batch_update_cells(
+        ws,
+        cells,
+    )
+
+    return len(
+        updated_job_ids
+    )
+
+
 def update_collection_job(
     client,
     *,
@@ -361,57 +610,448 @@ def update_collection_job(
     error_reason: str,
     attempted_at: str,
 ) -> None:
+    """Compatibility wrapper using one batch request."""
+
+    batch_update_collection_jobs(
+        client,
+        [
+            {
+                "job_id": job_id,
+                "status": status,
+                "attempt_count": (
+                    attempt_count
+                ),
+                "last_attempt_at": (
+                    attempted_at
+                ),
+                "last_error": (
+                    error_reason
+                ),
+                "updated_at": (
+                    attempted_at
+                ),
+            }
+        ],
+    )
+
+
+def batch_update_posted_results(
+    client,
+    updates: list[
+        tuple[
+            str,
+            dict[str, Any],
+        ]
+    ],
+) -> int:
+    if not updates:
+        return 0
+
     ws = client._ws(
-        "metrics_collection_jobs"
+        "posted_results"
     )
 
-    headers = _headers(ws)
-
-    if "job_id" not in headers:
-        raise KeyError(
-            "metrics_collection_jobs."
-            "job_id header missing"
-        )
-
-    cell = ws.find(
-        job_id,
-        in_column=(
-            headers.index("job_id")
-            + 1
-        ),
+    headers, indexed = _indexed_rows(
+        ws,
+        "result_id",
     )
 
-    if cell is None:
-        raise KeyError(
-            f"job_id={job_id!r} "
-            "not found"
+    cells: dict[
+        tuple[int, int],
+        str,
+    ] = {}
+
+    updated_result_ids = set()
+
+    for result_id, snapshot in updates:
+        result_id = str(
+            result_id
+        ).strip()
+
+        if result_id not in indexed:
+            raise KeyError(
+                f"result_id={result_id!r} "
+                "not found"
+            )
+
+        row_number, row = (
+            indexed[result_id]
         )
 
-    fields = {
-        "status": status,
-        "attempt_count": (
-            attempt_count
-        ),
-        "last_attempt_at": (
-            attempted_at
-        ),
-        "last_error": (
-            error_reason
-        ),
-        "updated_at": (
-            attempted_at
-        ),
+        for key in METRIC_KEYS:
+            if key not in headers:
+                continue
+
+            value = snapshot.get(key)
+
+            if value is None:
+                continue
+
+            rendered = str(value)
+
+            row[key] = rendered
+
+            cells[
+                (
+                    row_number,
+                    headers.index(key)
+                    + 1,
+                )
+            ] = rendered
+
+        incoming_status = str(
+            snapshot.get(
+                "metrics_status",
+                "",
+            )
+        ).upper()
+
+        existing_status = str(
+            row.get(
+                "metrics_status",
+                "",
+            )
+        ).upper()
+
+        should_write_status = (
+            incoming_status
+            == "MEASURED"
+            or (
+                incoming_status
+                == "PARTIAL"
+                and existing_status
+                != "MEASURED"
+            )
+        )
+
+        if (
+            should_write_status
+            and "metrics_status"
+            in headers
+        ):
+            row["metrics_status"] = (
+                incoming_status
+            )
+
+            cells[
+                (
+                    row_number,
+                    headers.index(
+                        "metrics_status"
+                    )
+                    + 1,
+                )
+            ] = incoming_status
+
+        if "collected_at" in headers:
+            collected_at = str(
+                snapshot.get(
+                    "collected_at",
+                    "",
+                )
+            )
+
+            row["collected_at"] = (
+                collected_at
+            )
+
+            cells[
+                (
+                    row_number,
+                    headers.index(
+                        "collected_at"
+                    )
+                    + 1,
+                )
+            ] = collected_at
+
+        if (
+            "measurement_window"
+            in headers
+        ):
+            window = snapshot.get(
+                "collection_window_hours",
+                "",
+            )
+
+            if window != "":
+                rendered_window = (
+                    f"{window}h"
+                )
+
+                row[
+                    "measurement_window"
+                ] = rendered_window
+
+                cells[
+                    (
+                        row_number,
+                        headers.index(
+                            "measurement_window"
+                        )
+                        + 1,
+                    )
+                ] = rendered_window
+
+        if "manual_memo" in headers:
+            memo = str(
+                snapshot.get(
+                    "memo",
+                    "",
+                )
+            )
+
+            error_reason = str(
+                snapshot.get(
+                    "error_reason",
+                    "",
+                )
+            )
+
+            if error_reason:
+                memo = (
+                    f"{memo} "
+                    f"error={error_reason}"
+                ).strip()
+
+            row["manual_memo"] = memo
+
+            cells[
+                (
+                    row_number,
+                    headers.index(
+                        "manual_memo"
+                    )
+                    + 1,
+                )
+            ] = memo
+
+        indexed[result_id] = (
+            row_number,
+            row,
+        )
+
+        updated_result_ids.add(
+            result_id
+        )
+
+    _batch_update_cells(
+        ws,
+        cells,
+    )
+
+    return len(
+        updated_result_ids
+    )
+
+
+def append_metric_snapshots(
+    client,
+    snapshots: list[
+        dict[str, Any]
+    ],
+) -> dict[str, int]:
+    if not snapshots:
+        return {
+            "added": 0,
+            "skipped": 0,
+        }
+
+    from sheets_client import (
+        TAB_DEFINITIONS,
+    )
+
+    client._ensure_tab(
+        "metric_snapshots",
+        TAB_DEFINITIONS[
+            "metric_snapshots"
+        ],
+    )
+
+    ws = client._ws(
+        "metric_snapshots"
+    )
+
+    headers, rows = (
+        _worksheet_table(ws)
+    )
+
+    if not headers:
+        raise RuntimeError(
+            "metric_snapshots "
+            "headers missing"
+        )
+
+    if "snapshot_id" not in headers:
+        raise KeyError(
+            "metric_snapshots."
+            "snapshot_id header missing"
+        )
+
+    snapshot_column = (
+        headers.index(
+            "snapshot_id"
+        )
+    )
+
+    existing_ids = {
+        str(
+            row[snapshot_column]
+        ).strip()
+        for row in rows
+        if snapshot_column
+        < len(row)
+        and str(
+            row[snapshot_column]
+        ).strip()
     }
 
-    for field, value in fields.items():
-        if field not in headers:
+    append_values = []
+
+    seen = set(
+        existing_ids
+    )
+
+    skipped = 0
+
+    for snapshot in snapshots:
+        snapshot_id = str(
+            snapshot.get(
+                "snapshot_id",
+                "",
+            )
+        ).strip()
+
+        if (
+            not snapshot_id
+            or snapshot_id in seen
+        ):
+            skipped += 1
             continue
 
-        ws.update_cell(
-            cell.row,
-            headers.index(field) + 1,
-            str(value),
+        append_values.append(
+            [
+                ""
+                if snapshot.get(
+                    header
+                ) is None
+                else str(
+                    snapshot.get(
+                        header,
+                        "",
+                    )
+                )
+                for header in headers
+            ]
         )
+
+        seen.add(
+            snapshot_id
+        )
+
+    if append_values:
+        ws.append_rows(
+            append_values,
+            value_input_option=(
+                "USER_ENTERED"
+            ),
+        )
+
+    return {
+        "added": len(
+            append_values
+        ),
+        "skipped": skipped,
+    }
+
+
+def snapshots_by_job(
+    snapshots: list[
+        dict[str, Any]
+    ],
+) -> dict[
+    str,
+    list[dict[str, Any]],
+]:
+    grouped: dict[
+        str,
+        list[dict[str, Any]],
+    ] = {}
+
+    for snapshot in snapshots:
+        job_id = str(
+            snapshot.get(
+                "collection_job_id",
+                "",
+            )
+        ).strip()
+
+        if not job_id:
+            continue
+
+        grouped.setdefault(
+            job_id,
+            [],
+        ).append(
+            dict(snapshot)
+        )
+
+    for rows in grouped.values():
+        rows.sort(
+            key=lambda row: (
+                str(
+                    row.get(
+                        "collected_at",
+                        "",
+                    )
+                ),
+                str(
+                    row.get(
+                        "snapshot_id",
+                        "",
+                    )
+                ),
+            )
+        )
+
+    return grouped
+
+
+def recoverable_snapshot_for_target(
+    target: dict[str, Any],
+    grouped_snapshots: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+) -> dict[str, Any] | None:
+    job_id = str(
+        target.get(
+            "collection_job_id",
+            "",
+        )
+    ).strip()
+
+    snapshots = grouped_snapshots.get(
+        job_id,
+        [],
+    )
+
+    committed_attempts = _integer(
+        target.get(
+            "collection_attempt_count",
+            0,
+        )
+    )
+
+    if (
+        len(snapshots)
+        > committed_attempts
+    ):
+        return dict(
+            snapshots[-1]
+        )
+
+    return None
 
 
 def load_state(
@@ -419,6 +1059,7 @@ def load_state(
     apply: bool,
 ) -> tuple[
     Any,
+    list[dict[str, Any]],
     list[dict[str, Any]],
     list[dict[str, Any]],
 ]:
@@ -451,7 +1092,22 @@ def load_state(
         ).get_all_records()
     ]
 
-    return client, posted, jobs
+    try:
+        snapshots = [
+            dict(row)
+            for row in client._ws(
+                "metric_snapshots"
+            ).get_all_records()
+        ]
+    except Exception:
+        snapshots = []
+
+    return (
+        client,
+        posted,
+        jobs,
+        snapshots,
+    )
 
 
 def collect_target(
@@ -641,10 +1297,13 @@ def main() -> int:
 
     apply = bool(args.apply)
 
-    client, posted, jobs = (
-        load_state(
-            apply=apply,
-        )
+    (
+        client,
+        posted,
+        jobs,
+        existing_snapshots,
+    ) = load_state(
+        apply=apply,
     )
 
     work = classify_due_work(
@@ -658,6 +1317,32 @@ def main() -> int:
     targets = work["collect"]
     cancel_jobs = work["cancel"]
     deferred_jobs = work["defer"]
+
+    grouped_snapshots = (
+        snapshots_by_job(
+            existing_snapshots
+        )
+    )
+
+    recoverable_snapshots = {}
+
+    for target in targets:
+        snapshot = (
+            recoverable_snapshot_for_target(
+                target,
+                grouped_snapshots,
+            )
+        )
+
+        if snapshot is not None:
+            recoverable_snapshots[
+                str(
+                    target.get(
+                        "collection_job_id",
+                        "",
+                    )
+                )
+            ] = snapshot
 
     plan = {
         "status": (
@@ -727,21 +1412,28 @@ def main() -> int:
                 ]
             )
         ),
+        "recoverable_snapshot_count": (
+            len(
+                recoverable_snapshots
+            )
+        ),
         "external_requests_planned": (
-            sum(
-                not bool(
-                    row.get(
-                        "collection_"
-                        "preflight_error"
-                    )
+            (
+                len(targets)
+                - len(
+                    recoverable_snapshots
                 )
-                for row in targets
             )
             if apply
             else 0
         ),
         "snapshot_writes_planned": (
-            len(targets)
+            (
+                len(targets)
+                - len(
+                    recoverable_snapshots
+                )
+            )
             if apply
             else 0
         ),
@@ -815,6 +1507,24 @@ def main() -> int:
 
     result_ids: list[str] = []
 
+    new_snapshots: list[
+        dict[str, Any]
+    ] = []
+
+    posted_result_updates: list[
+        tuple[
+            str,
+            dict[str, Any],
+        ]
+    ] = []
+
+    job_updates: list[
+        dict[str, Any]
+    ] = []
+
+    reused_snapshot_count = 0
+    external_request_count = 0
+
     for job in cancel_jobs:
         attempted_at = now_iso()
 
@@ -828,23 +1538,31 @@ def main() -> int:
             + 1
         )
 
-        update_collection_job(
-            client,
-            job_id=str(
-                job.get(
-                    "job_id",
-                    "",
-                )
-            ),
-            status="CANCELLED",
-            attempt_count=attempt_count,
-            error_reason=str(
-                job.get(
-                    "error_reason",
-                    "",
-                )
-            ),
-            attempted_at=attempted_at,
+        job_updates.append(
+            {
+                "job_id": str(
+                    job.get(
+                        "job_id",
+                        "",
+                    )
+                ),
+                "status": "CANCELLED",
+                "attempt_count": (
+                    attempt_count
+                ),
+                "last_attempt_at": (
+                    attempted_at
+                ),
+                "last_error": str(
+                    job.get(
+                        "error_reason",
+                        "",
+                    )
+                ),
+                "updated_at": (
+                    attempted_at
+                ),
+            }
         )
 
         status_counts[
@@ -873,23 +1591,33 @@ def main() -> int:
             else "RETRY"
         )
 
-        update_collection_job(
-            client,
-            job_id=str(
-                job.get(
-                    "job_id",
-                    "",
-                )
-            ),
-            status=deferred_status,
-            attempt_count=attempt_count,
-            error_reason=str(
-                job.get(
-                    "error_reason",
-                    "",
-                )
-            ),
-            attempted_at=attempted_at,
+        job_updates.append(
+            {
+                "job_id": str(
+                    job.get(
+                        "job_id",
+                        "",
+                    )
+                ),
+                "status": (
+                    deferred_status
+                ),
+                "attempt_count": (
+                    attempt_count
+                ),
+                "last_attempt_at": (
+                    attempted_at
+                ),
+                "last_error": str(
+                    job.get(
+                        "error_reason",
+                        "",
+                    )
+                ),
+                "updated_at": (
+                    attempted_at
+                ),
+            }
         )
 
         status_counts[
@@ -897,19 +1625,82 @@ def main() -> int:
         ] += 1
 
     for target in targets:
-        outcome = collect_target(
-            target
+        job_id = str(
+            target.get(
+                "collection_job_id",
+                "",
+            )
         )
 
-        snapshot = dict(
-            outcome["snapshot"]
+        recovered_snapshot = (
+            recoverable_snapshots.get(
+                job_id
+            )
         )
 
-        _append_row(
-            client,
-            "metric_snapshots",
-            snapshot,
-        )
+        if recovered_snapshot is not None:
+            snapshot = dict(
+                recovered_snapshot
+            )
+
+            attempt_count = (
+                _integer(
+                    target.get(
+                        "collection_"
+                        "attempt_count",
+                        0,
+                    )
+                )
+                + 1
+            )
+
+            job_status = next_job_status(
+                metrics_status=str(
+                    snapshot.get(
+                        "metrics_status",
+                        "",
+                    )
+                ),
+                collection_status=str(
+                    snapshot.get(
+                        "collection_status",
+                        "",
+                    )
+                ),
+                attempt_count=(
+                    attempt_count
+                ),
+            )
+
+            outcome = {
+                "snapshot": snapshot,
+                "attempt_count": (
+                    attempt_count
+                ),
+                "job_status": job_status,
+                "error_reason": str(
+                    snapshot.get(
+                        "error_reason",
+                        "",
+                    )
+                ),
+            }
+
+            reused_snapshot_count += 1
+        else:
+            outcome = collect_target(
+                target
+            )
+
+            snapshot = dict(
+                outcome["snapshot"]
+            )
+
+            new_snapshots.append(
+                snapshot
+            )
+
+            external_request_count += 1
 
         if str(
             snapshot.get(
@@ -920,41 +1711,45 @@ def main() -> int:
             "PARTIAL",
             "MEASURED",
         }:
-            _update_posted_result(
-                client,
-                str(
-                    snapshot.get(
-                        "result_id",
-                        "",
-                    )
-                ),
-                snapshot,
+            posted_result_updates.append(
+                (
+                    str(
+                        snapshot.get(
+                            "result_id",
+                            "",
+                        )
+                    ),
+                    snapshot,
+                )
             )
 
         attempted_at = now_iso()
 
-        update_collection_job(
-            client,
-            job_id=str(
-                target.get(
-                    "collection_job_id",
-                    "",
-                )
-            ),
-            status=str(
-                outcome["job_status"]
-            ),
-            attempt_count=int(
-                outcome[
-                    "attempt_count"
-                ]
-            ),
-            error_reason=str(
-                outcome[
-                    "error_reason"
-                ]
-            ),
-            attempted_at=attempted_at,
+        job_updates.append(
+            {
+                "job_id": job_id,
+                "status": str(
+                    outcome[
+                        "job_status"
+                    ]
+                ),
+                "attempt_count": int(
+                    outcome[
+                        "attempt_count"
+                    ]
+                ),
+                "last_attempt_at": (
+                    attempted_at
+                ),
+                "last_error": str(
+                    outcome[
+                        "error_reason"
+                    ]
+                ),
+                "updated_at": (
+                    attempted_at
+                ),
+            }
         )
 
         status_counts[
@@ -980,6 +1775,35 @@ def main() -> int:
                 )
             )
         )
+
+    # Recovery-safe order:
+    # 1. append immutable snapshots
+    # 2. merge posted-result metrics
+    # 3. commit job lifecycle state last
+    #
+    # If any phase fails, the next run can detect
+    # an uncommitted snapshot and resume without
+    # issuing the same Threads API request again.
+    snapshot_append_result = (
+        append_metric_snapshots(
+            client,
+            new_snapshots,
+        )
+    )
+
+    posted_result_rows_updated = (
+        batch_update_posted_results(
+            client,
+            posted_result_updates,
+        )
+    )
+
+    job_rows_updated = (
+        batch_update_collection_jobs(
+            client,
+            job_updates,
+        )
+    )
 
     print(
         json.dumps(
@@ -1009,6 +1833,41 @@ def main() -> int:
                     )
                 ),
                 "result_ids": result_ids,
+                "external_request_count": (
+                    external_request_count
+                ),
+                "reused_snapshot_count": (
+                    reused_snapshot_count
+                ),
+                "new_snapshot_count": len(
+                    new_snapshots
+                ),
+                "snapshot_append_result": (
+                    snapshot_append_result
+                ),
+                "posted_result_rows_updated": (
+                    posted_result_rows_updated
+                ),
+                "job_rows_updated": (
+                    job_rows_updated
+                ),
+                "bounded_sheet_write_requests": (
+                    int(
+                        bool(
+                            new_snapshots
+                        )
+                    )
+                    + int(
+                        bool(
+                            posted_result_updates
+                        )
+                    )
+                    + int(
+                        bool(
+                            job_updates
+                        )
+                    )
+                ),
             },
             ensure_ascii=False,
             indent=2,

@@ -408,9 +408,40 @@ def build_snapshot(*, row: dict[str, Any], source: str, confidence: str, metrics
         status = "UNAVAILABLE"
     else:
         status = "PENDING"
-    collection_status = classify_collection_status(metrics=metrics, error_reason=error_reason)
+    collection_status = classify_collection_status(
+        metrics=metrics,
+        error_reason=error_reason,
+    )
+
+    snapshot_scope = str(
+        row.get(
+            "collection_job_id",
+            "",
+        )
+        or row.get(
+            "result_id",
+            "unknown",
+        )
+        or "unknown"
+    )
+
+    snapshot_scope = re.sub(
+        r"[^a-zA-Z0-9_]+",
+        "_",
+        snapshot_scope,
+    ).strip("_")
+
+    snapshot_stamp = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y%m%d%H%M%S%f"
+    )
+
     return {
-        "snapshot_id": f"ms_{row.get('result_id', 'unknown')}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
+        "snapshot_id": (
+            f"ms_{snapshot_scope}_"
+            f"{snapshot_stamp}"
+        ),
         "result_id": row.get("result_id", ""),
         "account_id": row.get("account_id", ""),
         "platform": row.get("platform", "threads"),
