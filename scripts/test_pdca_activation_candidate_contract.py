@@ -11,6 +11,13 @@ rows = {
             "queue_id": "q1",
             "content_type": "pdca_text",
             "content_route": "pdca_text",
+            "source_result_id": "r2",
+            "source_content_route": (
+                "reference_text"
+            ),
+            "source_generation_mode": (
+                "reference_score_to_threads"
+            ),
         }
     ],
 }
@@ -24,9 +31,17 @@ result = attach_pdca_activation_evidence(
             "result_id": "r1",
             "metrics_status": "MEASURED",
             "collected_at": (
+                "2026-08-03T01:00:00+00:00"
+            ),
+        },
+        {
+            "snapshot_id": "s2",
+            "result_id": "r2",
+            "metrics_status": "MEASURED",
+            "collected_at": (
                 "2026-08-03T00:00:00+00:00"
             ),
-        }
+        },
     ],
     posted_results=[
         {
@@ -37,7 +52,16 @@ result = attach_pdca_activation_evidence(
             "generation_mode": (
                 "original_text"
             ),
-        }
+        },
+        {
+            "result_id": "r2",
+            "content_route": (
+                "reference_text"
+            ),
+            "generation_mode": (
+                "reference_score_to_threads"
+            ),
+        },
     ],
     stamp="20260803000000",
 )
@@ -59,14 +83,19 @@ assert (
     == "metrics_driven_pdca_text"
 )
 
-assert (
-    queue["source_result_id"]
-    == "r1"
-)
+# Preserve the source selected by measured
+# ranking instead of replacing it with the
+# newest snapshot's result.
+assert queue["source_result_id"] == "r2"
 
 assert (
     queue["source_content_route"]
-    == "original_text"
+    == "reference_text"
+)
+
+assert (
+    queue["source_generation_mode"]
+    == "reference_score_to_threads"
 )
 
 assert "canary_id" not in rows["queue"][0]
