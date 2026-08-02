@@ -871,17 +871,41 @@ def _topic_from_signal(account_id: str, signal: str) -> str:
     """Classify private reference/transcript content without quoting it publicly."""
     text = str(signal or "")
     if account_id == "night_scout":
+        # Preserve the production fallback precedence.
+        # Transfer synonyms are recognized when a more specific
+        # existing category has not already matched.
         mapping = [
             (("時給", "条件", "罰金"), "conditions"),
             (("ノルマ", "売上", "指名"), "pressure"),
             (("客層", "雰囲気", "お店"), "fit"),
-            (("移籍", "辞め", "転職"), "transfer"),
+            (
+                (
+                    "移籍",
+                    "辞め",
+                    "転職",
+                    "転身",
+                    "移る",
+                    "移り",
+                ),
+                "transfer",
+            ),
             (("副業", "出勤", "生活", "睡眠"), "balance"),
         ]
     else:
         # 「コメント」は広すぎるため、具体的な主題を先に判定する。
         mapping = [
-            (("ギフト", "応援", "投げ銭"), "support"),
+            (
+                (
+                    "ギフト",
+                    "応援",
+                    "投げ銭",
+                    "投げ",
+                    "コイン",
+                    "バトル",
+                    "団結",
+                ),
+                "support",
+            ),
             (("時間", "継続", "習慣"), "consistency"),
             (("企画", "話題", "会話", "二択"), "conversation"),
             (("事務所", "相談", "サポート"), "support_system"),
