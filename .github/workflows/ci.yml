@@ -63,6 +63,7 @@ jobs:
           python3 scripts/test_approved_source_clip_contract.py
           python3 scripts/test_readiness_and_fail_closed_contract.py
           python3 scripts/test_final_media_caption_after_asset_ready.py
+          python3 scripts/test_deterministic_caption_domain_terms.py
           python3 scripts/test_generated_queue_lifecycle_status.py
           python3 scripts/test_feature_attribution_cycle.py
           python3 scripts/test_auto_ready_requires_generation_contract.py
