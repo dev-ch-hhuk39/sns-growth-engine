@@ -962,6 +962,58 @@ def select_saved_media_candidate(
         if str(asset.get("permission_status") or clip.get("permission_status") or "").lower() != "approved":
             reasons.append(f"{media_id}:permission_blocked")
             continue
+
+        # Legacy system-generated videos are not valid approved-source clips.
+        # Fail closed even when their rows still carry owned/approved metadata.
+        synthetic_identity = "|".join(
+            str(value or "").strip().lower()
+            for value in (
+                asset.get("media_origin"),
+                asset.get("source_platform"),
+                asset.get("provider_name"),
+                clip.get("media_origin"),
+                clip.get("source_platform"),
+                source_video.get("platform"),
+                media_id,
+                clip_id,
+            )
+        )
+        if (
+            "system_generated" in synthetic_identity
+            or "system-owned" in synthetic_identity
+            or "system_owned" in synthetic_identity
+            or "pillow+ffmpeg" in synthetic_identity
+        ):
+            reasons.append(f"{media_id}:synthetic_media_forbidden")
+            continue
+
+        clip_status = str(
+            clip.get("clip_status")
+            or clip.get("reviewer_status")
+            or ""
+        ).upper()
+        if clip_status not in {"READY", "AUTO_APPROVED", "MEDIA_READY"}:
+            reasons.append(f"{media_id}:clip_not_ready")
+            continue
+
+        # Reuse the final-caption evidence contract at selection time so an
+        # uploaded asset cannot be chosen unless its transcript, exact time
+        # range and individual parent-video URL are all available.
+        bundle, _transcript_excerpt, grounding_reasons = (
+            _build_final_caption_bundle(
+                clip=clip,
+                source_video=source_video,
+                account_id=account_id,
+                media_asset=asset,
+            )
+        )
+        if bundle is None or grounding_reasons:
+            for reason in grounding_reasons or [
+                "final_caption_evidence_missing"
+            ]:
+                reasons.append(f"{media_id}:{reason}")
+            continue
+
         candidates.append((clip, source_video, asset))
     if not candidates:
         return None, None, None, reasons

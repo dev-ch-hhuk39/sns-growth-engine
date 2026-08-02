@@ -59,6 +59,7 @@ jobs:
           python3 scripts/test_bounded_media_canary_plan.py
           python3 scripts/test_generation_quality_gates.py
           python3 scripts/test_no_synthetic_media_entrypoints.py
+          python3 scripts/test_saved_media_selection_excludes_synthetic.py
           python3 scripts/test_approved_source_clip_contract.py
           python3 scripts/test_readiness_and_fail_closed_contract.py
           python3 scripts/test_final_media_caption_after_asset_ready.py
