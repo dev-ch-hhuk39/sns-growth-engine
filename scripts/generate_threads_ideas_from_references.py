@@ -766,6 +766,684 @@ def measured_pdca_snapshots(
     return selected
 
 
+
+PDCA_STRUCTURE_STRATEGIES = (
+    "同じテーマで、読者が次に抱く疑問へ答える",
+    "成功した切り口を、初心者向けの具体例に置き換える",
+    "同じ悩みを、失敗回避の観点から説明する",
+    "結論を先に示し、実行手順を短く整理する",
+    "比較形式に変えて、判断基準を分かりやすくする",
+    "読者が今日試せる一つの行動に絞る",
+)
+
+
+def _pdca_metric_int(
+    value: Any,
+) -> int:
+    try:
+        return max(
+            0,
+            int(
+                float(
+                    str(
+                        value
+                        if value is not None
+                        else 0
+                    ).strip()
+                    or "0"
+                )
+            ),
+        )
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return 0
+
+
+def _pdca_result_text(
+    row: dict[str, Any],
+) -> str:
+    for field in (
+        "posted_text",
+        "public_post_text",
+        "content",
+        "text",
+        "body_md",
+        "caption",
+    ):
+        value = str(
+            row.get(
+                field,
+                "",
+            )
+        ).strip()
+
+        if value:
+            return value
+
+    return ""
+
+
+def _pdca_snapshot_sort_key(
+    row: dict[str, Any],
+) -> tuple[int, str, str]:
+    return (
+        _pdca_metric_int(
+            row.get(
+                "collection_window_hours",
+                0,
+            )
+        ),
+        str(
+            row.get(
+                "collected_at",
+                "",
+            )
+        ),
+        str(
+            row.get(
+                "snapshot_id",
+                "",
+            )
+        ),
+    )
+
+
+def build_measured_pdca_inputs(
+    *,
+    measured_rows: list[dict[str, Any]],
+    posted_results: list[dict[str, Any]],
+    account_id: str,
+) -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+    dict[str, dict[str, Any]],
+]:
+    """Convert measured owned posts into standard generation inputs."""
+
+    posted_by_result = {
+        str(
+            row.get(
+                "result_id",
+                "",
+            )
+        ): dict(row)
+        for row in posted_results
+        if (
+            str(
+                row.get(
+                    "account_id",
+                    "",
+                )
+            )
+            == account_id
+            and str(
+                row.get(
+                    "result_id",
+                    "",
+                )
+            ).strip()
+        )
+    }
+
+    latest_by_result: dict[
+        str,
+        dict[str, Any],
+    ] = {}
+
+    for snapshot in measured_rows:
+        result_id = str(
+            snapshot.get(
+                "result_id",
+                "",
+            )
+        ).strip()
+
+        if (
+            not result_id
+            or result_id
+            not in posted_by_result
+        ):
+            continue
+
+        existing = latest_by_result.get(
+            result_id
+        )
+
+        if (
+            existing is None
+            or _pdca_snapshot_sort_key(
+                snapshot
+            )
+            > _pdca_snapshot_sort_key(
+                existing
+            )
+        ):
+            latest_by_result[result_id] = (
+                dict(snapshot)
+            )
+
+    ranked: list[dict[str, Any]] = []
+
+    for result_id, snapshot in (
+        latest_by_result.items()
+    ):
+        posted = posted_by_result[
+            result_id
+        ]
+
+        source_text = _pdca_result_text(
+            posted
+        )
+
+        if not source_text:
+            continue
+
+        views = _pdca_metric_int(
+            snapshot.get("views")
+        )
+
+        likes = _pdca_metric_int(
+            snapshot.get("likes")
+        )
+
+        comments = _pdca_metric_int(
+            snapshot.get("comments")
+        )
+
+        reposts = _pdca_metric_int(
+            snapshot.get("reposts")
+        )
+
+        quotes = _pdca_metric_int(
+            snapshot.get("quotes")
+        )
+
+        engagement_rate = (
+            (
+                likes
+                + comments
+                + reposts
+                + quotes
+            )
+            / views
+            if views > 0
+            else 0.0
+        )
+
+        source_route = str(
+            posted.get(
+                "content_route",
+                "",
+            )
+            or posted.get(
+                "content_type",
+                "",
+            )
+            or "unknown"
+        )
+
+        source_generation_mode = str(
+            posted.get(
+                "generation_mode",
+                "",
+            )
+            or "unknown"
+        )
+
+        ranked.append(
+            {
+                "result_id": result_id,
+                "source_text": source_text,
+                "source_route": (
+                    source_route
+                ),
+                "source_generation_mode": (
+                    source_generation_mode
+                ),
+                "source_url": str(
+                    posted.get(
+                        "post_url",
+                        "",
+                    )
+                ),
+                "theme": str(
+                    posted.get(
+                        "theme",
+                        "",
+                    )
+                ),
+                "views": views,
+                "likes": likes,
+                "comments": comments,
+                "reposts": reposts,
+                "quotes": quotes,
+                "engagement_rate": (
+                    engagement_rate
+                ),
+                "collected_at": str(
+                    snapshot.get(
+                        "collected_at",
+                        "",
+                    )
+                ),
+            }
+        )
+
+    ranked.sort(
+        key=lambda row: (
+            float(
+                row[
+                    "engagement_rate"
+                ]
+            ),
+            int(row["views"]),
+            str(row["collected_at"]),
+        ),
+        reverse=True,
+    )
+
+    posts: list[dict[str, Any]] = []
+    scores: list[dict[str, Any]] = []
+    source_meta: dict[
+        str,
+        dict[str, Any],
+    ] = {}
+
+    for rank, item in enumerate(
+        ranked,
+        1,
+    ):
+        result_id = str(
+            item["result_id"]
+        )
+
+        source_meta[result_id] = dict(
+            item
+        )
+
+        for variant, strategy in enumerate(
+            PDCA_STRUCTURE_STRATEGIES,
+            1,
+        ):
+            synthetic_post_id = (
+                f"pdca_metric_"
+                f"{_safe_id(result_id)}_"
+                f"{variant:02d}"
+            )
+
+            posts.append(
+                {
+                    "post_id": (
+                        synthetic_post_id
+                    ),
+                    "post_text": (
+                        item["source_text"]
+                    ),
+                    "title": (
+                        "実測上位の自社投稿を"
+                        "別角度で展開する。"
+                        f"改善方針: {strategy}"
+                    ),
+                    "category": (
+                        item["source_route"]
+                    ),
+                    "source_id": result_id,
+                    "post_url": (
+                        item["source_url"]
+                    ),
+                }
+            )
+
+            total_score = (
+                float(
+                    item[
+                        "engagement_rate"
+                    ]
+                )
+                * 1_000_000
+                + int(item["views"])
+                - rank
+                - variant / 100
+            )
+
+            scores.append(
+                {
+                    "account_id": (
+                        account_id
+                    ),
+                    "reference_post_id": (
+                        synthetic_post_id
+                    ),
+                    "total_score": (
+                        total_score
+                    ),
+                    "cta_score": (
+                        item["comments"]
+                    ),
+                    "reusable_pattern": (
+                        strategy
+                    ),
+                    "reason": (
+                        "実測値で上位だった"
+                        "自社投稿を選定し、"
+                        "同一テーマを別構成で"
+                        "展開する"
+                    ),
+                }
+            )
+
+    return (
+        posts,
+        scores,
+        source_meta,
+    )
+
+
+def apply_measured_pdca_lineage(
+    rows: dict[
+        str,
+        list[dict[str, Any]],
+    ],
+    *,
+    source_meta: dict[
+        str,
+        dict[str, Any],
+    ],
+    top_n: int,
+) -> dict[
+    str,
+    list[dict[str, Any]],
+]:
+    """Keep only requested candidates and mark their real metric lineage."""
+
+    selected_queues = [
+        dict(row)
+        for row in rows.get(
+            "queue",
+            [],
+        )[:max(1, top_n)]
+    ]
+
+    selected_draft_ids = {
+        str(
+            row.get(
+                "draft_id",
+                "",
+            )
+        )
+        for row in selected_queues
+    }
+
+    queue_meta_by_draft: dict[
+        str,
+        dict[str, Any],
+    ] = {}
+
+    for queue in selected_queues:
+        result_id = str(
+            queue.get(
+                "source_id",
+                "",
+            )
+        ).strip()
+
+        meta = source_meta.get(
+            result_id,
+            {},
+        )
+
+        queue[
+            "generation_mode"
+        ] = "metrics_driven_pdca_text"
+
+        queue["content_type"] = (
+            "pdca_text"
+        )
+
+        queue["content_route"] = (
+            "pdca_text"
+        )
+
+        queue["source_result_id"] = (
+            result_id
+        )
+
+        queue[
+            "source_content_route"
+        ] = str(
+            meta.get(
+                "source_route",
+                "",
+            )
+        )
+
+        queue[
+            "source_generation_mode"
+        ] = str(
+            meta.get(
+                "source_generation_mode",
+                "",
+            )
+        )
+
+        queue[
+            "transformation_type"
+        ] = "metrics_pdca_owned_post"
+
+        queue["source_credit"] = (
+            "owned_post_metrics"
+        )
+
+        queue["confidence_level"] = (
+            "high"
+        )
+
+        queue["text_policy_status"] = (
+            "PASS"
+        )
+
+        queue["internal_analysis"] = (
+            "Generated from a measured "
+            "owned Threads post. "
+            f"source_result_id={result_id}; "
+            f"engagement_rate="
+            f"{meta.get('engagement_rate', 0):.6f}; "
+            "public_post_text only is "
+            "publishable."
+        )
+
+        queue_meta_by_draft[
+            str(
+                queue.get(
+                    "draft_id",
+                    "",
+                )
+            )
+        ] = {
+            "result_id": result_id,
+            **meta,
+        }
+
+    selected_drafts = []
+
+    for row in rows.get(
+        "drafts",
+        [],
+    ):
+        draft_id = str(
+            row.get(
+                "draft_id",
+                "",
+            )
+        )
+
+        if draft_id not in (
+            selected_draft_ids
+        ):
+            continue
+
+        copied = dict(row)
+        meta = queue_meta_by_draft.get(
+            draft_id,
+            {},
+        )
+
+        copied[
+            "generation_mode"
+        ] = "metrics_driven_pdca_text"
+
+        copied["content_route"] = (
+            "pdca_text"
+        )
+
+        copied["source_result_id"] = (
+            meta.get(
+                "result_id",
+                "",
+            )
+        )
+
+        copied[
+            "source_content_route"
+        ] = meta.get(
+            "source_route",
+            "",
+        )
+
+        copied[
+            "source_generation_mode"
+        ] = meta.get(
+            "source_generation_mode",
+            "",
+        )
+
+        copied[
+            "transformation_type"
+        ] = "metrics_pdca_owned_post"
+
+        copied["source_credit"] = (
+            "owned_post_metrics"
+        )
+
+        copied["confidence_level"] = (
+            "high"
+        )
+
+        copied["notes"] = (
+            "Generated from the highest-"
+            "performing eligible owned post "
+            "using measured Threads metrics. "
+            "WAITING_REVIEW only."
+        )
+
+        selected_drafts.append(
+            copied
+        )
+
+    selected_derivatives = []
+
+    for row in rows.get(
+        "social_derivatives",
+        [],
+    ):
+        draft_id = str(
+            row.get(
+                "draft_id",
+                "",
+            )
+        )
+
+        if draft_id not in (
+            selected_draft_ids
+        ):
+            continue
+
+        copied = dict(row)
+
+        copied[
+            "transformation_type"
+        ] = "metrics_pdca_owned_post"
+
+        copied["source_credit"] = (
+            "owned_post_metrics"
+        )
+
+        copied["text_policy_status"] = (
+            "PASS"
+        )
+
+        copied["reason"] = (
+            "Measured owned-post PDCA "
+            "candidate. Review required."
+        )
+
+        selected_derivatives.append(
+            copied
+        )
+
+    return {
+        "drafts": selected_drafts,
+        "social_derivatives": (
+            selected_derivatives
+        ),
+        "queue": selected_queues,
+    }
+
+
+def build_measured_pdca_generation_rows(
+    *,
+    account_id: str,
+    measured_rows: list[dict[str, Any]],
+    posted_results: list[dict[str, Any]],
+    top_n: int,
+    slot_id: str,
+    theme: str,
+    schedule_date_jst: str,
+    history: list[str],
+) -> dict[
+    str,
+    list[dict[str, Any]],
+]:
+    (
+        posts,
+        scores,
+        source_meta,
+    ) = build_measured_pdca_inputs(
+        measured_rows=measured_rows,
+        posted_results=posted_results,
+        account_id=account_id,
+    )
+
+    if not posts or not scores:
+        return {
+            "drafts": [],
+            "social_derivatives": [],
+            "queue": [],
+        }
+
+    generated = build_generation_rows(
+        account_id=account_id,
+        posts=posts,
+        scores=scores,
+        top_n=len(scores),
+        slot_id=slot_id,
+        post_type="pdca_text",
+        theme=theme,
+        schedule_date_jst=(
+            schedule_date_jst
+        ),
+        history=history,
+    )
+
+    return apply_measured_pdca_lineage(
+        generated,
+        source_meta=source_meta,
+        top_n=top_n,
+    )
+
+
 def attach_pdca_activation_evidence(
     rows: dict[
         str,
@@ -815,20 +1493,21 @@ def attach_pdca_activation_evidence(
         )
     )
 
-    source_result = next(
-        (
-            row
-            for row in posted_results
-            if str(
-                row.get(
-                    "result_id",
-                    "",
-                )
+    posted_by_result = {
+        str(
+            row.get(
+                "result_id",
+                "",
             )
-            == source_result_id
-        ),
-        {},
-    )
+        ): dict(row)
+        for row in posted_results
+        if str(
+            row.get(
+                "result_id",
+                "",
+            )
+        ).strip()
+    }
 
     for index, row in enumerate(
         copied.get("queue", []),
@@ -852,8 +1531,23 @@ def attach_pdca_activation_evidence(
             "metrics_driven_pdca_text"
         )
 
+        row_source_result_id = str(
+            row.get(
+                "source_result_id",
+                "",
+            )
+            or source_result_id
+        )
+
+        source_result = (
+            posted_by_result.get(
+                row_source_result_id,
+                {},
+            )
+        )
+
         row["source_result_id"] = (
-            source_result_id
+            row_source_result_id
         )
 
         row["source_content_route"] = (
@@ -865,13 +1559,23 @@ def attach_pdca_activation_evidence(
                 "content_type",
                 "",
             )
+            or row.get(
+                "source_content_route",
+                "",
+            )
         )
 
         row[
             "source_generation_mode"
-        ] = source_result.get(
-            "generation_mode",
-            "",
+        ] = (
+            source_result.get(
+                "generation_mode",
+                "",
+            )
+            or row.get(
+                "source_generation_mode",
+                "",
+            )
         )
 
     return copied
@@ -992,14 +1696,53 @@ def run_reference_generation(
             "real_post_possible_now": False,
         }
 
-    fallback_used = (
-        post_type == "original_text"
-        or (
-            post_type == "pdca_text"
-            and not measured
-        )
+    strict_measured_pdca = (
+        post_type == "pdca_text"
+        and require_measured_pdca
     )
-    if post_type == "original_text":
+
+    fallback_used = False
+
+    if strict_measured_pdca:
+        rows = (
+            build_measured_pdca_generation_rows(
+                account_id=account_id,
+                measured_rows=measured,
+                posted_results=(
+                    posted_results
+                ),
+                top_n=top_n,
+                slot_id=slot_id,
+                theme=effective_theme,
+                schedule_date_jst=(
+                    schedule_date_jst
+                ),
+                history=history,
+            )
+        )
+
+        if not rows["queue"]:
+            return {
+                "status": "NO_DATA",
+                "account_id": account_id,
+                "post_type": post_type,
+                "candidate_count": 0,
+                "measured_metric_count": (
+                    len(measured)
+                ),
+                "reason": (
+                    "measured_pdca_generation_"
+                    "failed_quality_gate"
+                ),
+                "worker_selectable": False,
+                "real_post_possible_now": (
+                    False
+                ),
+            }
+
+    elif post_type == "original_text":
+        fallback_used = True
+
         rows = build_fallback_generation_rows(
             account_id=account_id,
             top_n=top_n,
@@ -1007,12 +1750,24 @@ def run_reference_generation(
             post_type="original_text",
             content_route=post_type,
             theme=effective_theme,
-            schedule_date_jst=schedule_date_jst,
+            schedule_date_jst=(
+                schedule_date_jst
+            ),
             history=history,
-            fallback_reason="original_text_slot",
-            preferred_topics=preferred_topics,
+            fallback_reason=(
+                "original_text_slot"
+            ),
+            preferred_topics=(
+                preferred_topics
+            ),
         )
-    elif post_type == "pdca_text" and not measured:
+
+    elif (
+        post_type == "pdca_text"
+        and not measured
+    ):
+        fallback_used = True
+
         rows = build_fallback_generation_rows(
             account_id=account_id,
             top_n=top_n,
@@ -1020,27 +1775,60 @@ def run_reference_generation(
             post_type="original_text",
             content_route=post_type,
             theme=theme,
-            schedule_date_jst=schedule_date_jst,
+            schedule_date_jst=(
+                schedule_date_jst
+            ),
             history=history,
-            fallback_reason="pdca_metrics_unavailable",
-            preferred_topics=preferred_topics,
+            fallback_reason=(
+                "pdca_metrics_unavailable"
+            ),
+            preferred_topics=(
+                preferred_topics
+            ),
         )
+
     else:
-        rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n, slot_id=slot_id, post_type=post_type, theme=effective_theme, schedule_date_jst=schedule_date_jst, history=history)
+        rows = build_generation_rows(
+            account_id=account_id,
+            posts=posts,
+            scores=scores,
+            top_n=top_n,
+            slot_id=slot_id,
+            post_type=post_type,
+            theme=effective_theme,
+            schedule_date_jst=(
+                schedule_date_jst
+            ),
+            history=history,
+        )
+
         if not rows["queue"]:
-            rows = build_fallback_generation_rows(
-                account_id=account_id,
-                top_n=top_n,
-                slot_id=slot_id,
-                post_type="original_text",
-                content_route=post_type,
-                theme=theme,
-                schedule_date_jst=schedule_date_jst,
-                history=history,
-                fallback_reason="scheduled_route_generation_empty",
-                preferred_topics=preferred_topics,
+            rows = (
+                build_fallback_generation_rows(
+                    account_id=account_id,
+                    top_n=top_n,
+                    slot_id=slot_id,
+                    post_type=(
+                        "original_text"
+                    ),
+                    content_route=post_type,
+                    theme=theme,
+                    schedule_date_jst=(
+                        schedule_date_jst
+                    ),
+                    history=history,
+                    fallback_reason=(
+                        "scheduled_route_"
+                        "generation_empty"
+                    ),
+                    preferred_topics=(
+                        preferred_topics
+                    ),
+                )
             )
+
             fallback_used = True
+
     if (
         post_type == "pdca_text"
         and require_measured_pdca
@@ -1069,6 +1857,15 @@ def run_reference_generation(
         "candidate_count": len(rows["queue"]),
         "candidate_status": CANDIDATE_STATUS,
         "fallback_original_used": fallback_used,
+        "pdca_generation_source": (
+            "measured_owned_post"
+            if strict_measured_pdca
+            else ""
+        ),
+        "pdca_metric_input_applied": (
+            strict_measured_pdca
+            and bool(rows["queue"])
+        ),
         "queue_ids": [r["queue_id"] for r in rows["queue"]],
         "candidate_content_routes": sorted({
             str(row.get("content_route", ""))
@@ -1107,7 +1904,10 @@ def run_reference_generation(
     queue_writes = sum(int(ops["queue"].get(k, 0)) for k in ("added", "refreshed"))
     fallback_topup_used = False
     fallback_ops: dict[str, dict[str, int]] = {}
-    if queue_writes == 0:
+    if (
+        queue_writes == 0
+        and not strict_measured_pdca
+    ):
         fallback_rows = build_fallback_generation_rows(
             account_id=account_id,
             top_n=top_n,
