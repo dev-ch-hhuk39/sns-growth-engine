@@ -129,6 +129,30 @@ def print_analysis(analysis: dict) -> None:
             text = str(post.get("text", post.get("body", "")))[:50]
             print(f"    {i}. [{pid}] imp={imp} likes={likes} | {text!r}")
 
+    # content_route別
+    by_route = analysis.get(
+        "by_content_route",
+        {},
+    )
+
+    if by_route:
+        print("\n  [content_route別]")
+
+        for route, route_metrics in by_route.items():
+            count = route_metrics.get(
+                "count",
+                0,
+            )
+            route_engagement = route_metrics.get(
+                "engagement_rate",
+                0,
+            )
+
+            print(
+                f"    {route}: {count}件 | "
+                f"eng_rate={route_engagement:.2%}"
+            )
+
     # generation_mode別
     by_mode = analysis.get("by_generation_mode", {})
     if by_mode:

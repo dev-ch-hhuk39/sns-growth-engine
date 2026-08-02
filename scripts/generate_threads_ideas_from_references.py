@@ -316,6 +316,10 @@ def build_generation_rows(
             "status": CANDIDATE_STATUS,
             "generation_model": CLI_NAME,
             "generation_mode": post_type,
+            "content_route": post_type,
+            "source_content_route": "",
+            "source_generation_mode": "",
+            "source_result_id": "",
             "media_strategy": "none",
             "imitation_risk": "low",
             "media_reuse_risk": "not_applicable",
@@ -361,6 +365,10 @@ def build_generation_rows(
             "auto_publish": "false",
             "generation_mode": "reference_score_to_threads",
             "content_type": post_type,
+            "content_route": post_type,
+            "source_content_route": "",
+            "source_generation_mode": "",
+            "source_result_id": "",
             "confidence_level": "medium",
             "ai_publish_recommendation": CANDIDATE_STATUS,
             "media_asset_id": "",
@@ -417,13 +425,29 @@ def _fallback_template_index(offset: int, account_id: str, *, slot_id: str = "",
 FALLBACK_ATTEMPTS_PER_SLOT = 64
 
 
-def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str = "", post_type: str = "original_text", theme: str = "", schedule_date_jst: str = "", history: list[str] | None = None, fallback_reason: str = "reference_unavailable", preferred_topics: list[str] | None = None) -> dict[str, list[dict[str, Any]]]:
+def build_fallback_generation_rows(
+    *,
+    account_id: str,
+    top_n: int,
+    slot_id: str = "",
+    post_type: str = "original_text",
+    content_route: str = "",
+    theme: str = "",
+    schedule_date_jst: str = "",
+    history: list[str] | None = None,
+    fallback_reason: str = "reference_unavailable",
+    preferred_topics: list[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     """Build safe reader-facing original candidates when reference data is empty.
 
     This is the production recovery path for scheduled autonomous posting: it
     keeps the public text separate, validates it, writes WAITING_REVIEW only,
     and lets auto_approve_queue decide whether it may become READY.
     """
+    resolved_content_route = (
+        str(content_route or post_type).strip()
+        or post_type
+    )
     created = now_iso()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     drafts: list[dict[str, Any]] = []
@@ -476,6 +500,10 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str 
             "status": CANDIDATE_STATUS,
             "generation_model": CLI_NAME,
             "generation_mode": post_type,
+            "content_route": resolved_content_route,
+            "source_content_route": "",
+            "source_generation_mode": "",
+            "source_result_id": "",
             "media_strategy": "none",
             "imitation_risk": "low",
             "media_reuse_risk": "not_applicable",
@@ -521,6 +549,10 @@ def build_fallback_generation_rows(*, account_id: str, top_n: int, slot_id: str 
             "auto_publish": "false",
             "generation_mode": post_type,
             "content_type": post_type,
+            "content_route": resolved_content_route,
+            "source_content_route": "",
+            "source_generation_mode": "",
+            "source_result_id": "",
             "confidence_level": "medium",
             "ai_publish_recommendation": CANDIDATE_STATUS,
             "media_asset_id": "",
@@ -645,13 +677,46 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
     measured = [row for row in metric_rows if str(row.get("metrics_status", "")).upper() == "MEASURED"]
     fallback_used = post_type == "original_text" or (post_type == "pdca_text" and not measured)
     if post_type == "original_text":
-        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=effective_theme, schedule_date_jst=schedule_date_jst, history=history, fallback_reason="original_text_slot", preferred_topics=preferred_topics)
+        rows = build_fallback_generation_rows(
+            account_id=account_id,
+            top_n=top_n,
+            slot_id=slot_id,
+            post_type="original_text",
+            content_route=post_type,
+            theme=effective_theme,
+            schedule_date_jst=schedule_date_jst,
+            history=history,
+            fallback_reason="original_text_slot",
+            preferred_topics=preferred_topics,
+        )
     elif post_type == "pdca_text" and not measured:
-        rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text" if post_type != "reference_text" else post_type, theme=theme, schedule_date_jst=schedule_date_jst, history=history, preferred_topics=preferred_topics)
+        rows = build_fallback_generation_rows(
+            account_id=account_id,
+            top_n=top_n,
+            slot_id=slot_id,
+            post_type="original_text",
+            content_route=post_type,
+            theme=theme,
+            schedule_date_jst=schedule_date_jst,
+            history=history,
+            fallback_reason="pdca_metrics_unavailable",
+            preferred_topics=preferred_topics,
+        )
     else:
         rows = build_generation_rows(account_id=account_id, posts=posts, scores=scores, top_n=top_n, slot_id=slot_id, post_type=post_type, theme=effective_theme, schedule_date_jst=schedule_date_jst, history=history)
         if not rows["queue"]:
-            rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history, preferred_topics=preferred_topics)
+            rows = build_fallback_generation_rows(
+                account_id=account_id,
+                top_n=top_n,
+                slot_id=slot_id,
+                post_type="original_text",
+                content_route=post_type,
+                theme=theme,
+                schedule_date_jst=schedule_date_jst,
+                history=history,
+                fallback_reason="scheduled_route_generation_empty",
+                preferred_topics=preferred_topics,
+            )
             fallback_used = True
     summary = {
         "status": "PLAN_ONLY",
@@ -662,6 +727,16 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
         "candidate_status": CANDIDATE_STATUS,
         "fallback_original_used": fallback_used,
         "queue_ids": [r["queue_id"] for r in rows["queue"]],
+        "candidate_content_routes": sorted({
+            str(row.get("content_route", ""))
+            for row in rows["queue"]
+            if str(row.get("content_route", ""))
+        }),
+        "candidate_generation_modes": sorted({
+            str(row.get("generation_mode", ""))
+            for row in rows["queue"]
+            if str(row.get("generation_mode", ""))
+        }),
         "worker_selectable": False,
         "real_post_possible_now": False,
         "slot_id": slot_id,
@@ -687,7 +762,18 @@ def run_reference_generation(account_id: str, top_n: int, *, apply: bool, slot_i
     fallback_topup_used = False
     fallback_ops: dict[str, dict[str, int]] = {}
     if queue_writes == 0:
-        fallback_rows = build_fallback_generation_rows(account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text", theme=theme, schedule_date_jst=schedule_date_jst, history=history, preferred_topics=preferred_topics)
+        fallback_rows = build_fallback_generation_rows(
+            account_id=account_id,
+            top_n=top_n,
+            slot_id=slot_id,
+            post_type="original_text",
+            content_route=post_type,
+            theme=theme,
+            schedule_date_jst=schedule_date_jst,
+            history=history,
+            fallback_reason="scheduled_route_topup",
+            preferred_topics=preferred_topics,
+        )
         fallback_topup_used = bool(fallback_rows["queue"])
         fallback_ops = {
             "drafts": _append_missing(client, "drafts", "draft_id", fallback_rows["drafts"]),

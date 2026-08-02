@@ -151,11 +151,17 @@ def _cta_pressure_score(text: str) -> int:
     return min(100, score)
 
 
-def _naturalness_score(text: str) -> int:
+def _naturalness_score(
+    text: str,
+    account_id: str = "",
+) -> int:
     if not text.strip():
         return 0
     score = 86
-    if "。" not in text:
+    if (
+        "。" not in text
+        and account_id != "liver_manager"
+    ):
         score -= 15
     if len(text) < 80 or len(text) > 520:
         score -= 18
@@ -226,27 +232,129 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
         logic_hits = [term for term in profile.get("logic_markers", []) if str(term) in text]
         if re.search(r"(?:から|ので|と、|この|だけで|ほど)", text):
             logic_hits.append("logic_sentence_structure")
-        manager_hits = [term for term in profile.get("manager_markers", []) if str(term) in text]
-        masculine_endings = sum(text.count(str(term)) for term in profile.get("masculine_endings", []))
-        fragments = [line.strip() for line in text.splitlines() if line.strip() and len(line.strip()) <= 18 and not re.search(r"[。！？]$", line.strip())]
+        manager_hits = [
+            term
+            for term in profile.get(
+                "manager_markers",
+                [],
+            )
+            if str(term) in text
+        ]
+        soft_hits = [
+            term
+            for term in profile.get(
+                "soft_markers",
+                [],
+            )
+            if str(term) in text
+        ]
+        raw_emoji_policy = profile.get(
+            "emoji_policy",
+            {},
+        )
+        emoji_policy = (
+            raw_emoji_policy
+            if isinstance(raw_emoji_policy, dict)
+            else {}
+        )
+        allowed_emojis = [
+            str(item)
+            for item in emoji_policy.get(
+                "allowed",
+                [],
+            )
+        ]
+        emoji_count = sum(
+            text.count(emoji)
+            for emoji in allowed_emojis
+            if emoji
+        )
+        emoji_max = int(
+            emoji_policy.get(
+                "maximum",
+                2,
+            )
+        )
+        masculine_endings = sum(
+            text.count(str(term))
+            for term in profile.get(
+                "masculine_endings",
+                [],
+            )
+        )
+        fragments = [
+            line.strip()
+            for line in text.splitlines()
+            if (
+                line.strip()
+                and len(line.strip()) <= 18
+                and not re.search(
+                    r"[。！？]$",
+                    line.strip(),
+                )
+            )
+        ]
         details.update({
             "action_marker_count": len(action_hits),
             "logic_marker_count": len(logic_hits),
             "manager_marker_count": len(manager_hits),
+            "soft_marker_count": len(soft_hits),
+            "soft_markers": soft_hits,
+            "emoji_count": emoji_count,
+            "emoji_max": emoji_max,
+            "full_stop_count": text.count("。"),
+            "full_stop_policy": profile.get(
+                "full_stop_policy",
+                "",
+            ),
             "masculine_ending_count": masculine_endings,
             "short_fragment_count": len(fragments),
         })
-        if len(action_hits) < int(profile.get("minimum_action_markers", 1)):
-            reasons.append("persona_concrete_action_missing")
-        if len(logic_hits) < int(profile.get("minimum_logic_markers", 1)):
-            reasons.append("persona_logic_missing")
+        if len(action_hits) < int(
+            profile.get(
+                "minimum_action_markers",
+                1,
+            )
+        ):
+            reasons.append(
+                "persona_concrete_action_missing"
+            )
+        if len(logic_hits) < int(
+            profile.get(
+                "minimum_logic_markers",
+                1,
+            )
+        ):
+            reasons.append(
+                "persona_logic_missing"
+            )
         if masculine_endings >= 3:
-            reasons.append("persona_masculine_assertion_repetition")
+            reasons.append(
+                "persona_masculine_assertion_repetition"
+            )
         if len(fragments) >= 6:
-            reasons.append("persona_fragment_overuse")
-        score += min(7, len(action_hits) * 3) + min(7, len(logic_hits) * 3) + min(4, len(manager_hits) * 2)
+            reasons.append(
+                "persona_fragment_overuse"
+            )
+        if emoji_count > emoji_max:
+            reasons.append(
+                "persona_emoji_overuse"
+            )
+        score += (
+            min(7, len(action_hits) * 3)
+            + min(7, len(logic_hits) * 3)
+            + min(4, len(manager_hits) * 2)
+            + min(6, len(soft_hits) * 2)
+        )
         score -= masculine_endings * 5
-        score -= max(0, len(fragments) - 5) * 4
+        score -= max(
+            0,
+            len(fragments) - 5,
+        ) * 4
+        score -= max(
+            0,
+            emoji_count - emoji_max,
+        ) * 5
 
     if first_person_mismatches:
         score -= 35
@@ -268,7 +376,10 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
     hashtag_count = len(re.findall(r"(?:^|\s)#\S+", public_text))
     risk = _risk_score(public_text)
     cta = _cta_pressure_score(public_text)
-    natural = _naturalness_score(public_text)
+    natural = _naturalness_score(
+        public_text,
+        account_id,
+    )
     reader = _reader_value_score(public_text, account_id)
     persona = persona_validation(public_text, account_id)
     fit = int(persona["score"])
@@ -722,10 +833,32 @@ def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, An
         ]
         text = variants[(index - 1) % len(variants)]
     persona = persona_validation(text, account_id)
+
+    if account_id == "liver_manager":
+        decision_support_repair = (
+            "私なら、条件だけで決めずに"
+            "無理なく続けられるかを先に確認します。"
+        )
+        concrete_action_repair = (
+            "私が見ている中では、まず次の配信で"
+            "一つだけ試してみることからで大丈夫です。"
+        )
+    else:
+        decision_support_repair = (
+            "僕なら、条件だけで決めずに"
+            "無理なく続けられるかを先に確認する。"
+        )
+        concrete_action_repair = (
+            "僕が見ている中では、まず避けたい条件を"
+            "一つ書き出してから次を選ぶだけでも変わる。"
+        )
+
     if "persona_decision_support_missing" in persona["reasons"]:
-        text += "\n\n僕なら、条件だけで決めずに無理なく続けられるかを先に確認する。"
+        text += f"\n\n{decision_support_repair}"
+
     if "persona_concrete_action_missing" in persona["reasons"]:
-        text += "\n\n僕が見ている中では、まず次の配信で一つだけ試してみることからで大丈夫です。"
+        text += f"\n\n{concrete_action_repair}"
+
     return build_generation_output(
         internal_analysis=f"account={account_id}; deterministic reader-facing template; index={index}",
         public_post_text=text,

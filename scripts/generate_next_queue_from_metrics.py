@@ -77,7 +77,25 @@ def rank_results_by_engagement(
         er = compute_engagement_rate(views, likes, comments)
         ranked.append({
             "result_id": str(r.get("result_id", "")),
-            "content_type": str(r.get("content_type", "") or r.get("category", "")),
+            "content_type": str(
+                r.get("content_type", "")
+                or r.get("category", "")
+            ),
+            "content_route": str(
+                r.get("content_route", "")
+                or r.get("content_type", "")
+                or r.get("generation_mode", "")
+                or r.get("category", "")
+            ),
+            "generation_mode": str(
+                r.get("generation_mode", "")
+            ),
+            "slot_id": str(
+                r.get("slot_id", "")
+            ),
+            "theme": str(
+                r.get("theme", "")
+            ),
             "views": views,
             "likes": likes,
             "comments": comments,
@@ -100,8 +118,28 @@ def build_next_queue_candidates(
     queues: list[dict[str, Any]] = []
 
     for i, src in enumerate(top, 1):
-        ctype = src.get("content_type") or "engagement"
-        title = f"[次回候補] 高ER傾向 {ctype} の継続展開"
+        source_content_route = str(
+            src.get("content_route", "")
+            or src.get("content_type", "")
+            or src.get("generation_mode", "")
+            or "unknown"
+        )
+        source_generation_mode = str(
+            src.get("generation_mode", "")
+            or "unknown"
+        )
+        source_result_id = str(
+            src.get("result_id", "")
+        )
+        ctype = (
+            src.get("content_type")
+            or source_content_route
+            or "engagement"
+        )
+        title = (
+            f"[次回候補] 高ER傾向 "
+            f"{source_content_route} の継続展開"
+        )
         body = (
             f"前回 ER {src['er']} を記録した「{ctype}」の切り口を、別角度で展開する案。\n\n"
             f"数字が出た理由を一段深掘りして、同じテーマで読者の次の疑問に答える構成にする。"
@@ -118,10 +156,20 @@ def build_next_queue_candidates(
             "status": "WAITING_REVIEW",  # drafts は人手レビュー（投稿は別工程）
             "generation_model": "generate_next_queue_from_metrics",
             "generation_mode": "metrics_driven_candidate",
+            "content_route": "pdca_text",
+            "source_content_route": source_content_route,
+            "source_generation_mode": source_generation_mode,
+            "source_result_id": source_result_id,
             "media_strategy": "none",
             "media_reuse_risk": "low",
             "ai_publish_recommendation": "WAITING_REVIEW",
-            "notes": f"Derived from result_id={src['result_id']} er={src['er']}. Human review required. X disabled.",
+            "notes": (
+                f"Derived from result_id={source_result_id} "
+                f"route={source_content_route} "
+                f"generation_mode={source_generation_mode} "
+                f"er={src['er']}. "
+                "Human review required. X disabled."
+            ),
         })
         queues.append({
             "queue_id": queue_id,
@@ -136,6 +184,11 @@ def build_next_queue_candidates(
             "processed_at": "",
             "auto_publish": "false",
             "generation_mode": "metrics_driven_candidate",
+            "content_type": "pdca_text",
+            "content_route": "pdca_text",
+            "source_content_route": source_content_route,
+            "source_generation_mode": source_generation_mode,
+            "source_result_id": source_result_id,
             "confidence_level": "low",
             "ai_publish_recommendation": "WAITING_REVIEW",
             "text_policy_status": "PENDING",
