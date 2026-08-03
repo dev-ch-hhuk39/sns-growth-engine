@@ -547,6 +547,125 @@ def test_good_source_suitability_summary_is_persisted() -> None:
         summary = item["source_evidence_summary"]
         assert summary["minimum_account_term_count"] == 2
 
+def _permission_checker(
+    row: dict[str, Any],
+    *,
+    account_id: str,
+    operation: str,
+) -> bool:
+    del account_id, operation
+    return (
+        row.get("permission_status") == "approved"
+        and bool(row.get("evidence_reference"))
+    )
+
+
+def test_source_suitable_selection_skips_irrelevant_first() -> None:
+    first = direct_selection("liver_manager")
+    first[0]["source_post_id"] = "sp_irrelevant"
+    first[1]["source_post_media_id"] = "spm_irrelevant"
+    first[1]["media_asset_id"] = "ma_irrelevant"
+    first[1]["media_understanding"] = {
+        "status": "PASS",
+        "visual_summary": "若い人物が屋外でダンスをしている",
+        "visible_text": "みんなで本番ダンス",
+    }
+
+    second = direct_selection("liver_manager")
+    second[0]["source_post_id"] = "sp_suitable"
+    second[1]["source_post_media_id"] = "spm_suitable"
+    second[1]["media_asset_id"] = "ma_suitable"
+
+    selected, selected_permission, rejections = (
+        mod.select_source_suitable_direct_candidate(
+            [first, second],
+            permissions=[
+                permission("src_liver_manager")
+            ],
+            account_id="liver_manager",
+            permission_checker=_permission_checker,
+        )
+    )
+
+    assert selected is not None
+    assert selected[0]["source_post_id"] == "sp_suitable"
+    assert selected_permission["permission_id"] == (
+        "perm_src_liver_manager"
+    )
+    assert rejections == [
+        {
+            "source_post_id": "sp_irrelevant",
+            "source_id": "src_liver_manager",
+            "status": "SOURCE_EVIDENCE_UNSUITABLE",
+            "blockers": [
+                "direct_media_account_evidence_insufficient"
+            ],
+        }
+    ]
+
+
+def test_source_suitable_selection_skips_missing_permission() -> None:
+    first = direct_selection("liver_manager")
+    first[0]["source_post_id"] = "sp_unpermissioned"
+    first[0]["source_id"] = "src_unpermissioned"
+    first[2]["source_id"] = "src_unpermissioned"
+
+    second = direct_selection("liver_manager")
+    second[0]["source_post_id"] = "sp_permissioned"
+
+    selected, selected_permission, rejections = (
+        mod.select_source_suitable_direct_candidate(
+            [first, second],
+            permissions=[
+                permission("src_liver_manager")
+            ],
+            account_id="liver_manager",
+            permission_checker=_permission_checker,
+        )
+    )
+
+    assert selected is not None
+    assert selected[0]["source_post_id"] == "sp_permissioned"
+    assert selected_permission["source_id"] == (
+        "src_liver_manager"
+    )
+    assert rejections[0]["source_post_id"] == (
+        "sp_unpermissioned"
+    )
+    assert rejections[0]["blockers"] == [
+        "active_direct_permission_missing"
+    ]
+
+
+def test_source_suitable_selection_all_rejected() -> None:
+    selected = direct_selection("liver_manager")
+    selected[0]["source_post_id"] = "sp_only_bad"
+    selected[1]["media_understanding"] = {
+        "status": "PASS",
+        "visual_summary": "料理を作って皿に盛り付けている",
+        "visible_text": "今日の晩ごはん",
+    }
+
+    result, selected_permission, rejections = (
+        mod.select_source_suitable_direct_candidate(
+            [selected],
+            permissions=[
+                permission("src_liver_manager")
+            ],
+            account_id="liver_manager",
+            permission_checker=_permission_checker,
+        )
+    )
+
+    assert result is None
+    assert selected_permission == {}
+    assert rejections[0]["source_post_id"] == "sp_only_bad"
+    assert (
+        "direct_media_account_evidence_insufficient"
+        in rejections[0]["blockers"]
+    )
+
+
 def main() -> None:
     tests = [value for name, value in globals().items() if name.startswith("test_") and callable(value)]
     for test in sorted(tests, key=lambda item: item.__name__):
