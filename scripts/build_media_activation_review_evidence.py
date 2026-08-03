@@ -1014,6 +1014,111 @@ def _active_permission_row(
     return candidates[0] if candidates else {}
 
 
+def select_source_suitable_direct_candidate(
+    candidates: Sequence[
+        tuple[
+            dict[str, Any],
+            dict[str, Any],
+            dict[str, Any],
+        ]
+    ],
+    *,
+    permissions: Sequence[Mapping[str, Any]],
+    account_id: str,
+    permission_checker: Callable[..., bool],
+) -> tuple[
+    tuple[
+        dict[str, Any],
+        dict[str, Any],
+        dict[str, Any],
+    ]
+    | None,
+    dict[str, Any],
+    list[dict[str, Any]],
+]:
+    # Select the first permissioned candidate whose source and media agree.
+    #
+    # Selection order remains the deterministic order produced by
+    # select_direct_candidates. Unsuitable or unpermissioned candidates are
+    # retained as diagnostics and never prevent a later suitable candidate
+    # from filling the Direct review slot.
+
+    rejections: list[dict[str, Any]] = []
+
+    for raw_selection in candidates:
+        post, primary_media, source = (
+            dict(item)
+            for item in raw_selection
+        )
+        source_post_id = _text(
+            post.get("source_post_id")
+        )
+        source_id = _text(
+            post.get("source_id")
+            or source.get("source_id")
+        )
+        permission = _active_permission_row(
+            permissions,
+            account_id=account_id,
+            source_id=source_id,
+            operation="direct",
+            checker=permission_checker,
+        )
+
+        if not permission:
+            rejections.append(
+                {
+                    "source_post_id": source_post_id,
+                    "source_id": source_id,
+                    "status": "BLOCKED",
+                    "blockers": [
+                        "active_direct_permission_missing"
+                    ],
+                }
+            )
+            continue
+
+        evidence_text, _summary, media_blockers = (
+            _direct_media_evidence(primary_media)
+        )
+        _suitability, suitability_blockers = (
+            _direct_source_suitability(
+                account_id=account_id,
+                post=post,
+                media_evidence_text=evidence_text,
+            )
+        )
+        blockers = sorted(
+            {
+                _text(reason)
+                for reason in (
+                    list(media_blockers)
+                    + list(suitability_blockers)
+                )
+                if _text(reason)
+            }
+        )
+
+        if blockers:
+            rejections.append(
+                {
+                    "source_post_id": source_post_id,
+                    "source_id": source_id,
+                    "status": "SOURCE_EVIDENCE_UNSUITABLE",
+                    "blockers": blockers,
+                }
+            )
+            continue
+
+        return (
+            (post, primary_media, source),
+            permission,
+            rejections,
+        )
+
+    return None, {}, rejections
+
+
 def _runtime_direct_caption_builder() -> CaptionBuilder:
     from generation.source_grounded_caption import (
         GitHubModelsGroundedProvider,
@@ -1078,7 +1183,6 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
     from generation.source_copyedit import validate_source_preserving_public_post
     from generation_quality_gates import evaluate_generation_quality, topic_coherence_validator
     from media_post_validator import validate_media_post
-    from plan_media_activation_from_production import select_permissioned_direct_candidate
     from prepare_media_activation_candidates import build_plan, candidate_blockers
     from public_post_quality import final_public_post_validator
     from run_direct_reference_media_pipeline import select_direct_candidates
@@ -1101,25 +1205,49 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
     direct_selections: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None] = {}
     clip_selections: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None] = {}
     permission_map: dict[tuple[str, str], dict[str, Any]] = {}
+    direct_selection_diagnostics: dict[str, dict[str, Any]] = {}
     for account_id in ACCOUNTS:
-        direct_candidates, _direct_reasons = select_direct_candidates(client, account_id)
-        direct_selection, _permission_reasons = select_permissioned_direct_candidate(
+        direct_candidates, direct_reasons = select_direct_candidates(
+            client,
+            account_id,
+        )
+        (
+            direct_selection,
+            direct_permission,
+            selection_rejections,
+        ) = select_source_suitable_direct_candidate(
             direct_candidates,
             permissions=datasets["media_permissions"],
             account_id=account_id,
             permission_checker=is_active_permission,
         )
         direct_selections[account_id] = direct_selection
+        selected_source_post_id = (
+            _text(direct_selection[0].get("source_post_id"))
+            if direct_selection is not None
+            else ""
+        )
+        direct_selection_diagnostics[account_id] = {
+            "status": (
+                "PASS"
+                if direct_selection is not None
+                else "BLOCKED"
+            ),
+            "candidate_count": len(direct_candidates),
+            "selected_source_post_id": selected_source_post_id,
+            "rejections": selection_rejections,
+            "upstream_reasons": sorted(
+                {
+                    _text(reason)
+                    for reason in direct_reasons
+                    if _text(reason)
+                }
+            ),
+        }
         if direct_selection is not None:
-            post, _media, source = direct_selection
-            source_id = _text(post.get("source_id") or source.get("source_id"))
-            permission_map[(account_id, "direct_reference_media")] = _active_permission_row(
-                datasets["media_permissions"],
-                account_id=account_id,
-                source_id=source_id,
-                operation="direct",
-                checker=is_active_permission,
-            )
+            permission_map[
+                (account_id, "direct_reference_media")
+            ] = direct_permission
         clip, source_video, asset, _clip_reasons = select_saved_media_candidate(
             datasets["video_clip_candidates"],
             datasets["source_videos"],
@@ -1144,7 +1272,7 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
                 checker=is_active_permission,
             )
 
-    return build_review_evidence_plan(
+    report = build_review_evidence_plan(
         direct_selections=direct_selections,
         clip_selections=clip_selections,
         permissions=permission_map,
@@ -1161,6 +1289,10 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
         candidate_validator=candidate_blockers,
         activation_planner=build_plan,
     )
+    report["direct_selection_diagnostics"] = (
+        direct_selection_diagnostics
+    )
+    return report
 
 
 def main() -> int:
@@ -1195,6 +1327,27 @@ def main() -> int:
     print(f"BATCH_ID={report['batch_id']}")
     print(f"CANDIDATE_COUNT={report['candidate_count']}")
     print(f"MISSING_SOURCE_SLOTS={','.join(report['missing_source_slots'])}")
+    for account_id, item in sorted(
+        report.get(
+            "direct_selection_diagnostics",
+            {},
+        ).items()
+    ):
+        rejected = [
+            (
+                f"{row.get('source_post_id', '')}:"
+                + "|".join(row.get("blockers", []))
+            )
+            for row in item.get("rejections", [])
+        ]
+        print(
+            "DIRECT_SELECTION:"
+            f"{account_id}:"
+            f"status={item.get('status', '')}:"
+            f"candidate_count={item.get('candidate_count', 0)}:"
+            f"selected={item.get('selected_source_post_id', '')}:"
+            f"rejected={';'.join(rejected) or 'NONE'}"
+        )
     for item in report.get("candidate_diagnostics", []):
         print(
             "SLOT:"
