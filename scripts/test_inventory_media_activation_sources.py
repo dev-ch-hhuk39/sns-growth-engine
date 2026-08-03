@@ -60,6 +60,9 @@ def direct_fixture(
     understanding: bool = True,
     uploaded: bool = True,
     off_topic: bool = False,
+    duration_seconds: str = "20",
+    media_type: str = "video",
+    source_url: str = "https://www.threads.com/@creator/post/example",
 ) -> dict[str, list[dict[str, Any]]]:
     if account_id == "night_scout":
         text = "夜職の店を選ぶ時は、時給と控除、客層を確認して体験入店することが大事です。"
@@ -78,7 +81,7 @@ def direct_fixture(
             "source_id": source_id,
             "target_account_id": account_id,
             "platform": "threads",
-            "canonical_post_url": "https://www.threads.com/@creator/post/example",
+            "canonical_post_url": source_url,
             "original_post_text": text,
             "published_at": "2026-08-01T00:00:00+00:00",
         }],
@@ -86,7 +89,7 @@ def direct_fixture(
             "source_post_media_id": media_id,
             "source_post_id": post_id,
             "media_index": "0",
-            "media_type": "video",
+            "media_type": media_type,
             "original_media_url": "https://origin.example/video.mp4",
         }],
         "media_assets": [{
@@ -96,8 +99,8 @@ def direct_fixture(
             "original_media_url": "https://origin.example/video.mp4",
             "storage_url": "https://cdn.example/video.mp4" if uploaded else "",
             "cloudinary_status": "UPLOADED" if uploaded else "PENDING",
-            "media_type": "video",
-            "duration_seconds": "20",
+            "media_type": media_type,
+            "duration_seconds": duration_seconds,
         }],
         "source_media_understanding": [{
             "source_post_media_id": media_id,
@@ -261,6 +264,38 @@ def test_direct_upload_repair():
     assert any("media_not_uploaded" in reason for reason in row["blockers"])
 
 
+def test_direct_over_limit_video_excluded():
+    row = direct_rows(direct_fixture(duration_seconds="301"))[0]
+    assert row["candidate_status"] == mod.EXCLUDED
+    assert any(
+        "video_duration_above_direct_limit" in reason
+        for reason in row["hard_blockers"]
+    )
+    assert not any(
+        "video_duration_above_direct_limit" in reason
+        for reason in row["repair_blockers"]
+    )
+
+
+def test_direct_unsupported_media_type_excluded():
+    row = direct_rows(direct_fixture(media_type="audio"))[0]
+    assert row["candidate_status"] == mod.EXCLUDED
+    assert any(
+        "unsupported_media_type" in reason
+        for reason in row["hard_blockers"]
+    )
+
+
+def test_direct_invalid_parent_url_excluded():
+    row = direct_rows(
+        direct_fixture(
+            source_url="https://www.threads.com/@creator",
+        )
+    )[0]
+    assert row["candidate_status"] == mod.EXCLUDED
+    assert "individual_source_post_url_required" in row["hard_blockers"]
+
+
 def test_direct_quarantined_excluded():
     data = direct_fixture()
     data["source_posts"][0]["quarantined_at"] = "2026-08-01T00:00:00+00:00"
@@ -319,6 +354,28 @@ def test_direct_sort_prefers_ready():
     rows = direct_rows(merge_data(review, ready))
     assert rows[0]["source_post_id"] == "sp_ready"
     assert rows[0]["candidate_status"] == mod.READY
+
+
+def test_slot_never_recommends_hard_blocked_direct_candidate():
+    hard_blocked = direct_fixture(
+        source_id="src_hard",
+        post_id="sp_hard",
+        duration_seconds="301",
+    )
+    repairable = direct_fixture(
+        source_id="src_repair",
+        post_id="sp_repair",
+        uploaded=False,
+    )
+    rows = direct_rows(merge_data(hard_blocked, repairable))
+    slot = mod.summarize_slot(
+        "liver_manager",
+        "direct_reference_media",
+        rows,
+    )
+    assert slot["route_status"] == "EXISTING_SOURCE_REPAIR_REQUIRED"
+    assert slot["recommended_candidate_id"] == "sp_repair"
+    assert slot["top_audit_candidate_id"] == "sp_repair"
 
 
 def test_clip_ready():
