@@ -40,7 +40,19 @@ TOPIC_TAXONOMY: dict[str, dict[str, tuple[str, ...]]] = {
         "creator_support": ("相談", "サポート", "支え", "一緒に", "改善を考え"),
         "continuity": ("配信時間", "継続", "習慣", "休む", "リズム", "続けられ", "続ける", "戻れる", "毎回の気合い", "長時間"),
         "monetization": ("ギフト", "投げ銭", "収益", "ダイヤ"),
-        "community_building": ("リスナー", "常連", "また来", "関係", "応援"),
+        "community_building": (
+            "リスナー",
+            "常連",
+            "また来",
+            "関係",
+            "応援",
+            "みんなで支え",
+            "皆んなで支え",
+            "皆で支え",
+            "枠を支え",
+            "枠が崩れ",
+            "リスナーがついて",
+        ),
         "stream_review": ("振り返り", "数字", "改善", "見直"),
         "stream_planning": ("企画", "構成", "終わり方", "配信設計"),
     },
@@ -56,13 +68,20 @@ RELATED_TOPICS: dict[str, dict[str, set[str]]] = {
         "performance_pressure": {"support_system", "workplace_fit"},
     },
     "liver_manager": {
-        "first_viewer_retention": {"comment_activation"},
+        "first_viewer_retention": {
+            "comment_activation",
+            "community_building",
+        },
         "comment_activation": {"first_viewer_retention", "community_building"},
         "agency_selection": {"creator_support"},
         "creator_support": {"agency_selection", "stream_review", "stream_planning"},
         "continuity": {"stream_planning", "stream_review"},
         "monetization": {"community_building"},
-        "community_building": {"comment_activation", "monetization"},
+        "community_building": {
+            "comment_activation",
+            "first_viewer_retention",
+            "monetization",
+        },
         "stream_review": {"creator_support", "continuity", "stream_planning"},
         "stream_planning": {"creator_support", "continuity", "stream_review"},
     },
@@ -349,14 +368,59 @@ def topic_coherence_validator(
         reasons.append("multiple_primary_topics")
 
     visual_topic = "general"
+    visual_confidence = 0.0
+    visual_direct_confidence = 0.0
     visual_match = True
     if visual_text.strip():
-        visual_topic, visual_confidence, _ = _infer_topic(
+        visual_topic, _visual_inferred_confidence, _ = _infer_topic(
             account_id,
             visual_text,
             preferred_topic=primary,
         )
-        visual_match = visual_confidence >= TOPIC_CONFIDENCE_MIN and visual_topic == primary
+        visual_scores = _topic_scores(
+            account_id,
+            visual_text,
+        )
+        visual_total_score = sum(
+            visual_scores.values()
+        )
+        visual_primary_score = visual_scores.get(
+            primary,
+            0,
+        )
+        visual_related = RELATED_TOPICS.get(
+            account_id,
+            {},
+        ).get(
+            primary,
+            set(),
+        )
+        visual_family_score = (
+            visual_primary_score
+            + sum(
+                visual_scores.get(topic, 0)
+                for topic in visual_related
+            )
+        )
+        visual_confidence = round(
+            visual_family_score
+            / max(1, visual_total_score),
+            4,
+        )
+        visual_direct_confidence = round(
+            visual_primary_score
+            / max(1, visual_total_score),
+            4,
+        )
+        visual_match = (
+            visual_confidence
+            >= TOPIC_CONFIDENCE_MIN
+            and _topic_allowed(
+                account_id,
+                primary,
+                visual_topic,
+            )
+        )
         if not visual_match:
             reasons.append("media_text_topic_mismatch")
 
@@ -387,6 +451,10 @@ def topic_coherence_validator(
         "hook_topic": hook_topic,
         "closing_topic": closing_topic,
         "visual_topic": visual_topic,
+        "visual_topic_confidence": visual_confidence,
+        "visual_topic_direct_confidence": (
+            visual_direct_confidence
+        ),
         "hook_topic_match": hook_match,
         "closing_topic_match": closing_match,
         "visual_topic_match": visual_match,

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-from generation_quality_gates import evaluate_generation_quality
+from generation_quality_gates import (
+    TOPIC_CONFIDENCE_MIN,
+    evaluate_generation_quality,
+)
 
 
 def check(condition: bool, name: str) -> None:
@@ -59,6 +62,46 @@ media_mismatch = evaluate_generation_quality(
     visual_text="初見が入ったらコメントで質問して会話へ参加してもらう",
 )
 check("media_text_topic_mismatch" in media_mismatch["topic_blocked_reasons"], "media topic mismatch")
+
+community_visual_alignment = evaluate_generation_quality(
+    "liver_manager",
+    (
+        "枠が崩れそうって配信者が1番感じてるからこそ、"
+        "リスナー皆んなでで支えなきゃいけない！"
+    ),
+    [],
+    visual_text=(
+        "枠主にリスナーがついてこないと、"
+        "初見さんは一生増えない。"
+    ),
+)
+check(
+    TOPIC_CONFIDENCE_MIN == 0.70,
+    "topic threshold is not relaxed",
+)
+check(
+    community_visual_alignment["status"] == "PASS",
+    "community and first-viewer evidence pass",
+)
+check(
+    community_visual_alignment["primary_topic"]
+    == "community_building",
+    "community topic inferred",
+)
+check(
+    community_visual_alignment["topic_confidence"]
+    >= TOPIC_CONFIDENCE_MIN,
+    "community text confidence passes unchanged threshold",
+)
+check(
+    community_visual_alignment["visual_topic_match"],
+    "community visual family matches",
+)
+check(
+    community_visual_alignment["visual_topic_confidence"]
+    >= TOPIC_CONFIDENCE_MIN,
+    "community visual confidence passes unchanged threshold",
+)
 
 aligned = evaluate_generation_quality(
     "liver_manager",
