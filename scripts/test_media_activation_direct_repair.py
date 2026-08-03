@@ -343,6 +343,108 @@ def test_exact_source_rows_are_bound_to_account_and_parent():
     assert media["media_type"] == "video"
 
 
+def persisted_datasets() -> dict[str, list[dict[str, Any]]]:
+    content_hash = "c" * 64
+    return {
+        "source_posts": [
+            {
+                "source_post_id": "sp_liver",
+                "source_id": "src_liver",
+                "target_account_id": "liver_manager",
+                "platform": "tiktok",
+            }
+        ],
+        "source_post_media": [
+            {
+                "source_post_media_id": "spm_liver_0",
+                "source_post_id": "sp_liver",
+                "media_type": "video",
+                "original_media_url": (
+                    "https://example.com/video.mp4"
+                ),
+                "download_status": "DOWNLOADED",
+                "cloudinary_status": "UPLOADED",
+                "storage_url": (
+                    "https://res.cloudinary.com/demo/video/upload/x.mp4"
+                ),
+                "content_hash": content_hash,
+                "media_asset_id": "ma_asset",
+                "understanding_status": "PASS",
+                "understanding_id": "smu_spm_liver_0",
+                "last_error": "",
+            }
+        ],
+        "media_assets": [
+            {
+                "media_id": "ma_asset",
+                "account_id": "liver_manager",
+                "storage_url": (
+                    "https://res.cloudinary.com/demo/video/upload/x.mp4"
+                ),
+                "upload_status": "UPLOADED",
+                "content_hash": content_hash,
+                "media_type": "video",
+            }
+        ],
+        "source_media_understanding": [
+            {
+                "understanding_id": "smu_spm_liver_0",
+                "source_post_media_id": "spm_liver_0",
+                "source_post_id": "sp_liver",
+                "account_id": "liver_manager",
+                "status": "PASS",
+                "provider_name": "local",
+                "visual_summary": "配信動画の内容",
+                "content_hash": content_hash,
+                "blocked_reason": "",
+            }
+        ],
+    }
+
+
+def test_exact_persisted_repair_passes():
+    result = mod.validate_exact_persisted_repair(
+        persisted_datasets(),
+        account_id="liver_manager",
+        source_post_id="sp_liver",
+        source_post_media_id="spm_liver_0",
+    )
+    assert result["media_asset_id"] == "ma_asset"
+    assert result["understanding_status"] == "PASS"
+
+
+def test_exact_persisted_repair_rejects_missing_asset_link():
+    datasets = persisted_datasets()
+    datasets["source_post_media"][0]["media_asset_id"] = ""
+    try:
+        mod.validate_exact_persisted_repair(
+            datasets,
+            account_id="liver_manager",
+            source_post_id="sp_liver",
+            source_post_media_id="spm_liver_0",
+        )
+    except RuntimeError as exc:
+        assert "source_post_media_asset_link_missing" in str(exc)
+    else:
+        raise AssertionError("expected persisted repair failure")
+
+
+def test_exact_persisted_repair_rejects_understanding_failure():
+    datasets = persisted_datasets()
+    datasets["source_media_understanding"][0]["status"] = "BLOCKED"
+    try:
+        mod.validate_exact_persisted_repair(
+            datasets,
+            account_id="liver_manager",
+            source_post_id="sp_liver",
+            source_post_media_id="spm_liver_0",
+        )
+    except RuntimeError as exc:
+        assert "media_understanding_status_not_pass" in str(exc)
+    else:
+        raise AssertionError("expected understanding failure")
+
+
 def test_post_repair_rejects_remaining_target_steps():
     report = manifest_report()
     try:
@@ -360,6 +462,26 @@ def test_post_repair_rejects_remaining_target_steps():
         raise AssertionError(
             "expected remaining repair-step failure"
         )
+
+
+def test_post_repair_allows_selected_source_rotation():
+    report = manifest_report()
+    row = next(
+        item
+        for item in report["manifests"]
+        if item["account_id"] == "liver_manager"
+    )
+    row["selected_candidate"]["source_post_id"] = "sp_next"
+    validated = mod.validate_post_repair(
+        report,
+        account_id="liver_manager",
+        source_post_id="sp_liver",
+        source_post_media_id="spm_liver_0",
+    )
+    assert (
+        validated["selected_candidate"]["source_post_id"]
+        == "sp_next"
+    )
 
 
 def test_post_repair_allows_other_remaining_steps():

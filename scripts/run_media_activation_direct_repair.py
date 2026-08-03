@@ -438,6 +438,199 @@ def run_exact_ingest(
     return result
 
 
+def _single_record(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    key: str,
+    value: str,
+    label: str,
+) -> dict[str, Any]:
+    matches = [
+        dict(row)
+        for row in rows
+        if isinstance(row, Mapping)
+        and _text(row.get(key)) == value
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            f"{label}_count_invalid:{value}:{len(matches)}"
+        )
+    return matches[0]
+
+
+def validate_exact_persisted_repair(
+    datasets: Mapping[str, Sequence[Mapping[str, Any]]],
+    *,
+    account_id: str,
+    source_post_id: str,
+    source_post_media_id: str,
+) -> dict[str, Any]:
+    post, media = resolve_exact_source_rows(
+        datasets,
+        account_id=account_id,
+        source_post_id=source_post_id,
+        source_post_media_id=source_post_media_id,
+    )
+
+    blockers: list[str] = []
+
+    download_status = _text(
+        media.get("download_status")
+    ).upper()
+    if download_status not in {
+        "DOWNLOADED",
+        "REUSED_IDENTICAL",
+    }:
+        blockers.append(
+            "source_post_media_download_not_complete"
+        )
+
+    if _text(media.get("cloudinary_status")).upper() != "UPLOADED":
+        blockers.append(
+            "source_post_media_cloudinary_not_uploaded"
+        )
+
+    storage_url = _text(media.get("storage_url"))
+    if not storage_url.startswith(
+        "https://res.cloudinary.com/"
+    ):
+        blockers.append(
+            "source_post_media_storage_url_invalid"
+        )
+
+    content_hash = _text(media.get("content_hash")).lower()
+    if not HASH_PATTERN.fullmatch(content_hash):
+        blockers.append(
+            "source_post_media_content_hash_invalid"
+        )
+
+    media_asset_id = _text(media.get("media_asset_id"))
+    if not media_asset_id:
+        blockers.append(
+            "source_post_media_asset_link_missing"
+        )
+
+    understanding_id = _text(media.get("understanding_id"))
+    if not understanding_id:
+        blockers.append(
+            "source_post_media_understanding_link_missing"
+        )
+
+    if _text(media.get("understanding_status")).upper() != "PASS":
+        blockers.append(
+            "source_post_media_understanding_not_pass"
+        )
+
+    if _text(media.get("last_error")):
+        blockers.append(
+            "source_post_media_last_error_present"
+        )
+
+    asset: dict[str, Any] = {}
+    if media_asset_id:
+        asset = _single_record(
+            datasets.get("media_assets", []),
+            key="media_id",
+            value=media_asset_id,
+            label="media_asset",
+        )
+
+        if _text(asset.get("account_id")) != account_id:
+            blockers.append("media_asset_account_mismatch")
+        if _text(asset.get("upload_status")).upper() != "UPLOADED":
+            blockers.append("media_asset_upload_not_complete")
+        if _text(asset.get("storage_url")) != storage_url:
+            blockers.append("media_asset_storage_url_mismatch")
+        if _text(asset.get("content_hash")).lower() != content_hash:
+            blockers.append("media_asset_content_hash_mismatch")
+        if _text(asset.get("media_type")).lower() != _text(
+            media.get("media_type")
+        ).lower():
+            blockers.append("media_asset_type_mismatch")
+
+    understanding: dict[str, Any] = {}
+    if understanding_id:
+        understanding = _single_record(
+            datasets.get("source_media_understanding", []),
+            key="understanding_id",
+            value=understanding_id,
+            label="media_understanding",
+        )
+
+        if _text(
+            understanding.get("source_post_media_id")
+        ) != source_post_media_id:
+            blockers.append(
+                "media_understanding_media_link_mismatch"
+            )
+        if _text(
+            understanding.get("source_post_id")
+        ) != source_post_id:
+            blockers.append(
+                "media_understanding_post_link_mismatch"
+            )
+        if _text(understanding.get("account_id")) != account_id:
+            blockers.append(
+                "media_understanding_account_mismatch"
+            )
+        if _text(understanding.get("status")).upper() != "PASS":
+            blockers.append(
+                "media_understanding_status_not_pass"
+            )
+        if _text(
+            understanding.get("content_hash")
+        ).lower() != content_hash:
+            blockers.append(
+                "media_understanding_content_hash_mismatch"
+            )
+        if _text(understanding.get("blocked_reason")):
+            blockers.append(
+                "media_understanding_blocked_reason_present"
+            )
+
+        evidence = [
+            _text(understanding.get(field))
+            for field in (
+                "visual_summary",
+                "visible_text",
+                "ocr_text",
+                "transcript_text",
+            )
+            if _text(understanding.get(field))
+        ]
+        if not evidence:
+            blockers.append(
+                "media_understanding_evidence_empty"
+            )
+
+    if blockers:
+        raise RuntimeError(
+            "persisted_repair_incomplete:"
+            + ",".join(sorted(set(blockers)))
+        )
+
+    return {
+        "account_id": account_id,
+        "source_post_id": source_post_id,
+        "source_post_media_id": source_post_media_id,
+        "source_id": _text(post.get("source_id")),
+        "download_status": download_status,
+        "cloudinary_status": _text(
+            media.get("cloudinary_status")
+        ).upper(),
+        "storage_url": storage_url,
+        "content_hash": content_hash,
+        "media_asset_id": media_asset_id,
+        "understanding_id": understanding_id,
+        "understanding_status": _text(
+            understanding.get("status")
+        ).upper(),
+        "understanding_provider": _text(
+            understanding.get("provider_name")
+        ),
+    }
+
+
 def validate_post_repair(
     report: Mapping[str, Any],
     *,
@@ -445,26 +638,38 @@ def validate_post_repair(
     source_post_id: str,
     source_post_media_id: str,
 ) -> dict[str, Any]:
+    """Validate only residual blockers when the repaired source remains selected.
+
+    A successfully repaired candidate can leave the repair inventory entirely,
+    allowing a different pending source to become the account's selected row.
+    Exact completion is therefore proved from persisted media, asset and
+    understanding records, not from post-repair candidate identity.
+    """
     manifest = _manifest_by_account(report, account_id)
     selected = manifest.get("selected_candidate", {})
-    if _text(selected.get("source_post_id")) != source_post_id:
-        raise RuntimeError("post_repair_selected_source_changed")
-    gate = manifest.get("permission_gate", {})
-    if _text(gate.get("status")) != "PASS_ACTIVE_PERMISSION":
-        raise RuntimeError("post_repair_permission_not_active")
-    remaining = [
-        dict(step)
-        for step in manifest.get("repair_steps", [])
-        if isinstance(step, Mapping)
-        and _text(step.get("target_id")) == source_post_media_id
-    ]
-    if remaining:
-        kinds = ",".join(
-            sorted(_text(step.get("kind")) for step in remaining)
-        )
-        raise RuntimeError(
-            "target_repair_steps_remaining:" + kinds
-        )
+    selected_source_post_id = _text(
+        selected.get("source_post_id")
+    )
+
+    if selected_source_post_id == source_post_id:
+        remaining = [
+            dict(step)
+            for step in manifest.get("repair_steps", [])
+            if isinstance(step, Mapping)
+            and _text(step.get("target_id"))
+            == source_post_media_id
+        ]
+        if remaining:
+            kinds = ",".join(
+                sorted(
+                    _text(step.get("kind"))
+                    for step in remaining
+                )
+            )
+            raise RuntimeError(
+                "target_repair_steps_remaining:" + kinds
+            )
+
     return manifest
 
 
@@ -626,12 +831,24 @@ def main() -> int:
     after_client = _load_client(dry_run=True)
     after_datasets = _load_datasets(
         after_client,
-        PROTECTED_LOGICALS,
+        (
+            "source_posts",
+            "source_post_media",
+            "media_assets",
+            "source_media_understanding",
+            *PROTECTED_LOGICALS,
+        ),
     )
     after_protected = protected_snapshot(after_datasets)
     assert_protected_unchanged(
         before_protected,
         after_protected,
+    )
+    persisted_repair = validate_exact_persisted_repair(
+        after_datasets,
+        account_id=account_id,
+        source_post_id=source_post_id,
+        source_post_media_id=source_post_media_id,
     )
 
     after_manifest_report = load_production_manifest()
@@ -641,17 +858,34 @@ def main() -> int:
         source_post_id=source_post_id,
         source_post_media_id=source_post_media_id,
     )
+    after_selected_candidate = (
+        after_account_manifest.get("selected_candidate")
+    )
+    if not isinstance(after_selected_candidate, Mapping):
+        after_selected_candidate = {}
 
     base_report.update(
         {
             "status": "REPAIR_COMPLETE",
             "ingest_result": ingest_result,
+            "persisted_repair": persisted_repair,
             "protected_after": after_protected,
             "after_manifest_hash": _text(
                 after_account_manifest.get("manifest_hash")
             ),
             "after_manifest_status": _text(
                 after_account_manifest.get("manifest_status")
+            ),
+            "after_selected_source_post_id": _text(
+                after_selected_candidate.get("source_post_id")
+            ),
+            "repaired_source_remains_selected": (
+                _text(
+                    after_selected_candidate.get(
+                        "source_post_id"
+                    )
+                )
+                == source_post_id
             ),
             "after_repair_step_count": len(
                 after_account_manifest.get("repair_steps", [])
@@ -675,11 +909,36 @@ def main() -> int:
         + base_report["after_manifest_status"]
     )
     print(
+        "PERSISTED_MEDIA_ASSET_ID="
+        + _text(
+            base_report["persisted_repair"].get(
+                "media_asset_id"
+            )
+        )
+    )
+    print(
+        "PERSISTED_UNDERSTANDING_ID="
+        + _text(
+            base_report["persisted_repair"].get(
+                "understanding_id"
+            )
+        )
+    )
+    print(
+        "REPAIRED_SOURCE_REMAINS_SELECTED="
+        + str(
+            base_report[
+                "repaired_source_remains_selected"
+            ]
+        ).lower()
+    )
+    print(
         "AFTER_REPAIR_STEP_COUNT="
         + str(base_report["after_repair_step_count"])
     )
     print(f"REPORT={args.output}")
     print("PASS: exact permissioned media repair completed")
+    print("PASS: persisted media, asset and understanding records verified")
     print("PASS: queue and posted results remained unchanged")
     print("PASS: no READY transition or SNS post")
     return 0
