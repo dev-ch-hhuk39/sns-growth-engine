@@ -415,9 +415,13 @@ def _direct_media_packet(
         if not persisted:
             repair.append(f"{media_id or media_row_id or 'media'}:media_not_uploaded")
         if media_type not in {"video", "image"}:
-            repair.append(f"{media_id or media_row_id or 'media'}:unsupported_media_type")
+            exclusions.append(
+                f"{media_id or media_row_id or 'media'}:unsupported_media_type"
+            )
         if media_type == "video" and _number(merged.get("duration_seconds")) > 300:
-            repair.append(f"{media_id or media_row_id or 'media'}:video_duration_above_direct_limit")
+            exclusions.append(
+                f"{media_id or media_row_id or 'media'}:video_duration_above_direct_limit"
+            )
 
         items.append(
             {
@@ -545,6 +549,7 @@ def build_direct_inventory(
     posted_results: Sequence[Mapping[str, Any]],
     permission_checker: PermissionChecker,
     quarantine_checker: QuarantineChecker = _default_quarantined,
+    individual_url_checker: IndividualURLChecker = _default_individual_url,
 ) -> list[dict[str, Any]]:
     sources = {
         _text(row.get("source_id")): dict(row)
@@ -594,6 +599,15 @@ def build_direct_inventory(
         post_id = _text(post.get("source_post_id"))
         source_id = _text(post.get("source_id"))
         source = sources.get(source_id, {})
+        platform = _text(
+            post.get("platform")
+            or source.get("platform")
+            or source.get("source_platform")
+        ).lower()
+        source_url = _text(
+            post.get("canonical_post_url")
+            or post.get("post_url")
+        )
         source_packet = _source_text_packet(account_id, post.get("original_post_text"))
         source_packet["account_id"] = account_id
         media_packet = _direct_media_packet(
@@ -621,6 +635,8 @@ def build_direct_inventory(
             extra_exclusions.append("synthetic_source_forbidden")
         if not post_id:
             extra_exclusions.append("source_post_id_missing")
+        if not source_url or not individual_url_checker(platform, source_url):
+            extra_exclusions.append("individual_source_post_url_required")
         state, blockers = _direct_state(
             source_packet=source_packet,
             media_packet=media_packet,
@@ -628,6 +644,11 @@ def build_direct_inventory(
             permission_scope_missing=scope_missing,
             extra_exclusions=extra_exclusions,
         )
+        hard_blockers = sorted(
+            set(media_packet.get("exclusion_blockers", []))
+            | set(extra_exclusions)
+        )
+        repair_blockers = list(media_packet.get("repair_blockers", []))
         media_terms = media_packet["account_terms_by_account"].get(account_id, [])
         shared_terms = sorted(set(source_packet["account_terms"]) & set(media_terms))
         score = _direct_score(
@@ -645,12 +666,8 @@ def build_direct_inventory(
                 "candidate_score": score,
                 "source_post_id": post_id,
                 "source_id": source_id,
-                "source_url": _text(post.get("canonical_post_url") or post.get("post_url")),
-                "platform": _text(
-                    post.get("platform")
-                    or source.get("platform")
-                    or source.get("source_platform")
-                ).lower(),
+                "source_url": source_url,
+                "platform": platform,
                 "published_at": _text(post.get("published_at")),
                 "source_priority": source.get("priority", ""),
                 "permission_id": _permission_id(permission),
@@ -666,6 +683,8 @@ def build_direct_inventory(
                 "source_account_terms": source_packet["account_terms"],
                 "media_account_terms": media_terms,
                 "shared_account_terms": shared_terms,
+                "hard_blockers": hard_blockers,
+                "repair_blockers": repair_blockers,
                 "blockers": sorted(set(blockers)),
                 "external_operations": [],
             }
@@ -1004,6 +1023,7 @@ def build_source_inventory(
             posted_results=datasets.get("posted_results", []),
             permission_checker=permission_checker,
             quarantine_checker=quarantine_checker,
+            individual_url_checker=individual_url_checker,
         )
         clips[account_id] = build_clip_inventory(
             account_id=account_id,
