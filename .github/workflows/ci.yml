@@ -47,6 +47,7 @@ jobs:
           python3 scripts/test_direct_media_identical_content_reuse.py
           python3 scripts/test_direct_media_permission_normalization.py
           python3 scripts/test_direct_media_requires_prepared.py
+          python3 scripts/test_media_activation_direct_repair.py
           python3 scripts/test_bounded_distinct_caption_fallback.py
           python3 scripts/test_source_preserving_direct_media_caption.py
           python3 scripts/test_no_fetch_enabled_added.py
