@@ -1119,6 +1119,211 @@ def select_source_suitable_direct_candidate(
     return None, {}, rejections
 
 
+def select_source_suitable_clip_candidate(
+    *,
+    selector: Callable[..., tuple[
+        dict[str, Any] | None,
+        dict[str, Any] | None,
+        dict[str, Any] | None,
+        list[str],
+    ]],
+    clips: Sequence[Mapping[str, Any]],
+    source_videos: Sequence[Mapping[str, Any]],
+    media_assets: Sequence[Mapping[str, Any]],
+    posted_results: Sequence[Mapping[str, Any]],
+    permissions: Sequence[Mapping[str, Any]],
+    account_id: str,
+    permission_checker: Callable[..., bool],
+) -> tuple[
+    tuple[
+        dict[str, Any],
+        dict[str, Any],
+        dict[str, Any],
+    ]
+    | None,
+    dict[str, Any],
+    list[dict[str, Any]],
+    list[str],
+]:
+    # Keep the deterministic saved-media ordering, but do not let one
+    # unsuitable prepared clip block a later source-suitable clip.
+
+    excluded_clip_ids: set[str] = set()
+    rejections: list[dict[str, Any]] = []
+    upstream_reasons: set[str] = set()
+    maximum_attempts = max(
+        1,
+        len(media_assets) + 1,
+    )
+
+    for _attempt in range(maximum_attempts):
+        (
+            clip,
+            source_video,
+            asset,
+            selection_reasons,
+        ) = selector(
+            list(clips),
+            list(source_videos),
+            list(media_assets),
+            list(posted_results),
+            account_id,
+            excluded_clip_ids=excluded_clip_ids,
+        )
+
+        upstream_reasons.update(
+            _text(reason)
+            for reason in selection_reasons
+            if _text(reason)
+        )
+
+        if (
+            clip is None
+            or source_video is None
+            or asset is None
+        ):
+            return (
+                None,
+                {},
+                rejections,
+                sorted(upstream_reasons),
+            )
+
+        clip = dict(clip)
+        source_video = dict(source_video)
+        asset = dict(asset)
+
+        clip_id = _text(
+            clip.get("clip_candidate_id")
+            or clip.get("clip_id")
+        )
+        source_video_id = _text(
+            source_video.get("source_video_id")
+            or clip.get("source_video_id")
+        )
+        source_id = _text(
+            source_video.get("source_id")
+            or clip.get("source_id")
+        )
+        media_asset_id = _media_id(asset)
+
+        if not clip_id:
+            rejections.append(
+                {
+                    "clip_candidate_id": "",
+                    "source_video_id": source_video_id,
+                    "source_id": source_id,
+                    "media_asset_id": media_asset_id,
+                    "status": "BLOCKED",
+                    "blockers": [
+                        "clip_candidate_id_missing"
+                    ],
+                }
+            )
+            return (
+                None,
+                {},
+                rejections,
+                sorted(upstream_reasons),
+            )
+
+        if clip_id in excluded_clip_ids:
+            rejections.append(
+                {
+                    "clip_candidate_id": clip_id,
+                    "source_video_id": source_video_id,
+                    "source_id": source_id,
+                    "media_asset_id": media_asset_id,
+                    "status": "BLOCKED",
+                    "blockers": [
+                        "clip_selector_repeated_excluded_candidate"
+                    ],
+                }
+            )
+            return (
+                None,
+                {},
+                rejections,
+                sorted(upstream_reasons),
+            )
+
+        permission = _active_permission_row(
+            permissions,
+            account_id=account_id,
+            source_id=source_id,
+            operation="clip",
+            checker=permission_checker,
+        )
+
+        blockers: list[str] = []
+
+        if not permission:
+            blockers.append(
+                "active_clip_permission_missing"
+            )
+
+        evidence_text, _summary, media_blockers = (
+            _clip_media_evidence(
+                clip,
+                source_video,
+                asset,
+            )
+        )
+        _suitability, suitability_blockers = (
+            _clip_source_suitability(
+                account_id=account_id,
+                transcript=evidence_text,
+            )
+        )
+
+        blockers.extend(media_blockers)
+        blockers.extend(suitability_blockers)
+        blockers = sorted(
+            {
+                _text(reason)
+                for reason in blockers
+                if _text(reason)
+            }
+        )
+
+        if blockers:
+            rejections.append(
+                {
+                    "clip_candidate_id": clip_id,
+                    "source_video_id": source_video_id,
+                    "source_id": source_id,
+                    "media_asset_id": media_asset_id,
+                    "status": (
+                        "SOURCE_EVIDENCE_UNSUITABLE"
+                        if _source_evidence_blockers(
+                            blockers
+                        )
+                        else "BLOCKED"
+                    ),
+                    "blockers": blockers,
+                }
+            )
+            excluded_clip_ids.add(clip_id)
+            continue
+
+        return (
+            (clip, source_video, asset),
+            permission,
+            rejections,
+            sorted(upstream_reasons),
+        )
+
+    return (
+        None,
+        {},
+        rejections,
+        sorted(
+            upstream_reasons
+            | {"clip_fallback_attempt_limit_reached"}
+        ),
+    )
+
+
 def _runtime_direct_caption_builder() -> CaptionBuilder:
     from generation.source_grounded_caption import (
         GitHubModelsGroundedProvider,
@@ -1206,6 +1411,7 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
     clip_selections: dict[str, tuple[dict[str, Any], dict[str, Any], dict[str, Any]] | None] = {}
     permission_map: dict[tuple[str, str], dict[str, Any]] = {}
     direct_selection_diagnostics: dict[str, dict[str, Any]] = {}
+    clip_selection_diagnostics: dict[str, dict[str, Any]] = {}
     for account_id in ACCOUNTS:
         direct_candidates, direct_reasons = select_direct_candidates(
             client,
@@ -1248,29 +1454,48 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
             permission_map[
                 (account_id, "direct_reference_media")
             ] = direct_permission
-        clip, source_video, asset, _clip_reasons = select_saved_media_candidate(
-            datasets["video_clip_candidates"],
-            datasets["source_videos"],
-            datasets["media_assets"],
-            datasets["posted_results"],
-            account_id,
-        )
-        clip_selection = (
-            (clip, source_video, asset)
-            if clip is not None and source_video is not None and asset is not None
-            else None
+        (
+            clip_selection,
+            clip_permission,
+            clip_rejections,
+            clip_upstream_reasons,
+        ) = select_source_suitable_clip_candidate(
+            selector=select_saved_media_candidate,
+            clips=datasets["video_clip_candidates"],
+            source_videos=datasets["source_videos"],
+            media_assets=datasets["media_assets"],
+            posted_results=datasets["posted_results"],
+            permissions=datasets["media_permissions"],
+            account_id=account_id,
+            permission_checker=is_active_permission,
         )
         clip_selections[account_id] = clip_selection
-        if clip_selection is not None:
-            selected_clip, selected_video, _asset = clip_selection
-            source_id = _text(selected_video.get("source_id") or selected_clip.get("source_id"))
-            permission_map[(account_id, "approved_source_clip")] = _active_permission_row(
-                datasets["media_permissions"],
-                account_id=account_id,
-                source_id=source_id,
-                operation="clip",
-                checker=is_active_permission,
+        selected_clip_id = (
+            _text(
+                clip_selection[0].get(
+                    "clip_candidate_id"
+                )
+                or clip_selection[0].get("clip_id")
             )
+            if clip_selection is not None
+            else ""
+        )
+        clip_selection_diagnostics[account_id] = {
+            "status": (
+                "PASS"
+                if clip_selection is not None
+                else "BLOCKED"
+            ),
+            "selected_clip_candidate_id": (
+                selected_clip_id
+            ),
+            "rejections": clip_rejections,
+            "upstream_reasons": clip_upstream_reasons,
+        }
+        if clip_selection is not None:
+            permission_map[
+                (account_id, "approved_source_clip")
+            ] = clip_permission
 
     report = build_review_evidence_plan(
         direct_selections=direct_selections,
@@ -1291,6 +1516,9 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
     )
     report["direct_selection_diagnostics"] = (
         direct_selection_diagnostics
+    )
+    report["clip_selection_diagnostics"] = (
+        clip_selection_diagnostics
     )
     return report
 
@@ -1346,6 +1574,26 @@ def main() -> int:
             f"status={item.get('status', '')}:"
             f"candidate_count={item.get('candidate_count', 0)}:"
             f"selected={item.get('selected_source_post_id', '')}:"
+            f"rejected={';'.join(rejected) or 'NONE'}"
+        )
+    for account_id, item in sorted(
+        report.get(
+            "clip_selection_diagnostics",
+            {},
+        ).items()
+    ):
+        rejected = [
+            (
+                f"{row.get('clip_candidate_id', '')}:"
+                + "|".join(row.get("blockers", []))
+            )
+            for row in item.get("rejections", [])
+        ]
+        print(
+            "CLIP_SELECTION:"
+            f"{account_id}:"
+            f"status={item.get('status', '')}:"
+            f"selected={item.get('selected_clip_candidate_id', '')}:"
             f"rejected={';'.join(rejected) or 'NONE'}"
         )
     for item in report.get("candidate_diagnostics", []):
