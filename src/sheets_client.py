@@ -93,6 +93,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Phase 2.13-2.15 追加
         "generation_mode", "content_route",
         "source_content_route", "source_generation_mode", "source_result_id",
+        # Generation provenance. Previously emitted by generators but absent
+        # from the persisted schema, which silently discarded these values.
+        "transformation_type", "source_credit",
+        "similarity_score", "direct_copy_guard",
         "hypothesis", "media_strategy",
         "imitation_risk", "media_reuse_risk",
         "buzz_potential_score", "conversion_potential_score",
@@ -110,6 +114,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "status", "reason", "created_at",
         # Phase 2.16 追加
         "char_count", "text_policy_status", "media_asset_id", "media_strategy",
+        # Generation provenance copied from the originating draft.
+        "transformation_type", "source_credit", "similarity_score",
         # Phase 2.21-2.24 追加
         "video_clip_id",      # クリップ候補 clip_id
         "source_time_range",  # 元動画の使用区間
@@ -204,6 +210,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Phase 2.13-2.15 追加
         "generation_mode", "content_route",
         "source_content_route", "source_generation_mode", "source_result_id",
+        # Public-candidate provenance used by activation and attribution audits.
+        "transformation_type", "source_credit",
         "confidence_level", "ai_publish_recommendation",
         "media_asset_id", "text_policy_status",
         # Phase 2.21-2.24 追加
