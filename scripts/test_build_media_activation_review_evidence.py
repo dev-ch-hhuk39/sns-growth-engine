@@ -666,6 +666,226 @@ def test_source_suitable_selection_all_rejected() -> None:
     )
 
 
+def _clip_selector(
+    selections: list[
+        tuple[
+            dict[str, Any],
+            dict[str, Any],
+            dict[str, Any],
+        ]
+    ],
+):
+    def select(
+        clips,
+        source_videos,
+        media_assets,
+        posted_results,
+        account_id,
+        excluded_clip_ids=None,
+    ):
+        del (
+            clips,
+            source_videos,
+            media_assets,
+            posted_results,
+            account_id,
+        )
+        excluded = excluded_clip_ids or set()
+        for selection in selections:
+            clip_id = str(
+                selection[0].get(
+                    "clip_candidate_id",
+                    "",
+                )
+            )
+            if clip_id not in excluded:
+                return (
+                    selection[0],
+                    selection[1],
+                    selection[2],
+                    [],
+                )
+        return None, None, None, [
+            "no_more_saved_clip_candidates"
+        ]
+
+    return select
+
+
+def _clip_permission_checker(
+    row: dict[str, Any],
+    *,
+    account_id: str,
+    operation: str,
+) -> bool:
+    del account_id
+    return (
+        operation == "clip"
+        and row.get("permission_status")
+        == "approved"
+        and bool(row.get("evidence_reference"))
+    )
+
+
+def test_clip_fallback_skips_unsuitable_first() -> None:
+    first = clip_selection("liver_manager")
+    first[0]["clip_candidate_id"] = "clip_bad"
+    first[0]["transcript_excerpt"] = (
+        "紙巻きについて話しながら、"
+        "楽しいかどうかを雑談している場面です。"
+    )
+
+    second = clip_selection("liver_manager")
+    second[0]["clip_candidate_id"] = "clip_good"
+
+    selected, selected_permission, rejected, reasons = (
+        mod.select_source_suitable_clip_candidate(
+            selector=_clip_selector(
+                [first, second]
+            ),
+            clips=[],
+            source_videos=[],
+            media_assets=[{}, {}],
+            posted_results=[],
+            permissions=[
+                permission(
+                    "src_clip_liver_manager"
+                )
+            ],
+            account_id="liver_manager",
+            permission_checker=(
+                _clip_permission_checker
+            ),
+        )
+    )
+
+    assert selected is not None
+    assert (
+        selected[0]["clip_candidate_id"]
+        == "clip_good"
+    )
+    assert selected_permission["permission_id"] == (
+        "perm_src_clip_liver_manager"
+    )
+    assert rejected == [
+        {
+            "clip_candidate_id": "clip_bad",
+            "source_video_id": (
+                "sv_liver_manager"
+            ),
+            "source_id": (
+                "src_clip_liver_manager"
+            ),
+            "media_asset_id": (
+                "ma_liver_manager_clip"
+            ),
+            "status": (
+                "SOURCE_EVIDENCE_UNSUITABLE"
+            ),
+            "blockers": [
+                "clip_account_evidence_insufficient"
+            ],
+        }
+    ]
+    assert reasons == []
+
+
+def test_clip_fallback_skips_missing_permission() -> None:
+    first = clip_selection("liver_manager")
+    first[0]["clip_candidate_id"] = (
+        "clip_unpermissioned"
+    )
+    first[0]["source_id"] = (
+        "src_unpermissioned"
+    )
+    first[1]["source_id"] = (
+        "src_unpermissioned"
+    )
+
+    second = clip_selection("liver_manager")
+    second[0]["clip_candidate_id"] = (
+        "clip_permissioned"
+    )
+
+    selected, selected_permission, rejected, _ = (
+        mod.select_source_suitable_clip_candidate(
+            selector=_clip_selector(
+                [first, second]
+            ),
+            clips=[],
+            source_videos=[],
+            media_assets=[{}, {}],
+            posted_results=[],
+            permissions=[
+                permission(
+                    "src_clip_liver_manager"
+                )
+            ],
+            account_id="liver_manager",
+            permission_checker=(
+                _clip_permission_checker
+            ),
+        )
+    )
+
+    assert selected is not None
+    assert (
+        selected[0]["clip_candidate_id"]
+        == "clip_permissioned"
+    )
+    assert selected_permission["source_id"] == (
+        "src_clip_liver_manager"
+    )
+    assert rejected[0][
+        "clip_candidate_id"
+    ] == "clip_unpermissioned"
+    assert rejected[0]["blockers"] == [
+        "active_clip_permission_missing"
+    ]
+
+
+def test_clip_fallback_all_unsuitable() -> None:
+    first = clip_selection("night_scout")
+    first[0]["clip_candidate_id"] = "clip_bad"
+    first[0]["transcript_excerpt"] = (
+        "今日の料理を作って、"
+        "盛り付けについて説明しています。"
+    )
+
+    selected, selected_permission, rejected, reasons = (
+        mod.select_source_suitable_clip_candidate(
+            selector=_clip_selector([first]),
+            clips=[],
+            source_videos=[],
+            media_assets=[{}],
+            posted_results=[],
+            permissions=[
+                permission(
+                    "src_clip_night_scout"
+                )
+            ],
+            account_id="night_scout",
+            permission_checker=(
+                _clip_permission_checker
+            ),
+        )
+    )
+
+    assert selected is None
+    assert selected_permission == {}
+    assert rejected[0]["clip_candidate_id"] == (
+        "clip_bad"
+    )
+    assert (
+        "clip_account_evidence_insufficient"
+        in rejected[0]["blockers"]
+    )
+    assert (
+        "no_more_saved_clip_candidates"
+        in reasons
+    )
+
+
 def main() -> None:
     tests = [value for name, value in globals().items() if name.startswith("test_") and callable(value)]
     for test in sorted(tests, key=lambda item: item.__name__):
