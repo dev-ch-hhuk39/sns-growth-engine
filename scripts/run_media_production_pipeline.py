@@ -43,6 +43,9 @@ from generation.source_copyedit import (  # noqa: E402
     DeterministicSourceCopyeditProvider,
     validate_source_preserving_public_post,
 )
+from evidence_context_caption import (  # noqa: E402
+    generate_evidence_context_caption,
+)
 from process_threads_queue import process_one, update_row  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -483,6 +486,7 @@ def _generate_final_media_caption(
     caption_service: Any | None = None,
     max_attempts: int = 3,
     allow_source_copyedit_fallback: bool | None = None,
+    allow_evidence_context_fallback: bool | None = None,
 ) -> dict[str, Any]:
     """Generate only from the final clip packet, at most three times."""
     bundle, transcript_excerpt, grounding_reasons = (
@@ -522,6 +526,13 @@ def _generate_final_media_caption(
             allow_source_copyedit_fallback
         )
     )
+    evidence_context_enabled = (
+        uses_default_caption_service
+        if allow_evidence_context_fallback is None
+        else bool(
+            allow_evidence_context_fallback
+        )
+    )
     service = (
         caption_service
         if caption_service is not None
@@ -536,9 +547,13 @@ def _generate_final_media_caption(
     attempts: list[dict[str, Any]] = []
     all_reasons: list[str] = []
 
+    terminal_fallback_enabled = (
+        evidence_context_enabled
+        or source_copyedit_enabled
+    )
     ordinary_attempt_limit = (
         max(0, attempt_limit - 1)
-        if source_copyedit_enabled
+        if terminal_fallback_enabled
         else attempt_limit
     )
 
@@ -708,7 +723,172 @@ def _generate_final_media_caption(
 
         all_reasons.extend(attempt_reasons)
 
-    if source_copyedit_enabled:
+    if (
+        evidence_context_enabled
+        and len(attempts) < attempt_limit
+    ):
+        evidence_output = (
+            generate_evidence_context_caption(
+                account_id=account_id,
+                transcript_excerpt=(
+                    transcript_excerpt
+                ),
+                recent_posts=recent_posts,
+            )
+        )
+        evidence_text = _finalize_generated_caption(
+            evidence_output.get(
+                "public_post_text",
+                "",
+            )
+        )
+        evidence_validation = (
+            final_public_post_validator(
+                evidence_text,
+                account_id,
+            )
+        )
+        evidence_semantic = (
+            evidence_output.get(
+                "semantic_alignment"
+            )
+            if isinstance(
+                evidence_output.get(
+                    "semantic_alignment"
+                ),
+                dict,
+            )
+            else {}
+        )
+        evidence_reasons = [
+            str(reason)
+            for reason in evidence_output.get(
+                "blocked_reasons",
+                [],
+            )
+            if str(reason)
+        ]
+        evidence_reasons.extend(
+            str(reason)
+            for reason in evidence_validation.get(
+                "blocked_reasons",
+                [],
+            )
+            if str(reason)
+        )
+        if evidence_semantic.get("status") != "PASS":
+            evidence_reasons.extend(
+                str(reason)
+                for reason in evidence_semantic.get(
+                    "blocked_reasons",
+                    ["semantic_alignment_failed"],
+                )
+                if str(reason)
+            )
+        evidence_reasons = sorted(
+            set(evidence_reasons)
+        )
+        attempts.append({
+            "attempt": len(attempts) + 1,
+            "provider_name": str(
+                evidence_output.get(
+                    "provider_name",
+                    "",
+                )
+            ),
+            "provider_version": str(
+                evidence_output.get(
+                    "provider_version",
+                    "",
+                )
+            ),
+            "provider_status": str(
+                evidence_output.get(
+                    "provider_status",
+                    "",
+                )
+            ),
+            "generation_status": str(
+                evidence_output.get(
+                    "status",
+                    "",
+                )
+            ),
+            "semantic_alignment_status": str(
+                evidence_semantic.get(
+                    "status",
+                    "BLOCKED",
+                )
+            ),
+            "final_validator_status": str(
+                evidence_validation.get(
+                    "status",
+                    "BLOCKED",
+                )
+            ),
+            "blocked_reasons": evidence_reasons,
+            "source_mode": "evidence_context",
+        })
+        if (
+            evidence_output.get("status") == "PASS"
+            and evidence_semantic.get("status") == "PASS"
+            and evidence_validation.get("status") == "PASS"
+            and bool(evidence_text)
+        ):
+            return {
+                "status": "PASS",
+                "public_post_text": evidence_text,
+                "caption_attempt_count": len(attempts),
+                "caption_attempts": attempts,
+                "blocked_reasons": [],
+                "caption_provider": str(
+                    evidence_output.get(
+                        "provider_name",
+                        "",
+                    )
+                ),
+                "caption_provider_version": str(
+                    evidence_output.get(
+                        "provider_version",
+                        "",
+                    )
+                ),
+                "alignment_status": "PASS",
+                "final_alignment_score": evidence_semantic.get(
+                    "final_alignment_score",
+                    0,
+                ),
+                "main_claim_coverage": evidence_semantic.get(
+                    "main_claim_coverage",
+                    0,
+                ),
+                "unsupported_claim_count": evidence_semantic.get(
+                    "unsupported_claim_count",
+                    0,
+                ),
+                "source_copy_similarity": evidence_semantic.get(
+                    "source_copy_similarity",
+                    0,
+                ),
+                "recent_post_similarity": evidence_semantic.get(
+                    "recent_post_similarity",
+                    0,
+                ),
+                "claim_support_json": json.dumps(
+                    evidence_output.get(
+                        "claim_support",
+                        [],
+                    ),
+                    ensure_ascii=False,
+                ),
+                "final_validation": evidence_validation,
+            }
+        all_reasons.extend(evidence_reasons)
+
+    if (
+        source_copyedit_enabled
+        and len(attempts) < attempt_limit
+    ):
         copyedit_service = SourceGroundedCaptionService(
             DeterministicSourceCopyeditProvider()
         )
