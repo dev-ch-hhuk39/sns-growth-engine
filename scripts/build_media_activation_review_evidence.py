@@ -512,6 +512,8 @@ def build_clip_draft(
         "publisher_media_type": "VIDEO",
         "duration_seconds": asset.get("duration_seconds") or asset.get("duration", ""),
         "aspect_ratio": asset.get("aspect_ratio", ""),
+        "width": asset.get("width", ""),
+        "height": asset.get("height", ""),
         "public_post_text": public_text,
         "media_origin": "approved_source_clip",
         "caption_mode": "transform",
