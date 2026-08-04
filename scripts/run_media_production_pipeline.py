@@ -2008,6 +2008,47 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
             media_row,
         )
 
+    if plan.get("prepare_only"):
+        client.update_video_clip_candidate(
+            clip_id,
+            cut_status="DONE",
+            local_clip_path=asset.get("local_path", ""),
+            clip_media_asset_id=media_id,
+            media_asset_id=media_id,
+            storage_url=media_url,
+            upload_status="UPLOADED",
+            post_status="MEDIA_READY",
+            reviewer_status="MEDIA_READY",
+            clip_status="MEDIA_READY",
+            retry_count="0",
+            last_error="",
+            failure_signature="",
+            same_failure_count="0",
+            quarantined_at="",
+            quarantine_reason="",
+        )
+        client.save_source_video({
+            **source_video,
+            "download_status": "DOWNLOADED",
+            "cut_status": "CUT",
+            "upload_status": "UPLOADED",
+            "post_status": "MEDIA_READY",
+            "processed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        return {
+            **plan,
+            "status": "MEDIA_READY",
+            "selected_clip": clip,
+            "public_post_preview": public_preview(str(clip.get("public_post_text", ""))),
+            "caption_result": {"status": "DEFERRED_UNTIL_POST"},
+            "media_asset_id": media_id,
+            "queue_id": "",
+            "would_download": False,
+            "would_cut": False,
+            "would_upload": False,
+            "would_post_video": False,
+        }
+
     caption = _generate_final_media_caption(
         clip=clip,
         source_video=source_video,
@@ -2106,35 +2147,6 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
             "media_validation": validation,
             "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
-        }
-
-    if plan.get("prepare_only"):
-        _clear_clip_failure(client, clip)
-        client.update_video_clip_candidate(
-            clip_id,
-            cut_status="DONE",
-            local_clip_path=asset.get("local_path", ""),
-            clip_media_asset_id=media_id,
-            media_asset_id=media_id,
-            storage_url=media_url,
-            upload_status="UPLOADED",
-            post_status="MEDIA_READY",
-            reviewer_status="MEDIA_READY",
-            clip_status="MEDIA_READY",
-        )
-        client.save_source_video({**source_video, "download_status": "DOWNLOADED", "cut_status": "CUT", "upload_status": "UPLOADED", "post_status": "MEDIA_READY", "processed_at": datetime.now(timezone.utc).isoformat()})
-        return {
-            **plan,
-            "status": "MEDIA_READY",
-            "selected_clip": clip,
-            "public_post_preview": public_preview(text),
-            "caption_result": caption,
-            "media_asset_id": media_id,
-            "queue_id": "",
-            "would_download": False,
-            "would_cut": False,
-            "would_upload": False,
-            "would_post_video": False,
         }
 
     queue_id = f"media_q_{clip_id}"

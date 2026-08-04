@@ -51,6 +51,30 @@ def _resolve_source_video(args: argparse.Namespace) -> dict:
     return {}
 
 
+def _verified_existing_download(source_video: dict) -> dict:
+    if str(source_video.get("download_status", "")).upper() != "DOWNLOADED":
+        return {}
+    local_path = str(source_video.get("local_path", "")).strip()
+    if not local_path:
+        return {}
+    local = Path(local_path)
+    if not local.is_file():
+        return {}
+    media_probe = probe_video_file(local)
+    if media_probe.get("media_probe_status") != "PASS":
+        return {}
+    source_video_id = str(source_video.get("source_video_id") or "video")
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", source_video_id)[:120]
+    return {
+        "status": "DOWNLOADED",
+        "media_asset_id": f"download_{safe_id}",
+        "local_path": str(local),
+        "file_size_bytes": local.stat().st_size,
+        "reused_existing_download": True,
+        **media_probe,
+    }
+
+
 def build_download_plan(args: argparse.Namespace) -> dict:
     source_video = _resolve_source_video(args)
     canonical_source_url = source_video.get("canonical_video_url") or args.source_url
@@ -59,6 +83,7 @@ def build_download_plan(args: argparse.Namespace) -> dict:
     rights_status = source_video.get("rights_status") or args.rights_status
     decision = build_rights_decision(rights_status, action="download")
     allow_env = os.environ.get("ALLOW_VIDEO_DOWNLOAD", "").lower() == "true"
+    existing_download = _verified_existing_download(source_video)
     blocked = []
     if getattr(args, "source_video_id", "") and not source_video:
         blocked.append("source_video_id_not_found")
@@ -68,16 +93,19 @@ def build_download_plan(args: argparse.Namespace) -> dict:
         blocked.append("individual_video_url_required")
     if approved_storage_url and not is_approved_storage_url(approved_storage_url):
         blocked.append("approved_storage_url_invalid")
-    if str(source_video.get("download_status", "")).upper() == "DOWNLOADED":
-        local_path = str(source_video.get("local_path", ""))
-        if local_path and Path(local_path).exists():
-            blocked.append("already_downloaded")
     if args.download and not args.confirm_download:
         blocked.append("--download requires --confirm-download")
     if args.download and not allow_env:
         blocked.append("ALLOW_VIDEO_DOWNLOAD=true is required")
+    reused = bool(args.download and not blocked and existing_download)
+    status = (
+        "DOWNLOADED" if reused
+        else "READY" if args.download and not blocked
+        else "BLOCKED" if blocked
+        else "PLAN_ONLY"
+    )
     return {
-        "status": "READY" if args.download and not blocked else "BLOCKED" if blocked else "PLAN_ONLY",
+        "status": status,
         "source_video_id": getattr(args, "source_video_id", ""),
         "source_url": source_url,
         "rights_status": decision.rights_status,
@@ -87,9 +115,9 @@ def build_download_plan(args: argparse.Namespace) -> dict:
         "download": bool(args.download),
         "confirm_download": bool(args.confirm_download),
         "allow_video_download": allow_env,
-        "would_download": bool(args.download and not blocked),
+        "would_download": bool(args.download and not blocked and not reused),
         "blocked_reasons": blocked,
-        "download_result": {
+        "download_result": existing_download if reused else {
             "media_asset_id": "",
             "local_path": "",
             "status": "NOT_DOWNLOADED",
@@ -99,6 +127,11 @@ def build_download_plan(args: argparse.Namespace) -> dict:
 
 def execute_download(plan: dict) -> dict:
     """Download one approved individual video. Secrets/cookies are never accepted or logged."""
+    if (
+        plan.get("status") == "DOWNLOADED"
+        and plan.get("download_result", {}).get("status") == "DOWNLOADED"
+    ):
+        return plan
     if plan.get("status") != "READY" or not plan.get("would_download"):
         return {**plan, "download_result": {"status": "NOT_DOWNLOADED", "media_asset_id": "", "local_path": ""}}
     if importlib.util.find_spec("yt_dlp") is None:

@@ -91,7 +91,10 @@ def _clip_row_for_sheets(row: dict[str, Any]) -> dict[str, Any]:
         **row,
         "clip_id": row.get("clip_id") or row.get("clip_candidate_id", ""),
         "reference_post_id": row.get("source_video_id", ""),
-        "transcript_id": f"tr_{row.get('source_video_id', '')}",
+        "transcript_id": (
+            row.get("transcript_id")
+            or f"tr_{row.get('source_video_id', '')}"
+        ),
         "source_platform": row.get("platform", ""),
         "source_video_url": row.get("canonical_video_url") or row.get("source_video_url", ""),
         "start_time": row.get("start_time", row.get("start_seconds", "")),
@@ -129,6 +132,55 @@ def _clip_row_for_sheets(row: dict[str, Any]) -> dict[str, Any]:
         "claim_support_json": row.get("claim_support_json", ""),
         "notes": "Auto-saved by run_media_growth_engine; production execution remains rights/env gated.",
     }
+
+
+STALE_QUARANTINE_RECOVERY_MARKER = "stale_quarantine_recovered=clip_evidence_v1"
+
+
+def _candidate_evidence_complete(row: dict[str, Any]) -> bool:
+    grounded = str(row.get("transcript_grounded", "")).lower() in {"1", "true", "yes"}
+    return bool(
+        grounded
+        and str(row.get("public_post_validator_status", "")).upper() == "PASS"
+        and str(row.get("alignment_status", "")).upper() == "PASS"
+        and str(row.get("source_evidence_status", "")).upper() == "PASS"
+        and str(row.get("transcript_excerpt", "")).strip()
+        and str(row.get("start_seconds") or row.get("start_time") or "").strip()
+        and str(row.get("end_seconds") or row.get("end_time") or "").strip()
+    )
+
+
+def _recover_stale_quarantine(*, old: dict[str, Any], mapped: dict[str, Any], merged: dict[str, Any], evidence_changed: bool) -> dict[str, Any]:
+    old_notes = str(old.get("notes", ""))
+    merged_notes = str(merged.get("notes", ""))
+    if STALE_QUARANTINE_RECOVERY_MARKER in old_notes and STALE_QUARANTINE_RECOVERY_MARKER not in merged_notes:
+        merged["notes"] = (merged_notes + " " + STALE_QUARANTINE_RECOVERY_MARKER).strip()
+    old_quarantined = bool(
+        str(old.get("quarantined_at", "")).strip()
+        or str(old.get("processing_status", "")).upper() == "QUARANTINED"
+    )
+    old_status = str(old.get("clip_status") or old.get("reviewer_status") or old.get("post_status") or "").upper()
+    should_recover = bool(
+        old_quarantined
+        and evidence_changed
+        and old_status not in {"MEDIA_READY", "POSTED"}
+        and STALE_QUARANTINE_RECOVERY_MARKER not in old_notes
+        and _candidate_evidence_complete(mapped)
+    )
+    if not should_recover:
+        return merged
+    merged.update({
+        "retry_count": "0",
+        "last_error": "",
+        "last_attempt_at": "",
+        "failure_signature": "",
+        "same_failure_count": "0",
+        "quarantined_at": "",
+        "quarantine_reason": "",
+        "processing_status": "",
+        "notes": (str(merged.get("notes", "")) + " " + STALE_QUARANTINE_RECOVERY_MARKER).strip(),
+    })
+    return merged
 
 
 def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, Any]]) -> int:
@@ -207,6 +259,18 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
                     merged["storage_url"] = old.get("storage_url", "")
                     merged["media_asset_id"] = old.get("media_asset_id", "")
                     merged["clip_media_asset_id"] = old.get("clip_media_asset_id", "")
+                merged = _recover_stale_quarantine(
+                    old=old,
+                    mapped=mapped,
+                    merged=merged,
+                    evidence_changed=bool(
+                        exact_range_improved
+                        or transcript_evidence_improved
+                        or source_evidence_improved
+                        or (new_validator == "PASS" and old_validator != "PASS")
+                        or (new_grounded and not old_grounded)
+                    ),
+                )
                 to_update.append({
                     "range": f"{rowcol_to_a1(row_number, 1)}:{rowcol_to_a1(row_number, len(headers))}",
                     "values": [[str(merged.get(h, "")) for h in headers]],
