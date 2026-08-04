@@ -34,6 +34,9 @@ from media_growth_schemas import (  # noqa: E402
     clips_overlap,
     extract_video_id,
 )
+from media_activation_source_suitability import (  # noqa: E402
+    clip_source_suitability,
+)
 from public_post_quality import (  # noqa: E402
     final_public_post_validator,
     generate_grounded_reader_facing_post,
@@ -156,11 +159,30 @@ def append_clip_candidates_to_sheets(client: SheetsClient, rows: list[dict[str, 
             new_ready = str(mapped.get("clip_status") or mapped.get("reviewer_status") or "").upper() in {"READY", "AUTO_APPROVED"}
             old_validator = str(old.get("public_post_validator_status", "")).upper()
             new_validator = str(mapped.get("public_post_validator_status", "")).upper()
+            old_start = str(old.get("start_seconds") or old.get("start_time") or "").strip()
+            old_end = str(old.get("end_seconds") or old.get("end_time") or "").strip()
+            new_start = str(mapped.get("start_seconds") or mapped.get("start_time") or "").strip()
+            new_end = str(mapped.get("end_seconds") or mapped.get("end_time") or "").strip()
+            exact_range_improved = bool(new_start and new_end) and (
+                not old_start or not old_end or old_start != new_start or old_end != new_end
+            )
+            transcript_evidence_improved = bool(mapped.get("transcript_excerpt")) and (
+                not old.get("transcript_excerpt")
+                or old.get("transcript_excerpt") != mapped.get("transcript_excerpt")
+                or old.get("transcript_id") != mapped.get("transcript_id")
+            )
+            source_evidence_improved = (
+                mapped.get("source_evidence_status") == "PASS"
+                and old.get("source_evidence_status") != "PASS"
+            )
             should_refresh = (
                 (new_grounded and not old_grounded)
                 or (new_ready and not old_ready)
                 or (new_validator == "PASS" and old_validator != "PASS")
                 or (bool(mapped.get("public_post_text")) and not old.get("public_post_text"))
+                or exact_range_improved
+                or transcript_evidence_improved
+                or source_evidence_improved
             )
             if should_refresh:
                 merged = {**old, **mapped}
@@ -477,6 +499,7 @@ def build_media_growth_plan(
     source_results = []
     transcript_rows = []
     clip_candidates = []
+    rejected_clip_candidates = []
     media_post_queue_preview = []
     for source in selected:
         rights = str(source.get("rights_status", ""))
@@ -649,6 +672,27 @@ def build_media_growth_plan(
                 "selected_reason": spec.get("selected_reason", "semantic_window"),
                 "semantic_segment_score": spec.get("semantic_score", ""),
             })
+            source_suitability, source_blockers = clip_source_suitability(
+                account_id=account_id,
+                transcript=str(spec.get("excerpt", "")),
+            )
+            cand.update({
+                "source_evidence_status": "PASS" if not source_blockers else "SOURCE_EVIDENCE_UNSUITABLE",
+                "source_evidence_blockers": json.dumps(source_blockers, ensure_ascii=False),
+                "source_evidence_account_terms": json.dumps(source_suitability.get("account_terms", []), ensure_ascii=False),
+                "source_evidence_transcript_hash": source_suitability.get("transcript_hash", ""),
+            })
+            if source_blockers:
+                cand["clip_status"] = "SKIPPED"
+                cand["reviewer_status"] = "SKIPPED"
+                cand["selected_reason"] = "account_source_evidence_blocked"
+                rejected_clip_candidates.append({
+                    "clip_candidate_id": cand.get("clip_candidate_id", ""),
+                    "source_video_id": source_video_id,
+                    "blockers": source_blockers,
+                    "account_terms": source_suitability.get("account_terms", []),
+                })
+                continue
             if any(clips_overlap(cand, old, config.get("clip_overlap_tolerance_seconds", 2)) for old in existing_clips):
                 cand["clip_status"] = "SKIPPED"
                 cand["reviewer_status"] = "SKIPPED"
@@ -729,6 +773,8 @@ def build_media_growth_plan(
             for row in transcript_rows
         ],
         "clip_candidate_count": len(clip_candidates),
+        "rejected_clip_candidate_count": len(rejected_clip_candidates),
+        "rejected_clip_candidates": rejected_clip_candidates,
         "top_clip_candidates": [
             {
                 "clip_candidate_id": row.get("clip_candidate_id", ""),

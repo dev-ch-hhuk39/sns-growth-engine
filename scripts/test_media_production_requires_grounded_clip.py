@@ -25,12 +25,27 @@ ungrounded = [{
     "clip_score": 99,
     "transcript_grounded": "false",
 }]
-grounded = [{**ungrounded[0], "clip_candidate_id": "clip_2", "transcript_grounded": "true", "alignment_status": "PASS"}]
+grounded = [{
+    **ungrounded[0],
+    "clip_candidate_id": "clip_2",
+    "transcript_grounded": "true",
+    "alignment_status": "PASS",
+    "transcript_excerpt": text,
+    "start_seconds": "10",
+    "end_seconds": "35",
+}]
+off_topic = [{
+    **grounded[0],
+    "clip_candidate_id": "clip_3",
+    "transcript_excerpt": "今日の料理は火加減が大切です。盛り付けと調味料について説明します。",
+}]
 blocked, _, reasons = select_candidate(ungrounded, source_videos, [])
 selected, _, _ = select_candidate(grounded, source_videos, [])
+off_topic_selected, _, off_topic_reasons = select_candidate(off_topic, source_videos, [])
 checks = [
     ("ungrounded clip blocked", blocked is None and any("transcript_grounding_required" in r for r in reasons)),
     ("grounded clip selected", selected and selected["clip_candidate_id"] == "clip_2"),
+    ("off-topic grounded clip blocked", off_topic_selected is None and any("clip_account_evidence_insufficient" in reason for reason in off_topic_reasons)),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
