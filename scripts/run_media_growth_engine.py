@@ -26,6 +26,9 @@ from generation.source_copyedit import (  # noqa: E402
     DeterministicSourceCopyeditProvider,
     validate_source_preserving_public_post,
 )
+from evidence_context_caption import (  # noqa: E402
+    generate_evidence_context_caption,
+)
 from video.semantic_clip_planner import plan_semantic_clips  # noqa: E402
 from discover_approved_source_videos import load_existing_source_videos  # noqa: E402
 from config_loader import get_config  # noqa: E402
@@ -914,6 +917,64 @@ def build_media_growth_plan(
                     clip_validation = (
                         copyedit_validation
                     )
+
+            current_alignment = (
+                clip_output.get("semantic_alignment")
+                if isinstance(
+                    clip_output.get("semantic_alignment"),
+                    dict,
+                )
+                else {}
+            )
+            if (
+                uses_default_caption_service
+                and (
+                    clip_output.get("status") != "PASS"
+                    or clip_validation.get("status") != "PASS"
+                    or current_alignment.get("status") != "PASS"
+                )
+            ):
+                evidence_context_output = (
+                    generate_evidence_context_caption(
+                        account_id=account_id,
+                        transcript_excerpt=str(
+                            spec.get("excerpt", "")
+                        ),
+                        recent_posts=[],
+                    )
+                )
+                evidence_context_text = str(
+                    evidence_context_output.get(
+                        "public_post_text",
+                        "",
+                    )
+                )
+                evidence_context_validation = (
+                    final_public_post_validator(
+                        evidence_context_text,
+                        account_id,
+                    )
+                )
+                evidence_context_alignment = (
+                    evidence_context_output.get(
+                        "semantic_alignment"
+                    )
+                    if isinstance(
+                        evidence_context_output.get(
+                            "semantic_alignment"
+                        ),
+                        dict,
+                    )
+                    else {}
+                )
+                if (
+                    evidence_context_output.get("status") == "PASS"
+                    and evidence_context_validation.get("status") == "PASS"
+                    and evidence_context_alignment.get("status") == "PASS"
+                ):
+                    clip_output = evidence_context_output
+                    clip_public_text = evidence_context_text
+                    clip_validation = evidence_context_validation
 
             cand = build_clip_candidate_for_video(
                 source,
