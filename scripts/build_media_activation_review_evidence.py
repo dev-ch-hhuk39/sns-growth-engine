@@ -31,6 +31,7 @@ from media_activation_source_suitability import (  # noqa: E402
     direct_source_suitability as _direct_source_suitability,
     source_evidence_blockers as _source_evidence_blockers,
 )
+from direct_caption_policy import direct_caption_mode  # noqa: E402
 
 ACCOUNTS = ("night_scout", "liver_manager")
 ROUTES = ("direct_reference_media", "approved_source_clip")
@@ -320,6 +321,7 @@ def build_direct_draft(
     caption_builder: CaptionBuilder,
     public_validator: PublicValidator,
     media_validator: MediaValidator,
+    transform_public_validator: PublicValidator | None = None,
 ) -> EvidenceDraft:
     post, primary_media, source = (dict(item) for item in selection)
     bundle = _media_bundle(primary_media)
@@ -355,6 +357,18 @@ def build_direct_draft(
     pre_generation_blocked = bool(blockers)
     caption = caption_builder(packet, recent_posts) if not pre_generation_blocked else {}
     public_text = _text(caption.get("public_post_text"))
+    caption_mode = _text(caption.get("source_mode")).lower()
+    if caption_mode not in {"source_copyedit", "transform"}:
+        caption_mode = direct_caption_mode(
+            post=post,
+            source=source,
+            permission=permission,
+        )
+    active_public_validator = (
+        public_validator
+        if caption_mode == "source_copyedit"
+        else (transform_public_validator or public_validator)
+    )
     if not pre_generation_blocked:
         if _text(caption.get("status")).upper() != "PASS" or not public_text:
             blockers.extend(
@@ -364,7 +378,7 @@ def build_direct_draft(
             )
             if not public_text:
                 blockers.append("public_post_text_missing")
-        public_validation = public_validator(public_text, account_id) if public_text else {"status": "BLOCKED"}
+        public_validation = active_public_validator(public_text, account_id) if public_text else {"status": "BLOCKED"}
         if _text(public_validation.get("status")).upper() != "PASS":
             blockers.extend(
                 _text(reason)
@@ -389,7 +403,7 @@ def build_direct_draft(
         "aspect_ratio": primary_media.get("aspect_ratio", ""),
         "public_post_text": public_text,
         "media_origin": "direct_reference",
-        "caption_mode": "source_copyedit",
+        "caption_mode": caption_mode,
         **alignment,
     }
     media_validation = (
@@ -428,6 +442,8 @@ def build_direct_draft(
             "duration_seconds": primary_media.get("duration_seconds", ""),
             "aspect_ratio": primary_media.get("aspect_ratio", ""),
             "content_hash": _text(post.get("content_hash")),
+            "transformation_type": caption_mode,
+            "source_generation_mode": caption_mode,
         },
         public_post_text=public_text,
         caption=dict(caption),
@@ -435,7 +451,11 @@ def build_direct_draft(
         media_validation=dict(media_validation),
         media_evidence_text=evidence_text,
         media_evidence_summary=evidence_summary,
-        structure_variant="source_preserving_parent",
+        structure_variant=(
+            "source_preserving_parent"
+            if caption_mode == "source_copyedit"
+            else "direct_evidence_transform"
+        ),
         blockers=sorted(set(blockers)),
     )
 
@@ -808,41 +828,50 @@ def build_review_evidence_plan(
     topic_validator: TopicValidator,
     candidate_validator: CandidateValidator,
     activation_planner: ActivationPlanner,
+    direct_transform_public_validator: PublicValidator | None = None,
 ) -> dict[str, Any]:
     drafts: list[EvidenceDraft] = []
     missing: list[str] = []
     for account_id in ACCOUNTS:
         history = _history_texts(account_id, queue_rows, posted_results)
-        direct = direct_selections.get(account_id)
-        direct_permission = permissions.get((account_id, "direct_reference_media"), {})
-        if direct is None:
-            missing.append(f"{account_id}:direct_reference_media")
-        else:
-            drafts.append(
-                build_direct_draft(
-                    account_id=account_id,
-                    selection=direct,
-                    permission=direct_permission,
-                    recent_posts=history,
-                    caption_builder=direct_caption_builder,
-                    public_validator=direct_public_validator,
-                    media_validator=media_validator,
-                )
-            )
+        clip_draft: EvidenceDraft | None = None
         clip = clip_selections.get(account_id)
         clip_permission = permissions.get((account_id, "approved_source_clip"), {})
         if clip is None:
             missing.append(f"{account_id}:approved_source_clip")
         else:
+            clip_draft = build_clip_draft(
+                account_id=account_id,
+                selection=clip,
+                permission=clip_permission,
+                recent_posts=history,
+                caption_builder=clip_caption_builder,
+                public_validator=clip_public_validator,
+                media_validator=media_validator,
+            )
+            drafts.append(clip_draft)
+
+        direct = direct_selections.get(account_id)
+        direct_permission = permissions.get((account_id, "direct_reference_media"), {})
+        if direct is None:
+            missing.append(f"{account_id}:direct_reference_media")
+        else:
+            direct_history = list(history)
+            if clip_draft is not None and clip_draft.public_post_text:
+                direct_history.append(clip_draft.public_post_text)
             drafts.append(
-                build_clip_draft(
+                build_direct_draft(
                     account_id=account_id,
-                    selection=clip,
-                    permission=clip_permission,
-                    recent_posts=history,
-                    caption_builder=clip_caption_builder,
-                    public_validator=clip_public_validator,
+                    selection=direct,
+                    permission=direct_permission,
+                    recent_posts=direct_history,
+                    caption_builder=direct_caption_builder,
+                    public_validator=direct_public_validator,
                     media_validator=media_validator,
+                    transform_public_validator=(
+                        direct_transform_public_validator
+                        or direct_public_validator
+                    ),
                 )
             )
     rows: list[dict[str, Any]] = []
@@ -1225,6 +1254,7 @@ def select_source_suitable_clip_candidate(
 
 
 def _runtime_direct_caption_builder() -> CaptionBuilder:
+    from evidence_context_caption import generate_evidence_context_caption
     from generation.source_grounded_caption import (
         GitHubModelsGroundedProvider,
         SourceGroundedCaptionService,
@@ -1241,13 +1271,42 @@ def _runtime_direct_caption_builder() -> CaptionBuilder:
         primary = packet["primary_media"]
         bundle_rows = _media_bundle(primary)
         source_bundle = build_source_post_bundle(packet["post"], bundle_rows)
-        result = service.generate(
-            source_bundle,
-            account_id=packet["account_id"],
-            recent_posts=recent_posts,
-            transcript_excerpt=packet["media_evidence_text"],
-            source_mode="source_copyedit",
+        source_mode = direct_caption_mode(
+            post=packet["post"],
+            source=packet["source"],
+            permission=packet["permission"],
         )
+        if source_mode == "transform":
+            exact_evidence = "\n".join(
+                value
+                for value in (
+                    _text(packet["post"].get("original_post_text")),
+                    _text(packet["media_evidence_text"]),
+                )
+                if value
+            )
+            result = generate_evidence_context_caption(
+                account_id=packet["account_id"],
+                transcript_excerpt=exact_evidence,
+                recent_posts=recent_posts,
+            )
+            if _text(result.get("status")).upper() != "PASS":
+                result = service.generate(
+                    source_bundle,
+                    account_id=packet["account_id"],
+                    recent_posts=recent_posts,
+                    transcript_excerpt=packet["media_evidence_text"],
+                    source_mode=source_mode,
+                )
+        else:
+            result = service.generate(
+                source_bundle,
+                account_id=packet["account_id"],
+                recent_posts=recent_posts,
+                transcript_excerpt=packet["media_evidence_text"],
+                source_mode=source_mode,
+            )
+        result["source_mode"] = source_mode
         text = _text(result.get("public_post_text"))
         result["public_post_hash"] = _sha_text(text) if text else ""
         return result
@@ -1408,6 +1467,7 @@ def load_production_evidence_plan(batch_id: str) -> dict[str, Any]:
         clip_caption_builder=_runtime_clip_caption_builder(),
         direct_public_validator=validate_source_preserving_public_post,
         clip_public_validator=final_public_post_validator,
+        direct_transform_public_validator=final_public_post_validator,
         media_validator=validate_media_post,
         quality_evaluator=evaluate_generation_quality,
         topic_validator=topic_coherence_validator,

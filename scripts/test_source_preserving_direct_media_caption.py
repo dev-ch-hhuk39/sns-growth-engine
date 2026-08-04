@@ -454,7 +454,17 @@ assert (
 )
 
 assert (
-    'source_mode="source_copyedit"'
+    "direct_caption_mode"
+    in pipeline_source
+)
+
+assert (
+    "source_mode=caption_mode"
+    in pipeline_source
+)
+
+assert (
+    "validate_source_preserving_public_post"
     in pipeline_source
 )
 

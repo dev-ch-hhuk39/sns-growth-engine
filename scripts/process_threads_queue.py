@@ -30,6 +30,7 @@ from media_post_validator import publisher_media_type, validate_media_post  # no
 from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
 from generation.source_copyedit import validate_source_preserving_public_post  # noqa: E402
+from direct_caption_policy import queue_caption_mode  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
@@ -605,10 +606,9 @@ def build_media_validation_plan(
             if direct_reference
             else "approved_source_clip"
         ),
-        "caption_mode": (
-            "source_copyedit"
-            if direct_reference
-            else "transform"
+        "caption_mode": queue_caption_mode(
+            queue_row,
+            direct_reference=direct_reference,
         ),
         "alignment_status": queue_row.get(
             "alignment_status",
@@ -668,7 +668,6 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             log_event(client, account_id, "FAILED", "Queue text is empty", {"queue_id": queue_id})
         return {"status": "FAILED", "reason": "EMPTY_TEXT", "queue_id": queue_id}
 
-    public_validation = final_public_post_validator(text, account_id)
     direct_reference = (
         str(
             queue_row.get(
@@ -678,14 +677,15 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         )
         == "direct_reference_media"
     )
-
-    if direct_reference:
-        public_validation = (
-            validate_source_preserving_public_post(
-                text,
-                account_id,
-            )
-        )
+    caption_mode = queue_caption_mode(
+        queue_row,
+        direct_reference=direct_reference,
+    )
+    public_validation = (
+        validate_source_preserving_public_post(text, account_id)
+        if direct_reference and caption_mode == "source_copyedit"
+        else final_public_post_validator(text, account_id)
+    )
 
     if public_validation["status"] != "PASS":
         reason = "FINAL_PUBLIC_POST_VALIDATOR_BLOCKED:" + ",".join(public_validation["blocked_reasons"])
