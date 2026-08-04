@@ -405,10 +405,10 @@ def test_direct_and_clip_public_validators_are_separate() -> None:
     )
     assert result["status"] == "PASS"
     assert calls == [
-        "direct:night_scout",
         "clip:night_scout",
-        "direct:liver_manager",
+        "direct:night_scout",
         "clip:liver_manager",
+        "direct:liver_manager",
     ]
 
 

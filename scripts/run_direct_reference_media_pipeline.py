@@ -37,6 +37,8 @@ from generation.source_copyedit import (  # noqa: E402
     source_text_is_usable,
     validate_source_preserving_public_post,
 )
+from direct_caption_policy import direct_caption_mode  # noqa: E402
+from evidence_context_caption import generate_evidence_context_caption  # noqa: E402
 from acquisition.reliability import (  # noqa: E402
     build_quarantine_record,
     is_quarantined,
@@ -566,12 +568,22 @@ def build_plan(
         for row in posted_rows
         if str(row.get("account_id", "")) == account_id
     ][-30:]
+    uses_default_caption_service = caption_service is None
     caption_service = caption_service or SourceGroundedCaptionService(
         GitHubModelsGroundedProvider(),
         allow_deterministic_fallback=True,
     )
     attempted: list[dict[str, Any]] = []
-    for post, media, _source in candidates:
+    for post, media, source in candidates:
+        permission = _permission_map(client).get(
+            str(post.get("source_id", "")),
+            {},
+        )
+        caption_mode = direct_caption_mode(
+            post=post,
+            source=source,
+            permission=permission,
+        )
         if not source_text_is_usable(
             str(
                 post.get(
@@ -623,13 +635,37 @@ def build_plan(
                 "quarantined": False,
             })
             continue
-        grounded = caption_service.generate(
-            bundle,
-            account_id=account_id,
-            recent_posts=recent_posts,
-            transcript_excerpt=media_evidence,
-            source_mode="source_copyedit",
-        )
+        if uses_default_caption_service and caption_mode == "transform":
+            exact_evidence = "\n".join(
+                value
+                for value in (
+                    str(post.get("original_post_text", "")).strip(),
+                    media_evidence,
+                )
+                if value
+            )
+            grounded = generate_evidence_context_caption(
+                account_id=account_id,
+                transcript_excerpt=exact_evidence,
+                recent_posts=recent_posts,
+            )
+            if str(grounded.get("status", "")).upper() != "PASS":
+                grounded = caption_service.generate(
+                    bundle,
+                    account_id=account_id,
+                    recent_posts=recent_posts,
+                    transcript_excerpt=media_evidence,
+                    source_mode=caption_mode,
+                )
+        else:
+            grounded = caption_service.generate(
+                bundle,
+                account_id=account_id,
+                recent_posts=recent_posts,
+                transcript_excerpt=media_evidence,
+                source_mode=caption_mode,
+            )
+        grounded["source_mode"] = caption_mode
         text = str(
             grounded.get(
                 "public_post_text",
@@ -637,10 +673,9 @@ def build_plan(
             )
         )
         validation = (
-            validate_source_preserving_public_post(
-                text,
-                account_id,
-            )
+            validate_source_preserving_public_post(text, account_id)
+            if caption_mode == "source_copyedit"
+            else final_public_post_validator(text, account_id)
         )
         alignment = grounded.get("semantic_alignment", {})
         carousel_urls = [str(item.get("storage_url", "")) for item in carousel_media]
@@ -653,7 +688,7 @@ def build_plan(
             "account_id": account_id, "media_type": str(media.get("media_type", "video")), "duration_seconds": media.get("duration_seconds", 0),
             "aspect_ratio": str(media.get("aspect_ratio", "")), "public_post_text": text,
             "media_origin": "direct_reference",
-            "caption_mode": "source_copyedit",
+            "caption_mode": caption_mode,
             "alignment_status": alignment.get("status", "BLOCKED"),
             "final_alignment_score": alignment.get("final_alignment_score", 0),
             "main_claim_coverage": alignment.get("main_claim_coverage", 0),
@@ -682,7 +717,9 @@ def build_plan(
                 "claim_support": grounded.get("claim_support", []),
                 "caption_provider": grounded.get("provider_name", ""),
                 "caption_provider_version": grounded.get("provider_version", ""),
-                "source_mode": grounded.get("source_mode", "source_copyedit"),
+                "source_mode": grounded.get("source_mode", caption_mode),
+                "caption_mode": caption_mode,
+                "transformation_type": caption_mode,
                 "semantic_alignment": alignment,
                 "media_validator": validator["status"], "would_post": bool(apply and not prepare_only),
                 "prepare_only": prepare_only,
@@ -762,10 +799,9 @@ def _queue_identity_suffix(
             )
         ).strip(),
         "caption_mode": str(
-            plan.get(
-                "caption_mode",
-                "source_copyedit",
-            )
+            plan.get("caption_mode")
+            or plan.get("transformation_type")
+            or "source_copyedit"
         ),
     }
 
@@ -924,6 +960,8 @@ def _build_queue(plan: dict[str, Any]) -> dict[str, Any]:
         "media_origin": "direct_reference", "duration_seconds": media.get("duration_seconds", ""),
         "aspect_ratio": media.get("aspect_ratio", ""), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
         "public_post_text": plan["public_post_text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
+        "transformation_type": plan.get("caption_mode", plan.get("transformation_type", "source_copyedit")),
+        "source_generation_mode": plan.get("caption_mode", plan.get("transformation_type", "source_copyedit")),
         "caption_provider": plan.get("caption_provider", ""),
         "caption_provider_version": plan.get("caption_provider_version", ""),
         "alignment_status": plan.get("semantic_alignment", {}).get("status", "BLOCKED"),
