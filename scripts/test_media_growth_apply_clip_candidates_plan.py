@@ -28,8 +28,8 @@ transcript = {
     "transcript_id": f"tr_{video['source_video_id']}",
     "source_video_id": video["source_video_id"],
     "transcription_status": "DONE",
-    "transcript_text": "配信で初見が入りやすくなるには、入室時の一言と話題の共有が大事です。",
-    "segments_json": '[{"start": 1, "end": 12, "text": "配信で初見が入りやすくなるには入室時の一言が大事です。"}]',
+    "transcript_text": "配信で初見が入りやすくなるには、入室時に今の話題を短く伝え、コメントしやすい質問を置くことが大事です。",
+    "segments_json": '[{"start": 1, "end": 20, "text": "配信で初見が入りやすくなるには、入室時に今の話題を短く伝え、コメントしやすい質問を置くことが大事です。"}]',
 }
 plan = build_media_growth_plan(
     "liver_manager",

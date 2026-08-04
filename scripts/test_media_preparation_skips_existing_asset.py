@@ -27,6 +27,9 @@ def main() -> int:
             "transcript_grounded": "true",
             "alignment_status": "PASS",
             "public_post_text": public_text,
+            "transcript_excerpt": public_text,
+            "start_seconds": "10",
+            "end_seconds": "35",
             "clip_score": 95,
         },
         {
@@ -37,6 +40,9 @@ def main() -> int:
             "transcript_grounded": "true",
             "alignment_status": "PASS",
             "public_post_text": public_text,
+            "transcript_excerpt": public_text,
+            "start_seconds": "10",
+            "end_seconds": "35",
             "clip_score": 90,
         },
     ]

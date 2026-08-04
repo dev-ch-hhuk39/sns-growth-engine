@@ -28,6 +28,7 @@ from download_approved_media import build_download_plan, execute_download, is_in
 from media_post_validator import validate_media_post  # noqa: E402
 from media.media_probe import asset_has_video_evidence  # noqa: E402
 from media_growth_schemas import build_media_pdca_records, extract_video_id  # noqa: E402
+from media_activation_source_suitability import clip_source_suitability  # noqa: E402
 from acquisition.models import (  # noqa: E402
     SourceMediaItem,
     SourcePostBundle,
@@ -886,6 +887,20 @@ def select_candidate(
             continue
         if not _true(clip.get("transcript_grounded")):
             reasons.append(f"{clip_id}:transcript_grounding_required")
+            continue
+        transcript_excerpt = str(clip.get("transcript_excerpt") or clip.get("transcript_text") or "").strip()
+        _source_evidence, source_blockers = clip_source_suitability(
+            account_id=account_id,
+            transcript=transcript_excerpt,
+        )
+        if source_blockers:
+            for blocker in source_blockers:
+                reasons.append(f"{clip_id}:{blocker}")
+            continue
+        start_seconds = str(clip.get("start_seconds") or clip.get("start_time") or "").strip()
+        end_seconds = str(clip.get("end_seconds") or clip.get("end_time") or "").strip()
+        if not start_seconds or not end_seconds:
+            reasons.append(f"{clip_id}:exact_clip_time_range_missing")
             continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")

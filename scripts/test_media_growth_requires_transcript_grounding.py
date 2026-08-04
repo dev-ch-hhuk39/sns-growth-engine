@@ -53,6 +53,21 @@ with_transcript = build_media_growth_plan(
     existing_transcripts=[transcript],
     caption_service=fixture_caption_service(),
 )
+off_topic_transcript = {
+    **transcript,
+    "transcript_id": f"tr_off_topic_{video['source_video_id']}",
+    "transcript_text": "今日の料理は火加減が大切です。盛り付けと調味料について説明します。",
+    "segments_json": json.dumps([
+        {"start": 1, "end": 16, "text": "今日の料理は火加減が大切です。"},
+        {"start": 18, "end": 34, "text": "盛り付けと調味料について説明します。"},
+    ], ensure_ascii=False),
+}
+off_topic = build_media_growth_plan(
+    "liver_manager",
+    existing_source_videos=[video],
+    existing_transcripts=[off_topic_transcript],
+    caption_service=fixture_caption_service(),
+)
 first = with_transcript["top_clip_candidates"][0] if with_transcript["top_clip_candidates"] else {}
 checks = [
     ("no transcript creates no ready clips", without_transcript["clip_candidate_count"] == 0),
@@ -60,6 +75,8 @@ checks = [
     ("clip is transcript grounded", first.get("transcript_grounded") is True),
     ("clip has transcript id", first.get("transcript_id") == transcript["transcript_id"]),
     ("clip auto approved only when grounded", first.get("clip_status") == "READY"),
+    ("off-topic transcript creates no clips", off_topic["clip_candidate_count"] == 0),
+    ("off-topic rejection is auditable", off_topic["rejected_clip_candidate_count"] > 0),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
