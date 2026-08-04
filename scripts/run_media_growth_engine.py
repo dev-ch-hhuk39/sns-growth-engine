@@ -22,6 +22,10 @@ from generation.source_grounded_caption import (  # noqa: E402
     GitHubModelsGroundedProvider,
     SourceGroundedCaptionService,
 )
+from generation.source_copyedit import (  # noqa: E402
+    DeterministicSourceCopyeditProvider,
+    validate_source_preserving_public_post,
+)
 from video.semantic_clip_planner import plan_semantic_clips  # noqa: E402
 from discover_approved_source_videos import load_existing_source_videos  # noqa: E402
 from config_loader import get_config  # noqa: E402
@@ -394,7 +398,17 @@ def night_subject_policy_check(source: dict[str, Any], video: dict[str, Any]) ->
     blocked = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
     if any(token.lower() in text for token in blocked):
         return {"status": "BLOCKED", "reason": "night_subject_policy_analysis_only"}
-    female_cues = ("キャバ嬢", "女の子", "女性", "嬢", "キャスト", "girl", "ladies")
+    female_cues = (
+        "キャバ嬢",
+        "女の子",
+        "女性",
+        "嬢",
+        "キャスト",
+        "美女",
+        "女優",
+        "girl",
+        "ladies",
+    )
     if any(token.lower() in text for token in female_cues):
         return {"status": "PASS", "reason": "metadata_female_subject_cue"}
     return {"status": "BLOCKED", "reason": "night_subject_evidence_required"}
@@ -422,6 +436,95 @@ def _segments(row: dict[str, Any]) -> list[dict[str, Any]]:
             end = start + 3
         rows.append({"start": start, "end": end, "text": text})
     return sorted(rows, key=lambda r: float(r["start"]))
+
+
+def _merge_transcript_rows(
+    rows: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+
+    for row in rows:
+        if not _transcript_done(row):
+            continue
+        source_video_id = str(
+            row.get("source_video_id", "")
+        ).strip()
+        if source_video_id:
+            grouped.setdefault(
+                source_video_id,
+                [],
+            ).append(dict(row))
+
+    merged: dict[str, dict[str, Any]] = {}
+
+    for source_video_id, parts in grouped.items():
+        segments: list[dict[str, Any]] = []
+        for part in parts:
+            segments.extend(_segments(part))
+
+        unique = {
+            (
+                round(float(item["start"]), 3),
+                round(float(item["end"]), 3),
+                str(item["text"]),
+            ): {
+                "start": round(
+                    float(item["start"]),
+                    3,
+                ),
+                "end": round(
+                    float(item["end"]),
+                    3,
+                ),
+                "text": str(item["text"]),
+            }
+            for item in segments
+        }
+        ordered = sorted(
+            unique.values(),
+            key=lambda item: (
+                float(item["start"]),
+                float(item["end"]),
+                item["text"],
+            ),
+        )
+        if not ordered:
+            continue
+
+        base = max(
+            parts,
+            key=lambda row: str(
+                row.get("updated_at")
+                or row.get("created_at")
+                or ""
+            ),
+        )
+        transcript_text = " ".join(
+            item["text"]
+            for item in ordered
+        ).strip()
+        merged[source_video_id] = {
+            **base,
+            "transcript_id": (
+                str(
+                    parts[0].get("transcript_id")
+                    or f"tr_{source_video_id}"
+                )
+                if len(parts) == 1
+                else f"tr_{source_video_id}_merged"
+            ),
+            "source_video_id": source_video_id,
+            "transcription_status": "DONE",
+            "transcript_text": transcript_text,
+            "segments_json": json.dumps(
+                ordered,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ),
+            "chunk_count": len(ordered),
+        }
+
+    return merged
 
 
 def _clip_specs_from_transcript(video: dict[str, Any], transcript: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
@@ -486,6 +589,7 @@ def build_media_growth_plan(
     existing_source_videos: list[dict[str, Any]] | None = None,
     existing_transcripts: list[dict[str, Any]] | None = None,
     caption_service: SourceGroundedCaptionService | None = None,
+    allow_source_copyedit_fallback: bool | None = None,
 ) -> dict[str, Any]:
     config = load_config()
     selected = select_sources(account_id, config)
@@ -528,11 +632,11 @@ def build_media_growth_plan(
 
     existing_source_videos = existing_source_videos if existing_source_videos is not None else load_existing_source_videos()
     existing_transcripts = existing_transcripts or []
-    transcript_by_source_video = {
-        str(t.get("source_video_id", "")): t
-        for t in existing_transcripts
-        if _transcript_done(t)
-    }
+    transcript_by_source_video = (
+        _merge_transcript_rows(
+            existing_transcripts
+        )
+    )
     planned_source_videos = [
         row
         for row in existing_source_videos
@@ -547,12 +651,28 @@ def build_media_growth_plan(
     remote_caption_limit = max(0, int(config.get("max_remote_caption_generations_per_video", 1)))
     remote_caption_run_limit = max(0, int(config.get("max_remote_caption_generations_per_run", 1)))
     uses_default_caption_service = caption_service is None
+    source_copyedit_enabled = (
+        uses_default_caption_service
+        if allow_source_copyedit_fallback is None
+        else bool(
+            allow_source_copyedit_fallback
+        )
+    )
     caption_service = caption_service or SourceGroundedCaptionService(
         GitHubModelsGroundedProvider(timeout_seconds=remote_caption_timeout),
         fallback_provider=DeterministicGroundedProvider(),
         retry_primary_on_alignment_failure=False,
     )
-    deterministic_caption_service = SourceGroundedCaptionService(DeterministicGroundedProvider())
+    deterministic_caption_service = (
+        SourceGroundedCaptionService(
+            DeterministicGroundedProvider()
+        )
+    )
+    copyedit_caption_service = (
+        SourceGroundedCaptionService(
+            DeterministicSourceCopyeditProvider()
+        )
+    )
     remote_caption_generation_count = 0
     public_text = ""
     validation = {"status": "BLOCKED", "blocked_reasons": ["no_grounded_clip_caption"]}
@@ -621,10 +741,116 @@ def build_media_growth_plan(
             clip_output = active_caption_service.generate(
                 bundle,
                 account_id=account_id,
-                transcript_excerpt=str(spec.get("excerpt", "")),
+                transcript_excerpt=str(
+                    spec.get("excerpt", "")
+                ),
             )
-            clip_public_text = str(clip_output.get("public_post_text", ""))
-            clip_validation = final_public_post_validator(clip_public_text, account_id)
+            clip_public_text = str(
+                clip_output.get(
+                    "public_post_text",
+                    "",
+                )
+            )
+            clip_validation = (
+                final_public_post_validator(
+                    clip_public_text,
+                    account_id,
+                )
+            )
+
+            if (
+                source_copyedit_enabled
+                and (
+                    clip_output.get("status")
+                    != "PASS"
+                    or clip_validation.get(
+                        "status"
+                    )
+                    != "PASS"
+                )
+            ):
+                excerpt = str(
+                    spec.get("excerpt", "")
+                ).strip()
+                copyedit_bundle = SourcePostBundle(
+                    source_post_id=source_video_id,
+                    source_id=str(
+                        source_video.get(
+                            "source_id",
+                            "",
+                        )
+                    ),
+                    target_account_id=account_id,
+                    platform=str(
+                        source_video.get(
+                            "platform",
+                            "",
+                        )
+                    ),
+                    profile_url=str(
+                        source_video.get(
+                            "source_url",
+                            "",
+                        )
+                    ),
+                    canonical_post_url=video_url,
+                    external_post_id=str(
+                        source_video.get(
+                            "video_id",
+                            "",
+                        )
+                    ),
+                    original_post_text=excerpt,
+                    published_at=str(
+                        source_video.get(
+                            "published_at",
+                            "",
+                        )
+                    ),
+                    media_items=(media,),
+                    content_hash=stable_content_hash(
+                        excerpt,
+                        [video_url],
+                    ),
+                )
+                copyedit_output = (
+                    copyedit_caption_service.generate(
+                        copyedit_bundle,
+                        account_id=account_id,
+                        transcript_excerpt=excerpt,
+                        source_mode=(
+                            "source_copyedit"
+                        ),
+                    )
+                )
+                copyedit_text = str(
+                    copyedit_output.get(
+                        "public_post_text",
+                        "",
+                    )
+                )
+                copyedit_validation = (
+                    validate_source_preserving_public_post(
+                        copyedit_text,
+                        account_id,
+                    )
+                )
+                if (
+                    copyedit_output.get("status")
+                    == "PASS"
+                    and copyedit_validation.get(
+                        "status"
+                    )
+                    == "PASS"
+                ):
+                    clip_output = copyedit_output
+                    clip_public_text = (
+                        copyedit_text
+                    )
+                    clip_validation = (
+                        copyedit_validation
+                    )
+
             cand = build_clip_candidate_for_video(
                 source,
                 source_video,

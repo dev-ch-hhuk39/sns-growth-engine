@@ -59,6 +59,212 @@ def normalize_segments(fetched: Any) -> list[dict[str, Any]]:
     return segments
 
 
+SHEETS_SAFE_CELL_CHARS = 40000
+YOUTUBE_CHUNK_SCOPE = "youtube_caption_chunk"
+
+
+def _complete_transcript_row(row: dict[str, Any]) -> bool:
+    return (
+        _text(
+            row.get("transcription_status")
+            or row.get("transcript_status")
+        ).upper()
+        in {
+            "DONE",
+            "FETCHED",
+            "YOUTUBE_CAPTIONS_DONE",
+            "LOCAL_WHISPER_DONE",
+        }
+        and bool(_text(row.get("segments_json")))
+    )
+
+
+def _chunk_scope(row: dict[str, Any]) -> tuple[int, int] | None:
+    raw = _text(row.get("transcription_scope"))
+    prefix = f"{YOUTUBE_CHUNK_SCOPE}:"
+    if not raw.startswith(prefix):
+        return None
+    try:
+        part_text, total_text = raw[len(prefix):].split("/", 1)
+        part = int(part_text)
+        total = int(total_text)
+    except (ValueError, TypeError):
+        return None
+    if part < 1 or total < 1 or part > total:
+        return None
+    return part, total
+
+
+def complete_source_video_ids(
+    transcripts: list[dict[str, Any]],
+) -> set[str]:
+    legacy_complete: set[str] = set()
+    chunk_parts: dict[str, set[int]] = {}
+    chunk_totals: dict[str, int] = {}
+
+    for row in transcripts:
+        if not _complete_transcript_row(row):
+            continue
+        source_video_id = _text(row.get("source_video_id"))
+        if not source_video_id:
+            continue
+        scope = _chunk_scope(row)
+        if scope is None:
+            legacy_complete.add(source_video_id)
+            continue
+        part, total = scope
+        chunk_parts.setdefault(source_video_id, set()).add(part)
+        chunk_totals[source_video_id] = max(
+            total,
+            chunk_totals.get(source_video_id, 0),
+        )
+
+    complete = set(legacy_complete)
+    for source_video_id, total in chunk_totals.items():
+        if chunk_parts.get(source_video_id, set()) == set(
+            range(1, total + 1)
+        ):
+            complete.add(source_video_id)
+    return complete
+
+
+def partition_transcript_segments(
+    segments: list[dict[str, Any]],
+    *,
+    max_cell_chars: int = SHEETS_SAFE_CELL_CHARS,
+) -> list[list[dict[str, Any]]]:
+    chunks: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+
+    def encoded_size(rows: list[dict[str, Any]]) -> tuple[int, int]:
+        transcript_text = " ".join(
+            _text(row.get("text"))
+            for row in rows
+        ).strip()
+        segments_json = json.dumps(
+            rows,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        return len(transcript_text), len(segments_json)
+
+    for source in segments:
+        row = {
+            "start": round(float(source.get("start", 0) or 0), 3),
+            "end": round(float(source.get("end", 0) or 0), 3),
+            "text": _text(source.get("text")),
+        }
+        if not row["text"]:
+            continue
+
+        candidate = current + [row]
+        text_size, json_size = encoded_size(candidate)
+
+        if (
+            current
+            and max(text_size, json_size) > max_cell_chars
+        ):
+            chunks.append(current)
+            current = [row]
+            text_size, json_size = encoded_size(current)
+        else:
+            current = candidate
+
+        if max(text_size, json_size) > max_cell_chars:
+            raise ValueError(
+                "single_transcript_segment_exceeds_safe_cell_limit"
+            )
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
+def build_transcript_rows(
+    *,
+    video: dict[str, Any],
+    account_id: str,
+    segments: list[dict[str, Any]],
+    language: str,
+) -> list[dict[str, Any]]:
+    source_video_id = _text(video.get("source_video_id"))
+    if not source_video_id:
+        raise ValueError("source_video_id_missing")
+
+    chunks = partition_transcript_segments(segments)
+    if not chunks:
+        raise ValueError("youtube_transcript_empty")
+
+    total = len(chunks)
+    now = datetime.now(
+        timezone.utc
+    ).replace(microsecond=0).isoformat()
+    rows: list[dict[str, Any]] = []
+
+    for index, chunk in enumerate(chunks, start=1):
+        transcript_text = " ".join(
+            row["text"]
+            for row in chunk
+        ).strip()
+        segments_json = json.dumps(
+            chunk,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        if (
+            len(transcript_text) > SHEETS_SAFE_CELL_CHARS
+            or len(segments_json) > SHEETS_SAFE_CELL_CHARS
+        ):
+            raise ValueError(
+                "transcript_chunk_exceeds_safe_cell_limit"
+            )
+        start = float(chunk[0]["start"])
+        end = float(chunk[-1]["end"])
+        duration = max(0.0, end - start)
+        rows.append({
+            "transcript_id": (
+                f"tr_{source_video_id}_part_{index:03d}"
+            ),
+            "account_id": account_id,
+            "reference_post_id": source_video_id,
+            "source_video_id": source_video_id,
+            "video_id": _text(video.get("video_id")),
+            "source_id": _text(video.get("source_id")),
+            "source_platform": "youtube",
+            "video_url": _text(
+                video.get("canonical_video_url")
+            ),
+            "transcription_provider": (
+                "youtube_transcript_api"
+            ),
+            "transcription_status": (
+                "YOUTUBE_CAPTIONS_DONE"
+            ),
+            "duration_seconds": round(duration, 3),
+            "transcript_text": transcript_text,
+            "segments_json": segments_json,
+            "language": language or "unknown",
+            "processed_minutes": round(duration / 60, 4),
+            "transcription_scope": (
+                f"{YOUTUBE_CHUNK_SCOPE}:{index}/{total}"
+            ),
+            "processed_duration_seconds": round(
+                duration,
+                3,
+            ),
+            "transcript_hash": hashlib.sha256(
+                transcript_text.encode("utf-8")
+            ).hexdigest(),
+            "chunk_count": len(chunk),
+            "error": "",
+            "created_at": now,
+            "updated_at": now,
+        })
+
+    return rows
+
+
 def fetch_youtube_segments(video_id: str) -> tuple[list[dict[str, Any]], str]:
     from youtube_transcript_api import YouTubeTranscriptApi
     api = YouTubeTranscriptApi()
@@ -106,13 +312,9 @@ def build_plan(*, client: SheetsClient, account_id: str, max_videos: int, apply:
     source_videos = _records(client, "source_videos")
     transcripts = _records(client, "video_transcripts")
     permissions = _records(client, "media_permissions")
-    complete = {
-        _text(row.get("source_video_id"))
-        for row in transcripts
-        if _text(row.get("transcription_status") or row.get("transcript_status")).upper()
-        in {"DONE", "FETCHED", "YOUTUBE_CAPTIONS_DONE", "LOCAL_WHISPER_DONE"}
-        and _text(row.get("segments_json"))
-    }
+    complete = complete_source_video_ids(
+        transcripts
+    )
     candidates: list[tuple[dict[str, Any], dict[str, Any]]] = []
     rejected: list[dict[str, Any]] = []
     for video in source_videos:
@@ -159,35 +361,40 @@ def build_plan(*, client: SheetsClient, account_id: str, max_videos: int, apply:
             segments, language = fetch_youtube_segments(video_id)
             if not segments:
                 raise RuntimeError("youtube_transcript_empty")
-            transcript_text = " ".join(row["text"] for row in segments).strip()
-            transcript_id = f"tr_{source_video_id}"
-            now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-            row = {
-                "transcript_id": transcript_id,
-                "source_video_id": source_video_id,
-                "source_id": _text(video.get("source_id")),
-                "source_url": _text(video.get("canonical_video_url")),
-                "account_id": account_id,
-                "platform": "youtube",
-                "video_id": video_id,
-                "title": _text(video.get("title")),
-                "transcript_status": "YOUTUBE_CAPTIONS_DONE",
-                "transcription_status": "YOUTUBE_CAPTIONS_DONE",
-                "transcript_language": language or "unknown",
-                "transcript_text": transcript_text,
-                "transcript_text_redacted_preview": transcript_text[:120],
-                "transcript_hash": hashlib.sha256(transcript_text.encode("utf-8")).hexdigest(),
-                "chunk_count": len(segments),
-                "segments_json": json.dumps(segments, ensure_ascii=False, separators=(",", ":")),
-                "provider_name": "youtube_transcript_api",
-                "provider_version": "1",
-                "created_at": now,
-                "updated_at": now,
-                "rights_status": _text(video.get("rights_status")),
-                "permission_status": "approved",
-            }
-            status = _append_or_update(client, row)
-            result.update({"status": status, "segment_count": len(segments), "transcript_id": transcript_id, "language": language or "unknown"})
+            transcript_rows = build_transcript_rows(
+                video=video,
+                account_id=account_id,
+                segments=segments,
+                language=language,
+            )
+            write_statuses = [
+                _append_or_update(client, row)
+                for row in transcript_rows
+            ]
+            status = (
+                "EXISTING_COMPLETE"
+                if all(
+                    item == "EXISTING_COMPLETE"
+                    for item in write_statuses
+                )
+                else "APPENDED"
+                if any(
+                    item == "APPENDED"
+                    for item in write_statuses
+                )
+                else "UPDATED"
+            )
+            result.update({
+                "status": status,
+                "segment_count": len(segments),
+                "chunk_row_count": len(transcript_rows),
+                "transcript_ids": [
+                    row["transcript_id"]
+                    for row in transcript_rows
+                ],
+                "write_statuses": write_statuses,
+                "language": language or "unknown",
+            })
         except Exception as exc:
             result.update({"status": "FAILED", "error": f"{type(exc).__name__}:{str(exc)[:300]}"})
         results.append(result)

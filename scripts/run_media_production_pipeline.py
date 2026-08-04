@@ -39,6 +39,10 @@ from generation.source_grounded_caption import (  # noqa: E402
     GitHubModelsGroundedProvider,
     SourceGroundedCaptionService,
 )
+from generation.source_copyedit import (  # noqa: E402
+    DeterministicSourceCopyeditProvider,
+    validate_source_preserving_public_post,
+)
 from process_threads_queue import process_one, update_row  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -478,6 +482,7 @@ def _generate_final_media_caption(
     recent_posts: list[str],
     caption_service: Any | None = None,
     max_attempts: int = 3,
+    allow_source_copyedit_fallback: bool | None = None,
 ) -> dict[str, Any]:
     """Generate only from the final clip packet, at most three times."""
     bundle, transcript_excerpt, grounding_reasons = (
@@ -507,6 +512,16 @@ def _generate_final_media_caption(
             "claim_support_json": "[]",
         }
 
+    uses_default_caption_service = (
+        caption_service is None
+    )
+    source_copyedit_enabled = (
+        uses_default_caption_service
+        if allow_source_copyedit_fallback is None
+        else bool(
+            allow_source_copyedit_fallback
+        )
+    )
     service = (
         caption_service
         if caption_service is not None
@@ -521,7 +536,16 @@ def _generate_final_media_caption(
     attempts: list[dict[str, Any]] = []
     all_reasons: list[str] = []
 
-    for attempt in range(1, attempt_limit + 1):
+    ordinary_attempt_limit = (
+        max(0, attempt_limit - 1)
+        if source_copyedit_enabled
+        else attempt_limit
+    )
+
+    for attempt in range(
+        1,
+        ordinary_attempt_limit + 1,
+    ):
         try:
             output = service.generate(
                 bundle,
@@ -684,11 +708,194 @@ def _generate_final_media_caption(
 
         all_reasons.extend(attempt_reasons)
 
+    if source_copyedit_enabled:
+        copyedit_service = SourceGroundedCaptionService(
+            DeterministicSourceCopyeditProvider()
+        )
+        copyedit_output = copyedit_service.generate(
+            bundle,
+            account_id=account_id,
+            recent_posts=recent_posts,
+            transcript_excerpt=transcript_excerpt,
+            source_mode="source_copyedit",
+        )
+        copyedit_text = _finalize_generated_caption(
+            copyedit_output.get(
+                "public_post_text",
+                "",
+            )
+        )
+        copyedit_validation = (
+            validate_source_preserving_public_post(
+                copyedit_text,
+                account_id,
+            )
+        )
+        copyedit_semantic = (
+            copyedit_output.get(
+                "semantic_alignment"
+            )
+            if isinstance(
+                copyedit_output.get(
+                    "semantic_alignment"
+                ),
+                dict,
+            )
+            else {}
+        )
+        copyedit_reasons = [
+            str(reason)
+            for reason in copyedit_output.get(
+                "blocked_reasons",
+                [],
+            )
+            if str(reason)
+        ]
+        copyedit_reasons.extend(
+            str(reason)
+            for reason in copyedit_validation.get(
+                "blocked_reasons",
+                [],
+            )
+            if str(reason)
+        )
+        if (
+            copyedit_semantic.get("status")
+            != "PASS"
+        ):
+            copyedit_reasons.extend(
+                str(reason)
+                for reason in copyedit_semantic.get(
+                    "blocked_reasons",
+                    [
+                        "semantic_alignment_failed"
+                    ],
+                )
+                if str(reason)
+            )
+        copyedit_reasons = sorted(
+            set(copyedit_reasons)
+        )
+        attempts.append({
+            "attempt": len(attempts) + 1,
+            "provider_name": str(
+                copyedit_output.get(
+                    "provider_name",
+                    "",
+                )
+            ),
+            "provider_version": str(
+                copyedit_output.get(
+                    "provider_version",
+                    "",
+                )
+            ),
+            "provider_status": str(
+                copyedit_output.get(
+                    "provider_status",
+                    "",
+                )
+            ),
+            "generation_status": str(
+                copyedit_output.get(
+                    "status",
+                    "",
+                )
+            ),
+            "semantic_alignment_status": str(
+                copyedit_semantic.get(
+                    "status",
+                    "BLOCKED",
+                )
+            ),
+            "final_validator_status": str(
+                copyedit_validation.get(
+                    "status",
+                    "BLOCKED",
+                )
+            ),
+            "blocked_reasons": copyedit_reasons,
+            "source_mode": "source_copyedit",
+        })
+
+        if (
+            copyedit_output.get("status")
+            == "PASS"
+            and copyedit_semantic.get("status")
+            == "PASS"
+            and copyedit_validation.get("status")
+            == "PASS"
+            and bool(copyedit_text)
+        ):
+            return {
+                "status": "PASS",
+                "public_post_text": copyedit_text,
+                "caption_attempt_count": len(
+                    attempts
+                ),
+                "caption_attempts": attempts,
+                "blocked_reasons": [],
+                "caption_provider": str(
+                    copyedit_output.get(
+                        "provider_name",
+                        "",
+                    )
+                ),
+                "caption_provider_version": str(
+                    copyedit_output.get(
+                        "provider_version",
+                        "",
+                    )
+                ),
+                "alignment_status": "PASS",
+                "final_alignment_score": (
+                    copyedit_semantic.get(
+                        "final_alignment_score",
+                        0,
+                    )
+                ),
+                "main_claim_coverage": (
+                    copyedit_semantic.get(
+                        "main_claim_coverage",
+                        0,
+                    )
+                ),
+                "unsupported_claim_count": (
+                    copyedit_semantic.get(
+                        "unsupported_claim_count",
+                        0,
+                    )
+                ),
+                "source_copy_similarity": (
+                    copyedit_semantic.get(
+                        "source_copy_similarity",
+                        0,
+                    )
+                ),
+                "recent_post_similarity": (
+                    copyedit_semantic.get(
+                        "recent_post_similarity",
+                        0,
+                    )
+                ),
+                "claim_support_json": json.dumps(
+                    copyedit_output.get(
+                        "claim_support",
+                        [],
+                    ),
+                    ensure_ascii=False,
+                ),
+                "final_validation": (
+                    copyedit_validation
+                ),
+            }
+
+        all_reasons.extend(copyedit_reasons)
     return {
         "status": "REVIEW_REQUIRED",
         # Never reuse the pre-generated candidate caption.
         "public_post_text": "",
-        "caption_attempt_count": attempt_limit,
+        "caption_attempt_count": len(attempts),
         "caption_attempts": attempts,
         "blocked_reasons": sorted(set(
             all_reasons
@@ -824,6 +1031,7 @@ def select_candidate(
     account_id: str = "liver_manager",
     media_assets: list[dict[str, Any]] | None = None,
     excluded_clip_ids: set[str] | None = None,
+    allow_waiting_review: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     sources = {str(row.get("source_video_id", "")): row for row in source_videos}
     posted_clip_ids = {str(row.get("clip_candidate_id", "")) for row in posted_results if row.get("clip_candidate_id")}
@@ -882,9 +1090,56 @@ def select_candidate(
         if rights not in APPROVED_RIGHTS or permission != "approved":
             reasons.append(f"{clip_id}:rights_or_permission_blocked")
             continue
-        if status not in {"READY", "AUTO_APPROVED", "MEDIA_READY"}:
-            reasons.append(f"{clip_id}:clip_not_ready")
+        ready_statuses = {
+            "READY",
+            "AUTO_APPROVED",
+            "MEDIA_READY",
+        }
+        review_statuses = {
+            "WAITING_REVIEW",
+            "REVIEW_REQUIRED",
+        }
+        review_candidate_allowed = (
+            allow_waiting_review
+            and status in review_statuses
+        )
+        if (
+            status not in ready_statuses
+            and not review_candidate_allowed
+        ):
+            reasons.append(
+                f"{clip_id}:clip_not_ready"
+            )
             continue
+        if review_candidate_allowed:
+            if (
+                str(
+                    clip.get(
+                        "public_post_validator_status",
+                        "",
+                    )
+                ).upper()
+                != "PASS"
+            ):
+                reasons.append(
+                    f"{clip_id}:"
+                    "public_post_validator_blocked"
+                )
+                continue
+            if (
+                str(
+                    clip.get(
+                        "alignment_status",
+                        "",
+                    )
+                ).upper()
+                != "PASS"
+            ):
+                reasons.append(
+                    f"{clip_id}:"
+                    "semantic_alignment_required"
+                )
+                continue
         if not _true(clip.get("transcript_grounded")):
             reasons.append(f"{clip_id}:transcript_grounding_required")
             continue
@@ -1230,7 +1485,13 @@ def build_plan(
         )
     else:
         clip, source_video, skipped = select_candidate(
-            clips, source_videos, posted, account_id, media_assets, excluded_clip_ids,
+            clips,
+            source_videos,
+            posted,
+            account_id,
+            media_assets,
+            excluded_clip_ids,
+            allow_waiting_review=prepare_only,
         )
         selected_asset = None
 
