@@ -115,6 +115,7 @@ def candidate_rows(
     client: SheetsClient,
     account_id: str,
     max_candidates: int,
+    slot_id: str = "",
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, str]]]:
     rows = [
         dict(row)
@@ -128,16 +129,27 @@ def candidate_rows(
         row
         for row in rows
         if requires_hybrid_ai_gate(row)
+        and (not slot_id or str(row.get("slot_id", "")) == slot_id)
         and str(row.get("excluded_from_activation", "")).lower() not in {"true", "1", "yes"}
         and str(row.get("repost_prohibited", "")).lower() not in {"true", "1", "yes"}
     ]
-    eligible.sort(
-        key=lambda row: (
-            int(str(row.get("priority", "999") or "999")),
-            str(row.get("created_at", "")),
-            str(row.get("queue_id", "")),
+    if slot_id:
+        eligible.sort(
+            key=lambda row: (
+                str(row.get("created_at", "")),
+                str(row.get("queue_id", "")),
+            ),
+            reverse=True,
         )
-    )
+        eligible = eligible[:max_candidates]
+    else:
+        eligible.sort(
+            key=lambda row: (
+                int(str(row.get("priority", "999") or "999")),
+                str(row.get("created_at", "")),
+                str(row.get("queue_id", "")),
+            )
+        )
 
     selected: list[tuple[dict[str, Any], dict[str, Any]]] = []
     skipped_current: list[dict[str, str]] = []
@@ -162,6 +174,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
     parser.add_argument("--max-candidates", type=int, default=2)
+    parser.add_argument("--slot-id", default="")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
@@ -186,7 +199,7 @@ def main() -> int:
     ledger = SheetsBudgetLedger(client, args.account_id)
     gemini = GeminiHybridClient(reserve_request=ledger.reserve)
     gate = HybridAiGate(gemini)
-    selected, skipped_current = candidate_rows(client, args.account_id, args.max_candidates)
+    selected, skipped_current = candidate_rows(client, args.account_id, args.max_candidates, args.slot_id)
     posted_before = records(client, "posted_results")
     statuses_before = {
         str(queue.get("queue_id", "")): str(queue.get("status", ""))
@@ -286,6 +299,7 @@ def main() -> int:
         "status": "PASS" if not runtime_errors else "PARTIAL_ERROR",
         "mode": "APPLY" if args.apply else "DRY_RUN",
         "account_id": args.account_id,
+        "slot_id": args.slot_id,
         "candidate_count": len(selected),
         "skipped_current_count": len(skipped_current),
         "skipped_current": skipped_current,

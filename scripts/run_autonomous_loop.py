@@ -637,6 +637,8 @@ def save_text_slot_result(plan: dict[str, Any], results: list[dict[str, Any]]) -
     account = str(plan.get("selected_account") or plan.get("account_id") or "")
     if not slot.get("slot_id") or slot.get("post_type") not in TEXT_POST_TYPES or not account:
         return {"status": "SKIPPED", "reason": "not_a_text_slot"}
+    if any(str(row.get("reason", "")) == "stop_before_post" for row in results):
+        return {"status": "DEFERRED", "reason": "hybrid_review_and_exact_publish_pending"}
     try:
         from config_loader import get_config
         from sheets_client import SheetsClient
@@ -694,7 +696,6 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
         plan["account_execution"] = execution
         plan["selected_account"] = execution.get("selected_account", accounts[0] if len(accounts) == 1 else "")
         plan["skipped_account"] = execution.get("skipped_accounts", [])
-    threads_source_urls = source_urls_for_platform(plan, "threads")
     threads_source_ids = source_ids_for_platform(plan, "threads")
     slot = dict(plan.get("content_slot") or {})
     slot_args = ["--slot-id", str(slot.get("slot_id", "")), "--post-type", str(slot.get("post_type", "original_text")), "--theme", str(slot.get("theme", "")), "--schedule-date-jst", datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=9))).strftime("%Y-%m-%d")]
@@ -919,7 +920,7 @@ def main() -> int:
                 cfg = get_config()
                 claim_client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
                 slot = plan.get("content_slot") or {}
-                if slot.get("slot_id") and args.account_id != "all":
+                if slot.get("slot_id") and args.account_id != "all" and not args.stop_before_post:
                     claim = claim_slot_run(claim_client, args.account_id, str(slot["slot_id"]))
                     plan["slot_claim"] = claim
                     if claim.get("status") != "CLAIMED":

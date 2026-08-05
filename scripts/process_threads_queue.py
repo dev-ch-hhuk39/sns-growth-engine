@@ -1051,6 +1051,38 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             pass
         return {"status": "POSTED_SAVE_FAILED", "queue_id": queue_id, "fallback": str(fallback)}
 
+    slot_warning = ""
+    slot_id = str(queue_row.get("slot_id", "")).strip()
+    if slot_id:
+        try:
+            from content_slot_runs import build_slot_run, upsert_slot_run
+            slot_row = build_slot_run(
+                account_id,
+                slot_id,
+                status="POSTED_PRIMARY",
+                actual_post_type=str(queue_row.get("content_type") or queue_row.get("generation_mode") or "threads"),
+                fallback_level=0,
+                queue_id=queue_id,
+                result_id=result_id,
+                post_url=result.posted_url or "",
+                media_asset_id=media["media_asset_id"],
+                source_post_id=str(queue_row.get("source_post_id", "")),
+                source_video_id=str(queue_row.get("source_video_id", "")),
+                actual_generation_mode=str(queue_row.get("generation_mode", "")),
+                actual_posted_at=now_iso(),
+            )
+            upsert_slot_run(client, slot_row)
+            clip_candidate_id = str(queue_row.get("clip_candidate_id") or queue_row.get("video_clip_id") or "").strip()
+            if clip_candidate_id and hasattr(client, "update_video_clip_candidate"):
+                client.update_video_clip_candidate(
+                    clip_candidate_id,
+                    post_status="POSTED",
+                    reviewer_status="AUTO_APPROVED",
+                    clip_status="POSTED",
+                )
+        except Exception as exc:
+            slot_warning = f"content_slot_finalize_failed:{type(exc).__name__}"
+
     pdca_warning = ""
     metrics_job_count = 0
     try:
@@ -1073,7 +1105,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         ),
         "post_url": result.posted_url or "",
         "metrics_collection_job_count": metrics_job_count,
-        "warning": pdca_warning,
+        "warning": ",".join(item for item in (pdca_warning, slot_warning) if item),
     }
 
 

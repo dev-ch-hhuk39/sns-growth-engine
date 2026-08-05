@@ -228,7 +228,7 @@ def check_workflow(path: Path) -> list[tuple[str, bool]]:
             return checks
         if name in {"media-growth-production.yml", "media-growth-production-night-scout.yml"}:
             account_id = "liver_manager" if name == "media-growth-production.yml" else "night_scout"
-            cron = 'cron: "20 22 * * *"' if name == "media-growth-production.yml" else 'cron: "20 2 * * *"'
+            cron = 'cron: "30 6 * * *"' if name == "media-growth-production.yml" else 'cron: "30 9 * * *"'
             checks.append((f"{name} [schedule] fixed media account", f'ACCOUNT_ID: "{account_id}"' in text))
             checks.append((f"{name} [schedule] daily one-slot cron", cron in text))
             checks.append((f"{name} [schedule] kill_switch guard exists", "kill_switch" in text))

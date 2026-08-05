@@ -100,7 +100,8 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
-    operation = lambda: client._ws(logical).get_all_records()
+    def operation() -> list[dict[str, Any]]:
+        return client._ws(logical).get_all_records()
     retry = getattr(client, "_call_with_rate_limit_retry", None)
     rows = retry(f"get_all_records:{logical}:media_production", operation) if retry else operation()
     return [dict(row) for row in rows]
@@ -110,9 +111,14 @@ def _append(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     ws = client._ws(logical)
     retry = getattr(client, "_call_with_rate_limit_retry", None)
-    read_headers = lambda: ws.row_values(1)
+    def read_headers() -> list[str]:
+        return ws.row_values(1)
     headers = retry(f"row_values:{logical}:media_production", read_headers) if retry else read_headers()
-    append = lambda: ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED")
+    def append() -> Any:
+        return ws.append_row(
+            [str(row.get(h, "")) for h in headers],
+            value_input_option="USER_ENTERED",
+        )
     if retry:
         retry(f"append_row:{logical}:media_production", append)
     else:
@@ -1591,6 +1597,7 @@ def build_plan(
     account_id: str = "liver_manager",
     prepare_only: bool = False,
     post_saved_media: bool = False,
+    prepare_saved_media_queue: bool = False,
     slot_id: str = "",
     excluded_clip_ids: set[str] | None = None,
 ) -> dict[str, Any]:
@@ -1612,6 +1619,7 @@ def build_plan(
             "would_post_video": False,
             "prepare_only": prepare_only,
             "post_saved_media": post_saved_media,
+        "prepare_saved_media_queue": prepare_saved_media_queue,
             "slot_id": slot_id,
             "blocked_reasons": ["resource_budget_media_slot"],
         }
@@ -1624,7 +1632,15 @@ def build_plan(
     if apply and not confirm:
         blocked.append("--apply requires --confirm-production-media")
     if apply:
-        required_env = SAVED_MEDIA_POST_REQUIRED_ENV if post_saved_media else (PREPARE_REQUIRED_ENV if prepare_only else REQUIRED_ENV)
+        required_env = (
+            ()
+            if prepare_saved_media_queue
+            else SAVED_MEDIA_POST_REQUIRED_ENV
+            if post_saved_media
+            else PREPARE_REQUIRED_ENV
+            if prepare_only
+            else REQUIRED_ENV
+        )
         blocked.extend(f"{name}=true required" for name in required_env if not _true(os.environ.get(name)))
     if not client:
         return {
@@ -1639,6 +1655,7 @@ def build_plan(
             "would_post_video": False,
             "prepare_only": prepare_only,
             "post_saved_media": post_saved_media,
+        "prepare_saved_media_queue": prepare_saved_media_queue,
             "slot_id": slot_id,
             "blocked_reasons": blocked,
         }
@@ -1740,6 +1757,7 @@ def build_plan(
         ),
         "prepare_only": prepare_only,
         "post_saved_media": post_saved_media,
+        "prepare_saved_media_queue": prepare_saved_media_queue,
         "slot_id": slot_id,
         "public_post_preview": public_preview(text),
         "today_post_count": len(today_posts),
@@ -1754,6 +1772,151 @@ def build_plan(
         "skipped_candidates": skipped[:20],
     }
 
+
+
+def prepare_saved_media_queue(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
+    """Create one exact WAITING_REVIEW queue row; never claim or publish a slot."""
+    clip = dict(plan["selected_clip"])
+    source_video = dict(plan["selected_source_video"])
+    asset = dict(plan["selected_media_asset"])
+    clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+    source_video_id = str(source_video.get("source_video_id") or "")
+    account_id = str(plan["account_id"])
+    slot_id = str(plan.get("slot_id", ""))
+    business = business_date()
+    queue_id = f"media_q_{business.replace('-', '')}_{account_id}_{slot_id}_{clip_id}"
+
+    existing = next(
+        (
+            dict(row)
+            for row in _records(client, "queue")
+            if str(row.get("queue_id", "")) == queue_id
+        ),
+        None,
+    )
+    if existing:
+        return {
+            **plan,
+            "status": "QUEUE_ALREADY_EXISTS",
+            "queue_id": queue_id,
+            "queue_status": str(existing.get("status", "")),
+            "would_post_video": False,
+        }
+
+    media_id = str(asset.get("media_asset_id") or asset.get("media_id") or "")
+    media_url = str(asset.get("storage_url") or asset.get("cloudinary_url") or "")
+    caption = _generate_final_media_caption(
+        clip=clip,
+        source_video=source_video,
+        media_asset=asset,
+        account_id=account_id,
+        recent_posts=_recent_public_posts(_records(client, "posted_results"), account_id),
+        max_attempts=3,
+    )
+    if caption.get("status") != "PASS":
+        _mark_caption_review_required(client, clip_id=clip_id, caption=caption)
+        return {
+            **plan,
+            "status": "REVIEW_REQUIRED",
+            "queue_id": "",
+            "caption_result": caption,
+            "would_post_video": False,
+        }
+
+    caption_fields = _caption_clip_fields(caption)
+    clip.update(caption_fields)
+    text_value = str(caption.get("public_post_text", ""))
+    validation = validate_media_post({
+        "rights_status": asset.get("rights_status") or clip.get("rights_status", ""),
+        "permission_status": asset.get("permission_status") or clip.get("permission_status", ""),
+        "media_url": media_url,
+        "media_asset_id": media_id,
+        "platform": "threads",
+        "account_id": account_id,
+        "media_type": "video",
+        "duration_seconds": asset.get("duration_seconds") or asset.get("duration", 0),
+        "aspect_ratio": asset.get("aspect_ratio", "9:16"),
+        "width": asset.get("width", ""),
+        "height": asset.get("height", ""),
+        "video_stream_count": asset.get("video_stream_count", 0),
+        "audio_stream_count": asset.get("audio_stream_count", 0),
+        "media_probe_status": asset.get("media_probe_status", ""),
+        "enforce_video_stream_evidence": True,
+        "public_post_text": text_value,
+        **_alignment_fields(clip),
+    })
+    if validation["status"] != "PASS":
+        return {
+            **plan,
+            "status": _validation_failure_status(validation),
+            "queue_id": "",
+            "media_validation": validation,
+            "would_post_video": False,
+        }
+
+    queue_row = {
+        "queue_id": queue_id,
+        "account_id": account_id,
+        "target_account_id": account_id,
+        "platform": "threads",
+        "priority": "1",
+        "status": "WAITING_REVIEW",
+        "auto_publish": "false",
+        "generation_mode": "saved_approved_source_clip",
+        "content_type": "approved_source_clip",
+        "slot_id": slot_id,
+        "business_date_jst": business,
+        "media_asset_id": media_id,
+        "video_clip_id": clip_id,
+        "source_video_id": source_video_id,
+        "clip_candidate_id": clip_id,
+        "rights_status": asset.get("rights_status") or clip.get("rights_status", ""),
+        "permission_status": asset.get("permission_status") or clip.get("permission_status", ""),
+        "rights_review_required": "false",
+        "media_reuse_risk": "low",
+        "source_video_url": source_video.get("canonical_video_url", ""),
+        "source_time_range": f"{clip.get('start_seconds', clip.get('start_time', ''))}-{clip.get('end_seconds', clip.get('end_time', ''))}",
+        "public_post_text": text_value,
+        "validator_status": "PASS",
+        "internal_leak_status": "PASS",
+        "account_fit_status": "PASS",
+        "caption_provider": clip.get("caption_provider", ""),
+        "caption_provider_version": clip.get("caption_provider_version", ""),
+        **_alignment_fields(clip),
+        "claim_support_json": clip.get("claim_support_json", ""),
+        "media_url": media_url,
+        "media_status": "UPLOADED",
+        "media_required": "true",
+        "media_type": "video",
+        "media_origin": "approved_source_clip",
+        "duration_seconds": asset.get("duration_seconds") or asset.get("duration", ""),
+        "aspect_ratio": asset.get("aspect_ratio", "9:16"),
+        "width": asset.get("width", ""),
+        "height": asset.get("height", ""),
+        "video_stream_count": asset.get("video_stream_count", 0),
+        "audio_stream_count": asset.get("audio_stream_count", 0),
+        "media_probe_status": asset.get("media_probe_status", ""),
+        "enforce_video_stream_evidence": "true",
+        "blocked_reason": "hybrid_ai_gate_pending",
+        "error": "hybrid_ai_gate_pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _append(client, "queue", queue_row)
+    client.update_video_clip_candidate(
+        clip_id,
+        **caption_fields,
+        post_status="WAITING_REVIEW",
+        reviewer_status="WAITING_REVIEW",
+        clip_status="MEDIA_READY",
+    )
+    return {
+        **plan,
+        "status": "QUEUED_WAITING_REVIEW",
+        "queue_id": queue_id,
+        "updated_queue_ids": [queue_id],
+        "public_post_preview": public_preview(text_value),
+        "would_post_video": False,
+    }
 
 def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     """Publish a previously uploaded, approved clip without download/cut/upload."""
@@ -2452,10 +2615,11 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--prepare-only", action="store_true", help="download/cut/upload one approved clip, but never post it")
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
+    parser.add_argument("--prepare-saved-media-queue", action="store_true", help="create one WAITING_REVIEW queue row for Hybrid AI; never post")
     parser.add_argument("--slot-id", default="", help="canonical approved_source_clip slot for idempotency and reporting")
     args = parser.parse_args()
-    if args.prepare_only and args.post_saved_media:
-        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["prepare_only_and_post_saved_media_are_mutually_exclusive"]}, ensure_ascii=False))
+    if sum(bool(value) for value in (args.prepare_only, args.post_saved_media, args.prepare_saved_media_queue)) > 1:
+        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["media_modes_are_mutually_exclusive"]}, ensure_ascii=False))
         return 1
 
     client = None
@@ -2469,7 +2633,8 @@ def main() -> int:
         confirm=args.confirm_production_media,
         client=client,
         prepare_only=args.prepare_only,
-        post_saved_media=args.post_saved_media,
+        post_saved_media=(args.post_saved_media or args.prepare_saved_media_queue),
+        prepare_saved_media_queue=args.prepare_saved_media_queue,
         slot_id=args.slot_id,
         excluded_clip_ids=excluded_clip_ids,
     )
@@ -2480,6 +2645,14 @@ def main() -> int:
         else:
             plan["slot_id"] = args.slot_id
     if (
+        args.apply
+        and args.confirm_production_media
+        and client
+        and plan.get("status") == "PLAN_ONLY"
+        and args.prepare_saved_media_queue
+    ):
+        plan = prepare_saved_media_queue(plan, client)
+    elif (
         args.apply
         and args.confirm_production_media
         and client
@@ -2504,7 +2677,8 @@ def main() -> int:
                 confirm=True,
                 client=client,
                 prepare_only=args.prepare_only,
-                post_saved_media=args.post_saved_media,
+                post_saved_media=(args.post_saved_media or args.prepare_saved_media_queue),
+        prepare_saved_media_queue=args.prepare_saved_media_queue,
                 slot_id=args.slot_id,
                 excluded_clip_ids=excluded_clip_ids,
             )

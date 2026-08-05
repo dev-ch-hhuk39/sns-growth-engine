@@ -36,8 +36,9 @@ EXPECTED_CRONS = {
     "liver_manager": {"4 1 * * *", "4 4 * * *", "4 12 * * *"},
 }
 
-# Media workflows remain dispatch-only until the canary evidence activates
-# scheduled media posting. Text schedules are intentionally independent.
+# End-to-end activation keeps preparation and publication separated. Every
+# scheduled publisher uses the persisted activation gate; preparation jobs may
+# run earlier but never publish.
 MEDIA_CANARY_WORKFLOWS = {
     "media_prepare_liver_manager",
     "media_prepare_night_scout",
@@ -46,7 +47,16 @@ MEDIA_CANARY_WORKFLOWS = {
     "direct_media_liver_manager",
     "direct_media_night_scout",
 }
-MEDIA_SCHEDULED_PUBLISH_WORKFLOWS: set[str] = set()
+MEDIA_SCHEDULED_PUBLISH_WORKFLOWS = {
+    "media_post_liver_manager",
+    "media_post_night_scout",
+    "direct_media_liver_manager",
+    "direct_media_night_scout",
+}
+MEDIA_SCHEDULED_PREP_WORKFLOWS = {
+    "media_prepare_liver_manager",
+    "media_prepare_night_scout",
+}
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -230,7 +240,13 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
                 'ALLOW_TRANSCRIPTION_API: "false"',
             ]),
             "crons": sorted(_crons(text)),
-            "trigger_mode": "dispatch_only_preparation" if key in MEDIA_CANARY_WORKFLOWS else "scheduled",
+            "trigger_mode": (
+                "scheduled_activation_guarded"
+                if key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
+                else "scheduled_preparation"
+                if key in MEDIA_SCHEDULED_PREP_WORKFLOWS
+                else "scheduled"
+            ),
         }
         if key in EXPECTED_CRONS and set(wf["crons"]) != EXPECTED_CRONS[key]:
             problems.append(f"{key}:schedule_mismatch")
@@ -242,8 +258,10 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
             or "scheduled_publish_activation_gate.py --use-sheets" not in text
         ):
             problems.append(f"{key}:scheduled_activation_guard_contract_failed")
-        if key in MEDIA_CANARY_WORKFLOWS - MEDIA_SCHEDULED_PUBLISH_WORKFLOWS and (wf["has_schedule"] or not wf["has_workflow_dispatch"]):
-            problems.append(f"{key}:dispatch_only_preparation_contract_failed")
+        if key in MEDIA_SCHEDULED_PREP_WORKFLOWS and (
+            not wf["has_schedule"] or not wf["has_workflow_dispatch"]
+        ):
+            problems.append(f"{key}:scheduled_preparation_contract_failed")
         if key not in {"manual", *MEDIA_CANARY_WORKFLOWS} and not wf["has_schedule"]:
             problems.append(f"{key}:schedule_missing")
         if not wf["has_permissions_contents_read"] or not wf["has_permissions_actions_read"]:
@@ -307,12 +325,34 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
             "media_schedule_on": bool(config.get("scheduled_publish_enabled")),
             "media_schedule_connected": bool(config.get("scheduled_publish_enabled")),
             "media_execution_mode": "scheduled_activation_guarded" if config.get("scheduled_publish_enabled") else "manual_canary_only",
+            # Schedule connectivity is reported separately. This aggregate
+            # verifies that every media workflow is classified into its exact
+            # activated execution mode; the cross-workflow safety tests verify
+            # schedule, dispatch, activation gate, and scoped capability flags.
             "media_canary_workflows_healthy": all(
-                workflow_results.get(key, {}).get("trigger_mode") == "dispatch_only_preparation"
-                and workflow_results.get(key, {}).get("has_workflow_dispatch", False)
-                and not workflow_results.get(key, {}).get("has_schedule", False)
+                (
+                    key in MEDIA_SCHEDULED_PUBLISH_WORKFLOWS
+                    and workflow_results.get(key, {}).get("trigger_mode")
+                    == "scheduled_activation_guarded"
+                )
+                or (
+                    key in MEDIA_SCHEDULED_PREP_WORKFLOWS
+                    and workflow_results.get(key, {}).get("trigger_mode")
+                    == "scheduled_preparation"
+                )
                 for key in MEDIA_CANARY_WORKFLOWS
             ),
+            "media_workflow_health_details": {
+                key: {
+                    "exists": workflow_results.get(key, {}).get("exists", False),
+                    "has_schedule": workflow_results.get(key, {}).get("has_schedule", False),
+                    "has_workflow_dispatch": workflow_results.get(key, {}).get(
+                        "has_workflow_dispatch", False
+                    ),
+                    "trigger_mode": workflow_results.get(key, {}).get("trigger_mode", ""),
+                }
+                for key in sorted(MEDIA_CANARY_WORKFLOWS)
+            },
             "media_growth_engine_enabled": bool(media_config.get("media_growth_engine_enabled")),
             "source_video_discovery_apply_enabled": bool(media_config.get("source_video_discovery_apply_enabled")),
             "auto_save_discovered_videos": bool(media_config.get("auto_save_discovered_videos")),

@@ -65,5 +65,22 @@
       "video_clip_reference": 10,
       "original_hypothesis": 0
     }
+  },
+  "operational_threads_slot_mix": {
+    "schema_version": "threads_slot_mix_v1",
+    "night_scout": {
+      "new_text_generation": 20,
+      "reference_text_generation": 20,
+      "pdca_text_generation": 20,
+      "direct_reference_media": 20,
+      "approved_source_clip": 20
+    },
+    "liver_manager": {
+      "new_text_generation": 20,
+      "reference_text_generation": 20,
+      "pdca_text_generation": 20,
+      "direct_reference_media": 20,
+      "approved_source_clip": 20
+    }
   }
 }

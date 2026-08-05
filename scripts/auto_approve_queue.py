@@ -358,10 +358,14 @@ def records(client: Any, logical: str) -> list[dict[str, Any]]:
     return [dict(r) for r in getattr(client, attr, [])]
 
 
-def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, Any]) -> dict[str, Any]:
+def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, Any], slot_id: str = "", queue_ids: set[str] | None = None) -> dict[str, Any]:
     queue_rows = client.get_queue_items(status=ELIGIBLE_STATUS)
     if account_id != "all":
         queue_rows = [r for r in queue_rows if r.get("account_id") == account_id]
+    if slot_id:
+        queue_rows = [r for r in queue_rows if str(r.get("slot_id", "")) == slot_id]
+    if queue_ids:
+        queue_rows = [r for r in queue_rows if str(r.get("queue_id", "")) in queue_ids]
     drafts = {str(r.get("draft_id", "")): r for r in records(client, "drafts")}
     derivatives = {
         (str(r.get("draft_id", "")), str(r.get("platform", "")).lower()): r
@@ -524,6 +528,8 @@ def main() -> int:
     parser.add_argument("--confirm-auto-ready", action="store_true")
     parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--max-ready", type=int, default=1)
+    parser.add_argument("--slot-id", default="")
+    parser.add_argument("--queue-id", action="append", default=[])
     parser.add_argument("--rules-file", default=str(RULES_FILE))
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--skip-setup", action="store_true", help="Assume Sheets tabs already exist and skip setup_all() to reduce read quota")
@@ -545,7 +551,7 @@ def main() -> int:
         from sheets_client import MockSheetsClient
         client = MockSheetsClient()
 
-    plan = build_plan(client, args.account_id, args.max_ready, rules)
+    plan = build_plan(client, args.account_id, args.max_ready, rules, args.slot_id, set(args.queue_id))
     if not args.apply:
         print(json.dumps({"mode": "dry-run", **plan}, ensure_ascii=False, indent=2))
         return 0

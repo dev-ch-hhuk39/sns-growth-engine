@@ -1,28 +1,22 @@
 #!/usr/bin/env python3
-"""Media publishers remain manual-only until canary evidence activates them."""
 from __future__ import annotations
-
 import sys
 from pathlib import Path
-
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-
 from check_autonomous_health import build_health
-
 health = build_health("all")
-workflows = health["workflow_files"]
 media = health["media_schedule"]
-scheduled_keys = {"media_post_liver_manager", "media_post_night_scout", "direct_media_liver_manager", "direct_media_night_scout"}
-preparation_keys = {key for key in workflows if key.startswith(("media_prepare_",))}
+workflows = health["workflow_files"]
+publishers = {"media_post_liver_manager", "media_post_night_scout", "direct_media_liver_manager", "direct_media_night_scout"}
+preparers = {"media_prepare_liver_manager", "media_prepare_night_scout"}
 checks = [
-    ("media scheduled publishing remains disabled", media["media_schedule_on"] is False),
-    ("media schedules are inactive before activation", media["media_schedule_connected"] is False),
-    ("media mode is manual canary only", media["media_execution_mode"] == "manual_canary_only"),
-    ("all media canary workflows are healthy", media["media_canary_workflows_healthy"] is True),
-    ("media publishers remain dispatch only", all(workflows[key]["trigger_mode"] == "dispatch_only_preparation" for key in scheduled_keys)),
-    ("media preparation remains dispatch only", all(workflows[key]["trigger_mode"] == "dispatch_only_preparation" for key in preparation_keys)),
-    ("no inactive media workflow is reported missing", not any("media_" in item and "schedule_" in item for item in health["problems"])),
+    ("media scheduled publishing enabled", media["media_schedule_on"] is True),
+    ("media schedules connected", media["media_schedule_connected"] is True),
+    ("media mode activation guarded", media["media_execution_mode"] == "scheduled_activation_guarded"),
+    ("all media workflows healthy", media["media_canary_workflows_healthy"] is True),
+    ("publishers activation guarded", all(workflows[k]["trigger_mode"] == "scheduled_activation_guarded" for k in publishers)),
+    ("preparers scheduled preparation", all(workflows[k]["trigger_mode"] == "scheduled_preparation" for k in preparers)),
 ]
 for name, ok in checks:
     print(f"  {'PASS' if ok else 'FAIL'} {name}")

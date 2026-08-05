@@ -15,6 +15,8 @@ GATED_GENERATION_MODES = {
     "saved_direct_reference_media",
     "saved_approved_source_clip",
     "system_owned_media",
+    "safe_original_fallback_threads",
+    "approved_source_clip",
 }
 
 

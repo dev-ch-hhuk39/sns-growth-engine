@@ -1,6 +1,8 @@
 name: Media Growth Post Liver Manager
 
 on:
+  schedule:
+    - cron: "4 9 * * *"
   # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
@@ -47,6 +49,7 @@ jobs:
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
     steps:
@@ -78,6 +81,12 @@ jobs:
       - name: Dry-run manual E2E saved media proof
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.manual_e2e_proof == 'true'
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --post-saved-media --dry-run --use-sheets
+      - name: Create exact WAITING_REVIEW clip queue
+        if: ((github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')) && github.event.inputs.manual_e2e_proof != 'true'
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --prepare-saved-media-queue --apply --confirm-production-media --use-sheets
+      - name: Hybrid review and exact media promotion
+        if: ((github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')) && github.event.inputs.manual_e2e_proof != 'true'
+        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "lm_1800_clip_media" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
       - name: Resolve scheduled activation gate
         id: activation
         run: |
@@ -103,7 +112,7 @@ jobs:
               raise SystemExit("[BLOCKED] media post disabled by kill switch or config")
           print("[OK] saved-media post is enabled")
           PY
-          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 THREADS_ACCESS_TOKEN_LIVER_MANAGER THREADS_USER_ID_LIVER_MANAGER; do
+          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 THREADS_ACCESS_TOKEN_LIVER_MANAGER THREADS_USER_ID_LIVER_MANAGER GEMINI_API_KEY; do
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Post one saved approved media asset
@@ -118,7 +127,10 @@ jobs:
           ALLOW_VIDEO_CUT: "false"
           ALLOW_CLOUDINARY_UPLOAD: "false"
           ALLOW_TRANSCRIPTION_API: "false"
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id lm_1800_clip_media --post-saved-media --apply --confirm-production-media --use-sheets
+        run: |
+          qid=$(python3 -c "import json; print(json.load(open('/tmp/hybrid-ready.json')).get('selected_queue_id',''))")
+          if [ -z "$qid" ]; then echo "[SAFE_NO_POST] no AI-approved clip candidate"; exit 0; fi
+          python3 scripts/process_threads_queue.py --account-id "$ACCOUNT_ID" --queue-id "$qid" --max-posts 1 --confirm-real-post
       - name: Post one manual E2E saved media proof
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.manual_e2e_proof == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
@@ -131,7 +143,9 @@ jobs:
           ALLOW_VIDEO_CUT: "false"
           ALLOW_CLOUDINARY_UPLOAD: "false"
           ALLOW_TRANSCRIPTION_API: "false"
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --post-saved-media --apply --confirm-production-media --use-sheets
+        run: |
+          echo "[BLOCKED] manual_e2e_proof cannot bypass Hybrid AI"
+          exit 1
       - name: Health summary
         if: always()
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

@@ -1,22 +1,4 @@
 #!/usr/bin/env python3
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parents[1]
-wf = (ROOT / ".github/workflows/media-growth-production.yml").read_text()
-checks = [
-    'schedule:' not in wf and "Canary gate" in wf,
-    'ACCOUNT_ID: "liver_manager"' in wf,
-    "confirm_production_media" in wf,
-    "kill_switch" in wf,
-    'ALLOW_REAL_X_POST: "false"' in wf,
-    'ALLOW_TRANSCRIPTION_API: "false"' in wf,
-    'ALLOW_VIDEO_DOWNLOAD: "true"' in wf,
-    'ALLOW_VIDEO_CUT: "true"' in wf,
-    'ALLOW_CLOUDINARY_UPLOAD: "true"' in wf,
-    '--prepare-only' in wf,
-    'ALLOW_REAL_THREADS_VIDEO_POST: "false"' in wf,
-    "run_media_production_pipeline.py" in wf,
-    "apt-get install --yes --no-install-recommends ffmpeg" in wf,
-]
-print(f"PASS: {sum(checks)} / FAIL: {len(checks)-sum(checks)}")
-raise SystemExit(0 if all(checks) else 1)
+from activated_autopost_test_utils import MEDIA_PREP_WORKFLOWS, assert_media_preparation_contract
+assert_media_preparation_contract(MEDIA_PREP_WORKFLOWS["liver_manager_clip_prepare"], "lm_1800_clip_media")
+print("PASS test_media_production_workflow.py")
