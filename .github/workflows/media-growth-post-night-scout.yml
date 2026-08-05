@@ -97,6 +97,9 @@ jobs:
       - name: Create exact WAITING_REVIEW clip queue
         if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-saved-media-queue --apply --confirm-production-media --use-sheets
+      - name: Normalize exact scheduled media caption
+        if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')
+        run: python3 scripts/normalize_scheduled_media_caption.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --apply --use-sheets
       - name: Stop delayed scheduled execution after preserving candidate
         if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed != 'true'
         run: |
