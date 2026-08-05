@@ -413,6 +413,35 @@ def test_generation_does_not_refresh_ready_or_posted_rows() -> None:
     assert rows[0]["generation_mode"] == "old"
 
 
+
+def _mock_hybrid_ai_pass_fields(queue: dict, public_post_text: str) -> dict[str, str]:
+    """Build the minimal persisted PASS audit used by offline contract tests."""
+    import json
+
+    from hybrid_ai_gate import GATE_SCHEMA_VERSION, hybrid_ai_input_hash
+
+    row = dict(queue)
+    row["public_post_text"] = public_post_text
+    gate = {
+        "schema_version": GATE_SCHEMA_VERSION,
+        "status": "PASS",
+        "input_hash": hybrid_ai_input_hash(row),
+        "route": "new_text_generation",
+        "public_post_text": public_post_text,
+        "blocked_reasons": [],
+        "actual_requests": 0,
+    }
+    return {
+        "public_post_text": public_post_text,
+        "generation_policy_json": json.dumps(
+            {"hybrid_ai_gate": gate},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    }
+
+
 def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
     from auto_approve_queue import build_plan, load_rules
     from generate_threads_ideas_from_references import build_fallback_generation_rows
@@ -421,6 +450,10 @@ def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
     for account_id in ("night_scout", "liver_manager"):
         client = MockSheetsClient()
         rows = build_fallback_generation_rows(account_id=account_id, top_n=2)
+        derivative_texts = {
+            derivative["draft_id"]: derivative["text"]
+            for derivative in rows["social_derivatives"]
+        }
         for draft in rows["drafts"]:
             client.save_draft(
                 account_id,
@@ -437,9 +470,22 @@ def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
             client.append_social_derivative(derivative)
         for queue in rows["queue"]:
             client.append_queue_item(queue)
-        plan = build_plan(client, account_id, 1, load_rules())
-        assert plan["approvable_count"] == 1, plan
-        assert plan["selected_queue_ids"], plan
+
+        ungated = build_plan(client, account_id, 1, load_rules())
+        assert ungated["approvable_count"] == 0, ungated
+        assert ungated["rejected_reasons"].get("hybrid_ai_gate_missing") == len(rows["queue"]), ungated
+
+        for queue in rows["queue"]:
+            fields = _mock_hybrid_ai_pass_fields(
+                queue,
+                derivative_texts[queue["draft_id"]],
+            )
+            client.update_queue_item(queue["queue_id"], **fields)
+
+        gated = build_plan(client, account_id, 1, load_rules())
+        assert gated["approvable_count"] == 1, gated
+        assert gated["selected_queue_ids"], gated
+
 
 
 def test_auto_approve_reject_reasons_visible() -> None:
@@ -465,15 +511,41 @@ def test_no_ready_queue_not_expected_after_safe_fallback() -> None:
 
     client = MockSheetsClient()
     rows = build_fallback_generation_rows(account_id="liver_manager", top_n=3)
+    derivative_texts = {
+        derivative["draft_id"]: derivative["text"]
+        for derivative in rows["social_derivatives"]
+    }
     for draft in rows["drafts"]:
-        client.save_draft("liver_manager", draft["title"], draft["body_md"], draft_id=draft["draft_id"], status=draft["status"], generation_mode=draft["generation_mode"], media_strategy="none", media_reuse_risk="low")
+        client.save_draft(
+            "liver_manager",
+            draft["title"],
+            draft["body_md"],
+            draft_id=draft["draft_id"],
+            status=draft["status"],
+            generation_mode=draft["generation_mode"],
+            media_strategy="none",
+            media_reuse_risk="low",
+        )
     for derivative in rows["social_derivatives"]:
         client.append_social_derivative(derivative)
     for queue in rows["queue"]:
         client.append_queue_item(queue)
-    plan = build_plan(client, "liver_manager", 1, load_rules())
-    assert plan["approvable_count"] >= 1, plan
-    assert plan["ready_count"] >= 1, plan
+
+    ungated = build_plan(client, "liver_manager", 1, load_rules())
+    assert ungated["approvable_count"] == 0, ungated
+    assert ungated["rejected_reasons"].get("hybrid_ai_gate_missing") == 3, ungated
+
+    for queue in rows["queue"]:
+        fields = _mock_hybrid_ai_pass_fields(
+            queue,
+            derivative_texts[queue["draft_id"]],
+        )
+        client.update_queue_item(queue["queue_id"], **fields)
+
+    gated = build_plan(client, "liver_manager", 1, load_rules())
+    assert gated["approvable_count"] >= 1, gated
+    assert gated["ready_count"] >= 1, gated
+
 
 
 def test_run_autonomous_loop_stop_before_post_static() -> None:
@@ -521,16 +593,36 @@ def test_queue_waiting_review_to_ready_flow() -> None:
 
     client = MockSheetsClient()
     rows = build_fallback_generation_rows(account_id="night_scout", top_n=1)
+    derivative_text = rows["social_derivatives"][0]["text"]
     for draft in rows["drafts"]:
-        client.save_draft("night_scout", draft["title"], draft["body_md"], draft_id=draft["draft_id"], status=draft["status"], generation_mode=draft["generation_mode"], media_strategy="none", media_reuse_risk="low")
+        client.save_draft(
+            "night_scout",
+            draft["title"],
+            draft["body_md"],
+            draft_id=draft["draft_id"],
+            status=draft["status"],
+            generation_mode=draft["generation_mode"],
+            media_strategy="none",
+            media_reuse_risk="low",
+        )
     for derivative in rows["social_derivatives"]:
         client.append_social_derivative(derivative)
     for queue in rows["queue"]:
         client.append_queue_item(queue)
-    plan = build_plan(client, "night_scout", 1, load_rules())
-    result = apply_ready(client, plan)
+
+    ungated = build_plan(client, "night_scout", 1, load_rules())
+    assert ungated["approvable_count"] == 0, ungated
+    assert "hybrid_ai_gate_missing" in ungated["rejected_reasons"], ungated
+
+    queue = rows["queue"][0]
+    fields = _mock_hybrid_ai_pass_fields(queue, derivative_text)
+    client.update_queue_item(queue["queue_id"], **fields)
+
+    gated = build_plan(client, "night_scout", 1, load_rules())
+    result = apply_ready(client, gated)
     assert result["updated_count"] == 1, result
-    assert client.get_queue_item(rows["queue"][0]["queue_id"])["status"] == "READY"
+    assert client.get_queue_item(queue["queue_id"])["status"] == "READY"
+
 
 
 def test_process_threads_queue_picks_ready_text_only() -> None:

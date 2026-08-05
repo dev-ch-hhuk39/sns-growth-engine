@@ -1,19 +1,43 @@
 #!/usr/bin/env python3
+from __future__ import annotations
+
+import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from auto_approve_queue import evaluate_item
-from public_post_quality import generate_production_post
+from auto_approve_queue import evaluate_item  # noqa: E402
+from hybrid_ai_gate import GATE_SCHEMA_VERSION, hybrid_ai_input_hash  # noqa: E402
+from public_post_quality import generate_production_post  # noqa: E402
 
 
 def check(condition: bool, name: str) -> None:
     assert condition, name
 
 
-text = generate_production_post("night_scout", batch_id="auto_ready_contract", content_type="original_text")["public_post_text"]
+def add_mock_gate(queue: dict[str, str]) -> None:
+    queue["generation_policy_json"] = json.dumps(
+        {
+            "hybrid_ai_gate": {
+                "schema_version": GATE_SCHEMA_VERSION,
+                "status": "PASS",
+                "input_hash": hybrid_ai_input_hash(queue),
+                "route": "new_text_generation",
+            }
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+text = generate_production_post(
+    "night_scout",
+    batch_id="auto_ready_contract",
+    content_type="original_text",
+)["public_post_text"]
 queue = {
     "queue_id": "q_contract",
     "account_id": "night_scout",
@@ -33,7 +57,10 @@ queue = {
     "shared_hook_detected": "false",
     "shared_closing_detected": "false",
 }
-derivative = {"text": "\u7d76\u5bfe\u7a3c\u3052\u308b\u3002\u4eca\u3059\u3050\u5fdc\u52df\u3002", "platform": "threads"}
+derivative = {
+    "text": "絶対稼げる。今すぐ応募。",
+    "platform": "threads",
+}
 rules = {
     "auto_ready_enabled": True,
     "kill_switch": False,
@@ -49,12 +76,39 @@ rules = {
     "blocked_terms": [],
     "sensitive_terms": [],
 }
-result = evaluate_item(queue=queue, draft=None, derivative=derivative, scores_by_ref={}, existing_texts=[], rules=rules)
-check(result["status"] == "APPROVABLE", "valid production contract approvable")
+
+missing = evaluate_item(
+    queue=queue,
+    draft=None,
+    derivative=derivative,
+    scores_by_ref={},
+    existing_texts=[],
+    rules=rules,
+)
+check(missing["status"] == "REJECTED", "missing hybrid gate rejected")
+check("hybrid_ai_gate_missing" in missing["reasons"], "missing gate reason recorded")
+
+add_mock_gate(queue)
+valid = evaluate_item(
+    queue=queue,
+    draft=None,
+    derivative=derivative,
+    scores_by_ref={},
+    existing_texts=[],
+    rules=rules,
+)
+check(valid["status"] == "APPROVABLE", "valid production and AI contracts approvable")
 
 bad = dict(queue)
 bad["topic_coherence_status"] = "BLOCKED"
-blocked = evaluate_item(queue=bad, draft=None, derivative=derivative, scores_by_ref={}, existing_texts=[], rules=rules)
+blocked = evaluate_item(
+    queue=bad,
+    draft=None,
+    derivative=derivative,
+    scores_by_ref={},
+    existing_texts=[],
+    rules=rules,
+)
 check(blocked["status"] == "REJECTED", "blocked topic contract rejected")
 check("topic_coherence_not_pass" in blocked["reasons"], "contract rejection reason recorded")
 

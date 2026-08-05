@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from public_post_quality import extract_public_post_text, final_public_post_validator  # noqa: E402
+from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate  # noqa: E402
 
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
@@ -212,6 +213,10 @@ def evaluate_item(
         reasons.append("status_not_waiting_review")
     if str(queue.get("generation_mode", "")).strip() == "":
         reasons.append("not_generated_candidate")
+    if requires_hybrid_ai_gate(queue):
+        gate_ok, gate_reason = hybrid_ai_gate_passed(queue)
+        if not gate_ok:
+            reasons.append(f"hybrid_ai_gate_{gate_reason}")
     if not recommended_use_ok(draft, scores_by_ref):
         reasons.append("recommended_use_not_allowed")
     if rules.get("kill_switch"):

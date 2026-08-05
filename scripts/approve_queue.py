@@ -48,6 +48,7 @@ from generation.approval_scorer import detect_forbidden_keywords
 from seeds import ACCOUNT_FORBIDDEN_KEYWORDS
 from sheets_client import SheetsClient, MockSheetsClient, make_client
 from publishers.dry_run import DryRunPublisher, X_CHAR_WARN, X_CHAR_LIMIT
+from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate
 
 ALLOWED_NEW_STATUSES = {"READY", "REJECTED"}
 
@@ -257,6 +258,14 @@ def cmd_approve(sheets, queue_id: str, new_status: str, reason: str, dry_run: bo
                 return 1
         except FileNotFoundError:
             pass
+
+    # Hybrid AI candidates require a current persisted semantic gate before READY.
+    if new_status == "READY" and requires_hybrid_ai_gate(q):
+        gate_ok, gate_reason = hybrid_ai_gate_passed(q)
+        if not gate_ok:
+            print(f"\n[REJECTED] hybrid_ai_gate: {gate_reason}")
+            print("  → run_hybrid_ai_queue_gate.py で候補を審査してから再承認してください。")
+            return 1
 
     # Phase 2.28: rights_review_required=true は READY 昇格ブロック
     if new_status == "READY":
