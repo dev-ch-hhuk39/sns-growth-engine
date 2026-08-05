@@ -74,13 +74,22 @@ jobs:
 
       - name: Collect Read-Only Evidence
         id: collector
+        continue-on-error: true
         run: |
           python3 scripts/collect_wp3_readonly_evidence.py --output /tmp/wp3_evidence.json
           python3 scripts/evaluate_wp3_readonly_workflow_result.py /tmp/wp3_evidence.json $GITHUB_STEP_SUMMARY
 
       - name: Audit Scheduled Autopost Candidates
+        id: scheduled_audit
+        if: always()
         run: |
           python3 scripts/run_scheduled_autopost_readonly_audit.py \
             --json-output /tmp/scheduled-autopost-audit.json \
             --markdown-output /tmp/scheduled-autopost-audit.md
           cat /tmp/scheduled-autopost-audit.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve WP3 evidence failure after audit
+        if: always() && steps.collector.outcome == 'failure'
+        run: |
+          echo '["WP3_READONLY_EVIDENCE_FAILED_AFTER_SCHEDULED_AUDIT"]' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
