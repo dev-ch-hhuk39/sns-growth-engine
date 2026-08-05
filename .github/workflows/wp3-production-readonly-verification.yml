@@ -38,6 +38,7 @@ jobs:
       CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
     steps:
       - name: Checkout Code
@@ -63,6 +64,11 @@ jobs:
             exit 1
           fi
 
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "[\"GEMINI_API_KEY_MISSING\"]" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
@@ -71,3 +77,10 @@ jobs:
         run: |
           python3 scripts/collect_wp3_readonly_evidence.py --output /tmp/wp3_evidence.json
           python3 scripts/evaluate_wp3_readonly_workflow_result.py /tmp/wp3_evidence.json $GITHUB_STEP_SUMMARY
+
+      - name: Audit Scheduled Autopost Candidates
+        run: |
+          python3 scripts/run_scheduled_autopost_readonly_audit.py \
+            --json-output /tmp/scheduled-autopost-audit.json \
+            --markdown-output /tmp/scheduled-autopost-audit.md
+          cat /tmp/scheduled-autopost-audit.md >> "$GITHUB_STEP_SUMMARY"
