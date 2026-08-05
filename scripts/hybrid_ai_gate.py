@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Common semantic/generation/review gate for every automated Threads route."""
+"""Common semantic, generation and final-review gate for Threads candidates."""
 from __future__ import annotations
 
 import hashlib
@@ -14,12 +14,20 @@ from generation.source_copyedit import (
     validate_source_preserving_public_post,
 )
 from hybrid_ai_policy import decide_route, requires_hybrid_ai_gate
+from hybrid_ai_source_context import hybrid_ai_source_context_hash
 from public_post_quality import final_public_post_validator
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/hybrid_ai_account_policies.json"
-GATE_SCHEMA_VERSION = "hybrid_ai_gate_v1"
-PROMPT_VERSION = "hybrid_ai_prompts_v1"
+GATE_SCHEMA_VERSION = "hybrid_ai_gate_v2"
+PROMPT_VERSION = "hybrid_ai_prompts_v2"
+
+GENERIC_TEMPLATE_PHRASES = (
+    "確認することは一つ。",
+    "この順番で考える理由はシンプル。",
+    "見るポイントは次の通り。",
+    "次に試すこと：",
+)
 
 CLASSIFICATION_SCHEMA = {
     "type": "object",
@@ -50,7 +58,7 @@ GENERATION_SCHEMA = {
     "additionalProperties": False,
     "required": ["public_post_text", "preserved_facts", "removed_noise", "notes"],
     "properties": {
-        "public_post_text": {"type": "string"},
+        "public_post_text": {"type": "string", "minLength": 20},
         "preserved_facts": {"type": "array", "items": {"type": "string"}},
         "removed_noise": {"type": "array", "items": {"type": "string"}},
         "notes": {"type": "string"},
@@ -87,6 +95,7 @@ class GateResult:
     public_post_text: str
     blocked_reasons: list[str]
     input_hash: str
+    source_context_hash: str
     classification: dict[str, Any]
     generation: dict[str, Any]
     review: dict[str, Any]
@@ -109,8 +118,29 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _queue_prompt_view(queue: Mapping[str, Any]) -> dict[str, str]:
+    fields = (
+        "queue_id",
+        "account_id",
+        "target_account_id",
+        "generation_mode",
+        "source_generation_mode",
+        "transformation_type",
+        "media_origin",
+        "content_type",
+        "source_id",
+        "source_post_id",
+        "source_video_id",
+        "clip_candidate_id",
+        "rights_status",
+        "permission_status",
+        "public_post_text",
+    )
+    return {field: _text(queue.get(field)) for field in fields}
+
+
 def hybrid_ai_input_hash(queue: Mapping[str, Any]) -> str:
-    fields = [
+    fields = (
         "queue_id",
         "account_id",
         "target_account_id",
@@ -127,7 +157,15 @@ def hybrid_ai_input_hash(queue: Mapping[str, Any]) -> str:
         "media_asset_id",
         "media_asset_ids_json",
         "public_post_text",
-    ]
+        "rights_status",
+        "permission_status",
+        "rights_review_required",
+        "media_reuse_risk",
+        "claim_support_json",
+        "content_hash",
+        "source_url",
+        "source_time_range",
+    )
     payload = {field: _text(queue.get(field)) for field in fields}
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -145,7 +183,10 @@ def persisted_hybrid_ai_gate(queue: Mapping[str, Any]) -> dict[str, Any] | None:
     return gate if isinstance(gate, dict) else None
 
 
-def hybrid_ai_gate_passed(queue: Mapping[str, Any]) -> tuple[bool, str]:
+def hybrid_ai_gate_current(
+    queue: Mapping[str, Any],
+    source_context: Mapping[str, Any] | None = None,
+) -> tuple[bool, str]:
     if not requires_hybrid_ai_gate(queue):
         return True, "not_required"
     gate = persisted_hybrid_ai_gate(queue)
@@ -153,22 +194,41 @@ def hybrid_ai_gate_passed(queue: Mapping[str, Any]) -> tuple[bool, str]:
         return False, "missing"
     if gate.get("schema_version") != GATE_SCHEMA_VERSION:
         return False, "schema_stale"
-    if gate.get("status") != "PASS":
-        return False, "not_pass"
     if gate.get("input_hash") != hybrid_ai_input_hash(queue):
         return False, "input_hash_stale"
+    if source_context is None:
+        return False, "source_context_required"
+    if gate.get("source_context_hash") != hybrid_ai_source_context_hash(source_context):
+        return False, "source_context_stale"
+    status = _text(gate.get("status")).upper()
+    if status not in {"PASS", "BLOCKED"}:
+        return False, "status_invalid"
+    return True, status.lower()
+
+
+def hybrid_ai_gate_passed(
+    queue: Mapping[str, Any],
+    source_context: Mapping[str, Any] | None = None,
+) -> tuple[bool, str]:
+    current, reason = hybrid_ai_gate_current(queue, source_context)
+    if not current:
+        return False, reason
+    if reason == "not_required":
+        return True, reason
+    if reason != "pass":
+        return False, "not_pass"
     return True, "pass"
 
 
 def _source_text(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> str:
-    candidates = [
+    candidates = (
         source_context.get("original_post_text"),
         source_context.get("transcript_excerpt"),
         source_context.get("transcript"),
         source_context.get("description"),
         source_context.get("source_text"),
         queue.get("public_post_text"),
-    ]
+    )
     seen: list[str] = []
     for value in candidates:
         text = _text(value)
@@ -181,7 +241,7 @@ def _hygiene_reasons(text: str) -> list[str]:
     reasons: list[str] = []
     if re.search(r"\[(?:音楽|拍手|BGM|笑い|無音)\]", text, flags=re.IGNORECASE):
         reasons.append("transcript_stage_direction_present")
-    if "ライバの排出" in text:
+    if "ライバの排出" in text or re.search(r"ライバー[^。\n]{0,12}排出", text):
         reasons.append("known_transcription_error_present")
     if re.search(r"(?:でで|がが|をを|にに|はは|もも)(?:[、。！!？?]|$)", text):
         reasons.append("duplicate_particle_present")
@@ -189,7 +249,13 @@ def _hygiene_reasons(text: str) -> list[str]:
         reasons.append("unverified_income_amount_present")
     if re.search(r"[0-9０-９,，]+\s*万円[^。\n]{0,20}(?:稼|達成)", text):
         reasons.append("unverified_income_achievement_present")
+    if any(phrase in text for phrase in GENERIC_TEMPLATE_PHRASES):
+        reasons.append("generic_template_phrase_present")
     return reasons
+
+
+def _is_true(value: Any) -> bool:
+    return _text(value).lower() in {"true", "1", "yes", "y"}
 
 
 def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> list[str]:
@@ -198,12 +264,33 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
     target_account_id = _text(queue.get("target_account_id"))
     if target_account_id and target_account_id != account_id:
         reasons.append("target_account_mismatch")
-    if _text(queue.get("excluded_from_activation")).lower() in {"true", "1", "yes"}:
+    source_target = _text(source_context.get("source_target_account_id"))
+    if source_target and source_target != account_id:
+        reasons.append("source_target_account_mismatch")
+    if source_context.get("read_errors"):
+        reasons.append("source_context_read_failed")
+    if _is_true(queue.get("excluded_from_activation")):
         reasons.append("excluded_from_activation")
-    if _text(queue.get("repost_prohibited")).lower() in {"true", "1", "yes"}:
+    if _is_true(queue.get("repost_prohibited")):
         reasons.append("repost_prohibited")
+
     route = decide_route(queue).route
-    media_route = route in {"external_direct_source_copyedit", "owned_media_transform", "approved_clip_transform"}
+    media_route = route in {
+        "external_direct_source_copyedit",
+        "owned_media_transform",
+        "approved_clip_transform",
+    }
+    rights_status = _text(queue.get("rights_status")).lower()
+    permission_status = _text(queue.get("permission_status")).lower()
+    if rights_status in {"not_allowed", "denied", "blocked"}:
+        reasons.append("rights_not_allowed")
+    if permission_status in {"not_allowed", "denied", "blocked"}:
+        reasons.append("permission_denied")
+    if media_route and _is_true(queue.get("rights_review_required")):
+        reasons.append("rights_review_required")
+    if media_route and rights_status == "unknown" and permission_status not in {"granted", "not_required"}:
+        reasons.append("rights_unverified")
+
     policies = {
         _text(source_context.get("use_policy")).upper(),
         _text(source_context.get("usage_scope")).upper(),
@@ -215,22 +302,46 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
         reasons.append("source_copyedit_text_missing")
     if not _source_text(queue, source_context):
         reasons.append("source_evidence_missing")
-    return reasons
+    return sorted(set(reasons))
 
 
-def _classification_prompt(queue: Mapping[str, Any], source_context: Mapping[str, Any], policy: Mapping[str, Any]) -> str:
+def _classification_prompt(
+    queue: Mapping[str, Any],
+    source_context: Mapping[str, Any],
+    policy: Mapping[str, Any],
+) -> str:
+    source_view = {
+        key: source_context.get(key)
+        for key in (
+            "source_id",
+            "original_post_text",
+            "transcript_excerpt",
+            "transcript",
+            "description",
+            "source_text",
+            "use_policy",
+            "usage_scope",
+            "reuse_policy",
+            "source_target_account_id",
+        )
+    }
     return (
         "あなたはSNS投稿候補の適合性審査担当です。文章生成はしません。"
         "対象アカウント、想定読者、BtoB/BtoC、参照元の利用目的を厳格に判定してください。"
-        "元素材が店舗経営者・事業者向けなのに求職者向けへ無理に変換されている場合はREJECT。"
-        "他社宣伝、根拠不明の収益実績、対象アカウント違いもREJECT。\n\n"
+        "店舗経営者・事業者向け素材を求職者向けへ無理に変換する場合、他社宣伝、"
+        "根拠不明の収益実績、対象アカウント違いはREJECTしてください。\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
-        f"QUEUE={json.dumps(dict(queue), ensure_ascii=False, sort_keys=True)}\n"
-        f"SOURCE_CONTEXT={json.dumps(dict(source_context), ensure_ascii=False, sort_keys=True)}"
+        f"QUEUE={json.dumps(_queue_prompt_view(queue), ensure_ascii=False, sort_keys=True)}\n"
+        f"SOURCE_CONTEXT={json.dumps(source_view, ensure_ascii=False, sort_keys=True)}"
     )
 
 
-def _generation_prompt(route: str, queue: Mapping[str, Any], source_text: str, policy: Mapping[str, Any]) -> str:
+def _generation_prompt(
+    route: str,
+    queue: Mapping[str, Any],
+    source_text: str,
+    policy: Mapping[str, Any],
+) -> str:
     if route == "external_direct_source_copyedit":
         instruction = (
             "元投稿の主張、固有情報、話者の温度感を維持し、誤字、重複助詞、メンション、ハッシュタグ、"
@@ -240,7 +351,7 @@ def _generation_prompt(route: str, queue: Mapping[str, Any], source_text: str, p
         instruction = (
             "参照根拠に書かれた事実だけを使い、対象読者に自然で具体的なThreads投稿を新規作成してください。"
             "BtoBの主張をBtoCに変換しない。他社の宣伝文や収益実績を自社の主張として使わない。"
-            "テンプレ句を避け、3段落程度で簡潔にしてください。"
+            "定型句を避け、3段落程度で簡潔にしてください。"
         )
     return (
         f"{instruction}\n\n"
@@ -251,11 +362,16 @@ def _generation_prompt(route: str, queue: Mapping[str, Any], source_text: str, p
     )
 
 
-def _review_prompt(queue: Mapping[str, Any], source_text: str, candidate_text: str, policy: Mapping[str, Any]) -> str:
+def _review_prompt(
+    queue: Mapping[str, Any],
+    source_text: str,
+    candidate_text: str,
+    policy: Mapping[str, Any],
+) -> str:
     return (
-        "公開直前のSNS投稿を厳格に審査してください。"
-        "自然な日本語、参照根拠への忠実性、対象読者・アカウント適合、公開安全性を確認してください。"
-        "誤字、重複助詞、[音楽]等、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECT。\n\n"
+        "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"
+        "対象読者・アカウント適合、公開安全性を確認してください。誤字、重複助詞、[音楽]等、"
+        "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
         f"QUEUE_ID={_text(queue.get('queue_id'))}\n"
         f"SOURCE_EVIDENCE={source_text}\n"
@@ -263,53 +379,144 @@ def _review_prompt(queue: Mapping[str, Any], source_text: str, candidate_text: s
     )
 
 
+def _blocked_context(classification: Mapping[str, Any], policy: Mapping[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    blocked_audiences = {
+        _text(item).lower()
+        for item in policy.get("blocked_source_audiences", [])
+        if _text(item)
+    }
+    source_audience = _text(classification.get("source_audience")).lower()
+    if source_audience and source_audience in blocked_audiences:
+        reasons.append("ai_blocked_source_audience")
+
+    blocked_contexts = {
+        _text(item).upper()
+        for item in policy.get("blocked_contexts", [])
+        if _text(item)
+    }
+    commercial_context = _text(classification.get("commercial_context")).upper()
+    if commercial_context in blocked_contexts:
+        reasons.append("ai_blocked_commercial_context")
+    elif commercial_context.startswith("B2B") and any(item.startswith("B2B") for item in blocked_contexts):
+        reasons.append("ai_blocked_commercial_context")
+    return reasons
+
+
 class HybridAiGate:
     def __init__(self, client: Any, policies: Mapping[str, Any] | None = None) -> None:
         self.client = client
         self.policies = dict(policies or load_account_policies())
+
+    def _result(
+        self,
+        *,
+        status: str,
+        route: str,
+        public_post_text: str,
+        blocked_reasons: list[str],
+        input_hash: str,
+        source_context_hash: str,
+        classification: dict[str, Any] | None = None,
+        generation: dict[str, Any] | None = None,
+        review: dict[str, Any] | None = None,
+        deterministic_validation: dict[str, Any] | None = None,
+        actual_requests: int = 0,
+    ) -> GateResult:
+        return GateResult(
+            status=status,
+            route=route,
+            public_post_text=public_post_text,
+            blocked_reasons=sorted(set(blocked_reasons)),
+            input_hash=input_hash,
+            source_context_hash=source_context_hash,
+            classification=classification or {},
+            generation=generation or {},
+            review=review or {},
+            deterministic_validation=deterministic_validation or {},
+            actual_requests=actual_requests,
+        )
 
     def evaluate(self, queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> GateResult:
         route = decide_route(queue)
         account_id = _text(queue.get("account_id"))
         policy = self.policies.get(account_id)
         initial_hash = hybrid_ai_input_hash(queue)
+        source_hash = hybrid_ai_source_context_hash(source_context)
+        current_text = _text(queue.get("public_post_text"))
         if not policy:
-            return GateResult("BLOCKED", route.route, _text(queue.get("public_post_text")), ["account_policy_missing"], initial_hash, {}, {}, {}, {}, 0)
+            return self._result(
+                status="BLOCKED",
+                route=route.route,
+                public_post_text=current_text,
+                blocked_reasons=["account_policy_missing"],
+                input_hash=initial_hash,
+                source_context_hash=source_hash,
+            )
+
         preflight = _preflight(queue, source_context)
         if preflight:
-            return GateResult("BLOCKED", route.route, _text(queue.get("public_post_text")), preflight, initial_hash, {}, {}, {}, {"preflight": preflight}, 0)
+            return self._result(
+                status="BLOCKED",
+                route=route.route,
+                public_post_text=current_text,
+                blocked_reasons=preflight,
+                input_hash=initial_hash,
+                source_context_hash=source_hash,
+                deterministic_validation={"preflight": preflight},
+            )
 
         source_text = _source_text(queue, source_context)
         before_requests = int(getattr(self.client, "actual_request_count", 0))
         classify_response = self.client.generate_json(
-            model=_text(source_context.get("classifier_model")) or "gemini-2.5-flash-lite",
+            model=_text(source_context.get("classifier_model")) or "gemini-3.1-flash-lite",
             prompt=_classification_prompt(queue, source_context, policy),
             schema=CLASSIFICATION_SCHEMA,
             operation="classify",
             account_id=account_id,
-            cache_context={"prompt_version": PROMPT_VERSION, "queue_hash": initial_hash},
+            cache_context={
+                "prompt_version": PROMPT_VERSION,
+                "queue_hash": initial_hash,
+                "source_context_hash": source_hash,
+            },
         )
         classification = dict(classify_response["data"])
-        classification_failures = []
+        classification_failures: list[str] = []
         if classification.get("decision") != "PASS":
             classification_failures.append("ai_classification_rejected")
         for field in ("target_account_match", "target_audience_match", "source_usage_fit"):
             if classification.get(field) != "PASS":
                 classification_failures.append(f"ai_{field}_failed")
+        classification_failures.extend(_blocked_context(classification, policy))
+        classification_failures.extend(str(flag) for flag in classification.get("risk_flags", []))
         if classification_failures:
             used = int(getattr(self.client, "actual_request_count", 0)) - before_requests
-            return GateResult("BLOCKED", route.route, _text(queue.get("public_post_text")), classification_failures + list(classification.get("risk_flags", [])), initial_hash, classification, {}, {}, {}, used)
+            return self._result(
+                status="BLOCKED",
+                route=route.route,
+                public_post_text=current_text,
+                blocked_reasons=classification_failures,
+                input_hash=initial_hash,
+                source_context_hash=source_hash,
+                classification=classification,
+                actual_requests=used,
+            )
 
         generation: dict[str, Any] = {}
-        candidate_text = _text(queue.get("public_post_text"))
+        candidate_text = current_text
         if route.generate:
             generate_response = self.client.generate_json(
-                model=_text(source_context.get("generator_model")) or "gemini-2.5-flash",
+                model=_text(source_context.get("generator_model")) or "gemini-3.5-flash",
                 prompt=_generation_prompt(route.route, queue, source_text, policy),
                 schema=GENERATION_SCHEMA,
                 operation="generate",
                 account_id=account_id,
-                cache_context={"prompt_version": PROMPT_VERSION, "queue_hash": initial_hash, "route": route.route},
+                cache_context={
+                    "prompt_version": PROMPT_VERSION,
+                    "queue_hash": initial_hash,
+                    "source_context_hash": source_hash,
+                    "route": route.route,
+                },
             )
             generation = dict(generate_response["data"])
             candidate_text = _text(generation.get("public_post_text"))
@@ -322,6 +529,7 @@ class HybridAiGate:
         )
         if public_validation["status"] != "PASS":
             deterministic_reasons.extend(str(reason) for reason in public_validation.get("blocked_reasons", []))
+
         source_contract: dict[str, Any] = {}
         if route.route == "external_direct_source_copyedit":
             source_contract = evaluate_source_copyedit_contract(
@@ -332,48 +540,65 @@ class HybridAiGate:
             )
             if source_contract.get("status") != "PASS":
                 deterministic_reasons.extend(str(reason) for reason in source_contract.get("blocked_reasons", []))
+
         deterministic = {
             "status": "PASS" if not deterministic_reasons else "BLOCKED",
             "blocked_reasons": sorted(set(deterministic_reasons)),
             "public_validation": public_validation,
             "source_copyedit_contract": source_contract,
         }
+        final_queue = dict(queue)
+        final_queue["public_post_text"] = candidate_text
+        final_hash = hybrid_ai_input_hash(final_queue)
         if deterministic_reasons:
             used = int(getattr(self.client, "actual_request_count", 0)) - before_requests
-            final_queue = dict(queue)
-            final_queue["public_post_text"] = candidate_text
-            return GateResult("BLOCKED", route.route, candidate_text, sorted(set(deterministic_reasons)), hybrid_ai_input_hash(final_queue), classification, generation, {}, deterministic, used)
+            return self._result(
+                status="BLOCKED",
+                route=route.route,
+                public_post_text=candidate_text,
+                blocked_reasons=deterministic_reasons,
+                input_hash=final_hash,
+                source_context_hash=source_hash,
+                classification=classification,
+                generation=generation,
+                deterministic_validation=deterministic,
+                actual_requests=used,
+            )
 
         review_response = self.client.generate_json(
-            model=_text(source_context.get("review_model")) or "gemini-2.5-flash-lite",
+            model=_text(source_context.get("review_model")) or "gemini-3.1-flash-lite",
             prompt=_review_prompt(queue, source_text, candidate_text, policy),
             schema=REVIEW_SCHEMA,
             operation="review",
             account_id=account_id,
-            cache_context={"prompt_version": PROMPT_VERSION, "queue_hash": initial_hash, "candidate_text": candidate_text},
+            cache_context={
+                "prompt_version": PROMPT_VERSION,
+                "queue_hash": final_hash,
+                "source_context_hash": source_hash,
+                "candidate_text": candidate_text,
+            },
         )
         review = dict(review_response["data"])
-        review_failures = []
+        review_failures: list[str] = []
         if review.get("decision") != "PASS":
             review_failures.append("ai_final_review_rejected")
         for field in ("natural_japanese", "source_grounding", "account_fit", "public_safety"):
             if review.get(field) != "PASS":
                 review_failures.append(f"ai_{field}_failed")
         review_failures.extend(str(flag) for flag in review.get("risk_flags", []))
-        final_queue = dict(queue)
-        final_queue["public_post_text"] = candidate_text
         used = int(getattr(self.client, "actual_request_count", 0)) - before_requests
-        return GateResult(
-            "PASS" if not review_failures else "BLOCKED",
-            route.route,
-            candidate_text,
-            sorted(set(review_failures)),
-            hybrid_ai_input_hash(final_queue),
-            classification,
-            generation,
-            review,
-            deterministic,
-            used,
+        return self._result(
+            status="PASS" if not review_failures else "BLOCKED",
+            route=route.route,
+            public_post_text=candidate_text,
+            blocked_reasons=review_failures,
+            input_hash=final_hash,
+            source_context_hash=source_hash,
+            classification=classification,
+            generation=generation,
+            review=review,
+            deterministic_validation=deterministic,
+            actual_requests=used,
         )
 
 

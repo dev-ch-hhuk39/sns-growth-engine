@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from auto_approve_queue import evaluate_item  # noqa: E402
 from hybrid_ai_gate import GATE_SCHEMA_VERSION, hybrid_ai_input_hash  # noqa: E402
+from hybrid_ai_source_context import hybrid_ai_source_context_hash  # noqa: E402
 from public_post_quality import generate_production_post  # noqa: E402
 
 
@@ -24,6 +25,7 @@ def add_mock_gate(queue: dict[str, str]) -> None:
                 "schema_version": GATE_SCHEMA_VERSION,
                 "status": "PASS",
                 "input_hash": hybrid_ai_input_hash(queue),
+                "source_context_hash": hybrid_ai_source_context_hash({}),
                 "route": "new_text_generation",
             }
         },

@@ -30,7 +30,7 @@ def main() -> None:
         "generation_mode": "reference_text",
         "public_post_text": "夜職の条件を確認する。",
     }
-    ok, reason = hybrid_ai_gate_passed(queue)
+    ok, reason = hybrid_ai_gate_passed(queue, {})
     assert ok is False and reason == "missing"
     print("PASS 11 tests")
 

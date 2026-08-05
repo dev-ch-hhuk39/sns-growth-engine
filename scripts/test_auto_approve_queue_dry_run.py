@@ -16,6 +16,7 @@ mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
 from hybrid_ai_gate import GATE_SCHEMA_VERSION, hybrid_ai_input_hash  # noqa: E402
+from hybrid_ai_source_context import hybrid_ai_source_context_hash  # noqa: E402
 
 
 def add_mock_gate(queue: dict[str, str], public_post_text: str) -> None:
@@ -26,6 +27,7 @@ def add_mock_gate(queue: dict[str, str], public_post_text: str) -> None:
                 "schema_version": GATE_SCHEMA_VERSION,
                 "status": "PASS",
                 "input_hash": hybrid_ai_input_hash(queue),
+                "source_context_hash": hybrid_ai_source_context_hash({}),
                 "route": "new_text_generation",
             }
         },
@@ -61,6 +63,7 @@ def main() -> int:
         scores_by_ref={"ref1": {"recommended_use": "REFERENCE_ONLY"}},
         existing_texts=[],
         rules=rules,
+        source_context={},
     )
     add_mock_gate(queue, derivative["text"])
     gated = mod.evaluate_item(
@@ -70,6 +73,7 @@ def main() -> int:
         scores_by_ref={"ref1": {"recommended_use": "REFERENCE_ONLY"}},
         existing_texts=[],
         rules=rules,
+        source_context={},
     )
 
     checks = [

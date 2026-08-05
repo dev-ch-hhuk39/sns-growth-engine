@@ -157,7 +157,6 @@ class GeminiHybridClient:
             "generationConfig": {
                 "responseMimeType": "application/json",
                 "responseJsonSchema": dict(schema),
-                "temperature": 0.2,
             },
         }
         last_error: Exception | None = None

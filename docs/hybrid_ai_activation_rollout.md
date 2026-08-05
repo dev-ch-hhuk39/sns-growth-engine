@@ -48,4 +48,16 @@ Optional repository variables:
 - `GEMINI_GENERATOR_MODEL`
 - `GEMINI_REVIEW_MODEL`
 
+Default free-tier-oriented stable models:
+
+- classifier/reviewer: `gemini-3.1-flash-lite`
+- generator: `gemini-3.5-flash`
+
 The workflows skip safely when the secret is absent. The integration test suite uses fake transports and never calls Gemini.
+
+
+## Freshness and repeat suppression
+
+The persisted audit hashes both the queue fields and the resolved source evidence/policy. READY approval and posting rebuild the source context, so a rights, permission, source-account, transcript or use-policy change invalidates the old PASS. A current PASS or BLOCKED audit is not re-run on later schedules; it is reconsidered only after the queue or source-context hash changes.
+
+Budget ledger reads are fail-closed. If the persistent Sheets request ledger cannot be read, no Gemini request is sent.
