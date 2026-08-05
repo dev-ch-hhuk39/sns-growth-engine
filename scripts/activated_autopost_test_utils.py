@@ -26,6 +26,8 @@ MEDIA_PREPARATION_WORKFLOWS = {
     "night_scout_clip": WORKFLOWS / "media-growth-production-night-scout.yml",
     "liver_manager_clip": WORKFLOWS / "media-growth-production.yml",
 }
+# Backward-compatible name used by the existing media preparation tests.
+MEDIA_PREP_WORKFLOWS = MEDIA_PREPARATION_WORKFLOWS
 
 
 def load_json(path: Path) -> dict:
