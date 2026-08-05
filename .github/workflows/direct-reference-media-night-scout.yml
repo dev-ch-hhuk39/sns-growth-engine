@@ -1,6 +1,8 @@
 name: Direct Reference Media Night Scout
 
 on:
+  schedule:
+    - cron: "2 9 * * *"
   # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
@@ -47,6 +49,7 @@ jobs:
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
     steps:
@@ -74,6 +77,9 @@ jobs:
         run: python3 scripts/check_schedule_window.py --slot-id "$CONTENT_SLOT_ID"
       - name: Dry-run prepared inventory
         run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --post-ready --dry-run --use-sheets
+      - name: Hybrid review and exact media promotion
+        if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true')
+        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "ns_1800_direct_media" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
       - name: Resolve scheduled activation gate
         id: activation
         run: |
@@ -97,7 +103,7 @@ jobs:
               raise SystemExit("[BLOCKED] kill_switch=true")
           print("[OK] kill_switch=false")
           PY
-          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 THREADS_ACCESS_TOKEN_NIGHT_SCOUT THREADS_USER_ID_NIGHT_SCOUT; do
+          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 THREADS_ACCESS_TOKEN_NIGHT_SCOUT THREADS_USER_ID_NIGHT_SCOUT GEMINI_API_KEY; do
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Dispatch one READY direct-media item
@@ -113,7 +119,10 @@ jobs:
           ALLOW_VIDEO_DOWNLOAD: "false"
           ALLOW_VIDEO_CUT: "false"
           ALLOW_CLOUDINARY_UPLOAD: "false"
-        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --post-ready --apply --confirm-direct-media --use-sheets
+        run: |
+          qid=$(python3 -c "import json; print(json.load(open('/tmp/hybrid-ready.json')).get('selected_queue_id',''))")
+          if [ -z "$qid" ]; then echo "[SAFE_NO_POST] no AI-approved direct-media candidate"; exit 0; fi
+          python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "$qid" --post-ready --apply --confirm-direct-media --use-sheets
       - name: Health summary
         if: always()
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

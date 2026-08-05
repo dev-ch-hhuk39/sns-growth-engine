@@ -1,6 +1,8 @@
 name: Media Growth Asset Preparation Night Scout
 
 on:
+  schedule:
+    - cron: "30 9 * * *"
   # Canary gate: real discovery/transcription/cut/upload is dispatch-only.
   workflow_dispatch:
     inputs:
@@ -151,7 +153,7 @@ jobs:
         run: |
           python3 scripts/run_media_production_pipeline.py \
             --account-id "$ACCOUNT_ID" --apply --confirm-production-media \
-            --prepare-only --use-sheets
+            --slot-id ns_2100_clip_media --prepare-only --use-sheets
 
       - name: Clean expired transient media
         if: always()

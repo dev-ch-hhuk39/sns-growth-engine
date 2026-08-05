@@ -73,7 +73,9 @@ def test_scheduled_workflows_prepare_only_until_activation() -> None:
         assert 'production_publish_activation_approved' in text
         assert 'RUN_AUTONOMOUS_APPLY=$apply' in text
         assert "if: env.RUN_AUTONOMOUS_APPLY == 'true'" in text
-        assert "--apply" in text and "--confirm-autonomous" in text
+        assert "run_scheduled_text_slot_pipeline.py" in text
+        assert '--account-id "$ACCOUNT_ID"' in text
+        assert '--slot-id "$CONTENT_SLOT_ID"' in text
         assert 'PUBLISH_ENABLED: "true"' in text
         assert 'ALLOW_REAL_THREADS_POST: "true"' in text
 
@@ -233,10 +235,11 @@ def test_auto_approve_can_promote_safe_candidate() -> None:
     body = generate_reader_facing_post("night_scout", 1)["public_post_text"]
     client.save_draft("night_scout", body.splitlines()[0], body, draft_id="d-safe", status="WAITING_REVIEW", generation_mode="safe_original_fallback_threads", media_strategy="none", media_reuse_risk="low", source_refs="")
     client.append_social_derivative({"derivative_id": "sd-safe", "draft_id": "d-safe", "account_id": "night_scout", "platform": "threads", "text": body, "status": "WAITING_REVIEW", "media_strategy": "none"})
-    client.append_queue_item({"queue_id": "q-safe", "draft_id": "d-safe", "account_id": "night_scout", "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": "safe_original_fallback_threads", "media_reuse_risk": "low", "priority": "1"})
+    queue = {"queue_id": "q-safe", "draft_id": "d-safe", "account_id": "night_scout", "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": "safe_original_fallback_threads", "media_reuse_risk": "low", "priority": "1", "public_post_text": body}
+    queue.update(_mock_hybrid_ai_pass_fields(queue, body))
+    client.append_queue_item(queue)
     plan = build_plan(client, "night_scout", 1, load_rules())
     assert plan["approvable_count"] == 1, plan
-
 
 def test_ready_queue_can_be_processed_text_only() -> None:
     from process_threads_queue import resolve_queue_media

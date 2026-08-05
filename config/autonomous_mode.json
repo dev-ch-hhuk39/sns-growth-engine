@@ -4,9 +4,9 @@
   "auto_idea_generation_enabled": true,
   "auto_ready_enabled": true,
   "auto_post_enabled": true,
-  "production_publish_activation_approved": false,
+  "production_publish_activation_approved": true,
   "scheduled_prepare_enabled": true,
-  "scheduled_publish_enabled": false,
+  "scheduled_publish_enabled": true,
   "allowed_accounts": [
     "night_scout",
     "liver_manager"
@@ -60,5 +60,7 @@
     "cta_pressure_score_max": 30,
     "risk_score_max": 10,
     "similarity_to_source_max": 0.45
-  }
+  },
+  "pre_activation_queue_archive_required": true,
+  "pre_activation_queue_archive_completed": true
 }

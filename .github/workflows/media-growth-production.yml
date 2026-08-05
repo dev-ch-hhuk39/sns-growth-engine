@@ -1,6 +1,8 @@
 name: Media Growth Asset Preparation Liver Manager
 
 on:
+  schedule:
+    - cron: "30 6 * * *"
   # Canary gate: real discovery/transcription/cut/upload is dispatch-only.
   workflow_dispatch:
     inputs:
@@ -192,6 +194,7 @@ jobs:
             --account-id liver_manager \
             --apply \
             --confirm-production-media \
+            --slot-id lm_1800_clip_media \
             --prepare-only \
             --use-sheets
 

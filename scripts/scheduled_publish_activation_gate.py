@@ -59,6 +59,9 @@ def _decision(
         if not config.get("scheduled_publish_enabled"):
             reasons.append("scheduled_publish_not_enabled")
 
+        if config.get("pre_activation_queue_archive_required") and not config.get("pre_activation_queue_archive_completed"):
+            reasons.append("pre_activation_queue_archive_not_completed")
+
     reasons = list(dict.fromkeys(reasons))
 
     allowed = not reasons
