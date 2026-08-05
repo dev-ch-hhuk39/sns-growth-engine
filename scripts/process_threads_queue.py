@@ -31,6 +31,8 @@ from publishers.threads_publisher import ThreadsPublisher  # noqa: E402
 from public_post_quality import extract_public_post_text, final_public_post_validator, public_preview  # noqa: E402
 from generation.source_copyedit import validate_source_preserving_public_post  # noqa: E402
 from direct_caption_policy import queue_caption_mode  # noqa: E402
+from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate  # noqa: E402
+from hybrid_ai_source_context import build_source_context  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
@@ -667,6 +669,23 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             update_row(client, "queue", "queue_id", queue_id, {"status": "FAILED", "error": "EMPTY_TEXT", "processed_at": now_iso()})
             log_event(client, account_id, "FAILED", "Queue text is empty", {"queue_id": queue_id})
         return {"status": "FAILED", "reason": "EMPTY_TEXT", "queue_id": queue_id}
+
+    if requires_hybrid_ai_gate(queue_row):
+        gate_ok, gate_reason = hybrid_ai_gate_passed(
+            queue_row,
+            build_source_context(client, queue_row),
+        )
+        if not gate_ok:
+            status = "DRY_RUN_BLOCKED" if dry_run else "SAFETY_STOP_HYBRID_AI_GATE"
+            reason = f"HYBRID_AI_GATE_BLOCKED:{gate_reason}"
+            if not dry_run:
+                update_row(client, "queue", "queue_id", queue_id, {
+                    "status": status,
+                    "error": reason,
+                    "processed_at": now_iso(),
+                })
+                log_event(client, account_id, status, reason, {"queue_id": queue_id})
+            return {"status": status, "reason": reason, "queue_id": queue_id}
 
     direct_reference = (
         str(

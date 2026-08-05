@@ -1,0 +1,45 @@
+{
+  "schema_version": "hybrid_ai_account_policies_v1",
+  "accounts": {
+    "night_scout": {
+      "target_audience": "night_work_job_seeker",
+      "commercial_context": "B2C",
+      "purpose": "夜職を検討中・在籍中の女性が、店選び、条件、働き方、相談環境を判断できる投稿",
+      "allowed_topics": [
+        "work_conditions",
+        "store_selection",
+        "support_system",
+        "workplace_fit",
+        "customer_relationships",
+        "sustainable_work_style"
+      ],
+      "blocked_source_audiences": [
+        "store_owner",
+        "agency_owner",
+        "business_operator"
+      ],
+      "blocked_contexts": ["B2B_SALES"],
+      "tone": "落ち着いた実務的な助言。断定や煽りを避ける。"
+    },
+    "liver_manager": {
+      "target_audience": "beginner_liver",
+      "commercial_context": "B2C",
+      "purpose": "配信未経験から開始初期のライバーが、配信準備、会話、視聴者対応、振り返り、事務所選びを学べる投稿",
+      "allowed_topics": [
+        "stream_preparation",
+        "conversation",
+        "community_building",
+        "stream_review",
+        "agency_selection",
+        "sustainable_streaming"
+      ],
+      "blocked_source_audiences": [
+        "agency_owner",
+        "store_owner",
+        "business_operator"
+      ],
+      "blocked_contexts": ["B2B_SALES"],
+      "tone": "初心者にも分かる教育的な助言。過度な収益訴求を避ける。"
+    }
+  }
+}

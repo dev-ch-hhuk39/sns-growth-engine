@@ -1,0 +1,44 @@
+name: Hybrid AI Gate - Liver Manager
+
+on:
+  schedule:
+    - cron: '30 0 * * *'
+    - cron: '30 9 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: hybrid-ai-gate-production
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_CLASSIFIER_MODEL: ${{ vars.GEMINI_CLASSIFIER_MODEL || 'gemini-3.1-flash-lite' }}
+      GEMINI_GENERATOR_MODEL: ${{ vars.GEMINI_GENERATOR_MODEL || 'gemini-3.5-flash' }}
+      GEMINI_REVIEW_MODEL: ${{ vars.GEMINI_REVIEW_MODEL || 'gemini-3.1-flash-lite' }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      HYBRID_AI_EXECUTION_MAX_REQUESTS: '20'
+      HYBRID_AI_DAILY_MAX_REQUESTS: '40'
+      HYBRID_AI_MONTHLY_MAX_REQUESTS: '1000'
+      PUBLISH_ENABLED: 'false'
+      ALLOW_REAL_THREADS_POST: 'false'
+      AUTO_POST: 'false'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Review at most two Liver Manager candidates
+        run: python scripts/run_hybrid_ai_queue_gate.py --account-id liver_manager --max-candidates 2 --apply --use-sheets

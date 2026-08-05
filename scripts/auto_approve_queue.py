@@ -14,7 +14,7 @@ import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -22,6 +22,8 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from public_post_quality import extract_public_post_text, final_public_post_validator  # noqa: E402
+from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate  # noqa: E402
+from hybrid_ai_source_context import build_source_context  # noqa: E402
 
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
@@ -191,6 +193,7 @@ def evaluate_item(
     scores_by_ref: dict[str, dict[str, Any]],
     existing_texts: list[str],
     rules: dict[str, Any],
+    source_context: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     account_id = str(queue.get("account_id", ""))
     platform = str(queue.get("platform", "")).lower()
@@ -212,6 +215,13 @@ def evaluate_item(
         reasons.append("status_not_waiting_review")
     if str(queue.get("generation_mode", "")).strip() == "":
         reasons.append("not_generated_candidate")
+    if requires_hybrid_ai_gate(queue):
+        gate_ok, gate_reason = hybrid_ai_gate_passed(
+            queue,
+            source_context or {},
+        )
+        if not gate_ok:
+            reasons.append(f"hybrid_ai_gate_{gate_reason}")
     if not recommended_use_ok(draft, scores_by_ref):
         reasons.append("recommended_use_not_allowed")
     if rules.get("kill_switch"):
@@ -379,7 +389,15 @@ def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, An
         acct_rules = rules_for_account(rules, acct)
         draft = drafts.get(str(q.get("draft_id", "")))
         deriv = derivatives.get((str(q.get("draft_id", "")), "threads"))
-        ev = evaluate_item(queue=q, draft=draft, derivative=deriv, scores_by_ref=scores_by_ref, existing_texts=existing_for_dup, rules=acct_rules)
+        ev = evaluate_item(
+            queue=q,
+            draft=draft,
+            derivative=deriv,
+            scores_by_ref=scores_by_ref,
+            existing_texts=existing_for_dup,
+            rules=acct_rules,
+            source_context=build_source_context(client, q),
+        )
         limit_ok, limit_reason = account_limits_ok(acct, selected_times, logs, queue_rows, acct_rules)
         per_run = len(selected_times.get(acct, [])) < int(acct_rules.get("max_posts_per_run", 1))
         if ev["status"] == "APPROVABLE" and not limit_ok:
