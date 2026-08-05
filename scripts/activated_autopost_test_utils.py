@@ -25,6 +25,8 @@ MEDIA_PREPARATION_WORKFLOWS = {
     "direct": WORKFLOWS / "direct-media-preparation.yml",
     "night_scout_clip": WORKFLOWS / "media-growth-production-night-scout.yml",
     "liver_manager_clip": WORKFLOWS / "media-growth-production.yml",
+    "night_scout_clip_prepare": WORKFLOWS / "media-growth-production-night-scout.yml",
+    "liver_manager_clip_prepare": WORKFLOWS / "media-growth-production.yml",
 }
 # Backward-compatible name used by the existing media preparation tests.
 MEDIA_PREP_WORKFLOWS = MEDIA_PREPARATION_WORKFLOWS
