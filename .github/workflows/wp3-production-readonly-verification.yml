@@ -75,6 +75,9 @@ jobs:
       - name: Install Dependencies
         run: pip install -r requirements.txt
 
+      - name: Fetch protected main for evidence comparison
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
       - name: Collect Read-Only Evidence
         id: collector
         continue-on-error: true

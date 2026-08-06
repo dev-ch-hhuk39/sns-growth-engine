@@ -986,17 +986,23 @@ def build_measured_pdca_inputs(
             snapshot.get("quotes")
         )
 
+        engagement_actions = (
+            likes
+            + comments
+            + reposts
+            + quotes
+        )
         engagement_rate = (
-            (
-                likes
-                + comments
-                + reposts
-                + quotes
-            )
-            / views
+            engagement_actions / views
             if views > 0
             else 0.0
         )
+
+        # A zero-signal row cannot support a claim that a pattern worked.
+        # Keep the PDCA slot fail closed until owned-post evidence contains at
+        # least one measured reaction.
+        if views <= 0 or engagement_actions <= 0:
+            continue
 
         source_route = str(
             posted.get(
@@ -1167,12 +1173,61 @@ def build_measured_pdca_inputs(
     )
 
 
+
+def build_measured_pdca_public_text(
+    *,
+    account_id: str,
+    meta: dict[str, Any],
+) -> str:
+    """Render measured owned-post evidence as an explicit PDCA experiment."""
+
+    source = str(meta.get("source_text", "")).replace("\\n", "\n").strip()
+    first_sentence = next(
+        (
+            item.strip()
+            for item in re.split(r"[。！？!?\n]+", source)
+            if item.strip()
+        ),
+        "前回扱ったテーマ",
+    )[:90]
+    views = _pdca_metric_int(meta.get("views"))
+    likes = _pdca_metric_int(meta.get("likes"))
+    comments = _pdca_metric_int(meta.get("comments"))
+    reposts = _pdca_metric_int(meta.get("reposts"))
+    quotes = _pdca_metric_int(meta.get("quotes"))
+
+    observation = (
+        f"前回の投稿は{views}表示で、いいね{likes}件・"
+        f"コメント{comments}件・再投稿{reposts}件・引用{quotes}件でした。"
+    )
+    if account_id == "night_scout":
+        hypothesis = (
+            f"僕は、「{first_sentence}」という判断軸が具体的だったことが、"
+            "読者の反応につながった可能性があると見ています。"
+        )
+        next_test = (
+            "次は、同じテーマを入店前に確認する三つの項目へ絞り、"
+            "表示数とコメント数が前回を上回るか確認します。"
+        )
+    else:
+        hypothesis = (
+            f"運用側で見ると、「{first_sentence}」という一つの行動へ絞ったことが、"
+            "配信者に試す場面を伝えやすくした可能性があります。"
+        )
+        next_test = (
+            "次は、初見対応の一つの行動だけを提示し、"
+            "表示数とコメント数が前回を上回るか確認します。"
+        )
+    return f"{observation}\n\n{hypothesis}\n\n{next_test}"
+
+
 def apply_measured_pdca_lineage(
     rows: dict[
         str,
         list[dict[str, Any]],
     ],
     *,
+    account_id: str = "",
     source_meta: dict[
         str,
         dict[str, Any],
@@ -1218,6 +1273,19 @@ def apply_measured_pdca_lineage(
         meta = source_meta.get(
             result_id,
             {},
+        )
+
+        queue["public_post_text"] = build_measured_pdca_public_text(
+            account_id=(account_id or str(queue.get("account_id", ""))),
+            meta=meta,
+        )
+        queue["key_claims_json"] = json.dumps(
+            [
+                "前回の実測結果",
+                "反応が出た理由の仮説",
+                "次回に検証する一つの変更",
+            ],
+            ensure_ascii=False,
         )
 
         queue[
@@ -1292,6 +1360,11 @@ def apply_measured_pdca_lineage(
             **meta,
         }
 
+    queue_text_by_draft = {
+        str(row.get("draft_id", "")): str(row.get("public_post_text", ""))
+        for row in selected_queues
+    }
+
     selected_drafts = []
 
     for row in rows.get(
@@ -1311,6 +1384,11 @@ def apply_measured_pdca_lineage(
             continue
 
         copied = dict(row)
+        pdca_text = queue_text_by_draft.get(draft_id, "")
+        if pdca_text:
+            copied["body_md"] = pdca_text
+            copied["content"] = pdca_text
+            copied["title"] = pdca_text.splitlines()[0][:80]
         meta = queue_meta_by_draft.get(
             draft_id,
             {},
@@ -1387,6 +1465,10 @@ def apply_measured_pdca_lineage(
             continue
 
         copied = dict(row)
+        pdca_text = queue_text_by_draft.get(draft_id, "")
+        if pdca_text:
+            copied["text"] = pdca_text
+            copied["char_count"] = str(len(pdca_text))
 
         copied[
             "transformation_type"
@@ -1465,6 +1547,7 @@ def build_measured_pdca_generation_rows(
 
     return apply_measured_pdca_lineage(
         generated,
+        account_id=account_id,
         source_meta=source_meta,
         top_n=top_n,
     )
@@ -1828,6 +1911,22 @@ def run_reference_generation(
             ),
             history=history,
         )
+
+        if (
+            not rows["queue"]
+            and post_type == "reference_text"
+            and slot_id in {"ns_1400_reference", "lm_1300_reference"}
+        ):
+            return {
+                "status": "NO_DATA",
+                "account_id": account_id,
+                "post_type": post_type,
+                "candidate_count": 0,
+                "measured_metric_count": len(measured),
+                "reason": "reference_source_required_for_reference_slot",
+                "worker_selectable": False,
+                "real_post_possible_now": False,
+            }
 
         if not rows["queue"]:
             rows = (

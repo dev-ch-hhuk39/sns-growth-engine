@@ -74,6 +74,12 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on", "enabled"}
 
 
+
+def _normalize_public_text(value: Any) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    return text.replace("\\n", "\n").strip()
+
+
 def _safe(value: Any, depth: int = 0) -> Any:
     if depth > 8:
         return "<depth-limited>"
@@ -124,6 +130,7 @@ def _runtime() -> dict[str, Any]:
 
 
 def _quality(text: str, account_id: str, post_type: str) -> dict[str, Any]:
+    text = _normalize_public_text(text)
     compact = re.sub(r"\s+", "", text)
     flags: list[str] = []
     observations: list[str] = []
@@ -143,7 +150,7 @@ def _quality(text: str, account_id: str, post_type: str) -> dict[str, Any]:
         if not any(term in text for term in ("キャバ", "夜職", "店", "指名", "時給", "手取り")):
             flags.append("night_scout_domain_signal_missing")
         if "僕" not in text:
-            observations.append("night_scout_first_person_boku_not_used")
+            flags.append("night_scout_first_person_boku_missing")
     else:
         if not any(term in text for term in ("配信", "ライバー", "リスナー", "コメント", "初見")):
             flags.append("liver_manager_domain_signal_missing")
@@ -368,11 +375,37 @@ def main() -> int:
         else:
             slots.append(_clip_preview(client, runtimes[account_id], account_id, slot_id))
 
+    slot_status_counts: dict[str, int] = {}
+    for slot in slots:
+        if "final_text" in slot:
+            slot["final_text"] = _normalize_public_text(slot.get("final_text", ""))
+        for key in ("candidate", "gemini"):
+            payload = slot.get(key)
+            if isinstance(payload, dict) and "public_post_text" in payload:
+                payload["public_post_text"] = _normalize_public_text(
+                    payload.get("public_post_text", "")
+                )
+        preview_reasons = [str(item) for item in slot.get("lineage_flags", []) if str(item)]
+        quality = slot.get("quality")
+        if isinstance(quality, dict) and not bool(quality.get("pass")):
+            preview_reasons.extend(str(item) for item in quality.get("flags", []) if str(item))
+        if preview_reasons:
+            slot["preview_blocked_reasons"] = sorted(set(preview_reasons))
+            if str(slot.get("status", "")).upper() == "PASS":
+                slot["status"] = "BLOCKED"
+        status_key = str(slot.get("status", "UNKNOWN")).upper() or "UNKNOWN"
+        slot_status_counts[status_key] = slot_status_counts.get(status_key, 0) + 1
+
     queue_after = _records(client, "queue")
     protected_after = {str(row.get("queue_id", "")): dict(row) for row in queue_after if str(row.get("queue_id", "")) in PROTECTED_QUEUE_IDS}
     report = {
         "schema_version": "scheduled_autopost_preview_v2",
-        "status": "PREVIEW_COMPLETE",
+        "status": (
+            "PREVIEW_COMPLETE"
+            if slot_status_counts == {"PASS": len(slots)}
+            else "PREVIEW_COMPLETE_WITH_BLOCKS"
+        ),
+        "slot_status_counts": slot_status_counts,
         "generated_at_jst": datetime.now(JST).isoformat(),
         "slot_count": len(slots),
         "would_post": False,
