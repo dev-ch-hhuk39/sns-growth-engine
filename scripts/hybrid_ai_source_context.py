@@ -188,8 +188,9 @@ def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any
     base_use_policy = _first(source.get("use_policy"), source_post.get("use_policy"), reference_post.get("use_policy"))
     effective_policy = "APPROVED_MEDIA_REUSE" if permission_status == "APPROVED" else base_use_policy
     source_text = _first(
-        queue.get("claim_support_json"), queue.get("key_claims_json"),
-        queue.get("internal_analysis"), original_post_text,
+        queue.get("claim_support_json"),
+        queue.get("key_claims_json"),
+        original_post_text,
     )
 
     return {

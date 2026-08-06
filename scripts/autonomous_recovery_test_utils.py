@@ -236,7 +236,7 @@ def test_auto_approve_can_promote_safe_candidate() -> None:
     client.save_draft("night_scout", body.splitlines()[0], body, draft_id="d-safe", status="WAITING_REVIEW", generation_mode="safe_original_fallback_threads", media_strategy="none", media_reuse_risk="low", source_refs="")
     client.append_social_derivative({"derivative_id": "sd-safe", "draft_id": "d-safe", "account_id": "night_scout", "platform": "threads", "text": body, "status": "WAITING_REVIEW", "media_strategy": "none"})
     queue = {"queue_id": "q-safe", "draft_id": "d-safe", "account_id": "night_scout", "platform": "threads", "status": "WAITING_REVIEW", "generation_mode": "safe_original_fallback_threads", "media_reuse_risk": "low", "priority": "1", "public_post_text": body}
-    queue.update(_mock_hybrid_ai_pass_fields(queue, body))
+    queue.update(_mock_hybrid_ai_pass_fields(client, queue, body))
     client.append_queue_item(queue)
     plan = build_plan(client, "night_scout", 1, load_rules())
     assert plan["approvable_count"] == 1, plan
@@ -417,12 +417,12 @@ def test_generation_does_not_refresh_ready_or_posted_rows() -> None:
 
 
 
-def _mock_hybrid_ai_pass_fields(queue: dict, public_post_text: str) -> dict[str, str]:
+def _mock_hybrid_ai_pass_fields(client: object, queue: dict, public_post_text: str) -> dict[str, str]:
     """Build the minimal persisted PASS audit used by offline contract tests."""
     import json
 
     from hybrid_ai_gate import GATE_SCHEMA_VERSION, hybrid_ai_input_hash
-    from hybrid_ai_source_context import hybrid_ai_source_context_hash
+    from hybrid_ai_source_context import build_source_context, hybrid_ai_source_context_hash
 
     row = dict(queue)
     row["public_post_text"] = public_post_text
@@ -430,7 +430,7 @@ def _mock_hybrid_ai_pass_fields(queue: dict, public_post_text: str) -> dict[str,
         "schema_version": GATE_SCHEMA_VERSION,
         "status": "PASS",
         "input_hash": hybrid_ai_input_hash(row),
-        "source_context_hash": hybrid_ai_source_context_hash({}),
+        "source_context_hash": hybrid_ai_source_context_hash(build_source_context(client, row)),
         "route": "new_text_generation",
         "public_post_text": public_post_text,
         "blocked_reasons": [],
@@ -481,8 +481,7 @@ def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
         assert ungated["rejected_reasons"].get("hybrid_ai_gate_missing") == len(rows["queue"]), ungated
 
         for queue in rows["queue"]:
-            fields = _mock_hybrid_ai_pass_fields(
-                queue,
+            fields = _mock_hybrid_ai_pass_fields(client, queue,
                 derivative_texts[queue["draft_id"]],
             )
             client.update_queue_item(queue["queue_id"], **fields)
@@ -541,8 +540,7 @@ def test_no_ready_queue_not_expected_after_safe_fallback() -> None:
     assert ungated["rejected_reasons"].get("hybrid_ai_gate_missing") == 3, ungated
 
     for queue in rows["queue"]:
-        fields = _mock_hybrid_ai_pass_fields(
-            queue,
+        fields = _mock_hybrid_ai_pass_fields(client, queue,
             derivative_texts[queue["draft_id"]],
         )
         client.update_queue_item(queue["queue_id"], **fields)
@@ -620,7 +618,7 @@ def test_queue_waiting_review_to_ready_flow() -> None:
     assert "hybrid_ai_gate_missing" in ungated["rejected_reasons"], ungated
 
     queue = rows["queue"][0]
-    fields = _mock_hybrid_ai_pass_fields(queue, derivative_text)
+    fields = _mock_hybrid_ai_pass_fields(client, queue, derivative_text)
     client.update_queue_item(queue["queue_id"], **fields)
 
     gated = build_plan(client, "night_scout", 1, load_rules())
