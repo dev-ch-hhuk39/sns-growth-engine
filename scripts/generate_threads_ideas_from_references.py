@@ -1617,6 +1617,7 @@ def run_reference_generation(
     theme: str = "",
     schedule_date_jst: str = "",
     require_measured_pdca: bool = False,
+    include_preview_rows: bool = False,
 ) -> dict[str, Any]:
     from config_loader import get_config
     from sheets_client import SheetsClient
@@ -1919,6 +1920,24 @@ def run_reference_generation(
         "strategy_policy_active": bool(preferred_topics),
     }
     if not apply:
+        if include_preview_rows:
+            preview_fields = (
+                "queue_id", "account_id", "target_account_id", "platform",
+                "generation_mode", "content_type", "content_route",
+                "source_content_route", "source_generation_mode",
+                "source_result_id", "transformation_type", "source_credit",
+                "source_id", "source_url", "public_post_text", "slot_id",
+                "theme", "schedule_date_jst", "rights_status",
+                "permission_status", "rights_review_required",
+                "media_reuse_risk", "validator_status",
+                "internal_leak_status", "account_fit_status",
+                "generation_policy_json", "claim_support_json",
+                "key_claims_json", "internal_analysis",
+            )
+            summary["preview_queue"] = [
+                {key: row.get(key, "") for key in preview_fields}
+                for row in rows.get("queue", [])[:max(1, top_n)]
+            ]
         return summary
     if not rows["queue"]:
         return {**summary, "status": "NO_DATA", "reason": "reference posts/scores and fallback candidates are missing"}
@@ -2033,6 +2052,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--theme", default="")
     parser.add_argument("--schedule-date-jst", default="")
     parser.add_argument(
+        "--include-preview-queue",
+        action="store_true",
+        help="Include sanitized in-memory queue candidates in PLAN_ONLY output.",
+    )
+    parser.add_argument(
         "--require-measured-pdca",
         action="store_true",
         help=(
@@ -2063,6 +2087,9 @@ def main() -> int:
             ),
             require_measured_pdca=(
                 args.require_measured_pdca
+            ),
+            include_preview_rows=(
+                args.include_preview_queue
             ),
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from scheduled_execution_guard import append_job_summary
 
 
 def extract_json_objects(text: str) -> list[dict[str, Any]]:
@@ -43,14 +46,7 @@ def gate_command(account_id: str, slot_id: str, max_candidates: int, apply: bool
     ]
 
 
-def approval_command(
-    account_id: str,
-    slot_id: str,
-    queue_id: str,
-    *,
-    apply: bool,
-    approval_mode: str,
-) -> list[str]:
+def approval_command(account_id: str, slot_id: str, queue_id: str, *, apply: bool, approval_mode: str) -> list[str]:
     if approval_mode == "text":
         return [
             sys.executable,
@@ -92,15 +88,7 @@ def command_plan(
 ) -> list[list[str]]:
     commands = [gate_command(account_id, slot_id, max_candidates, apply)]
     if queue_id:
-        commands.append(
-            approval_command(
-                account_id,
-                slot_id,
-                queue_id,
-                apply=apply,
-                approval_mode=approval_mode,
-            )
-        )
+        commands.append(approval_command(account_id, slot_id, queue_id, apply=apply, approval_mode=approval_mode))
     return commands
 
 
@@ -108,26 +96,15 @@ def run_command(command: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=ROOT, check=False, text=True, capture_output=True)
 
 
-def run_stage(
-    stage_name: str,
-    command: list[str],
-    runner: Callable[[list[str]], subprocess.CompletedProcess[str]],
-) -> tuple[dict[str, Any], bool]:
+def run_stage(stage_name: str, command: list[str], runner: Callable[[list[str]], subprocess.CompletedProcess[str]]) -> tuple[dict[str, Any], bool]:
     completed = runner(command)
     if completed.stdout:
         print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
     if completed.stderr:
-        print(
-            completed.stderr,
-            file=sys.stderr,
-            end="" if completed.stderr.endswith("\n") else "\n",
-        )
+        print(completed.stderr, file=sys.stderr, end="" if completed.stderr.endswith("\n") else "\n")
     payloads = extract_json_objects(completed.stdout)
     payload = payloads[-1] if payloads else {}
-    return (
-        {"stage": stage_name, "returncode": completed.returncode, "payload": payload},
-        completed.returncode == 0,
-    )
+    return ({"stage": stage_name, "returncode": completed.returncode, "payload": payload}, completed.returncode == 0)
 
 
 def reviewed_pass_queue_ids(payload: dict[str, Any]) -> list[str]:
@@ -151,11 +128,7 @@ def execute(
     runner: Callable[[list[str]], subprocess.CompletedProcess[str]] = run_command,
 ) -> dict[str, Any]:
     stages: list[dict[str, Any]] = []
-    gate_stage, gate_ok = run_stage(
-        "hybrid_gate",
-        gate_command(account_id, slot_id, max_candidates, apply),
-        runner,
-    )
+    gate_stage, gate_ok = run_stage("hybrid_gate", gate_command(account_id, slot_id, max_candidates, apply), runner)
     stages.append(gate_stage)
     if not gate_ok:
         return {
@@ -173,6 +146,7 @@ def execute(
     if not reviewed_ids:
         return {
             "status": "NO_READY_CANDIDATE",
+            "reason": "no_hybrid_pass_candidate_for_exact_slot",
             "account_id": account_id,
             "slot_id": slot_id,
             "selected_queue_id": "",
@@ -197,13 +171,7 @@ def execute(
     stage_name = "auto_ready" if approval_mode == "text" else "media_promote"
     approval_stage, approval_ok = run_stage(
         stage_name,
-        approval_command(
-            account_id,
-            slot_id,
-            selected_queue_id,
-            apply=apply,
-            approval_mode=approval_mode,
-        ),
+        approval_command(account_id, slot_id, selected_queue_id, apply=apply, approval_mode=approval_mode),
         runner,
     )
     stages.append(approval_stage)
@@ -219,14 +187,11 @@ def execute(
             "would_post": False,
         }
 
-    updated = [
-        str(item)
-        for item in approval_stage["payload"].get("updated_queue_ids", [])
-        if str(item)
-    ]
+    updated = [str(item) for item in approval_stage["payload"].get("updated_queue_ids", []) if str(item)]
     status = "READY" if selected_queue_id in updated else "NO_READY_CANDIDATE"
     return {
         "status": status,
+        "reason": "" if status == "READY" else "exact_candidate_not_promoted_ready",
         "account_id": account_id,
         "slot_id": slot_id,
         "selected_queue_id": selected_queue_id if status == "READY" else "",
@@ -262,9 +227,10 @@ def main() -> int:
     )
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     print(rendered)
+    append_job_summary("Hybrid exact-slot result", result)
     if args.json_output:
         Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
-    return 0 if result["status"] in {"READY", "NO_READY_CANDIDATE"} else 1
+    return 0 if result["status"] == "READY" else 2
 
 
 if __name__ == "__main__":

@@ -40,6 +40,8 @@ jobs:
       - name: Source registry validation and focused contracts
         run: |
           python3 scripts/validate_source_registry.py
+          python3 scripts/test_scheduled_runtime_blockers.py
+          python3 scripts/test_scheduled_autopost_preview_v2.py
           python3 scripts/test_acquisition_observability_fail_soft.py
           python3 scripts/test_direct_media_preparation_serialized.py
           python3 scripts/test_direct_media_batch_snapshot.py
@@ -87,7 +89,7 @@ jobs:
           python3 scripts/test_final_readiness_activation_evidence_source.py
 
   tests:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

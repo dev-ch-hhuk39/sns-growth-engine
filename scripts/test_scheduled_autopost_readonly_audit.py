@@ -45,4 +45,10 @@ for forbidden in (
 ):
     assert forbidden not in source, forbidden
 
+
+source = SCRIPT.read_text(encoding="utf-8")
+assert '"scripts/scheduled_publish_activation_gate.py",' in source
+assert '"/tmp/scheduled-autopost-activation-gate.json"' not in source
+assert '"stderr_tail"' in source
+
 print("PASS test_scheduled_autopost_readonly_audit.py")

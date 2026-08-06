@@ -640,8 +640,6 @@ def main() -> int:
         sys.executable,
         "scripts/scheduled_publish_activation_gate.py",
         "--use-sheets",
-        "--json-output",
-        "/tmp/scheduled-autopost-activation-gate.json",
     ])
     activation_payload = activation.get("payload") if isinstance(activation.get("payload"), dict) else {}
 
@@ -668,6 +666,8 @@ def main() -> int:
             "status": activation_payload.get("status", ""),
             "reasons": activation_reasons(activation_payload),
             "payload": activation_payload,
+            "stderr_tail": activation.get("stderr_tail", ""),
+            "json_found": activation.get("json_found", False),
         },
         "protected_rows_before": protected_before,
         "protected_rows_after": protected_after,

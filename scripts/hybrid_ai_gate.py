@@ -296,10 +296,37 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
         _text(source_context.get("usage_scope")).upper(),
         _text(source_context.get("reuse_policy")).upper(),
     }
-    if media_route and "REFERENCE_ONLY" in policies:
+    permission_evidence = _text(source_context.get("permission_evidence_status")).upper()
+    external_permission_route = route in {
+        "external_direct_source_copyedit",
+        "approved_clip_transform",
+    }
+    if media_route and "REFERENCE_ONLY" in policies and permission_evidence != "APPROVED":
         reasons.append("reference_only_media_reuse_blocked")
+    if external_permission_route and permission_evidence in {"", "MISSING", "DENIED"}:
+        reasons.append("media_permission_evidence_missing_or_denied")
     if not _text(queue.get("public_post_text")) and route == "external_direct_source_copyedit":
         reasons.append("source_copyedit_text_missing")
+    if route == "external_direct_source_copyedit" and not _text(source_context.get("original_post_text")):
+        reasons.append("direct_source_post_text_missing")
+    if route == "approved_clip_transform":
+        excerpt = _text(source_context.get("transcript_excerpt"))
+        if not _text(queue.get("clip_candidate_id")):
+            reasons.append("clip_candidate_id_missing")
+        if not _text(queue.get("source_video_id")):
+            reasons.append("source_video_id_missing")
+        if not excerpt:
+            reasons.append("clip_transcript_evidence_missing")
+        if re.search(r"\[(?:音楽|拍手|BGM|笑い|無音)\]", excerpt, flags=re.IGNORECASE):
+            reasons.append("clip_transcript_noise_present")
+        try:
+            duration = float(_text(source_context.get("clip_duration_seconds")) or 0)
+        except ValueError:
+            duration = 0.0
+        if duration and not 12.0 <= duration <= 45.0:
+            reasons.append("clip_duration_out_of_review_range")
+        if not _text(source_context.get("clip_start_seconds")) or not _text(source_context.get("clip_end_seconds")):
+            reasons.append("clip_exact_time_range_missing")
     if not _source_text(queue, source_context):
         reasons.append("source_evidence_missing")
     return sorted(set(reasons))
@@ -323,6 +350,10 @@ def _classification_prompt(
             "usage_scope",
             "reuse_policy",
             "source_target_account_id",
+            "permission_evidence_status",
+            "clip_duration_seconds",
+            "clip_start_seconds",
+            "clip_end_seconds",
         )
     }
     return (

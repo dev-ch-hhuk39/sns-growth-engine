@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  models: read
 
 concurrency:
   group: sns-growth-wp3-readonly-verification
@@ -39,6 +40,8 @@ jobs:
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_MODELS_ENABLED: "true"
 
     steps:
       - name: Checkout Code
@@ -87,6 +90,12 @@ jobs:
             --json-output /tmp/scheduled-autopost-audit.json \
             --markdown-output /tmp/scheduled-autopost-audit.md
           cat /tmp/scheduled-autopost-audit.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preview all scheduled candidates with Gemini
+        id: scheduled_preview_v2
+        if: always()
+        run: |
+          python3 scripts/run_scheduled_autopost_preview_v2.py
 
       - name: Preserve WP3 evidence failure after audit
         if: always() && steps.collector.outcome == 'failure'
