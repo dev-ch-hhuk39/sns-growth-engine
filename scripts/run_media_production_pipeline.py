@@ -83,6 +83,34 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
+APPROVED_CLIP_REVIEW_MIN_SECONDS = 12.0
+APPROVED_CLIP_REVIEW_MAX_SECONDS = 45.0
+
+
+def approved_clip_duration_seconds(clip: dict[str, Any]) -> float:
+    try:
+        duration = float(str(clip.get("duration_seconds") or "0").strip() or "0")
+    except (TypeError, ValueError):
+        duration = 0.0
+    if duration > 0:
+        return duration
+    try:
+        start = float(str(clip.get("start_seconds") or clip.get("start_time") or "").strip())
+        end = float(str(clip.get("end_seconds") or clip.get("end_time") or "").strip())
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, end - start)
+
+
+def approved_clip_duration_blockers(clip: dict[str, Any]) -> list[str]:
+    duration = approved_clip_duration_seconds(clip)
+    if duration <= 0:
+        return ["clip_duration_missing"]
+    if not APPROVED_CLIP_REVIEW_MIN_SECONDS <= duration <= APPROVED_CLIP_REVIEW_MAX_SECONDS:
+        return ["clip_duration_out_of_review_range"]
+    return []
+
+
 def _alignment_fields(clip: dict[str, Any]) -> dict[str, Any]:
     return {
         "alignment_status": clip.get("alignment_status", ""),
@@ -1342,6 +1370,10 @@ def select_candidate(
         end_seconds = str(clip.get("end_seconds") or clip.get("end_time") or "").strip()
         if not start_seconds or not end_seconds:
             reasons.append(f"{clip_id}:exact_clip_time_range_missing")
+            continue
+        duration_blockers = approved_clip_duration_blockers(clip)
+        if duration_blockers:
+            reasons.extend(f"{clip_id}:{reason}" for reason in duration_blockers)
             continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")
