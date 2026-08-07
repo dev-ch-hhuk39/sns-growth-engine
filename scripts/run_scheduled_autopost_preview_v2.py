@@ -34,6 +34,7 @@ from run_media_production_pipeline import (
 )
 from generate_threads_ideas_from_references import run_reference_generation
 from sheets_client import SheetsClient
+from sheets_record_reader import enable_readonly_record_cache, read_records_safely  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
 TEXT_SLOTS = (
@@ -101,7 +102,7 @@ def _safe(value: Any, depth: int = 0) -> Any:
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     try:
-        return [dict(row) for row in client._ws(logical).get_all_records()]
+        return read_records_safely(client, logical)
     except Exception:
         return []
 
@@ -190,6 +191,7 @@ def _text_preview(client: SheetsClient, runtime: dict[str, Any], account_id: str
         theme="", schedule_date_jst=datetime.now(JST).strftime("%Y-%m-%d"),
         require_measured_pdca=(post_type == "pdca_text"),
         include_preview_rows=True,
+        client=client,
     )
     candidates = [dict(row) for row in result.get("preview_queue", [])]
     if not candidates:
@@ -362,6 +364,7 @@ def main() -> int:
     flags = _action_flags()
     cfg = get_config()
     client = SheetsClient(sheet_id=cfg["sheet_id"], sa_dict=cfg["sa_dict"], dry_run=True)
+    enable_readonly_record_cache(client)
     queue_before = _records(client, "queue")
     protected_before = {str(row.get("queue_id", "")): dict(row) for row in queue_before if str(row.get("queue_id", "")) in PROTECTED_QUEUE_IDS}
     runtimes = {account: _runtime() for account in ("night_scout", "liver_manager")}

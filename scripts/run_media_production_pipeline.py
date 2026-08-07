@@ -49,6 +49,7 @@ from evidence_context_caption import (  # noqa: E402
 from process_threads_queue import process_one, update_row  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from sheets_record_reader import READONLY_RECORD_CACHE_ATTR, read_records_safely  # noqa: E402
 from upload_media_assets import build_upload_plan, execute_cloudinary_uploads  # noqa: E402
 from acquisition.reliability import build_quarantine_record, clear_failure, is_quarantined, register_failure  # noqa: E402
 
@@ -128,8 +129,13 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
+    cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+    if isinstance(cache, dict):
+        return read_records_safely(client, logical)
+
     def operation() -> list[dict[str, Any]]:
         return client._ws(logical).get_all_records()
+
     retry = getattr(client, "_call_with_rate_limit_retry", None)
     rows = retry(f"get_all_records:{logical}:media_production", operation) if retry else operation()
     return [dict(row) for row in rows]

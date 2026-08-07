@@ -1701,26 +1701,34 @@ def run_reference_generation(
     schedule_date_jst: str = "",
     require_measured_pdca: bool = False,
     include_preview_rows: bool = False,
+    client: Any | None = None,
 ) -> dict[str, Any]:
-    from config_loader import get_config
-    from sheets_client import SheetsClient
+    from sheets_record_reader import read_records_safely
 
-    cfg = get_config()
-    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    posts = [dict(r) for r in client._ws("source_account_posts").get_all_records() if str(r.get("account_id", "")) == account_id]
-    scores = [dict(r) for r in client._ws("reference_post_scores").get_all_records() if str(r.get("account_id", "")) == account_id]
+    if client is None:
+        from config_loader import get_config
+        from sheets_client import SheetsClient
+
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+
+    source_posts = read_records_safely(client, "source_account_posts")
+    posts = [
+        dict(row)
+        for row in source_posts
+        if str(row.get("account_id", "")) == account_id
+    ]
+    score_rows = read_records_safely(client, "reference_post_scores")
+    scores = [
+        dict(row)
+        for row in score_rows
+        if str(row.get("account_id", "")) == account_id
+    ]
+    posted_results_all = read_records_safely(client, "posted_results")
     posted_results = [
         dict(row)
-        for row in client._ws(
-            "posted_results"
-        ).get_all_records()
-        if str(
-            row.get(
-                "account_id",
-                "",
-            )
-        )
-        == account_id
+        for row in posted_results_all
+        if str(row.get("account_id", "")) == account_id
     ]
 
     history = [
@@ -1733,36 +1741,20 @@ def run_reference_generation(
         for row in posted_results
     ]
     try:
-        strategy_rows = [dict(row) for row in client._ws("strategy_state").get_all_records()]
+        strategy_rows = read_records_safely(client, "strategy_state")
     except Exception:
         strategy_rows = []
     preferred_topics = preferred_primary_topics(strategy_rows, account_id)
     metric_snapshots = [
         dict(row)
-        for row in client._ws(
-            "metric_snapshots"
-        ).get_all_records()
-        if str(
-            row.get(
-                "account_id",
-                "",
-            )
-        )
-        == account_id
+        for row in read_records_safely(client, "metric_snapshots")
+        if str(row.get("account_id", "")) == account_id
     ]
 
     media_metric_rows = [
         dict(row)
-        for row in client._ws(
-            "media_metrics"
-        ).get_all_records()
-        if str(
-            row.get(
-                "account_id",
-                "",
-            )
-        )
-        == account_id
+        for row in read_records_safely(client, "media_metrics")
+        if str(row.get("account_id", "")) == account_id
     ]
 
     metric_rows = [
@@ -1770,11 +1762,19 @@ def run_reference_generation(
         *media_metric_rows,
     ]
     from generation.context_selector import select_generation_context
-    category_scores = [dict(row) for row in client._ws("category_scores").get_all_records() if str(row.get("account_id", "")) == account_id]
-    learning_rules = [dict(row) for row in client._ws("learning_rules").get_all_records() if str(row.get("account_id", "")) == account_id]
+    category_scores = [
+        dict(row)
+        for row in read_records_safely(client, "category_scores")
+        if str(row.get("account_id", "")) == account_id
+    ]
+    learning_rules = [
+        dict(row)
+        for row in read_records_safely(client, "learning_rules")
+        if str(row.get("account_id", "")) == account_id
+    ]
     context = select_generation_context(
         account_id=account_id,
-        posted_results=[dict(row) for row in client._ws("posted_results").get_all_records()],
+        posted_results=[dict(row) for row in posted_results_all],
         metric_rows=metric_rows,
         category_scores=category_scores,
         learning_rules=learning_rules,

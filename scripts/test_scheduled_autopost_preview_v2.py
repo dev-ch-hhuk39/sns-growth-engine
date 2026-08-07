@@ -7,6 +7,8 @@ workflow = (ROOT / ".github/workflows/wp3-production-readonly-verification.yml")
 source_context = (ROOT / "scripts/hybrid_ai_source_context.py").read_text(encoding="utf-8")
 autonomous = (ROOT / "scripts/run_autonomous_loop.py").read_text(encoding="utf-8")
 generator = (ROOT / "scripts/generate_threads_ideas_from_references.py").read_text(encoding="utf-8")
+record_reader = (ROOT / "src/sheets_record_reader.py").read_text(encoding="utf-8")
+media_pipeline = (ROOT / "scripts/run_media_production_pipeline.py").read_text(encoding="utf-8")
 
 for slot_id in (
     "ns_1400_reference", "ns_1600_original", "ns_1800_direct_media",
@@ -30,6 +32,16 @@ assert "scheduled_publish_activation_gate.py\", \"--use-sheets" in preview
 assert "--json-output" not in preview
 assert "include_preview_rows" in generator
 assert "--include-preview-queue" in generator
+assert "client: Any | None = None" in generator
+assert 'read_records_safely(client, "posted_results")' in generator
+assert "posted_results=[dict(row) for row in posted_results_all]" in generator
+assert "enable_readonly_record_cache(client)" in preview
+assert "client=client" in preview
+assert "READONLY_RECORD_CACHE_ATTR" in record_reader
+assert "_cached_records(client, logical)" in record_reader
+assert "read_records_safely(client, logical)" in media_pipeline
+assert "_call_with_rate_limit_retry" in media_pipeline
+assert "READONLY_RECORD_CACHE_ATTR" in media_pipeline
 assert "--require-measured-pdca" in autonomous
 assert "source_account_posts" in source_context
 assert "source_result_id" in source_context
