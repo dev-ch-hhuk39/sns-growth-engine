@@ -16,6 +16,47 @@ from run_media_production_pipeline import (
 )
 
 
+class PromptCaptureClient:
+    def __init__(self, generated_text: str) -> None:
+        self.generated_text = generated_text
+        self.actual_request_count = 0
+        self.review_prompt = ""
+
+    def generate_json(self, **kwargs: Any) -> dict[str, Any]:
+        self.actual_request_count += 1
+        operation = kwargs["operation"]
+        if operation == "classify":
+            data = {
+                "decision": "PASS",
+                "target_account_match": "PASS",
+                "target_audience_match": "PASS",
+                "source_audience": "night_work_job_seeker",
+                "commercial_context": "B2C",
+                "source_usage_fit": "PASS",
+                "risk_flags": [],
+                "reasons": [],
+            }
+        elif operation == "generate":
+            data = {
+                "public_post_text": self.generated_text,
+                "preserved_facts": [],
+                "removed_noise": [],
+                "notes": "fixture",
+            }
+        else:
+            self.review_prompt = kwargs["prompt"]
+            data = {
+                "decision": "PASS",
+                "natural_japanese": "PASS",
+                "source_grounding": "PASS",
+                "account_fit": "PASS",
+                "public_safety": "PASS",
+                "risk_flags": [],
+                "reasons": [],
+            }
+        return {"data": data, "actual_requests": 1, "cache_hit": False}
+
+
 class ContractClient:
     def __init__(self, generated_text: str) -> None:
         self.generated_text = generated_text
@@ -110,6 +151,24 @@ assert original_result.status == "PASS", original_result.audit()
 assert "僕" in original_result.public_post_text, original_result.public_post_text
 assert original_result.generation["scheduled_text_contract"]["status"] == "REPAIRED"
 
+# Scheduled owned Direct media must preserve the Night Scout first-person voice after AI rewriting.
+direct_queue = queue("night_scout", "direct_reference_media", night_current)
+direct_queue.update({
+    "generation_mode": "direct_reference_media",
+    "media_origin": "direct_reference",
+    "ownership": "system_owned",
+    "source_id": "system_owned_night_scout_fixture",
+})
+direct_context = context(night_current)
+direct_context["permission_evidence_status"] = "APPROVED"
+direct_result = HybridAiGate(ContractClient(night_generated_without_boku)).evaluate(
+    direct_queue,
+    direct_context,
+)
+assert direct_result.status == "PASS", direct_result.audit()
+assert "僕" in direct_result.public_post_text, direct_result.public_post_text
+assert direct_result.generation["scheduled_text_contract"]["status"] == "REPAIRED"
+
 pdca_current = (
     "前回の投稿は101表示で、いいね1件・コメント0件・再投稿0件・引用0件でした。\n\n"
     "僕は、『夜職の条件を見る時は、表示額より引かれる金額を先に整理したい』という判断軸が具体的だったことが、"
@@ -130,6 +189,17 @@ assert pdca_result.public_post_text == pdca_current
 contract = pdca_result.generation["scheduled_text_contract"]
 assert contract["fallback_to_current_queue_text"] is True, contract
 assert "pdca_measured_observation_missing" in contract["rejected_generated_contract_reasons"]
+
+# Owned public-post metrics are intentional evidence for PDCA, not secret internal process metrics.
+prompt_client = PromptCaptureClient(pdca_generic)
+prompt_result = HybridAiGate(prompt_client).evaluate(
+    queue("night_scout", "pdca_text", pdca_current),
+    context(pdca_current),
+)
+assert prompt_result.status == "PASS", prompt_result.audit()
+assert "公開済み自社投稿" in prompt_client.review_prompt, prompt_client.review_prompt
+assert "INTERNAL_PROCESS_METRICS" in prompt_client.review_prompt, prompt_client.review_prompt
+assert "秘密情報" in prompt_client.review_prompt, prompt_client.review_prompt
 
 liver_current = (
     "初見がすぐ抜ける配信は、内容より最初に入りやすい説明があるかを見直したい。\n\n"

@@ -34,6 +34,7 @@ SCHEDULED_TEXT_TYPES = {
     "reference_text",
     "pdca_text",
     "metrics_driven_pdca_text",
+    "direct_reference_media",
 }
 
 
@@ -467,10 +468,22 @@ def _review_prompt(
     candidate_text: str,
     policy: Mapping[str, Any],
 ) -> str:
+    pdca_instruction = ""
+    if (
+        _scheduled_text_type(queue) in {"pdca_text", "metrics_driven_pdca_text"}
+        and _text(queue.get("generation_mode")).lower() == "metrics_driven_pdca_text"
+    ):
+        pdca_instruction = (
+            "この候補はPDCA枠です。SOURCE_EVIDENCEにある公開済み自社投稿の表示数、いいね数、"
+            "コメント数、再投稿数、引用数は、反応を説明するために意図的に使う公開可能な実測根拠です。"
+            "これらの公開投稿パフォーマンス値だけを理由にINTERNAL_PROCESS_METRICSやaccount_fit不一致として"
+            "REJECTしないでください。ただし秘密情報、非公開の社内KPI、運用手順、認証情報は引き続きREJECTしてください。"
+        )
     return (
         "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"
         "対象読者・アカウント適合、公開安全性を確認してください。誤字、重複助詞、[音楽]等、"
-        "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。\n\n"
+        "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。"
+        f"{(' ' + pdca_instruction) if pdca_instruction else ''}\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
         f"QUEUE_ID={_text(queue.get('queue_id'))}\n"
         f"SOURCE_EVIDENCE={source_text}\n"
@@ -620,7 +633,7 @@ class HybridAiGate:
             generation = dict(generate_response["data"])
             candidate_text = _text(generation.get("public_post_text"))
 
-        if route.route == "new_text_generation":
+        if route.route in {"new_text_generation", "owned_media_transform"}:
             generated_contract_reasons = _scheduled_text_contract_reasons(
                 queue,
                 candidate_text,
