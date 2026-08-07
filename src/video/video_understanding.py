@@ -38,35 +38,33 @@ class VideoUnderstanding:
         target_platform: str = "threads",
         mock: bool = True,
     ) -> dict[str, Any]:
-        """raw_source_item (dict) から動画理解結果を返す。"""
-        title = item.get("title", "")
-        description = item.get("description", "")
-        transcript = item.get("transcript", "")
+        """Normalize actual source content for downstream source-grounded generation."""
+        title = str(item.get("title") or "").strip()
+        description = str(item.get("description") or "").strip()
+        source_text = str(
+            item.get("text") or item.get("post_text") or item.get("caption") or ""
+        ).strip()
+        transcript = str(item.get("transcript") or "").strip()
         duration = item.get("duration_seconds")
         view_count = item.get("view_count", 0)
         like_count = item.get("like_count", 0)
         post_url = item.get("post_url", "")
-        platform = item.get("source_platform", "youtube")
-
+        platform = str(item.get("source_platform") or "youtube").lower()
         has_transcript = bool(transcript)
 
         if mock:
-            return self._mock_analysis(
-                item, account_id, target_platform, has_transcript
+            return self._mock_analysis(item, account_id, target_platform, has_transcript)
+
+        if has_transcript:
+            return self._transcript_based_analysis(
+                title, description, source_text, transcript, duration,
+                view_count, like_count, post_url, platform,
+                account_id, target_platform, item.get("source_id", ""),
             )
 
-        # メタデータのみの場合
-        if not has_transcript:
-            return self._metadata_based_plan(
-                title, description, duration, view_count, like_count,
-                post_url, platform, account_id, target_platform,
-                item.get("source_id", ""),
-            )
-
-        return self._transcript_based_analysis(
-            title, description, transcript, duration,
-            view_count, like_count, post_url, platform,
-            account_id, target_platform,
+        return self._metadata_based_plan(
+            title, description, source_text, duration, view_count, like_count,
+            post_url, platform, account_id, target_platform,
             item.get("source_id", ""),
         )
 
@@ -74,6 +72,7 @@ class VideoUnderstanding:
         self,
         title: str,
         description: str,
+        source_text: str,
         transcript: str,
         duration: float | None,
         view_count: int,
@@ -84,17 +83,12 @@ class VideoUnderstanding:
         target_platform: str,
         source_id: str,
     ) -> dict[str, Any]:
-        # transcript から key_points を抽出（実際はLLM処理、ここではテキスト分割）
         sentences = [s.strip() for s in transcript.replace("。", "。\n").splitlines() if s.strip()]
         key_points = sentences[:5]
-
-        # hook_candidates: 最初の1-2文が最も有力
         hook_candidates = [
-            {"text": s, "confidence": 0.8 - i * 0.1, "reason": f"冒頭{i+1}文目"}
+            {"text": s, "confidence": 0.8 - i * 0.1, "reason": f"transcript冒頭{i+1}文目"}
             for i, s in enumerate(sentences[:3])
         ]
-
-        # clip_candidates: duration がある場合に時間分割
         clip_candidates = []
         if duration and duration > 30:
             segment_count = min(3, int(duration // 30))
@@ -113,8 +107,6 @@ class VideoUnderstanding:
                     "cut_required": False,
                 })
 
-        summary = f"{title}: {' / '.join(key_points[:3])}" if key_points else title
-
         generated_post = self._generate_post_copy(
             title=title,
             key_points=key_points,
@@ -122,13 +114,11 @@ class VideoUnderstanding:
             target_platform=target_platform,
             account_id=account_id,
         )
-
         generated_thread = self._generate_thread_copy(
             title=title,
             key_points=key_points,
             target_platform=target_platform,
         )
-
         return {
             "understanding_id": f"vu_{_short_id()}",
             "source_id": source_id,
@@ -137,8 +127,13 @@ class VideoUnderstanding:
             "target_account_id": account_id,
             "target_platform": target_platform,
             "title": title,
-            "summary": summary,
+            "source_text": source_text,
+            "description": description,
+            "transcript": transcript,
+            "summary": f"{title}: {' / '.join(key_points[:3])}" if key_points else title,
             "has_transcript": True,
+            "semantic_ready": True,
+            "semantic_block_reason": "",
             "key_points": key_points,
             "hook_candidates": hook_candidates,
             "clip_candidates": clip_candidates,
@@ -159,7 +154,7 @@ class VideoUnderstanding:
                 "download_required": False,
                 "cut_required": False,
                 "upload_required": False,
-                "note": "実行には --confirm-download --confirm-cut が必要です",
+                "note": "media execution remains gated separately",
             },
             "analyzed_at": _now_jst(),
             "status": "OK",
@@ -169,6 +164,7 @@ class VideoUnderstanding:
         self,
         title: str,
         description: str,
+        source_text: str,
         duration: float | None,
         view_count: int,
         like_count: int,
@@ -178,28 +174,26 @@ class VideoUnderstanding:
         target_platform: str,
         source_id: str,
     ) -> dict[str, Any]:
-        hook_candidates = [
-            {
-                "text": f"「{title}」から学んだこと",
-                "confidence": 0.5,
-                "reason": "タイトルベース hook",
-            }
-        ]
-        if description:
-            hook_candidates.append({
-                "text": description[:60],
-                "confidence": 0.4,
-                "reason": "説明文から抽出",
-            })
+        is_video = platform in {"youtube", "youtube_shorts", "tiktok"}
+        semantic_ready = bool(source_text) and not is_video
+        block_reason = "" if semantic_ready else (
+            "video_transcript_required" if is_video else "source_post_text_required"
+        )
+        sentences = [s.strip() for s in source_text.replace("。", "。\n").splitlines() if s.strip()]
+        key_points = sentences[:5] if semantic_ready else []
+        hook_candidates = []
+        if sentences:
+            hook_candidates.append({"text": sentences[0], "confidence": 0.8, "reason": "source post text"})
+        elif title:
+            hook_candidates.append({"text": title, "confidence": 0.3, "reason": "metadata only; not semantically ready"})
 
         generated_post = self._generate_post_copy(
             title=title,
-            key_points=[description[:100]] if description else [title],
-            hook=title,
+            key_points=key_points,
+            hook=hook_candidates[0]["text"] if hook_candidates else title,
             target_platform=target_platform,
             account_id=account_id,
         )
-
         return {
             "understanding_id": f"vu_{_short_id()}",
             "source_id": source_id,
@@ -208,27 +202,32 @@ class VideoUnderstanding:
             "target_account_id": account_id,
             "target_platform": target_platform,
             "title": title,
-            "summary": f"[transcript なし] {title}",
+            "source_text": source_text,
+            "description": description,
+            "transcript": "",
+            "summary": source_text[:300] if semantic_ready else f"[semantic input不足] {title}",
             "has_transcript": False,
-            "key_points": [description[:200]] if description else [],
+            "semantic_ready": semantic_ready,
+            "semantic_block_reason": block_reason,
+            "key_points": key_points,
             "hook_candidates": hook_candidates,
             "clip_candidates": [],
             "recommended_time_ranges": [],
             "generated_post_copy": generated_post,
             "generated_thread_copy": None,
             "generation_job_candidate": {
-                "type": "video_reference_no_transcript",
-                "status": "WAITING_REVIEW",
-                "note": "transcript 取得後に再実行を推奨",
+                "type": "reference_based_text" if semantic_ready else "video_reference_no_transcript",
+                "status": "PLANNED" if semantic_ready else "WAITING_REVIEW",
+                "note": "actual source text is available" if semantic_ready else "video transcript is required before generation",
             },
             "media_ingestion_plan": {
                 "action": "plan_only",
                 "download_required": False,
-                "transcript_required": True,
-                "note": "transcript 取得には youtube_transcript_fetcher を使用",
+                "transcript_required": is_video,
+                "note": "video metadata/description alone must not drive reference generation",
             },
             "analyzed_at": _now_jst(),
-            "status": "NOT_READY_TRANSCRIPT",
+            "status": "OK" if semantic_ready else ("NOT_READY_TRANSCRIPT" if is_video else "NOT_READY_SOURCE_TEXT"),
         }
 
     def _generate_post_copy(

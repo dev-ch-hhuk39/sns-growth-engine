@@ -11,6 +11,8 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from .reference_source_rewriter import ReferenceRewriteError, rewrite_reference_post
+
 JST = timezone(timedelta(hours=9))
 
 
@@ -32,34 +34,65 @@ class VideoReferenceGenerator:
     ) -> dict[str, Any]:
         is_beauty = account_id == "beauty_account"
         status = "WAITING_REVIEW" if is_beauty else "PLANNED"
-
-        title = understanding.get("title", "")
-        key_points = understanding.get("key_points", [])
-        hook_candidates = understanding.get("hook_candidates", [])
-        clip_candidates = understanding.get("clip_candidates", [])
-        has_transcript = understanding.get("has_transcript", False)
+        has_transcript = bool(understanding.get("has_transcript"))
+        clip_candidates = list(understanding.get("clip_candidates") or [])
 
         if mock:
-            return self._mock_result(
-                understanding, account_id, target_platform, status
+            return self._mock_result(understanding, account_id, target_platform, status)
+
+        platform = str(understanding.get("platform") or "").lower()
+        semantic_ready = understanding.get("semantic_ready")
+        if semantic_ready is None:
+            if platform in {"youtube", "youtube_shorts", "tiktok"}:
+                semantic_ready = has_transcript
+            else:
+                semantic_ready = bool(understanding.get("source_text") or understanding.get("transcript"))
+        if not semantic_ready:
+            return {
+                "job_id": f"vrg_{str(uuid.uuid4())[:8]}",
+                "source_id": understanding.get("source_id", ""),
+                "source_url": understanding.get("post_url", ""),
+                "account_id": account_id,
+                "target_platform": target_platform,
+                "generation_mode": generation_mode,
+                "has_transcript": has_transcript,
+                "status": "WAITING_REVIEW",
+                "is_beauty": is_beauty,
+                "draft_count": 0,
+                "drafts": [],
+                "clip_plan_count": len(clip_candidates),
+                "blocked_reason": understanding.get("semantic_block_reason") or "semantic_source_not_ready",
+                "created_at": _now_jst(),
+            }
+
+        try:
+            rewritten = rewrite_reference_post(
+                account_id=account_id,
+                source=understanding,
+                source_score={},
+                target_platform=target_platform,
+                slot_theme=generation_mode,
             )
+        except ReferenceRewriteError as exc:
+            return {
+                "job_id": f"vrg_{str(uuid.uuid4())[:8]}",
+                "source_id": understanding.get("source_id", ""),
+                "source_url": understanding.get("post_url", ""),
+                "account_id": account_id,
+                "target_platform": target_platform,
+                "generation_mode": generation_mode,
+                "has_transcript": has_transcript,
+                "status": "WAITING_REVIEW",
+                "is_beauty": is_beauty,
+                "draft_count": 0,
+                "drafts": [],
+                "clip_plan_count": len(clip_candidates),
+                "blocked_reason": str(exc),
+                "created_at": _now_jst(),
+            }
 
-        if not has_transcript and generation_mode == "video_clip_reference":
-            generation_mode = "video_reference_no_transcript"
-            status = "WAITING_REVIEW"
-
-        best_hook = hook_candidates[0]["text"] if hook_candidates else title
-        drafts = []
-
-        # テキスト投稿
-        post_text = self._build_post(
-            title=title,
-            hook=best_hook,
-            key_points=key_points,
-            source_url=understanding.get("post_url", ""),
-            target_platform=target_platform,
-        )
-        drafts.append({
+        post_text = str(rewritten["public_post_text"]).strip()
+        drafts = [{
             "draft_id": f"vrd_{str(uuid.uuid4())[:6]}",
             "type": "text_post",
             "platform": target_platform,
@@ -68,22 +101,10 @@ class VideoReferenceGenerator:
             "char_count": len(post_text),
             "status": "DRAFT",
             "generation_mode": generation_mode,
-        })
-
-        # スレッド
-        if target_platform in ("x", "threads") and key_points:
-            thread = self._build_thread(title, best_hook, key_points, target_platform)
-            drafts.append({
-                "draft_id": f"vrd_th_{str(uuid.uuid4())[:6]}",
-                "type": "thread_series",
-                "platform": target_platform,
-                "account_id": account_id,
-                "thread_posts": thread,
-                "post_count": len(thread),
-                "status": "DRAFT",
-                "generation_mode": generation_mode,
-            })
-
+            "generation_model": rewritten.get("generation_model", ""),
+            "generation_strategy": rewritten.get("generation_strategy", "source_grounded_gemini_v1"),
+            "semantic_fidelity": rewritten.get("semantic_fidelity", {}),
+        }]
         return {
             "job_id": f"vrg_{str(uuid.uuid4())[:8]}",
             "source_id": understanding.get("source_id", ""),
@@ -97,6 +118,8 @@ class VideoReferenceGenerator:
             "draft_count": len(drafts),
             "drafts": drafts,
             "clip_plan_count": len(clip_candidates),
+            "semantic_fidelity": rewritten.get("semantic_fidelity", {}),
+            "generation_model": rewritten.get("generation_model", ""),
             "created_at": _now_jst(),
         }
 
