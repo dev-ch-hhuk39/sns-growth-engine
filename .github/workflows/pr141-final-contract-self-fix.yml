@@ -44,13 +44,15 @@ jobs:
           python3 scripts/test_scheduled_autopost_preview_findings_contract.py
           python3 scripts/test_readiness_and_fail_closed_contract.py
 
+      - name: Remove temporary workflow before repository safety tests
+        run: rm .github/workflows/pr141-final-contract-self-fix.yml
+
       - name: Full repository regression
         run: python3 scripts/run_repository_tests.py --json-output /tmp/repository-tests.json
 
-      - name: Commit tested fix and remove temporary files
+      - name: Commit tested fix and remove temporary patch script
         run: |
           set -euo pipefail
-          rm .github/workflows/pr141-final-contract-self-fix.yml
           rm scripts/pr141_final_self_fix.py
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
