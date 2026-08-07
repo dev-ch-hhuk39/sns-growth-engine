@@ -2,6 +2,8 @@ name: PR 141 Final V1 Read-Only Validation
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: read
