@@ -1,0 +1,218 @@
+name: PR 141 Final V1 Read-Only Validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  models: read
+
+concurrency:
+  group: pr141-final-v1-readonly-validation
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  READONLY_TARGET_PR: "141"
+  READONLY_TARGET_SHA: "ce264e746054c8b01aef39ee8ab34d0228f420d8"
+
+jobs:
+  verify_exact_target:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact PR 141 head without production secrets
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ce264e746054c8b01aef39ee8ab34d0228f420d8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify PR 141 still points to exact reviewed head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$READONLY_TARGET_SHA"
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$READONLY_TARGET_PR" --jq '.head.sha')"
+          test "$actual" = "$READONLY_TARGET_SHA"
+          echo "exact_target_verified=true" >> "$GITHUB_STEP_SUMMARY"
+
+  final_readonly_validation:
+    needs: verify_exact_target
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    env:
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_MODELS_ENABLED: "true"
+      SCHEDULED_AUTOPOST_PREVIEW_V2_OUTPUT: /tmp/pr141-preview-v2.json
+
+    steps:
+      - name: Checkout exact PR 141 head
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ce264e746054c8b01aef39ee8ab34d0228f420d8
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Reconfirm exact target
+        run: test "$(git rev-parse HEAD)" = "$READONLY_TARGET_SHA"
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Verify credentials are present without exposing values
+        run: |
+          set -euo pipefail
+          test -n "$SNS_MASTER_SHEET_ID$SPREADSHEET_ID"
+          test -n "$SA_JSON_BASE64$GCP_SA_JSON_BASE64"
+          test -n "$GEMINI_API_KEY"
+          echo "required_secret_presence=PASS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fetch protected main for evidence comparison
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Run exact-head scheduled Preview v2
+        run: python3 scripts/run_scheduled_autopost_preview_v2.py
+
+      - name: Validate V1 acceptance and print deterministic 10-slot summary
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path('/tmp/pr141-preview-v2.json')
+          report = json.loads(path.read_text(encoding='utf-8'))
+          expected = {
+              'ns_1400_reference': ('night_scout', 'reference_text'),
+              'ns_1600_original': ('night_scout', 'original_text'),
+              'ns_1800_direct_media': ('night_scout', 'direct_reference_media'),
+              'ns_2100_clip_media': ('night_scout', 'approved_source_clip'),
+              'ns_2500_pdca': ('night_scout', 'pdca_text'),
+              'lm_1000_original': ('liver_manager', 'original_text'),
+              'lm_1300_reference': ('liver_manager', 'reference_text'),
+              'lm_1600_direct_media': ('liver_manager', 'direct_reference_media'),
+              'lm_1800_clip_media': ('liver_manager', 'approved_source_clip'),
+              'lm_2100_pdca': ('liver_manager', 'pdca_text'),
+          }
+          hard_errors = []
+          slots = report.get('slots') or []
+          by_slot = {str(s.get('slot_id', '')): s for s in slots}
+          if report.get('schema_version') != 'scheduled_autopost_preview_v2':
+              hard_errors.append('schema_version_mismatch')
+          if int(report.get('slot_count') or 0) != 10 or len(slots) != 10:
+              hard_errors.append('slot_count_not_10')
+          if set(by_slot) != set(expected):
+              hard_errors.append('canonical_slot_set_mismatch')
+          if report.get('would_post') is not False:
+              hard_errors.append('would_post_not_false')
+          if report.get('writes_performed') is not False:
+              hard_errors.append('writes_performed_not_false')
+          if report.get('queue_unchanged') is not True:
+              hard_errors.append('queue_changed')
+          if report.get('protected_rows_unchanged') is not True:
+              hard_errors.append('protected_rows_changed')
+          if not report.get('gemini_key_present'):
+              hard_errors.append('gemini_key_missing')
+          flags = report.get('real_action_flags') or {}
+          unsafe_flags = {k: v for k, v in flags.items() if str(v).strip().lower() in {'1','true','yes','on','enabled'}}
+          if unsafe_flags:
+              hard_errors.append('unsafe_real_action_flags:' + ','.join(sorted(unsafe_flags)))
+          requests = report.get('gemini_request_counts') or {}
+          for account in ('night_scout', 'liver_manager'):
+              if int(requests.get(account) or 0) <= 0:
+                  hard_errors.append(f'gemini_requests_missing:{account}')
+
+          compact = []
+          for slot_id, (expected_account, expected_type) in expected.items():
+              slot = by_slot.get(slot_id, {})
+              account = str(slot.get('account_id', ''))
+              post_type = str(slot.get('post_type', ''))
+              status = str(slot.get('status', '')).upper()
+              if account != expected_account:
+                  hard_errors.append(f'account_mismatch:{slot_id}:{account}')
+              if post_type != expected_type:
+                  hard_errors.append(f'post_type_mismatch:{slot_id}:{post_type}')
+              if status in {'RUNTIME_ERROR', 'ERROR', 'EXCEPTION'}:
+                  hard_errors.append(f'runtime_error:{slot_id}')
+              candidate = slot.get('candidate') if isinstance(slot.get('candidate'), dict) else {}
+              for key in ('account_id', 'target_account_id'):
+                  value = str(candidate.get(key, '')).strip()
+                  if value and value != expected_account:
+                      hard_errors.append(f'candidate_account_mismatch:{slot_id}:{key}:{value}')
+              quality = slot.get('quality') if isinstance(slot.get('quality'), dict) else {}
+              gemini = slot.get('gemini') if isinstance(slot.get('gemini'), dict) else {}
+              plan = slot.get('plan') if isinstance(slot.get('plan'), dict) else {}
+              compact.append({
+                  'slot_id': slot_id,
+                  'account_id': account,
+                  'post_type': post_type,
+                  'status': status,
+                  'quality_pass': quality.get('pass'),
+                  'quality_flags': quality.get('flags', []),
+                  'preview_blocked_reasons': slot.get('preview_blocked_reasons', []),
+                  'lineage_flags': slot.get('lineage_flags', []),
+                  'gemini_status': gemini.get('status', ''),
+                  'gemini_blocked_reasons': gemini.get('blocked_reasons', []),
+                  'plan_status': plan.get('status', ''),
+                  'plan_blocked_reasons': plan.get('blocked_reasons', plan.get('reasons', [])),
+                  'candidate_queue_id': candidate.get('queue_id', ''),
+                  'candidate_source_id': candidate.get('source_id', ''),
+                  'candidate_clip_id': candidate.get('clip_candidate_id', ''),
+                  'final_text': str(slot.get('final_text', ''))[:800],
+              })
+
+          diversity = report.get('cross_slot_diversity') or {}
+          if diversity.get('status') == 'BLOCKED':
+              hard_errors.append('cross_slot_diversity_blocked')
+
+          summary = {
+              'schema_version': report.get('schema_version'),
+              'preview_status': report.get('status'),
+              'slot_count': report.get('slot_count'),
+              'slot_status_counts': report.get('slot_status_counts'),
+              'gemini_request_counts': requests,
+              'queue_row_count_before': report.get('queue_row_count_before'),
+              'queue_row_count_after': report.get('queue_row_count_after'),
+              'queue_unchanged': report.get('queue_unchanged'),
+              'protected_rows_unchanged': report.get('protected_rows_unchanged'),
+              'would_post': report.get('would_post'),
+              'writes_performed': report.get('writes_performed'),
+              'real_action_flags': flags,
+              'cross_slot_diversity': diversity,
+              'hard_errors': sorted(set(hard_errors)),
+              'slots': compact,
+          }
+          rendered = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+          print('=== PR141_FINAL_V1_SUMMARY_BEGIN ===')
+          print(rendered)
+          print('=== PR141_FINAL_V1_SUMMARY_END ===')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as handle:
+              handle.write('\n## PR 141 Final V1 Read-Only Summary\n\n```json\n')
+              handle.write(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
+              handle.write('\n```\n')
+          if hard_errors:
+              raise SystemExit('V1_HARD_ACCEPTANCE_FAILED: ' + ','.join(sorted(set(hard_errors))))
+          PY
