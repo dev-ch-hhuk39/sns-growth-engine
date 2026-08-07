@@ -1,0 +1,151 @@
+name: PR 141 Final Contract Self Fix
+
+on:
+  push:
+    branches:
+      - fix/scheduled-autopost-preview-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch_test_and_push:
+    if: github.event.head_commit.message == 'chore: run final PR 141 contract self-fix'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: fix/scheduled-autopost-preview-v2
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            requirements-acquisition.txt
+            requirements-ci.txt
+
+      - name: Apply the two final contract fixes and regression assertions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gate_path = Path('scripts/hybrid_ai_gate.py')
+          text = gate_path.read_text(encoding='utf-8')
+
+          old_types = '''SCHEDULED_TEXT_TYPES = {
+              "original_text",
+              "reference_text",
+              "pdca_text",
+              "metrics_driven_pdca_text",
+          }'''
+          new_types = '''SCHEDULED_TEXT_TYPES = {
+              "original_text",
+              "reference_text",
+              "pdca_text",
+              "metrics_driven_pdca_text",
+              "direct_reference_media",
+          }'''
+          assert text.count(old_types) == 1, 'scheduled type block changed unexpectedly'
+          text = text.replace(old_types, new_types)
+
+          old_review = '''def _review_prompt(
+              queue: Mapping[str, Any],
+              source_text: str,
+              candidate_text: str,
+              policy: Mapping[str, Any],
+          ) -> str:
+              return (
+                  "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"
+                  "対象読者・アカウント適合、公開安全性を確認してください。誤字、重複助詞、[音楽]等、"
+                  "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。\\n\\n"
+                  f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\\n"
+                  f"QUEUE_ID={_text(queue.get('queue_id'))}\\n"
+                  f"SOURCE_EVIDENCE={source_text}\\n"
+                  f"CANDIDATE_TEXT={candidate_text}"
+              )'''
+          new_review = '''def _review_prompt(
+              queue: Mapping[str, Any],
+              source_text: str,
+              candidate_text: str,
+              policy: Mapping[str, Any],
+          ) -> str:
+              pdca_instruction = ""
+              if (
+                  _scheduled_text_type(queue) in {"pdca_text", "metrics_driven_pdca_text"}
+                  and _text(queue.get("generation_mode")).lower() == "metrics_driven_pdca_text"
+              ):
+                  pdca_instruction = (
+                      "この候補はPDCA枠です。SOURCE_EVIDENCEにある公開済み自社投稿の表示数、いいね数、"
+                      "コメント数、再投稿数、引用数は、反応を説明するために意図的に使う公開可能な実測根拠です。"
+                      "これらの公開投稿パフォーマンス値だけを理由にINTERNAL_PROCESS_METRICSやaccount_fit不一致として"
+                      "REJECTしないでください。ただし秘密情報、非公開の社内KPI、運用手順、認証情報は引き続きREJECTしてください。"
+                  )
+              return (
+                  "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"
+                  "対象読者・アカウント適合、公開安全性を確認してください。誤字、重複助詞、[音楽]等、"
+                  "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。"
+                  f"{(' ' + pdca_instruction) if pdca_instruction else ''}\\n\\n"
+                  f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\\n"
+                  f"QUEUE_ID={_text(queue.get('queue_id'))}\\n"
+                  f"SOURCE_EVIDENCE={source_text}\\n"
+                  f"CANDIDATE_TEXT={candidate_text}"
+              )'''
+          assert text.count(old_review) == 1, 'review prompt block changed unexpectedly'
+          text = text.replace(old_review, new_review)
+
+          old_route = '        if route.route == "new_text_generation":\n'
+          new_route = '        if route.route in {"new_text_generation", "owned_media_transform"}:\n'
+          assert text.count(old_route) == 1, 'scheduled contract route guard changed unexpectedly'
+          text = text.replace(old_route, new_route)
+          gate_path.write_text(text, encoding='utf-8')
+
+          test_path = Path('scripts/test_scheduled_preview_post_ai_contract.py')
+          test = test_path.read_text(encoding='utf-8')
+          marker = '''assert original_result.generation["scheduled_text_contract"]["status"] == "REPAIRED"\n\n'''
+          addition = '''assert original_result.generation["scheduled_text_contract"]["status"] == "REPAIRED"\n\n# Scheduled owned Direct media must preserve the Night Scout first-person voice after AI rewriting.\ndirect_queue = queue("night_scout", "direct_reference_media", night_current)\ndirect_queue.update({\n    "generation_mode": "direct_reference_media",\n    "media_origin": "direct_reference",\n    "ownership": "system_owned",\n    "source_id": "system_owned_night_scout_fixture",\n})\ndirect_context = context(night_current)\ndirect_context["permission_evidence_status"] = "APPROVED"\ndirect_result = HybridAiGate(ContractClient(night_generated_without_boku)).evaluate(\n    direct_queue,\n    direct_context,\n)\nassert direct_result.status == "PASS", direct_result.audit()\nassert "僕" in direct_result.public_post_text, direct_result.public_post_text\nassert direct_result.generation["scheduled_text_contract"]["status"] == "REPAIRED"\n\n'''
+          assert test.count(marker) == 1, 'direct regression insertion marker changed unexpectedly'
+          test = test.replace(marker, addition)
+
+          class_marker = '''class ContractClient:\n'''
+          capture_class = '''class PromptCaptureClient:\n    def __init__(self, generated_text: str) -> None:\n        self.generated_text = generated_text\n        self.actual_request_count = 0\n        self.review_prompt = ""\n\n    def generate_json(self, **kwargs: Any) -> dict[str, Any]:\n        self.actual_request_count += 1\n        operation = kwargs["operation"]\n        if operation == "classify":\n            data = {\n                "decision": "PASS",\n                "target_account_match": "PASS",\n                "target_audience_match": "PASS",\n                "source_audience": "night_work_job_seeker",\n                "commercial_context": "B2C",\n                "source_usage_fit": "PASS",\n                "risk_flags": [],\n                "reasons": [],\n            }\n        elif operation == "generate":\n            data = {\n                "public_post_text": self.generated_text,\n                "preserved_facts": [],\n                "removed_noise": [],\n                "notes": "fixture",\n            }\n        else:\n            self.review_prompt = kwargs["prompt"]\n            data = {\n                "decision": "PASS",\n                "natural_japanese": "PASS",\n                "source_grounding": "PASS",\n                "account_fit": "PASS",\n                "public_safety": "PASS",\n                "risk_flags": [],\n                "reasons": [],\n            }\n        return {"data": data, "actual_requests": 1, "cache_hit": False}\n\n\nclass ContractClient:\n'''
+          assert test.count(class_marker) == 1, 'client insertion marker changed unexpectedly'
+          test = test.replace(class_marker, capture_class)
+
+          pdca_marker = '''assert "pdca_measured_observation_missing" in contract["rejected_generated_contract_reasons"]\n\n'''
+          pdca_addition = '''assert "pdca_measured_observation_missing" in contract["rejected_generated_contract_reasons"]\n\n# Owned public-post metrics are intentional evidence for PDCA, not secret internal process metrics.\nprompt_client = PromptCaptureClient(pdca_generic)\nprompt_result = HybridAiGate(prompt_client).evaluate(\n    queue("night_scout", "pdca_text", pdca_current),\n    context(pdca_current),\n)\nassert prompt_result.status == "PASS", prompt_result.audit()\nassert "公開済み自社投稿" in prompt_client.review_prompt, prompt_client.review_prompt\nassert "INTERNAL_PROCESS_METRICS" in prompt_client.review_prompt, prompt_client.review_prompt\nassert "秘密情報" in prompt_client.review_prompt, prompt_client.review_prompt\n\n'''
+          assert test.count(pdca_marker) == 1, 'PDCA regression insertion marker changed unexpectedly'
+          test = test.replace(pdca_marker, pdca_addition)
+          test_path.write_text(test, encoding='utf-8')
+          PY
+
+      - name: Install test dependencies
+        run: python3 -m pip install --requirement requirements-acquisition.txt --requirement requirements-ci.txt
+
+      - name: Focused final contract tests
+        run: |
+          python3 -m ruff check --select E9,F63,F7,F82 scripts/hybrid_ai_gate.py scripts/test_scheduled_preview_post_ai_contract.py
+          python3 -m compileall -q src scripts
+          python3 scripts/test_scheduled_preview_post_ai_contract.py
+          python3 scripts/test_hybrid_ai_gate.py
+          python3 scripts/test_scheduled_autopost_preview_v2.py
+          python3 scripts/test_scheduled_autopost_preview_findings_contract.py
+          python3 scripts/test_readiness_and_fail_closed_contract.py
+
+      - name: Full repository regression
+        run: python3 scripts/run_repository_tests.py --json-output /tmp/repository-tests.json
+
+      - name: Remove one-time workflow and push tested fix
+        run: |
+          set -euo pipefail
+          rm .github/workflows/pr141-final-contract-self-fix.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/hybrid_ai_gate.py scripts/test_scheduled_preview_post_ai_contract.py .github/workflows/pr141-final-contract-self-fix.yml
+          git diff --cached --check
+          git commit -m "fix: finalize scheduled AI contracts"
+          git push origin HEAD:fix/scheduled-autopost-preview-v2
