@@ -986,17 +986,23 @@ def build_measured_pdca_inputs(
             snapshot.get("quotes")
         )
 
+        engagement_actions = (
+            likes
+            + comments
+            + reposts
+            + quotes
+        )
         engagement_rate = (
-            (
-                likes
-                + comments
-                + reposts
-                + quotes
-            )
-            / views
+            engagement_actions / views
             if views > 0
             else 0.0
         )
+
+        # A zero-signal row cannot support a claim that a pattern worked.
+        # Keep the PDCA slot fail closed until owned-post evidence contains at
+        # least one measured reaction.
+        if views <= 0 or engagement_actions <= 0:
+            continue
 
         source_route = str(
             posted.get(
@@ -1167,12 +1173,61 @@ def build_measured_pdca_inputs(
     )
 
 
+
+def build_measured_pdca_public_text(
+    *,
+    account_id: str,
+    meta: dict[str, Any],
+) -> str:
+    """Render measured owned-post evidence as an explicit PDCA experiment."""
+
+    source = str(meta.get("source_text", "")).replace("\\n", "\n").strip()
+    first_sentence = next(
+        (
+            item.strip()
+            for item in re.split(r"[。！？!?\n]+", source)
+            if item.strip()
+        ),
+        "前回扱ったテーマ",
+    )[:90]
+    views = _pdca_metric_int(meta.get("views"))
+    likes = _pdca_metric_int(meta.get("likes"))
+    comments = _pdca_metric_int(meta.get("comments"))
+    reposts = _pdca_metric_int(meta.get("reposts"))
+    quotes = _pdca_metric_int(meta.get("quotes"))
+
+    observation = (
+        f"前回の投稿は{views}表示で、いいね{likes}件・"
+        f"コメント{comments}件・再投稿{reposts}件・引用{quotes}件でした。"
+    )
+    if account_id == "night_scout":
+        hypothesis = (
+            f"僕は、「{first_sentence}」という判断軸が具体的だったことが、"
+            "読者の反応につながった可能性があると見ています。"
+        )
+        next_test = (
+            "次は、同じテーマを入店前に確認する三つの項目へ絞り、"
+            "表示数とコメント数が前回を上回るか確認します。"
+        )
+    else:
+        hypothesis = (
+            f"運用側で見ると、「{first_sentence}」という一つの行動へ絞ったことが、"
+            "配信者に試す場面を伝えやすくした可能性があります。"
+        )
+        next_test = (
+            "次は、初見対応の一つの行動だけを提示し、"
+            "表示数とコメント数が前回を上回るか確認します。"
+        )
+    return f"{observation}\n\n{hypothesis}\n\n{next_test}"
+
+
 def apply_measured_pdca_lineage(
     rows: dict[
         str,
         list[dict[str, Any]],
     ],
     *,
+    account_id: str = "",
     source_meta: dict[
         str,
         dict[str, Any],
@@ -1218,6 +1273,19 @@ def apply_measured_pdca_lineage(
         meta = source_meta.get(
             result_id,
             {},
+        )
+
+        queue["public_post_text"] = build_measured_pdca_public_text(
+            account_id=(account_id or str(queue.get("account_id", ""))),
+            meta=meta,
+        )
+        queue["key_claims_json"] = json.dumps(
+            [
+                "前回の実測結果",
+                "反応が出た理由の仮説",
+                "次回に検証する一つの変更",
+            ],
+            ensure_ascii=False,
         )
 
         queue[
@@ -1292,6 +1360,11 @@ def apply_measured_pdca_lineage(
             **meta,
         }
 
+    queue_text_by_draft = {
+        str(row.get("draft_id", "")): str(row.get("public_post_text", ""))
+        for row in selected_queues
+    }
+
     selected_drafts = []
 
     for row in rows.get(
@@ -1311,6 +1384,11 @@ def apply_measured_pdca_lineage(
             continue
 
         copied = dict(row)
+        pdca_text = queue_text_by_draft.get(draft_id, "")
+        if pdca_text:
+            copied["body_md"] = pdca_text
+            copied["content"] = pdca_text
+            copied["title"] = pdca_text.splitlines()[0][:80]
         meta = queue_meta_by_draft.get(
             draft_id,
             {},
@@ -1387,6 +1465,10 @@ def apply_measured_pdca_lineage(
             continue
 
         copied = dict(row)
+        pdca_text = queue_text_by_draft.get(draft_id, "")
+        if pdca_text:
+            copied["text"] = pdca_text
+            copied["char_count"] = str(len(pdca_text))
 
         copied[
             "transformation_type"
@@ -1465,6 +1547,7 @@ def build_measured_pdca_generation_rows(
 
     return apply_measured_pdca_lineage(
         generated,
+        account_id=account_id,
         source_meta=source_meta,
         top_n=top_n,
     )
@@ -1617,26 +1700,35 @@ def run_reference_generation(
     theme: str = "",
     schedule_date_jst: str = "",
     require_measured_pdca: bool = False,
+    include_preview_rows: bool = False,
+    client: Any | None = None,
 ) -> dict[str, Any]:
-    from config_loader import get_config
-    from sheets_client import SheetsClient
+    from sheets_record_reader import read_records_safely
 
-    cfg = get_config()
-    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    posts = [dict(r) for r in client._ws("source_account_posts").get_all_records() if str(r.get("account_id", "")) == account_id]
-    scores = [dict(r) for r in client._ws("reference_post_scores").get_all_records() if str(r.get("account_id", "")) == account_id]
+    if client is None:
+        from config_loader import get_config
+        from sheets_client import SheetsClient
+
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+
+    source_posts = read_records_safely(client, "source_account_posts")
+    posts = [
+        dict(row)
+        for row in source_posts
+        if str(row.get("account_id", "")) == account_id
+    ]
+    score_rows = read_records_safely(client, "reference_post_scores")
+    scores = [
+        dict(row)
+        for row in score_rows
+        if str(row.get("account_id", "")) == account_id
+    ]
+    posted_results_all = read_records_safely(client, "posted_results")
     posted_results = [
         dict(row)
-        for row in client._ws(
-            "posted_results"
-        ).get_all_records()
-        if str(
-            row.get(
-                "account_id",
-                "",
-            )
-        )
-        == account_id
+        for row in posted_results_all
+        if str(row.get("account_id", "")) == account_id
     ]
 
     history = [
@@ -1649,36 +1741,20 @@ def run_reference_generation(
         for row in posted_results
     ]
     try:
-        strategy_rows = [dict(row) for row in client._ws("strategy_state").get_all_records()]
+        strategy_rows = read_records_safely(client, "strategy_state")
     except Exception:
         strategy_rows = []
     preferred_topics = preferred_primary_topics(strategy_rows, account_id)
     metric_snapshots = [
         dict(row)
-        for row in client._ws(
-            "metric_snapshots"
-        ).get_all_records()
-        if str(
-            row.get(
-                "account_id",
-                "",
-            )
-        )
-        == account_id
+        for row in read_records_safely(client, "metric_snapshots")
+        if str(row.get("account_id", "")) == account_id
     ]
 
     media_metric_rows = [
         dict(row)
-        for row in client._ws(
-            "media_metrics"
-        ).get_all_records()
-        if str(
-            row.get(
-                "account_id",
-                "",
-            )
-        )
-        == account_id
+        for row in read_records_safely(client, "media_metrics")
+        if str(row.get("account_id", "")) == account_id
     ]
 
     metric_rows = [
@@ -1686,11 +1762,19 @@ def run_reference_generation(
         *media_metric_rows,
     ]
     from generation.context_selector import select_generation_context
-    category_scores = [dict(row) for row in client._ws("category_scores").get_all_records() if str(row.get("account_id", "")) == account_id]
-    learning_rules = [dict(row) for row in client._ws("learning_rules").get_all_records() if str(row.get("account_id", "")) == account_id]
+    category_scores = [
+        dict(row)
+        for row in read_records_safely(client, "category_scores")
+        if str(row.get("account_id", "")) == account_id
+    ]
+    learning_rules = [
+        dict(row)
+        for row in read_records_safely(client, "learning_rules")
+        if str(row.get("account_id", "")) == account_id
+    ]
     context = select_generation_context(
         account_id=account_id,
-        posted_results=[dict(row) for row in client._ws("posted_results").get_all_records()],
+        posted_results=[dict(row) for row in posted_results_all],
         metric_rows=metric_rows,
         category_scores=category_scores,
         learning_rules=learning_rules,
@@ -1828,6 +1912,22 @@ def run_reference_generation(
             history=history,
         )
 
+        if (
+            not rows["queue"]
+            and post_type == "reference_text"
+            and slot_id in {"ns_1400_reference", "lm_1300_reference"}
+        ):
+            return {
+                "status": "NO_DATA",
+                "account_id": account_id,
+                "post_type": post_type,
+                "candidate_count": 0,
+                "measured_metric_count": len(measured),
+                "reason": "reference_source_required_for_reference_slot",
+                "worker_selectable": False,
+                "real_post_possible_now": False,
+            }
+
         if not rows["queue"]:
             rows = (
                 build_fallback_generation_rows(
@@ -1919,6 +2019,24 @@ def run_reference_generation(
         "strategy_policy_active": bool(preferred_topics),
     }
     if not apply:
+        if include_preview_rows:
+            preview_fields = (
+                "queue_id", "account_id", "target_account_id", "platform",
+                "generation_mode", "content_type", "content_route",
+                "source_content_route", "source_generation_mode",
+                "source_result_id", "transformation_type", "source_credit",
+                "source_id", "source_url", "public_post_text", "slot_id",
+                "theme", "schedule_date_jst", "rights_status",
+                "permission_status", "rights_review_required",
+                "media_reuse_risk", "validator_status",
+                "internal_leak_status", "account_fit_status",
+                "generation_policy_json", "claim_support_json",
+                "key_claims_json", "internal_analysis",
+            )
+            summary["preview_queue"] = [
+                {key: row.get(key, "") for key in preview_fields}
+                for row in rows.get("queue", [])[:max(1, top_n)]
+            ]
         return summary
     if not rows["queue"]:
         return {**summary, "status": "NO_DATA", "reason": "reference posts/scores and fallback candidates are missing"}
@@ -2033,6 +2151,11 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--theme", default="")
     parser.add_argument("--schedule-date-jst", default="")
     parser.add_argument(
+        "--include-preview-queue",
+        action="store_true",
+        help="Include sanitized in-memory queue candidates in PLAN_ONLY output.",
+    )
+    parser.add_argument(
         "--require-measured-pdca",
         action="store_true",
         help=(
@@ -2063,6 +2186,9 @@ def main() -> int:
             ),
             require_measured_pdca=(
                 args.require_measured_pdca
+            ),
+            include_preview_rows=(
+                args.include_preview_queue
             ),
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))

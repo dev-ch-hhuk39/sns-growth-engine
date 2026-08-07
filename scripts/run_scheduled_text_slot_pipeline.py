@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate, Hybrid-review, promote, and publish one exact scheduled text slot."""
+"""Generate, Hybrid-review, promote, and conditionally publish one scheduled text slot."""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from scheduled_execution_guard import append_job_summary, scheduled_window_decision
 
 
 def extract_json_objects(text: str) -> list[dict[str, Any]]:
@@ -48,6 +51,21 @@ def run_stage(name: str, command: list[str], env: dict[str, str]) -> tuple[int, 
     return completed.returncode, payload
 
 
+def no_post(reason: str, *, account_id: str, slot_id: str, queue_id: str = "", details: Any = None) -> int:
+    payload = {
+        "status": "NO_POST",
+        "reason": reason,
+        "account_id": account_id,
+        "slot_id": slot_id,
+        "queue_id": queue_id,
+        "details": details or {},
+        "would_post": False,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    append_job_summary("Scheduled text result: NO_POST", payload)
+    return 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
@@ -71,6 +89,9 @@ def main() -> int:
         "ALLOW_TRANSCRIPTION_API": "false",
     }
 
+    window = scheduled_window_decision(args.slot_id)
+    append_job_summary("Scheduled execution window", window)
+
     generation = [
         sys.executable,
         "scripts/run_autonomous_loop.py",
@@ -82,11 +103,16 @@ def main() -> int:
         "--slot-id",
         args.slot_id,
     ]
-    rc, _payload = run_stage("generate_waiting_review", generation, safe_env)
+    rc, generation_payload = run_stage("generate_waiting_review", generation, safe_env)
     if rc != 0:
-        return rc
+        return no_post(
+            "CANDIDATE_GENERATION_FAILED",
+            account_id=args.account_id,
+            slot_id=args.slot_id,
+            details=generation_payload,
+        )
 
-    ready_output = Path("/tmp/hybrid-ready-text.json")
+    ready_output = Path(f"/tmp/hybrid-ready-text-{args.account_id}-{args.slot_id}.json")
     ready_command = [
         sys.executable,
         "scripts/run_hybrid_ready_pipeline.py",
@@ -104,35 +130,45 @@ def main() -> int:
         str(ready_output),
     ]
     rc, ready_payload = run_stage("hybrid_review_and_auto_ready", ready_command, safe_env)
-    if rc != 0:
-        return rc
     if ready_output.exists():
         ready_payload = json.loads(ready_output.read_text(encoding="utf-8"))
+    if rc != 0:
+        return no_post(
+            "HYBRID_REVIEW_FAILED",
+            account_id=args.account_id,
+            slot_id=args.slot_id,
+            details=ready_payload,
+        )
+
     queue_id = str(ready_payload.get("selected_queue_id", "")).strip()
     if not queue_id:
-        print(json.dumps({
-            "status": "NO_POST",
-            "reason": "NO_AI_APPROVED_SLOT_CANDIDATE",
-            "account_id": args.account_id,
-            "slot_id": args.slot_id,
-        }, ensure_ascii=False))
-        return 0
+        return no_post(
+            "NO_AI_APPROVED_SLOT_CANDIDATE",
+            account_id=args.account_id,
+            slot_id=args.slot_id,
+            details=ready_payload,
+        )
 
-    activation = [
-        sys.executable,
-        "scripts/scheduled_publish_activation_gate.py",
-        "--use-sheets",
-    ]
-    rc, _activation_payload = run_stage("runtime_activation_gate", activation, safe_env)
+    activation = [sys.executable, "scripts/scheduled_publish_activation_gate.py", "--use-sheets"]
+    rc, activation_payload = run_stage("runtime_activation_gate", activation, safe_env)
+    append_job_summary("Runtime activation gate", activation_payload)
     if rc != 0:
-        print(json.dumps({
-            "status": "NO_POST",
-            "reason": "RUNTIME_ACTIVATION_GATE_BLOCKED",
-            "account_id": args.account_id,
-            "slot_id": args.slot_id,
-            "queue_id": queue_id,
-        }, ensure_ascii=False))
-        return 0
+        return no_post(
+            "RUNTIME_ACTIVATION_GATE_BLOCKED",
+            account_id=args.account_id,
+            slot_id=args.slot_id,
+            queue_id=queue_id,
+            details=activation_payload,
+        )
+
+    if window.get("status") != "PASS":
+        return no_post(
+            "SCHEDULED_RUN_OUT_OF_WINDOW",
+            account_id=args.account_id,
+            slot_id=args.slot_id,
+            queue_id=queue_id,
+            details=window,
+        )
 
     publish_env = {
         **base_env,
@@ -158,13 +194,15 @@ def main() -> int:
         "--confirm-real-post",
     ]
     rc, publish_payload = run_stage("publish_exact_queue", publish, publish_env)
-    print(json.dumps({
-        "status": "PASS" if rc == 0 else "FAILED",
+    result = {
+        "status": "POSTED" if rc == 0 else "FAILED",
         "account_id": args.account_id,
         "slot_id": args.slot_id,
         "selected_queue_id": queue_id,
-        "publish_status": publish_payload.get("status", ""),
-    }, ensure_ascii=False, indent=2))
+        "publish_payload": publish_payload,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    append_job_summary("Scheduled text result", result)
     return rc
 
 

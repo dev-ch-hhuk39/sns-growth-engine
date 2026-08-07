@@ -230,7 +230,7 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
         if re.search(r"(?:してみ|した方が|すること|できる|見てお|決めてお)", text):
             action_hits.append("action_sentence_structure")
         logic_hits = [term for term in profile.get("logic_markers", []) if str(term) in text]
-        if re.search(r"(?:から|ので|と、|この|だけで|ほど)", text):
+        if re.search(r"(?:から|ので|ことで|ため|理由|改善|反応|と、|この|だけで|ほど)", text):
             logic_hits.append("logic_sentence_structure")
         manager_hits = [
             term
@@ -438,6 +438,18 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         "risk_score": risk,
         "similarity_to_source": 0.0,
     }
+
+
+
+def apply_account_voice(text: str, account_id: str) -> str:
+    """Add the account's declared first-person frame without changing facts."""
+
+    value = str(text or "").strip()
+    if account_id == "night_scout" and value and "僕" not in value:
+        # Keep the original topic-bearing hook intact. A generic extra hook
+        # changes topic inference and can exhaust otherwise valid fallbacks.
+        return f"僕なら、{value}"
+    return value
 
 
 def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, Any]:
@@ -832,6 +844,7 @@ def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, An
             ),
         ]
         text = variants[(index - 1) % len(variants)]
+    text = apply_account_voice(text, account_id)
     persona = persona_validation(text, account_id)
 
     if account_id == "liver_manager":
@@ -1211,6 +1224,8 @@ def generate_grounded_reader_facing_post(
         text = f"{hook}\n\n{body}\n\n次に試すこと：\n{closing}"
     else:
         text = f"{hook}\n\n{body}\n\nこの順番で考える理由はシンプル。\n{closing}"
+
+    text = apply_account_voice(text, account_id)
 
     concepts = {
         "night_scout": {

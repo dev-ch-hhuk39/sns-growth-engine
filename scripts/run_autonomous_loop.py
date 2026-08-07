@@ -808,7 +808,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             [sys.executable, "scripts/score_reference_posts.py", "--account-id", account, "--apply", "--confirm-score"],
             warning_reason=f"{account}:reference_scoring_failed_fallback_generation_enabled",
         )
-        generation_result = _run([
+        generation_command = [
             sys.executable,
             "scripts/generate_threads_ideas_from_references.py",
             "--account-id",
@@ -816,7 +816,10 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             "--apply",
             "--confirm-generate",
             *slot_args,
-        ])
+        ]
+        if str(slot.get("post_type", "")) == "pdca_text":
+            generation_command.append("--require-measured-pdca")
+        generation_result = _run(generation_command)
         results.append(generation_result)
         if generation_result.get("returncode") != 0:
             generation_result["status"] = "SAFE_NO_CANDIDATE"

@@ -29,6 +29,73 @@ GENERIC_TEMPLATE_PHRASES = (
     "次に試すこと：",
 )
 
+SCHEDULED_TEXT_TYPES = {
+    "original_text",
+    "reference_text",
+    "pdca_text",
+    "metrics_driven_pdca_text",
+    "direct_reference_media",
+}
+
+
+def _scheduled_text_type(queue: Mapping[str, Any]) -> str:
+    return _text(queue.get("content_type") or queue.get("generation_mode")).lower()
+
+
+def _scheduled_text_contract_reasons(
+    queue: Mapping[str, Any],
+    text: str,
+) -> list[str]:
+    """Validate account voice and measured PDCA structure after AI rewriting."""
+
+    content_type = _scheduled_text_type(queue)
+    if content_type not in SCHEDULED_TEXT_TYPES:
+        return []
+    value = _text(text)
+    reasons: list[str] = []
+    if _text(queue.get("account_id")) == "night_scout" and "僕" not in value:
+        reasons.append("night_scout_first_person_boku_missing")
+    if content_type in {"pdca_text", "metrics_driven_pdca_text"}:
+        observation = (
+            ("前回" in value or "実測" in value)
+            and any(term in value for term in ("表示", "いいね", "コメント", "再投稿", "引用", "件"))
+        )
+        hypothesis = any(term in value for term in ("仮説", "可能性", "理由", "と見ています"))
+        next_test = (
+            any(term in value for term in ("次は", "次回"))
+            and any(term in value for term in ("確認", "検証", "比べ", "上回"))
+        )
+        if not observation:
+            reasons.append("pdca_measured_observation_missing")
+        if not hypothesis:
+            reasons.append("pdca_hypothesis_missing")
+        if not next_test:
+            reasons.append("pdca_next_test_missing")
+    return sorted(set(reasons))
+
+
+def _scheduled_text_contract_instruction(queue: Mapping[str, Any]) -> str:
+    instructions: list[str] = []
+    content_type = _scheduled_text_type(queue)
+    if content_type not in SCHEDULED_TEXT_TYPES:
+        return ""
+    if _text(queue.get("account_id")) == "night_scout":
+        instructions.append("最終本文では一人称の『僕』を少なくとも一度残してください。")
+    if content_type in {"pdca_text", "metrics_driven_pdca_text"}:
+        instructions.append(
+            "実測結果、反応理由の仮説、次回に比較する一つの検証を必ず明記し、"
+            "通常の助言投稿へ置き換えないでください。"
+        )
+    return ("追加必須条件: " + "".join(instructions)) if instructions else ""
+
+
+def _repair_night_scout_first_person(text: str) -> str:
+    value = _text(text)
+    if not value or "僕" in value:
+        return value
+    return f"僕なら、{value}"
+
+
 CLASSIFICATION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -296,10 +363,37 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
         _text(source_context.get("usage_scope")).upper(),
         _text(source_context.get("reuse_policy")).upper(),
     }
-    if media_route and "REFERENCE_ONLY" in policies:
+    permission_evidence = _text(source_context.get("permission_evidence_status")).upper()
+    external_permission_route = route in {
+        "external_direct_source_copyedit",
+        "approved_clip_transform",
+    }
+    if media_route and "REFERENCE_ONLY" in policies and permission_evidence != "APPROVED":
         reasons.append("reference_only_media_reuse_blocked")
+    if external_permission_route and permission_evidence in {"", "MISSING", "DENIED"}:
+        reasons.append("media_permission_evidence_missing_or_denied")
     if not _text(queue.get("public_post_text")) and route == "external_direct_source_copyedit":
         reasons.append("source_copyedit_text_missing")
+    if route == "external_direct_source_copyedit" and not _text(source_context.get("original_post_text")):
+        reasons.append("direct_source_post_text_missing")
+    if route == "approved_clip_transform":
+        excerpt = _text(source_context.get("transcript_excerpt"))
+        if not _text(queue.get("clip_candidate_id")):
+            reasons.append("clip_candidate_id_missing")
+        if not _text(queue.get("source_video_id")):
+            reasons.append("source_video_id_missing")
+        if not excerpt:
+            reasons.append("clip_transcript_evidence_missing")
+        if re.search(r"\[(?:音楽|拍手|BGM|笑い|無音)\]", excerpt, flags=re.IGNORECASE):
+            reasons.append("clip_transcript_noise_present")
+        try:
+            duration = float(_text(source_context.get("clip_duration_seconds")) or 0)
+        except ValueError:
+            duration = 0.0
+        if duration and not 12.0 <= duration <= 45.0:
+            reasons.append("clip_duration_out_of_review_range")
+        if not _text(source_context.get("clip_start_seconds")) or not _text(source_context.get("clip_end_seconds")):
+            reasons.append("clip_exact_time_range_missing")
     if not _source_text(queue, source_context):
         reasons.append("source_evidence_missing")
     return sorted(set(reasons))
@@ -323,6 +417,10 @@ def _classification_prompt(
             "usage_scope",
             "reuse_policy",
             "source_target_account_id",
+            "permission_evidence_status",
+            "clip_duration_seconds",
+            "clip_start_seconds",
+            "clip_end_seconds",
         )
     }
     return (
@@ -353,8 +451,10 @@ def _generation_prompt(
             "BtoBの主張をBtoCに変換しない。他社の宣伝文や収益実績を自社の主張として使わない。"
             "定型句を避け、3段落程度で簡潔にしてください。"
         )
+    contract_instruction = _scheduled_text_contract_instruction(queue)
     return (
-        f"{instruction}\n\n"
+        f"{instruction}"
+        f"{(' ' + contract_instruction) if contract_instruction else ''}\n\n"
         f"ROUTE={route}\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
         f"CURRENT_QUEUE_TEXT={_text(queue.get('public_post_text'))}\n"
@@ -368,10 +468,22 @@ def _review_prompt(
     candidate_text: str,
     policy: Mapping[str, Any],
 ) -> str:
+    pdca_instruction = ""
+    if (
+        _scheduled_text_type(queue) in {"pdca_text", "metrics_driven_pdca_text"}
+        and _text(queue.get("generation_mode")).lower() == "metrics_driven_pdca_text"
+    ):
+        pdca_instruction = (
+            "この候補はPDCA枠です。SOURCE_EVIDENCEにある公開済み自社投稿の表示数、いいね数、"
+            "コメント数、再投稿数、引用数は、反応を説明するために意図的に使う公開可能な実測根拠です。"
+            "これらの公開投稿パフォーマンス値だけを理由にINTERNAL_PROCESS_METRICSやaccount_fit不一致として"
+            "REJECTしないでください。ただし秘密情報、非公開の社内KPI、運用手順、認証情報は引き続きREJECTしてください。"
+        )
     return (
         "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"
         "対象読者・アカウント適合、公開安全性を確認してください。誤字、重複助詞、[音楽]等、"
-        "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。\n\n"
+        "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。"
+        f"{(' ' + pdca_instruction) if pdca_instruction else ''}\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
         f"QUEUE_ID={_text(queue.get('queue_id'))}\n"
         f"SOURCE_EVIDENCE={source_text}\n"
@@ -520,6 +632,82 @@ class HybridAiGate:
             )
             generation = dict(generate_response["data"])
             candidate_text = _text(generation.get("public_post_text"))
+
+        if route.route in {"new_text_generation", "owned_media_transform"}:
+            generated_contract_reasons = _scheduled_text_contract_reasons(
+                queue,
+                candidate_text,
+            )
+            if generated_contract_reasons == ["night_scout_first_person_boku_missing"]:
+                repaired_text = _repair_night_scout_first_person(candidate_text)
+                repaired_validation = final_public_post_validator(repaired_text, account_id)
+                repaired_reasons = (
+                    _scheduled_text_contract_reasons(queue, repaired_text)
+                    + _hygiene_reasons(repaired_text)
+                    + (
+                        []
+                        if repaired_validation.get("status") == "PASS"
+                        else [
+                            str(reason)
+                            for reason in repaired_validation.get("blocked_reasons", [])
+                        ]
+                    )
+                )
+                if not repaired_reasons:
+                    candidate_text = repaired_text
+                    generated_contract_reasons = []
+                    generation["scheduled_text_contract"] = {
+                        "status": "REPAIRED",
+                        "repair": "night_scout_first_person_boku_prefix",
+                        "fallback_to_current_queue_text": False,
+                    }
+
+            if generated_contract_reasons:
+                fallback_text = current_text
+                fallback_validation = final_public_post_validator(fallback_text, account_id)
+                fallback_reasons = (
+                    _scheduled_text_contract_reasons(queue, fallback_text)
+                    + _hygiene_reasons(fallback_text)
+                    + (
+                        []
+                        if fallback_validation.get("status") == "PASS"
+                        else [
+                            str(reason)
+                            for reason in fallback_validation.get("blocked_reasons", [])
+                        ]
+                    )
+                )
+                if fallback_text and not fallback_reasons:
+                    candidate_text = fallback_text
+                    generation["scheduled_text_contract"] = {
+                        "status": "FALLBACK_TO_VALIDATED_CURRENT_CANDIDATE",
+                        "rejected_generated_contract_reasons": generated_contract_reasons,
+                        "fallback_to_current_queue_text": True,
+                    }
+                else:
+                    used = int(getattr(self.client, "actual_request_count", 0)) - before_requests
+                    final_queue = dict(queue)
+                    final_queue["public_post_text"] = candidate_text
+                    return self._result(
+                        status="BLOCKED",
+                        route=route.route,
+                        public_post_text=candidate_text,
+                        blocked_reasons=(
+                            generated_contract_reasons
+                            + [f"fallback_{reason}" for reason in fallback_reasons]
+                        ),
+                        input_hash=hybrid_ai_input_hash(final_queue),
+                        source_context_hash=source_hash,
+                        classification=classification,
+                        generation=generation,
+                        deterministic_validation={
+                            "scheduled_text_contract": {
+                                "generated_reasons": generated_contract_reasons,
+                                "fallback_reasons": fallback_reasons,
+                            }
+                        },
+                        actual_requests=used,
+                    )
 
         deterministic_reasons = _hygiene_reasons(candidate_text)
         public_validation = (

@@ -82,6 +82,7 @@ def base_queue() -> dict[str, Any]:
 def source_context() -> dict[str, Any]:
     return {
         "original_post_text": base_queue()["public_post_text"],
+        "permission_evidence_status": "APPROVED",
         "classifier_model": "fixture-classifier",
         "generator_model": "fixture-generator",
         "review_model": "fixture-review",
@@ -116,7 +117,11 @@ def main() -> None:
 
     reference_only = HybridAiGate(FakeClient(generated_text=corrected)).evaluate(
         base_queue(),
-        {**context, "use_policy": "REFERENCE_ONLY"},
+        {
+            **context,
+            "use_policy": "REFERENCE_ONLY",
+            "permission_evidence_status": "MISSING",
+        },
     )
     assert reference_only.status == "BLOCKED"
     assert "reference_only_media_reuse_blocked" in reference_only.blocked_reasons

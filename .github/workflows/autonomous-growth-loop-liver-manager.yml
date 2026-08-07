@@ -2,8 +2,6 @@ name: Autonomous Growth Loop Liver Manager
 
 on:
   schedule:
-    # Text-only slots: JST 10:00/13:00/21:00. Jobs start just after the target.
-    # 16:00 is direct-reference media and 18:00 is generated clip media.
     - cron: "4 1 * * *"
     - cron: "4 4 * * *"
     - cron: "4 12 * * *"
@@ -46,7 +44,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 60
-
     env:
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
@@ -96,13 +93,28 @@ jobs:
           echo "CONTENT_SLOT_ID=$slot" >> "$GITHUB_ENV"
           echo "content_slot=$slot"
 
+      - name: Early runtime preflight
+        env:
+          MANUAL_CONFIRM: ${{ github.event.inputs.confirm_autonomous }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          sys.path.insert(0, "scripts")
+          from scheduled_execution_guard import append_job_summary, missing_required_secrets, scheduled_window_decision
+          slot_id = os.environ["CONTENT_SLOT_ID"]
+          should_publish = os.environ.get("GITHUB_EVENT_NAME") == "schedule" or os.environ.get("MANUAL_CONFIRM") == "true"
+          missing = missing_required_secrets() if should_publish else []
+          window = scheduled_window_decision(slot_id)
+          append_job_summary("Scheduled runtime preflight", {"missing_secret_names": missing, "window": window})
+          print(json.dumps({"missing_secret_names": missing, "window": window}, ensure_ascii=False))
+          if missing:
+              raise SystemExit("[BLOCKED] required production secret is unavailable: " + ",".join(missing))
+          PY
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      - name: Diagnose schedule delay
-        if: github.event_name == 'schedule'
-        continue-on-error: true
-        run: python3 scripts/check_schedule_window.py --slot-id "$CONTENT_SLOT_ID" --write-github-output
 
       - name: Dry-run autonomous plan
         run: python3 scripts/run_autonomous_loop.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --dry-run
@@ -118,12 +130,7 @@ jobs:
           import json
           from pathlib import Path
           cfg = json.loads(Path("config/autonomous_mode.json").read_text())
-          allowed = bool(
-              cfg.get("autonomous_mode_enabled")
-              and cfg.get("production_publish_activation_approved")
-              and cfg.get("scheduled_publish_enabled")
-              and not cfg.get("kill_switch")
-          )
+          allowed = bool(cfg.get("autonomous_mode_enabled") and cfg.get("production_publish_activation_approved") and cfg.get("scheduled_publish_enabled") and not cfg.get("kill_switch"))
           print("true" if allowed else "false")
           PYMODE
             )
@@ -133,7 +140,7 @@ jobs:
           echo "RUN_AUTONOMOUS_APPLY=$apply" >> "$GITHUB_ENV"
           echo "autonomous_apply=$apply" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Guard autonomous activation, secrets, and kill switch
+      - name: Guard autonomous activation and Sheets credentials
         if: env.RUN_AUTONOMOUS_APPLY == 'true'
         run: |
           python3 - <<'PY'
@@ -144,20 +151,9 @@ jobs:
               raise SystemExit("[BLOCKED] autonomous kill_switch=true")
           if not cfg.get("production_publish_activation_approved", False):
               raise SystemExit("[BLOCKED] production_publish_activation_approved=false")
-          print("[OK] manual publish activation accepted and kill_switch=false")
           PY
-          if [ -z "$SNS_MASTER_SHEET_ID" ] && [ -z "$SPREADSHEET_ID" ]; then
-            echo "[BLOCKED] Sheets spreadsheet secret is missing."
-            exit 1
-          fi
-          if [ -z "$SA_JSON_BASE64" ] && [ -z "$GCP_SA_JSON_BASE64" ]; then
-            echo "[BLOCKED] Sheets service account secret is missing."
-            exit 1
-          fi
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "[BLOCKED] Gemini API key secret is missing."
-            exit 1
-          fi
+          test -n "$SNS_MASTER_SHEET_ID$SPREADSHEET_ID" || { echo "[BLOCKED] Sheets spreadsheet secret is missing."; exit 1; }
+          test -n "$SA_JSON_BASE64$GCP_SA_JSON_BASE64" || { echo "[BLOCKED] Sheets service account secret is missing."; exit 1; }
 
       - name: Apply autonomous Threads loop
         if: env.RUN_AUTONOMOUS_APPLY == 'true'
@@ -174,6 +170,7 @@ jobs:
             --account-id "$ACCOUNT_ID" \
             --slot-id "$CONTENT_SLOT_ID" \
             --use-sheets
+
       - name: Autonomous health summary
         if: always()
         continue-on-error: true

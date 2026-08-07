@@ -49,6 +49,7 @@ from evidence_context_caption import (  # noqa: E402
 from process_threads_queue import process_one, update_row  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from sheets_record_reader import READONLY_RECORD_CACHE_ATTR, read_records_safely  # noqa: E402
 from upload_media_assets import build_upload_plan, execute_cloudinary_uploads  # noqa: E402
 from acquisition.reliability import build_quarantine_record, clear_failure, is_quarantined, register_failure  # noqa: E402
 
@@ -83,6 +84,34 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
+APPROVED_CLIP_REVIEW_MIN_SECONDS = 12.0
+APPROVED_CLIP_REVIEW_MAX_SECONDS = 45.0
+
+
+def approved_clip_duration_seconds(clip: dict[str, Any]) -> float:
+    try:
+        duration = float(str(clip.get("duration_seconds") or "0").strip() or "0")
+    except (TypeError, ValueError):
+        duration = 0.0
+    if duration > 0:
+        return duration
+    try:
+        start = float(str(clip.get("start_seconds") or clip.get("start_time") or "").strip())
+        end = float(str(clip.get("end_seconds") or clip.get("end_time") or "").strip())
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, end - start)
+
+
+def approved_clip_duration_blockers(clip: dict[str, Any]) -> list[str]:
+    duration = approved_clip_duration_seconds(clip)
+    if duration <= 0:
+        return ["clip_duration_missing"]
+    if not APPROVED_CLIP_REVIEW_MIN_SECONDS <= duration <= APPROVED_CLIP_REVIEW_MAX_SECONDS:
+        return ["clip_duration_out_of_review_range"]
+    return []
+
+
 def _alignment_fields(clip: dict[str, Any]) -> dict[str, Any]:
     return {
         "alignment_status": clip.get("alignment_status", ""),
@@ -100,8 +129,13 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
+    cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+    if isinstance(cache, dict):
+        return read_records_safely(client, logical)
+
     def operation() -> list[dict[str, Any]]:
         return client._ws(logical).get_all_records()
+
     retry = getattr(client, "_call_with_rate_limit_retry", None)
     rows = retry(f"get_all_records:{logical}:media_production", operation) if retry else operation()
     return [dict(row) for row in rows]
@@ -1342,6 +1376,10 @@ def select_candidate(
         end_seconds = str(clip.get("end_seconds") or clip.get("end_time") or "").strip()
         if not start_seconds or not end_seconds:
             reasons.append(f"{clip_id}:exact_clip_time_range_missing")
+            continue
+        duration_blockers = approved_clip_duration_blockers(clip)
+        if duration_blockers:
+            reasons.extend(f"{clip_id}:{reason}" for reason in duration_blockers)
             continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")

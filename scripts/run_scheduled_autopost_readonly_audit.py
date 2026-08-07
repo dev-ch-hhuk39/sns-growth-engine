@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
@@ -169,7 +170,22 @@ def read_queue_rows() -> list[dict[str, str]]:
 
     client = gspread.service_account_from_dict(decode_service_account())
     worksheet = client.open_by_key(spreadsheet_id()).worksheet(QUEUE_SHEET)
-    values = worksheet.get_all_values()
+    values: list[list[str]] | None = None
+    last_error: Exception | None = None
+    for delay_seconds in (0, 10, 20, 40, 65):
+        if delay_seconds:
+            time.sleep(delay_seconds)
+        try:
+            values = worksheet.get_all_values()
+            break
+        except Exception as exc:
+            message = str(exc).lower()
+            if "429" not in message and "quota exceeded" not in message:
+                raise
+            last_error = exc
+    if values is None:
+        assert last_error is not None
+        raise last_error
     if not values:
         return []
     headers = [str(item).strip() for item in values[0]]
@@ -640,8 +656,6 @@ def main() -> int:
         sys.executable,
         "scripts/scheduled_publish_activation_gate.py",
         "--use-sheets",
-        "--json-output",
-        "/tmp/scheduled-autopost-activation-gate.json",
     ])
     activation_payload = activation.get("payload") if isinstance(activation.get("payload"), dict) else {}
 
@@ -668,6 +682,8 @@ def main() -> int:
             "status": activation_payload.get("status", ""),
             "reasons": activation_reasons(activation_payload),
             "payload": activation_payload,
+            "stderr_tail": activation.get("stderr_tail", ""),
+            "json_found": activation.get("json_found", False),
         },
         "protected_rows_before": protected_before,
         "protected_rows_after": protected_after,

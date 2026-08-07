@@ -17,11 +17,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from config_loader import get_config  # noqa: E402
 from gemini_hybrid_client import GeminiHybridClient  # noqa: E402
-from hybrid_ai_gate import (  # noqa: E402
-    HybridAiGate,
-    hybrid_ai_gate_current,
-    merge_gate_audit,
-)
+from hybrid_ai_gate import HybridAiGate, hybrid_ai_gate_current, merge_gate_audit  # noqa: E402
 from hybrid_ai_policy import requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
@@ -72,10 +68,7 @@ class SheetsBudgetLedger:
     def reserve(self, metadata: dict[str, Any]) -> None:
         if self.execution_used + 1 > EXECUTION_MAX:
             raise RuntimeError("hybrid_ai_execution_limit_exceeded")
-
         now = now_jst()
-        # Budget reads are intentionally strict. A quota/read error must stop
-        # the request rather than treating the ledger as empty.
         logs = [dict(row) for row in read_records_safely(self.client, "logs")]
         reservations = [
             row
@@ -93,12 +86,10 @@ class SheetsBudgetLedger:
                 monthly_used += 1
             if timestamp.strftime("%Y-%m-%d") == now.strftime("%Y-%m-%d"):
                 daily_used += 1
-
         if daily_used + 1 > DAILY_MAX:
             raise RuntimeError("hybrid_ai_daily_limit_exceeded")
         if monthly_used + 1 > MONTHLY_MAX:
             raise RuntimeError("hybrid_ai_monthly_limit_exceeded")
-
         details = json.dumps(metadata, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         self.client.log(
             operation="hybrid_ai_request_reserved",
@@ -119,11 +110,7 @@ def candidate_rows(
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, str]]]:
     rows = [
         dict(row)
-        for row in client.get_queue_items(
-            account_id=account_id,
-            platform="threads",
-            status="WAITING_REVIEW",
-        )
+        for row in client.get_queue_items(account_id=account_id, platform="threads", status="WAITING_REVIEW")
     ]
     eligible = [
         row
@@ -134,13 +121,7 @@ def candidate_rows(
         and str(row.get("repost_prohibited", "")).lower() not in {"true", "1", "yes"}
     ]
     if slot_id:
-        eligible.sort(
-            key=lambda row: (
-                str(row.get("created_at", "")),
-                str(row.get("queue_id", "")),
-            ),
-            reverse=True,
-        )
+        eligible.sort(key=lambda row: (str(row.get("created_at", "")), str(row.get("queue_id", ""))), reverse=True)
         eligible = eligible[:max_candidates]
     else:
         eligible.sort(
@@ -150,19 +131,13 @@ def candidate_rows(
                 str(row.get("queue_id", "")),
             )
         )
-
     selected: list[tuple[dict[str, Any], dict[str, Any]]] = []
     skipped_current: list[dict[str, str]] = []
     for row in eligible:
         source_context = build_source_context(client, row)
         current, current_status = hybrid_ai_gate_current(row, source_context)
         if current:
-            skipped_current.append(
-                {
-                    "queue_id": str(row.get("queue_id", "")),
-                    "gate_status": current_status,
-                }
-            )
+            skipped_current.append({"queue_id": str(row.get("queue_id", "")), "gate_status": current_status})
             continue
         selected.append((row, source_context))
         if len(selected) >= max_candidates:
@@ -184,13 +159,14 @@ def main() -> int:
     if not 1 <= args.max_candidates <= 2:
         raise RuntimeError("max_candidates_must_be_between_1_and_2")
     if not os.environ.get("GEMINI_API_KEY", "").strip():
-        print(
-            json.dumps(
-                {"status": "SKIPPED_NO_GEMINI_API_KEY", "account_id": args.account_id},
-                ensure_ascii=False,
-            )
-        )
-        return 0
+        print(json.dumps({
+            "status": "FAILED_MISSING_GEMINI_API_KEY",
+            "account_id": args.account_id,
+            "slot_id": args.slot_id,
+            "no_ready_transition": True,
+            "no_post": True,
+        }, ensure_ascii=False))
+        return 2
     if not args.use_sheets:
         raise RuntimeError("--use-sheets is required for production queue review")
 
@@ -227,11 +203,7 @@ def main() -> int:
                     status="FAILED",
                     message=f"Hybrid AI gate runtime error: {queue_id}",
                     account_id=args.account_id,
-                    details=json.dumps(
-                        {"queue_id": queue_id, "error_type": type(exc).__name__},
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    ),
+                    details=json.dumps({"queue_id": queue_id, "error_type": error_code}, ensure_ascii=False, sort_keys=True),
                     level="ERROR",
                 )
             continue
@@ -271,11 +243,7 @@ def main() -> int:
                 message=f"Hybrid AI gate {result.status}: {queue_id}",
                 account_id=args.account_id,
                 details=json.dumps(
-                    {
-                        "queue_id": queue_id,
-                        "route": result.route,
-                        "blocked_reasons": result.blocked_reasons,
-                    },
+                    {"queue_id": queue_id, "route": result.route, "blocked_reasons": result.blocked_reasons},
                     ensure_ascii=False,
                     sort_keys=True,
                 ),
@@ -284,10 +252,7 @@ def main() -> int:
         results.append({"queue_id": queue_id, **result.audit()})
 
     if args.apply:
-        selected_after = {
-            str(row.get("queue_id", "")): row
-            for row in records(client, "queue")
-        }
+        selected_after = {str(row.get("queue_id", "")): row for row in records(client, "queue")}
         for queue_id, status_before in statuses_before.items():
             if str(selected_after[queue_id].get("status", "")) != status_before:
                 raise RuntimeError(f"queue_status_changed_by_hybrid_gate:{queue_id}")

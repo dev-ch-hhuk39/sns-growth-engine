@@ -56,6 +56,36 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
+SCHEDULED_DIRECT_SLOT_IDS = {
+    "night_scout": "ns_1800_direct_media",
+    "liver_manager": "lm_1600_direct_media",
+}
+SCHEDULED_DIRECT_MIN_CHARS = 65
+SCHEDULED_DIRECT_DOMAIN_TERMS = {
+    "night_scout": ("夜職", "キャバ", "店", "時給", "ノルマ", "担当", "出勤", "移籍", "指名", "売上"),
+    "liver_manager": ("配信", "ライバー", "リスナー", "初見", "コメント", "ギフト", "事務所", "LIVE"),
+}
+
+
+def scheduled_direct_caption_blockers(
+    account_id: str,
+    slot_id: str,
+    text: str,
+) -> list[str]:
+    """Reject weak captions only for the two autonomous scheduled Direct slots."""
+
+    if SCHEDULED_DIRECT_SLOT_IDS.get(account_id) != str(slot_id or ""):
+        return []
+    value = str(text or "").strip()
+    compact = "".join(value.split())
+    reasons: list[str] = []
+    if len(compact) < SCHEDULED_DIRECT_MIN_CHARS:
+        reasons.append("scheduled_direct_caption_too_short")
+    if not any(term in value for term in SCHEDULED_DIRECT_DOMAIN_TERMS.get(account_id, ())):
+        reasons.append("scheduled_direct_account_domain_signal_missing")
+    return sorted(set(reasons))
+
+
 def normalize_prepare_only_outcome(plan: dict[str, Any], *, prepare_only: bool) -> dict[str, Any]:
     """A preparation miss is observable but not a publishing/workflow failure.
 
@@ -682,6 +712,25 @@ def build_plan(
         carousel_asset_ids = [str(item.get("media_asset_id") or item.get("media_id") or item.get("source_post_media_id") or "") for item in carousel_media]
         carousel_types = [str(item.get("media_type", "")).lower() for item in carousel_media]
         asset_id = str(media.get("media_asset_id") or media.get("source_post_media_id") or "")
+        scheduled_caption_reasons = (
+            scheduled_direct_caption_blockers(
+                account_id,
+                slot_id,
+                text,
+            )
+            if uses_default_caption_service
+            else []
+        )
+        if scheduled_caption_reasons:
+            attempted.append({
+                "source_post_id": post.get("source_post_id", ""),
+                "media_asset_id": asset_id,
+                "quarantined": False,
+                "blocked_reasons": scheduled_caption_reasons,
+            })
+            # This is slot suitability, not evidence that the media asset is
+            # invalid globally. Do not increment failure/quarantine state.
+            continue
         validator = validate_media_post({
             "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
             "media_url": media.get("storage_url", ""), "media_asset_id": asset_id, "platform": "threads",

@@ -3,7 +3,6 @@ name: Media Growth Post Night Scout
 on:
   schedule:
     - cron: "2 12 * * *"
-  # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
       confirm_media_post:
@@ -25,6 +24,7 @@ concurrency:
 
 env:
   ACCOUNT_ID: "night_scout"
+  CONTENT_SLOT_ID: "ns_2100_clip_media"
   PUBLISH_ENABLED: "false"
   ALLOW_REAL_THREADS_POST: "false"
   ALLOW_REAL_THREADS_VIDEO_POST: "false"
@@ -52,6 +52,11 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Verify triggering revision
+        run: |
+          git checkout --detach "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.11"}
       - name: Schedule heartbeat
@@ -60,31 +65,69 @@ jobs:
           echo "event=${{ github.event_name }}"
           echo "account=$ACCOUNT_ID"
           date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
+
+      - name: Early runtime preflight
+        id: preflight
+        env:
+          MANUAL_CONFIRM: ${{ github.event.inputs.confirm_media_post }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "scripts")
+          from scheduled_execution_guard import append_job_summary, missing_required_secrets, scheduled_window_decision
+          should_publish = os.environ.get("GITHUB_EVENT_NAME") == "schedule" or os.environ.get("MANUAL_CONFIRM") == "true"
+          missing = missing_required_secrets(("GEMINI_API_KEY",)) if should_publish else []
+          window = scheduled_window_decision(os.environ["CONTENT_SLOT_ID"])
+          payload = {"missing_secret_names": missing, "window": window}
+          append_job_summary("Scheduled media preflight", payload)
+          print(json.dumps(payload, ensure_ascii=False))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"window_allowed={'true' if window.get('status') == 'PASS' else 'false'}\n")
+          if missing:
+              raise SystemExit("[BLOCKED] required production secret is unavailable: " + ",".join(missing))
+          PY
+
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Diagnose schedule delay
-        if: github.event_name == 'schedule'
-        continue-on-error: true
-        run: python3 scripts/check_schedule_window.py --slot-id ns_2100_clip_media --write-github-output
       - name: Dry-run saved media plan
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --post-saved-media --dry-run --use-sheets
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --post-saved-media --dry-run --use-sheets
       - name: Create exact WAITING_REVIEW clip queue
         if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id ns_2100_clip_media --prepare-saved-media-queue --apply --confirm-production-media --use-sheets
-      - name: Hybrid review and exact media promotion
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-saved-media-queue --apply --confirm-production-media --use-sheets
+      - name: Normalize exact scheduled media caption
         if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')
-        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "ns_2100_clip_media" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
+        run: python3 scripts/normalize_scheduled_media_caption.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --apply --use-sheets
+      - name: Stop delayed scheduled execution after preserving candidate
+        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed != 'true'
+        run: |
+          echo '{"status":"NO_POST","reason":"scheduled_run_out_of_window","candidate_preserved":true}' | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 2
+      - name: Hybrid review and exact media promotion
+        if: (github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')
+        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
       - name: Resolve scheduled activation gate
         id: activation
+        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'
         run: |
-          allowed=false
-          if [ "${{ github.event_name }}" = "schedule" ] && python3 scripts/scheduled_publish_activation_gate.py --use-sheets >/dev/null 2>&1; then
-            allowed=true
+          set +e
+          python3 scripts/scheduled_publish_activation_gate.py --use-sheets | tee /tmp/activation-gate.json
+          rc=${PIPESTATUS[0]}
+          {
+            echo "### Runtime activation gate"
+            echo '```json'
+            cat /tmp/activation-gate.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            exit 2
           fi
-          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+          echo "allowed=true" >> "$GITHUB_OUTPUT"
       - name: Check free-tier media budget
         id: media_budget
-        continue-on-error: true
         if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')
         run: python3 scripts/check_media_resource_budget.py --use-sheets --apply --confirm-resource-usage --enforce --purpose post
       - name: Guard media post and kill switch
@@ -97,7 +140,6 @@ jobs:
           media = json.loads(Path("config/media_growth_engine.json").read_text())
           if auto.get("kill_switch") or not media.get("saved_media_post_enabled"):
               raise SystemExit("[BLOCKED] media post disabled by kill switch or config")
-          print("[OK] saved-media post is enabled")
           PY
           for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 THREADS_ACCESS_TOKEN_NIGHT_SCOUT THREADS_USER_ID_NIGHT_SCOUT GEMINI_API_KEY; do
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
@@ -116,8 +158,9 @@ jobs:
           ALLOW_TRANSCRIPTION_API: "false"
         run: |
           qid=$(python3 -c "import json; print(json.load(open('/tmp/hybrid-ready.json')).get('selected_queue_id',''))")
-          if [ -z "$qid" ]; then echo "[SAFE_NO_POST] no AI-approved clip candidate"; exit 0; fi
+          if [ -z "$qid" ]; then echo "[NO_POST] no AI-approved clip candidate"; exit 2; fi
           python3 scripts/process_threads_queue.py --account-id "$ACCOUNT_ID" --queue-id "$qid" --max-posts 1 --confirm-real-post
       - name: Health summary
         if: always()
+        continue-on-error: true
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

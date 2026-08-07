@@ -3,7 +3,6 @@ name: Direct Reference Media Liver Manager
 on:
   schedule:
     - cron: "4 7 * * *"
-  # Canary gate: manual-only until full canary evidence enables media slots.
   workflow_dispatch:
     inputs:
       confirm_direct_media:
@@ -69,28 +68,66 @@ jobs:
           echo "event=${{ github.event_name }}"
           echo "account=$ACCOUNT_ID"
           date -u +"utc=%Y-%m-%dT%H:%M:%SZ"
+
+      - name: Early runtime preflight
+        id: preflight
+        env:
+          MANUAL_CONFIRM: ${{ github.event.inputs.confirm_direct_media }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+          sys.path.insert(0, "scripts")
+          from scheduled_execution_guard import append_job_summary, missing_required_secrets, scheduled_window_decision
+          should_publish = os.environ.get("GITHUB_EVENT_NAME") == "schedule" or os.environ.get("MANUAL_CONFIRM") == "true"
+          missing = missing_required_secrets(("GEMINI_API_KEY",)) if should_publish else []
+          window = scheduled_window_decision(os.environ["CONTENT_SLOT_ID"])
+          payload = {"missing_secret_names": missing, "window": window}
+          append_job_summary("Scheduled direct-media preflight", payload)
+          print(json.dumps(payload, ensure_ascii=False))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"window_allowed={'true' if window.get('status') == 'PASS' else 'false'}\n")
+          if missing:
+              raise SystemExit("[BLOCKED] required production secret is unavailable: " + ",".join(missing))
+          PY
+
       - name: Install dispatcher dependencies
         run: python3 -m pip install --requirement requirements.txt
-      - name: Diagnose schedule delay
-        if: github.event_name == 'schedule'
-        continue-on-error: true
-        run: python3 scripts/check_schedule_window.py --slot-id "$CONTENT_SLOT_ID"
       - name: Dry-run prepared inventory
         run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --post-ready --dry-run --use-sheets
-      - name: Hybrid review and exact media promotion
+      - name: Normalize exact direct-media caption
         if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true')
-        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "lm_1600_direct_media" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
+        run: python3 scripts/normalize_scheduled_media_caption.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --apply --use-sheets
+      - name: Stop delayed scheduled execution with prepared inventory preserved
+        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed != 'true'
+        run: |
+          echo '{"status":"NO_POST","reason":"scheduled_run_out_of_window","prepared_inventory_preserved":true}' | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 2
+      - name: Hybrid review and exact media promotion
+        if: (github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true')
+        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
       - name: Resolve scheduled activation gate
         id: activation
+        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'
         run: |
-          allowed=false
-          if [ "${{ github.event_name }}" = "schedule" ] && python3 scripts/scheduled_publish_activation_gate.py --use-sheets >/dev/null 2>&1; then
-            allowed=true
+          set +e
+          python3 scripts/scheduled_publish_activation_gate.py --use-sheets | tee /tmp/activation-gate.json
+          rc=${PIPESTATUS[0]}
+          {
+            echo "### Runtime activation gate"
+            echo '```json'
+            cat /tmp/activation-gate.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$rc" -ne 0 ]; then
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            exit 2
           fi
-          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+          echo "allowed=true" >> "$GITHUB_OUTPUT"
       - name: Check free-tier post budget
         id: media_budget
-        continue-on-error: true
         if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')
         run: python3 scripts/check_media_resource_budget.py --use-sheets --apply --confirm-resource-usage --enforce --purpose post
       - name: Guard publisher, credentials, and kill switch
@@ -101,7 +138,6 @@ jobs:
           from pathlib import Path
           if json.loads(Path("config/autonomous_mode.json").read_text()).get("kill_switch"):
               raise SystemExit("[BLOCKED] kill_switch=true")
-          print("[OK] kill_switch=false")
           PY
           for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 THREADS_ACCESS_TOKEN_LIVER_MANAGER THREADS_USER_ID_LIVER_MANAGER GEMINI_API_KEY; do
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
@@ -121,8 +157,9 @@ jobs:
           ALLOW_CLOUDINARY_UPLOAD: "false"
         run: |
           qid=$(python3 -c "import json; print(json.load(open('/tmp/hybrid-ready.json')).get('selected_queue_id',''))")
-          if [ -z "$qid" ]; then echo "[SAFE_NO_POST] no AI-approved direct-media candidate"; exit 0; fi
+          if [ -z "$qid" ]; then echo "[NO_POST] no AI-approved direct-media candidate"; exit 2; fi
           python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "$qid" --post-ready --apply --confirm-direct-media --use-sheets
       - name: Health summary
         if: always()
+        continue-on-error: true
         run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets
