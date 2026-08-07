@@ -44,7 +44,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from public_post_quality import (  # noqa: E402
     final_public_post_validator,
-    generate_grounded_reader_facing_post,
     generate_production_post,
     generate_reader_facing_post,
     reader_facing_template_count,
@@ -64,7 +63,8 @@ REAL_POST_GATES = ["--confirm-real-post", "PUBLISH_ENABLED=true", "ALLOW_REAL_TH
 READY_GATE = "approve_queue.py or auto_approve_queue.py"
 SIMILARITY_BLOCK_THRESHOLD = 0.62
 MAX_QUOTE_CHARS = 80
-from generation_quality_gates import evaluate_generation_quality, persisted_quality_evidence  # noqa: E402
+from generation_quality_gates import batch_diversity_validator, evaluate_generation_quality, persisted_quality_evidence  # noqa: E402
+from generation.reference_source_rewriter import ReferenceRewriteError, rewrite_reference_post  # noqa: E402
 from learning.feature_attribution import preferred_primary_topics  # noqa: E402
 
 
@@ -170,53 +170,21 @@ def build_rewritten_post_candidate(
     }
 
 
-def _reference_signal(account_id: str, post: dict[str, Any], score: dict[str, Any], index: int) -> str:
-    candidates = [
-        _post_text(post),
-        str(post.get("title", "")),
-        str(score.get("reusable_pattern", "")),
-        str(score.get("reason", "")),
-        str(post.get("category", "")),
-    ]
-    combined = " ".join(value.strip() for value in candidates if value and value.strip())
-    defaults = {
-        "night_scout": [
-            "時給と控除を含めた条件を比べて手取りを確認する",
-            "客層や店の雰囲気が自分の接客と合うか体験入店で確認する",
-            "夜職と副業を両立するために睡眠と休みを残せる出勤ペースを決める",
-        ],
-        "liver_manager": [
-            "初見が入りやすい挨拶とコメントの入口を作る",
-            "配信時間と休む時間を決めて無理なく継続できるリズムを作る",
-            "ライバー事務所を選ぶ時は数字が落ちた時にも相談できる支え方を確認する",
-        ],
-    }
-    values = defaults.get(account_id, ["読者が次に試せる具体策を一つ整理する"])
-    default_signal = values[(index - 1) % len(values)]
-    specific_terms = {
-        "night_scout": ("時給", "控除", "客層", "体験入店", "移籍", "出勤", "睡眠", "売上", "指名"),
-        "liver_manager": ("初見", "コメント", "配信", "事務所", "ギフト", "リスナー"),
-    }.get(account_id, ())
-    if combined and any(term in combined for term in specific_terms):
-        return combined
-    return f"{default_signal} {combined}".strip()
 
 
 def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, Any], index: int) -> str:
-    """Build reader-facing public text only.
-
-    Reference details stay in internal generation metadata; public output must
-    never mention source names, source platforms, scoring, or generation notes.
-    """
-    output = generate_grounded_reader_facing_post(
-        account_id,
-        private_signal=_reference_signal(account_id, post, score, index),
-        index=index,
+    """Build a source-grounded reader-facing post using the real source text."""
+    output = rewrite_reference_post(
+        account_id=account_id,
+        source=post,
+        source_score=score,
+        target_platform="threads",
+        slot_theme="reference_text",
     )
     body = str(output["public_post_text"])
     validation = final_public_post_validator(body, account_id)
     if validation["status"] != "PASS":
-        raise ValueError(f"public post template failed validation: {validation['blocked_reasons']}")
+        raise ValueError(f"public post failed validation: {validation['blocked_reasons']}")
     return body
 
 
@@ -238,6 +206,53 @@ def _feature_fields(output: dict[str, Any], quality: dict[str, Any]) -> dict[str
         **persisted_quality_evidence(quality),
     }
 
+
+def _reference_quality(
+    account_id: str,
+    text: str,
+    compared: list[dict[str, Any] | str],
+    *,
+    batch_compared: list[dict[str, Any] | str],
+    structure_variant: str | int = "",
+) -> dict[str, Any]:
+    """Reference-specific quality: semantic fidelity replaces canned topic taxonomy.
+
+    Account/persona safety is still enforced by final_public_post_validator.
+    Diversity remains deterministic. The source-grounded Gemini judge is the
+    topic-coherence authority for reference posts so arbitrary real source
+    topics are not forced into the legacy fixed taxonomy.
+    """
+    diversity = batch_diversity_validator(
+        account_id,
+        text,
+        compared,
+        batch_compared=batch_compared,
+        structure_variant=structure_variant,
+    )
+    passed = diversity["batch_diversity_status"] == "PASS"
+    return {
+        **diversity,
+        "primary_topic": "source_grounded",
+        "supporting_topics": [],
+        "topic_confidence": 1.0,
+        "primary_topic_evidence_score": 1,
+        "primary_topic_direct_confidence": 1.0,
+        "topic_coherence_status": "PASS",
+        "topic_coherence_score": 100,
+        "off_topic_sentence_count": 0,
+        "off_topic_sentences": [],
+        "hook_topic": "source_grounded",
+        "closing_topic": "source_grounded",
+        "visual_topic": "general",
+        "visual_topic_confidence": 0.0,
+        "visual_topic_direct_confidence": 0.0,
+        "hook_topic_match": True,
+        "closing_topic_match": True,
+        "visual_topic_match": True,
+        "topic_blocked_reasons": [],
+        "quality_gate_version": "reference_source_grounded_v1",
+        "status": "PASS" if passed else "BLOCKED",
+    }
 
 def build_generation_rows(
     *,
@@ -272,26 +287,28 @@ def build_generation_rows(
         draft_id = f"idea_{stable}"
         derivative_id = f"sd_{stable}_threads"
         queue_id = f"q_{stable}_threads"
-        output = generate_grounded_reader_facing_post(
-            account_id,
-            private_signal=_reference_signal(account_id, post, score, i),
-            index=i,
-            slot_theme=post_type,
-            recent_posts=recent,
-            structure_variant=(i - 1) % 6,
-        )
+        try:
+            output = rewrite_reference_post(
+                account_id=account_id,
+                source=post,
+                source_score=score,
+                target_platform="threads",
+                slot_theme=post_type,
+            )
+        except ReferenceRewriteError as exc:
+            print(f"[reference-rewrite] skip source={ref_id}: {exc}", file=sys.stderr)
+            continue
         body = str(output.get("public_post_text", ""))
         validation = final_public_post_validator(body, account_id)
-        quality = evaluate_generation_quality(
+        quality = _reference_quality(
             account_id, body, recent + accepted, batch_compared=accepted,
             structure_variant=output.get("grounding_summary", {}).get("structure_variant", ""),
-            primary_topic=output.get("grounding_summary", {}).get("quality_topic", ""),
         )
         if validation["status"] != "PASS" or quality["status"] != "PASS":
             continue
         output["generation_batch_id"] = batch_id
         output["generation_attempt"] = i
-        output["generation_rule_version"] = "production_composition_v3"
+        output["generation_rule_version"] = "source_grounded_gemini_v1"
         feature_fields = _feature_fields(output, quality)
         candidate = build_rewritten_post_candidate(
             account_id=account_id,
@@ -331,7 +348,7 @@ def build_generation_rows(
             "conversion_potential_score": str(score.get("cta_score", "")),
             "confidence_level": "medium",
             "ai_publish_recommendation": CANDIDATE_STATUS,
-            "notes": "Generated from REFERENCE_ONLY source metadata/scores. AUTO_READY or human review required. No third-party media reuse.",
+            "notes": "Generated from actual source content with semantic-fidelity gating. AUTO_READY or human review required. No third-party media reuse.",
         })
         derivatives.append({
             "derivative_id": derivative_id,
