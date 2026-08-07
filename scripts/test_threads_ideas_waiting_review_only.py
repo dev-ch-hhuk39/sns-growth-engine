@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+from unittest.mock import patch
+
+from reference_rewrite_ci_stub import fake_reference_rewrite
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,7 +24,8 @@ def main() -> int:
     gen = _load("generate_threads_ideas_from_references", ROOT / "scripts/generate_threads_ideas_from_references.py")
     posts = seed.build_reference_posts(seed.load_sources(ROOT / "config/source_accounts/default_sources.json"), account_id="night_scout", limit=3)
     scores = score.build_scores(posts, "night_scout", "20260630000000")
-    rows = gen.build_generation_rows(account_id="night_scout", posts=posts, scores=scores, top_n=3)
+    with patch.object(gen, "rewrite_reference_post", side_effect=fake_reference_rewrite):
+        rows = gen.build_generation_rows(account_id="night_scout", posts=posts, scores=scores, top_n=3)
     all_rows = rows["drafts"] + rows["social_derivatives"] + rows["queue"]
     checks = [
         ("queue 3件", len(rows["queue"]) == 3),
