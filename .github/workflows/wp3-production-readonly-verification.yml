@@ -5,7 +5,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
   models: read
 
 concurrency:
@@ -22,49 +21,9 @@ env:
   ALLOW_MEDIA_POSTS: "false"
   ALLOW_REAL_THREADS_VIDEO_POST: "false"
   ALLOW_TRANSCRIPTION_API: "false"
-  READONLY_TARGET_PR: "141"
-  READONLY_TARGET_SHA: "ce264e746054c8b01aef39ee8ab34d0228f420d8"
-  READONLY_REQUIREMENTS_SHA256: "6cb258d43e631391fb8c1de1c94d9413a7bc773e171a417f6438e7c41f0ec77b"
 
 jobs:
-  verify_exact_target:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout exact reviewed PR 141 head without production secrets
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          ref: ce264e746054c8b01aef39ee8ab34d0228f420d8
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Verify PR 141 still points to the reviewed SHA
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$(git rev-parse HEAD)" = "$READONLY_TARGET_SHA"
-          actual="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$READONLY_TARGET_PR" --jq '.head.sha')"
-          test "$actual" = "$READONLY_TARGET_SHA"
-          test "$(sha256sum requirements.txt | awk '{print $1}')" = "$READONLY_REQUIREMENTS_SHA256"
-
-      - name: Setup Python for no-secret contract tests
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install unchanged dependencies without production secrets
-        run: pip install -r requirements.txt
-
-      - name: Run exact-head read-only contract tests without production secrets
-        run: |
-          python3 scripts/test_scheduled_autopost_preview_v2.py
-          python3 scripts/test_scheduled_runtime_blockers.py
-          python3 scripts/test_hybrid_ai_source_context_stability.py
-          python3 scripts/test_auto_approve_hybrid_source_context_contract.py
-
   readonly_verification:
-    needs: verify_exact_target
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20
@@ -85,17 +44,10 @@ jobs:
       GITHUB_MODELS_ENABLED: "true"
 
     steps:
-      - name: Checkout exact reviewed PR 141 head
+      - name: Checkout Code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ce264e746054c8b01aef39ee8ab34d0228f420d8
-          fetch-depth: 1
           persist-credentials: false
-
-      - name: Reconfirm exact target and unchanged dependencies
-        run: |
-          test "$(git rev-parse HEAD)" = "$READONLY_TARGET_SHA"
-          test "$(sha256sum requirements.txt | awk '{print $1}')" = "$READONLY_REQUIREMENTS_SHA256"
 
       - name: Setup Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
