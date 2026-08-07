@@ -25,7 +25,7 @@ env:
   ALLOW_REAL_THREADS_VIDEO_POST: "false"
   ALLOW_TRANSCRIPTION_API: "false"
   READONLY_TARGET_PR: "141"
-  READONLY_TARGET_SHA: "ce264e746054c8b01aef39ee8ab34d0228f420d8"
+  READONLY_TARGET_SHA: "07f706dd561d3079c9ac51a19be48676d6f7c312"
 
 jobs:
   verify_exact_target:
@@ -35,7 +35,7 @@ jobs:
       - name: Checkout exact PR 141 head without production secrets
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ce264e746054c8b01aef39ee8ab34d0228f420d8
+          ref: 07f706dd561d3079c9ac51a19be48676d6f7c312
           fetch-depth: 1
           persist-credentials: false
 
@@ -68,7 +68,7 @@ jobs:
       - name: Checkout exact PR 141 head
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ce264e746054c8b01aef39ee8ab34d0228f420d8
+          ref: 07f706dd561d3079c9ac51a19be48676d6f7c312
           fetch-depth: 1
           persist-credentials: false
 
