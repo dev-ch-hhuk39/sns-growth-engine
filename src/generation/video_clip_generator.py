@@ -106,8 +106,8 @@ def generate_from_clip(
         return _mock_generation(account_id)
     from llm_client import call_gemini_json
     result = call_gemini_json(
+        prompt=_build_user_prompt(candidate, account_id),
         system_prompt=_build_system_prompt(account_id),
-        user_prompt=_build_user_prompt(candidate, account_id),
     )
     if not isinstance(result, dict):
         raise RuntimeError("clip generation did not return a JSON object")

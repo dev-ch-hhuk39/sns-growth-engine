@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config_partial
 from generation.video_clip_materializer import materialize_clip, parse_timecode, validate_bounds
+from generation.video_source_acquirer import acquire_authorized_public_source, find_cached_source
 from sheets_client import make_client
 from sheets_record_reader import read_records_safely
 
@@ -20,8 +21,11 @@ def main() -> int:
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
     parser.add_argument("--clip-id", required=True)
     parser.add_argument("--output-dir", default="/tmp/sns-growth-engine-clips")
+    parser.add_argument("--source-cache-dir", default=str(Path.home() / "Downloads" / "SNS_GROWTH_ENGINE_SOURCE_CACHE"))
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-cut", action="store_true")
+    parser.add_argument("--acquire-missing-source", action="store_true")
+    parser.add_argument("--confirm-download", action="store_true")
     args = parser.parse_args()
     cfg = get_config_partial()
     client = make_client(cfg, dry_run=True, force_mock=False)
@@ -34,10 +38,12 @@ def main() -> int:
         print(f"STATUS=BLOCKED_CANDIDATE_MATCH_COUNT_{len(candidates)}")
         return 2
     candidate = candidates[0]
-    if str(candidate.get("rights_status", "unknown")).lower() == "not_allowed":
+    rights = str(candidate.get("rights_status", "unknown")).lower()
+    risk = str(candidate.get("media_reuse_risk", "low")).lower()
+    if rights == "not_allowed":
         print("STATUS=BLOCKED_RIGHTS_NOT_ALLOWED")
         return 2
-    if str(candidate.get("media_reuse_risk", "low")).lower() == "high":
+    if risk == "high":
         print("STATUS=BLOCKED_MEDIA_REUSE_RISK_HIGH")
         return 2
     source_video_id = str(candidate.get("source_video_id", "")).strip()
@@ -50,19 +56,35 @@ def main() -> int:
         print(f"STATUS=BLOCKED_SOURCE_VIDEO_MATCH_COUNT_{len(videos)}")
         return 2
     source = videos[0]
-    input_path = Path(str(source.get("local_path", ""))).expanduser()
+    configured = Path(str(source.get("local_path", ""))).expanduser()
+    cached = find_cached_source(args.source_cache_dir, args.account_id, source_video_id)
+    input_path = configured if configured.is_file() else cached
+    acquisition_performed = False
+    if input_path is None and args.acquire_missing_source and args.confirm_download:
+        input_path = acquire_authorized_public_source(
+            candidate,
+            source,
+            cache_root=args.source_cache_dir,
+            account_id=args.account_id,
+            source_video_id=source_video_id,
+        )
+        acquisition_performed = True
     start = parse_timecode(candidate.get("start_seconds") or candidate.get("start_time"))
     end = parse_timecode(candidate.get("end_seconds") or candidate.get("end_time"))
     duration = validate_bounds(start, end)
     print(f"clip_id={args.clip_id}")
     print(f"source_video_id_present={'true' if source_video_id else 'false'}")
-    print(f"source_local_file_present={'true' if input_path.is_file() else 'false'}")
+    print(f"source_local_file_present={'true' if input_path is not None and input_path.is_file() else 'false'}")
+    print(f"source_acquisition_performed={str(acquisition_performed).lower()}")
     print(f"duration_seconds={duration:.3f}")
     print("sheet_writes_performed=false")
     print("cloudinary_uploads_performed=false")
     print("posts_performed=false")
-    if not input_path.is_file():
-        print("STATUS=BLOCKED_LOCAL_SOURCE_VIDEO_MISSING")
+    if input_path is None or not input_path.is_file():
+        if args.acquire_missing_source and not args.confirm_download:
+            print("STATUS=BLOCKED_CONFIRM_DOWNLOAD_REQUIRED")
+        else:
+            print("STATUS=BLOCKED_LOCAL_SOURCE_VIDEO_MISSING")
         return 3
     if not (args.apply and args.confirm_cut):
         print("STATUS=PLAN_ONLY_READY_TO_CUT")

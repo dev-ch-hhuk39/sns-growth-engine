@@ -49,3 +49,27 @@ def test_ffmpeg_command_is_bounded_and_non_shell() -> None:
     assert "-ss" in cmd and "-t" in cmd
     assert "in.mp4" in cmd and "out.mp4" in cmd
     assert all(";" not in part for part in cmd)
+
+
+def test_real_clip_generation_uses_call_gemini_json_prompt_keyword(monkeypatch) -> None:
+    import llm_client
+
+    captured = {}
+
+    def fake_call_gemini_json(prompt, *, system_prompt=None, **kwargs):
+        captured["prompt"] = prompt
+        captured["system_prompt"] = system_prompt
+        captured["kwargs"] = kwargs
+        return {
+            "threads_text": "実呼び出し経路のテスト投稿",
+            "title": "テスト",
+            "hypothesis": "test",
+            "media_strategy": "video_clip",
+        }
+
+    monkeypatch.setattr(llm_client, "call_gemini_json", fake_call_gemini_json)
+    result = gen.generate_from_clip(candidate(), {"account_id": "liver_manager"}, mock_llm=False)
+    assert result["threads_text"]
+    assert captured["prompt"]
+    assert captured["system_prompt"]
+    assert "user_prompt" not in captured["kwargs"]
