@@ -54,6 +54,18 @@ def test_prompt_contains_source_and_no_canned_topic_injection():
     assert "時給と控除を含めた条件を比べて手取りを確認する" not in prompt
 
 
+def test_liver_prompt_requires_source_grounded_concrete_action_or_skip():
+    source = "[transcript]\n初見が入りやすい配信導線を説明している。"
+    prompt = rewriter.build_reference_rewrite_prompt(
+        account_id="liver_manager",
+        source_material=source,
+    )
+    assert source in prompt
+    assert "具体的な行動を最低1つ" in prompt
+    assert "なぜ有効かの理由や因果を1文" in prompt
+    assert "一般論で補わず __SKIP_SOURCE__" in prompt
+
+
 def test_rewrite_uses_generation_and_semantic_fidelity(monkeypatch):
     responses = iter([
         "売上が落ちた時こそ、連絡数を増やすより相手ごとの距離感を見直したい。\n\n僕なら、返信の温度感を見ながら連絡頻度を整える。",
