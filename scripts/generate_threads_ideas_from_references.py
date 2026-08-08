@@ -68,6 +68,7 @@ from generation.reference_source_rewriter import (  # noqa: E402
     reference_source_eligibility,
     rewrite_reference_post,
 )
+from generation.reference_generation_adapter import build_current_reference_generation_inputs  # noqa: E402
 from learning.feature_attribution import preferred_primary_topics  # noqa: E402
 
 
@@ -318,7 +319,18 @@ def build_generation_rows(
                 slot_theme=post_type,
             )
         except ReferenceRewriteError as exc:
-            print(f"[reference-rewrite] skip source={ref_id}: {exc}", file=sys.stderr)
+            message = str(exc)
+            print(f"[reference-rewrite] skip source={ref_id}: {message}", file=sys.stderr)
+            # _call_gemini already performs bounded retry/backoff for retryable
+            # 429 responses. If it still returns RESOURCE_EXHAUSTED, moving to
+            # another source only burns more quota/rate-limit budget. Stop the
+            # current batch and fail closed; a later scheduled run may retry.
+            if "Gemini API returned HTTP 429" in message and "RESOURCE_EXHAUSTED" in message:
+                print(
+                    "[reference-rewrite] stop batch: Gemini 429 remained after bounded retries",
+                    file=sys.stderr,
+                )
+                break
             continue
         body = str(output.get("public_post_text", ""))
         validation = final_public_post_validator(body, account_id)
@@ -1751,18 +1763,27 @@ def run_reference_generation(
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
 
-    source_posts = read_records_safely(client, "source_account_posts")
-    posts = [
-        dict(row)
-        for row in source_posts
-        if str(row.get("account_id", "")) == account_id
+    # Canonical source-of-truth handoff. Do not generate from the stale
+    # source_account_posts/reference_post_scores mirror. Video transcript text
+    # is joined at read time and never copied back into source_posts.
+    canonical_source_posts = [
+        dict(row) for row in read_records_safely(client, "source_posts")
     ]
-    score_rows = read_records_safely(client, "reference_post_scores")
-    scores = [
-        dict(row)
-        for row in score_rows
-        if str(row.get("account_id", "")) == account_id
+    source_videos = [
+        dict(row) for row in read_records_safely(client, "source_videos")
     ]
+    video_transcripts = [
+        dict(row) for row in read_records_safely(client, "video_transcripts")
+    ]
+    adapted_reference_inputs = build_current_reference_generation_inputs(
+        account_id=account_id,
+        source_posts=canonical_source_posts,
+        source_videos=source_videos,
+        transcripts=video_transcripts,
+    )
+    posts = list(adapted_reference_inputs["posts"])
+    scores = list(adapted_reference_inputs["scores"])
+    reference_input_diagnostics = dict(adapted_reference_inputs["diagnostics"])
     posted_results_all = read_records_safely(client, "posted_results")
     posted_results = [
         dict(row)
@@ -2019,6 +2040,8 @@ def run_reference_generation(
         "account_id": account_id,
         "source_posts": len(posts),
         "source_scores": len(scores),
+        "reference_input_source": "source_posts_current",
+        "reference_input_diagnostics": reference_input_diagnostics,
         "candidate_count": len(rows["queue"]),
         "candidate_status": CANDIDATE_STATUS,
         "fallback_original_used": fallback_used,
