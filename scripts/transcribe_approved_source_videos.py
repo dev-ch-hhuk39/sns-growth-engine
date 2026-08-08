@@ -36,6 +36,8 @@ from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DONE_STATUSES = {"DONE", "FETCHED", "LOCAL_WHISPER_DONE", "YOUTUBE_CAPTIONS_DONE"}
+TERMINAL_TRANSCRIPT_STATUSES = {"NO_RELIABLE_SPEECH", "MEDIA_ACQUISITION_BLOCKED"}
+TIKTOK_REHYDRATION_ERROR = "unable to extract universal data for rehydration"
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 NIGHT_FEMALE_SUBJECT_CUES = ("キャバ嬢", "女の子", "女性", "嬢", "キャスト", "girl", "ladies")
 NIGHT_ANALYSIS_ONLY_CUES = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
@@ -165,6 +167,11 @@ def eligible_videos(
         for row in transcripts
         if str(row.get("transcription_status", "")).upper() in DONE_STATUSES and str(row.get("transcript_text", "")).strip()
     }
+    existing_terminal = {
+        str(row.get("source_video_id", ""))
+        for row in transcripts
+        if str(row.get("transcription_status", "")).upper() in TERMINAL_TRANSCRIPT_STATUSES
+    }
     candidates: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     for row in source_videos:
@@ -198,6 +205,8 @@ def eligible_videos(
             reasons.append(subject_reason)
         if source_video_id in existing_done:
             reasons.append("already_transcribed")
+        if source_video_id in existing_terminal:
+            reasons.append("terminal_transcription_state")
         if reasons:
             skipped.append({"source_video_id": source_video_id, "reason": ",".join(reasons)})
             continue
@@ -261,6 +270,74 @@ def _normalize_audio_for_whisper(source: Path, target: Path, *, max_audio_second
         raise RuntimeError("audio_normalization_failed")
 
 
+def _ytdlp_audio_attempt_profiles(platform: str) -> tuple[tuple[str, dict[str, Any]], ...]:
+    """Return a bounded download strategy; never use cookies or broad retries."""
+    if platform == "tiktok":
+        return (
+            ("auto", {}),
+            ("chrome", {"impersonate": "chrome"}),
+        )
+    return (("auto", {}),)
+
+
+def _download_audio_with_ytdlp(
+    yt_dlp_module: Any,
+    video_url: str,
+    tmp_path: Path,
+    platform: str,
+) -> tuple[Path | None, str, str]:
+    profiles = _ytdlp_audio_attempt_profiles(platform)
+    rehydration_failures = 0
+    for mode, overrides in profiles:
+        template = str(tmp_path / f"audio-{mode}.%(ext)s")
+        options = metadata_options(
+            platform,
+            {
+                "format": "bestaudio/best",
+                "outtmpl": template,
+                "quiet": True,
+                "no_warnings": True,
+                "noplaylist": True,
+                "socket_timeout": 30,
+                "noprogress": True,
+                "retries": 1,
+                "fragment_retries": 1,
+            },
+            **overrides,
+        )
+        try:
+            with yt_dlp_module.YoutubeDL(options) as ydl:
+                ydl.download([video_url])
+        except Exception as exc:  # noqa: BLE001
+            if TIKTOK_REHYDRATION_ERROR in str(exc).lower():
+                rehydration_failures += 1
+            continue
+        files = sorted(
+            candidate
+            for candidate in tmp_path.glob(f"audio-{mode}.*")
+            if candidate.is_file() and candidate.stat().st_size > 0
+        )
+        if files:
+            return files[0], mode, ""
+    if platform == "tiktok" and rehydration_failures == len(profiles):
+        return None, "", "MEDIA_ACQUISITION_BLOCKED"
+    return None, "", "LOCAL_WHISPER_FAILED"
+
+
+def finalize_transcription_status(
+    previous_transcript: dict[str, Any] | None,
+    current_row: dict[str, Any],
+) -> dict[str, Any]:
+    """Terminalize only a repeated empty result; one empty result stays retryable."""
+    copied = dict(current_row)
+    previous_status = str((previous_transcript or {}).get("transcription_status", "")).upper()
+    current_status = str(copied.get("transcription_status", "")).upper()
+    if previous_status == "LOCAL_WHISPER_EMPTY" and current_status == "LOCAL_WHISPER_EMPTY":
+        copied["transcription_status"] = "NO_RELIABLE_SPEECH"
+        copied["error"] = "repeated_local_whisper_empty"
+    return copied
+
+
 def transcribe_with_local_whisper(
     video_url: str,
     *,
@@ -281,26 +358,28 @@ def transcribe_with_local_whisper(
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "status": "LOCAL_WHISPER_NOT_AVAILABLE", "error": type(exc).__name__}
     with TemporaryDirectory(prefix="sns_transcribe_") as tmp:
-        outtmpl = str(Path(tmp) / "audio.%(ext)s")
+        tmp_path = Path(tmp)
         platform = "youtube" if "youtu" in video_url.lower() else "tiktok"
-        opts = metadata_options(platform, {
-            "format": "bestaudio/best",
-            "outtmpl": outtmpl,
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-            "socket_timeout": 30,
-            "noprogress": True,
-        })
+        audio, acquisition_mode, download_status = _download_audio_with_ytdlp(
+            yt_dlp,
+            video_url,
+            tmp_path,
+            platform,
+        )
+        if audio is None:
+            return {
+                "ok": False,
+                "status": download_status,
+                "error": "DownloadError",
+                "acquisition_mode": "",
+            }
         try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([video_url])
-            files = sorted(Path(tmp).glob("audio.*"))
-            audio = files[0] if files else None
-            if audio is None:
-                raise RuntimeError("audio_download_missing")
-            normalized_audio = Path(tmp) / "whisper-input.flac"
-            _normalize_audio_for_whisper(audio, normalized_audio, max_audio_seconds=max_audio_seconds)
+            normalized_audio = tmp_path / "whisper-input.flac"
+            _normalize_audio_for_whisper(
+                audio,
+                normalized_audio,
+                max_audio_seconds=max_audio_seconds,
+            )
             if audio != normalized_audio:
                 audio.unlink(missing_ok=True)
             model = WhisperModel(
@@ -319,27 +398,41 @@ def transcribe_with_local_whisper(
             segments = []
             texts = []
             for seg in segments_iter:
-                text = str(getattr(seg, "text", "")).strip()
-                if not text:
+                value = str(getattr(seg, "text", "")).strip()
+                if not value:
                     continue
                 start = float(getattr(seg, "start", 0.0) or 0.0)
                 end = float(getattr(seg, "end", start) or start)
-                segments.append({"start": start, "end": end, "text": text})
-                texts.append(text)
+                segments.append({"start": start, "end": end, "text": value})
+                texts.append(value)
             full_text = "\n".join(texts)
             if not full_text.strip():
-                return {"ok": False, "status": "LOCAL_WHISPER_EMPTY", "error": ""}
+                return {
+                    "ok": False,
+                    "status": "LOCAL_WHISPER_EMPTY",
+                    "error": "",
+                    "acquisition_mode": acquisition_mode,
+                }
             return {
                 "ok": True,
                 "provider": "local_faster_whisper",
                 "language": str(getattr(info, "language", "") or "unknown"),
                 "text": full_text,
                 "segments": segments,
-                "processed_duration_seconds": max((float(seg["end"]) for seg in segments), default=0.0),
+                "processed_duration_seconds": max(
+                    (float(seg["end"]) for seg in segments),
+                    default=0.0,
+                ),
                 "max_audio_seconds": max_audio_seconds,
+                "acquisition_mode": acquisition_mode,
             }
         except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "status": "LOCAL_WHISPER_FAILED", "error": type(exc).__name__}
+            return {
+                "ok": False,
+                "status": "LOCAL_WHISPER_FAILED",
+                "error": type(exc).__name__,
+                "acquisition_mode": acquisition_mode,
+            }
 
 
 def build_transcript_row(video: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -434,6 +527,7 @@ def transcribe_one(
             "preview": redacted_preview(str(result.get("text", "")), 80),
             "processing_seconds": round(time.monotonic() - started, 3),
             "transcription_scope": transcript_row.get("transcription_scope", ""),
+            "acquisition_mode": result.get("acquisition_mode", ""),
         }
     status = str(result.get("status") or "UNAVAILABLE")
     return build_unavailable_row(video, status, str(result.get("error", ""))), {
@@ -444,6 +538,7 @@ def transcribe_one(
         "chunk_count": 0,
         "preview": "",
         "processing_seconds": round(time.monotonic() - started, 3),
+        "acquisition_mode": result.get("acquisition_mode", ""),
     }
 
 
@@ -497,6 +592,22 @@ def main() -> int:
 
     client = load_sheets() if args.use_sheets else None
     source_videos, transcripts = load_rows(client) if client else ([], [])
+    previous_transcript_by_source: dict[str, dict[str, Any]] = {}
+    for transcript in transcripts:
+        source_video_id = str(transcript.get("source_video_id", "")).strip()
+        if not source_video_id:
+            continue
+        existing = previous_transcript_by_source.get(source_video_id)
+        current_key = (
+            str(transcript.get("updated_at", "")),
+            str(transcript.get("transcript_id", "")),
+        )
+        existing_key = (
+            str((existing or {}).get("updated_at", "")),
+            str((existing or {}).get("transcript_id", "")),
+        )
+        if existing is None or current_key >= existing_key:
+            previous_transcript_by_source[source_video_id] = dict(transcript)
     if client:
         source_videos = attach_approved_storage_inputs(source_videos, load_media_assets(client))
     selected, skipped = eligible_videos(
@@ -525,6 +636,12 @@ def main() -> int:
             max_audio_seconds=args.max_audio_seconds,
             cpu_threads=args.cpu_threads,
         )
+        row = finalize_transcription_status(
+            previous_transcript_by_source.get(str(video.get("source_video_id", ""))),
+            row,
+        )
+        summary["status"] = row["transcription_status"]
+        summary["terminal"] = row["transcription_status"] in TERMINAL_TRANSCRIPT_STATUSES
         transcript_rows.append(row)
         source_updates.append({
             **video,
