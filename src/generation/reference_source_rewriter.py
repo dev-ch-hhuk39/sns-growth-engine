@@ -194,6 +194,7 @@ def build_reference_rewrite_prompt(
         if _clean(score.get(key))
     )[:1000]
     return f"""あなたはSNS編集者です。以下のSOURCEを元に、{target_platform}向け投稿を1本だけ作成してください。
+STRUCTURE RULE: This is a structure-preserving rewrite, not free composition. Preserve the source hook, information order, paragraph/list/question pattern, and closing shape whenever the source is a text post. Change wording and account framing, not the content architecture.
 
 最重要ルール:
 - SOURCEの中心テーマ・出来事・主張を意味上の境界にする。

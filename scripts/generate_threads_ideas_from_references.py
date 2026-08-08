@@ -258,6 +258,104 @@ def _reference_quality(
         "status": "PASS" if passed else "BLOCKED",
     }
 
+
+def _structure_units(value: str) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+    if len(paragraphs) > 1:
+        return paragraphs
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) > 1:
+        return lines
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?。！？])\s*", text) if part.strip()]
+    return sentences or [text]
+
+
+def reference_structure_fidelity(
+    source_text: str,
+    draft_text: str,
+    *,
+    source_platform: str = "",
+    minimum_score: float = 0.55,
+) -> dict[str, Any]:
+    platform = str(source_platform or "").strip().lower()
+    if platform in {"youtube", "youtube_shorts", "tiktok"}:
+        return {
+            "pass": True,
+            "applicable": False,
+            "score": 1.0,
+            "minimum_score": minimum_score,
+            "reason": "video transcript uses semantic fidelity; text-post layout preservation is not applicable",
+        }
+    source_units = _structure_units(source_text)
+    draft_units = _structure_units(draft_text)
+    if not source_units or not draft_units:
+        return {
+            "pass": False,
+            "applicable": True,
+            "score": 0.0,
+            "minimum_score": minimum_score,
+            "reason": "missing source or draft structure units",
+        }
+    count_score = min(len(source_units), len(draft_units)) / max(len(source_units), len(draft_units))
+    if len(source_units) >= 3 and count_score < 0.5:
+        return {
+            "pass": False,
+            "applicable": True,
+            "score": round(count_score, 4),
+            "minimum_score": minimum_score,
+            "source_unit_count": len(source_units),
+            "draft_unit_count": len(draft_units),
+            "reason": "source structure collapsed too far",
+        }
+    source_list = bool(re.search(r"(?m)^\s*(?:[-*]|[0-9]+[.)])\s+", source_text))
+    draft_list = bool(re.search(r"(?m)^\s*(?:[-*]|[0-9]+[.)])\s+", draft_text))
+    if source_list and not draft_list:
+        return {
+            "pass": False,
+            "applicable": True,
+            "score": 0.0,
+            "minimum_score": minimum_score,
+            "source_unit_count": len(source_units),
+            "draft_unit_count": len(draft_units),
+            "reason": "source list structure was lost",
+        }
+    list_score = 1.0 if source_list == draft_list else 0.0
+    source_question = bool(re.search(r"[?]", source_text))
+    draft_question = bool(re.search(r"[?]", draft_text))
+    question_score = 1.0 if source_question == draft_question else 0.5
+
+    def bucket(unit: str) -> int:
+        size = len(unit)
+        if size <= 45:
+            return 0
+        if size <= 100:
+            return 1
+        return 2
+
+    hook_score = 1.0 if bucket(source_units[0]) == bucket(draft_units[0]) else 0.5
+    close_score = 1.0 if bucket(source_units[-1]) == bucket(draft_units[-1]) else 0.5
+    score = round(
+        0.50 * count_score
+        + 0.15 * list_score
+        + 0.10 * question_score
+        + 0.15 * hook_score
+        + 0.10 * close_score,
+        4,
+    )
+    return {
+        "pass": score >= minimum_score,
+        "applicable": True,
+        "score": score,
+        "minimum_score": minimum_score,
+        "source_unit_count": len(source_units),
+        "draft_unit_count": len(draft_units),
+        "reason": "structure preserved" if score >= minimum_score else "source structure drifted too far",
+    }
+
+
 def build_generation_rows(
     *,
     account_id: str,
@@ -333,6 +431,17 @@ def build_generation_rows(
                 break
             continue
         body = str(output.get("public_post_text", ""))
+        structure_fidelity = reference_structure_fidelity(
+            _post_text(post),
+            body,
+            source_platform=str(post.get("source_platform") or post.get("platform") or ""),
+        )
+        if not structure_fidelity["pass"]:
+            print(
+                f"[reference-rewrite] skip source={ref_id}: structure_fidelity={structure_fidelity['score']}",
+                file=sys.stderr,
+            )
+            continue
         validation = final_public_post_validator(body, account_id)
         quality = _reference_quality(
             account_id, body, recent + accepted, batch_compared=accepted,
