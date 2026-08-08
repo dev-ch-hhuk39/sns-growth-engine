@@ -269,7 +269,7 @@ def _structure_units(value: str) -> list[str]:
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if len(lines) > 1:
         return lines
-    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text) if part.strip()]
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?。！？])\s*", text) if part.strip()]
     return sentences or [text]
 
 
@@ -300,8 +300,28 @@ def reference_structure_fidelity(
             "reason": "missing source or draft structure units",
         }
     count_score = min(len(source_units), len(draft_units)) / max(len(source_units), len(draft_units))
+    if len(source_units) >= 3 and count_score < 0.5:
+        return {
+            "pass": False,
+            "applicable": True,
+            "score": round(count_score, 4),
+            "minimum_score": minimum_score,
+            "source_unit_count": len(source_units),
+            "draft_unit_count": len(draft_units),
+            "reason": "source structure collapsed too far",
+        }
     source_list = bool(re.search(r"(?m)^\s*(?:[-*]|[0-9]+[.)])\s+", source_text))
     draft_list = bool(re.search(r"(?m)^\s*(?:[-*]|[0-9]+[.)])\s+", draft_text))
+    if source_list and not draft_list:
+        return {
+            "pass": False,
+            "applicable": True,
+            "score": 0.0,
+            "minimum_score": minimum_score,
+            "source_unit_count": len(source_units),
+            "draft_unit_count": len(draft_units),
+            "reason": "source list structure was lost",
+        }
     list_score = 1.0 if source_list == draft_list else 0.0
     source_question = bool(re.search(r"[?]", source_text))
     draft_question = bool(re.search(r"[?]", draft_text))
