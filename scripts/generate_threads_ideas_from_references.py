@@ -45,7 +45,6 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from public_post_quality import (  # noqa: E402
     final_public_post_validator,
     generate_production_post,
-    generate_reader_facing_post,
     reader_facing_template_count,
 )
 
@@ -64,7 +63,11 @@ READY_GATE = "approve_queue.py or auto_approve_queue.py"
 SIMILARITY_BLOCK_THRESHOLD = 0.62
 MAX_QUOTE_CHARS = 80
 from generation_quality_gates import batch_diversity_validator, evaluate_generation_quality, persisted_quality_evidence  # noqa: E402
-from generation.reference_source_rewriter import ReferenceRewriteError, rewrite_reference_post  # noqa: E402
+from generation.reference_source_rewriter import (  # noqa: E402
+    ReferenceRewriteError,
+    reference_source_eligibility,
+    rewrite_reference_post,
+)
 from learning.feature_attribution import preferred_primary_topics  # noqa: E402
 
 
@@ -280,9 +283,28 @@ def build_generation_rows(
     recent = [str(value) for value in (history or []) if str(value)]
     accepted: list[dict[str, Any]] = []
     batch_id = f"scheduled_{account_id}_{schedule_date_jst or datetime.now(timezone.utc).strftime('%Y%m%d')}_{slot_id or 'reference'}"
-    for i, score in enumerate(usable_scores[:top_n], 1):
+    generation_attempts = 0
+    max_generation_attempts = max(top_n * 2, top_n + 2)
+    for score in usable_scores:
+        if len(queues) >= top_n:
+            break
         ref_id = str(score.get("reference_post_id") or score.get("collected_post_id", ""))
         post = posts_by_id[ref_id]
+        eligibility = reference_source_eligibility(post)
+        if not eligibility["eligible"]:
+            print(
+                f"[reference-rewrite] skip source={ref_id}: ineligible={eligibility['reason']}",
+                file=sys.stderr,
+            )
+            continue
+        if generation_attempts >= max_generation_attempts:
+            print(
+                f"[reference-rewrite] stop after {generation_attempts} Gemini generation attempts; target={top_n}",
+                file=sys.stderr,
+            )
+            break
+        generation_attempts += 1
+        i = generation_attempts
         stable = _safe_id(f"{account_id}_{ref_id}")
         draft_id = f"idea_{stable}"
         derivative_id = f"sd_{stable}_threads"

@@ -12,6 +12,8 @@ import hashlib
 import json
 import os
 import re
+import threading
+import time
 from typing import Any
 
 import requests
@@ -21,6 +23,11 @@ MAX_PRIMARY_CHARS = 18000
 MAX_SUPPLEMENTARY_CHARS = 1200
 VIDEO_PLATFORMS = {"youtube", "youtube_shorts", "tiktok"}
 TEXT_PLATFORMS = {"threads", "x", "twitter"}
+INTERNAL_SOURCE_PLATFORMS = {"system_generated", "system_generated_owned"}
+DEFAULT_MIN_INTERVAL_SECONDS = 13.0
+DEFAULT_MAX_ATTEMPTS = 4
+_GEMINI_RATE_LOCK = threading.Lock()
+_LAST_GEMINI_REQUEST_AT = 0.0
 
 
 class ReferenceRewriteError(RuntimeError):
@@ -55,9 +62,40 @@ def _first(source: dict[str, Any], keys: tuple[str, ...]) -> str:
     return ""
 
 
+def reference_source_eligibility(source: dict[str, Any]) -> dict[str, Any]:
+    """Reject internal/self-generated and known platform boilerplate before LLM use."""
+    platform = _platform(source)
+    source_account_id = _clean(source.get("source_account_id")).lower()
+    post_text = _first(
+        source,
+        (
+            "source_text",
+            "text",
+            "post_text",
+            "original_post_text",
+            "caption",
+            "content",
+            "投稿本文",
+        ),
+    )
+    normalized = re.sub(r"\s+", " ", post_text).strip().lower()
+    if platform in INTERNAL_SOURCE_PLATFORMS or source_account_id == "system_generated":
+        return {"eligible": False, "reason": "internal_or_self_generated_source", "platform": platform}
+    threads_markers = (
+        "join threads to share ideas",
+        "log in with your instagram",
+    )
+    if any(marker in normalized for marker in threads_markers):
+        return {"eligible": False, "reason": "threads_login_boilerplate", "platform": platform}
+    return {"eligible": True, "reason": "", "platform": platform}
+
+
 def build_source_material(source: dict[str, Any]) -> str:
     """Build canonical semantic source material without inventing topic text."""
-    platform = _platform(source)
+    eligibility = reference_source_eligibility(source)
+    if not eligibility["eligible"]:
+        raise ReferenceRewriteError(f"reference source is ineligible: {eligibility['reason']}")
+    platform = str(eligibility["platform"])
     transcript = _first(
         source,
         (
@@ -75,6 +113,7 @@ def build_source_material(source: dict[str, Any]) -> str:
             "source_text",
             "text",
             "post_text",
+            "original_post_text",
             "caption",
             "content",
             "投稿本文",
@@ -181,46 +220,178 @@ def _api_key() -> str:
     return key
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(_clean(os.getenv(name)) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(_clean(os.getenv(name)) or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _pace_gemini_request() -> None:
+    global _LAST_GEMINI_REQUEST_AT
+    minimum = max(0.0, _env_float("REFERENCE_GEMINI_MIN_INTERVAL_SECONDS", DEFAULT_MIN_INTERVAL_SECONDS))
+    if minimum <= 0:
+        return
+    with _GEMINI_RATE_LOCK:
+        now = time.monotonic()
+        remaining = minimum - (now - _LAST_GEMINI_REQUEST_AT)
+        if _LAST_GEMINI_REQUEST_AT > 0 and remaining > 0:
+            time.sleep(remaining)
+        _LAST_GEMINI_REQUEST_AT = time.monotonic()
+
+
+def _retry_delay_seconds(response: requests.Response | None, attempt: int) -> float:
+    if response is not None:
+        retry_after = _clean(response.headers.get("Retry-After"))
+        if retry_after:
+            try:
+                return min(max(float(retry_after), 0.0), 60.0)
+            except ValueError:
+                pass
+        try:
+            payload = response.json()
+            details = (payload.get("error") or {}).get("details") or []
+            for detail in details:
+                value = _clean(detail.get("retryDelay")) if isinstance(detail, dict) else ""
+                match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)s", value)
+                if match:
+                    return min(max(float(match.group(1)), 0.0), 60.0)
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return min(4.0 * (2 ** max(0, attempt - 1)), 45.0)
+
+
+def _safe_gemini_error_detail(response: requests.Response) -> str:
+    """Return bounded API diagnostics without logging request headers or secrets."""
+    try:
+        payload = response.json()
+    except (ValueError, TypeError, AttributeError):
+        return ""
+    error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(error, dict):
+        return ""
+    status = _clean(error.get("status"))[:80]
+    message = _clean(error.get("message"))[:260]
+    # Defensive redaction even though Google error messages normally do not echo keys.
+    message = re.sub(r"AIza[0-9A-Za-z_-]{20,}", "[REDACTED_API_KEY]", message)
+    message = re.sub(r"(?i)(api[_ -]?key\s*[=:]\s*)[^\s,&]+", r"\1[REDACTED]", message)
+    message = re.sub(r"(?i)([?&]key=)[^&\s]+", r"\1[REDACTED]", message)
+    if status and message:
+        return f"{status}: {message}"
+    return status or message
+
+
 def _call_gemini(
     prompt: str,
     *,
     model: str | None = None,
     temperature: float = 0.35,
-    max_output_tokens: int = 900,
+    max_output_tokens: int = 2048,
+    response_schema: dict[str, Any] | None = None,
 ) -> str:
     model_name = _clean(model or os.getenv("REFERENCE_GEMINI_MODEL") or DEFAULT_MODEL)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
-    try:
-        response = requests.post(
-            url,
-            headers={
-                "Content-Type": "application/json",
-                "x-goog-api-key": _api_key(),
-            },
-            json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": temperature,
-                    "maxOutputTokens": max_output_tokens,
+    generation_config: dict[str, Any] = {
+        "temperature": temperature,
+        "maxOutputTokens": max_output_tokens,
+    }
+    if model_name.startswith("gemini-3"):
+        thinking_level = _clean(os.getenv("REFERENCE_GEMINI_THINKING_LEVEL") or "low").lower()
+        if thinking_level not in {"minimal", "low", "medium", "high"}:
+            raise ReferenceRewriteError(
+                "REFERENCE_GEMINI_THINKING_LEVEL must be minimal, low, medium, or high"
+            )
+        generation_config["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    if response_schema is not None:
+        # The v1beta generateContent endpoint accepts the long-standing
+        # responseMimeType + responseSchema pair broadly. Keep the semantic
+        # judge structured/fail-closed without relying on a newer responseFormat
+        # rollout that can return INVALID_ARGUMENT in some projects.
+        generation_config["responseMimeType"] = "application/json"
+        generation_config["responseSchema"] = response_schema
+    max_attempts = max(1, min(_env_int("REFERENCE_GEMINI_MAX_ATTEMPTS", DEFAULT_MAX_ATTEMPTS), 6))
+    last_status = 0
+    for attempt in range(1, max_attempts + 1):
+        _pace_gemini_request()
+        response: requests.Response | None = None
+        try:
+            response = requests.post(
+                url,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": _api_key(),
                 },
-            },
-            timeout=60,
-        )
-    except requests.RequestException as exc:
-        raise ReferenceRewriteError(f"Gemini request failed: {exc.__class__.__name__}") from exc
-    if response.status_code >= 400:
-        raise ReferenceRewriteError(f"Gemini API returned HTTP {response.status_code}")
-    try:
-        payload = response.json()
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": generation_config,
+                },
+                timeout=60,
+            )
+        except requests.RequestException as exc:
+            if attempt >= max_attempts:
+                raise ReferenceRewriteError(f"Gemini request failed: {exc.__class__.__name__}") from exc
+            time.sleep(_retry_delay_seconds(None, attempt))
+            continue
+        last_status = response.status_code
+        if response.status_code in {429, 500, 502, 503, 504} and attempt < max_attempts:
+            time.sleep(_retry_delay_seconds(response, attempt))
+            continue
+        if response.status_code >= 400:
+            detail = _safe_gemini_error_detail(response)
+            suffix = f" ({detail})" if detail else ""
+            raise ReferenceRewriteError(
+                f"Gemini API returned HTTP {response.status_code}{suffix}"
+            )
+        try:
+            payload = response.json()
+        except (ValueError, TypeError) as exc:
+            raise ReferenceRewriteError("Gemini response could not be parsed") from exc
+        if not isinstance(payload, dict):
+            raise ReferenceRewriteError("Gemini response was not a JSON object")
         candidates = payload.get("candidates") or []
-        parts = candidates[0]["content"]["parts"] if candidates else []
-        text = "".join(_clean(part.get("text")) for part in parts if part.get("text")).strip()
-    except (ValueError, KeyError, TypeError, IndexError) as exc:
-        raise ReferenceRewriteError("Gemini response could not be parsed") from exc
-    if not text:
-        raise ReferenceRewriteError("Gemini returned empty text")
-    return text
-
+        if not isinstance(candidates, list) or not candidates:
+            prompt_feedback = payload.get("promptFeedback") or {}
+            block_reason = _clean(prompt_feedback.get("blockReason")) if isinstance(prompt_feedback, dict) else ""
+            suffix = f" (promptBlockReason={block_reason})" if block_reason else ""
+            raise ReferenceRewriteError(f"Gemini returned no candidates{suffix}")
+        candidate = candidates[0] if isinstance(candidates[0], dict) else {}
+        content = candidate.get("content") if isinstance(candidate, dict) else {}
+        parts = content.get("parts") if isinstance(content, dict) else []
+        if not isinstance(parts, list):
+            parts = []
+        visible_parts = []
+        for part in parts:
+            if not isinstance(part, dict) or part.get("thought") is True:
+                continue
+            value = _clean(part.get("text"))
+            if value:
+                visible_parts.append(value)
+        result_text = "".join(visible_parts).strip()
+        if not result_text:
+            finish_reason = _clean(candidate.get("finishReason")) or "UNKNOWN"
+            finish_message = _clean(candidate.get("finishMessage"))[:180]
+            usage = payload.get("usageMetadata") or {}
+            thoughts = usage.get("thoughtsTokenCount") if isinstance(usage, dict) else None
+            output_tokens = usage.get("candidatesTokenCount") if isinstance(usage, dict) else None
+            diagnostics = [f"finishReason={finish_reason}"]
+            if isinstance(thoughts, int):
+                diagnostics.append(f"thoughtsTokenCount={thoughts}")
+            if isinstance(output_tokens, int):
+                diagnostics.append(f"candidatesTokenCount={output_tokens}")
+            if finish_message:
+                diagnostics.append(f"finishMessage={finish_message}")
+            raise ReferenceRewriteError(
+                "Gemini returned no visible text (" + ", ".join(diagnostics) + ")"
+            )
+        return result_text
+    raise ReferenceRewriteError(f"Gemini API returned HTTP {last_status or 'unknown'}")
 
 def _parse_json_object(raw: str) -> dict[str, Any]:
     text = _clean(raw)
@@ -264,7 +435,21 @@ DRAFT:
 {draft}
 ---
 """
-    raw = _call_gemini(prompt, model=model, temperature=0.0, max_output_tokens=220)
+    response_schema = {
+        "type": "object",
+        "properties": {
+            "pass": {"type": "boolean"},
+            "reason": {"type": "string"},
+        },
+        "required": ["pass", "reason"],
+    }
+    raw = _call_gemini(
+        prompt,
+        model=model,
+        temperature=0.0,
+        max_output_tokens=1024,
+        response_schema=response_schema,
+    )
     result = _parse_json_object(raw)
     passed = result.get("pass") is True
     reason = _clean(result.get("reason"))[:300]
@@ -303,7 +488,7 @@ def rewrite_reference_post(
         target_platform=target_platform,
         slot_theme=slot_theme,
     )
-    draft = _clean(_call_gemini(prompt, model=model, temperature=0.35, max_output_tokens=900))
+    draft = _clean(_call_gemini(prompt, model=model, temperature=0.35, max_output_tokens=2048))
     if draft == "__SKIP_SOURCE__" or "__SKIP_SOURCE__" in draft:
         raise ReferenceRewriteError("source cannot be transformed without changing its central topic")
     if len(draft) < 40:
