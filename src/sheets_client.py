@@ -240,6 +240,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Media Growth Engine provenance. Text-only rows leave these blank.
         "source_post_id", "source_video_id", "clip_candidate_id",
         "slot_id", "business_date_jst",
+        "schedule_date_jst", "theme",
         "media_url", "media_status", "media_required", "media_type", "content_type", "publisher_media_type", "media_origin",
         "duration_seconds", "aspect_ratio",
         "width", "height",
@@ -263,6 +264,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "primary_topic_evidence_score", "primary_topic_direct_confidence", "topic_coherence_status",
         "topic_coherence_score", "off_topic_sentence_count", "off_topic_sentences",
         "hook_topic", "closing_topic", "visual_topic",
+        "visual_topic_confidence", "visual_topic_direct_confidence",
         "hook_topic_match", "closing_topic_match", "visual_topic_match",
         "topic_blocked_reasons", "quality_gate_version",
         "generation_attempt", "generation_rule_version", "generation_policy_json",
