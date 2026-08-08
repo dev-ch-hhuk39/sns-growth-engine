@@ -21,6 +21,10 @@ DONE_TRANSCRIPT_STATUSES = {
     "LOCAL_WHISPER_DONE",
     "YOUTUBE_CAPTIONS_DONE",
 }
+TERMINAL_TRANSCRIPT_STATUSES = {
+    "NO_RELIABLE_SPEECH",
+    "MEDIA_ACQUISITION_BLOCKED",
+}
 YOUTUBE_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 TIKTOK_ID = re.compile(r"^[0-9]{10,30}$")
 
@@ -152,19 +156,40 @@ def resolve_transcript(
     source_video_id = _clean(source_video.get("source_video_id"))
     account_id = _clean(source_video.get("account_id"))
     candidates: list[dict[str, Any]] = []
+    terminal_candidates: list[dict[str, Any]] = []
     for transcript in transcripts:
         if _clean(transcript.get("source_video_id")) != source_video_id:
             continue
         transcript_account = _clean(transcript.get("account_id"))
         if account_id and transcript_account and transcript_account != account_id:
             continue
-        if _clean(transcript.get("transcription_status")).upper() not in DONE_TRANSCRIPT_STATUSES:
+        status = _clean(transcript.get("transcription_status")).upper()
+        if status in TERMINAL_TRANSCRIPT_STATUSES:
+            terminal_candidates.append(dict(transcript))
+            continue
+        if status not in DONE_TRANSCRIPT_STATUSES:
             continue
         if not _clean(transcript.get("transcript_text")):
             continue
         candidates.append(dict(transcript))
     if len(candidates) == 1:
         return {"status": "READY", "match": candidates[0], "matches": candidates}
+    if not candidates and terminal_candidates:
+        terminal_candidates.sort(
+            key=lambda row: (
+                _clean(row.get("updated_at")),
+                _clean(row.get("transcript_id")),
+            ),
+            reverse=True,
+        )
+        latest = terminal_candidates[0]
+        return {
+            "status": "TERMINAL",
+            "reason": "terminal_transcript_state",
+            "terminal_status": _clean(latest.get("transcription_status")).upper(),
+            "match": latest,
+            "matches": terminal_candidates,
+        }
     if not candidates:
         return {"status": "MISSING", "reason": "completed_transcript_not_found", "matches": []}
     hashes = {
@@ -172,9 +197,24 @@ def resolve_transcript(
         for row in candidates
     }
     if len(hashes) == 1:
-        candidates.sort(key=lambda row: (_clean(row.get("updated_at")), _clean(row.get("transcript_id"))), reverse=True)
-        return {"status": "READY", "match": candidates[0], "matches": candidates, "duplicate_equivalent": True}
-    return {"status": "AMBIGUOUS", "reason": "multiple_distinct_completed_transcripts", "matches": candidates}
+        candidates.sort(
+            key=lambda row: (
+                _clean(row.get("updated_at")),
+                _clean(row.get("transcript_id")),
+            ),
+            reverse=True,
+        )
+        return {
+            "status": "READY",
+            "match": candidates[0],
+            "matches": candidates,
+            "duplicate_equivalent": True,
+        }
+    return {
+        "status": "AMBIGUOUS",
+        "reason": "multiple_distinct_completed_transcripts",
+        "matches": candidates,
+    }
 
 
 def enrich_source_post(
@@ -219,6 +259,7 @@ def enrich_source_post(
             "reason": transcript_result.get("reason", ""),
             "video_id": video_result["video_id"],
             "source_video_id": row["source_video_id"],
+            "terminal_status": transcript_result.get("terminal_status", ""),
         }
     transcript = dict(transcript_result["match"])
     transcript_text = _clean(transcript.get("transcript_text"))
@@ -298,6 +339,7 @@ def build_current_reference_generation_inputs(
         "text_ready": 0,
         "video_transcript_ready": 0,
         "video_transcript_missing": 0,
+        "video_transcript_terminal": 0,
         "video_unmatched": 0,
         "video_ambiguous": 0,
         "text_missing": 0,
@@ -322,6 +364,8 @@ def build_current_reference_generation_inputs(
             counts["video_transcript_ready"] += 1
         elif status in {"TRANSCRIPT_MISSING", "TRANSCRIPT_AMBIGUOUS"}:
             counts["video_transcript_missing"] += 1
+        elif status == "TRANSCRIPT_TERMINAL":
+            counts["video_transcript_terminal"] += 1
         elif status == "VIDEO_UNMATCHED":
             counts["video_unmatched"] += 1
         elif status == "VIDEO_AMBIGUOUS":
@@ -336,6 +380,7 @@ def build_current_reference_generation_inputs(
                     "video_id": state.get("video_id", ""),
                     "status": status,
                     "reason": state.get("reason", ""),
+                    "terminal_status": state.get("terminal_status", ""),
                     "match_count": state.get("match_count", 0),
                 })
             continue
