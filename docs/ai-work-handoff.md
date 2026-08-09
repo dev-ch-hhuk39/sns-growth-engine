@@ -6649,3 +6649,28 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 - 次に触ってよい: YouTubeのvideo-level subject suitability、Threads reference-text generationとquality review、TikTok/Xのbounded fallback改善。
 - 触らない方がよい: 失敗媒体の自動media activation、cookie/stealth/CAPTCHA回避、第三者reference-only media、X/beauty publish、`.env`、`data/`、`output/`、secrets/cookies。
+
+## 2026-08-09 YouTube-First Clip Candidate Repair
+
+### 本システム / 変更ファイル
+
+- 作業ブランチ: `repair/dual-account-clip-content-golden-v7-20260809`。
+- 更新: `config/source_accounts/default_sources.json`, `scripts/discover_approved_source_videos.py`, `src/video/semantic_clip_planner.py`, `scripts/run_media_growth_engine.py`, `scripts/test_media_growth_engine_does_not_download_in_dry_run.py`, 本handoff。
+- 追加: `scripts/test_youtube_source_id_bounded_discovery.py`, `scripts/test_youtube_public_html_fallback.py`, `scripts/test_account_aware_semantic_clip_selection.py`。
+- YouTubeを唯一の動画入口に限定。X/TikTok/beautyのmedia activationは変更していない。`fetch_enabled=true`は増やしていない。
+- discoveryは承認済みsource IDを明示指定でき、`--start-position`でboundedな後続候補窓だけを検査できる。未指定sourceに広がらない。
+- `yt-dlp`のflat channel discoveryがhandle URLで空なら、cookieなし公開`/videos` HTMLから個別IDをbounded取得し、既存`yt-dlp` metadataで補完する。stream download、Sheets保存、Cloudinary、cut、投稿は行わない。
+- Night Scoutのclip候補は一般フックだけでなく夜職根拠語を含む字幕区間を優先する。根拠閾値は緩めていない。これは素材適合であり、投稿ペルソナとは別の判定である。
+- `src_ns_yt_cand_001`はホスト男性主体の直近候補だったためmetadata探索対象から外した。`src_ns_yt_cand_006`、`src_ns_yt_cand_008`、`src_ns_yt_cand_009`はmetadata-only candidate discovery用に`active=true`。全て`fetch_enabled=false`、download/cut/upload/video postのgateはfalseのまま。
+
+### 実証 / テスト結果
+
+- 実読取（保存なし）: `src_ns_yt_cand_006` と `src_ns_yt_cand_009` は公開HTML fallbackで各3個の個別YouTube URLを返した。`https://www.youtube.com/watch?v=q3BTG2FCpIw` は公開字幕472 chunkを取得できた。
+- 同動画は字幕根拠不足の2区間を除外し、夜職根拠を含む1区間だけを`WAITING_REVIEW` clip candidateとして残した。caption alignmentはまだPASSでないためdownload/cut/upload/postへ進めない。
+- PASS: `test_youtube_public_html_fallback.py`, `test_youtube_source_id_bounded_discovery.py`, `test_account_aware_semantic_clip_selection.py`, `test_semantic_clip_planner.py`, `test_media_growth_night_scout_account.py`, `test_media_growth_engine_generates_clip_candidates.py`, `test_media_growth_engine_does_not_download_in_dry_run.py`, `test_youtube_transcript_chunking.py`, `test_youtube_transcript_adapter_gate.py`, `test_transcript_pipeline_no_download_for_third_party.py`, `py_compile`, `git diff --check`。
+
+### 未完了事項 / 残WARN / 次AI
+
+- 未実行: source_videos/video_transcriptsのSheets apply、動画download、visual stream検証、cut、Cloudinary upload、media queue apply、Threads media post、metrics/PDCA live proof。
+- 次に触ってよい: YouTube candidateのcaption alignment改善とreview queue preview。alignment、permission/provenance、visual validationが全てPASSした個別動画だけを、env+confirm gateつきのdownload/cut/upload canaryへ進める。
+- 触らない方がよい: X/TikTok/beauty activation、cookie・ログイン状態・CAPTCHA回避、第三者reference-only素材、`.env`、`data/`、`output/`、実Threads投稿。

@@ -90,6 +90,7 @@ def plan_semantic_clips(
     min_seconds: float = 8,
     max_seconds: float = 45,
     overlap_tolerance_seconds: float = 2,
+    preferred_terms: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     cleaned = [
         {"start": float(row.get("start", 0)), "end": float(row.get("end", 0)), "text": str(row.get("text", "")).strip()}
@@ -110,7 +111,18 @@ def plan_semantic_clips(
             "anchor_index": 0,
         }]
 
-    ranked = sorted(range(len(cleaned)), key=lambda index: (-segment_signal_score(cleaned[index]), index))
+    def preference_score(index: int) -> int:
+        text = cleaned[index]["text"].casefold()
+        return sum(1 for term in preferred_terms if term.casefold() in text)
+
+    ranked = sorted(
+        range(len(cleaned)),
+        key=lambda index: (
+            -preference_score(index),
+            -segment_signal_score(cleaned[index]),
+            index,
+        ),
+    )
     accepted: list[dict[str, Any]] = []
     for anchor_index in ranked:
         candidate = _window_for_anchor(

@@ -126,7 +126,7 @@
         "manual_url"
       ],
       "candidate_status": "approved",
-      "active": true,
+      "active": false,
       "fetch_enabled": false,
       "allow_network_fetch": true,
       "allow_download": "gated",
@@ -2266,7 +2266,7 @@
         "manual_url"
       ],
       "candidate_status": "candidate",
-      "active": false,
+      "active": true,
       "fetch_enabled": false,
       "allow_network_fetch": true,
       "allow_download": "gated",
@@ -2510,7 +2510,7 @@
         "manual_url"
       ],
       "candidate_status": "candidate",
-      "active": false,
+      "active": true,
       "fetch_enabled": false,
       "allow_network_fetch": true,
       "allow_download": "gated",
@@ -2632,7 +2632,7 @@
         "manual_url"
       ],
       "candidate_status": "candidate",
-      "active": false,
+      "active": true,
       "fetch_enabled": false,
       "allow_network_fetch": true,
       "allow_download": "gated",
