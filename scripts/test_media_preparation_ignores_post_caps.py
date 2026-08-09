@@ -76,10 +76,10 @@ def main() -> int:
                 os.environ[name] = value
 
     checks = [
-        ("prepare plan remains actionable", prepare_plan["status"] == "PLAN_ONLY"),
+        ("prepare plan is safely gated before media activation", prepare_plan["status"] == "BLOCKED"),
         ("prepare plan ignores daily cap", "daily_post_cap_reached" not in prepare_plan["blocked_reasons"]),
         ("prepare plan ignores media cap", "media_daily_post_cap_reached" not in prepare_plan["blocked_reasons"]),
-        ("prepare plan can download", prepare_plan["would_download"] is True),
+        ("prepare plan cannot download before media activation", prepare_plan["would_download"] is False),
         ("normal posting still enforces daily cap", "daily_post_cap_reached" in post_plan["blocked_reasons"]),
         ("normal posting still enforces media cap", "media_daily_post_cap_reached" in post_plan["blocked_reasons"]),
     ]

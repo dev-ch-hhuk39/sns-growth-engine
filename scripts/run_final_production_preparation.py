@@ -75,11 +75,8 @@ def build_report(*, account_id: str, apply: bool, manual_json: list[str]) -> dic
     else:
         collection["threads"] = {"exit_code": 0, "result": {"status": "NO_ENABLED_THREADS_SOURCES"}}
     if x_ids:
-        if os.environ.get("X_READ_ONLY_BEARER_TOKEN"):
-            command = collect_base + ["--platform", "x", "--include-x", "--fetch-real"] + sum((["--source-id", item] for item in x_ids), [])
-            collection["x"] = _run(command)
-        else:
-            collection["x"] = {"exit_code": 0, "result": {"status": "BLOCKED_OPTIONAL", "reason": "X_READ_ONLY_BEARER_TOKEN missing; Threads/manual import continue", "source_ids": x_ids}}
+        command = collect_base + ["--platform", "x", "--include-x", "--fetch-real"] + sum((["--source-id", item] for item in x_ids), [])
+        collection["x"] = _run(command)
     for source_id, path in _manual_args(manual_json):
         source = next((item for item in sources if str(item.get("source_id", "")) == source_id), {})
         platform = str(source.get("source_platform") or "threads")

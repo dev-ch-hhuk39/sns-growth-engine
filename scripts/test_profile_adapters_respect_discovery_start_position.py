@@ -62,7 +62,9 @@ assert [item.external_post_id for item in threads_posts] == [
     "p4",
 ]
 
-assert all(item.media_count == 1 for item in threads_posts)
+# An OG image is a page preview, not evidence of post media. Do not invent a
+# direct-media child without an individual post payload that exposes it.
+assert all(item.media_count == 0 for item in threads_posts)
 
 
 tiktok_profile = " ".join(

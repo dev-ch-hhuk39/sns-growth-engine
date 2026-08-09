@@ -42,6 +42,7 @@ from media_growth_schemas import (  # noqa: E402
     extract_video_id,
 )
 from media_activation_source_suitability import (  # noqa: E402
+    ACCOUNT_EVIDENCE_TERMS,
     clip_source_suitability,
 )
 from public_post_quality import (  # noqa: E402
@@ -594,7 +595,13 @@ def _merge_transcript_rows(
     return merged
 
 
-def _clip_specs_from_transcript(video: dict[str, Any], transcript: dict[str, Any], config: dict[str, Any]) -> list[dict[str, Any]]:
+def _clip_specs_from_transcript(
+    video: dict[str, Any],
+    transcript: dict[str, Any],
+    config: dict[str, Any],
+    *,
+    account_id: str,
+) -> list[dict[str, Any]]:
     segments = _segments(transcript)
     if not segments:
         return []
@@ -607,6 +614,7 @@ def _clip_specs_from_transcript(video: dict[str, Any], transcript: dict[str, Any
         min_seconds=float(config.get("clip_duration_min_seconds", 8)),
         max_seconds=float(config.get("clip_duration_max_seconds", 45)),
         overlap_tolerance_seconds=float(config.get("clip_overlap_tolerance_seconds", 2)),
+        preferred_terms=ACCOUNT_EVIDENCE_TERMS.get(account_id, ()),
     )
 
 
@@ -765,7 +773,12 @@ def build_media_growth_plan(
             source_video["skip_reason"] = "duration_metadata_required_or_too_short"
             source_video["analysis_status"] = "SKIPPED"
             continue
-        clip_specs = _clip_specs_from_transcript(source_video, transcript, config)
+        clip_specs = _clip_specs_from_transcript(
+            source_video,
+            transcript,
+            config,
+            account_id=account_id,
+        )
         count = len(clip_specs)
         video_candidates = []
         for i, spec in enumerate(clip_specs, start=1):

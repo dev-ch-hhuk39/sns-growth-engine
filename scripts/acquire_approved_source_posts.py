@@ -32,7 +32,7 @@ from source_discovery_policy import (
     select_unique_candidates,
 )
 
-MEDIA_PLATFORMS = {"threads", "youtube", "tiktok"}
+MEDIA_PLATFORMS = {"threads", "youtube", "tiktok", "x"}
 BLOCKED_ACCOUNTS = {"beauty_account"}
 
 
@@ -53,6 +53,7 @@ def capability_for(platform: str) -> str:
         "threads": "threads.profile_posts",
         "tiktok": "tiktok.profile_posts",
         "youtube": "youtube.channel_videos",
+        "x": "x.profile_posts",
     }[platform]
 
 
@@ -71,7 +72,10 @@ def selected_sources(
             continue
         if platform_filter != "all" and platform != platform_filter:
             continue
-        if platform not in MEDIA_PLATFORMS or account in BLOCKED_ACCOUNTS or platform == "x":
+        if platform not in MEDIA_PLATFORMS or account in BLOCKED_ACCOUNTS:
+            continue
+        if platform == "x" and not truthy(source.get("x_read_only")):
+            blocked.append({"source_id": str(source.get("source_id", "")), "reason": "x_read_only_not_approved"})
             continue
         if not truthy(source.get("active")):
             continue

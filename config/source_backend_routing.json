@@ -4,23 +4,30 @@
   "routes": {
     "threads.profile_posts": {
       "primary": "threads_public_playwright",
-      "fallbacks": ["threads_public_http"],
+      "fallbacks": ["threads_public_screen", "threads_public_http"],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
     },
     "threads.post_detail": {
       "primary": "threads_public_playwright",
-      "fallbacks": ["threads_public_http"],
+      "fallbacks": ["threads_public_screen", "threads_public_http"],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
     },
     "tiktok.profile_posts": {
       "primary": "yt_dlp",
-      "fallbacks": ["tiktok_public_playwright"],
+      "fallbacks": ["tiktok_gallery_dl", "tiktok_public_playwright"],
       "shadow": [],
       "cooldown_seconds": 900
+    },
+    "x.profile_posts": {
+      "primary": "x_gallery_dl",
+      "fallbacks": [],
+      "shadow": [],
+      "cooldown_seconds": 900,
+      "circuit_failure_threshold": 3
     },
     "youtube.channel_videos": {
       "primary": "yt_dlp",
@@ -84,8 +91,11 @@
   "backend_roles": {
     "yt_dlp": "PRIMARY",
     "tiktok_public_playwright": "FALLBACK",
+    "tiktok_gallery_dl": "FALLBACK",
     "threads_public_playwright": "PRIMARY",
+    "threads_public_screen": "FALLBACK",
     "threads_public_http": "FALLBACK",
+    "x_gallery_dl": "PRIMARY",
     "youtube_transcript_api": "PRIMARY",
     "youtube_comment_downloader": "PRIMARY",
     "threads_public_comments": "PRIMARY",

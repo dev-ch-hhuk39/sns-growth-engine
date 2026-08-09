@@ -63,10 +63,11 @@ def adapter_status() -> dict[str, str]:
         "beautifulsoup4": "installed" if importlib.util.find_spec("bs4") else "not_installed",
         "lxml": "installed" if importlib.util.find_spec("lxml") else "not_installed",
         "requests": "installed" if importlib.util.find_spec("requests") else "not_installed",
-        "tweepy": "installed" if importlib.util.find_spec("tweepy") else "not_installed",
+        "gallery_dl": "installed" if shutil.which("gallery-dl") else "not_installed",
         "agent_reach": "installed" if shutil.which("agent-reach") else "optional_not_installed",
         "cli_anything": "installed" if shutil.which("cli-anything") else "optional_not_installed",
         "threads_public_og": "wired",
+        "threads_public_screen": "wired",
         "x_fetch": "bounded_read_only_with_explicit_include_x",
     }
 
@@ -144,44 +145,95 @@ def discover_threads_post_urls(account_url: str, *, limit: int) -> dict[str, Any
     return {"status": "DISCOVERED" if urls else "FALLBACK_REQUIRED", "urls": urls[:max(1, limit)], "reason": "" if urls else "browser_export_or_manual_json_required"}
 
 
+def fetch_threads_account_posts(src: dict[str, Any], *, limit: int) -> dict[str, Any]:
+    """Collect bounded public Threads posts through the shared adapter router.
+
+    The legacy collector previously used an HTTP regex independently from the
+    production acquisition router.  That meant the rendered-screen fallback
+    was never reached.  Returning normalized individual posts here keeps
+    source text and ordered media attached to the same source post.
+    """
+    try:
+        from acquisition.factory import build_router
+
+        routed = build_router().route("threads.profile_posts", src, limit=limit)
+        rows = [
+            {
+                "post_url": post.canonical_post_url,
+                "external_post_id": post.external_post_id,
+                "text": post.original_post_text,
+                "published_at": post.published_at,
+                "author_handle": post.author_handle,
+                "media_urls": [item.original_media_url for item in post.media_items],
+                "backend": routed.backend_name,
+            }
+            for post in routed.posts
+            if is_individual_post_url(post.canonical_post_url, "threads")
+        ]
+        if not rows:
+            raise RuntimeError("threads_router_returned_no_individual_posts")
+        return {
+            "status": "FETCHED",
+            "rows": rows[: max(1, limit)],
+            "reason": "",
+            "backend": routed.backend_name,
+            "fallback_used": routed.fallback_used,
+        }
+    except Exception:
+        return {
+            "status": "FALLBACK_REQUIRED",
+            "rows": [],
+            "reason": "browser_export_or_manual_json_required",
+            "backend": "",
+            "fallback_used": False,
+        }
+
+
 def plan_x_fetch_adapter(src: dict[str, Any], *, include_x: bool) -> dict[str, Any]:
     return {
         "source_id": src.get("source_id", ""),
         "platform": "x",
-        "adapter": "tweepy",
+        "adapter": "gallery-dl",
         "status": "BLOCKED" if not include_x else "READY_FOR_BOUNDED_READ_ONLY_FETCH",
-        "reason": "--include-x is required; real collection also requires the read-only bearer token",
-        "installed": importlib.util.find_spec("tweepy") is not None,
+        "reason": "--include-x is required; unavailable gallery-dl falls back to browser export/manual JSON",
+        "installed": shutil.which("gallery-dl") is not None,
     }
 
 
 def fetch_x_account_posts(src: dict[str, Any], *, limit: int) -> dict[str, Any]:
-    """Bounded read-only X v2 adapter; profile URLs are never persisted as posts."""
+    """Route X discovery through the shared acquisition router.
+
+    Keeping this legacy reference collector on the router prevents the direct
+    media and reference-text paths from drifting into separate X implementations.
+    The route has no scraping fallback: recovery remains browser export/manual
+    JSON when the bounded gallery-dl adapter is unavailable.
+    """
     if not is_true(src.get("x_read_only")):
         return {"status": "BLOCKED", "rows": [], "reason": "x_read_only_not_approved"}
-    token = os.environ.get("X_READ_ONLY_BEARER_TOKEN", "")
-    if not token or importlib.util.find_spec("tweepy") is None:
-        return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": "browser_export_or_manual_json_required"}
     try:
-        import tweepy
-        handle = str(src.get("source_handle", "")).lstrip("@")
-        client = tweepy.Client(bearer_token=token, wait_on_rate_limit=False)
-        user = client.get_user(username=handle)
-        if not user or not user.data:
-            return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": "x_user_not_found"}
-        response = client.get_users_tweets(user.data.id, max_results=max(5, min(limit, 20)), tweet_fields=["created_at", "attachments"], expansions=["attachments.media_keys"], media_fields=["type", "url", "preview_image_url"])
-        includes = getattr(response, "includes", None) or {}
-        media = {m.media_key: m for m in includes.get("media", [])}
-        rows = []
-        for tweet in response.data or []:
-            media_urls = []
-            for key in getattr(tweet, "attachments", {}).get("media_keys", []):
-                item = media.get(key); url = getattr(item, "url", "") or getattr(item, "preview_image_url", "")
-                if url: media_urls.append(url)
-            rows.append({"post_url": f"https://x.com/{handle}/status/{tweet.id}", "external_post_id": str(tweet.id), "text": tweet.text, "published_at": str(getattr(tweet, "created_at", "")), "media_urls": media_urls})
-        return {"status": "FETCHED", "rows": rows[:limit], "reason": ""}
+        from acquisition.factory import build_router
+
+        routed = build_router().route("x.profile_posts", src, limit=limit)
+        posts = routed.posts
+        rows = [
+            {
+                "post_url": post.canonical_post_url,
+                "external_post_id": post.external_post_id,
+                "text": post.original_post_text,
+                "published_at": post.published_at,
+                "media_urls": [item.original_media_url for item in post.media_items],
+            }
+            for post in posts
+        ]
+        return {
+            "status": "FETCHED",
+            "rows": rows[:limit],
+            "reason": "",
+            "backend": routed.backend_name,
+            "fallback_used": routed.fallback_used,
+        }
     except Exception as exc:
-        return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": f"x_api_{type(exc).__name__}"}
+        return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": "browser_export_or_manual_json_required"}
 
 
 def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: str, include_x: bool = False) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -424,12 +476,24 @@ def main() -> int:
                 skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": "x_individual_post_or_browser_export_required"})
             continue
         elif src_platform == "threads" and not is_individual_post_url(url, "threads"):
-            discovery = discover_threads_post_urls(url, limit=args.limit) if args.fetch_real else {"status": "PLAN_ONLY", "urls": [], "reason": "fetch_real_required"}
-            for post_url in discovery["urls"]:
-                fetched = fetch_threads_post(post_url)
-                rows.append(normalize_source({**src, "source_url": post_url}, fetched))
-                archive_payloads.append(fetched.get("raw", {}))
-            skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": discovery["reason"] or "account_discovery_only"})
+            outcome = (
+                fetch_threads_account_posts(src, limit=args.limit)
+                if args.fetch_real
+                else {"status": "PLAN_ONLY", "rows": [], "reason": "fetch_real_required", "backend": ""}
+            )
+            for item in outcome["rows"]:
+                fetched = {
+                    "ok": True,
+                    "text": item["text"],
+                    "author_handle": item["author_handle"],
+                    "published_at": item["published_at"],
+                    "media_urls": item["media_urls"],
+                    "error": "",
+                }
+                rows.append(normalize_source({**src, "source_url": item["post_url"]}, {**fetched, "external_post_id": item["external_post_id"]}))
+                archive_payloads.append(redact_raw({"post_url": item["post_url"], "backend": item.get("backend", "")}))
+            if outcome["status"] != "FETCHED":
+                skipped.append({"source_id": src.get("source_id", ""), "url": url, "reason": outcome["reason"]})
             continue
         else:
             fetched = fetch_threads_post(url) if args.fetch_real and src_platform == "threads" else {}

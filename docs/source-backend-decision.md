@@ -10,15 +10,27 @@ text, media URLs, or secrets.
 | Capability | PRIMARY | FALLBACK | Status |
 | --- | --- | --- | --- |
 | YouTube/TikTok profile metadata | `yt-dlp` | none | PRIMARY |
-| Threads public profile posts | own public Playwright adapter | own public HTTP adapter | PRIMARY/FALLBACK |
+| Threads public profile posts | own public Playwright adapter | rendered-screen Playwright, own public HTTP | PRIMARY/FALLBACK |
+| X approved profile posts | `gallery-dl` bounded JSON adapter | browser export / manual JSON import | PRIMARY/RECOVERY |
 | YouTube transcript | `youtube-transcript-api` | yt-dlp subtitles, local faster-whisper | PRIMARY/FALLBACK |
 | Trend signals | local `source_posts` aggregator | none | PRIMARY |
 | Agent-Reach/last30days | not a posting or media truth backend | optional analysis shadow only | ANALYSIS_ONLY |
 
-The Threads adapters use a fresh browser context, public HTML only, no stored
-cookies, no private GraphQL, no proxy rotation, no stealth/CAPTCHA bypass, and
-serial requests. A normal public-page failure opens a 15-minute circuit breaker
-and then permits the HTTP fallback.
+The Threads adapters use a fresh browser context, public HTML and visible public
+anchors only, no stored cookies, no private GraphQL, no proxy rotation, no
+stealth/CAPTCHA bypass, and serial requests.  The screen fallback performs at
+most two small profile scrolls and only accepts individual post URLs belonging
+to the configured handle. A normal public-page failure opens a 15-minute
+circuit breaker and then permits the next fallback.
+
+The X adapter is limited to registry rows with `x_read_only=true` and requests
+at most 20 recent posts per approved profile through `gallery-dl --dump-json`.
+It emits only `/status/<id>` posts with their original ordered media children;
+it never stores a profile URL as a post, downloads media, uses browser cookies,
+or enables X publishing. An extractor failure or unavailable local binary is a
+recoverable acquisition result: the operator may supply a bounded browser
+export or manual JSON containing individual post URLs. It is not reported as a
+successful live fetch.
 
 ## Repository audit
 
@@ -55,6 +67,10 @@ overwritten.
 - Threads: 5 posts/profile scan, one Chromium process, serial requests.
 - YouTube/TikTok: 10 posts/scan, bounded to 3 by production workflows.
 - No automatic TikTok profile expansion beyond bounded yt-dlp metadata.
+- `gallery-dl` is a bounded metadata-only discovery adapter for explicitly
+  approved X profiles. It never uses cookies or downloads. Any later media
+  resolver still requires a permission-approved individual source post and
+  cannot bypass source/media permission checks.
 - Mixed carousels require `ALLOW_THREADS_MIXED_CAROUSEL=true` and are false by
   default. Homogeneous carousels use the official Threads container route only
   when `ALLOW_THREADS_CAROUSEL=true` in the scoped apply step.

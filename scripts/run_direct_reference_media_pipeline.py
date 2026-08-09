@@ -1256,8 +1256,12 @@ def main() -> int:
     publish_mode = not args.prepare_only
     if args.apply and not args.confirm_direct_media:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires --confirm-direct-media"]}, ensure_ascii=False)); return 1
-    if args.apply and publish_mode and (not _true(os.environ.get("PUBLISH_ENABLED")) or not _true(os.environ.get("ALLOW_REAL_THREADS_POST")) or not _true(os.environ.get("ALLOW_MEDIA_POSTS")) or not _true(os.environ.get("ALLOW_REAL_THREADS_VIDEO_POST"))):
-        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires confirmation and all Threads media gates"]}, ensure_ascii=False)); return 1
+    # The dispatcher intentionally does not guess the selected media shape.
+    # `ThreadsPublisher` receives the resolved asset and enforces the extra
+    # VIDEO / CAROUSEL gates for that exact format. Requiring the video flag
+    # here used to make an approved image-only queue impossible to publish.
+    if args.apply and publish_mode and (not _true(os.environ.get("PUBLISH_ENABLED")) or not _true(os.environ.get("ALLOW_REAL_THREADS_POST")) or not _true(os.environ.get("ALLOW_MEDIA_POSTS"))):
+        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires confirmation and base Threads media gates"]}, ensure_ascii=False)); return 1
     if not args.slot_id and not args.manual_e2e_proof:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["--slot-id or --manual-e2e-proof is required"]}, ensure_ascii=False)); return 1
     if args.queue_id and not args.post_ready:

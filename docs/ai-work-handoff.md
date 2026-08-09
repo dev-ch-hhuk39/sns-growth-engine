@@ -6536,6 +6536,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 ### 未完了事項 / スケール方針 / 残WARN
 
+- 2026-08-09 の実取得検証: 許可済みsourceのbounded discoveryはNight Scout/Liver Manager各3件の個別動画候補を発見し、`/Users/hayatoa/Downloads/SNS-Growth-Engine-Review/` にJSON保存した。一方、Liver Manager TikTokの個別3件は `yt-dlp` のrehydration抽出失敗、`gallery-dl` の403、cookieなしPlaywrightのindividual URL抽出なしで、動画保存には至らなかった。投稿・Cloudinary・Sheets書込み・cutは未実行。cookie/stealth/CAPTCHA回避は使わない。
 - stabilization PRが通常マージされるまで、Threads投稿、Cloudinary upload、Sheets apply、scheduled activationは実行しない。
 - media scheduleはcanary完了後のactivationまでmanual-only。text scheduleは既存gateのまま変更しない。
 - 全回帰/full CIはこのPRの最終確認時に一度だけ実行する。PR gate後、mainでproduction orchestratorのcanary modeを使って新規4件を準備し、READY artifactとpreviewを提示して人間承認を待つ。
@@ -6565,3 +6566,129 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - その後のread-only inventoryで、旧sheet row順が新規queueより優先される不具合を発見。`build_live_canary_inventory.py`は、`content_type`を正として最新fresh queueから親・assetを辿るよう修正中。旧canaryを再利用せず、新規queue/assetをpreview対象に固定する。
 - follow-upでは、media/text候補のqueue ID、persona/final/internal-leak validator、publisher media typeをinventoryへ持ち上げ、全validatorが`PASS`でない候補を`READY_FOR_HUMAN_CANARY`にしない契約へ修正中。
 - Final Production Preparationは投稿なしで同じ`prepare_bounded_canary_publish.py --wave first_wave --dry-run`を実行し、4件のpublisher preflightをartifactへ保存する。Cloudinary/Sheets登録済みの4件以外を生成・READY化・投稿しない。
+## 2026-08-09 Codex Unified OSS Acquisition Router (In Progress)
+
+### 本システム / 今回の変更
+
+- 作業ブランチ: `repair/dual-account-clip-content-golden-v7-20260809`、開始HEAD: `2b83de8185926193325681b51e5ba0fe1e119de3`。
+- 収集の正規形は `NormalizedSourcePost` と順序付き `NormalizedMediaItem`。Threads/TikTok/YouTube/X のいずれでも、本文とメディアは同一の個別投稿親へだけ紐付ける。profile/channel URLを投稿として保存しない。
+- Xは公式API/tweepy前提を撤回し、既存OSSの `gallery-dl --dump-json` を使う bounded read-only adapterへ統一した。明示的に `x_read_only=true` のsourceだけ、最大20件の `/status/<id>` を発見する。cookie・download・X投稿は使用しない。失敗時は browser export/manual JSON に明示フォールバックする。
+- TikTok profile discoveryは `yt-dlp` primary → `gallery-dl` JSON fallback → cookieなしPlaywright public HTML fallback の順に統一した。いずれも最大20件の個別 `/video/<id>` の発見だけで、download/cut/upload/postは別のrights/confirm gateを通る。
+- X `gallery-dl` がexit 0でも個別 `/status/<id>` を返さない場合は成功扱いにせず、`browser_export_or_manual_json_required` として回復経路へ渡すよう修正した。
+- legacy reference collectorも同じ `AdapterRouter` のX routeを呼ぶため、reference textとdirect-media pathでX抽出実装が分岐しない。Xメディアは別途 `media_permissions` が承認済みになるまで direct mediaに進めない。
+- `gallery-dl` はX discoveryに接続済み。TikTokの provider chainに書かれている `gallery-dl` はまだAdapterRouter実装ではないため、接続済みとは扱わない。
+- `run_autonomous_loop.py` のslot未指定dry-runは `preview_only_unscheduled` と明示し、media slotが不足した際のtext fallbackとして扱わない。media slotは既存どおり `SKIPPED_NO_VALID_MEDIA` で止まる。
+- 投稿生成のstructure variant 1で、closingがすでに「最後…」から始まる場合に「最後に、最後…」となる不自然な重複を除去した。focused quality testで両accountの複数seedを確認済み。
+
+### 変更ファイル一覧 / テスト結果
+
+- 更新: `config/source_backend_routing.json`, `requirements.txt`, `src/acquisition/factory.py`, `src/acquisition/models.py`, `scripts/collect_source_posts.py`, `scripts/acquire_approved_source_posts.py`, `.github/workflows/account-acquisition.yml`, `docs/source-backend-decision.md`。
+- 追加: `src/acquisition/x_gallerydl.py`, `tests/test_x_gallerydl_adapter.py`。既存のclip/source provenance/router変更も未コミットで同一worktreeにあるため、意図を確認してから一緒にcommitする。
+- PASS: X adapter script (5/0)、X/router/provenance/clip pytest focused set (28 passed)、incremental acquisition policy、primary/fallback router、normalized source parent integrity、`py_compile`、Ruff syntax/import rules、`git diff --check`。
+
+### 未完了事項 / スケール方針 / 残WARN
+
+- 実fetch/download/cut/upload/transcription/postは未実行。`gallery-dl` の実ネットワーク成功はまだ本番証拠ではない。今は `--fetch-real` が明示された時だけ実行する。
+- 実media E2Eの残りは、account-level candidate selection（あるsourceが失敗したら同一accountの別の承認済みsourceを選ぶ）、TikTok `gallery-dl` の実adapter化、個別video discoveryからvisual stream検証・clip・Cloudinary・review queueまでのlive evidenceである。
+- source失敗時に別SNSへ進むのは「同一accountの承認済み候補を選び直す」処理で行う。別投稿の本文とメディアを混ぜるcross-post fallbackは不許可。
+- `config/autonomous_mode.json` と `config/media_growth_engine.json` は現時点でpublish/media activation系の値が有効になっている。これは「確認後に投稿」の現在要件と緊張関係があるため、外部操作の前に人間が運用モードを決定するまで変更・実行しない。
+
+### 次AIへの引き継ぎ
+
+- 次に触ってよい: shared acquisition router、TikTok/Threads adapter、account-level selection receipt、source/permission tests、`docs/source-backend-decision.md`。
+- 触らない方がよい: `.env`、`data/`、`output/`、credentials/cookies/storage state、X posting、beauty account、第三者reference-only mediaのdownload/cut/upload/repost、live scheduled publish。
+
+## 2026-08-09 Threads Primary Acquisition Repair
+
+### 本システムについて
+
+- 参照テキスト収集は、公開Threadsプロフィールから個別投稿を有界に発見し、本文をNight Scout/Liver Manager向け生成の参考にする経路である。これは直接メディア再投稿とは別であり、第三者素材は`media_permissions`の明示承認なしにdownload/upload/repostしない。
+- Night Scoutの`female_subject_required`は、第三者動画をclip候補に選べるかの素材ポリシーであって、Night Scout投稿の話者ペルソナではない。投稿ペルソナは`config/accounts/night_scout.json`（`僕`、夜職女性の意思決定を支援）、Liver Managerは`config/accounts/liver_manager.json`（`私`、女性マネージャー）を正本とする。
+
+### 変更ファイル一覧
+
+- 更新: `src/acquisition/threads_public.py`, `src/acquisition/factory.py`, `scripts/collect_source_posts.py`, `config/source_backend_routing.json`, `docs/source-backend-decision.md`, `docs/library-capability-matrix.json`, `docs/ai-work-handoff.md`。
+- 追加: `scripts/test_threads_public_screen_adapter.py`, `scripts/test_threads_public_og_image_not_media.py`, `scripts/test_collect_source_posts_threads_router.py`。
+- `threads_public_screen` を shared `AdapterRouter` のfallbackへ追加。cookieなしPlaywrightの公開画面から、最大2回の小さなscroll後に可視アンカーを読む。configured handleと一致する個別`/@handle/post/<id>`だけを受理する。
+- legacy `collect_source_posts.py` のThreads profile pathをshared Routerへ接続し、これまで未使用だったrendered-screen fallbackを実際の収集経路に通した。
+- `og:image`単独はプロフィール画像・共有カードである可能性があるためmedia childに昇格しない。個別投稿の構造化mediaだけを親`source_post_id`へ順序付きで保存候補にする。
+
+### 実証 / テスト結果
+
+- 2026-08-09、`--fetch-real --dry-run`でThreads公開プロフィールの実読取を実施。Night Scout `@chiishunin_s` とLiver Manager `@me01_lsm` から各2件、合計4件の個別`/post/` URLと本文を取得した。Sheets保存、投稿、download、Cloudinary upload、cutはいずれも未実行。
+- Night Scoutの先頭投稿では、構造化された同一親投稿のカルーセル5媒体を順序付きで検出した。OG画像だけの投稿はmedia childに保存しないこともfocused testで確認した。
+- PASS: `test_threads_public_screen_adapter.py`, `test_threads_public_og_image_not_media.py`, `test_collect_source_posts_threads_router.py`, `test_threads_public_adapter_media_parenting.py`, `test_collect_source_posts_manual_json_fallback.py`, `test_collect_source_posts_parent_bundle.py`, `test_collect_source_posts_no_media_download.py`, X/TikTok adapter pytest `6 passed`, `py_compile`, `git diff --check`。
+
+### 未完了事項 / スケール方針 / 残WARN
+
+- YouTubeはmetadata discoveryが実行済みだが、Night Scoutでclipに使う個別動画は`female_subject_required`、`no_male_scout_talking_head_for_clip`、店舗PR除外を動画単位で確認してから選ぶ。素材適合に失敗した候補はanalysis-onlyにし、account personaと混同しない。
+- Threadsのreference text取得は実証済み。direct mediaは、個別投稿の構造化mediaと対象アカウント用`media_permissions`がそろった場合だけ次段へ進める。本文と別投稿のmediaを混ぜない。
+- Xはbounded `gallery-dl`、TikTokは`yt-dlp -> gallery-dl -> public Playwright`の順で引き続き任意経路。失敗は`browser_export_or_manual_json_required`とし、mock成功を実取得成功に数えない。
+- 次に触ってよい: YouTube個別候補の素材適合判定、reference text生成、permission-approved direct-media runner。触らない方がよい: `.env`, `data/`, `output/`, credentials/cookies/storage state、X publish、beauty、第三者reference-only素材のdownload/cut/upload/repost、実Threads投稿。
+
+## 2026-08-09 Staged Production Routing
+
+### 現在の本番可否
+
+- **本番対象（text-only）**: ThreadsへのNight Scout/Liver Manager投稿生成・投稿前validator。公開Threads参照元の個別投稿取得は両アカウントで実読取済み。実publishは既存のThreads credentials、queue、quality gateを通る独立経路でのみ行う。
+- **準備対象（metadata-only）**: YouTube channel discovery。Night Scoutで実個別動画候補3件のmetadata discoveryを確認済み。ただしclip化対象は動画単位でsubject policyを満たす必要があり、未選別候補をdownload/cut/upload/postしない。
+- **段階実装対象**: TikTokは`yt-dlp -> gallery-dl -> public Playwright`の全fallbackを試したが、現在の個別候補ではrehydration抽出失敗・403・公開HTML候補なし。Xはbounded `gallery-dl`が個別`/status/`を返さず、browser export/manual JSONが必要。いずれも本番media経路へ進めない。
+
+### 今回の変更ファイル一覧 / 残WARN
+
+- 更新: `config/media_growth_engine.json`, `docs/ai-work-handoff.md`。
+- 更新: `scripts/check_autonomous_health.py`, `scripts/test_autonomous_health_media_canary_dispatch_only.py`。
+- 追加: `scripts/test_media_growth_staged_activation.py`。
+- `media_growth_engine` のproduction autopilot、download、transcript、clip、cut、Cloudinary upload、video post、media schedule、source-video Sheets applyをfalseへ戻した。metadata discoveryだけはtrueのまま。text-only Threads scheduleの設定は変更していない。
+- 再有効化の順序: (1) 個別YouTube/TikTok動画の取得成功、(2) Night Scout/Liver Manager素材適合、(3) permission/provenance、(4) visual stream検証、(5) review queue preview、(6) Cloudinary/upload/Threads media canary。Xはread-only sourceが取れてもX投稿は無効のまま。
+- 残WARN: `config/autonomous_mode.json` のtext-only scheduled publishは有効で、現在の投稿運用方針に従う。media configとの混同を避けるため、media workflowはconfig guardでBLOCK/SKIPされるのが正しい状態である。
+- `check_autonomous_health.py` はworkflowのcron接続とlive media activationを別表示に修正した。media workflowが存在しても`media_schedule_enabled=false`なら、`media_execution_mode=disabled_pending_acquisition_validation`と表示する。
+- health checkerの`dry_run_only`判定を現在のworkflow環境変数形式にも対応させ、正常なNight Scout/Liver Manager/aftercare workflowをWARN扱いするfalse positiveを除去した。
+
+### 次AIへの引き継ぎ
+
+- 次に触ってよい: YouTubeのvideo-level subject suitability、Threads reference-text generationとquality review、TikTok/Xのbounded fallback改善。
+- 触らない方がよい: 失敗媒体の自動media activation、cookie/stealth/CAPTCHA回避、第三者reference-only media、X/beauty publish、`.env`、`data/`、`output/`、secrets/cookies。
+
+## 2026-08-09 YouTube-First Clip Candidate Repair
+
+### 本システム / 変更ファイル
+
+- 作業ブランチ: `repair/dual-account-clip-content-golden-v7-20260809`。
+- 更新: `config/source_accounts/default_sources.json`, `scripts/discover_approved_source_videos.py`, `src/video/semantic_clip_planner.py`, `scripts/run_media_growth_engine.py`, `scripts/test_media_growth_engine_does_not_download_in_dry_run.py`, 本handoff。
+- 追加: `scripts/test_youtube_source_id_bounded_discovery.py`, `scripts/test_youtube_public_html_fallback.py`, `scripts/test_account_aware_semantic_clip_selection.py`。
+- YouTubeを唯一の動画入口に限定。X/TikTok/beautyのmedia activationは変更していない。`fetch_enabled=true`は増やしていない。
+- discoveryは承認済みsource IDを明示指定でき、`--start-position`でboundedな後続候補窓だけを検査できる。未指定sourceに広がらない。
+- `yt-dlp`のflat channel discoveryがhandle URLで空なら、cookieなし公開`/videos` HTMLから個別IDをbounded取得し、既存`yt-dlp` metadataで補完する。stream download、Sheets保存、Cloudinary、cut、投稿は行わない。
+- Night Scoutのclip候補は一般フックだけでなく夜職根拠語を含む字幕区間を優先する。根拠閾値は緩めていない。これは素材適合であり、投稿ペルソナとは別の判定である。
+- `src_ns_yt_cand_001`はホスト男性主体の直近候補だったためmetadata探索対象から外した。`src_ns_yt_cand_006`、`src_ns_yt_cand_008`、`src_ns_yt_cand_009`はmetadata-only candidate discovery用に`active=true`。全て`fetch_enabled=false`、download/cut/upload/video postのgateはfalseのまま。
+
+### 実証 / テスト結果
+
+- 実読取（保存なし）: `src_ns_yt_cand_006` と `src_ns_yt_cand_009` は公開HTML fallbackで各3個の個別YouTube URLを返した。`https://www.youtube.com/watch?v=q3BTG2FCpIw` は公開字幕472 chunkを取得できた。
+- 同動画は字幕根拠不足の2区間を除外し、夜職根拠を含む1区間だけを`WAITING_REVIEW` clip candidateとして残した。caption alignmentはまだPASSでないためdownload/cut/upload/postへ進めない。
+- PASS: `test_youtube_public_html_fallback.py`, `test_youtube_source_id_bounded_discovery.py`, `test_account_aware_semantic_clip_selection.py`, `test_semantic_clip_planner.py`, `test_media_growth_night_scout_account.py`, `test_media_growth_engine_generates_clip_candidates.py`, `test_media_growth_engine_does_not_download_in_dry_run.py`, `test_youtube_transcript_chunking.py`, `test_youtube_transcript_adapter_gate.py`, `test_transcript_pipeline_no_download_for_third_party.py`, `py_compile`, `git diff --check`。
+
+### 未完了事項 / 残WARN / 次AI
+
+- 未実行: source_videos/video_transcriptsのSheets apply、動画download、visual stream検証、cut、Cloudinary upload、media queue apply、Threads media post、metrics/PDCA live proof。
+- 次に触ってよい: YouTube candidateのcaption alignment改善とreview queue preview。alignment、permission/provenance、visual validationが全てPASSした個別動画だけを、env+confirm gateつきのdownload/cut/upload canaryへ進める。
+- 触らない方がよい: X/TikTok/beauty activation、cookie・ログイン状態・CAPTCHA回避、第三者reference-only素材、`.env`、`data/`、`output/`、実Threads投稿。
+
+## 2026-08-09 Threads Media Format Gate Repair
+
+- 更新: `scripts/run_direct_reference_media_pipeline.py`。追加: `scripts/test_direct_media_dispatcher_defers_format_gate.py`。
+- direct-media dispatcherの共通gateは`PUBLISH_ENABLED`、`ALLOW_REAL_THREADS_POST`、`ALLOW_MEDIA_POSTS`だけにした。旧来の動画gate一律要求を除去し、実際の形式に応じた`ALLOW_REAL_THREADS_VIDEO_POST`、`ALLOW_THREADS_CAROUSEL`、mixed carousel gateは`ThreadsPublisher`で判定する。これにより画像/カルーセルを動画として誤ってBLOCKしない。
+- PASS: direct dispatcher focused test、manual E2E safety、media-to-text fallback禁止、media slot fallback禁止、Threads video gate、media validator、`py_compile`、`git diff --check`。
+- 未実行: 実Cloudinary upload、Sheets queue保存、Threads image/carousel/video post。いずれも明示gateとreview-ready mediaが必要。
+
+## 2026-08-09 CI Contract Alignment
+
+- 作業ブランチ: `repair/dual-account-clip-content-golden-v7-20260809`。対象PR: #162。
+- 更新: `scripts/auto_approve_queue.py` と既存media/adapter contract tests。本番media gateの設定は変更していない。
+- `final_public_post_validator`が高品質と判定した読者向けtext-only候補を、旧来の簡易quality heuristicだけで誤って`REJECTED`にしないよう修正した。内部語、リスク、自然さ、読者価値、アカウント適合、重複、media制約の全gateは従来どおり必須である。
+- CIで失敗していた15件は、media discovery/download/cut/upload/video postが段階的にfalseである現設定と、過去の"自動ON"前提のテストの不整合だった。テストを「disabledなら外部操作せずBLOCK/WAITING_REVIEW」と確認する内容へ更新した。ThreadsのOG画像は個別投稿mediaの証拠でないため、media childを0件とする契約も明文化した。
+- `config/production_autopilot.json`にも残っていたmedia public/discovery/clip apply有効の誤表記をfalseへ修正し、実際のmedia gateと一致させた。text-onlyのautopilot設定は変更していない。
+- focused PASS: auto-ready fallback、media discovery apply guard、media growth staging、transcript grounding、production media plan、profile discovery position、workflow media gates、`py_compile`、`git diff --check`。
+- 未完了 / 残WARN: 実Cloudinary upload、media queue Sheets apply、Threads image/carousel/video/clip投稿、live metrics回収は未実証。text-onlyの本番設定と、未検証mediaの安全停止を混同しないこと。
+- 次に触ってよい: PR #162のCI成功確認と通常マージ後、review-readyな権利・alignment済みmedia candidateの一件ずつのcanary準備。触らない方がよい: media gateの一括ON、X/beauty publish、第三者reference-only素材、`.env`、`data/`、`output/`、secrets/cookies。

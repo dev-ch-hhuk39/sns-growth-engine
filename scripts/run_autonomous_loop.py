@@ -471,7 +471,14 @@ def build_autonomous_plan(
     plan_result["account_fit_check"] = preview_validation["account_fit_check"]["status"]
     plan_result["final_validator_result"] = preview_validation["status"]
     plan_result["would_post"] = False
-    plan_result["content_slot"] = content_slot or {"slot_id": slot_id or "unspecified", "post_type": "text_only_fallback"}
+    # A manual/dry-run preview is not a media-slot fallback.  Keep it visibly
+    # unscheduled and original-text-only so it can never be mistaken for a
+    # substitute publication of an unavailable media slot.
+    plan_result["content_slot"] = content_slot or {
+        "slot_id": slot_id or "preview_only_unscheduled",
+        "post_type": "original_text",
+        "preview_only": True,
+    }
     return plan_result
 
 

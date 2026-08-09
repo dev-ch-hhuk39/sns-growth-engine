@@ -20,7 +20,7 @@ def main() -> int:
     safe_growth = build_media_growth_plan(
         "night_scout",
         existing_source_videos=[{
-            "source_video_id": "sv_ns_safe", "source_id": "src_ns_yt_cand_001",
+            "source_video_id": "sv_ns_safe", "source_id": "src_ns_yt_cand_006",
             "account_id": "night_scout", "platform": "youtube",
             "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk",
             "title": "キャバ嬢の働き方", "description_preview": "女の子が店選びを考える動画",

@@ -12,8 +12,14 @@ from .enrichment import (
     YouTubeTranscriptProvider,
     YtDlpPostDetailProvider,
 )
-from .threads_public import ThreadsPublicHttpAdapter, ThreadsPublicProfileAdapter
+from .threads_public import (
+    ThreadsPublicHttpAdapter,
+    ThreadsPublicProfileAdapter,
+    ThreadsPublicScreenAdapter,
+)
 from .tiktok_public import TikTokPublicProfileAdapter
+from .tiktok_gallerydl import TikTokGalleryDlProfileAdapter
+from .x_gallerydl import XGalleryDlProfileAdapter
 from .ytdlp import YtDlpProfilePostAdapter
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,8 +34,11 @@ def build_router() -> AdapterRouter:
     adapters = {
         "yt_dlp": YtDlpProfilePostAdapter(),
         "tiktok_public_playwright": TikTokPublicProfileAdapter(),
+        "tiktok_gallery_dl": TikTokGalleryDlProfileAdapter(),
         "threads_public_playwright": ThreadsPublicProfileAdapter(),
+        "threads_public_screen": ThreadsPublicScreenAdapter(),
         "threads_public_http": ThreadsPublicHttpAdapter(),
+        "x_gallery_dl": XGalleryDlProfileAdapter(),
     }
     routes = {
         capability: BackendRoute(

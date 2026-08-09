@@ -96,12 +96,12 @@ finally:
 
 checks = [
     (
-        "not blocked when confirmed " "and real discovery requested",
-        plan["status"] != "BLOCKED",
+        "apply remains blocked while discovery persistence is disabled",
+        "source_video_discovery_apply_disabled" in plan["blocked_reasons"],
     ),
     (
-        "apply save planned",
-        (plan["would_save_source_videos"] is True),
+        "apply save is not planned while disabled",
+        (plan["would_save_source_videos"] is False),
     ),
     (
         "new videos available",

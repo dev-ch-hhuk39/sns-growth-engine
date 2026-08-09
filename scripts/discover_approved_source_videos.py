@@ -14,6 +14,7 @@ import sys
 from itertools import islice
 from pathlib import Path
 from typing import Any
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -603,6 +604,101 @@ def _bounded_public_comments(
     return []
 
 
+YOUTUBE_PUBLIC_VIDEO_ID_RE = re.compile(r'"videoId":"([A-Za-z0-9_-]{11})"')
+
+
+def youtube_public_video_ids(
+    html: str,
+    *,
+    limit: int,
+    start_position: int = 1,
+) -> list[str]:
+    """Return unique IDs from a public YouTube channel page within its cap."""
+    ids: list[str] = []
+    seen: set[str] = set()
+    start = max(1, start_position)
+    for video_id in YOUTUBE_PUBLIC_VIDEO_ID_RE.findall(html):
+        if video_id in seen:
+            continue
+        seen.add(video_id)
+        ids.append(video_id)
+        if len(ids) >= start - 1 + max(1, limit):
+            break
+    return ids[start - 1:]
+
+
+def discover_youtube_public_html(
+    source: dict[str, Any],
+    config: dict[str, Any],
+    scan_plan: dict[str, Any],
+) -> tuple[list[dict[str, Any]], str]:
+    """Bounded unauthenticated fallback when flat channel extraction is empty."""
+    source_url = str(source.get("source_url", "")).rstrip("/")
+    if not source_url:
+        return [], "youtube_public_html_source_url_missing"
+    limit = max(1, int(scan_plan.get("scan_limit", config.get("max_videos_per_source_scan", 12))))
+    try:
+        request = Request(
+            f"{source_url}/videos",
+            headers={"User-Agent": "Mozilla/5.0 (compatible; SNSGrowthEngine/1.0)"},
+        )
+        with urlopen(request, timeout=20) as response:  # nosec B310: approved public source only
+            html = response.read(2_000_000).decode("utf-8", errors="replace")
+    except Exception as exc:
+        return [], f"youtube_public_html_failed:{type(exc).__name__}"
+    # The page scan may inspect a bounded range, but detail enrichment is
+    # capped to the number this run can actually admit.
+    detail_limit = min(
+        limit,
+        max(1, int(scan_plan.get("per_source_new_limit", config.get("max_new_videos_per_source_per_run", 3)))),
+    )
+    video_ids = youtube_public_video_ids(
+        html,
+        limit=detail_limit,
+        start_position=int(scan_plan.get("start_position", 1)),
+    )
+    if not video_ids:
+        return [], "youtube_public_html_no_individual_videos"
+    if importlib.util.find_spec("yt_dlp") is None:
+        return [], "yt_dlp_not_installed"
+    import yt_dlp  # type: ignore[import]
+
+    rows: list[dict[str, Any]] = []
+    for position, video_id in enumerate(video_ids, start=1):
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        try:
+            with yt_dlp.YoutubeDL(metadata_options("youtube", {
+                "skip_download": True,
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+                "ignoreerrors": True,
+                "socket_timeout": 20,
+            })) as ydl:
+                entry = ydl.extract_info(video_url, download=False) or {}
+        except Exception:
+            entry = {}
+        row = build_source_video(
+            source,
+            index=position,
+            video_url=video_url,
+            title=str(entry.get("title") or ""),
+            duration_seconds=entry.get("duration") or 0,
+            description=str(entry.get("description") or ""),
+            discovery_status="DISCOVERED",
+        )
+        row["source_position"] = position
+        row["discovery_mode"] = str(scan_plan.get("mode", "initial"))
+        row["collection_backend"] = "youtube_public_html_then_ytdlp_metadata"
+        row["author_handle"] = str(entry.get("uploader_id") or entry.get("channel_id") or source.get("source_handle") or "")
+        row["published_at"] = str(entry.get("upload_date") or entry.get("timestamp") or "")
+        row["view_count"] = entry.get("view_count") or ""
+        row["like_count"] = entry.get("like_count") or ""
+        row["comment_count"] = entry.get("comment_count") or ""
+        rows.append(row)
+    return rows, "YOUTUBE_PUBLIC_HTML_FALLBACK"
+
+
 def discover_source_videos_real(
     source: dict[str, Any],
     config: dict[str, Any],
@@ -688,12 +784,16 @@ def discover_source_videos_real(
                 download=False,
             )
     except Exception as exc:
+        if platform == "youtube":
+            return discover_youtube_public_html(source, config, scan_plan)
         return (
             [],
             f"{type(exc).__name__}: " "discovery_failed",
         )
 
     if not info:
+        if platform == "youtube":
+            return discover_youtube_public_html(source, config, scan_plan)
         return [], "metadata_unavailable"
 
     entries = info.get("entries") if isinstance(info, dict) else None
@@ -799,10 +899,9 @@ def discover_source_videos_real(
 
         rows.append(row)
 
-    return (
-        rows,
-        ("REAL_DISCOVERY" if rows else "NO_INDIVIDUAL_VIDEOS"),
-    )
+    if not rows and platform == "youtube":
+        return discover_youtube_public_html(source, config, scan_plan)
+    return rows, "REAL_DISCOVERY" if rows else "NO_INDIVIDUAL_VIDEOS"
 
 
 def _source_discovery_status(source: dict[str, Any]) -> str:
@@ -822,6 +921,8 @@ def build_discovery_plan(
     existing_source_videos: list[dict[str, Any]] | None = None,
     discovery_state_rows: list[dict[str, Any]] | None = None,
     fetch_real: bool = False,
+    source_ids: list[str] | None = None,
+    start_position: int | None = None,
 ) -> dict[str, Any]:
     config = load_config()
 
@@ -840,6 +941,16 @@ def build_discovery_plan(
         ),
         existing,
     )
+
+    # Operators may validate one approved channel at a time before enabling a
+    # broader bounded scan. Unknown IDs intentionally select nothing rather
+    # than widening the operation.
+    requested_source_ids = {str(source_id) for source_id in (source_ids or []) if str(source_id)}
+    if requested_source_ids:
+        selected_sources = [
+            source for source in selected_sources
+            if str(source.get("source_id", "")) in requested_source_ids
+        ]
 
     blocked: list[str] = []
 
@@ -916,6 +1027,12 @@ def build_discovery_plan(
             state_rows=state_rows,
             config=config,
         )
+        if start_position is not None:
+            scan_plan = {
+                **scan_plan,
+                "mode": "operator_bounded_window",
+                "start_position": max(1, int(start_position)),
+            }
 
         discovery_status = _source_discovery_status(source)
 
@@ -1137,6 +1254,8 @@ def build_discovery_plan(
             }
             for source in selected_sources
         ],
+        "requested_source_ids": sorted(requested_source_ids),
+        "requested_start_position": start_position,
         "discovery_enabled": bool(config.get("source_video_discovery_enabled")),
         "source_video_discovery_apply_enabled": (
             bool(config.get("source_video_discovery_apply_enabled"))
@@ -1256,6 +1375,20 @@ def main() -> int:
         help=("bounded metadata discovery; " "never downloads media"),
     )
 
+    parser.add_argument(
+        "--source-id",
+        action="append",
+        default=[],
+        help=("limit bounded discovery to an approved source ID; repeatable"),
+    )
+
+    parser.add_argument(
+        "--start-position",
+        type=int,
+        default=None,
+        help=("start an approved source scan at this one-based position"),
+    )
+
     args = parser.parse_args()
 
     client = None
@@ -1279,6 +1412,8 @@ def main() -> int:
         existing_source_videos=existing,
         discovery_state_rows=state_rows,
         fetch_real=args.fetch_real,
+        source_ids=args.source_id,
+        start_position=args.start_position,
     )
 
     if (

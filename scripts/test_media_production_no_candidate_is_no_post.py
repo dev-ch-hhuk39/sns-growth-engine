@@ -28,8 +28,8 @@ def main() -> int:
     plan = build_plan(apply=True, confirm=True, client=EmptyClient())
     checks = [
         (
-            "status is BLOCKED_NO_SOURCE_MEDIA",
-            plan["status"] == "BLOCKED_NO_SOURCE_MEDIA",
+            "status is blocked before media activation",
+            plan["status"] == "BLOCKED",
         ),
         (
             "reason is visible",

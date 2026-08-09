@@ -27,7 +27,7 @@ def canonical_url(url: str) -> str:
     pairs = parse_qsl(parsed.query, keep_blank_values=False)
     if "youtube" in host and path == "/watch":
         pairs = [(key, value) for key, value in pairs if key == "v" and value]
-    elif "threads" in host or "tiktok" in host:
+    elif "threads" in host or "tiktok" in host or host == "x.com" or host.endswith(".x.com") or "twitter.com" in host:
         pairs = []
     return urlunsplit((parsed.scheme or "https", host, path, urlencode(pairs), ""))
 
@@ -40,6 +40,7 @@ def external_post_id(url: str, fallback: str = "") -> str:
         r"/video/(\d+)",
         r"[?&]v=([A-Za-z0-9_-]{6,})",
         r"/shorts/([A-Za-z0-9_-]{6,})",
+        r"/status/(\d+)",
     )
     for pattern in patterns:
         match = re.search(pattern, normalized)
@@ -233,7 +234,7 @@ def validate_source_post(post: NormalizedSourcePost) -> list[str]:
     errors: list[str] = []
     if not post.source_post_id or not post.source_id or not post.target_account_id:
         errors.append("missing_identity")
-    if post.platform not in {"threads", "tiktok", "youtube"}:
+    if post.platform not in {"threads", "tiktok", "youtube", "x"}:
         errors.append("unsupported_platform")
     if not post.canonical_post_url.startswith("https://"):
         errors.append("canonical_post_url_required")
