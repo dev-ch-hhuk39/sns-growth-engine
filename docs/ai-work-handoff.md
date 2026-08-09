@@ -6536,6 +6536,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 ### 未完了事項 / スケール方針 / 残WARN
 
+- 2026-08-09 の実取得検証: 許可済みsourceのbounded discoveryはNight Scout/Liver Manager各3件の個別動画候補を発見し、`/Users/hayatoa/Downloads/SNS-Growth-Engine-Review/` にJSON保存した。一方、Liver Manager TikTokの個別3件は `yt-dlp` のrehydration抽出失敗、`gallery-dl` の403、cookieなしPlaywrightのindividual URL抽出なしで、動画保存には至らなかった。投稿・Cloudinary・Sheets書込み・cutは未実行。cookie/stealth/CAPTCHA回避は使わない。
 - stabilization PRが通常マージされるまで、Threads投稿、Cloudinary upload、Sheets apply、scheduled activationは実行しない。
 - media scheduleはcanary完了後のactivationまでmanual-only。text scheduleは既存gateのまま変更しない。
 - 全回帰/full CIはこのPRの最終確認時に一度だけ実行する。PR gate後、mainでproduction orchestratorのcanary modeを使って新規4件を準備し、READY artifactとpreviewを提示して人間承認を待つ。
