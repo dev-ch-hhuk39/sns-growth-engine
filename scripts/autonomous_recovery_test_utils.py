@@ -863,11 +863,11 @@ def test_pdca_pending_after_post() -> None:
 def test_media_growth_roadmap_off_by_default() -> None:
     media = media_config()
     cfg = config()
-    assert media["source_video_discovery_apply_enabled"] is True
-    assert media["download_enabled"] is True
-    assert media["cut_enabled"] is True
-    assert media["upload_enabled"] is True
-    assert media["video_post_enabled"] is True
+    assert media["source_video_discovery_apply_enabled"] is False
+    assert media["download_enabled"] is False
+    assert media["cut_enabled"] is False
+    assert media["upload_enabled"] is False
+    assert media["video_post_enabled"] is False
     assert media["require_permission_evidence"] is True
     # Text-only autonomous runner remains unable to opt into media. Media uses
     # its own account-specific workflows and explicit environment gates.
@@ -934,7 +934,7 @@ def test_media_growth_does_not_break_autonomous_text_posting() -> None:
     media = media_config()
     assert cfg["auto_post_enabled"] is True
     assert cfg["allow_media_posts"] is False
-    assert media["video_post_enabled"] is True
+    assert media["video_post_enabled"] is False
     for name in ("autonomous-growth-loop-night-scout.yml", "autonomous-growth-loop-liver-manager.yml"):
         workflow = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
         assert 'ALLOW_VIDEO_DOWNLOAD: "false"' in workflow
@@ -944,7 +944,7 @@ def test_media_growth_does_not_break_autonomous_text_posting() -> None:
 
 def test_source_video_discovery_apply_disabled_by_default() -> None:
     media = media_config()
-    assert media["source_video_discovery_apply_enabled"] is True
+    assert media["source_video_discovery_apply_enabled"] is False
     assert media["max_total_new_videos_per_run"] <= 20
 
 
@@ -957,10 +957,10 @@ def test_download_cut_upload_video_post_still_gated() -> None:
     # The production feature exists, but no generic/autonomous process receives
     # these capabilities. Dedicated media workflows scope every true gate to a
     # confirmed step and keep workflow-level defaults false.
-    assert media["download_enabled"] is True
-    assert media["cut_enabled"] is True
-    assert media["upload_enabled"] is True
-    assert media["video_post_enabled"] is True
+    assert media["download_enabled"] is False
+    assert media["cut_enabled"] is False
+    assert media["upload_enabled"] is False
+    assert media["video_post_enabled"] is False
     for name in (
         "media-growth-production.yml",
         "media-growth-production-night-scout.yml",

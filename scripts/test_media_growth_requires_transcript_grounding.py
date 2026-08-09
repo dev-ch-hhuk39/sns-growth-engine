@@ -74,7 +74,7 @@ checks = [
     ("transcript creates clips", with_transcript["clip_candidate_count"] > 0),
     ("clip is transcript grounded", first.get("transcript_grounded") is True),
     ("clip has transcript id", first.get("transcript_id") == transcript["transcript_id"]),
-    ("clip auto approved only when grounded", first.get("clip_status") == "READY"),
+    ("grounded clip remains review-only before media activation", first.get("clip_status") == "WAITING_REVIEW"),
     ("off-topic transcript creates no clips", off_topic["clip_candidate_count"] == 0),
     ("off-topic rejection is auditable", off_topic["rejected_clip_candidate_count"] > 0),
 ]

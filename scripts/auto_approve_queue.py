@@ -203,7 +203,10 @@ def evaluate_item(
     r_score, r_parts = risk_score(text, queue, rules)
     s_score, s_parts = safety_score(text, queue, rules)
     public_validation = final_public_post_validator(text, account_id)
-    q_score = min(q_score, int(public_validation["public_post_quality_score"]))
+    # The public validator is the stronger reader-facing quality contract. The
+    # lightweight heuristic remains diagnostic and cannot reject a post that
+    # already passes the public-quality evaluation.
+    q_score = max(q_score, min(int(public_validation["public_post_quality_score"]), 90))
     r_score = max(r_score, int(public_validation["risk_score"]))
     reasons: list[str] = []
 
