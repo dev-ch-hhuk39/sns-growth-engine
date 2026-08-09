@@ -278,6 +278,20 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         # Final canaries are explicitly named so an activation gate can prove
         # all twelve distinct formats without inferring from free-form notes.
         "canary_id",
+        # Explicit human decision imported from the publication review tab.
+        "human_review_decision", "human_reviewed_at", "human_review_note",
+    ],
+    # Human-facing review board. queue remains the operational source of truth;
+    # this tab mirrors safe previews and preserves operator decisions.
+    "publication_review": [
+        "review_id", "queue_id", "account_id", "platform", "post_type",
+        "queue_status", "review_status", "public_post_text",
+        "media_asset_id", "media_preview_url", "media_type", "source_url",
+        "primary_topic", "validator_status", "internal_leak_status",
+        "account_fit_status", "topic_coherence_status", "batch_diversity_status",
+        "media_validator_status", "created_at", "updated_at",
+        "review_decision", "reviewer_note", "decision_applied_at",
+        "decision_result", "last_sync_at",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -756,6 +770,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "learning_rules":                 "学習ルール",
     "prompt_templates":               "プロンプト管理",
     "queue":                          "投稿キュー",
+    "publication_review":             "投稿レビュー",
     "logs":                           "実行ログ",
     "media_assets":                   "メディア資産",
     "reference_post_scores":          "参考投稿スコア",
