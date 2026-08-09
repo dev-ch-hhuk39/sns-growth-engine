@@ -6674,3 +6674,10 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 未実行: source_videos/video_transcriptsのSheets apply、動画download、visual stream検証、cut、Cloudinary upload、media queue apply、Threads media post、metrics/PDCA live proof。
 - 次に触ってよい: YouTube candidateのcaption alignment改善とreview queue preview。alignment、permission/provenance、visual validationが全てPASSした個別動画だけを、env+confirm gateつきのdownload/cut/upload canaryへ進める。
 - 触らない方がよい: X/TikTok/beauty activation、cookie・ログイン状態・CAPTCHA回避、第三者reference-only素材、`.env`、`data/`、`output/`、実Threads投稿。
+
+## 2026-08-09 Threads Media Format Gate Repair
+
+- 更新: `scripts/run_direct_reference_media_pipeline.py`。追加: `scripts/test_direct_media_dispatcher_defers_format_gate.py`。
+- direct-media dispatcherの共通gateは`PUBLISH_ENABLED`、`ALLOW_REAL_THREADS_POST`、`ALLOW_MEDIA_POSTS`だけにした。旧来の動画gate一律要求を除去し、実際の形式に応じた`ALLOW_REAL_THREADS_VIDEO_POST`、`ALLOW_THREADS_CAROUSEL`、mixed carousel gateは`ThreadsPublisher`で判定する。これにより画像/カルーセルを動画として誤ってBLOCKしない。
+- PASS: direct dispatcher focused test、manual E2E safety、media-to-text fallback禁止、media slot fallback禁止、Threads video gate、media validator、`py_compile`、`git diff --check`。
+- 未実行: 実Cloudinary upload、Sheets queue保存、Threads image/carousel/video post。いずれも明示gateとreview-ready mediaが必要。
