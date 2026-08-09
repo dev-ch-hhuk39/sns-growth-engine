@@ -18,7 +18,7 @@
     },
     "tiktok.profile_posts": {
       "primary": "yt_dlp",
-      "fallbacks": ["tiktok_public_playwright"],
+      "fallbacks": ["tiktok_gallery_dl", "tiktok_public_playwright"],
       "shadow": [],
       "cooldown_seconds": 900
     },
@@ -91,6 +91,7 @@
   "backend_roles": {
     "yt_dlp": "PRIMARY",
     "tiktok_public_playwright": "FALLBACK",
+    "tiktok_gallery_dl": "FALLBACK",
     "threads_public_playwright": "PRIMARY",
     "threads_public_http": "FALLBACK",
     "x_gallery_dl": "PRIMARY",

@@ -41,7 +41,7 @@ routing = json.loads((ROOT / "config/source_backend_routing.json").read_text(enc
 urls = extract_profile_video_urls(html, source["source_url"], limit=50)
 
 checks = {
-    "configured fallback": routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_public_playwright"],
+    "configured fallback": routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_gallery_dl", "tiktok_public_playwright"],
     "fallback selected": result.backend_name == "tiktok_public_playwright" and result.fallback_used,
     "bounded limit": len(result.posts) == MAX_PUBLIC_PROFILE_POSTS == len(urls),
     "same profile only": all("@approved.creator/video/" in post.canonical_post_url for post in result.posts),
