@@ -6625,3 +6625,27 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Threadsのreference text取得は実証済み。direct mediaは、個別投稿の構造化mediaと対象アカウント用`media_permissions`がそろった場合だけ次段へ進める。本文と別投稿のmediaを混ぜない。
 - Xはbounded `gallery-dl`、TikTokは`yt-dlp -> gallery-dl -> public Playwright`の順で引き続き任意経路。失敗は`browser_export_or_manual_json_required`とし、mock成功を実取得成功に数えない。
 - 次に触ってよい: YouTube個別候補の素材適合判定、reference text生成、permission-approved direct-media runner。触らない方がよい: `.env`, `data/`, `output/`, credentials/cookies/storage state、X publish、beauty、第三者reference-only素材のdownload/cut/upload/repost、実Threads投稿。
+
+## 2026-08-09 Staged Production Routing
+
+### 現在の本番可否
+
+- **本番対象（text-only）**: ThreadsへのNight Scout/Liver Manager投稿生成・投稿前validator。公開Threads参照元の個別投稿取得は両アカウントで実読取済み。実publishは既存のThreads credentials、queue、quality gateを通る独立経路でのみ行う。
+- **準備対象（metadata-only）**: YouTube channel discovery。Night Scoutで実個別動画候補3件のmetadata discoveryを確認済み。ただしclip化対象は動画単位でsubject policyを満たす必要があり、未選別候補をdownload/cut/upload/postしない。
+- **段階実装対象**: TikTokは`yt-dlp -> gallery-dl -> public Playwright`の全fallbackを試したが、現在の個別候補ではrehydration抽出失敗・403・公開HTML候補なし。Xはbounded `gallery-dl`が個別`/status/`を返さず、browser export/manual JSONが必要。いずれも本番media経路へ進めない。
+
+### 今回の変更ファイル一覧 / 残WARN
+
+- 更新: `config/media_growth_engine.json`, `docs/ai-work-handoff.md`。
+- 更新: `scripts/check_autonomous_health.py`, `scripts/test_autonomous_health_media_canary_dispatch_only.py`。
+- 追加: `scripts/test_media_growth_staged_activation.py`。
+- `media_growth_engine` のproduction autopilot、download、transcript、clip、cut、Cloudinary upload、video post、media schedule、source-video Sheets applyをfalseへ戻した。metadata discoveryだけはtrueのまま。text-only Threads scheduleの設定は変更していない。
+- 再有効化の順序: (1) 個別YouTube/TikTok動画の取得成功、(2) Night Scout/Liver Manager素材適合、(3) permission/provenance、(4) visual stream検証、(5) review queue preview、(6) Cloudinary/upload/Threads media canary。Xはread-only sourceが取れてもX投稿は無効のまま。
+- 残WARN: `config/autonomous_mode.json` のtext-only scheduled publishは有効で、現在の投稿運用方針に従う。media configとの混同を避けるため、media workflowはconfig guardでBLOCK/SKIPされるのが正しい状態である。
+- `check_autonomous_health.py` はworkflowのcron接続とlive media activationを別表示に修正した。media workflowが存在しても`media_schedule_enabled=false`なら、`media_execution_mode=disabled_pending_acquisition_validation`と表示する。
+- health checkerの`dry_run_only`判定を現在のworkflow環境変数形式にも対応させ、正常なNight Scout/Liver Manager/aftercare workflowをWARN扱いするfalse positiveを除去した。
+
+### 次AIへの引き継ぎ
+
+- 次に触ってよい: YouTubeのvideo-level subject suitability、Threads reference-text generationとquality review、TikTok/Xのbounded fallback改善。
+- 触らない方がよい: 失敗媒体の自動media activation、cookie/stealth/CAPTCHA回避、第三者reference-only media、X/beauty publish、`.env`、`data/`、`output/`、secrets/cookies。

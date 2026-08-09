@@ -228,7 +228,11 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
             "has_concurrency": "concurrency:" in text and "cancel-in-progress: false" in text,
             "has_heartbeat": "Schedule heartbeat" in text and "github.workflow" in text and "date -u" in text,
             "has_dry_run_only_dispatch": "dry_run_only:" in text,
-            "dry_run_only_skips_apply": "dry_run_only != 'true'" in text,
+            "dry_run_only_skips_apply": (
+                "dry_run_only != 'true'" in text
+                or ('MANUAL_DRY_RUN_ONLY' in text and '"$MANUAL_DRY_RUN_ONLY" != "true"' in text)
+                or ('github.event.inputs.dry_run_only' in text and '!= "true"' in text)
+            ),
             "has_jitter": "random.randint(0, 1800)" in text,
             "has_apply_step": any(flag in text for flag in ("--confirm-autonomous", "--confirm-production-media", "--confirm-direct-media")),
             "apply_env_scoped": 'PUBLISH_ENABLED: "true"' in text and 'ALLOW_REAL_THREADS_POST: "true"' in text,
@@ -322,9 +326,19 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
         "validator_sanity": {"final_public_post_validator": "EXPECTED_IN_RUNNER_AND_WORKER"},
         "media_schedule": {
             "text_only_schedule_on": True,
-            "media_schedule_on": bool(config.get("scheduled_publish_enabled")),
-            "media_schedule_connected": bool(config.get("scheduled_publish_enabled")),
-            "media_execution_mode": "scheduled_activation_guarded" if config.get("scheduled_publish_enabled") else "manual_canary_only",
+            # Workflow files may retain their schedule declarations while the
+            # media engine is disabled.  Report wiring separately from live
+            # execution so an unvalidated backend is never shown as ON.
+            "media_schedule_on": bool(media_config.get("media_schedule_enabled")),
+            "media_schedule_connected": all(
+                workflow_results.get(key, {}).get("exists", False)
+                for key in MEDIA_CANARY_WORKFLOWS
+            ),
+            "media_execution_mode": (
+                "scheduled_activation_guarded"
+                if media_config.get("media_schedule_enabled")
+                else "disabled_pending_acquisition_validation"
+            ),
             # Schedule connectivity is reported separately. This aggregate
             # verifies that every media workflow is classified into its exact
             # activated execution mode; the cross-workflow safety tests verify
