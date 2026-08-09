@@ -14,6 +14,7 @@ from .enrichment import (
 )
 from .threads_public import ThreadsPublicHttpAdapter, ThreadsPublicProfileAdapter
 from .tiktok_public import TikTokPublicProfileAdapter
+from .x_gallerydl import XGalleryDlProfileAdapter
 from .ytdlp import YtDlpProfilePostAdapter
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +31,7 @@ def build_router() -> AdapterRouter:
         "tiktok_public_playwright": TikTokPublicProfileAdapter(),
         "threads_public_playwright": ThreadsPublicProfileAdapter(),
         "threads_public_http": ThreadsPublicHttpAdapter(),
+        "x_gallery_dl": XGalleryDlProfileAdapter(),
     }
     routes = {
         capability: BackendRoute(

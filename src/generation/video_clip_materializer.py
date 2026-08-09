@@ -61,7 +61,7 @@ def build_ffmpeg_command(
         "-t",
         f"{duration:.3f}",
         "-map",
-        "0:v:0?",
+        "0:v:0",
         "-map",
         "0:a:0?",
         "-c:v",
@@ -78,15 +78,48 @@ def build_ffmpeg_command(
     ]
 
 
-def probe_duration(path: str | Path, *, ffprobe_bin: str = "ffprobe") -> float:
+def probe_media_streams(path: str | Path, *, ffprobe_bin: str = "ffprobe") -> dict[str, Any]:
     proc = subprocess.run(
-        [ffprobe_bin, "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)],
+        [ffprobe_bin, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
         check=True,
         capture_output=True,
         text=True,
     )
-    payload = json.loads(proc.stdout)
-    return float((payload.get("format") or {}).get("duration") or 0.0)
+    payload = json.loads(proc.stdout or "{}")
+    streams = list(payload.get("streams") or [])
+    video = []
+    audio = []
+    for stream in streams:
+        codec_type = str(stream.get("codec_type") or "")
+        if codec_type == "video":
+            attached = int((stream.get("disposition") or {}).get("attached_pic") or 0)
+            width = int(stream.get("width") or 0)
+            height = int(stream.get("height") or 0)
+            if not attached and width > 0 and height > 0:
+                video.append(stream)
+        elif codec_type == "audio":
+            audio.append(stream)
+    duration = float((payload.get("format") or {}).get("duration") or 0.0)
+    width = max((int(s.get("width") or 0) for s in video), default=0)
+    height = max((int(s.get("height") or 0) for s in video), default=0)
+    return {
+        "video_stream_count": len(video),
+        "audio_stream_count": len(audio),
+        "width": width,
+        "height": height,
+        "duration_seconds": duration,
+    }
+
+
+def require_video_stream(path: str | Path, *, ffprobe_bin: str = "ffprobe") -> dict[str, Any]:
+    probe = probe_media_streams(path, ffprobe_bin=ffprobe_bin)
+    if probe["video_stream_count"] < 1 or probe["width"] <= 0 or probe["height"] <= 0:
+        raise RuntimeError("media does not contain a usable visual video stream")
+    return probe
+
+
+def probe_duration(path: str | Path, *, ffprobe_bin: str = "ffprobe") -> float:
+    return float(probe_media_streams(path, ffprobe_bin=ffprobe_bin)["duration_seconds"])
 
 
 def materialize_clip(
@@ -106,6 +139,7 @@ def materialize_clip(
     ffprobe_bin = shutil.which("ffprobe")
     if not ffmpeg_bin or not ffprobe_bin:
         raise RuntimeError("ffmpeg and ffprobe executables are required")
+    source_probe = require_video_stream(src, ffprobe_bin=ffprobe_bin)
     dst.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         build_ffmpeg_command(src, dst, start_seconds, end_seconds, ffmpeg_bin=ffmpeg_bin),
@@ -115,7 +149,8 @@ def materialize_clip(
     )
     if not dst.is_file() or dst.stat().st_size <= 0:
         raise RuntimeError("FFmpeg did not produce a non-empty clip")
-    actual = probe_duration(dst, ffprobe_bin=ffprobe_bin)
+    output_probe = require_video_stream(dst, ffprobe_bin=ffprobe_bin)
+    actual = float(output_probe["duration_seconds"])
     if actual <= 0 or abs(actual - duration) > 2.5:
         raise RuntimeError("materialized clip duration failed validation")
     return {
@@ -123,4 +158,9 @@ def materialize_clip(
         "requested_duration_seconds": duration,
         "actual_duration_seconds": actual,
         "size_bytes": dst.stat().st_size,
+        "video_stream_count": output_probe["video_stream_count"],
+        "audio_stream_count": output_probe["audio_stream_count"],
+        "width": output_probe["width"],
+        "height": output_probe["height"],
+        "source_video_stream_count": source_probe["video_stream_count"],
     }

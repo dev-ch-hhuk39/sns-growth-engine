@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from generation.video_clip_materializer import probe_media_streams
+
 AUTHORIZED_RIGHTS = {
     "allowed",
     "approved",
@@ -88,20 +90,38 @@ def _safe_id(value: str) -> str:
     return safe[:120] or "source"
 
 
-def find_cached_source(cache_root: str | Path, account_id: str, source_video_id: str) -> Path | None:
+def _has_video_stream(path: Path) -> bool:
+    try:
+        probe = probe_media_streams(path)
+    except Exception:
+        return False
+    return int(probe.get("video_stream_count") or 0) >= 1 and int(probe.get("width") or 0) > 0 and int(probe.get("height") or 0) > 0
+
+
+def find_cached_source(
+    cache_root: str | Path,
+    account_id: str,
+    source_video_id: str,
+    *,
+    require_video: bool = False,
+) -> Path | None:
     directory = Path(cache_root).expanduser() / _safe_id(account_id)
     prefix = _safe_id(source_video_id)
     if not directory.is_dir():
         return None
-    files = [
-        p for p in directory.glob(prefix + ".*")
-        if p.is_file() and p.stat().st_size > 0 and p.suffix.lower() not in {".part", ".ytdl", ".json"}
-    ]
-    if not files:
+    files: list[Path] = []
+    for pattern in (prefix + ".*", prefix + "-video.*"):
+        files.extend(
+            p for p in directory.glob(pattern)
+            if p.is_file() and p.stat().st_size > 0 and p.suffix.lower() not in {".part", ".ytdl", ".json"}
+        )
+    deduped = list({p.resolve(): p for p in files}.values())
+    if require_video:
+        deduped = [p for p in deduped if _has_video_stream(p)]
+    if not deduped:
         return None
-    files.sort(key=lambda p: (p.stat().st_mtime, p.stat().st_size), reverse=True)
-    return files[0]
-
+    deduped.sort(key=lambda p: (p.stat().st_mtime, p.stat().st_size), reverse=True)
+    return deduped[0]
 
 def acquire_authorized_public_source(
     candidate: dict[str, Any],
@@ -113,7 +133,7 @@ def acquire_authorized_public_source(
 ) -> Path:
     if not is_download_authorized(candidate):
         raise PermissionError("candidate is not explicitly authorized for source acquisition")
-    cached = find_cached_source(cache_root, account_id, source_video_id)
+    cached = find_cached_source(cache_root, account_id, source_video_id, require_video=True)
     if cached is not None:
         return cached
     url = resolve_source_url(candidate, source)
@@ -125,7 +145,7 @@ def acquire_authorized_public_source(
     directory = Path(cache_root).expanduser() / _safe_id(account_id)
     directory.mkdir(parents=True, exist_ok=True)
     prefix = _safe_id(source_video_id)
-    outtmpl = str(directory / f"{prefix}.%(ext)s")
+    outtmpl = str(directory / f"{prefix}-video.%(ext)s")
     options = {
         "outtmpl": outtmpl,
         "noplaylist": True,
@@ -141,7 +161,7 @@ def acquire_authorized_public_source(
     }
     with YoutubeDL(options) as ydl:
         ydl.extract_info(url, download=True)
-    acquired = find_cached_source(cache_root, account_id, source_video_id)
+    acquired = find_cached_source(cache_root, account_id, source_video_id, require_video=True)
     if acquired is None:
         raise RuntimeError("yt-dlp completed without a usable cached source")
     if acquired.stat().st_size > MAX_DOWNLOAD_BYTES:

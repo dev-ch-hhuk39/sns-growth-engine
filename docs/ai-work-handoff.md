@@ -6565,3 +6565,30 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - その後のread-only inventoryで、旧sheet row順が新規queueより優先される不具合を発見。`build_live_canary_inventory.py`は、`content_type`を正として最新fresh queueから親・assetを辿るよう修正中。旧canaryを再利用せず、新規queue/assetをpreview対象に固定する。
 - follow-upでは、media/text候補のqueue ID、persona/final/internal-leak validator、publisher media typeをinventoryへ持ち上げ、全validatorが`PASS`でない候補を`READY_FOR_HUMAN_CANARY`にしない契約へ修正中。
 - Final Production Preparationは投稿なしで同じ`prepare_bounded_canary_publish.py --wave first_wave --dry-run`を実行し、4件のpublisher preflightをartifactへ保存する。Cloudinary/Sheets登録済みの4件以外を生成・READY化・投稿しない。
+## 2026-08-09 Codex Unified OSS Acquisition Router (In Progress)
+
+### 本システム / 今回の変更
+
+- 作業ブランチ: `repair/dual-account-clip-content-golden-v7-20260809`、開始HEAD: `2b83de8185926193325681b51e5ba0fe1e119de3`。
+- 収集の正規形は `NormalizedSourcePost` と順序付き `NormalizedMediaItem`。Threads/TikTok/YouTube/X のいずれでも、本文とメディアは同一の個別投稿親へだけ紐付ける。profile/channel URLを投稿として保存しない。
+- Xは公式API/tweepy前提を撤回し、既存OSSの `gallery-dl --dump-json` を使う bounded read-only adapterへ統一した。明示的に `x_read_only=true` のsourceだけ、最大20件の `/status/<id>` を発見する。cookie・download・X投稿は使用しない。失敗時は browser export/manual JSON に明示フォールバックする。
+- legacy reference collectorも同じ `AdapterRouter` のX routeを呼ぶため、reference textとdirect-media pathでX抽出実装が分岐しない。Xメディアは別途 `media_permissions` が承認済みになるまで direct mediaに進めない。
+- `gallery-dl` はX discoveryに接続済み。TikTokの provider chainに書かれている `gallery-dl` はまだAdapterRouter実装ではないため、接続済みとは扱わない。
+
+### 変更ファイル一覧 / テスト結果
+
+- 更新: `config/source_backend_routing.json`, `requirements.txt`, `src/acquisition/factory.py`, `src/acquisition/models.py`, `scripts/collect_source_posts.py`, `scripts/acquire_approved_source_posts.py`, `.github/workflows/account-acquisition.yml`, `docs/source-backend-decision.md`。
+- 追加: `src/acquisition/x_gallerydl.py`, `tests/test_x_gallerydl_adapter.py`。既存のclip/source provenance/router変更も未コミットで同一worktreeにあるため、意図を確認してから一緒にcommitする。
+- PASS: X adapter script (5/0)、X/router/provenance/clip pytest focused set (28 passed)、incremental acquisition policy、primary/fallback router、normalized source parent integrity、`py_compile`、Ruff syntax/import rules、`git diff --check`。
+
+### 未完了事項 / スケール方針 / 残WARN
+
+- 実fetch/download/cut/upload/transcription/postは未実行。`gallery-dl` の実ネットワーク成功はまだ本番証拠ではない。今は `--fetch-real` が明示された時だけ実行する。
+- 実media E2Eの残りは、account-level candidate selection（あるsourceが失敗したら同一accountの別の承認済みsourceを選ぶ）、TikTok `gallery-dl` の実adapter化、個別video discoveryからvisual stream検証・clip・Cloudinary・review queueまでのlive evidenceである。
+- source失敗時に別SNSへ進むのは「同一accountの承認済み候補を選び直す」処理で行う。別投稿の本文とメディアを混ぜるcross-post fallbackは不許可。
+- `config/autonomous_mode.json` と `config/media_growth_engine.json` は現時点でpublish/media activation系の値が有効になっている。これは「確認後に投稿」の現在要件と緊張関係があるため、外部操作の前に人間が運用モードを決定するまで変更・実行しない。
+
+### 次AIへの引き継ぎ
+
+- 次に触ってよい: shared acquisition router、TikTok/Threads adapter、account-level selection receipt、source/permission tests、`docs/source-backend-decision.md`。
+- 触らない方がよい: `.env`、`data/`、`output/`、credentials/cookies/storage state、X posting、beauty account、第三者reference-only mediaのdownload/cut/upload/repost、live scheduled publish。

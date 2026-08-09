@@ -38,3 +38,16 @@ def test_cache_lookup_is_deterministic(tmp_path) -> None:
     target = directory / "sv-1.mp4"
     target.write_bytes(b"video")
     assert find_cached_source(tmp_path, "night_scout", "sv-1") == target
+
+
+def test_cache_can_require_real_video_stream(tmp_path, monkeypatch) -> None:
+    import generation.video_source_acquirer as acq
+    directory = tmp_path / "night_scout"
+    directory.mkdir()
+    audio = directory / "sv-2.mp4"
+    visual = directory / "sv-2-video.mp4"
+    audio.write_bytes(b"audio")
+    visual.write_bytes(b"video")
+
+    monkeypatch.setattr(acq, "_has_video_stream", lambda path: path.name.endswith("-video.mp4"))
+    assert acq.find_cached_source(tmp_path, "night_scout", "sv-2", require_video=True) == visual

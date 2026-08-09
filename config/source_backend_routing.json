@@ -22,6 +22,13 @@
       "shadow": [],
       "cooldown_seconds": 900
     },
+    "x.profile_posts": {
+      "primary": "x_gallery_dl",
+      "fallbacks": [],
+      "shadow": [],
+      "cooldown_seconds": 900,
+      "circuit_failure_threshold": 3
+    },
     "youtube.channel_videos": {
       "primary": "yt_dlp",
       "fallbacks": [],
@@ -86,6 +93,7 @@
     "tiktok_public_playwright": "FALLBACK",
     "threads_public_playwright": "PRIMARY",
     "threads_public_http": "FALLBACK",
+    "x_gallery_dl": "PRIMARY",
     "youtube_transcript_api": "PRIMARY",
     "youtube_comment_downloader": "PRIMARY",
     "threads_public_comments": "PRIMARY",
