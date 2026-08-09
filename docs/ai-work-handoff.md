@@ -6574,6 +6574,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 収集の正規形は `NormalizedSourcePost` と順序付き `NormalizedMediaItem`。Threads/TikTok/YouTube/X のいずれでも、本文とメディアは同一の個別投稿親へだけ紐付ける。profile/channel URLを投稿として保存しない。
 - Xは公式API/tweepy前提を撤回し、既存OSSの `gallery-dl --dump-json` を使う bounded read-only adapterへ統一した。明示的に `x_read_only=true` のsourceだけ、最大20件の `/status/<id>` を発見する。cookie・download・X投稿は使用しない。失敗時は browser export/manual JSON に明示フォールバックする。
 - TikTok profile discoveryは `yt-dlp` primary → `gallery-dl` JSON fallback → cookieなしPlaywright public HTML fallback の順に統一した。いずれも最大20件の個別 `/video/<id>` の発見だけで、download/cut/upload/postは別のrights/confirm gateを通る。
+- X `gallery-dl` がexit 0でも個別 `/status/<id>` を返さない場合は成功扱いにせず、`browser_export_or_manual_json_required` として回復経路へ渡すよう修正した。
 - legacy reference collectorも同じ `AdapterRouter` のX routeを呼ぶため、reference textとdirect-media pathでX抽出実装が分岐しない。Xメディアは別途 `media_permissions` が承認済みになるまで direct mediaに進めない。
 - `gallery-dl` はX discoveryに接続済み。TikTokの provider chainに書かれている `gallery-dl` はまだAdapterRouter実装ではないため、接続済みとは扱わない。
 - `run_autonomous_loop.py` のslot未指定dry-runは `preview_only_unscheduled` と明示し、media slotが不足した際のtext fallbackとして扱わない。media slotは既存どおり `SKIPPED_NO_VALID_MEDIA` で止まる。
