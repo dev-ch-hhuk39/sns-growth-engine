@@ -31,7 +31,13 @@ def main() -> int:
     )["operational_threads_slot_mix"]
     for account in ("night_scout", "liver_manager"):
         assert sum(mix[account].values()) == 100
-        assert set(mix[account].values()) == {20}
+        assert mix[account] == {
+            "new_text_generation": 10,
+            "reference_text_generation": 35,
+            "pdca_text_generation": 20,
+            "direct_reference_media": 30,
+            "approved_source_clip": 5,
+        }
 
     expected = {
         ".github/workflows/autonomous-growth-loop-night-scout.yml": [

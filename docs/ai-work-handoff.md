@@ -6714,6 +6714,6 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 ### 変更ファイル / テスト / 引き継ぎ
 
 - 更新: `config/content_mix/default_mix.json`, `src/generation/content_mix_planner.py`, `scripts/run_media_production_pipeline.py`, `scripts/test_video_stream_evidence_contract.py`, `docs/ai-work-handoff.md`。追加: `src/generation/reference_first_router.py`, `scripts/test_reference_first_content_router.py`。
-- focused PASS: `test_reference_first_content_router.py`、`test_content_mix_planner.py` (13/13)、`test_media_production_requires_grounded_clip.py` (3/3)、`test_approved_source_clip_contract.py`、変更対象の`py_compile`、`git diff --check`。
+- focused PASS: `test_reference_first_content_router.py`、`test_content_mix_planner.py` (13/13)、`test_media_production_requires_grounded_clip.py` (3/3)、`test_approved_source_clip_contract.py`、`test_video_stream_evidence_contract.py`、変更対象の`py_compile`、`git diff --check`。
 - dry-run / 外部操作: 実fetch、download、cut、upload、Cloudinary、Sheets更新、Threads投稿はいずれも未実行。X/Beauty block、media-to-text fallback禁止、既存publisher gateは維持。
 - 未完了: このルールに沿う候補を投稿レビューへ補充する実運用確認。安全ゲートとmedia-to-text fallback禁止は維持する。
