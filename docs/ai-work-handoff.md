@@ -6692,3 +6692,14 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - focused PASS: auto-ready fallback、media discovery apply guard、media growth staging、transcript grounding、production media plan、profile discovery position、workflow media gates、`py_compile`、`git diff --check`。
 - 未完了 / 残WARN: 実Cloudinary upload、media queue Sheets apply、Threads image/carousel/video/clip投稿、live metrics回収は未実証。text-onlyの本番設定と、未検証mediaの安全停止を混同しないこと。
 - 次に触ってよい: PR #162のCI成功確認と通常マージ後、review-readyな権利・alignment済みmedia candidateの一件ずつのcanary準備。触らない方がよい: media gateの一括ON、X/beauty publish、第三者reference-only素材、`.env`、`data/`、`output/`、secrets/cookies。
+
+## 2026-08-09 Sheets Publication Review Board
+
+- 作業ブランチ: `feat/sheets-publication-review-queue`。
+- 追加: `scripts/publication_review_board.py`, `scripts/sync_publication_review.py`, `scripts/apply_publication_review_decisions.py`, `scripts/test_publication_review_board.py`, `scripts/test_publication_review_workflow_safety.py`, `.github/workflows/publication-review-sync.yml`。
+- 更新: `src/sheets_client.py`, `docs/threads-operation-runbook.md`, 本handoff。
+- 新規Google Sheetsタブ **投稿レビュー** (`publication_review`) は、既存の`投稿キュー`を正本のまま、人間が本文・媒体形式・preview URL・品質判定を確認するためのビューとして同期する。同期はoperator入力の`review_decision` / `reviewer_note`を上書きしない。
+- `OK`は投稿を直接起動しない。本文候補は最終validatorとinternal leak判定を再確認してから`READY`に進む。media候補は`allow_media_posts=false`の間`APPROVED_PENDING_MEDIA_GATE`で停止し、media-to-text fallbackは行わない。`NG`は`REJECTED`、`HOLD`は待機を維持する。
+- `Publication Review Board` workflowは2時間ごとにSheetsへ同期し、明示入力済みの判断だけを反映する。workflow内の投稿、X、download、cut、Cloudinary、media postの全gateはfalse。
+- テスト: review tab schema、operator decision保存、OK/NG/HOLD遷移、media gate保留、workflow safety、`py_compile`、`git diff --check`。
+- 次に触ってよい: PRマージ後のworkflow dispatchで投稿レビューtabを初期化・同期し、実際の候補を確認する。触らない方がよい: review workflowでの外部media操作や投稿、X/beauty、`.env`、`data/`、`output/`、secrets/cookies。

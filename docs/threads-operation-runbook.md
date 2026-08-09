@@ -14,6 +14,16 @@ worker が投稿するのは **`READY` の行のみ**。生成系CLIが出力す
 
 状態遷移: `WAITING_REVIEW → READY → PROCESSING → POSTED`（昇格は `approve_queue.py` の人間承認、または `auto_approve_queue.py` のAUTO_READY条件通過のみ）。詳細は `docs/threads-queue-worker.md` の Status モデルを参照。
 
+## 投稿レビュー Tab
+
+Google Sheets の **投稿レビュー** タブは、`投稿キュー`のうちNight Scout / Liver Manager向けのThreads候補を、人が確認しやすい形で表示する専用ビューです。本文、投稿形式、メディアURL、テーマ、品質・漏えい・トピック判定を確認できます。
+
+1. `review_decision` に `OK`、`NG`、または `HOLD` を入力する。
+2. 必要なら `reviewer_note` に短いコメントを残す。
+3. 定期同期が2時間ごとに反映する。手動ならGitHub Actionsの **Publication Review Board** を `sync-and-apply` で実行する。
+
+`OK` は投稿操作ではありません。text-only候補は全validatorを再確認した後だけ`READY`へ進みます。画像・カルーセル・動画・clipは、media gateと権利・整合性が通るまで`APPROVED_PENDING_MEDIA_GATE`に留まり、textへ代替して投稿されません。`NG`は対象queueを`REJECTED`にし、`HOLD`は待機を維持します。
+
 ## Daily Safe Flow
 
 1. Verify Sheets state:
