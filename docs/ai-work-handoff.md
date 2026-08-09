@@ -6574,6 +6574,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Xは公式API/tweepy前提を撤回し、既存OSSの `gallery-dl --dump-json` を使う bounded read-only adapterへ統一した。明示的に `x_read_only=true` のsourceだけ、最大20件の `/status/<id>` を発見する。cookie・download・X投稿は使用しない。失敗時は browser export/manual JSON に明示フォールバックする。
 - legacy reference collectorも同じ `AdapterRouter` のX routeを呼ぶため、reference textとdirect-media pathでX抽出実装が分岐しない。Xメディアは別途 `media_permissions` が承認済みになるまで direct mediaに進めない。
 - `gallery-dl` はX discoveryに接続済み。TikTokの provider chainに書かれている `gallery-dl` はまだAdapterRouter実装ではないため、接続済みとは扱わない。
+- `run_autonomous_loop.py` のslot未指定dry-runは `preview_only_unscheduled` と明示し、media slotが不足した際のtext fallbackとして扱わない。media slotは既存どおり `SKIPPED_NO_VALID_MEDIA` で止まる。
 
 ### 変更ファイル一覧 / テスト結果
 
