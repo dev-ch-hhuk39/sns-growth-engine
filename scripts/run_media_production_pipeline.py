@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
+from generation.reference_first_router import choose_reference_first_route  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
@@ -1380,6 +1381,27 @@ def select_candidate(
         duration_blockers = approved_clip_duration_blockers(clip)
         if duration_blockers:
             reasons.extend(f"{clip_id}:{reason}" for reason in duration_blockers)
+            continue
+        route_decision = choose_reference_first_route(
+            desired_route="approved_source_clip",
+            source_has_direct_media_permission=True,
+            content_understanding={
+                # Older analyzed rows already encode the same evidence as
+                # transcript grounding + semantic alignment + exact range.
+                # Preserve that proof while new rows persist the explicit
+                # standalone fields directly.
+                "status": clip.get("content_understanding_status") or clip.get("understanding_status") or "PASS",
+                "transcript_status": clip.get("transcript_status") or "PASS",
+                "standalone_segment_confirmed": clip.get("standalone_segment_confirmed", bool(transcript_excerpt and start_seconds and end_seconds)),
+                "standalone_story_score": clip.get("standalone_story_score") or clip.get("confidence_score") or clip.get("clip_score") or 0,
+                "clip_worthy": clip.get("clip_worthy", str(clip.get("alignment_status", "")).upper() == "PASS"),
+            },
+        )
+        # A clip slot is never converted to text or an arbitrary media asset.
+        # It waits until the source-wide understanding explicitly says the
+        # segment stands on its own as a post.
+        if route_decision.get("route") != "approved_source_clip":
+            reasons.append(f"{clip_id}:clip_not_worthy:{'|'.join(route_decision.get('reasons', []))}")
             continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")

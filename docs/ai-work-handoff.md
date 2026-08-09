@@ -6703,3 +6703,17 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - `Publication Review Board` workflowは2時間ごとにSheetsへ同期し、明示入力済みの判断だけを反映する。workflow内の投稿、X、download、cut、Cloudinary、media postの全gateはfalse。
 - テスト: review tab schema、operator decision保存、OK/NG/HOLD遷移、media gate保留、workflow safety、`py_compile`、`git diff --check`。
 - 次に触ってよい: PRマージ後のworkflow dispatchで投稿レビューtabを初期化・同期し、実際の候補を確認する。触らない方がよい: review workflowでの外部media操作や投稿、X/beauty、`.env`、`data/`、`output/`、secrets/cookies。
+# 2026-08-10 Reference-First Content Routing (In Progress)
+
+### 本システムについて / 方針変更
+
+- 投稿形式は両アカウント共通の `reference_first_router` で選ぶ。参照投稿の構成を使う新規文35%、元投稿・動画へのコメント付き引用30%、MEASURED PDCAベース20%、オリジナル10%、切り抜き5%を標準とする。
+- Clipは動画の存在だけでは選ばない。全体理解・transcript・独立した一区間の確認・`standalone_story_score >= 85`・`clip_worthy=true`が揃った場合だけ選べる。満たさない動画は、適法なdirect mediaなら引用コメント候補へ戻し、Clip枠をtextへ代替しない。
+- Night Scout/Liver Managerは収集・理解・形式選択・reviewを共通化し、異なるのはtopic fitとpersona/copyだけ。X/Beauty、実投稿、外部取得、download/cut/uploadは今回実行しない。
+
+### 変更ファイル / テスト / 引き継ぎ
+
+- 更新: `config/content_mix/default_mix.json`, `src/generation/content_mix_planner.py`, `scripts/run_media_production_pipeline.py`, `docs/ai-work-handoff.md`。追加: `src/generation/reference_first_router.py`, `scripts/test_reference_first_content_router.py`。
+- focused PASS: `test_reference_first_content_router.py`、`test_content_mix_planner.py` (13/13)、`test_media_production_requires_grounded_clip.py` (3/3)、`test_approved_source_clip_contract.py`、変更対象の`py_compile`、`git diff --check`。
+- dry-run / 外部操作: 実fetch、download、cut、upload、Cloudinary、Sheets更新、Threads投稿はいずれも未実行。X/Beauty block、media-to-text fallback禁止、既存publisher gateは維持。
+- 未完了: このルールに沿う候補を投稿レビューへ補充する実運用確認。安全ゲートとmedia-to-text fallback禁止は維持する。
