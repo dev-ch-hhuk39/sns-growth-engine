@@ -6688,6 +6688,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 更新: `scripts/auto_approve_queue.py` と既存media/adapter contract tests。本番media gateの設定は変更していない。
 - `final_public_post_validator`が高品質と判定した読者向けtext-only候補を、旧来の簡易quality heuristicだけで誤って`REJECTED`にしないよう修正した。内部語、リスク、自然さ、読者価値、アカウント適合、重複、media制約の全gateは従来どおり必須である。
 - CIで失敗していた15件は、media discovery/download/cut/upload/video postが段階的にfalseである現設定と、過去の"自動ON"前提のテストの不整合だった。テストを「disabledなら外部操作せずBLOCK/WAITING_REVIEW」と確認する内容へ更新した。ThreadsのOG画像は個別投稿mediaの証拠でないため、media childを0件とする契約も明文化した。
+- `config/production_autopilot.json`にも残っていたmedia public/discovery/clip apply有効の誤表記をfalseへ修正し、実際のmedia gateと一致させた。text-onlyのautopilot設定は変更していない。
 - focused PASS: auto-ready fallback、media discovery apply guard、media growth staging、transcript grounding、production media plan、profile discovery position、workflow media gates、`py_compile`、`git diff --check`。
 - 未完了 / 残WARN: 実Cloudinary upload、media queue Sheets apply、Threads image/carousel/video/clip投稿、live metrics回収は未実証。text-onlyの本番設定と、未検証mediaの安全停止を混同しないこと。
 - 次に触ってよい: PR #162のCI成功確認と通常マージ後、review-readyな権利・alignment済みmedia candidateの一件ずつのcanary準備。触らない方がよい: media gateの一括ON、X/beauty publish、第三者reference-only素材、`.env`、`data/`、`output/`、secrets/cookies。
