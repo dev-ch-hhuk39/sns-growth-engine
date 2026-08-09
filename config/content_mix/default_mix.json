@@ -67,20 +67,22 @@
     }
   },
   "operational_threads_slot_mix": {
-    "schema_version": "threads_slot_mix_v1",
+    "schema_version": "threads_reference_first_v2",
+    "selection_policy": "reference_first",
+    "clip_policy": "exception_only_after_full_content_understanding",
     "night_scout": {
-      "new_text_generation": 20,
-      "reference_text_generation": 20,
+      "new_text_generation": 10,
+      "reference_text_generation": 35,
       "pdca_text_generation": 20,
-      "direct_reference_media": 20,
-      "approved_source_clip": 20
+      "direct_reference_media": 30,
+      "approved_source_clip": 5
     },
     "liver_manager": {
-      "new_text_generation": 20,
-      "reference_text_generation": 20,
+      "new_text_generation": 10,
+      "reference_text_generation": 35,
       "pdca_text_generation": 20,
-      "direct_reference_media": 20,
-      "approved_source_clip": 20
+      "direct_reference_media": 30,
+      "approved_source_clip": 5
     }
   }
 }

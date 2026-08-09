@@ -33,6 +33,45 @@ CONTENT_TYPES = [
 ]
 
 
+def plan_operational_threads_routes(
+    account_id: str,
+    count: int,
+    *,
+    config: dict | None = None,
+) -> list[str]:
+    """Build a deterministic reference-first operational route plan.
+
+    This is intentionally separate from the legacy general-purpose content
+    types above.  It is the one planner that both operational accounts use for
+    quote/reference/PDCA/original/clip selection, before their persona-specific
+    copy is generated.
+    """
+    from generation.reference_first_router import REFERENCE_FIRST_ROUTES, load_operational_mix
+
+    if count <= 0:
+        return []
+    ratios = load_operational_mix(account_id, config=config)
+    exact = {route: count * ratios[route] / 100 for route in REFERENCE_FIRST_ROUTES}
+    allocation = {route: int(exact[route]) for route in REFERENCE_FIRST_ROUTES}
+    remaining = count - sum(allocation.values())
+    order = sorted(
+        REFERENCE_FIRST_ROUTES,
+        key=lambda route: (exact[route] - allocation[route], ratios[route]),
+        reverse=True,
+    )
+    for route in order[:remaining]:
+        allocation[route] += 1
+
+    # Interleave routes so a small batch does not bunch the exceptional clip.
+    result: list[str] = []
+    while sum(allocation.values()):
+        for route in REFERENCE_FIRST_ROUTES:
+            if allocation[route]:
+                result.append(route)
+                allocation[route] -= 1
+    return result
+
+
 def _now_jst() -> str:
     return datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+09:00")
 
