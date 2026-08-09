@@ -1212,7 +1212,8 @@ def generate_grounded_reader_facing_post(
     if structure == 0:
         text = f"{hook}\n\n{body}\n\n{closing}"
     elif structure == 1:
-        text = f"{hook}\n\nまず、{body}\n\n最後に、{closing}"
+        closing_lead = "" if closing.lstrip().startswith(("最後", "まず", "次に")) else "最後に、"
+        text = f"{hook}\n\nまず、{body}\n\n{closing_lead}{closing}"
     elif structure == 2:
         if len(body_parts) >= 2:
             text = f"{hook}\n\n{body_parts[0]}。\n\n{body_parts[1]}。\n\n{closing}"
