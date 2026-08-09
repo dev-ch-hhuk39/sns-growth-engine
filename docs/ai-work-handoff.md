@@ -6575,6 +6575,7 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - legacy reference collectorも同じ `AdapterRouter` のX routeを呼ぶため、reference textとdirect-media pathでX抽出実装が分岐しない。Xメディアは別途 `media_permissions` が承認済みになるまで direct mediaに進めない。
 - `gallery-dl` はX discoveryに接続済み。TikTokの provider chainに書かれている `gallery-dl` はまだAdapterRouter実装ではないため、接続済みとは扱わない。
 - `run_autonomous_loop.py` のslot未指定dry-runは `preview_only_unscheduled` と明示し、media slotが不足した際のtext fallbackとして扱わない。media slotは既存どおり `SKIPPED_NO_VALID_MEDIA` で止まる。
+- 投稿生成のstructure variant 1で、closingがすでに「最後…」から始まる場合に「最後に、最後…」となる不自然な重複を除去した。focused quality testで両accountの複数seedを確認済み。
 
 ### 変更ファイル一覧 / テスト結果
 
