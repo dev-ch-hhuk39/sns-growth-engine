@@ -43,6 +43,14 @@ def test_x_gallery_dl_requires_explicit_bounded_source():
         XGalleryDlProfileAdapter().acquire({"source_url": "https://x.com/example"}, limit=1)
 
 
+def test_x_gallery_dl_empty_result_requires_manual_recovery(monkeypatch):
+    adapter = XGalleryDlProfileAdapter()
+    monkeypatch.setattr("acquisition.x_gallerydl.shutil.which", lambda _: "/usr/bin/gallery-dl")
+    monkeypatch.setattr("acquisition.x_gallerydl.subprocess.run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""))
+    with pytest.raises(BackendFailure, match="browser_export_or_manual_json_required"):
+        adapter.acquire({"source_url": "https://x.com/meg_lsm", "x_read_only": True}, limit=1)
+
+
 def test_factory_registers_x_gallery_dl_route():
     router = build_router()
     assert router.routes["x.profile_posts"].primary == "x_gallery_dl"

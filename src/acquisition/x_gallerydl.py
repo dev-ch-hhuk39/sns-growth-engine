@@ -148,4 +148,6 @@ class XGalleryDlProfileAdapter:
                 content_hash=stable_content_hash(text, [item.original_media_url for item in media_items]),
                 discovered_at=utc_now(),
             ))
+        if not posts:
+            raise BackendFailure("x_gallery_dl_individual_posts_unavailable_browser_export_or_manual_json_required")
         return posts
