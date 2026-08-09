@@ -123,16 +123,52 @@ def extract_ordered_post_media(page_html: str) -> list[tuple[str, str]]:
 
 
 def extract_profile_post_urls(page_html: str, profile_url: str, *, limit: int) -> list[str]:
-    """Extract stable public post paths from a public profile page."""
+    """Extract stable public post paths that belong to the requested profile."""
+    expected_handle = _profile_handle(profile_url)
     paths = []
     for match in POST_HREF.finditer(page_html):
         path = match.group(0)
         value = canonical_url(urljoin(profile_url, path))
+        if expected_handle and _post_handle(value) != expected_handle:
+            continue
         if value not in paths:
             paths.append(value)
         if len(paths) >= limit:
             break
     return paths
+
+
+def _profile_handle(profile_url: str) -> str:
+    match = re.search(r"/@([^/?#]+)", canonical_url(profile_url))
+    return match.group(1).lower() if match else ""
+
+
+def _post_handle(post_url: str) -> str:
+    match = re.search(r"/@([^/]+)/post/", canonical_url(post_url))
+    return match.group(1).lower() if match else ""
+
+
+def extract_profile_post_urls_from_hrefs(
+    hrefs: list[str], profile_url: str, *, limit: int
+) -> list[str]:
+    """Normalize bounded visible-anchor results from a rendered public page.
+
+    This is intentionally separate from raw HTML parsing: Threads often adds
+    post anchors after the initial document response.  Only anchors for the
+    requested profile are accepted, so recommendation cards cannot become a
+    source post.
+    """
+    expected_handle = _profile_handle(profile_url)
+    urls: list[str] = []
+    for href in hrefs:
+        value = canonical_url(urljoin(profile_url, str(href or "")))
+        if not expected_handle or _post_handle(value) != expected_handle:
+            continue
+        if value not in urls:
+            urls.append(value)
+        if len(urls) >= max(1, int(limit)):
+            break
+    return urls
 
 
 def parse_public_post_html(
@@ -159,8 +195,12 @@ def parse_public_post_html(
     )
     media: list[NormalizedMediaItem] = []
     ordered = extract_ordered_post_media(page_html)
+    # An OG image on a Threads page can be the account avatar or a generic
+    # share card.  It is useful as a thumbnail but is not evidence that the
+    # asset belongs to this individual post.  Never promote it to a reusable
+    # media child without an explicit post-bound structured media record.
     if not ordered:
-        ordered = [("image", url) for url in image_urls] + [("video", url) for url in video_urls]
+        ordered = [("video", url) for url in video_urls]
     for index, (media_type, media_url) in enumerate(dict.fromkeys(ordered)):
         media.append(
             NormalizedMediaItem(
@@ -336,3 +376,95 @@ class ThreadsPublicHttpAdapter(ThreadsPublicProfileAdapter):
             raise
         except Exception as exc:
             raise BackendFailure(f"threads_public_http_failed:{type(exc).__name__}") from exc
+
+
+class ThreadsPublicScreenAdapter(ThreadsPublicProfileAdapter):
+    """Bounded rendered-screen fallback for public Threads profile discovery.
+
+    It uses the same cookie-free Playwright dependency as the existing public
+    adapter, but reads visible post anchors after a short, bounded render and
+    scroll sequence.  There is no login, storage state, stealth layer, proxy,
+    private endpoint, or CAPTCHA handling.
+    """
+
+    backend_name = "threads_public_screen"
+    backend_version = "public-screen-v1"
+
+    def __init__(
+        self,
+        html_loader: Callable[[str], str] | None = None,
+        href_loader: Callable[[str, int], list[str]] | None = None,
+    ):
+        super().__init__(html_loader=html_loader)
+        self._href_loader = href_loader
+
+    def _visible_hrefs(self, profile_url: str, *, limit: int) -> list[str]:
+        if self._href_loader:
+            return self._href_loader(profile_url, limit)
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            raise BackendFailure("playwright_not_installed") from exc
+        try:
+            with sync_playwright() as browser_api:
+                browser = browser_api.chromium.launch(headless=True)
+                context = browser.new_context()
+                page = context.new_page()
+                page.set_default_timeout(30_000)
+                page.goto(profile_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(1_500)
+                hrefs: list[str] = []
+                # Two small scrolls are enough to expose the first bounded
+                # page without turning profile discovery into an unbounded crawl.
+                for _ in range(3):
+                    visible = page.locator("a[href*='/post/']").evaluate_all(
+                        "elements => elements.map(element => element.getAttribute('href') || '')"
+                    )
+                    hrefs.extend(str(value) for value in visible)
+                    if len(extract_profile_post_urls_from_hrefs(hrefs, profile_url, limit=limit)) >= limit:
+                        break
+                    page.mouse.wheel(0, 900)
+                    page.wait_for_timeout(700)
+                context.close()
+                browser.close()
+                return hrefs
+        except BackendFailure:
+            raise
+        except Exception as exc:
+            raise BackendFailure(f"threads_public_screen_failed:{type(exc).__name__}") from exc
+
+    def acquire(
+        self, source: dict[str, Any], *, limit: int
+    ) -> list[NormalizedSourcePost]:
+        profile_url = canonical_url(str(source.get("source_url") or ""))
+        if not profile_url.startswith("https://www.threads.com/@"):
+            raise BackendFailure("threads_profile_url_required")
+        try:
+            start_position = max(1, int(source.get("_discovery_start_position", 1)))
+        except (TypeError, ValueError):
+            start_position = 1
+        bounded = max(1, int(limit))
+        requested = start_position - 1 + bounded
+        urls = extract_profile_post_urls_from_hrefs(
+            self._visible_hrefs(profile_url, limit=requested), profile_url, limit=requested
+        )
+        post_urls = urls[start_position - 1 : start_position - 1 + bounded]
+        if not post_urls:
+            raise BackendFailure("threads_visible_post_links_unavailable")
+        posts: list[NormalizedSourcePost] = []
+        for post_url in post_urls:
+            try:
+                posts.append(
+                    parse_public_post_html(
+                        source,
+                        post_url,
+                        self._load(post_url),
+                        backend_name=self.backend_name,
+                        backend_version=self.backend_version,
+                    )
+                )
+            except BackendFailure:
+                continue
+        if not posts:
+            raise BackendFailure("threads_visible_post_detail_unavailable")
+        return posts

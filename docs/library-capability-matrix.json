@@ -141,6 +141,19 @@
       "constraints": ["public content only", "explicit partial status on failure"]
     },
     {
+      "id": "threads_public_screen",
+      "repository": "internal_adapter",
+      "pinned_version": "playwright==1.61.0",
+      "pinned_revision": "repository_head",
+      "license": "project_license",
+      "install_method": "requirements.txt plus pinned Chromium install",
+      "capabilities": ["rendered_threads_profile_discovery", "bounded_visible_post_anchors", "same_handle_post_filter"],
+      "adapter": "src/acquisition/threads_public.py",
+      "github_actions_compatibility": "PASS_WITH_LIVE_CANARY_REQUIRED",
+      "production_status": "INTEGRATED_FALLBACK",
+      "constraints": ["fresh cookie-free context", "at most two small profile scrolls", "no stealth, login, proxy, or CAPTCHA bypass"]
+    },
+    {
       "id": "tiktok_public_playwright",
       "repository": "internal_adapter",
       "pinned_version": "playwright==1.61.0",

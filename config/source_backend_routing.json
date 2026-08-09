@@ -4,14 +4,14 @@
   "routes": {
     "threads.profile_posts": {
       "primary": "threads_public_playwright",
-      "fallbacks": ["threads_public_http"],
+      "fallbacks": ["threads_public_screen", "threads_public_http"],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
     },
     "threads.post_detail": {
       "primary": "threads_public_playwright",
-      "fallbacks": ["threads_public_http"],
+      "fallbacks": ["threads_public_screen", "threads_public_http"],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
@@ -93,6 +93,7 @@
     "tiktok_public_playwright": "FALLBACK",
     "tiktok_gallery_dl": "FALLBACK",
     "threads_public_playwright": "PRIMARY",
+    "threads_public_screen": "FALLBACK",
     "threads_public_http": "FALLBACK",
     "x_gallery_dl": "PRIMARY",
     "youtube_transcript_api": "PRIMARY",

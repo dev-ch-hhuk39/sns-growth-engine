@@ -6,7 +6,12 @@ from acquisition.threads_public import extract_profile_post_urls, parse_public_p
 
 source = {"source_id": "src", "target_account_id": "night_scout", "source_url": "https://www.threads.com/@sample"}
 profile = '<a href="/@sample/post/abc123">one</a><a href="/@sample/post/abc123">again</a>'
-page = '<meta property="og:description" content="reader-facing source text"><meta property="og:image" content="https://cdn.example/one.jpg"><meta property="og:image" content="https://cdn.example/two.jpg">'
+page = '''<meta property="og:description" content="reader-facing source text">
+<meta property="og:image" content="https://cdn.example/avatar.jpg">
+<script>{"carousel_media":[
+ {"image_url":"https://cdn.example/one.jpg"},
+ {"image_url":"https://cdn.example/two.jpg"}
+]}</script>'''
 urls = extract_profile_post_urls(profile, source["source_url"], limit=5)
 post = parse_public_post_html(source, urls[0], page)
 checks = {"deduped profile post link": len(urls) == 1, "carousel images retained": post.media_count == 2,

@@ -10,16 +10,18 @@ text, media URLs, or secrets.
 | Capability | PRIMARY | FALLBACK | Status |
 | --- | --- | --- | --- |
 | YouTube/TikTok profile metadata | `yt-dlp` | none | PRIMARY |
-| Threads public profile posts | own public Playwright adapter | own public HTTP adapter | PRIMARY/FALLBACK |
+| Threads public profile posts | own public Playwright adapter | rendered-screen Playwright, own public HTTP | PRIMARY/FALLBACK |
 | X approved profile posts | `gallery-dl` bounded JSON adapter | browser export / manual JSON import | PRIMARY/RECOVERY |
 | YouTube transcript | `youtube-transcript-api` | yt-dlp subtitles, local faster-whisper | PRIMARY/FALLBACK |
 | Trend signals | local `source_posts` aggregator | none | PRIMARY |
 | Agent-Reach/last30days | not a posting or media truth backend | optional analysis shadow only | ANALYSIS_ONLY |
 
-The Threads adapters use a fresh browser context, public HTML only, no stored
-cookies, no private GraphQL, no proxy rotation, no stealth/CAPTCHA bypass, and
-serial requests. A normal public-page failure opens a 15-minute circuit breaker
-and then permits the HTTP fallback.
+The Threads adapters use a fresh browser context, public HTML and visible public
+anchors only, no stored cookies, no private GraphQL, no proxy rotation, no
+stealth/CAPTCHA bypass, and serial requests.  The screen fallback performs at
+most two small profile scrolls and only accepts individual post URLs belonging
+to the configured handle. A normal public-page failure opens a 15-minute
+circuit breaker and then permits the next fallback.
 
 The X adapter is limited to registry rows with `x_read_only=true` and requests
 at most 20 recent posts per approved profile through `gallery-dl --dump-json`.

@@ -12,7 +12,11 @@ from .enrichment import (
     YouTubeTranscriptProvider,
     YtDlpPostDetailProvider,
 )
-from .threads_public import ThreadsPublicHttpAdapter, ThreadsPublicProfileAdapter
+from .threads_public import (
+    ThreadsPublicHttpAdapter,
+    ThreadsPublicProfileAdapter,
+    ThreadsPublicScreenAdapter,
+)
 from .tiktok_public import TikTokPublicProfileAdapter
 from .tiktok_gallerydl import TikTokGalleryDlProfileAdapter
 from .x_gallerydl import XGalleryDlProfileAdapter
@@ -32,6 +36,7 @@ def build_router() -> AdapterRouter:
         "tiktok_public_playwright": TikTokPublicProfileAdapter(),
         "tiktok_gallery_dl": TikTokGalleryDlProfileAdapter(),
         "threads_public_playwright": ThreadsPublicProfileAdapter(),
+        "threads_public_screen": ThreadsPublicScreenAdapter(),
         "threads_public_http": ThreadsPublicHttpAdapter(),
         "x_gallery_dl": XGalleryDlProfileAdapter(),
     }

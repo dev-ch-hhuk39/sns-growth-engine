@@ -6597,3 +6597,31 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 - 次に触ってよい: shared acquisition router、TikTok/Threads adapter、account-level selection receipt、source/permission tests、`docs/source-backend-decision.md`。
 - 触らない方がよい: `.env`、`data/`、`output/`、credentials/cookies/storage state、X posting、beauty account、第三者reference-only mediaのdownload/cut/upload/repost、live scheduled publish。
+
+## 2026-08-09 Threads Primary Acquisition Repair
+
+### 本システムについて
+
+- 参照テキスト収集は、公開Threadsプロフィールから個別投稿を有界に発見し、本文をNight Scout/Liver Manager向け生成の参考にする経路である。これは直接メディア再投稿とは別であり、第三者素材は`media_permissions`の明示承認なしにdownload/upload/repostしない。
+- Night Scoutの`female_subject_required`は、第三者動画をclip候補に選べるかの素材ポリシーであって、Night Scout投稿の話者ペルソナではない。投稿ペルソナは`config/accounts/night_scout.json`（`僕`、夜職女性の意思決定を支援）、Liver Managerは`config/accounts/liver_manager.json`（`私`、女性マネージャー）を正本とする。
+
+### 変更ファイル一覧
+
+- 更新: `src/acquisition/threads_public.py`, `src/acquisition/factory.py`, `scripts/collect_source_posts.py`, `config/source_backend_routing.json`, `docs/source-backend-decision.md`, `docs/library-capability-matrix.json`, `docs/ai-work-handoff.md`。
+- 追加: `scripts/test_threads_public_screen_adapter.py`, `scripts/test_threads_public_og_image_not_media.py`, `scripts/test_collect_source_posts_threads_router.py`。
+- `threads_public_screen` を shared `AdapterRouter` のfallbackへ追加。cookieなしPlaywrightの公開画面から、最大2回の小さなscroll後に可視アンカーを読む。configured handleと一致する個別`/@handle/post/<id>`だけを受理する。
+- legacy `collect_source_posts.py` のThreads profile pathをshared Routerへ接続し、これまで未使用だったrendered-screen fallbackを実際の収集経路に通した。
+- `og:image`単独はプロフィール画像・共有カードである可能性があるためmedia childに昇格しない。個別投稿の構造化mediaだけを親`source_post_id`へ順序付きで保存候補にする。
+
+### 実証 / テスト結果
+
+- 2026-08-09、`--fetch-real --dry-run`でThreads公開プロフィールの実読取を実施。Night Scout `@chiishunin_s` とLiver Manager `@me01_lsm` から各2件、合計4件の個別`/post/` URLと本文を取得した。Sheets保存、投稿、download、Cloudinary upload、cutはいずれも未実行。
+- Night Scoutの先頭投稿では、構造化された同一親投稿のカルーセル5媒体を順序付きで検出した。OG画像だけの投稿はmedia childに保存しないこともfocused testで確認した。
+- PASS: `test_threads_public_screen_adapter.py`, `test_threads_public_og_image_not_media.py`, `test_collect_source_posts_threads_router.py`, `test_threads_public_adapter_media_parenting.py`, `test_collect_source_posts_manual_json_fallback.py`, `test_collect_source_posts_parent_bundle.py`, `test_collect_source_posts_no_media_download.py`, X/TikTok adapter pytest `6 passed`, `py_compile`, `git diff --check`。
+
+### 未完了事項 / スケール方針 / 残WARN
+
+- YouTubeはmetadata discoveryが実行済みだが、Night Scoutでclipに使う個別動画は`female_subject_required`、`no_male_scout_talking_head_for_clip`、店舗PR除外を動画単位で確認してから選ぶ。素材適合に失敗した候補はanalysis-onlyにし、account personaと混同しない。
+- Threadsのreference text取得は実証済み。direct mediaは、個別投稿の構造化mediaと対象アカウント用`media_permissions`がそろった場合だけ次段へ進める。本文と別投稿のmediaを混ぜない。
+- Xはbounded `gallery-dl`、TikTokは`yt-dlp -> gallery-dl -> public Playwright`の順で引き続き任意経路。失敗は`browser_export_or_manual_json_required`とし、mock成功を実取得成功に数えない。
+- 次に触ってよい: YouTube個別候補の素材適合判定、reference text生成、permission-approved direct-media runner。触らない方がよい: `.env`, `data/`, `output/`, credentials/cookies/storage state、X publish、beauty、第三者reference-only素材のdownload/cut/upload/repost、実Threads投稿。
