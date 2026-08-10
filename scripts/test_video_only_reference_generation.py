@@ -48,10 +48,8 @@ def main() -> int:
             "night_scout", 3, apply=False, video_only_reference=True, client=client,
         )
     checks = [
-        ("video filter reported", result["reference_media_filter"] == "video_only"),
-        ("only video parent is generation input", result["source_posts"] == 1),
-        ("video parent count preserved", result["video_reference_parent_count"] == 1),
-        ("review-only candidate status", result["candidate_status"] == "WAITING_REVIEW"),
+        ("missing eligible video reference is NO_DATA", result["status"] == "NO_DATA"),
+        ("never silently falls back to original text", result["reason"] == "video_reference_source_required"),
         ("never worker selectable", result["worker_selectable"] is False),
         ("never posts", result["real_post_possible_now"] is False),
     ]

@@ -2106,7 +2106,10 @@ def run_reference_generation(
         if (
             not rows["queue"]
             and post_type == "reference_text"
-            and slot_id in {"ns_1400_reference", "lm_1300_reference"}
+            and (
+                video_only_reference
+                or slot_id in {"ns_1400_reference", "lm_1300_reference"}
+            )
         ):
             return {
                 "status": "NO_DATA",
@@ -2114,7 +2117,11 @@ def run_reference_generation(
                 "post_type": post_type,
                 "candidate_count": 0,
                 "measured_metric_count": len(measured),
-                "reason": "reference_source_required_for_reference_slot",
+                "reason": (
+                    "video_reference_source_required"
+                    if video_only_reference
+                    else "reference_source_required_for_reference_slot"
+                ),
                 "worker_selectable": False,
                 "real_post_possible_now": False,
             }
