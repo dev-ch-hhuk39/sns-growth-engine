@@ -12,7 +12,7 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-import discover_approved_source_videos as d
+import discover_approved_source_videos as d  # noqa: E402
 
 
 def fake_real_discovery(
@@ -96,12 +96,12 @@ finally:
 
 checks = [
     (
-        "apply remains blocked while discovery persistence is disabled",
-        "source_video_discovery_apply_disabled" in plan["blocked_reasons"],
+        "bounded discovery persistence is enabled",
+        "source_video_discovery_apply_disabled" not in plan["blocked_reasons"],
     ),
     (
-        "apply save is not planned while disabled",
-        (plan["would_save_source_videos"] is False),
+        "apply plans source video metadata save",
+        (plan["would_save_source_videos"] is True),
     ),
     (
         "new videos available",
