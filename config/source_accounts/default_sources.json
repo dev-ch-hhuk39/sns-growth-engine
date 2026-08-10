@@ -1358,6 +1358,7 @@
       "allow_upload": false,
       "requires_local_login": true,
       "rights_policy": "reference_only",
+      "rights_status": "reference_only",
       "reuse_policy": "reference_only",
       "media_policy": "do_not_download",
       "pdca_enabled": false,

@@ -1888,10 +1888,17 @@ def run_reference_generation(
         if str(row.get("media_type", "")).strip().lower() == "video"
         and str(row.get("source_post_id", "")).strip()
     }
+    threads_video_parent_count = len({
+        str(row.get("source_post_id", "")).strip()
+        for row in canonical_source_posts
+        if str(row.get("source_post_id", "")).strip() in video_parent_ids
+        and str(row.get("platform", "")).strip().lower() == "threads"
+    })
     if video_only_reference:
         canonical_source_posts = [
             row for row in canonical_source_posts
             if str(row.get("source_post_id", "")).strip() in video_parent_ids
+            and str(row.get("platform", "")).strip().lower() == "threads"
         ]
     source_videos = [
         dict(row) for row in read_records_safely(client, "source_videos")
@@ -2166,7 +2173,7 @@ def run_reference_generation(
         "source_scores": len(scores),
         "reference_input_source": "source_posts_current",
         "reference_media_filter": "video_only" if video_only_reference else "any",
-        "video_reference_parent_count": len(video_parent_ids),
+        "video_reference_parent_count": threads_video_parent_count,
         "reference_input_diagnostics": reference_input_diagnostics,
         "candidate_count": len(rows["queue"]),
         "candidate_status": CANDIDATE_STATUS,

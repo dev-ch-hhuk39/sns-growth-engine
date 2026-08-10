@@ -58,7 +58,7 @@ def capability_for(platform: str) -> str:
 
 
 def selected_sources(
-    account_id: str, platform_filter: str
+    account_id: str, platform_filter: str, *, reference_only: bool = False
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     data = json.loads(
         (ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")
@@ -79,6 +79,12 @@ def selected_sources(
             continue
         if not truthy(source.get("active")):
             continue
+        if reference_only:
+            # Reference acquisition never grants reuse rights. It is limited
+            # to sources that were explicitly enabled for bounded fetching.
+            if truthy(source.get("fetch_enabled")):
+                selected.append(source)
+            continue
         # The owner-attested permission ledger is the runtime authority.  The
         # repository mapping merely limits which active sources can be planned.
         if media_usage_mode(source) not in {"direct_media_reuse", "direct_and_clip"}:
@@ -91,6 +97,18 @@ def selected_sources(
             continue
         selected.append(source)
     return selected, blocked
+
+
+def reference_only_permission(source: dict[str, Any]) -> dict[str, str]:
+    """Policy for source text and ordered media metadata, never media reuse."""
+    return {
+        "rights_status": str(
+            source.get("rights_status")
+            or source.get("rights_policy")
+            or "reference_only"
+        ),
+        "permission_status": "reference_only",
+    }
 
 
 def ledger_permission(client: SheetsClient, source_id: str) -> dict[str, Any] | None:
@@ -863,10 +881,12 @@ def run(
     *,
     apply: bool,
     shadow: bool,
+    reference_only: bool = False,
 ) -> dict[str, Any]:
     sources, blocked = selected_sources(
         account_id,
         platform_filter,
+        reference_only=reference_only,
     )
 
     discovery_config = load_discovery_config()
@@ -885,6 +905,7 @@ def run(
         "selected_source_count": len(sources),
         "blocked_sources": blocked,
         "network_fetch": False,
+        "reference_only": reference_only,
         "would_save_source_posts": False,
         "source_results": [],
         "discovered_post_count": 0,
@@ -1004,9 +1025,10 @@ def run(
             "inventory_target": (scan_plan["inventory_target"]),
         }
 
-        permission = ledger_permission(
-            client,
-            source_id,
+        permission = (
+            reference_only_permission(source)
+            if reference_only
+            else ledger_permission(client, source_id)
         )
 
         if not permission:
@@ -1123,8 +1145,8 @@ def run(
             provider_run_rows.extend(provider_events)
 
             policy_by_source[source_id] = {
-                "rights_status": str(permission.get("rights_status") or "approved_creator_clip"),
-                "permission_status": str(permission.get("permission_status") or "approved"),
+                "rights_status": str(permission.get("rights_status") or "reference_only"),
+                "permission_status": str(permission.get("permission_status") or "reference_only"),
             }
 
             latest_candidate = candidates[0] if candidates else {}
@@ -1351,6 +1373,11 @@ def main() -> int:
         action="store_true",
         help=("run configured analysis-only " "shadow adapters when installed"),
     )
+    parser.add_argument(
+        "--reference-only",
+        action="store_true",
+        help="fetch enabled reference sources without granting media reuse",
+    )
 
     args = parser.parse_args()
 
@@ -1384,6 +1411,7 @@ def main() -> int:
         args.max_posts,
         apply=args.apply,
         shadow=args.shadow,
+        reference_only=args.reference_only,
     )
 
     print(
