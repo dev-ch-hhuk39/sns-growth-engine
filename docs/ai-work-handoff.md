@@ -6719,3 +6719,18 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - focused PASS: `test_reference_first_content_router.py`、`test_content_mix_planner.py` (13/13)、`test_media_production_requires_grounded_clip.py` (3/3)、`test_approved_source_clip_contract.py`、`test_video_stream_evidence_contract.py`、`test_media_aspect_ratio_preservation.py`、変更対象の`py_compile`、`git diff --check`。
 - dry-run / 外部操作: 実fetch、download、cut、upload、Cloudinary、Sheets更新、Threads投稿はいずれも未実行。X/Beauty block、media-to-text fallback禁止、既存publisher gateは維持。
 - 未完了: このルールに沿う候補を投稿レビューへ補充する実運用確認。安全ゲートとmedia-to-text fallback禁止は維持する。
+
+# 2026-08-10 Live Acquisition And Review Preparation
+
+### 実行結果
+
+- GitHub Actions `Approved Account Acquisition` run `31344220449` を投稿なしで実行し、承認済みsourceから個別投稿12件・media child 13件をSheetsへ保存した。X投稿・Beauty・Threads投稿は0件。
+- GitHub Actions `Direct Media Preparation` run `31344289651` を投稿なしで実行した。Liver ManagerはTikTok個別投稿 `sp_src_lm_tt_user_001_7670874544651160839` の動画1件を取得し、Cloudinary保存、vision理解、queue生成、`WAITING_REVIEW`化まで成功した。生成queueは `direct_media_20260810_liver_manager_sp_src_lm_tt_user_001_7664954598758550802_ma_cde0d66afad8f7d520e6e724_85e66decfcea`。
+- Night ScoutはThreads個別投稿 `sp_src_ns_threads_required_003_Dbzik2RiZq1` のmedia bundle 2件を取得・Cloudinary保存・vision理解まで成功した。ただし既存queueの権利またはmedia understanding不足をfail-closedで検知し、READY候補化は `FAILED_READY_REQUIRED` として停止した。投稿は0件。
+- `Publication Review Board` run `31344524466` がSheetsの **投稿レビュー** タブを同期し、`review_count=44`、`read_after_write=true`、新規append 1件を確認した。レビューの`OK`入力だけでは投稿されない。
+
+### 残WARN / 次の操作
+
+- 取得・Cloudinary保存・Sheetsレビュー同期は実経路で確認できたが、Night Scoutの新規video candidateは既存のpermission / media-understanding欠損を補うまでレビュー候補にしない。権利を推測して追加しない。
+- 次に人間が見る場所: Google Sheetsの **投稿レビュー** タブ。Liver Managerの新規動画候補と、既存text/reference候補を本文・preview URL・品質状態で確認する。
+- 次AIが触ってよい: Night Scoutの承認済みsourceに限定したpermission/provenanceとmedia-understandingの修復、review-ready候補の品質確認。触らない方がよい: `.env`、`data/`、`output/`、credentials/cookies、X/Beauty publish、第三者reference-only素材、review未承認のThreads投稿。
