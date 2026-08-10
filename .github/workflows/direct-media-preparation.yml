@@ -91,7 +91,8 @@ jobs:
         if: github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true'
         run: |
           python3 scripts/acquire_approved_source_posts_failsoft.py \
-            --account-id "$ACCOUNT_ID" --platform threads --max-posts 12 \
+            --account-id "$ACCOUNT_ID" --platform threads --max-posts 30 \
+            --media-filter video-only --force-backfill \
             --apply --confirm-acquisition
       - name: Dry-run direct preparation plan
         run: |

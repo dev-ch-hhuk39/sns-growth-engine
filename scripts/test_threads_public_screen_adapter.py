@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from acquisition.threads_public import ThreadsPublicScreenAdapter
+from acquisition.threads_public import ThreadsPublicScreenAdapter  # noqa: E402
 
 PROFILE = "https://www.threads.com/@target"
 
@@ -34,11 +34,22 @@ posts = adapter.acquire(
     limit=2,
 )
 
+backfill = adapter.acquire(
+    {
+        "source_id": "src",
+        "source_url": PROFILE,
+        "target_account_ids": ["night_scout"],
+        "_discovery_start_position": 2,
+    },
+    limit=1,
+)
+
 checks = {
     "only configured handle": [post.author_handle for post in posts] == ["target", "target"],
     "individual post urls": [post.external_post_id for post in posts] == ["first", "second"],
     "deduplicated": len(posts) == 2,
     "no profile parent": all("/post/" in post.canonical_post_url for post in posts),
+    "bounded start position": [post.external_post_id for post in backfill] == ["second"],
 }
 for name, passed in checks.items():
     print(f"{'PASS' if passed else 'FAIL'} {name}")

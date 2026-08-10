@@ -18,15 +18,18 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
-from acquisition.factory import build_provider_registry, build_router
-from acquisition.models import NormalizedSourcePost, validate_source_post
-from acquisition.router import BackendFailure
-from config_loader import get_config
-from media_source_policy import media_usage_mode
-from media_growth_schemas import build_source_video
-from sheets_client import TAB_DEFINITIONS, SheetsClient
-from transcription.sheets_limits import bounded_cell, normalize_transcript_row
-from source_discovery_policy import (
+from acquisition.factory import build_provider_registry, build_router  # noqa: E402
+from acquisition.models import NormalizedSourcePost, validate_source_post  # noqa: E402
+from acquisition.router import BackendFailure  # noqa: E402
+from config_loader import get_config  # noqa: E402
+from media_source_policy import media_usage_mode  # noqa: E402
+from media_growth_schemas import build_source_video  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from transcription.sheets_limits import (  # noqa: E402
+    bounded_cell,
+    normalize_transcript_row,
+)
+from source_discovery_policy import (  # noqa: E402
     build_state_update,
     plan_source_scan,
     select_unique_candidates,
@@ -874,6 +877,40 @@ def persist_observability(client: SheetsClient, results: list[dict[str, Any]]) -
         )
 
 
+def post_matches_media_filter(
+    post: NormalizedSourcePost,
+    media_filter: str,
+) -> bool:
+    """Keep complete parent bundles; video-only never strips image children."""
+    if media_filter != "video-only":
+        return True
+
+    return bool(post.media_items) and all(
+        item.media_type == "video"
+        for item in post.media_items
+    )
+
+
+def selection_with_scan_progress(
+    selection: dict[str, Any],
+    scan_plan: dict[str, Any],
+    adapter_post_count: int,
+) -> dict[str, Any]:
+    """Advance the bounded cursor even when a window contains no videos."""
+    start_position = int(scan_plan.get("start_position", 1))
+    scanned_high_watermark = (
+        start_position + max(0, int(adapter_post_count)) - 1
+    )
+
+    return {
+        **selection,
+        "max_scanned_position": max(
+            int(selection.get("max_scanned_position", 0) or 0),
+            scanned_high_watermark,
+        ),
+    }
+
+
 def run(
     account_id: str,
     platform_filter: str,
@@ -882,6 +919,8 @@ def run(
     apply: bool,
     shadow: bool,
     reference_only: bool = False,
+    media_filter: str = "any",
+    force_backfill: bool = False,
 ) -> dict[str, Any]:
     sources, blocked = selected_sources(
         account_id,
@@ -890,6 +929,15 @@ def run(
     )
 
     discovery_config = load_discovery_config()
+
+    if force_backfill:
+        discovery_config = {
+            **discovery_config,
+            # General text/image inventory must not hide a shortage in the
+            # video-only direct-media route. Reuse the existing bounded
+            # backfill cursor instead of starting an unbounded profile crawl.
+            "min_unprocessed_source_inventory_per_account": 1_000_000,
+        }
 
     max_scan_posts = max(
         1,
@@ -906,6 +954,8 @@ def run(
         "blocked_sources": blocked,
         "network_fetch": False,
         "reference_only": reference_only,
+        "media_filter": media_filter,
+        "force_backfill": force_backfill,
         "would_save_source_posts": False,
         "source_results": [],
         "discovered_post_count": 0,
@@ -1094,6 +1144,17 @@ def run(
             )
 
             valid_before_policy = [post for post in routed.posts if not validate_source_post(post)]
+            adapter_post_count = len(valid_before_policy)
+
+            if media_filter == "video-only":
+                valid_before_policy = [
+                    post
+                    for post in valid_before_policy
+                    if post_matches_media_filter(
+                        post,
+                        media_filter,
+                    )
+                ]
 
             candidates = [
                 source_post_candidate(
@@ -1152,7 +1213,11 @@ def run(
             latest_candidate = candidates[0] if candidates else {}
 
             state_selection = {
-                **selection,
+                **selection_with_scan_progress(
+                    selection,
+                    scan_plan,
+                    adapter_post_count,
+                ),
                 "new_count": len(valid),
             }
 
@@ -1190,7 +1255,8 @@ def run(
                 "attempt_count": len(routed.attempted_backends),
                 "retryable": False,
                 "fallback_used": (routed.fallback_used),
-                "adapter_post_count": len(valid_before_policy),
+                "adapter_post_count": adapter_post_count,
+                "media_filtered_post_count": len(valid_before_policy),
                 "post_count": len(valid),
                 "duplicate_post_count": int(
                     selection.get(
@@ -1378,6 +1444,17 @@ def main() -> int:
         action="store_true",
         help="fetch enabled reference sources without granting media reuse",
     )
+    parser.add_argument(
+        "--media-filter",
+        choices=["any", "video-only"],
+        default="any",
+        help="persist all posts or only complete video-only parent posts",
+    )
+    parser.add_argument(
+        "--force-backfill",
+        action="store_true",
+        help="use the bounded historical cursor even when general inventory is full",
+    )
 
     args = parser.parse_args()
 
@@ -1412,6 +1489,8 @@ def main() -> int:
         apply=args.apply,
         shadow=args.shadow,
         reference_only=args.reference_only,
+        media_filter=args.media_filter,
+        force_backfill=args.force_backfill,
     )
 
     print(
