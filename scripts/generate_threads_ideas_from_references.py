@@ -1861,6 +1861,7 @@ def run_reference_generation(
     schedule_date_jst: str = "",
     require_measured_pdca: bool = False,
     include_preview_rows: bool = False,
+    video_only_reference: bool = False,
     client: Any | None = None,
 ) -> dict[str, Any]:
     from sheets_record_reader import read_records_safely
@@ -1878,6 +1879,20 @@ def run_reference_generation(
     canonical_source_posts = [
         dict(row) for row in read_records_safely(client, "source_posts")
     ]
+    source_post_media = [
+        dict(row) for row in read_records_safely(client, "source_post_media")
+    ]
+    video_parent_ids = {
+        str(row.get("source_post_id", "")).strip()
+        for row in source_post_media
+        if str(row.get("media_type", "")).strip().lower() == "video"
+        and str(row.get("source_post_id", "")).strip()
+    }
+    if video_only_reference:
+        canonical_source_posts = [
+            row for row in canonical_source_posts
+            if str(row.get("source_post_id", "")).strip() in video_parent_ids
+        ]
     source_videos = [
         dict(row) for row in read_records_safely(client, "source_videos")
     ]
@@ -2150,6 +2165,8 @@ def run_reference_generation(
         "source_posts": len(posts),
         "source_scores": len(scores),
         "reference_input_source": "source_posts_current",
+        "reference_media_filter": "video_only" if video_only_reference else "any",
+        "video_reference_parent_count": len(video_parent_ids),
         "reference_input_diagnostics": reference_input_diagnostics,
         "candidate_count": len(rows["queue"]),
         "candidate_status": CANDIDATE_STATUS,
@@ -2335,6 +2352,11 @@ def _parse_args() -> argparse.Namespace:
             "MEASURED evidence exists."
         ),
     )
+    parser.add_argument(
+        "--video-only-reference",
+        action="store_true",
+        help="Use only source_posts with an ordered video child; still creates text-only review candidates.",
+    )
     return parser.parse_args()
 
 
@@ -2361,6 +2383,7 @@ def main() -> int:
             include_preview_rows=(
                 args.include_preview_queue
             ),
+            video_only_reference=args.video_only_reference,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
@@ -2380,6 +2403,7 @@ def main() -> int:
             require_measured_pdca=(
                 args.require_measured_pdca
             ),
+            video_only_reference=args.video_only_reference,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["status"] in {"GENERATED", "NO_DATA"} else 1
