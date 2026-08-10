@@ -195,6 +195,26 @@ def _media_type_preference_rank(
     return 2
 
 
+def _is_video_only_bundle(row: dict[str, Any]) -> bool:
+    """Direct comment posts use source videos only; images never fill this route."""
+    raw_bundle = row.get("carousel_media", [])
+    bundle = raw_bundle if isinstance(raw_bundle, list) and raw_bundle else [row]
+    media_types = [
+        str(item.get("media_type", "")).strip().lower()
+        for item in bundle
+        if isinstance(item, dict)
+    ]
+    if not media_types and row.get("media_types"):
+        raw_types = row.get("media_types")
+        if isinstance(raw_types, str):
+            try:
+                raw_types = json.loads(raw_types)
+            except json.JSONDecodeError:
+                raw_types = [raw_types]
+        media_types = [str(value).strip().lower() for value in raw_types if str(value).strip()]
+    return bool(media_types) and all(media_type == "video" for media_type in media_types)
+
+
 def _today_posts(rows: list[dict[str, Any]], account_id: str) -> list[dict[str, Any]]:
     target = business_date()
     result: list[dict[str, Any]] = []
@@ -360,15 +380,9 @@ def select_direct_candidates(
             **resolved[0],
             "carousel_media": resolved,
         }
-        if (
-            not image_fallback_enabled
-            and _media_type_preference_rank(
-                primary,
-                preferred_media_type,
-            ) == 2
-        ):
+        if not image_fallback_enabled and not _is_video_only_bundle(primary):
             reasons.append(
-                f"{post_id}:image_fallback_disabled"
+                f"{post_id}:direct_comment_requires_video"
             )
             continue
         candidates.append((post, primary, source))
@@ -1159,6 +1173,14 @@ def dispatch_ready(
             "video",
         )
     ).strip().lower()
+    image_fallback_enabled = _true(
+        _load(MEDIA_CONFIG).get(
+            "direct_media_image_fallback_enabled",
+            False,
+        )
+    )
+    if not image_fallback_enabled:
+        candidates = [row for row in candidates if _is_video_only_bundle(row)]
     candidates.sort(
         key=lambda row: (
             _media_type_preference_rank(

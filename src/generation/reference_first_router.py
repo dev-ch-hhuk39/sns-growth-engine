@@ -34,7 +34,7 @@ def load_operational_mix(account_id: str, *, config: dict[str, Any] | None = Non
         raise ValueError("reference_first_mix_must_contain_all_routes_and_sum_to_100")
     if ratios[CLIP_ROUTE] > 5:
         raise ValueError("clip_route_must_not_exceed_five_percent")
-    if ratios["reference_text_generation"] + ratios["direct_reference_media"] < 65:
+    if ratios["reference_text_generation"] + ratios["direct_reference_media"] < 80:
         raise ValueError("reference_and_quote_routes_must_be_primary")
     return ratios
 

@@ -61,6 +61,8 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     )
     duration = float(plan.get("duration_seconds") or 0)
     aspect = str(plan.get("aspect_ratio", ""))
+    aspect_policy = str(plan.get("aspect_ratio_policy", "force_9_16")).strip().lower()
+    source_aspect = str(plan.get("source_aspect_ratio", "")).strip()
     media_origin = str(plan.get("media_origin", "approved_source_clip")).strip().lower()
     content_type = str(plan.get("content_type", "")).strip().lower()
     declared_publisher_type = str(plan.get("publisher_media_type", "")).strip().upper()
@@ -159,7 +161,12 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         else:
             if not 8 <= duration <= 45:
                 reasons.append("duration_out_of_range")
-            if aspect != "9:16":
+            if aspect_policy == "preserve_source":
+                if not aspect:
+                    reasons.append("aspect_ratio_missing")
+                elif source_aspect and aspect != source_aspect:
+                    reasons.append("aspect_ratio_not_preserved_from_source")
+            elif aspect != "9:16":
                 reasons.append("aspect_ratio_not_9_16")
     if text_result["status"] != "PASS":
         reasons.append("public_post_validator_blocked")

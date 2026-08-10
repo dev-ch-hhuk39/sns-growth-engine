@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Direct reference media prefers video while retaining image fallback."""
+"""Direct reference media is video-only when image fallback is disabled."""
 from __future__ import annotations
 
 import sys
@@ -152,7 +152,7 @@ try:
     pipeline._load = (
         lambda _path: {
             "direct_media_preferred_type": "video",
-            "direct_media_image_fallback_enabled": True,
+        "direct_media_image_fallback_enabled": False,
         }
     )
 
@@ -168,10 +168,7 @@ try:
         for candidate in candidates
     ]
 
-    assert selected_ids == [
-        "video_post",
-        "image_post",
-    ], selected_ids
+    assert selected_ids == ["video_post"], selected_ids
 
     tables["source_posts"] = [
         post("image_post", "source_image"),
@@ -199,10 +196,7 @@ try:
         )
     )
 
-    assert [
-        candidate[0]["source_post_id"]
-        for candidate in fallback_candidates
-    ] == ["image_post"]
+    assert fallback_candidates == []
 
 finally:
     pipeline._records = original_records

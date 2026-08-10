@@ -23,16 +23,16 @@ def main() -> None:
     for account_id in ("night_scout", "liver_manager"):
         mix = load_operational_mix(account_id)
         assert mix == {
-            "new_text_generation": 10,
-            "reference_text_generation": 35,
-            "pdca_text_generation": 20,
-            "direct_reference_media": 30,
+            "new_text_generation": 5,
+            "reference_text_generation": 30,
+            "pdca_text_generation": 10,
+            "direct_reference_media": 50,
             "approved_source_clip": 5,
         }
         routes = plan_operational_threads_routes(account_id, 20)
         assert routes.count("approved_source_clip") == 1
-        assert routes.count("reference_text_generation") == 7
-        assert routes.count("direct_reference_media") == 6
+        assert routes.count("reference_text_generation") == 6
+        assert routes.count("direct_reference_media") == 10
 
     forced = choose_reference_first_route(
         desired_route="approved_source_clip", source_has_direct_media_permission=True,
@@ -52,7 +52,7 @@ def main() -> None:
     )
     assert no_permission["status"] == "BLOCKED"
     assert "direct_media_permission_missing" in no_permission["reasons"]
-    print("PASS reference-first routing: reference/quote=65%, clip=5%, forced clips blocked")
+    print("PASS reference-first routing: reference/quote=80%, direct comments are video-only, clip=5%")
 
 
 if __name__ == "__main__":

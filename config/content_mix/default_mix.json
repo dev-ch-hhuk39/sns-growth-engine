@@ -71,17 +71,17 @@
     "selection_policy": "reference_first",
     "clip_policy": "exception_only_after_full_content_understanding",
     "night_scout": {
-      "new_text_generation": 10,
-      "reference_text_generation": 35,
-      "pdca_text_generation": 20,
-      "direct_reference_media": 30,
+      "new_text_generation": 5,
+      "reference_text_generation": 30,
+      "pdca_text_generation": 10,
+      "direct_reference_media": 50,
       "approved_source_clip": 5
     },
     "liver_manager": {
-      "new_text_generation": 10,
-      "reference_text_generation": 35,
-      "pdca_text_generation": 20,
-      "direct_reference_media": 30,
+      "new_text_generation": 5,
+      "reference_text_generation": 30,
+      "pdca_text_generation": 10,
+      "direct_reference_media": 50,
       "approved_source_clip": 5
     }
   }

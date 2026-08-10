@@ -44,7 +44,8 @@
   "require_clip_review_before_cut": true,
   "require_media_validator_before_post": true,
   "max_clips_per_source_per_run": 3,
-  "target_aspect_ratio": "9:16",
+  "target_aspect_ratio": "preserve_source",
+  "aspect_ratio_policy": "preserve_source",
   "clip_duration_min_seconds": 8,
   "clip_duration_max_seconds": 45,
   "subtitle_enabled": false,
@@ -67,7 +68,7 @@
   "direct_reference_media_enabled": true,
   "direct_media_preferred_type": "video",
   "direct_media_preference_mode": "video_first_soft",
-  "direct_media_image_fallback_enabled": true,
+  "direct_media_image_fallback_enabled": false,
   "direct_media_video_target_share_min": 0.9,
   "direct_media_video_target_share_max": 0.95,
   "asset_inventory_targets": {

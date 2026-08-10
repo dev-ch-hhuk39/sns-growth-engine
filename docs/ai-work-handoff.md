@@ -6707,7 +6707,9 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 
 ### 本システムについて / 方針変更
 
-- 投稿形式は両アカウント共通の `reference_first_router` で選ぶ。参照投稿の構成を使う新規文35%、元投稿・動画へのコメント付き引用30%、MEASURED PDCAベース20%、オリジナル10%、切り抜き5%を標準とする。
+- 投稿形式は両アカウント共通の `reference_first_router` で選ぶ。参照投稿の構成を使う新規文30%、元動画付きコメント投稿50%、MEASURED PDCAベース10%、オリジナル5%、切り抜き5%を標準とする。参照構成と元動画付きコメント投稿で80%を占める。指定案は合計105だったため、80%の参照系を維持してPDCAを10%へ正規化した。
+- `direct_reference_media` は以後「元動画付きコメント投稿」を意味し、`direct_media_image_fallback_enabled=false`で動画のみを許可する。画像・画像カルーセル・混在bundleをこの経路の代替素材にしない。
+- 元動画付きコメント投稿は元ファイルの比率をそのまま使う。generated clipも既定は`preserve_source`であり、本番runnerは縦型cropを要求しない。縦型化は明示指定時だけで、保存した`source_aspect_ratio`と出力`aspect_ratio`が異なる場合は投稿前validatorがBLOCKする。
 - Clipは動画の存在だけでは選ばない。全体理解・transcript・独立した一区間の確認・`standalone_story_score >= 85`・`clip_worthy=true`が揃った場合だけ選べる。満たさない動画は、適法なdirect mediaなら引用コメント候補へ戻し、Clip枠をtextへ代替しない。
 - Night Scout/Liver Managerは収集・理解・形式選択・reviewを共通化し、異なるのはtopic fitとpersona/copyだけ。X/Beauty、実投稿、外部取得、download/cut/uploadは今回実行しない。
 
