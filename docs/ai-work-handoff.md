@@ -5,6 +5,7 @@
 - 手動Workflow `Threads Video Reference Preparation` は、Night Scout/Liver ManagerのThreads参照アカウントから個別投稿本文と順序付きmedia metadataを取得し、Sheetsの`source_posts` / `source_post_media`へ保存する。
 - `--video-only-reference`は、同じ親`source_post_id`に`media_type=video`を持つ投稿だけを文章生成入力にする。参照元本文の論点・構成を新しい読者向け本文に変換し、候補は`WAITING_REVIEW`として`投稿レビュー`へ同期する。
 - 投稿、動画download、Cloudinary upload、切り抜き、X、Beautyはすべて無効。参照元videoはpermission evidenceがない限りCloudinaryへ保存・再利用しない。
+- `src_lm_threads_user_me01_lsm`は`reference_only`のbounded acquisition対象として扱う。本文・個別URL・順序付きvideo metadataの保存にdirect-media permissionは不要だが、download/upload/repostの権利は引き続き付与しない。
 
 ### 変更ファイル一覧 / テスト結果
 
