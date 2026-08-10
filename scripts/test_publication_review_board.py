@@ -18,7 +18,7 @@ text_queue = {
 }
 media_queue = {
     **text_queue, "queue_id": "q_media", "media_required": "true", "media_asset_id": "asset_1",
-    "media_url": "https://res.cloudinary.example/asset_1.png", "media_type": "IMAGE",
+    "media_url": "https://res.cloudinary.example/asset_1.png", "media_type": "IMAGE", "media_status": "UPLOADED",
 }
 
 row = review_row(text_queue, {"review_decision": "OK", "reviewer_note": "内容確認済み"})
@@ -27,7 +27,8 @@ checks = [
     ("queue records public text", row["public_post_text"] == "投稿本文です。"),
     ("sync preserves operator decision", row["review_decision"] == "OK" and row["reviewer_note"] == "内容確認済み"),
     ("OK text becomes READY only after validation", decision_for_row({"review_decision": "OK"}, text_queue, allow_media_posts=False)[0] == "READY"),
-    ("OK media remains pending while media gate off", decision_for_row({"review_decision": "OK"}, media_queue, allow_media_posts=False)[0] == "APPROVED_PENDING_MEDIA_GATE"),
+    ("OK prepared media becomes READY without publishing", decision_for_row({"review_decision": "OK"}, media_queue, allow_media_posts=False)[0] == "READY"),
+    ("missing media stays pending", decision_for_row({"review_decision": "OK"}, {**media_queue, "media_url": ""}, allow_media_posts=True)[0] == "APPROVED_PENDING_MEDIA_GATE"),
     ("invalid text cannot be approved", decision_for_row({"review_decision": "OK"}, {**text_queue, "validator_status": "BLOCKED"}, allow_media_posts=False)[0] == "BLOCKED_VALIDATION"),
     ("NG rejects without publishing", decision_for_row({"review_decision": "NG"}, text_queue, allow_media_posts=False)[0] == "REJECTED"),
 ]

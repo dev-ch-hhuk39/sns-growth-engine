@@ -60,8 +60,13 @@ jobs:
       CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      THREADS_BROWSER_STORAGE_STATE_B64: ${{ secrets.THREADS_BROWSER_STORAGE_STATE_B64 }}
       GITHUB_TOKEN: ${{ github.token }}
       GITHUB_MODELS_ENABLED: "true"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_CLASSIFIER_MODEL: ${{ vars.GEMINI_CLASSIFIER_MODEL || 'gemini-3.1-flash-lite' }}
+      GEMINI_GENERATOR_MODEL: ${{ vars.GEMINI_GENERATOR_MODEL || 'gemini-3.5-flash' }}
+      GEMINI_REVIEW_MODEL: ${{ vars.GEMINI_REVIEW_MODEL || 'gemini-3.1-flash-lite' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -80,6 +85,14 @@ jobs:
           command -v ffmpeg
           command -v ffprobe
           command -v tesseract
+      - name: Install bounded Threads browser backend
+        run: python3 -m playwright install --with-deps chromium
+      - name: Acquire bounded reference posts before media preparation
+        if: github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true'
+        run: |
+          python3 scripts/acquire_approved_source_posts_failsoft.py \
+            --account-id "$ACCOUNT_ID" --platform threads --max-posts 12 \
+            --apply --confirm-acquisition
       - name: Dry-run direct preparation plan
         run: |
           python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --dry-run
@@ -110,7 +123,7 @@ jobs:
           ALLOW_LOCAL_TRANSCRIPTION: "true"
           ALLOW_TRANSCRIPTION_API: "false"
         run: python3 scripts/ingest_direct_reference_media_reliable.py --account-id "$ACCOUNT_ID" --max-assets 10 --apply --confirm-ingest
-      - name: Persist validator-approved READY inventory
+      - name: Persist validator-approved review inventory
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
         env:
           REQUIRE_PREPARED: "true"
@@ -118,6 +131,15 @@ jobs:
       - name: Normalize prepared inventory for Hybrid review
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
         run: python3 scripts/normalize_unreviewed_slot_candidates.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --apply --confirm-normalize --use-sheets
+      - name: Finalize prepared public text before human review
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
+        run: python3 scripts/run_hybrid_ai_queue_gate.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --max-candidates 2 --apply --use-sheets
+      - name: Sync prepared media to publication review
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
+        run: |
+          python3 scripts/sync_publication_review.py \
+            --apply --confirm-review-sync --use-sheets \
+            --output /tmp/direct-media-review.json
       - name: Clean expired transient media
         if: always()
         run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup

@@ -1,5 +1,13 @@
 # Reference Pipeline Runbook
 
+## Threads reference-media route - 2026-08-10
+
+The production path is now `bounded profile discovery -> individual /post/ -> same-parent text and ordered media -> permission lookup -> direct HTTPS/individual-post fallback -> Cloudinary -> grounded new caption -> WAITING_REVIEW`. Night Scout and Liver Manager share this path; topic fit and persona are account-specific.
+
+The preferred backend is `threads_browser_session` when `THREADS_BROWSER_STORAGE_STATE_B64` or a local storage-state path is explicitly configured. It scopes text, video and images to one rendered individual-post root. If no session is configured, routing continues to public screen/Playwright/HTTP adapters. A missing session is not reported as successful acquisition.
+
+Live evidence before this change: public Playwright saved three Liver Manager individual posts and three same-parent media children; the Night Scout run found four already-known individual posts and skipped them as duplicates. No video child was fabricated. Reference-only rows continue to support text/structure analysis, but direct download/repost requires a separate approved `media_permissions` row.
+
 Date: 2026-06-27
 
 ネタ収集・参考素材収集・動画文字起こし・切り抜き候補・投稿案生成の標準 CLI 運用手順。

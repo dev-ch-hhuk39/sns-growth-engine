@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """Download and Cloudinary-ingest one explicitly permitted source-post asset."""
 from __future__ import annotations
-import argparse, hashlib, ipaddress, json, mimetypes, os, socket, subprocess, sys
-from urllib.error import HTTPError
-from urllib.request import HTTPRedirectHandler, Request, build_opener
-from urllib.parse import urlparse
+import argparse
+import hashlib
+import ipaddress
+import json
+import os
+import socket
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-ROOT = Path(__file__).resolve().parents[1]; sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
-from config_loader import get_config
-from media.direct_content_understanding import analyze_local_media
-from sheets_client import TAB_DEFINITIONS, SheetsClient
-from acquisition.ytdlp_runtime import metadata_options
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
+from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
+from config_loader import get_config  # noqa: E402
+from media.direct_content_understanding import analyze_local_media  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 
 def truthy(v: Any) -> bool: return str(v or "").lower() in {"1", "true", "yes"}
@@ -145,7 +152,11 @@ def permission_ok_from_rows(rows: list[dict[str, Any]], source_id: str) -> bool:
 def permission_ok(client: SheetsClient, source_id: str) -> bool:
     return permission_ok_from_rows(permission_rows(client), source_id)
 
-ALLOWLIST = {"youtube.com", "www.youtube.com", "youtu.be", "tiktok.com", "www.tiktok.com", "res.cloudinary.com"}
+ALLOWLIST = {
+    "youtube.com", "www.youtube.com", "youtu.be",
+    "tiktok.com", "www.tiktok.com", "threads.com", "www.threads.com",
+    "res.cloudinary.com",
+}
 STREAM_HOST_SUFFIXES = {
     "googlevideo.com", "tiktokcdn.com", "tiktokcdn-us.com", "byteoversea.com",
     "ibytedtos.com", "akamaized.net", "muscdn.com", "cdninstagram.com", "fbcdn.net",
@@ -154,7 +165,8 @@ STREAM_HOST_SUFFIXES = {
 def col_letter(index: int) -> str:
     result = ""
     while index:
-        index, remainder = divmod(index - 1, 26); result = chr(65 + remainder) + result
+        index, remainder = divmod(index - 1, 26)
+        result = chr(65 + remainder) + result
     return result
 
 def safe_https_url(url: str, *, stream_url: bool = False) -> bool:
@@ -219,15 +231,20 @@ def download_direct_https_media(url: str, path: Path, *, media_type: str) -> Non
 
 def magic_mime(path: Path) -> str:
     head = path.read_bytes()[:32]
-    if head.startswith(b"\x89PNG\r\n\x1a\n"): return "image/png"
-    if head.startswith(b"\xff\xd8\xff"): return "image/jpeg"
-    if head[4:8] == b"ftyp": return "video/mp4"
-    if head.startswith(b"RIFF") and head[8:12] == b"WEBP": return "image/webp"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if head.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if head[4:8] == b"ftyp":
+        return "video/mp4"
+    if head.startswith(b"RIFF") and head[8:12] == b"WEBP":
+        return "image/webp"
     return ""
 
 def probe_video(path: Path) -> dict[str, str]:
     result = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=width,height", "-of", "json", str(path)], capture_output=True, text=True, timeout=30, check=True)
-    data = json.loads(result.stdout); stream = next((item for item in data.get("streams", []) if item.get("width")), {})
+    data = json.loads(result.stdout)
+    stream = next((item for item in data.get("streams", []) if item.get("width")), {})
     width, height = stream.get("width", ""), stream.get("height", "")
     duration = float(data.get("format", {}).get("duration") or 0)
     return {"duration_seconds": f"{duration:.2f}", "width": str(width), "height": str(height), "aspect_ratio": "9:16" if width and height and int(height) > int(width) else ""}
@@ -274,12 +291,49 @@ def download_with_ytdlp(url: str, path: Path) -> None:
         if actual != path:
             actual.replace(path)
 
+
+def download_source_media(
+    *,
+    media_url: str,
+    canonical_post_url: str,
+    path: Path,
+    media_type: str,
+    platform: str,
+) -> str:
+    """Use a bounded same-post fallback without mixing source parents.
+
+    Threads normally exposes a direct CDN object. If that resolved video URL
+    expires, retry only the exact individual Threads post through yt-dlp. An
+    account page, a different post, images and carousel members never enter
+    this fallback.
+    """
+    direct_cdn = media_url != canonical_post_url or platform == "threads"
+    if not direct_cdn:
+        download_with_ytdlp(media_url, path)
+        return "yt_dlp_individual_post"
+    try:
+        download_direct_https_media(media_url, path, media_type=media_type)
+        return "direct_https_media"
+    except Exception:
+        is_exact_threads_video = (
+            platform == "threads"
+            and media_type == "video"
+            and safe_https_url(canonical_post_url)
+            and "/post/" in canonical_post_url
+        )
+        if not is_exact_threads_video:
+            raise
+        path.unlink(missing_ok=True)
+        download_with_ytdlp(canonical_post_url, path)
+        return "threads_individual_post_ytdlp_fallback"
+
 def update_media_row(client: SheetsClient, source_post_media_id: str, fields: dict[str, Any]) -> None:
     ws = client._ws("source_post_media")
     headers = client._call_with_rate_limit_retry("read_headers:source_post_media", lambda: ws.row_values(1))
     rows = client._call_with_rate_limit_retry("get_all_records:source_post_media", lambda: ws.get_all_records())
     row_number = next((i for i, row in enumerate(rows, start=2) if str(row.get("source_post_media_id", "")) == source_post_media_id), 0)
-    if not row_number: raise RuntimeError("source_post_media_row_missing")
+    if not row_number:
+        raise RuntimeError("source_post_media_row_missing")
     updates = [{"range": f"{col_letter(headers.index(key) + 1)}{row_number}", "values": [[str(value)]]} for key, value in fields.items() if key in headers]
     if updates:
         client._call_with_rate_limit_retry(
@@ -528,7 +582,8 @@ def find_reusable_identical_asset(
 
 
 def upsert_media_asset(client: SheetsClient, post: dict[str, Any], media: dict[str, Any], *, storage_url: str, public_id: str, digest: str, mime: str, local_path: Path) -> str:
-    asset_id = f"ma_{digest[:24]}"; ws = client._ensure_tab("media_assets", TAB_DEFINITIONS["media_assets"])
+    asset_id = f"ma_{digest[:24]}"
+    ws = client._ensure_tab("media_assets", TAB_DEFINITIONS["media_assets"])
     headers = client._call_with_rate_limit_retry("read_headers:media_assets", lambda: ws.row_values(1))
     rows = client._call_with_rate_limit_retry("get_all_records:media_assets", lambda: ws.get_all_records())
     now = datetime.now(timezone.utc).isoformat()
@@ -871,11 +926,13 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             }
 
         platform = str(post.get("platform", "")).lower()
-        is_direct_cdn = url != str(media.get("canonical_post_url", "")) or platform == "threads"
-        if is_direct_cdn:
-            download_direct_https_media(url, local_path, media_type=media_type)
-        else:
-            download_with_ytdlp(url, local_path)
+        download_backend = download_source_media(
+            media_url=url,
+            canonical_post_url=str(media.get("canonical_post_url", "")),
+            path=local_path,
+            media_type=media_type,
+            platform=platform,
+        )
         size_limit = 300 * 1024 * 1024 if media_type == "video" else 20 * 1024 * 1024
         if not local_path.exists() or local_path.stat().st_size > size_limit:
             raise RuntimeError("media_size_limit_exceeded")
@@ -901,6 +958,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             content_hash=digest_text,
         )
         update_media_row(client, source_post_media_id, {
+            "acquisition_method": download_backend,
             "understanding_status": analysis.get("status", "BLOCKED"),
             "visual_summary": analysis.get("visual_summary", ""),
             "visible_text": analysis.get("visible_text", ""),
@@ -1018,49 +1076,62 @@ def main() -> int:
     parser.add_argument("--source-post-id", default="", help="ingest the complete ordered media bundle for one source post")
     parser.add_argument("--account-id", choices=["night_scout", "liver_manager"], default="")
     parser.add_argument("--max-assets", type=int, default=10, help="hard cap for one source-post bundle")
-    parser.add_argument("--dry-run", action="store_true"); parser.add_argument("--apply", action="store_true"); parser.add_argument("--confirm-ingest", action="store_true")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--confirm-ingest", action="store_true")
     args = parser.parse_args()
     if args.apply and not args.confirm_ingest:
-        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-ingest"})); return 1
+        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-ingest"}))
+        return 1
     gates = truthy(os.getenv("ALLOW_VIDEO_DOWNLOAD")) and truthy(os.getenv("ALLOW_CLOUDINARY_UPLOAD"))
     if args.apply and not gates:
-        print(json.dumps({"status": "BLOCKED", "reason": "ALLOW_VIDEO_DOWNLOAD=true and ALLOW_CLOUDINARY_UPLOAD=true are required"})); return 1
+        print(json.dumps({"status": "BLOCKED", "reason": "ALLOW_VIDEO_DOWNLOAD=true and ALLOW_CLOUDINARY_UPLOAD=true are required"}))
+        return 1
     # Dry-run is deliberately offline: a real source-post lookup is an apply
     # precondition and must not authenticate to Sheets or touch a provider.
     if not args.apply:
-        print(json.dumps({"status": "PLAN_ONLY", "source_post_media_id": args.source_post_media_id, "would_lookup_sheets": True, "would_download": True, "would_upload": True, "network_fetch": False}, ensure_ascii=False, indent=2)); return 0
-    cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        print(json.dumps({"status": "PLAN_ONLY", "source_post_media_id": args.source_post_media_id, "would_lookup_sheets": True, "would_download": True, "would_upload": True, "network_fetch": False}, ensure_ascii=False, indent=2))
+        return 0
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     client._ensure_tab("source_posts", TAB_DEFINITIONS["source_posts"])
     client._ensure_tab("source_post_media", TAB_DEFINITIONS["source_post_media"])
     source_post_media_id = args.source_post_media_id
     source_post_id = args.source_post_id
     if source_post_id and source_post_media_id:
-        print(json.dumps({"status": "BLOCKED", "reason": "choose_source_post_id_or_source_post_media_id"})); return 1
+        print(json.dumps({"status": "BLOCKED", "reason": "choose_source_post_id_or_source_post_media_id"}))
+        return 1
     try:
         permissions = permission_rows(client)
     except Exception:
         # A transient Sheets quota failure must never be interpreted as
         # permission.  End this preparation attempt without publishing; the
         # scheduled run can retry after the quota window resets.
-        print(json.dumps({"status": "NO_PENDING_MEDIA", "reason": "sheets_permission_read_unavailable"})); return 0
+        print(json.dumps({"status": "NO_PENDING_MEDIA", "reason": "sheets_permission_read_unavailable"}))
+        return 0
     if source_post_id:
         bundle = source_post_media_bundle(client, source_post_id)
         source_post_media_id = str((bundle[0] if bundle else {}).get("source_post_media_id", ""))
     elif not source_post_media_id:
         source_post_media_id = select_pending_media_id(client, args.account_id, permissions=permissions)
     if not source_post_media_id:
-        print(json.dumps({"status": "NO_PENDING_MEDIA", "reason": "no_pending_source_post_media_for_account"})); return 0
+        print(json.dumps({"status": "NO_PENDING_MEDIA", "reason": "no_pending_source_post_media_for_account"}))
+        return 0
     media = record(client, "source_post_media", "source_post_media_id", source_post_media_id)
     if not media:
-        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_not_found"})); return 1
+        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_not_found"}))
+        return 1
     post = record(client, "source_posts", "source_post_id", str(media.get("source_post_id", "")))
     if not post or not permission_ok_from_rows(permissions, str(post.get("source_id", ""))):
-        print(json.dumps({"status": "BLOCKED", "reason": "active_direct_media_permission_missing"})); return 1
+        print(json.dumps({"status": "BLOCKED", "reason": "active_direct_media_permission_missing"}))
+        return 1
     bundle = [media] if args.source_post_media_id else source_post_media_bundle(client, str(post["source_post_id"]))
     if not bundle:
-        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_empty"})); return 1
+        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_empty"}))
+        return 1
     if args.max_assets < 1 or len(bundle) > args.max_assets:
-        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_exceeds_cap", "asset_count": len(bundle), "max_assets": args.max_assets})); return 1
+        print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_exceeds_cap", "asset_count": len(bundle), "max_assets": args.max_assets}))
+        return 1
     results = [ingest_one(client, post, item) for item in bundle]
     failures = [row for row in results if row.get("status") == "FAILED"]
     skipped = [row for row in results if row.get("status") == "SKIPPED_EXTERNAL_UNAVAILABLE"]
@@ -1086,4 +1157,5 @@ def main() -> int:
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0 if not failures else 1
 
-if __name__ == "__main__": raise SystemExit(main())
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,5 +1,14 @@
 # Media Pipeline Runbook
 
+## 2026-08-10 Current production contract
+
+- Direct reference media is prepared as `WAITING_REVIEW`. Preparation fixes the public caption with the Hybrid AI and deterministic validators, then synchronizes the exact queue row to the Sheets publication review board.
+- A media row becomes publishable only after `review_decision=OK`; the queue then has `status=READY` and `human_review_decision=OK`. Scheduled dispatch rechecks the same queue ID, current Hybrid gate evidence, permission, media URL, and all validators. It does not auto-promote unreviewed media.
+- Threads acquisition uses an optional authenticated Playwright storage-state backend first and independent public Playwright/HTTP fallbacks. Missing browser state is an availability fallback, never a global failure and never logged.
+- A resolved Threads CDN video is downloaded directly. If that URL expired, only the same individual `/post/` URL may be retried by yt-dlp. Profiles, images, and carousel children never use that fallback, so parents and media order cannot be mixed.
+- Clips preserve source width/height by default and contain no burned subtitles. A horizontal source remains horizontal; vertical conversion is an explicit editorial option only.
+- Metadata-only YouTube channel discovery is scheduled and bounded. Download, local transcription, ffmpeg cut, Cloudinary upload, and media posting remain explicit workflow-dispatch operations for approved individual videos.
+
 ## 2026-07-12 Production Media Path
 
 The production media path is enabled only for source records with both approved permission evidence and `media_autopilot_enabled=true`.
@@ -9,7 +18,7 @@ The production media path is enabled only for source records with both approved 
 - Each account has an independent daily media cap of one. Bounded discovery scans at most 12 videos per source, registers at most three new videos per source and twelve in total per run; subsequent runs continue through the remaining back catalogue without duplicate video/clip processing.
 
 1. Daily aftercare saves bounded real video metadata and auto-approved clip candidates that pass rights and public-text checks.
-2. The media production workflow selects one unposted clip, downloads the individual source video, creates a 9:16 ffmpeg clip, uploads it to Cloudinary, validates the asset and text, and places a READY media row into the Threads queue.
+2. The media production workflow selects one unposted clip, downloads the individual source video, preserves its source geometry while cutting with ffmpeg, uploads it to Cloudinary, validates the asset and text, and places a `WAITING_REVIEW` media row into the Threads queue.
 3. Threads publication waits for the video container to finish and records `source_video_id` and `clip_candidate_id` in `posted_results`.
 
 Every real operation requires the dedicated schedule/dispatch guard and step-scoped environment gates. Unknown or reference-only rights, sources without `media_autopilot_enabled`, X, beauty, missing permission evidence, invalid IDs, duplicate clips, and failed validators are blocked. The daily media cap is one per account, and `kill_switch=true` stops the run.

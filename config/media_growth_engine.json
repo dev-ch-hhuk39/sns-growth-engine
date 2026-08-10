@@ -53,7 +53,7 @@
   "cloudinary_upload_enabled": false,
   "threads_video_post_enabled": false,
   "source_video_discovery_enabled": true,
-  "source_video_discovery_apply_enabled": false,
+  "source_video_discovery_apply_enabled": true,
   "require_source_media_autopilot_enabled": true,
   "media_schedule_enabled": false,
   "media_public_post_auto_enabled": false,

@@ -16,6 +16,7 @@ queue = {
     "account_id": "liver_manager",
     "platform": "threads",
     "status": "READY",
+    "human_review_decision": "OK",
     "generation_mode": "direct_reference_media",
     "slot_id": "lm_1600_direct_media",
     "business_date_jst": pipeline.business_date(),

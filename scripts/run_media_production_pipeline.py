@@ -1685,7 +1685,10 @@ def build_plan(
         }
     if autonomous_cfg.get("kill_switch"):
         blocked.append("kill_switch=true")
-    if not media_cfg.get("media_public_post_auto_enabled"):
+    posts_media_now = post_saved_media or (
+        not prepare_only and not prepare_saved_media_queue
+    )
+    if posts_media_now and not media_cfg.get("media_public_post_auto_enabled"):
         blocked.append("media_public_post_auto_disabled")
     if account_id not in set(media_cfg.get("allowed_target_account_ids", [media_cfg.get("target_account_id")])):
         blocked.append("account_not_allowed")

@@ -62,7 +62,8 @@ finally:
 
 checks = [
     ("prepared status", result.get("status") == "PREPARED"),
-    ("one READY row saved", len(saved) == 1 and saved[0].get("status") == "READY"),
+    ("one review row saved", len(saved) == 1 and saved[0].get("status") == "WAITING_REVIEW"),
+    ("review must precede publishing", saved[0].get("auto_publish") == "false"),
     ("canonical slot saved", saved[0].get("slot_id") == "ns_1800_direct_media"),
     ("media provenance saved", saved[0].get("media_origin") == "direct_reference"),
     ("publisher never called", not published),

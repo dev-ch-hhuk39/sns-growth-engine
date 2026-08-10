@@ -8,10 +8,11 @@ profile no longer exposes post links.
 
 from __future__ import annotations
 
+import base64
 import html
 import json
+import os
 import re
-from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.parse import urljoin
 
@@ -146,6 +147,131 @@ def _profile_handle(profile_url: str) -> str:
 def _post_handle(post_url: str) -> str:
     match = re.search(r"/@([^/]+)/post/", canonical_url(post_url))
     return match.group(1).lower() if match else ""
+
+
+_THREADS_UI_LINES = {
+    "log in",
+    "login",
+    "sign up",
+    "continue with instagram",
+    "threadsを始める",
+    "ログイン",
+    "登録",
+}
+
+
+def _usable_rendered_text(candidates: list[str], handle: str) -> str:
+    """Select source text from rendered post-scoped DOM candidates."""
+    cleaned: list[str] = []
+    normalized_handle = handle.lower().lstrip("@")
+    for value in candidates:
+        lines = []
+        for raw_line in str(value or "").splitlines():
+            line = " ".join(raw_line.split()).strip()
+            lowered = line.lower()
+            if not line or lowered in _THREADS_UI_LINES:
+                continue
+            if normalized_handle and lowered.lstrip("@") == normalized_handle:
+                continue
+            if "log in to see" in lowered or "threadsでさらに" in line:
+                continue
+            if re.fullmatch(r"[\d,.]+(?:[kKmM万])?", line):
+                continue
+            lines.append(line)
+        candidate = "\n".join(lines).strip()
+        if len(candidate) >= 8 and candidate not in cleaned:
+            cleaned.append(candidate)
+    return max(cleaned, key=len, default="")
+
+
+def normalized_post_from_rendered(
+    source: dict[str, Any],
+    post_url: str,
+    rendered: dict[str, Any],
+    *,
+    backend_name: str,
+    backend_version: str,
+) -> NormalizedSourcePost:
+    """Build one post bundle from a single rendered post root.
+
+    The caller must scope every text/media candidate to the same individual
+    post container. This helper preserves DOM media order and rejects profile
+    pages, blob URLs, avatars and unrelated recommendation cards.
+    """
+    canonical_post = canonical_url(post_url)
+    external = external_post_id(canonical_post)
+    if "/post/" not in canonical_post:
+        raise BackendFailure("threads_individual_post_url_required")
+    handle = _post_handle(canonical_post)
+    original_text = _usable_rendered_text(
+        [str(value) for value in rendered.get("text_candidates", [])], handle
+    )
+    media: list[NormalizedMediaItem] = []
+    seen_urls: set[str] = set()
+    source_id = str(source.get("source_id") or "")
+    post_id = f"sp_{source_id}_{external}"
+    for item in rendered.get("media", []):
+        if not isinstance(item, dict):
+            continue
+        media_type = str(item.get("media_type") or "").lower()
+        media_url = canonical_url(str(item.get("url") or ""))
+        if media_type not in {"image", "video"} or not media_url.startswith("https://"):
+            continue
+        lowered = media_url.lower()
+        if media_url in seen_urls or any(
+            marker in lowered
+            for marker in ("profile_pic", "/t51.82787-19/", "/t51.2885-19/")
+        ):
+            continue
+        width = str(item.get("width") or "")
+        height = str(item.get("height") or "")
+        try:
+            if media_type == "image" and int(width or 0) < 180 and int(height or 0) < 180:
+                continue
+        except ValueError:
+            pass
+        seen_urls.add(media_url)
+        media.append(
+            NormalizedMediaItem(
+                source_post_media_id=f"spm_{post_id}_{len(media)}",
+                source_post_id=post_id,
+                media_index=len(media),
+                media_type=media_type,
+                canonical_post_url=canonical_post,
+                original_media_url=media_url,
+                resolver_backend=backend_name,
+                width=width,
+                height=height,
+                duration_seconds=str(item.get("duration_seconds") or ""),
+                thumbnail_url=canonical_url(str(item.get("poster") or "")),
+            )
+        )
+    account_id = str(
+        (source.get("target_account_ids") or [source.get("target_account_id")])[0]
+        or ""
+    )
+    return NormalizedSourcePost(
+        source_post_id=post_id,
+        source_id=source_id,
+        target_account_id=account_id,
+        platform="threads",
+        profile_url=canonical_url(str(source.get("source_url") or "")),
+        canonical_post_url=canonical_post,
+        external_post_id=external,
+        original_post_text=original_text,
+        published_at=str(rendered.get("published_at") or ""),
+        author_name=str(rendered.get("author_name") or ""),
+        author_handle=handle,
+        media_items=tuple(media),
+        engagement={},
+        collection_backend=backend_name,
+        backend_version=backend_version,
+        content_hash=stable_content_hash(
+            original_text, [item.original_media_url for item in media]
+        ),
+        discovered_at=utc_now(),
+        detail_status="PASS" if original_text else "PARTIAL",
+    )
 
 
 def extract_profile_post_urls_from_hrefs(
@@ -468,3 +594,185 @@ class ThreadsPublicScreenAdapter(ThreadsPublicProfileAdapter):
         if not posts:
             raise BackendFailure("threads_visible_post_detail_unavailable")
         return posts
+
+
+class ThreadsBrowserSessionAdapter:
+    """Bounded rendered-DOM acquisition using an optional browser session.
+
+    This is the production fallback for public Threads pages that render only
+    login boilerplate. Session material is supplied at runtime, never logged or
+    persisted by this adapter. Every media child is read from the same rendered
+    individual-post root as its caption.
+    """
+
+    backend_name = "threads_browser_session"
+    backend_version = "rendered-dom-v1"
+
+    def __init__(
+        self,
+        render_loader: Callable[[dict[str, Any], int], list[dict[str, Any]]] | None = None,
+    ):
+        self._render_loader = render_loader
+
+    @staticmethod
+    def _storage_state() -> dict[str, Any] | str:
+        path = os.environ.get("THREADS_BROWSER_STORAGE_STATE_PATH", "").strip()
+        if path:
+            return path
+        encoded = os.environ.get("THREADS_BROWSER_STORAGE_STATE_B64", "").strip()
+        if not encoded:
+            raise BackendFailure("threads_browser_session_not_configured")
+        try:
+            value = json.loads(base64.b64decode(encoded).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise BackendFailure("threads_browser_session_invalid") from exc
+        if not isinstance(value, dict):
+            raise BackendFailure("threads_browser_session_invalid")
+        return value
+
+    @staticmethod
+    def _rendered_post(page: Any, post_url: str) -> dict[str, Any]:
+        external = external_post_id(post_url)
+        roots = page.locator("article")
+        root = None
+        for index in range(roots.count()):
+            candidate = roots.nth(index)
+            hrefs = candidate.locator("a[href*='/post/']").evaluate_all(
+                "els => els.map(el => el.href || el.getAttribute('href') || '')"
+            )
+            if any(external_post_id(str(href)) == external for href in hrefs):
+                root = candidate
+                break
+        if root is None:
+            root = page.locator("main").first
+        payload = root.evaluate(
+            """root => {
+              const visible = el => {
+                const style = window.getComputedStyle(el);
+                const rect = el.getBoundingClientRect();
+                return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+              };
+              const textCandidates = [...root.querySelectorAll("div[dir='auto'], span[dir='auto']")]
+                .filter(visible).map(el => (el.innerText || el.textContent || '').trim()).filter(Boolean);
+              const media = [];
+              for (const el of root.querySelectorAll('video, img')) {
+                if (!visible(el)) continue;
+                if (el.tagName.toLowerCase() === 'video') {
+                  const source = el.currentSrc || el.src || el.querySelector('source')?.src || '';
+                  if (source && source.startsWith('https://')) media.push({
+                    media_type: 'video', url: source, poster: el.poster || '',
+                    width: String(el.videoWidth || el.clientWidth || ''),
+                    height: String(el.videoHeight || el.clientHeight || ''),
+                    duration_seconds: Number.isFinite(el.duration) ? String(el.duration) : ''
+                  });
+                } else {
+                  const source = el.currentSrc || el.src || '';
+                  if (source && source.startsWith('https://')) media.push({
+                    media_type: 'image', url: source,
+                    width: String(el.naturalWidth || el.clientWidth || ''),
+                    height: String(el.naturalHeight || el.clientHeight || '')
+                  });
+                }
+              }
+              return {
+                text_candidates: textCandidates,
+                media,
+                published_at: root.querySelector('time')?.dateTime || '',
+                author_name: ''
+              };
+            }"""
+        )
+        return dict(payload or {})
+
+    def _render(self, source: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+        if self._render_loader:
+            return self._render_loader(source, limit)
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError as exc:
+            raise BackendFailure("playwright_not_installed") from exc
+        profile_url = canonical_url(str(source.get("source_url") or ""))
+        if not profile_url.startswith("https://www.threads.com/@"):
+            raise BackendFailure("threads_profile_url_required")
+        try:
+            with sync_playwright() as browser_api:
+                browser = browser_api.chromium.launch(headless=True)
+                context = browser.new_context(storage_state=self._storage_state())
+                page = context.new_page()
+                page.set_default_timeout(30_000)
+                page.goto(profile_url, wait_until="domcontentloaded")
+                page.wait_for_timeout(1_500)
+                hrefs: list[str] = []
+                for _ in range(3):
+                    hrefs.extend(
+                        page.locator("a[href*='/post/']").evaluate_all(
+                            "els => els.map(el => el.href || el.getAttribute('href') || '')"
+                        )
+                    )
+                    urls = extract_profile_post_urls_from_hrefs(
+                        hrefs, profile_url, limit=max(1, int(limit))
+                    )
+                    if len(urls) >= max(1, int(limit)):
+                        break
+                    page.mouse.wheel(0, 900)
+                    page.wait_for_timeout(700)
+                urls = extract_profile_post_urls_from_hrefs(
+                    hrefs, profile_url, limit=max(1, int(limit))
+                )
+                rendered: list[dict[str, Any]] = []
+                for post_url in urls:
+                    page.goto(post_url, wait_until="domcontentloaded")
+                    page.wait_for_timeout(1_200)
+                    rendered.append(
+                        {"post_url": post_url, **self._rendered_post(page, post_url)}
+                    )
+                context.close()
+                browser.close()
+                return rendered
+        except BackendFailure:
+            raise
+        except Exception as exc:
+            raise BackendFailure(
+                f"threads_browser_session_failed:{type(exc).__name__}"
+            ) from exc
+
+    def acquire(
+        self, source: dict[str, Any], *, limit: int
+    ) -> list[NormalizedSourcePost]:
+        rendered = self._render(source, max(1, int(limit)))
+        posts: list[NormalizedSourcePost] = []
+        for item in rendered:
+            post_url = canonical_url(str(item.get("post_url") or ""))
+            if _post_handle(post_url) != _profile_handle(str(source.get("source_url") or "")):
+                continue
+            post = normalized_post_from_rendered(
+                source,
+                post_url,
+                item,
+                backend_name=self.backend_name,
+                backend_version=self.backend_version,
+            )
+            if post.original_post_text or post.media_items:
+                posts.append(post)
+        if not posts:
+            raise BackendFailure("threads_browser_session_no_post_data")
+        return posts
+
+    def discover_profile(
+        self, source: dict[str, Any], *, limit: int
+    ) -> ProviderResult[list[NormalizedSourcePost]]:
+        try:
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "PASS",
+                data=self.acquire(source, limit=limit),
+            )
+        except Exception as exc:
+            return ProviderResult(
+                self.backend_name,
+                self.backend_version,
+                "UNAVAILABLE",
+                reason=f"{type(exc).__name__}:threads_browser_session_unavailable",
+                retryable=True,
+            )
