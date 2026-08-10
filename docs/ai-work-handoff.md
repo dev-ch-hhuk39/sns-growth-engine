@@ -6784,3 +6784,12 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - Direct Media Preparation run `31360775596`: Liver ManagerはThreads取得、media ingest、Cloudinary、review inventory、Hybrid AI、Sheetsの投稿レビュー同期までPASS。Night Scoutは2子mediaのうち1件を取得・理解・Cloudinary保存したが、もう1件が`media_content_understanding_blocked`で、不完全bundleを投稿候補にしないため停止。
 - `ingest_direct_reference_media_reliable.py` は自動選択時のみ、失敗した親bundleを部分利用せず次の許可済み個別投稿へ最大3回進む。明示ID指定時は別候補に変更しない。
 - 残WARN: Night Scoutの次候補にcomplete bundleが無ければReview在庫は作られない。安全なNO_POSTであり、text fallbackは行わない。実Threads投稿は未実行。
+
+### 2026-08-10 Night Scout Direct-Video Candidate Repair
+
+- Direct Media Preparation run `31361878617` では、Night Scoutの公開Threads取得が6個別投稿・18媒体をSheetsへ保存した。したがって主因は取得不能ではなく、動画専用のdirect comment枠へ画像のみ／画像混在の親投稿を先に渡していた候補選定である。
+- 更新: `scripts/ingest_direct_reference_media_reliable.py`, `scripts/test_ingest_direct_media_priority.py`。追加: `scripts/test_direct_media_reliable_video_only_parent.py`。
+- 自動候補選定は同一`source_post_id`の全子mediaを先に束ね、全件が`media_type=video`の親だけを候補化する。画像のみ、画像＋動画の混在、型不明はdownload前に除外し、部分bundleをCloudinary・Reviewへ流さない。media order、permission ledger、content understanding、人間Review、publisher gate、media-to-text fallback禁止は維持する。
+- focused PASS: video-only parent selection、platform priority、next-parent retry、downstream video-only filter、prepare-only no-publish、`py_compile`。実Threads投稿、X/Beauty、cut、generated clip、scheduled activationは未実行。
+- 次タスク: PR/CI/通常マージ後、Night ScoutのDirect Media Preparationを再実行する。video-onlyの許可済み個別投稿があればCloudinary・投稿レビューまで進め、無ければ`NO_PENDING_MEDIA`として安全停止し、Threads動画投稿のbounded discovery在庫を補充する。画像bundleへ戻したりtextへ代替しない。
+- 次に触ってよい: direct-video candidate inventoryとbounded Threads acquisition。触らない方がよい: publisher権利/confirm/idempotency、X/Beauty、第三者reference-only media、`.env`, `data/`, `output/`, secrets/cookies/storage state。

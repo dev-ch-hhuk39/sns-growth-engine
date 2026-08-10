@@ -182,18 +182,56 @@ def select_pending_media_id(
         for row in client._ws("source_posts").get_all_records()
     }
 
-    pending: list[tuple[int, str, str]] = []
-
-    for media in client._ws(
+    media_rows = client._ws(
         "source_post_media"
-    ).get_all_records():
-        post = posts.get(
+    ).get_all_records()
+    media_by_post: dict[str, list[dict[str, Any]]] = {}
+
+    for media in media_rows:
+        media_by_post.setdefault(
             str(
                 media.get(
                     "source_post_id",
                     "",
                 )
+            ),
+            [],
+        ).append(media)
+
+    video_only_parent_ids = {
+        source_post_id
+        for source_post_id, bundle in media_by_post.items()
+        if bundle
+        and all(
+            str(
+                item.get(
+                    "media_type",
+                    "",
+                )
+            ).strip().lower()
+            == "video"
+            for item in bundle
+        )
+    }
+
+    pending: list[tuple[int, str, str]] = []
+
+    for media in media_rows:
+        source_post_id = str(
+            media.get(
+                "source_post_id",
+                "",
             )
+        )
+
+        # A direct comment slot is video-only. Reject image-only, mixed and
+        # unknown bundles before downloading any child so a partial parent can
+        # never enter Cloudinary or the review inventory.
+        if source_post_id not in video_only_parent_ids:
+            continue
+
+        post = posts.get(
+            source_post_id
         )
 
         if not post:

@@ -12,7 +12,7 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-import ingest_direct_reference_media_reliable as module
+import ingest_direct_reference_media_reliable as module  # noqa: E402
 
 
 class FakeWorksheet:
@@ -82,6 +82,7 @@ media = [
     {
         "source_post_media_id": "media-youtube",
         "source_post_id": "post-youtube",
+        "media_type": "video",
         "original_media_url": (
             "https://www.youtube.com/watch?v=abc"
         ),
@@ -95,6 +96,7 @@ media = [
     {
         "source_post_media_id": "media-tiktok",
         "source_post_id": "post-tiktok",
+        "media_type": "video",
         "original_media_url": (
             "https://www.tiktok.com/@sample/video/123"
         ),
@@ -106,6 +108,7 @@ media = [
     {
         "source_post_media_id": "media-threads",
         "source_post_id": "post-threads",
+        "media_type": "video",
         "original_media_url": (
             "https://scontent.example.cdninstagram.com/"
             "v/t51.82787-15/post.jpg"
@@ -118,6 +121,7 @@ media = [
     {
         "source_post_media_id": "media-profile",
         "source_post_id": "post-profile",
+        "media_type": "video",
         "original_media_url": (
             "https://scontent.example.cdninstagram.com/"
             "v/t51.82787-19/profile.jpg"
