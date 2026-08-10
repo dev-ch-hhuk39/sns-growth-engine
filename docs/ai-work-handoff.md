@@ -6734,3 +6734,9 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 取得・Cloudinary保存・Sheetsレビュー同期は実経路で確認できたが、Night Scoutの新規video candidateは既存のpermission / media-understanding欠損を補うまでレビュー候補にしない。権利を推測して追加しない。
 - 次に人間が見る場所: Google Sheetsの **投稿レビュー** タブ。Liver Managerの新規動画候補と、既存text/reference候補を本文・preview URL・品質状態で確認する。
 - 次AIが触ってよい: Night Scoutの承認済みsourceに限定したpermission/provenanceとmedia-understandingの修復、review-ready候補の品質確認。触らない方がよい: `.env`、`data/`、`output/`、credentials/cookies、X/Beauty publish、第三者reference-only素材、review未承認のThreads投稿。
+
+### 2026-08-10 Sheets再同期
+
+- ユーザーが人間確認用の既存行を消去した後、`Final Production Preparation` run `31344742655` で必要なactivation evidence tabの存在とread-after-writeを再確認した。text canaryの追加は、正本`投稿キュー`に残る過去候補とのsemantic novelty競合によりfail-closedで停止した。
+- `Approved Account Acquisition` run `31344796627` は成功。`Direct Media Preparation` run `31344797833` はLiver Manager成功、Night ScoutはSheets rate limitでingestを停止した。どちらもThreads/X/Beauty投稿は0件。
+- `Publication Review Board` run `31345049951` は、人間確認用の空`投稿レビュー`tabへ44行を新規appendし、`read_after_write=true`を確認した。Liver Managerの成功済みdirect-video候補を含む。レビューの明示`OK`だけで投稿されることはない。
