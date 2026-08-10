@@ -24,6 +24,7 @@ rows = [
         "account_id": "night_scout",
         "platform": "threads",
         "status": "READY",
+        "human_review_decision": "OK",
         "generation_mode": (
             "direct_reference_media"
         ),
@@ -40,6 +41,7 @@ rows = [
         "account_id": "night_scout",
         "platform": "threads",
         "status": "READY",
+        "human_review_decision": "OK",
         "generation_mode": (
             "direct_reference_media"
         ),

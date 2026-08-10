@@ -1,5 +1,14 @@
 # Production Completion Status
 
+## 2026-08-10 Phase 1 reference-media completion status
+
+- Threads individual-post metadata acquisition is operational for both accounts through a common router. Public Playwright has live Sheets evidence; an authenticated browser-session backend is now available as the preferred route when its secret is provisioned, with public adapters retained as independent fallbacks.
+- Direct reference media is not allowed to fall back to text and is not automatically approved. The exact prepared queue row must pass Hybrid/deterministic checks, appear in the publication review tab, receive human `OK`, and then pass exact-ID dispatch and publisher gates.
+- The old successful pattern is restored safely for Threads video: direct CDN first, then yt-dlp against the same individual Threads post only. Cross-post media mixing, profile URLs, image fallback, and unapproved rights remain blocked.
+- YouTube candidate discovery is empirically operational: approved Night Scout and Liver Manager channels each returned three individual videos in bounded live metadata dry-runs. Scheduled metadata persistence is enabled; download/transcription/cut/upload remains confirmed dispatch-only.
+- Source geometry is preserved and subtitle burn-in is disabled. X posting and Beauty remain disabled.
+- This change does not claim a new live Threads media post. The next operational proof is a permissioned video candidate progressing through Cloudinary and Sheets review before a bounded canary.
+
 ## 2026-07-28 Current safety boundary
 
 The system is **not yet enabled for automatic external mutation**. Scheduled

@@ -103,8 +103,14 @@ def decision_for_row(review: Mapping[str, Any], queue: Mapping[str, Any], *, all
 
     if text(queue.get("validator_status")).upper() != "PASS" or text(queue.get("internal_leak_status")).upper() not in {"", "PASS"}:
         return "BLOCKED_VALIDATION", {}
-    if text(queue.get("media_required")).lower() in {"true", "1", "yes"} and not allow_media_posts:
-        return "APPROVED_PENDING_MEDIA_GATE", {}
+    if text(queue.get("media_required")).lower() in {"true", "1", "yes"}:
+        if not text(queue.get("media_asset_id")) or not text(queue.get("media_url")):
+            return "APPROVED_PENDING_MEDIA_GATE", {}
+        if text(queue.get("media_status")).upper() not in {"UPLOADED", "READY", "PASS"}:
+            return "APPROVED_PENDING_MEDIA_GATE", {}
+        # Human approval may make inventory READY while global publisher gates
+        # remain disabled. READY is not a post side effect; the dispatcher
+        # independently requires activation, credentials and media gates.
     return "READY", {
         "status": "READY",
         "human_review_decision": "OK",

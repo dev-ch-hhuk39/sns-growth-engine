@@ -107,15 +107,23 @@ def candidate_rows(
     account_id: str,
     max_candidates: int,
     slot_id: str = "",
+    require_human_review: bool = False,
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, str]]]:
-    rows = [
-        dict(row)
-        for row in client.get_queue_items(account_id=account_id, platform="threads", status="WAITING_REVIEW")
-    ]
+    statuses = ["READY"] if require_human_review else ["WAITING_REVIEW"]
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    for status in statuses:
+        for row in client.get_queue_items(account_id=account_id, platform="threads", status=status):
+            value = dict(row)
+            rows_by_id[str(value.get("queue_id", ""))] = value
+    rows = list(rows_by_id.values())
     eligible = [
         row
         for row in rows
         if requires_hybrid_ai_gate(row)
+        and (
+            not require_human_review
+            or str(row.get("human_review_decision", "")).upper() == "OK"
+        )
         and (not slot_id or str(row.get("slot_id", "")) == slot_id)
         and str(row.get("excluded_from_activation", "")).lower() not in {"true", "1", "yes"}
         and str(row.get("repost_prohibited", "")).lower() not in {"true", "1", "yes"}
@@ -139,6 +147,14 @@ def candidate_rows(
         if current:
             skipped_current.append({"queue_id": str(row.get("queue_id", "")), "gate_status": current_status})
             continue
+        if require_human_review:
+            # Never rewrite a row after a human approved its public text. A
+            # stale gate requires a fresh review cycle instead.
+            skipped_current.append({
+                "queue_id": str(row.get("queue_id", "")),
+                "gate_status": "STALE_REVIEW_REQUIRED",
+            })
+            continue
         selected.append((row, source_context))
         if len(selected) >= max_candidates:
             break
@@ -150,6 +166,7 @@ def main() -> int:
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
     parser.add_argument("--max-candidates", type=int, default=2)
     parser.add_argument("--slot-id", default="")
+    parser.add_argument("--require-human-review", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
@@ -175,7 +192,13 @@ def main() -> int:
     ledger = SheetsBudgetLedger(client, args.account_id)
     gemini = GeminiHybridClient(reserve_request=ledger.reserve)
     gate = HybridAiGate(gemini)
-    selected, skipped_current = candidate_rows(client, args.account_id, args.max_candidates, args.slot_id)
+    selected, skipped_current = candidate_rows(
+        client,
+        args.account_id,
+        args.max_candidates,
+        args.slot_id,
+        require_human_review=args.require_human_review,
+    )
     posted_before = records(client, "posted_results")
     statuses_before = {
         str(queue.get("queue_id", "")): str(queue.get("status", ""))

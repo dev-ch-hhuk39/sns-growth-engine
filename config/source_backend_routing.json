@@ -3,15 +3,15 @@
   "notes": "One PRIMARY backend is invoked for each capability. FALLBACK is used only after PRIMARY failure. Analysis-only tools never download, upload, or publish.",
   "routes": {
     "threads.profile_posts": {
-      "primary": "threads_public_playwright",
-      "fallbacks": ["threads_public_screen", "threads_public_http"],
+      "primary": "threads_browser_session",
+      "fallbacks": ["threads_public_screen", "threads_public_playwright", "threads_public_http"],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
     },
     "threads.post_detail": {
-      "primary": "threads_public_playwright",
-      "fallbacks": ["threads_public_screen", "threads_public_http"],
+      "primary": "threads_browser_session",
+      "fallbacks": ["threads_public_screen", "threads_public_playwright", "threads_public_http"],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
@@ -92,7 +92,8 @@
     "yt_dlp": "PRIMARY",
     "tiktok_public_playwright": "FALLBACK",
     "tiktok_gallery_dl": "FALLBACK",
-    "threads_public_playwright": "PRIMARY",
+    "threads_browser_session": "PRIMARY_WHEN_RUNTIME_SESSION_CONFIGURED",
+    "threads_public_playwright": "FALLBACK",
     "threads_public_screen": "FALLBACK",
     "threads_public_http": "FALLBACK",
     "x_gallery_dl": "PRIMARY",

@@ -55,7 +55,13 @@ def build_plan(
             continue
         if str(row.get("slot_id", "")) != slot_id:
             continue
-        if str(row.get("status", "")).upper() != "WAITING_REVIEW":
+        # Media may be promoted only after the exact prepared row has been
+        # approved on the human review board. The Hybrid gate verifies that
+        # approved text; it must never turn an unreviewed row into READY.
+        if str(row.get("status", "")).upper() != "READY":
+            continue
+        if str(row.get("human_review_decision", "")).upper() != "OK":
+            rejected.append({"queue_id": queue_id, "reasons": "human_review_not_approved"})
             continue
         if truthy(row.get("excluded_from_activation")) or truthy(row.get("repost_prohibited")):
             continue
@@ -119,7 +125,7 @@ def apply(client: SheetsClient, result: dict[str, Any]) -> dict[str, Any]:
             blocked_reason="",
             error="",
             auto_ready_by="promote_hybrid_approved_media.py",
-            auto_ready_reason="hybrid_ai_and_persisted_media_validators_passed",
+            auto_ready_reason="human_review_hybrid_ai_and_persisted_media_validators_passed",
         )
         updated.append(queue_id)
     return {

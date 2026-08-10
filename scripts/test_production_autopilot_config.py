@@ -12,7 +12,7 @@ checks = [
     ("text public posting enabled", cfg["text_only_public_posting_enabled"] is True and auto["auto_post_enabled"] is True),
     ("account schedules enabled", cfg["account_scheduled_posting_enabled"] is True),
     ("metrics aftercare enabled", cfg["metrics_aftercare_enabled"] is True),
-    ("media discovery save remains staged", media["source_video_discovery_apply_enabled"] is False and media["auto_save_discovered_videos"] is False),
+    ("bounded media discovery persists metadata only", media["source_video_discovery_apply_enabled"] is True and media["auto_save_discovered_videos"] is False),
     ("clip candidate save remains staged", media["auto_save_clip_candidates"] is False),
     ("media public posting remains disabled until verified", cfg["media_public_posting_enabled"] is False and media["media_public_post_auto_enabled"] is False),
     ("x remains off", cfg["x_posting_enabled"] is False and "x" in auto["blocked_platforms_for_post"]),

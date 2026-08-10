@@ -12,8 +12,8 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-import acquire_approved_source_posts as a
-from acquisition.models import (
+import acquire_approved_source_posts as a  # noqa: E402
+from acquisition.models import (  # noqa: E402
     NormalizedMediaItem,
     NormalizedSourcePost,
 )
@@ -173,7 +173,7 @@ def apply_common(
     router,
     discovery_data,
 ):
-    a.selected_sources = lambda account_id, platform: (
+    a.selected_sources = lambda account_id, platform, **_kwargs: (
         [SOURCE],
         [],
     )

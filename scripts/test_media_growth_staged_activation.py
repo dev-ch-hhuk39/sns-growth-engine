@@ -17,7 +17,6 @@ blocked = (
     "video_post_enabled",
     "cloudinary_upload_enabled",
     "threads_video_post_enabled",
-    "source_video_discovery_apply_enabled",
     "media_schedule_enabled",
     "media_public_post_auto_enabled",
     "auto_approve_clip_candidates",
@@ -26,6 +25,7 @@ blocked = (
 )
 checks = {
     "metadata discovery remains available": config["source_video_discovery_enabled"] is True,
+    "bounded metadata discovery saves review inventory": config["source_video_discovery_apply_enabled"] is True,
     "clip review is required": config["require_clip_review_before_cut"] is True,
     "unverified media actions are disabled": all(config[key] is False for key in blocked),
 }

@@ -27,7 +27,7 @@ from content_slot_runs import business_date, build_slot_run, claim_slot_run, exi
 from media_post_validator import validate_media_post  # noqa: E402
 from media_source_policy import DIRECT_SCOPE, decision  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
-from public_post_quality import final_public_post_validator, generate_grounded_reader_facing_post, public_preview  # noqa: E402
+from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from generation.source_grounded_caption import (  # noqa: E402
     GitHubModelsGroundedProvider,
     SourceGroundedCaptionService,
@@ -1012,7 +1012,7 @@ def _build_queue(plan: dict[str, Any]) -> dict[str, Any]:
     )
     return {
         "queue_id": queue_id, "account_id": plan["account_id"], "target_account_id": plan["account_id"], "platform": "threads",
-        "priority": "1", "status": "READY", "auto_publish": "true", "generation_mode": "direct_reference_media",
+        "priority": "1", "status": "WAITING_REVIEW", "auto_publish": "false", "generation_mode": "direct_reference_media",
         "slot_id": plan.get("slot_id", ""), "business_date_jst": business_date(),
         "source_post_id": post["source_post_id"], "source_id": post.get("source_id", ""), "source_url": post.get("post_url", ""),
         "media_asset_id": plan["media_asset_id"], "media_url": media["storage_url"],
@@ -1043,7 +1043,7 @@ def prepare(
     plan: dict[str, Any],
     client: SheetsClient,
 ) -> dict[str, Any]:
-    """Persist one validated READY item without invoking a publisher."""
+    """Persist one validated review item without invoking a publisher."""
 
     queue = _build_queue(plan)
     rows = _records(
@@ -1158,6 +1158,7 @@ def dispatch_ready(
         if str(row.get("account_id") or row.get("target_account_id") or "") == account_id
         and str(row.get("platform", "")).lower() == "threads"
         and str(row.get("status", "")).upper() == "READY"
+        and str(row.get("human_review_decision", "")).upper() == "OK"
         and str(row.get("generation_mode", "")) == "direct_reference_media"
         and str(row.get("slot_id", "")) == slot_id
         and str(row.get("business_date_jst", "")) == target_date
@@ -1274,18 +1275,22 @@ def main() -> int:
     args = parser.parse_args()
     client = None
     if args.use_sheets:
-        cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     publish_mode = not args.prepare_only
     if args.apply and not args.confirm_direct_media:
-        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires --confirm-direct-media"]}, ensure_ascii=False)); return 1
+        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires --confirm-direct-media"]}, ensure_ascii=False))
+        return 1
     # The dispatcher intentionally does not guess the selected media shape.
     # `ThreadsPublisher` receives the resolved asset and enforces the extra
     # VIDEO / CAROUSEL gates for that exact format. Requiring the video flag
     # here used to make an approved image-only queue impossible to publish.
     if args.apply and publish_mode and (not _true(os.environ.get("PUBLISH_ENABLED")) or not _true(os.environ.get("ALLOW_REAL_THREADS_POST")) or not _true(os.environ.get("ALLOW_MEDIA_POSTS"))):
-        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires confirmation and base Threads media gates"]}, ensure_ascii=False)); return 1
+        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires confirmation and base Threads media gates"]}, ensure_ascii=False))
+        return 1
     if not args.slot_id and not args.manual_e2e_proof:
-        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["--slot-id or --manual-e2e-proof is required"]}, ensure_ascii=False)); return 1
+        print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["--slot-id or --manual-e2e-proof is required"]}, ensure_ascii=False))
+        return 1
     if args.queue_id and not args.post_ready:
         print(json.dumps({
             "status": "BLOCKED",

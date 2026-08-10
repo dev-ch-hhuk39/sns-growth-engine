@@ -6744,3 +6744,36 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - focused PASS: `test_reference_first_content_router.py`、`test_content_mix_planner.py` (13/13)、`test_media_production_requires_grounded_clip.py` (3/3)、`test_approved_source_clip_contract.py`、`test_video_stream_evidence_contract.py`、`test_media_aspect_ratio_preservation.py`、変更対象の`py_compile`、`git diff --check`。
 - dry-run / 外部操作: 実fetch、download、cut、upload、Cloudinary、Sheets更新、Threads投稿はいずれも未実行。X/Beauty block、media-to-text fallback禁止、既存publisher gateは維持。
 - 未完了: このルールに沿う候補を投稿レビューへ補充する実運用確認。安全ゲートとmedia-to-text fallback禁止は維持する。
+
+## 2026-08-10 Phase 1 Reference Media Production
+
+### 本システムと今回の変更
+
+- Night Scout / Liver Manager共通の取得基盤で、Threadsの個別投稿・本文・順序付きmediaを同一親へ紐付ける。登録済みアカウント以外は取得せず、profile URLをsource postとして保存しない。
+- `threads_browser_session` を第一取得経路とし、public screen / Playwright / HTTPへbounded fallbackする。session secretはログやarchiveに保存しない。
+- direct reference videoは、同じsource postで解決したCDN URLの直接取得を優先し、失敗時のみ同一の個別Threads `/post/` URLにyt-dlpを使う。画像やprofile URLをvideo fallbackに流さない。
+- direct media用の取得は`--reference-only`を使わず、`media_permissions`の明示承認とsourceのmedia usage scopeが両方合う場合だけ実行する。参照本文取得とmedia再利用の権限を混ぜない。
+- 取得・Cloudinary・品質判定後の候補は`WAITING_REVIEW`で保存する。Sheetsの人間判定`OK`がある完全なmedia候補だけが`READY`に進み、承認済み本文を後から自動書き換えしない。投稿直前のpublisher gateは維持。
+- YouTubeは承認済みchannelのbounded metadata discoveryを定期実行で保存可能にした。transcription / download / cut / upload / media postはworkflow_dispatchと明示confirmが必要で、scheduleで勝手に実行しない。
+
+### 変更ファイル一覧
+
+- 取得: `src/acquisition/threads_public.py`, `src/acquisition/factory.py`, `config/source_backend_routing.json`, `scripts/ingest_direct_reference_media.py`。
+- Review / queue: `scripts/run_direct_reference_media_pipeline.py`, `scripts/publication_review_board.py`, `scripts/promote_hybrid_approved_media.py`, `scripts/run_hybrid_ai_queue_gate.py`, `scripts/run_hybrid_ready_pipeline.py`。
+- YouTube / workflow: `config/media_growth_engine.json`, `.github/workflows/direct-media-preparation.yml`, `.github/workflows/threads-video-reference-preparation.yml`, `.github/workflows/media-growth-production.yml`, `.github/workflows/media-growth-production-night-scout.yml`, `scripts/run_media_production_pipeline.py`。
+- Docs: `docs/media-pipeline-runbook.md`, `docs/reference-pipeline-runbook.md`, `docs/video-reference-runbook.md`, `docs/production-completion-status.md`, `docs/ai-work-handoff.md`。
+- Tests: `scripts/test_threads_browser_session_adapter.py`, `scripts/test_threads_direct_video_download_fallback.py`, `scripts/test_media_hybrid_promotion_requires_human_review.py`, `scripts/test_youtube_discovery_scheduled_heavy_media_manual.py` と関連既存testの契約更新。
+
+### スケール方針・タスク・残WARN
+
+- スケールはbackendを増やすより、現行Acquisition Routerの共通`NormalizedPost` / `NormalizedMedia` 契約に接続する。各SNSの取得上限、同一親・media順序・canonical URL dedupeを維持する。
+- 次タスクは、投稿レビューへ入った権利・alignment・Hybrid AI判定済み候補を1件ずつcanary確認すること。承認なしの実投稿は行わない。
+- 残WARN: Threadsの公開HTMLは変更され得る。browser session secretが無い環境はpublic fallbackで継続するが、取得保証ではない。YouTube個別動画のtranscript・素材適合判定・実cutはまだ本番未実証。
+- 実fetch / download / cut / Cloudinary upload / Threads投稿は今回未実行。X投稿、Beauty、media-to-text fallback、権利不明mediaは引き続きBLOCK。
+
+### テスト結果と次AIへの引き継ぎ
+
+- focused PASS: Threads browser/public/router、source-parent media整合、direct video fallback、Review判定保存、Hybrid AIゲート、direct ingest read-after-write、aspect-ratio維持、YouTube discovery/heavy-media schedule分離、media staging、rights/security関連。最終数は当該commit/PRのCI結果を参照。
+- 次に触ってよい: 上記取得adapterのselector追従修正、Review候補の限定canary、YouTube個別動画の素材適合判定。
+- 触らない方がよい: publisherの権利/confirm/idempotency gate、X/Beauty有効化、media-to-text fallback復活、`.env`、`data/`、`output/`、secrets/cookies/storage state。
+- 次AIは「adapterがある」と「実メディア取得・Cloudinary・Threads投稿が実証済み」を分けて報告すること。未実証を完成扱いしない。

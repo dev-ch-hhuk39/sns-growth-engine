@@ -12,7 +12,7 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from scheduled_execution_guard import append_job_summary
+from scheduled_execution_guard import append_job_summary  # noqa: E402
 
 
 def extract_json_objects(text: str) -> list[dict[str, Any]]:
@@ -31,8 +31,15 @@ def extract_json_objects(text: str) -> list[dict[str, Any]]:
     return [item[2] for item in candidates]
 
 
-def gate_command(account_id: str, slot_id: str, max_candidates: int, apply: bool) -> list[str]:
-    return [
+def gate_command(
+    account_id: str,
+    slot_id: str,
+    max_candidates: int,
+    apply: bool,
+    *,
+    approval_mode: str = "text",
+) -> list[str]:
+    command = [
         sys.executable,
         "scripts/run_hybrid_ai_queue_gate.py",
         "--account-id",
@@ -44,6 +51,9 @@ def gate_command(account_id: str, slot_id: str, max_candidates: int, apply: bool
         "--apply" if apply else "--dry-run",
         "--use-sheets",
     ]
+    if approval_mode == "media":
+        command.append("--require-human-review")
+    return command
 
 
 def approval_command(account_id: str, slot_id: str, queue_id: str, *, apply: bool, approval_mode: str) -> list[str]:
@@ -86,7 +96,13 @@ def command_plan(
     approval_mode: str = "text",
     queue_id: str = "",
 ) -> list[list[str]]:
-    commands = [gate_command(account_id, slot_id, max_candidates, apply)]
+    commands = [gate_command(
+        account_id,
+        slot_id,
+        max_candidates,
+        apply,
+        approval_mode=approval_mode,
+    )]
     if queue_id:
         commands.append(approval_command(account_id, slot_id, queue_id, apply=apply, approval_mode=approval_mode))
     return commands
@@ -128,7 +144,17 @@ def execute(
     runner: Callable[[list[str]], subprocess.CompletedProcess[str]] = run_command,
 ) -> dict[str, Any]:
     stages: list[dict[str, Any]] = []
-    gate_stage, gate_ok = run_stage("hybrid_gate", gate_command(account_id, slot_id, max_candidates, apply), runner)
+    gate_stage, gate_ok = run_stage(
+        "hybrid_gate",
+        gate_command(
+            account_id,
+            slot_id,
+            max_candidates,
+            apply,
+            approval_mode=approval_mode,
+        ),
+        runner,
+    )
     stages.append(gate_stage)
     if not gate_ok:
         return {

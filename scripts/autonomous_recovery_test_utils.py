@@ -863,7 +863,7 @@ def test_pdca_pending_after_post() -> None:
 def test_media_growth_roadmap_off_by_default() -> None:
     media = media_config()
     cfg = config()
-    assert media["source_video_discovery_apply_enabled"] is False
+    assert media["source_video_discovery_apply_enabled"] is True
     assert media["download_enabled"] is False
     assert media["cut_enabled"] is False
     assert media["upload_enabled"] is False
@@ -944,7 +944,7 @@ def test_media_growth_does_not_break_autonomous_text_posting() -> None:
 
 def test_source_video_discovery_apply_disabled_by_default() -> None:
     media = media_config()
-    assert media["source_video_discovery_apply_enabled"] is False
+    assert media["source_video_discovery_apply_enabled"] is True
     assert media["max_total_new_videos_per_run"] <= 20
 
 

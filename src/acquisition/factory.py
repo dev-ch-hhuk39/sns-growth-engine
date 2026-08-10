@@ -13,6 +13,7 @@ from .enrichment import (
     YtDlpPostDetailProvider,
 )
 from .threads_public import (
+    ThreadsBrowserSessionAdapter,
     ThreadsPublicHttpAdapter,
     ThreadsPublicProfileAdapter,
     ThreadsPublicScreenAdapter,
@@ -35,6 +36,7 @@ def build_router() -> AdapterRouter:
         "yt_dlp": YtDlpProfilePostAdapter(),
         "tiktok_public_playwright": TikTokPublicProfileAdapter(),
         "tiktok_gallery_dl": TikTokGalleryDlProfileAdapter(),
+        "threads_browser_session": ThreadsBrowserSessionAdapter(),
         "threads_public_playwright": ThreadsPublicProfileAdapter(),
         "threads_public_screen": ThreadsPublicScreenAdapter(),
         "threads_public_http": ThreadsPublicHttpAdapter(),
