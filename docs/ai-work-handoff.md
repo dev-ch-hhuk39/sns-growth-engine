@@ -1,3 +1,27 @@
+## 2026-08-10 Threads Video Reference Review Preparation
+
+### 本システムについて / 今回の変更
+
+- 手動Workflow `Threads Video Reference Preparation` は、Night Scout/Liver ManagerのThreads参照アカウントから個別投稿本文と順序付きmedia metadataを取得し、Sheetsの`source_posts` / `source_post_media`へ保存する。
+- `--video-only-reference`は、同じ親`source_post_id`に`media_type=video`を持つ投稿だけを文章生成入力にする。参照元本文の論点・構成を新しい読者向け本文に変換し、候補は`WAITING_REVIEW`として`投稿レビュー`へ同期する。
+- 投稿、動画download、Cloudinary upload、切り抜き、X、Beautyはすべて無効。参照元videoはpermission evidenceがない限りCloudinaryへ保存・再利用しない。
+
+### 変更ファイル一覧 / テスト結果
+
+- 追加: `.github/workflows/threads-video-reference-preparation.yml`、`scripts/test_video_only_reference_generation.py`。
+- 更新: `scripts/generate_threads_ideas_from_references.py`、本handoff。
+- focused PASS: `test_video_only_reference_generation.py`、`test_generate_threads_ideas_from_references.py`、`test_threads_ideas_waiting_review_only.py`、Workflow YAML parse、`git diff --check`。
+
+### 未完了事項 / スケール方針 / 残WARN
+
+- `reference_only`の参照元で保存するのは個別投稿本文・URL・順序付きvideo metadataと文章構成。video fileのCloudinary保管・直接再投稿はpermission evidence追加までBLOCKED。
+- 取得を増やす場合もbounded `--max-posts 12`を維持する。切り抜きはこの経路から除外した。
+
+### 次AIへの引き継ぎメモ
+
+- 次に触ってよい: main反映後にWorkflowを`account_id=all`、`confirm_preparation=PREPARE_VIDEO_REFERENCES`でdispatchし、artifactと`投稿レビュー`の新規`WAITING_REVIEW`行を確認する。
+- 触らない方がよい: 実投稿、X/Beauty、第三者videoのdownload/Cloudinary/repost、`.env`、`data/`、`output/`、token/cookie。
+
 ## 2026-07-29 Codex Existing Canary Evidence Dispatch Fallback (In Progress)
 
 ### 本システムについて / 今回の変更
