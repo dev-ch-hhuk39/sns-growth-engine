@@ -67,7 +67,7 @@ jobs:
         run: |
           python3 scripts/acquire_approved_source_posts_failsoft.py \
             --account-id "$ACCOUNT_ID" --platform threads --max-posts 12 \
-            --apply --confirm-acquisition
+            --reference-only --apply --confirm-acquisition
       - name: Create review-only candidates from video-post text and structure
         run: |
           accounts=(night_scout liver_manager)

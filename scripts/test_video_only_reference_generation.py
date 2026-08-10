@@ -23,10 +23,12 @@ class FakeClient:
         "source_posts": [
             {"source_post_id": "video_parent", "target_account_id": "night_scout", "platform": "threads", "original_post_text": "夜職で長く続けるために、入店前に確認したいことを整理する。", "source_id": "threads_video"},
             {"source_post_id": "image_parent", "target_account_id": "night_scout", "platform": "threads", "original_post_text": "画像だけの投稿は今回の生成対象にしない。", "source_id": "threads_image"},
+            {"source_post_id": "youtube_parent", "target_account_id": "night_scout", "platform": "youtube", "original_post_text": "YouTube動画も今回のThreads参照対象にしない。", "source_id": "youtube_video"},
         ],
         "source_post_media": [
             {"source_post_id": "video_parent", "media_type": "video", "media_index": "0"},
             {"source_post_id": "image_parent", "media_type": "image", "media_index": "0"},
+            {"source_post_id": "youtube_parent", "media_type": "video", "media_index": "0"},
         ],
         "source_videos": [], "video_transcripts": [], "posted_results": [],
         "strategy_state": [], "metric_snapshots": [], "media_metrics": [],
