@@ -6777,3 +6777,10 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 次に触ってよい: 上記取得adapterのselector追従修正、Review候補の限定canary、YouTube個別動画の素材適合判定。
 - 触らない方がよい: publisherの権利/confirm/idempotency gate、X/Beauty有効化、media-to-text fallback復活、`.env`、`data/`、`output/`、secrets/cookies/storage state。
 - 次AIは「adapterがある」と「実メディア取得・Cloudinary・Threads投稿が実証済み」を分けて報告すること。未実証を完成扱いしない。
+
+### 2026-08-10 Phase 1 Live Preparation Follow-up
+
+- main `967e9b1370e4f94ed6960cfd1922a889d5be81c8` でfull CI 810 tests、Mypy、Workflow safety、secret history、dependency auditがPASS。
+- Direct Media Preparation run `31360775596`: Liver ManagerはThreads取得、media ingest、Cloudinary、review inventory、Hybrid AI、Sheetsの投稿レビュー同期までPASS。Night Scoutは2子mediaのうち1件を取得・理解・Cloudinary保存したが、もう1件が`media_content_understanding_blocked`で、不完全bundleを投稿候補にしないため停止。
+- `ingest_direct_reference_media_reliable.py` は自動選択時のみ、失敗した親bundleを部分利用せず次の許可済み個別投稿へ最大3回進む。明示ID指定時は別候補に変更しない。
+- 残WARN: Night Scoutの次候補にcomplete bundleが無ければReview在庫は作られない。安全なNO_POSTであり、text fallbackは行わない。実Threads投稿は未実行。

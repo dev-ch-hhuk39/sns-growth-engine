@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -14,7 +15,7 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-import ingest_direct_reference_media as core
+import ingest_direct_reference_media as core  # noqa: E402
 
 
 _PLATFORM_PRIORITY = {
@@ -373,5 +374,30 @@ core.permission_ok_from_rows = permission_ok_from_rows
 core.select_pending_media_id = select_pending_media_id
 
 
+def main() -> int:
+    """Try the next approved post after a failed automatic candidate.
+
+    A partially ingested parent remains ineligible because the normal direct
+    pipeline requires every ordered child to be uploaded and understood. The
+    next attempt therefore selects another complete source post. Explicit ID
+    invocations never change the operator-selected parent or media child.
+    """
+    explicit_target = any(
+        flag in sys.argv for flag in ("--source-post-id", "--source-post-media-id")
+    )
+    configured = int(os.environ.get("DIRECT_MEDIA_CANDIDATE_ATTEMPTS", "3") or "3")
+    max_attempts = 1 if explicit_target else max(1, min(configured, 3))
+    for attempt in range(1, max_attempts + 1):
+        result = core.main()
+        if result == 0:
+            return 0
+        if attempt < max_attempts:
+            print(
+                f"[DIRECT_MEDIA_RETRY] candidate {attempt} failed; trying next approved parent",
+                file=sys.stderr,
+            )
+    return 1
+
+
 if __name__ == "__main__":
-    raise SystemExit(core.main())
+    raise SystemExit(main())
