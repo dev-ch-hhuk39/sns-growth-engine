@@ -297,6 +297,12 @@ def extract_profile_post_urls_from_hrefs(
     return urls
 
 
+def bounded_profile_scroll_attempts(requested_posts: int) -> int:
+    """Scale profile discovery while keeping every scan strictly bounded."""
+    requested = max(1, int(requested_posts))
+    return min(12, max(3, (requested + 3) // 4))
+
+
 def parse_public_post_html(
     source: dict[str, Any],
     post_url: str,
@@ -540,9 +546,7 @@ class ThreadsPublicScreenAdapter(ThreadsPublicProfileAdapter):
                 page.goto(profile_url, wait_until="domcontentloaded")
                 page.wait_for_timeout(1_500)
                 hrefs: list[str] = []
-                # Two small scrolls are enough to expose the first bounded
-                # page without turning profile discovery into an unbounded crawl.
-                for _ in range(3):
+                for _ in range(bounded_profile_scroll_attempts(limit)):
                     visible = page.locator("a[href*='/post/']").evaluate_all(
                         "elements => elements.map(element => element.getAttribute('href') || '')"
                     )
@@ -695,6 +699,15 @@ class ThreadsBrowserSessionAdapter:
         if not profile_url.startswith("https://www.threads.com/@"):
             raise BackendFailure("threads_profile_url_required")
         try:
+            start_position = max(
+                1,
+                int(source.get("_discovery_start_position", 1)),
+            )
+        except (TypeError, ValueError):
+            start_position = 1
+        bounded = max(1, int(limit))
+        requested = start_position - 1 + bounded
+        try:
             with sync_playwright() as browser_api:
                 browser = browser_api.chromium.launch(headless=True)
                 context = browser.new_context(storage_state=self._storage_state())
@@ -703,22 +716,25 @@ class ThreadsBrowserSessionAdapter:
                 page.goto(profile_url, wait_until="domcontentloaded")
                 page.wait_for_timeout(1_500)
                 hrefs: list[str] = []
-                for _ in range(3):
+                for _ in range(bounded_profile_scroll_attempts(requested)):
                     hrefs.extend(
                         page.locator("a[href*='/post/']").evaluate_all(
                             "els => els.map(el => el.href || el.getAttribute('href') || '')"
                         )
                     )
                     urls = extract_profile_post_urls_from_hrefs(
-                        hrefs, profile_url, limit=max(1, int(limit))
+                        hrefs, profile_url, limit=requested
                     )
-                    if len(urls) >= max(1, int(limit)):
+                    if len(urls) >= requested:
                         break
                     page.mouse.wheel(0, 900)
                     page.wait_for_timeout(700)
                 urls = extract_profile_post_urls_from_hrefs(
-                    hrefs, profile_url, limit=max(1, int(limit))
+                    hrefs, profile_url, limit=requested
                 )
+                urls = urls[
+                    start_position - 1 : start_position - 1 + bounded
+                ]
                 rendered: list[dict[str, Any]] = []
                 for post_url in urls:
                     page.goto(post_url, wait_until="domcontentloaded")

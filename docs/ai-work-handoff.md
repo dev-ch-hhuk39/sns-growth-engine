@@ -6793,3 +6793,11 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - focused PASS: video-only parent selection、platform priority、next-parent retry、downstream video-only filter、prepare-only no-publish、`py_compile`。実Threads投稿、X/Beauty、cut、generated clip、scheduled activationは未実行。
 - 次タスク: PR/CI/通常マージ後、Night ScoutのDirect Media Preparationを再実行する。video-onlyの許可済み個別投稿があればCloudinary・投稿レビューまで進め、無ければ`NO_PENDING_MEDIA`として安全停止し、Threads動画投稿のbounded discovery在庫を補充する。画像bundleへ戻したりtextへ代替しない。
 - 次に触ってよい: direct-video candidate inventoryとbounded Threads acquisition。触らない方がよい: publisher権利/confirm/idempotency、X/Beauty、第三者reference-only media、`.env`, `data/`, `output/`, secrets/cookies/storage state。
+
+### 2026-08-10 Threads Video-Only Bounded Backfill
+
+- 直近投稿だけで動画不足を確定しないよう、既存Acquisition Routerへ`--media-filter video-only --force-backfill`を追加した。Direct Media Preparationは参照元ごとに一度に最大30投稿を調べ、同一親の全mediaがvideoである個別投稿だけを保存候補にする。画像のみ、画像＋動画、mediaなしは親を分割せず除外する。
+- Threads browser session/public screenは`_discovery_start_position`を尊重する。可視post linkのscrollは要求件数に応じて増やすが最大12回で停止する。scan cursorをSheetsへ保存し、動画0件の探索窓でも確認済み位置まで前進するため、次回は同じ最近投稿ではなく次の過去窓を調べる。
+- 変更: `src/acquisition/threads_public.py`, `scripts/acquire_approved_source_posts.py`, `.github/workflows/direct-media-preparation.yml`, `scripts/test_threads_public_screen_adapter.py`。追加: `scripts/test_threads_direct_video_backfill_contract.py`。
+- focused PASS: video-only parent filter、mixed/image/empty parent block、start-position、bounded scroll、cursor high-watermark、session/public adapter、reliable selector、observability fail-soft、workflow safety 456/0、media-to-text fallback禁止、prepare-only no-publish、dry-run、`py_compile`、Ruff、`git diff --check`。
+- 実行しないもの: Threads投稿、X/Beauty、権利不明media、generated clip、scheduled activation。次タスクは通常マージ後にNight Scout準備runを再実行し、video-only parentのSheets保存・Cloudinary・Review同期を確認する。動画が見つからない窓はcursorを進め、上限内の次runで後続窓を探索する。
