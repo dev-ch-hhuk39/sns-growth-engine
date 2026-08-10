@@ -21,6 +21,7 @@ queue = {
     "business_date_jst": pipeline.business_date(),
     "source_post_id": "post_1",
     "media_asset_id": "asset_1",
+    "media_type": "video",
 }
 events: list[str] = []
 original_records = pipeline._records

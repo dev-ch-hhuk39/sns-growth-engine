@@ -95,6 +95,8 @@ def build_plan(args: argparse.Namespace) -> dict:
         "would_cut": bool(args.cut and not blocked),
         "blocked_reasons": blocked,
         "vertical_9x16": args.vertical,
+        "aspect_ratio_policy": "force_9_16" if args.vertical else "preserve_source",
+        "source_aspect_ratio": str(getattr(args, "source_aspect_ratio", "") or clip_candidate.get("source_aspect_ratio", "") or ""),
         "burn_subtitles": args.burn_subtitles,
         "media_asset_result": {
             "media_asset_id": "",
@@ -165,6 +167,8 @@ def execute_cut(plan: dict) -> dict:
                 "aspect_ratio",
                 "",
             ),
+            "aspect_ratio_policy": plan.get("aspect_ratio_policy", "preserve_source"),
+            "source_aspect_ratio": plan.get("source_aspect_ratio", "") or media_probe.get("aspect_ratio", ""),
             "duration_seconds": (
                 media_probe.get(
                     "duration_seconds"

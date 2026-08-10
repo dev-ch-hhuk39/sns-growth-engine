@@ -32,10 +32,10 @@ def main() -> int:
     for account in ("night_scout", "liver_manager"):
         assert sum(mix[account].values()) == 100
         assert mix[account] == {
-            "new_text_generation": 10,
-            "reference_text_generation": 35,
-            "pdca_text_generation": 20,
-            "direct_reference_media": 30,
+            "new_text_generation": 5,
+            "reference_text_generation": 30,
+            "pdca_text_generation": 10,
+            "direct_reference_media": 50,
             "approved_source_clip": 5,
         }
 
