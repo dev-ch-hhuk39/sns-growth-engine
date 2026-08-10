@@ -21,10 +21,10 @@ media = {
     "source_post_media_id": "spm_1",
     "source_post_id": "post_1",
     "media_index": "0",
-    "media_type": "image",
-    "original_media_url": "https://example.com/image.jpg",
+    "media_type": "video",
+    "original_media_url": "https://example.com/video.mp4",
     "cloudinary_status": "UPLOADED",
-    "storage_url": "https://res.cloudinary.com/demo/image/upload/a.jpg",
+    "storage_url": "https://res.cloudinary.com/demo/video/upload/a.mp4",
     "media_asset_id": "asset_1",
 }
 asset = {
@@ -32,7 +32,7 @@ asset = {
     "reference_post_id": "post_1",
     "original_media_url": media["original_media_url"],
     "storage_url": media["storage_url"],
-    "media_type": "image",
+    "media_type": "video",
 }
 permission = {
     "source_id": "src_1",
