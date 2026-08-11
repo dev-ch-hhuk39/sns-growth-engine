@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "preserve_source": true,
+  "x_exact_statuses": [
+    {"account_id": "night_scout", "source_id": "src_ns_x_cand_004", "source_handle": "@amuxamudaily", "url": "https://x.com/amuxamudaily/status/2086438502351487354", "source_text": "ラストコールの接客で、相手の提案を否定せずに会話へ乗り、次の流れへつなげる接客が紹介されている。"},
+    {"account_id": "night_scout", "source_id": "src_ns_x_cand_008", "source_handle": "@3j2c9q", "url": "https://x.com/3j2c9q/status/2086422845102686422", "source_text": "騒動後の振り返りを通じて、状況が落ち着いた後に考え方と行動を見直す様子が語られている。"},
+    {"account_id": "liver_manager", "source_id": "src_lm_x_cand_001", "source_handle": "@meg_lsm", "url": "https://x.com/meg_lsm/status/1738178096464064991", "source_text": "ライバーとしての活動は毎日の積み重ねであり、ここから先の成長を応援するイベント動画。"},
+    {"account_id": "liver_manager", "source_id": "src_lm_x_cand_002", "source_handle": "@ryoyan_1130", "url": "https://x.com/ryoyan_1130/status/1853140240543985703", "source_text": "ライブ配信でギフトにつながる関係づくりを、具体的な行動として説明する動画。"}
+  ],
+  "youtube_goldens": [
+    {"account_id": "night_scout", "source_id": "src_ns_yt_cand_006", "source_handle": "@ichijo_hibiki", "url": "https://www.youtube.com/watch?v=J8Gy-o6gxio", "source_text": "仕事や恋愛などの質問に答えながら、自分に合う選択を考える長尺トーク動画。"},
+    {"account_id": "liver_manager", "source_id": "src_lm_yt_cand_001", "source_handle": "@suu-san_pococha", "url": "https://www.youtube.com/shorts/vqJAu4GZyf0", "source_text": "常連リスナーを増やすために、配信で意識したい具体的な関係づくりを説明する短尺動画。"}
+  ]
+}

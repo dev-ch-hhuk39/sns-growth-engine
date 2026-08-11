@@ -19,15 +19,12 @@
   ],
   "sources": [
     {"source_id": "src_ns_x_cand_001", "account_id": "night_scout", "platform": "x", "source_handle": "@takashimaanna"},
-    {"source_id": "src_ns_x_cand_002", "account_id": "night_scout", "platform": "x", "source_handle": "@cabalounge"},
     {"source_id": "src_ns_x_cand_003", "account_id": "night_scout", "platform": "x", "source_handle": "@minatoku789"},
     {"source_id": "src_ns_x_cand_004", "account_id": "night_scout", "platform": "x", "source_handle": "@amuxamudaily"},
     {"source_id": "src_ns_x_cand_005", "account_id": "night_scout", "platform": "x", "source_handle": "@1okukure_"},
-    {"source_id": "src_ns_x_cand_006", "account_id": "night_scout", "platform": "x", "source_handle": "@onigiriscout_0"},
     {"source_id": "src_ns_x_cand_007", "account_id": "night_scout", "platform": "x", "source_handle": "@urarament"},
     {"source_id": "src_ns_x_cand_008", "account_id": "night_scout", "platform": "x", "source_handle": "@3j2c9q"},
     {"source_id": "src_ns_x_owner_kyaba_career", "account_id": "night_scout", "platform": "x", "source_handle": "@kyaba_career"},
-    {"source_id": "src_ns_x_owner_kyabataihendane", "account_id": "night_scout", "platform": "x", "source_handle": "@kyabataihendane"},
     {"source_id": "src_ns_threads_required_001", "account_id": "night_scout", "platform": "threads", "source_handle": "@kyaba_ryo"},
     {"source_id": "src_ns_threads_required_002", "account_id": "night_scout", "platform": "threads", "source_handle": "@mizuno9120"},
     {"source_id": "src_ns_threads_shared_001", "account_id": "night_scout", "platform": "threads", "source_handle": "@kyaba_oohata"},
@@ -42,5 +39,10 @@
     {"source_id": "src_lm_tt_user_001", "account_id": "liver_manager", "platform": "tiktok", "source_handle": "@user5597696107300"},
     {"source_id": "src_lm_tt_user_002", "account_id": "liver_manager", "platform": "tiktok", "source_handle": "@me02_lsm"},
     {"source_id": "src_lm_tt_user_003", "account_id": "liver_manager", "platform": "tiktok", "source_handle": "@uare.inc"}
+  ],
+  "retired_sources": [
+    {"source_id": "src_ns_x_cand_002", "account_id": "night_scout", "platform": "x", "source_handle": "@cabalounge", "retired_reason": "owner_removed_from_night_scout_reference_set"},
+    {"source_id": "src_ns_x_cand_006", "account_id": "night_scout", "platform": "x", "source_handle": "@onigiriscout_0", "retired_reason": "owner_removed_from_night_scout_reference_set"},
+    {"source_id": "src_ns_x_owner_kyabataihendane", "account_id": "night_scout", "platform": "x", "source_handle": "@kyabataihendane", "retired_reason": "owner_removed_from_night_scout_reference_set"}
   ]
 }

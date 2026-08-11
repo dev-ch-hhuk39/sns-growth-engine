@@ -6927,3 +6927,80 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   idempotency/confirm gates, media-to-text fallback, X/Beauty publish gates.
 - No Cloudinary upload, Threads/X publish, Beauty operation, or mass posting was
   performed. Only the explicitly authorized permission-ledger write occurred.
+## 2026-08-11 Codex multi-platform physical acquisition checkpoint
+
+### 本システムについて / 実装内容
+
+- Reference-first SNS Growth Engineの取得層を、権利判定とeditorial選定を
+  分離したまま実測した。Night Scout X動画primaryは`@3j2c9q` priority 1、
+  `@amuxamudaily` priority 2。`@takashimaanna`、`@minatoku789`、
+  `@1okukure_`、`@urarament`、`@kyaba_career`は文章/画像referenceのみ。
+- `@onigiriscout_0`、`@cabalounge`、`@kyabataihendane`はruntime retire。
+  registryの過去行は保持し、Permission Ledgerへappend-only revocationを3行
+  追加した。live read-after-writeはPASS、3件のeffective active permissionは0。
+- owner指定X exact status 4件はyt-dlpで実bytes取得済み。URL status ID
+  (`display_id`)と動画media ID (`id`)を区別し、canonical URL、registered
+  author、非RT/非quote、video/audio stream、duration、geometry、source保持を
+  検証する。4件ともローカルE2Eで`WAITING_REVIEW`、publisher eligible=false。
+- YouTubeはNight/Liver各1件を実downloadし、ffprobe `PASS_AV`。ただし選定した
+  `src_ns_yt_cand_006` / `src_lm_yt_cand_001`はlive ledgerのexact grantが
+  absent/not-approvedのため、`WAITING_REVIEW`へは進めずBLOCKした。
+- TikTokは登録3 profileをboundedにyt-dlp/gallery-dlで実測したが、個別投稿の
+  identity解決に失敗し`POST_DISCOVERY_UNAVAILABLE`。Threadsは全9 profileの
+  public HTTP 200を確認したが個別post linkがなく同分類。browser/sessionは不使用。
+- failure reasonをrouterから保持し、`PROFILE_DISCOVERY_UNAVAILABLE`、
+  `POST_DISCOVERY_UNAVAILABLE`、`VIDEO_URL_EXTRACTION_UNAVAILABLE`、
+  `AUTH_REQUIRED`、`RATE_LIMITED`、`NO_VIDEO_FOUND_IN_BOUNDED_SAMPLE`、
+  `BACKEND_UNSTABLE`へ明示分類する。
+
+### 変更ファイル一覧
+
+- config: `owner_source_permissions_20260811.json`,
+  `source_accounts/default_sources.json`, `physical_media_goldens.json`。
+- acquisition/policy: `src/acquisition/router.py`, `threads_public.py`,
+  `ytdlp.py`, `x_exact_status.py`, `src/generation/media_platform_policy.py`。
+- runner: `scripts/acquire_approved_source_posts.py`,
+  `seed_owner_attested_media_permissions.py`, `verify_physical_media_goldens.py`。
+- tests: owner permission count、retirement/revocation、X editorial selection、
+  exact-status provenance、external failure classification、physical Golden contract。
+- docs: 本handoff、`production-completion-status.md`,
+  `source-registry-inventory.md`, `x-reusable-media-permission-decision-package.json`。
+
+### 未完了事項 / 外部blocker / 残WARN
+
+- YouTube 2件は実bytesとA/V検証済みだが、live Permission Ledgerのsource単位
+  grantが必要。権利は推測しない。grant applyは承認システムに拒否されたため未実行。
+- TikTokはpublic no-cookie backendでsecondary user identityが解決せず、Threadsは
+  public profile HTMLに個別post URLがない。両platformはphysical stableへ昇格しない。
+- TikTok/Threadsの手動URLが必要な場合はprofile URLではなく、登録handle本人の
+  canonical individual post URLを受け取る。browser/cookie/session追加は今回禁止。
+- Agent ReachはYouTube SHADOW、TikTok/Threads analysis-only、X NOT_USED。
+  profile文章をvideo acquisition成功として扱わない。
+
+### スケール方針 / safety
+
+- bounded sampleとper-source上限を維持し、backend失敗時も無制限retryしない。
+- `THIRD_PARTY_REPOST_PERMISSION_INHERITANCE=false`、quality threshold 85以上、
+  preserve-source、WAITING_REVIEW worker-ineligible、READY-only publisherを維持。
+- Cloudinary production upload、Threads/X/SNS publish、Beauty、mass postingは未実行。
+
+### テスト結果 / タスク
+
+- focused tests: X editorial primary/retire、revocation、exact provenance、failure
+  classification、Golden contract、Agent Reach optional role、router fallback/circuit、
+  Threads parent/media order、READY-only/public text、rights/X/Beauty safety、YouTube
+  source acquisitionをPASS。
+- full repository regression 825/825 PASS、workflow safety 455/455 PASS。
+  Reference-first completionは`SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY` PASS
+  （code complete 22/22、production evidence 0/22）。拡張Goalは21/48で、
+  実canary/read-after-write/metrics等の本番証拠をfail-closeした。
+- Ruffは全repo safety selection `E9,F63,F7,F82` PASS、今回変更Pythonは
+  full rules PASS。全repo full rulesの既存1811件はこの変更範囲外の負債。
+  compileall、gitleaks（diff+untracked、leak 0）、git diff checkはPASS。
+
+### 次AIへの引き継ぎメモ
+
+- 次に触ってよい: acquisition adapters、explicit failure classification、Golden
+  verifier、source editorial policy、append-only permission revocation、関連tests/docs。
+- 触らない方がよい: `.env`, `data/`, `output/`, secrets/cookies/tokens、
+  Cloudinary/Threads/X production mutation、Beauty、quality/rights/publisher gateの緩和。

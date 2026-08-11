@@ -22,6 +22,7 @@ from acquisition.factory import build_provider_registry, build_router  # noqa: E
 from acquisition.models import NormalizedSourcePost, validate_source_post  # noqa: E402
 from acquisition.router import BackendFailure  # noqa: E402
 from config_loader import get_config  # noqa: E402
+from generation.media_platform_policy import is_retired_source  # noqa: E402
 from media_source_policy import media_usage_mode  # noqa: E402
 from media.permission_ledger import evaluate_permission  # noqa: E402
 from media_growth_schemas import build_source_video  # noqa: E402
@@ -61,6 +62,32 @@ def capability_for(platform: str) -> str:
     }[platform]
 
 
+def classify_external_failure(platform: str, reason: str) -> str:
+    """Map bounded backend failures to operator-actionable external states."""
+    lowered = str(reason or "").lower()
+    if "429" in lowered or "rate_limit" in lowered:
+        return "RATE_LIMITED"
+    if any(marker in lowered for marker in ("401", "403", "auth_required", "login_required")):
+        return "AUTH_REQUIRED"
+    if "circuit_open" in lowered or "timeout" in lowered:
+        return "BACKEND_UNSTABLE"
+    if platform == "threads":
+        if "post_detail" in lowered:
+            return "VIDEO_URL_EXTRACTION_UNAVAILABLE"
+        if "post_links" in lowered:
+            return "POST_DISCOVERY_UNAVAILABLE"
+        if "public_http_failed" in lowered or "profile_url_required" in lowered:
+            return "PROFILE_DISCOVERY_UNAVAILABLE"
+    if platform == "tiktok":
+        if "no_video" in lowered or "no_videos" in lowered:
+            return "NO_VIDEO_FOUND_IN_BOUNDED_SAMPLE"
+        if "secondary user id" in lowered or "discovery_failed" in lowered:
+            return "POST_DISCOVERY_UNAVAILABLE"
+        if "individual_posts_unavailable" in lowered:
+            return "POST_DISCOVERY_UNAVAILABLE"
+    return "BACKEND_UNSTABLE"
+
+
 def selected_sources(
     account_id: str, platform_filter: str, *, reference_only: bool = False
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
@@ -76,6 +103,14 @@ def selected_sources(
             continue
         if platform_filter != "all" and platform != platform_filter:
             continue
+        if is_retired_source(source):
+            blocked.append(
+                {
+                    "source_id": str(source.get("source_id", "")),
+                    "reason": "source_retired_from_runtime_selection",
+                }
+            )
+            continue
         if platform not in MEDIA_PLATFORMS or account in BLOCKED_ACCOUNTS:
             continue
         if platform == "x" and not truthy(source.get("x_read_only")):
@@ -88,6 +123,14 @@ def selected_sources(
             # to sources that were explicitly enabled for bounded fetching.
             if truthy(source.get("fetch_enabled")):
                 selected.append(source)
+            continue
+        if platform == "x" and source.get("x_video_candidate_enabled") is not True:
+            blocked.append(
+                {
+                    "source_id": str(source.get("source_id", "")),
+                    "reason": "x_source_not_editorially_selected_for_video",
+                }
+            )
             continue
         # The owner-attested permission ledger is the runtime authority.  The
         # repository mapping merely limits which active sources can be planned.
@@ -1027,17 +1070,18 @@ def run(
                 result["discovered_post_count"] += len(valid_posts)
                 result["media_item_count"] += sum(post.media_count for post in valid_posts)
             except BackendFailure as exc:
+                reason = str(exc)[:500]
                 result["source_results"].append(
                     {
                         **base,
-                        "status": "UNVERIFIED_EXTERNAL",
-                        "reason": str(exc)[:240],
+                        "status": classify_external_failure(platform, reason),
+                        "reason": reason[:240],
                     }
                 )
         result["status"] = (
             "PASS"
             if any(row.get("status") == "PASS" for row in result["source_results"])
-            else "UNVERIFIED_EXTERNAL"
+            else "EXTERNAL_ACQUISITION_BLOCKED"
         )
         return result
 

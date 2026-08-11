@@ -52,3 +52,40 @@ def reference_priority_score(platform: Any = "", url: str = "") -> float:
     if rank is None:
         return 0.0
     return 1.0 - (rank * 0.2)
+
+
+def is_retired_source(source: dict[str, Any]) -> bool:
+    """Return true for owner-retired sources regardless of stale active flags."""
+    return bool(source.get("retired_from_runtime_selection")) or _text(
+        source.get("editorial_selection_status")
+    ).lower() == "retired"
+
+
+def select_x_video_primary_sources(
+    sources: list[dict[str, Any]], account_id: str = "night_scout"
+) -> list[dict[str, Any]]:
+    """Select editorially approved X video sources without inferring rights.
+
+    Editorial fitness and effective permission are independent gates. Physical
+    acquisition must still pass the permission ledger after this selection.
+    """
+    selected: list[dict[str, Any]] = []
+    for source in sources:
+        targets = source.get("target_account_ids") or [source.get("target_account_id")]
+        if account_id not in {_text(value) for value in targets if _text(value)}:
+            continue
+        if normalize_platform(
+            source.get("source_platform") or source.get("platform"),
+            _text(source.get("canonical_url") or source.get("source_url")),
+        ) != "x":
+            continue
+        if is_retired_source(source) or source.get("x_video_candidate_enabled") is not True:
+            continue
+        selected.append(source)
+    return sorted(
+        selected,
+        key=lambda row: (
+            int(row.get("x_video_candidate_priority") or 999),
+            _text(row.get("source_id")),
+        ),
+    )

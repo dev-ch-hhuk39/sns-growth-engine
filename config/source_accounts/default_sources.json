@@ -4,6 +4,8 @@
   "sources": [
     {
       "source_id": "src_ns_x_cand_001",
+      "editorial_selection_status": "text_image_reference",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference 01",
       "source_platform": "x",
       "source_handle": "@takashimaanna",
@@ -710,6 +712,11 @@
     },
     {
       "source_id": "src_ns_x_cand_002",
+      "editorial_selection_status": "retired",
+      "retired_from_runtime_selection": true,
+      "retired_at": "2026-08-11T00:00:00+09:00",
+      "retired_reason": "owner_removed_from_night_scout_reference_set",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference (@cabalounge)",
       "source_platform": "x",
       "source_handle": "@cabalounge",
@@ -786,6 +793,8 @@
     },
     {
       "source_id": "src_ns_x_cand_003",
+      "editorial_selection_status": "text_image_reference",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference (@minatoku789)",
       "source_platform": "x",
       "source_handle": "@minatoku789",
@@ -864,6 +873,9 @@
     },
     {
       "source_id": "src_ns_x_cand_004",
+      "editorial_selection_status": "video_primary",
+      "x_video_candidate_enabled": true,
+      "x_video_candidate_priority": 2,
       "source_name": "night_scout X reference (@amuxamudaily)",
       "source_platform": "x",
       "source_handle": "@amuxamudaily",
@@ -940,6 +952,8 @@
     },
     {
       "source_id": "src_ns_x_cand_005",
+      "editorial_selection_status": "text_image_reference",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference (@1okukure_)",
       "source_platform": "x",
       "source_handle": "@1okukure_",
@@ -1016,6 +1030,11 @@
     },
     {
       "source_id": "src_ns_x_cand_006",
+      "editorial_selection_status": "retired",
+      "retired_from_runtime_selection": true,
+      "retired_at": "2026-08-11T00:00:00+09:00",
+      "retired_reason": "owner_removed_from_night_scout_reference_set",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference (@onigiriscout_0)",
       "source_platform": "x",
       "source_handle": "@onigiriscout_0",
@@ -1092,6 +1111,8 @@
     },
     {
       "source_id": "src_ns_x_cand_007",
+      "editorial_selection_status": "text_image_reference",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference (@urarament)",
       "source_platform": "x",
       "source_handle": "@urarament",
@@ -1168,6 +1189,9 @@
     },
     {
       "source_id": "src_ns_x_cand_008",
+      "editorial_selection_status": "video_primary",
+      "x_video_candidate_enabled": true,
+      "x_video_candidate_priority": 1,
       "source_name": "night_scout X reference (@3j2c9q)",
       "source_platform": "x",
       "source_handle": "@3j2c9q",
@@ -1244,6 +1268,8 @@
     },
     {
       "source_id": "src_ns_x_owner_kyaba_career",
+      "editorial_selection_status": "text_image_reference",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference (@kyaba_career)",
       "source_platform": "x",
       "platform": "x",
@@ -1282,6 +1308,11 @@
     },
     {
       "source_id": "src_ns_x_owner_kyabataihendane",
+      "editorial_selection_status": "retired",
+      "retired_from_runtime_selection": true,
+      "retired_at": "2026-08-11T00:00:00+09:00",
+      "retired_reason": "owner_removed_from_night_scout_reference_set",
+      "x_video_candidate_enabled": false,
       "source_name": "night_scout X reference (@kyabataihendane)",
       "source_platform": "x",
       "platform": "x",

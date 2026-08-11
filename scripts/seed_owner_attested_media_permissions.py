@@ -17,8 +17,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from config_loader import get_config
-from sheets_client import TAB_DEFINITIONS, SheetsClient
+from config_loader import get_config  # noqa: E402
+from media.permission_ledger import evaluate_permission, latest_permission  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 MEDIA_CAPABLE_PLATFORMS = {"threads", "youtube", "tiktok"}
 DECISION_PLATFORMS = {"x", "threads", "tiktok"}
@@ -120,6 +121,14 @@ def decision_sources(
     return selected
 
 
+def retired_decision_sources(
+    decision: dict[str, Any], source_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
+    """Validate retired identities against the registry without deleting history."""
+    retirement_decision = {**decision, "sources": decision.get("retired_sources") or []}
+    return decision_sources(retirement_decision, source_ids)
+
+
 def permission_row(
     source: dict[str, Any],
     now: str,
@@ -165,15 +174,47 @@ def permission_row(
     }
 
 
+def revocation_row(
+    source: dict[str, Any], now: str, decision: dict[str, Any]
+) -> dict[str, str]:
+    """Build an append-only owner revocation that wins latest-row evaluation."""
+    source_id = str(source["source_id"])
+    account_id = str(source.get("account_id") or "")
+    compact_time = now.replace("-", "").replace(":", "").replace("+", "_")
+    row = permission_row(source, now, decision)
+    row.update(
+        {
+            "permission_id": f"owner_retirement_{source_id}_{compact_time}",
+            "account_id": account_id,
+            "allowed_accounts": account_id,
+            "usage_mode": "blocked",
+            "rights_status": "restricted",
+            "permission_status": "revoked",
+            "revoked": "true",
+            "revoked_at": now,
+            "notes": "Owner retired source from runtime selection; historical grants remain audit-only.",
+            "updated_at": now,
+        }
+    )
+    for flag in DECISION_REQUIRED_FLAGS:
+        row[flag] = "false"
+    return row
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="seed global owner-attested media permissions")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-owner-attestation", action="store_true")
+    parser.add_argument("--revoke-retired", action="store_true")
+    parser.add_argument("--confirm-retirement-revocation", action="store_true")
     parser.add_argument("--source-id", action="append", default=[], help="Explicit approved source ID; repeat for each source")
     parser.add_argument("--decision-file", help="Owner decision JSON with exact source/account/handle scope")
     args = parser.parse_args()
-    if args.apply and not args.confirm_owner_attestation:
+    if args.apply and args.revoke_retired and not args.confirm_retirement_revocation:
+        print(json.dumps({"status": "BLOCKED", "reason": "--revoke-retired apply requires --confirm-retirement-revocation"}))
+        return 1
+    if args.apply and not args.revoke_retired and not args.confirm_owner_attestation:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-owner-attestation"}))
         return 1
     if args.apply and not args.source_id:
@@ -183,11 +224,24 @@ def main() -> int:
     requested = {str(value).strip() for value in args.source_id if str(value).strip()} or None
     try:
         decision = load_owner_decision(Path(args.decision_file)) if args.decision_file else None
-        sources = decision_sources(decision, requested) if decision else eligible_sources(requested)
+        if args.revoke_retired and not decision:
+            raise ValueError("--revoke-retired requires --decision-file")
+        sources = (
+            retired_decision_sources(decision, requested)
+            if args.revoke_retired and decision
+            else decision_sources(decision, requested)
+            if decision
+            else eligible_sources(requested)
+        )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps({"status": "BLOCKED", "reason": str(exc)}, ensure_ascii=False))
         return 1
-    rows = [permission_row(source, now, decision) for source in sources]
+    rows = [
+        revocation_row(source, now, decision)
+        if args.revoke_retired and decision
+        else permission_row(source, now, decision)
+        for source in sources
+    ]
     result: dict[str, Any] = {
         "status": "PLAN_ONLY",
         "eligible_source_count": len(rows),
@@ -197,10 +251,13 @@ def main() -> int:
         "would_write": len(rows),
         "revoked_preserved": True,
         "approved_rights_only": True,
+        "operation": "revoke_retired" if args.revoke_retired else "grant",
     }
     if not args.apply:
-        print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
-    cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     ws = client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
     headers = client._call_with_rate_limit_retry(
         "row_values:media_permissions:owner_seed",
@@ -218,6 +275,20 @@ def main() -> int:
     for row in rows:
         previous_entry = existing.get(row["source_id"])
         previous = previous_entry[1] if previous_entry else None
+        if args.revoke_retired:
+            effective = latest_permission(existing_rows, row["source_id"])
+            if effective and truthy(effective.get("revoked")):
+                revoked_skips += 1
+                continue
+            client._call_with_rate_limit_retry(
+                f"append_revocation:media_permissions:{row['source_id']}",
+                lambda row=row: ws.append_row(
+                    [row.get(header, "") for header in headers],
+                    value_input_option="USER_ENTERED",
+                ),
+            )
+            writes += 1
+            continue
         if previous and truthy(previous.get("revoked")):
             revoked_skips += 1
             continue
@@ -244,15 +315,23 @@ def main() -> int:
         "get_all_records:media_permissions:owner_seed_verify",
         lambda: ws.get_all_records(),
     )
-    latest = {
-        str(row.get("source_id", "")): dict(row)
-        for row in verified_rows
-        if row.get("source_id")
-    }
     invalid_rows: list[dict[str, Any]] = []
     expected_by_id = {row["source_id"]: row for row in rows}
     for source_id, expected in expected_by_id.items():
-        actual = latest.get(source_id, {})
+        actual = latest_permission(verified_rows, source_id)
+        if args.revoke_retired:
+            evaluation = evaluate_permission(
+                verified_rows,
+                source_id,
+                account_id=expected["account_id"],
+                source_handle=expected["source_handle"],
+                required_flags=DECISION_REQUIRED_FLAGS,
+            )
+            if evaluation["allowed"] or not truthy(actual.get("revoked")):
+                invalid_rows.append(
+                    {"source_id": source_id, "invalid_fields": ["effective_permission_not_revoked"]}
+                )
+            continue
         exact_fields = (
             "source_id",
             "source_handle",

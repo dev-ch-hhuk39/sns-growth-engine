@@ -480,7 +480,7 @@ class ThreadsPublicProfileAdapter:
                 self.backend_name,
                 self.backend_version,
                 "FAILED",
-                reason=f"{type(exc).__name__}:threads_profile_discovery_failed",
+                reason=str(exc) or f"{type(exc).__name__}:threads_profile_discovery_failed",
                 retryable=True,
             )
 
@@ -498,7 +498,14 @@ class ThreadsPublicHttpAdapter(ThreadsPublicProfileAdapter):
             from urllib.request import Request, urlopen
 
             request = Request(
-                url, headers={"User-Agent": "SNSGrowthEngine/1.0 public-source-collector"}
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 Chrome/126 Safari/537.36"
+                    ),
+                    "Accept-Language": "ja,en-US;q=0.8,en;q=0.6",
+                },
             )
             with urlopen(request, timeout=20) as response:
                 if response.status != 200:

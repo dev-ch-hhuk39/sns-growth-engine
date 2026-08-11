@@ -14,11 +14,15 @@ from seed_owner_attested_media_permissions import (  # noqa: E402
     decision_sources,
     load_owner_decision,
     permission_row,
+    retired_decision_sources,
+    revocation_row,
 )
 
 decision = load_owner_decision(ROOT / "config/owner_source_permissions_20260811.json")
 sources = decision_sources(decision)
 rows = [permission_row(source, "2026-08-11T01:23:45+00:00", decision) for source in sources]
+retired = retired_decision_sources(decision)
+revocations = [revocation_row(source, "2026-08-11T02:23:45+00:00", decision) for source in retired]
 counts: dict[tuple[str, str], int] = {}
 for source in sources:
     key = (source["account_id"], source["platform"])
@@ -26,8 +30,10 @@ for source in sources:
 
 sample = next(row for row in rows if row["source_id"] == "src_lm_x_cand_001")
 checks = {
-    "all 24 explicit identities selected": len(sources) == 24,
-    "night X count": counts.get(("night_scout", "x")) == 10,
+    "all 21 active identities selected": len(sources) == 21,
+    "night X active count": counts.get(("night_scout", "x")) == 7,
+    "three retired identities isolated": len(retired) == 3,
+    "retired identities have revocation rows": all(row["revoked"] == "true" for row in revocations),
     "night Threads count": counts.get(("night_scout", "threads")) == 8,
     "night TikTok absent": counts.get(("night_scout", "tiktok"), 0) == 0,
     "liver X count": counts.get(("liver_manager", "x")) == 2,
