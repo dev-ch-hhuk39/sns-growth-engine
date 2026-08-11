@@ -5,6 +5,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
+from .failures import classify_failure, fallback_allowed
+
 
 class BackendFailure(RuntimeError):
     """A recoverable acquisition failure that permits the configured fallback."""
@@ -118,6 +120,14 @@ class AdapterRouter:
                     f"{backend_name}:{type(exc).__name__}"
                     + (f":{detail}" if detail else "")
                 )
+                platform = str(
+                    source.get("source_platform") or source.get("platform") or ""
+                ).lower()
+                category = classify_failure(platform, str(exc))
+                if not fallback_allowed(category):
+                    raise BackendFailure(
+                        f"non_fallback_failure:{category.value}:{backend_name}"
+                    ) from exc
         raise BackendFailure("all_backends_failed:" + ",".join(errors))
 
     def health_rows(self) -> list[dict[str, Any]]:

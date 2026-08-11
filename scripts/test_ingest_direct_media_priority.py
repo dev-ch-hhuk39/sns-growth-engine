@@ -198,7 +198,7 @@ try:
         permissions=permissions,
     )
 
-    assert selected == ""
+    assert selected == "media-tiktok"
 
     recoverable_threads = FakeClient(
         posts,

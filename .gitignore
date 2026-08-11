@@ -79,6 +79,7 @@ output/
 !config/content_mix/default_mix.json
 !config/external_libraries.json
 !config/source_backend_routing.json
+!config/acquisition_backend_capabilities.json
 !config/reference_first_completion.json
 !config/owner_source_permissions_20260811.json
 !config/physical_media_goldens.json

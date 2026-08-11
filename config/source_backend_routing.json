@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "notes": "Reference discovery remains TikTok/Threads/X/YouTube. Browser-based source acquisition is disabled in the active route. Physical media download is governed separately by media_platform_policy and is currently X/YouTube only.",
+  "notes": "Reference discovery remains TikTok/Threads/X/YouTube. Browser-based source acquisition is disabled in the active route. TikTok profile discovery uses the bounded public embed payload with gallery-dl as a metadata fallback. Physical media download is governed separately by media_platform_policy.",
   "routes": {
     "threads.profile_posts": {
       "primary": "threads_public_http",
@@ -17,7 +17,7 @@
       "circuit_failure_threshold": 3
     },
     "tiktok.profile_posts": {
-      "primary": "yt_dlp",
+      "primary": "tiktok_public_embed",
       "fallbacks": [
         "tiktok_gallery_dl"
       ],
@@ -54,9 +54,7 @@
     },
     "threads.comments": {
       "primary": "threads_public_comments",
-      "fallbacks": [
-        "vdite_threads_scraper"
-      ],
+      "fallbacks": [],
       "shadow": [],
       "cooldown_seconds": 1800
     },
@@ -97,7 +95,8 @@
     }
   },
   "backend_roles": {
-    "yt_dlp": "PRIMARY_PHYSICAL_X_YOUTUBE",
+    "yt_dlp": "PRIMARY_PHYSICAL_X_YOUTUBE_POST_DETAIL",
+    "tiktok_public_embed": "PRIMARY_PUBLIC_PROFILE_DISCOVERY",
     "tiktok_public_playwright": "DEPRECATED_INACTIVE",
     "tiktok_gallery_dl": "FALLBACK_METADATA_ONLY",
     "threads_browser_session": "DEPRECATED_INACTIVE",

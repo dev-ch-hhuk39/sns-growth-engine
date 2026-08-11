@@ -4,9 +4,28 @@
 
 Reference discovery: TikTok -> Threads -> X -> YouTube.
 
-Physical media acquisition: X + YouTube only, using yt-dlp.
+Physical media acquisition: X and YouTube use yt-dlp. Owner-authorized TikTok
+individual posts use bounded public-embed direct HTTP after exact registered-
+author and permission-ledger checks. Threads physical media remains deferred.
 
-TikTok/Threads remain valid text/structure reference sources but do not trigger new physical-media download attempts.
+The acquisition router now validates every active profile backend against
+`config/acquisition_backend_capabilities.json`. Browser, auth-only and opaque
+external-service candidates cannot enter the backend-only production chain.
+See `docs/oss-acquisition-stack-20260811.md` and run
+`python3 scripts/acquisition_doctor.py --json` for the current matrix.
+
+TikTok and Threads remain valid text/structure reference sources. TikTok may
+also trigger physical acquisition only for exact owner-authorized individual
+posts. Threads does not trigger physical-media download attempts.
+
+The 2026-08-11 bounded audit found a safe anonymous TikTok route after the
+yt-dlp/gallery-dl and ssut profile paths failed. Public embed hydration now
+resolves exact individual posts for all three registered Liver sources; one
+owner-authorized post also passed physical A/V, provenance, permission and
+WAITING_REVIEW verification. Threads public HTML still returns a logged-out
+application-404 SSR payload for one Night and one Liver source, while maintained
+alternatives require Playwright/session state or an opaque conversion service.
+Threads remains an exact external blocker, not profile-text success.
 
 Content mix for Night Scout and Liver Manager: 50% direct reference media, 30% reference text, 10% PDCA, 5% new text, 5% approved clips.
 
@@ -37,7 +56,8 @@ permission.
 - Threads browser-session acquisition for scheduled media preparation.
 - Playwright Threads media preparation.
 - TikTok Playwright physical-media fallback.
-- New physical-media acquisition for Threads/TikTok.
+- New physical-media acquisition for Threads. TikTok browser acquisition stays
+  deprecated; the active TikTok route is public HTTP only.
 - Implicit force_9_16 defaults.
 - Clip ratios above 5%.
 
@@ -45,15 +65,15 @@ These paths are not hard-deleted in this refactor so rollback and evidence remai
 
 ## Regression-contract migration after first full harness
 
-The first repository harness after the refactor produced 10 failures. They were traced to stale contracts that assumed Threads physical download, Threads browser-session routing, Playwright TikTok fallback, an exact historical source count, or a scheduled Threads-centric direct-media preparation workflow. The updated contract keeps TikTok/Threads as reference-discovery platforms while physical-media acquisition stays X/YouTube only. Permission-ledger, content-understanding, rights, video-first and review safety checks remain mandatory.
+The first repository harness after the refactor produced 10 failures. They were traced to stale contracts that assumed Threads physical download, Threads browser-session routing, Playwright TikTok fallback, an exact historical source count, or a scheduled Threads-centric direct-media preparation workflow. The updated contract keeps all four reference-discovery platforms and adds owner-authorized TikTok physical acquisition without reactivating browsers. Permission-ledger, exact-author, content-understanding, rights, video-first and review safety checks remain mandatory.
 
 ## Physical-source eligibility normalization
 
-The legacy `media_growth_engine.allowed_source_ids` list is physical-media inventory, not the four-platform reference registry. It is now filtered by each registered source's actual normalized platform, retaining only X/YouTube. TikTok/Threads remain available through the reference acquisition routes. Regression contracts use the production rights policy and platform normalizer instead of requiring a raw `rights_status` field spelling.
+The legacy `media_growth_engine.allowed_source_ids` list is physical-media inventory, not the four-platform reference registry. It is filtered by each registered source's actual normalized platform, retaining X, YouTube and explicitly owner-authorized TikTok sources. Threads remains reference-only. Regression contracts use the production rights policy and platform normalizer instead of requiring a raw `rights_status` field spelling.
 
 ## Discovery-plan rights contract
 
-`build_discovery_plan().selected_sources` is a lightweight source-selection view and may omit enriched rights/permission fields. Physical-media safety is therefore checked in two stages: the selected row must normalize to X/YouTube, and its exactly matching `source_results` row must carry an allowed rights status plus `permission_status=approved`. This keeps the contract fail-closed without requiring presentation-only fields on the lightweight selection record.
+`build_discovery_plan().selected_sources` is a lightweight source-selection view and may omit enriched rights/permission fields. Physical-media safety is therefore checked in two stages: the selected row must normalize to an active physical platform, and its exactly matching `source_results` row must carry an allowed rights status plus `permission_status=approved`. TikTok additionally requires an individual `/@handle/video/<id>` parent whose author matches the registry and a recognized TikTok CDN media child. This keeps the contract fail-closed without requiring presentation-only fields on the lightweight selection record.
 
 ## Cleanup candidates, not deletion targets
 

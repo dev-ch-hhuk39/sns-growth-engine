@@ -147,15 +147,16 @@
   ],
   "physical_media_source_platforms": [
     "x",
-    "youtube"
+    "youtube",
+    "tiktok"
   ],
   "deferred_physical_media_source_platforms": [
-    "tiktok",
     "threads"
   ],
   "physical_media_provider_by_platform": {
     "x": "yt_dlp",
-    "youtube": "yt_dlp"
+    "youtube": "yt_dlp",
+    "tiktok": "public_embed_direct_http"
   },
-  "physical_media_policy": "x_youtube_only_until_explicit_reenable"
+  "physical_media_policy": "x_youtube_and_owner_authorized_tiktok_only"
 }

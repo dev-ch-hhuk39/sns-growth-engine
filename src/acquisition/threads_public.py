@@ -437,6 +437,10 @@ class ThreadsPublicProfileAdapter:
 
         profile_html = self._load(profile_url)
 
+        if "Barcelona404ErrorRoot" in profile_html:
+            handle = _profile_handle(profile_url)
+            raise BackendFailure(f"threads_profile_application_404:{handle}")
+
         discovered_urls = extract_profile_post_urls(
             profile_html,
             profile_url,

@@ -308,16 +308,15 @@ def download_source_media(
     media_type: str,
     platform: str,
 ) -> str:
-    """Acquire only the currently proven physical-video platforms.
-
-    Reference discovery can still use TikTok/Threads, but new physical media
-    attempts are intentionally limited to X and YouTube. Both use yt-dlp on
-    the exact individual post URL so signed CDN URLs and source geometry stay
-    outside editorial selection logic.
-    """
+    """Acquire one proven physical-media object without changing geometry."""
     resolved_platform = normalize_platform(platform, canonical_post_url or media_url)
     if not can_attempt_physical_media(resolved_platform, canonical_post_url or media_url):
         raise RuntimeError(f"physical_media_platform_deferred:{resolved_platform or 'unknown'}")
+    if resolved_platform == "tiktok":
+        if "/video/" not in canonical_post_url:
+            raise RuntimeError("tiktok_individual_post_url_required")
+        download_direct_https_media(media_url, path, media_type=media_type)
+        return "tiktok_public_embed_direct_http"
     target_url = canonical_post_url or media_url
     if not safe_https_url(target_url):
         raise RuntimeError("direct_media_url_blocked")

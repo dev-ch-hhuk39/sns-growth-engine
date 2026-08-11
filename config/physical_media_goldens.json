@@ -10,5 +10,8 @@
   "youtube_goldens": [
     {"account_id": "night_scout", "source_id": "src_ns_yt_cand_006", "source_handle": "@ichijo_hibiki", "url": "https://www.youtube.com/watch?v=J8Gy-o6gxio", "source_text": "仕事や恋愛などの質問に答えながら、自分に合う選択を考える長尺トーク動画。"},
     {"account_id": "liver_manager", "source_id": "src_lm_yt_cand_001", "source_handle": "@suu-san_pococha", "url": "https://www.youtube.com/shorts/vqJAu4GZyf0", "source_text": "常連リスナーを増やすために、配信で意識したい具体的な関係づくりを説明する短尺動画。"}
+  ],
+  "tiktok_goldens": [
+    {"account_id": "liver_manager", "source_id": "src_lm_tt_user_001", "source_handle": "@user5597696107300", "url": "https://www.tiktok.com/@user5597696107300/video/7649682547588254994", "source_text": "配信を始める前に整えておきたい準備を、具体例とともに説明する動画。"}
   ]
 }

@@ -3,7 +3,12 @@ import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from generation.multiplatform_media_router import merge_designated_sources, normalize_platform, platform_counts, provider_chain
+from generation.multiplatform_media_router import (  # noqa: E402
+    merge_designated_sources,
+    normalize_platform,
+    platform_counts,
+    provider_chain,
+)
 
 
 def test_platform_detection_and_provider_chains() -> None:
@@ -13,7 +18,7 @@ def test_platform_detection_and_provider_chains() -> None:
     assert normalize_platform(url="https://youtu.be/abc") == "youtube"
     assert provider_chain("youtube") == ("yt_dlp",)
     assert provider_chain("x") == ("yt_dlp",)
-    assert provider_chain("tiktok") == ()
+    assert provider_chain("tiktok") == ("public_embed_direct_http",)
     assert provider_chain("threads") == ()
     assert provider_chain("unknown") == ()
 

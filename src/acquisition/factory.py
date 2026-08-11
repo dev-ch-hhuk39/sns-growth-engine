@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .capability_registry import CapabilityRegistry
 from .router import AdapterRouter, BackendRoute
 from .enrichment import (
     FirecrawlWebEnrichmentProvider,
@@ -19,6 +20,7 @@ from .threads_public import (
     ThreadsPublicScreenAdapter,
 )
 from .tiktok_public import TikTokPublicProfileAdapter
+from .tiktok_embed import TikTokPublicEmbedAdapter
 from .tiktok_gallerydl import TikTokGalleryDlProfileAdapter
 from .x_gallerydl import XGalleryDlProfileAdapter
 from .ytdlp import YtDlpProfilePostAdapter
@@ -34,6 +36,7 @@ def build_router() -> AdapterRouter:
     config = load_routing_config()
     adapters = {
         "yt_dlp": YtDlpProfilePostAdapter(),
+        "tiktok_public_embed": TikTokPublicEmbedAdapter(),
         "tiktok_public_playwright": TikTokPublicProfileAdapter(),
         "tiktok_gallery_dl": TikTokGalleryDlProfileAdapter(),
         "threads_browser_session": ThreadsBrowserSessionAdapter(),
@@ -54,6 +57,10 @@ def build_router() -> AdapterRouter:
         for capability, row in config["routes"].items()
         if row["primary"] in adapters
     }
+    registry = CapabilityRegistry.load()
+    errors = registry.validate_routes(routes, registered=set(adapters))
+    if errors:
+        raise ValueError("invalid_acquisition_routes:" + ",".join(errors))
     return AdapterRouter(adapters, routes)
 
 

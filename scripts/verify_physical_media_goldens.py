@@ -33,7 +33,7 @@ from sheets_record_reader import read_records_safely  # noqa: E402
 
 
 def _video_id(url: str) -> str:
-    match = re.search(r"(?:v=|/shorts/|/status/)([A-Za-z0-9_-]+)", url)
+    match = re.search(r"(?:v=|/shorts/|/status/|/video/)([A-Za-z0-9_-]+)", url)
     return match.group(1) if match else ""
 
 
@@ -99,13 +99,13 @@ def verify_item(
         media_type="video",
         canonical_post_url=url,
         original_media_url=url,
-        resolver_backend="yt_dlp",
+        resolver_backend="public_embed_direct_http" if "tiktok.com/" in url else "yt_dlp",
         mime_type="video/mp4",
         width=str(probe.get("width") or ""),
         height=str(probe.get("height") or ""),
         duration_seconds=str(probe.get("duration_seconds") or ""),
     )
-    platform = "x" if "x.com/" in url else "youtube"
+    platform = "x" if "x.com/" in url else ("tiktok" if "tiktok.com/" in url else "youtube")
     provenance = (
         validate_exact_status_provenance(url, item, metadata)
         if platform == "x"
@@ -116,14 +116,18 @@ def verify_item(
         source_id=source_id,
         target_account_id=account_id,
         platform=platform,
-        profile_url=url.split("/status/", 1)[0] if platform == "x" else url,
+        profile_url=(
+            url.split("/status/", 1)[0]
+            if platform == "x"
+            else (url.split("/video/", 1)[0] if platform == "tiktok" else url)
+        ),
         canonical_post_url=url.rstrip("/"),
         external_post_id=_video_id(url),
         original_post_text=source_text,
         published_at="",
         author_handle=str(item.get("source_handle") or "").lstrip("@"),
         media_items=(media,),
-        collection_backend="yt_dlp",
+        collection_backend="public_embed_direct_http" if platform == "tiktok" else "yt_dlp",
         backend_version="physical-golden",
         content_hash=stable_content_hash(source_text, [url]),
         discovered_at="2026-08-11T00:00:00+00:00",
@@ -188,15 +192,27 @@ def verify_item(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--x-dir", type=Path, required=True)
-    parser.add_argument("--youtube-dir", type=Path, required=True)
+    parser.add_argument("--x-dir", type=Path, default=Path("/tmp"))
+    parser.add_argument("--youtube-dir", type=Path, default=Path("/tmp"))
+    parser.add_argument("--tiktok-dir", type=Path, default=Path("/tmp"))
+    parser.add_argument("--platform", choices=["all", "x", "youtube", "tiktok"], default="all")
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     manifest = json.loads((ROOT / "config/physical_media_goldens.json").read_text(encoding="utf-8"))
     permissions = _permission_rows(args.use_sheets)
-    items = [*manifest["x_exact_statuses"], *manifest["youtube_goldens"]]
-    directories = [args.x_dir, args.youtube_dir]
+    groups = {
+        "x": manifest["x_exact_statuses"],
+        "youtube": manifest["youtube_goldens"],
+        "tiktok": manifest.get("tiktok_goldens", []),
+    }
+    items = [
+        item
+        for platform, platform_items in groups.items()
+        if args.platform in {"all", platform}
+        for item in platform_items
+    ]
+    directories = [args.x_dir, args.youtube_dir, args.tiktok_dir]
     rows = [
         verify_item(
             item,

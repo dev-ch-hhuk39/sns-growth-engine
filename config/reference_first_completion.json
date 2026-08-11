@@ -2,7 +2,7 @@
   "schema_version": 1,
   "managed_accounts": ["night_scout", "liver_manager"],
   "reference_priority": ["tiktok", "threads", "x", "youtube"],
-  "physical_media_providers": {"x": "yt_dlp", "youtube": "yt_dlp"},
+  "physical_media_providers": {"x": "yt_dlp", "youtube": "yt_dlp", "tiktok": "public_embed_direct_http"},
   "physical_media_evidence": {
     "youtube": {
       "night_scout": "PASS_AV",
@@ -15,7 +15,7 @@
       "evidence_class": "permission_applied_but_physical_golden_not_recorded"
     }
   },
-  "deferred_physical_media_platforms": ["tiktok", "threads"],
+  "deferred_physical_media_platforms": ["threads"],
   "content_mix": {
     "direct_reference_media": 50,
     "reference_text_generation": 30,

@@ -7004,3 +7004,87 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   verifier、source editorial policy、append-only permission revocation、関連tests/docs。
 - 触らない方がよい: `.env`, `data/`, `output/`, secrets/cookies/tokens、
   Cloudinary/Threads/X production mutation、Beauty、quality/rights/publisher gateの緩和。
+## 2026-08-11 Codex OSS Acquisition Completion v20
+
+### System / changed files
+
+- Added a machine-readable backend capability registry, production route
+  validation, standard acquisition failure taxonomy, and a side-effect-free
+  acquisition doctor. Active production profile routes are backend-only,
+  bounded and read-only; browser/auth-only/opaque-service candidates are
+  mechanically non-selectable.
+- Audited 24 current upstream repositories at exact SHAs in
+  `docs/oss-acquisition-stack-20260811.md`. Added the missing
+  `youtube-comment-downloader==0.1.78` runtime pin and removed the browser-based
+  vdite fallback from the Threads comments route.
+- Updated: `.gitignore`, `requirements.txt`,
+  `config/source_backend_routing.json`, `config/media_growth_engine.json`,
+  `config/reference_first_completion.json`, `config/physical_media_goldens.json`,
+  `scripts/acquire_approved_source_posts.py`, `scripts/verify_physical_media_goldens.py`,
+  `src/acquisition/factory.py`, `src/generation/video_source_acquirer.py`,
+  current-work/reference-first docs and this handoff.
+  Added: `config/acquisition_backend_capabilities.json`,
+  `src/acquisition/capability_registry.py`, `src/acquisition/failures.py`,
+  `src/acquisition/tiktok_embed.py`, `scripts/acquisition_doctor.py`, focused
+  tests and the OSS audit.
+
+### Live audit, remaining work, WARN and scale policy
+
+- X and YouTube proven physical routes remain unchanged. The retired Night X
+  sources and third-party repost non-inheritance contract remain enforced.
+- TikTok: the new backend-only `tiktok_public_embed` PRIMARY resolves all three
+  approved Liver profiles without browser, cookie or login. Bounded live proof
+  returned 3 posts and 3 same-parent media children per source (9/9 total).
+  Exact Golden `src_lm_tt_user_001` post
+  `7649682547588254994` produced 12,310,033 local bytes, A/V streams,
+  720x1280, 90.950998 seconds and passed live Permission Ledger, author,
+  provenance, persona and public validation to `WAITING_REVIEW` (publisher
+  eligible=false). yt-dlp/gallery-dl/ssut failures remain documented as
+  fallback audit evidence; cookie-based f2/JoeanAmier stay disabled.
+- Threads: bounded public HTTP probes for `@chiishunin_s` and `@me01_lsm`
+  returned HTTP 200 transport but an application 404 SSR payload with no handle
+  or post links. Browser/session and opaque remote-service fallbacks remain off.
+- Limits remain serial and bounded (Threads 5; TikTok max 20, live run 3 per
+  source). Do not
+  solve these blockers by harvesting personal browser cookies or weakening
+  author/rights checks.
+
+### Tests / safe files / next AI
+
+- Focused registry, doctor, Threads blocker, TikTok embed/direct physical,
+  X/gallery and TikTok/gallery tests PASS. `tests/` pytest is 92/92 PASS.
+  Repository regression is 825/825 PASS and Workflow safety is 455/455 PASS.
+- Completion evaluator: `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`,
+  `software_complete=true`, `integration_complete=true`, architecture and
+  repository evidence PASS, `production_evidence_complete=false`. TikTok is
+  recorded as `PASS_PUBLIC_EMBED_AND_AV_RECORDED`; Threads is
+  `BLOCKED_APPLICATION_404_RECORDED`.
+- Acquisition Doctor PASS with no missing PRIMARY backend, no secret-value read
+  and no side effects. Changed-Python full Ruff and repository safety selection
+  `E9,F63,F7,F82` PASS; compileall PASS. Gitleaks scanned only current diff plus
+  non-ignored untracked files (109,282 bytes) with redaction and found 0 leaks.
+  `git diff --check` PASS.
+- Safe to touch: `src/acquisition/`, acquisition configs/tests/docs and bounded
+  probe scripts. Avoid: `.env`, data/output, browser profiles, credential files,
+  production Sheets/Cloudinary/SNS state, X/Beauty publisher paths.
+- Remaining external blocker is Threads only: Night `@chiishunin_s` and Liver
+  `@me01_lsm` both return Meta's `Barcelona404ErrorRoot`, classified as exact
+  `POST_DISCOVERY_UNAVAILABLE`. Do not report transport HTTP 200 or profile
+  biography as post-discovery success. A future route needs a supported
+  backend-only public response or a separately approved dedicated non-personal
+  authenticated identity; browser/session remains prohibited.
+
+### Remaining task and production boundary
+
+- Software/acquisition integration has no remaining internal implementation
+  item for X, YouTube or TikTok. Threads remains externally blocked at public
+  post discovery for the two live registered profiles tested; the adapter
+  fails closed and does not activate a browser fallback.
+- Production publish evidence remains intentionally incomplete. No production
+  Sheets mutation, Cloudinary upload, SNS publish, mass posting, X posting or
+  Beauty operation occurred. `WAITING_REVIEW` remains worker-ineligible and
+  only `READY` remains publisher-eligible.
+- Next safe files: `src/acquisition/`, the bounded physical downloader,
+  acquisition registry/doctor/tests/docs. Do not touch `.env`, cookies, browser
+  state, publisher gates, production state or rights inheritance without a new
+  explicit owner authorization.

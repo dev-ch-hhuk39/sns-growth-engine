@@ -6,9 +6,13 @@ from typing import Any
 
 REFERENCE_PLATFORMS = ("tiktok", "threads", "x", "youtube")
 REFERENCE_PLATFORM_PRIORITY = {"tiktok": 0, "threads": 1, "x": 2, "youtube": 3}
-PHYSICAL_MEDIA_PLATFORMS = ("x", "youtube")
-DEFERRED_PHYSICAL_MEDIA_PLATFORMS = ("tiktok", "threads")
-PHYSICAL_MEDIA_PROVIDER = {"x": "yt_dlp", "youtube": "yt_dlp"}
+PHYSICAL_MEDIA_PLATFORMS = ("x", "youtube", "tiktok")
+DEFERRED_PHYSICAL_MEDIA_PLATFORMS = ("threads",)
+PHYSICAL_MEDIA_PROVIDER = {
+    "x": "yt_dlp",
+    "youtube": "yt_dlp",
+    "tiktok": "public_embed_direct_http",
+}
 
 
 def _text(value: Any) -> str:

@@ -110,7 +110,7 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
     expected_routes = {
         "threads.profile_posts": ("threads_public_http", []),
         "threads.post_detail": ("threads_public_http", []),
-        "tiktok.profile_posts": ("yt_dlp", ["tiktok_gallery_dl"]),
+        "tiktok.profile_posts": ("tiktok_public_embed", ["tiktok_gallery_dl"]),
         "x.profile_posts": ("x_gallery_dl", []),
         "youtube.channel_videos": ("yt_dlp", []),
     }
@@ -164,7 +164,7 @@ def _reference_discovery(routing: dict[str, Any]) -> dict[str, Any]:
         for platform in ("tiktok", "threads", "x", "youtube")
     }
     expected = {
-        "tiktok": ("tiktok.profile_posts", "yt_dlp"),
+        "tiktok": ("tiktok.profile_posts", "tiktok_public_embed"),
         "threads": ("threads.profile_posts", "threads_public_http"),
         "x": ("x.profile_posts", "x_gallery_dl"),
         "youtube": ("youtube.channel_videos", "yt_dlp"),
@@ -177,9 +177,11 @@ def _reference_discovery(routing: dict[str, Any]) -> dict[str, Any]:
         ready = ready and code_ready
         statuses[platform] = {
             "code_status": "PASS" if code_ready else "FAIL",
-            "external_status": (
-                "PASS_AV_RECORDED" if platform == "youtube" else "UNVERIFIED_EXTERNAL"
-            ),
+            "external_status": {
+                "youtube": "PASS_AV_RECORDED",
+                "tiktok": "PASS_PUBLIC_EMBED_AND_AV_RECORDED",
+                "threads": "BLOCKED_APPLICATION_404_RECORDED",
+            }.get(platform, "UNVERIFIED_EXTERNAL"),
             "bounded_verification_command": commands[platform],
         }
     return _state(ready, platform_statuses=statuses)

@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 from acquisition.factory import build_provider_registry, build_router  # noqa: E402
+from acquisition.failures import classify_failure  # noqa: E402
 from acquisition.models import NormalizedSourcePost, validate_source_post  # noqa: E402
 from acquisition.router import BackendFailure  # noqa: E402
 from config_loader import get_config  # noqa: E402
@@ -64,28 +65,7 @@ def capability_for(platform: str) -> str:
 
 def classify_external_failure(platform: str, reason: str) -> str:
     """Map bounded backend failures to operator-actionable external states."""
-    lowered = str(reason or "").lower()
-    if "429" in lowered or "rate_limit" in lowered:
-        return "RATE_LIMITED"
-    if any(marker in lowered for marker in ("401", "403", "auth_required", "login_required")):
-        return "AUTH_REQUIRED"
-    if "circuit_open" in lowered or "timeout" in lowered:
-        return "BACKEND_UNSTABLE"
-    if platform == "threads":
-        if "post_detail" in lowered:
-            return "VIDEO_URL_EXTRACTION_UNAVAILABLE"
-        if "post_links" in lowered:
-            return "POST_DISCOVERY_UNAVAILABLE"
-        if "public_http_failed" in lowered or "profile_url_required" in lowered:
-            return "PROFILE_DISCOVERY_UNAVAILABLE"
-    if platform == "tiktok":
-        if "no_video" in lowered or "no_videos" in lowered:
-            return "NO_VIDEO_FOUND_IN_BOUNDED_SAMPLE"
-        if "secondary user id" in lowered or "discovery_failed" in lowered:
-            return "POST_DISCOVERY_UNAVAILABLE"
-        if "individual_posts_unavailable" in lowered:
-            return "POST_DISCOVERY_UNAVAILABLE"
-    return "BACKEND_UNSTABLE"
+    return classify_failure(platform, reason).value
 
 
 def selected_sources(
