@@ -44,7 +44,6 @@ jobs:
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.GOOGLE_API_KEY }}
-      THREADS_BROWSER_STORAGE_STATE_B64: ${{ secrets.THREADS_BROWSER_STORAGE_STATE_B64 }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -56,8 +55,6 @@ jobs:
           cache-dependency-path: requirements-acquisition.txt
       - name: Install bounded acquisition and generation dependencies
         run: python3 -m pip install --requirement requirements-acquisition.txt
-      - name: Install bounded public-browser backend
-        run: python3 -m playwright install --with-deps chromium
       - name: Guard review-only preparation
         run: |
           test "${{ inputs.confirm_preparation }}" = "PREPARE_VIDEO_REFERENCES"

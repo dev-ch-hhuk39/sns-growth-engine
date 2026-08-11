@@ -16,6 +16,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from generation.media_platform_policy import reference_priority_score
+
 _MEDIA_OFFICIAL_PAT = re.compile(
     r"(official|公式|news|magazine|prtimes|television|press|broadcast|oricon|"
     r"nikkei|asahi|mainichi|yomiuri|sankei|nhk|low_priority_media_official)",
@@ -30,10 +32,7 @@ _KNOWHOW_PAT = re.compile(
     re.IGNORECASE,
 )
 
-_PLATFORM_PRIORITY = {
-    "tiktok": 1.0,
-    "threads": 0.8,
-    "x": 0.8,
+_NON_CANONICAL_PLATFORM_PRIORITY = {
     "instagram": 0.6,
     "note": 0.5,
     "youtube": 0.45,
@@ -94,8 +93,15 @@ def active_recently_score(src: dict[str, Any]) -> float:
 
 
 def platform_priority_score(src: dict[str, Any]) -> float:
-    """platform優先度。TikTok > Threads/X > YouTube。0..1。"""
-    return _PLATFORM_PRIORITY.get(str(src.get("source_platform", "")), 0.3)
+    """platform優先度。TikTok > Threads > X > YouTube。0..1。"""
+    platform = str(src.get("source_platform") or src.get("platform") or "")
+    canonical = reference_priority_score(
+        platform,
+        str(src.get("source_url") or src.get("canonical_url") or ""),
+    )
+    if canonical:
+        return canonical
+    return _NON_CANONICAL_PLATFORM_PRIORITY.get(platform, 0.3)
 
 
 def category_fit_score(src: dict[str, Any]) -> float:

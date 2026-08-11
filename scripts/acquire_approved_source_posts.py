@@ -23,6 +23,7 @@ from acquisition.models import NormalizedSourcePost, validate_source_post  # noq
 from acquisition.router import BackendFailure  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from media_source_policy import media_usage_mode  # noqa: E402
+from media.permission_ledger import evaluate_permission  # noqa: E402
 from media_growth_schemas import build_source_video  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 from transcription.sheets_limits import (  # noqa: E402
@@ -114,48 +115,33 @@ def reference_only_permission(source: dict[str, Any]) -> dict[str, str]:
     }
 
 
-def ledger_permission(client: SheetsClient, source_id: str) -> dict[str, Any] | None:
+def ledger_permission(
+    client: SheetsClient,
+    source_id: str,
+    *,
+    account_id: str = "",
+) -> dict[str, Any] | None:
     client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
     rows = client._call_with_rate_limit_retry(
         "get_all_records:media_permissions:acquisition",
         lambda: client._ws("media_permissions").get_all_records(),
     )
-    now = datetime.now(timezone.utc)
-    for row in rows:
-        if str(row.get("source_id", "")) != source_id or truthy(row.get("revoked")):
-            continue
-        expires_at = str(row.get("expires_at", "")).strip()
-        if expires_at:
-            try:
-                expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-                expiry = expiry if expiry.tzinfo else expiry.replace(tzinfo=timezone.utc)
-            except ValueError:
-                continue
-            if expiry <= now:
-                continue
-        if (
-            not str(row.get("evidence_type", "")).strip()
-            or not str(row.get("evidence_reference", "")).strip()
-        ):
-            continue
-        if all(
-            truthy(row.get(name))
-            for name in (
-                "allow_download",
-                "allow_cloudinary_storage",
-                "allow_original_repost",
-                "allow_new_caption",
-            )
-        ):
-            normalized = dict(row)
-            normalized["rights_status"] = str(row.get("rights_status") or "approved_creator_clip")
-            normalized["permission_status"] = "approved"
-            return normalized
-    return None
+    decision = evaluate_permission(
+        rows,
+        source_id,
+        account_id=account_id,
+        required_flags=(
+            "allow_download",
+            "allow_cloudinary_storage",
+            "allow_original_repost",
+            "allow_new_caption",
+        ),
+    )
+    return dict(decision["row"]) if decision["allowed"] else None
 
 
-def ledger_allows(client: SheetsClient, source_id: str) -> bool:
-    return ledger_permission(client, source_id) is not None
+def ledger_allows(client: SheetsClient, source_id: str, *, account_id: str = "") -> bool:
+    return ledger_permission(client, source_id, account_id=account_id) is not None
 
 
 def _headers(client: SheetsClient, logical: str) -> tuple[Any, list[str], list[dict[str, Any]]]:
@@ -921,6 +907,7 @@ def run(
     reference_only: bool = False,
     media_filter: str = "any",
     force_backfill: bool = False,
+    verify_network: bool = False,
 ) -> dict[str, Any]:
     sources, blocked = selected_sources(
         account_id,
@@ -1001,6 +988,55 @@ def run(
             for source in sources
         ]
 
+        if not verify_network:
+            return result
+
+        router = build_router()
+        result["status"] = "READ_ONLY_VERIFICATION"
+        result["network_fetch"] = True
+        result["source_results"] = []
+        for source in sources:
+            platform = source_platform(source)
+            capability = capability_for(platform)
+            base = {
+                "source_id": str(source.get("source_id", "")),
+                "platform": platform,
+                "capability": capability,
+                "primary_backend": router.routes[capability].primary,
+            }
+            try:
+                routed = router.route(
+                    capability,
+                    source,
+                    limit=max_scan_posts,
+                    shadow=shadow,
+                )
+                valid_posts = [post for post in routed.posts if not validate_source_post(post)]
+                result["source_results"].append(
+                    {
+                        **base,
+                        "status": "PASS" if valid_posts else "UNVERIFIED_EXTERNAL",
+                        "selected_backend": routed.backend_name,
+                        "fallback_used": routed.fallback_used,
+                        "post_count": len(valid_posts),
+                        "reason": "" if valid_posts else "no_valid_normalized_posts",
+                    }
+                )
+                result["discovered_post_count"] += len(valid_posts)
+                result["media_item_count"] += sum(post.media_count for post in valid_posts)
+            except BackendFailure as exc:
+                result["source_results"].append(
+                    {
+                        **base,
+                        "status": "UNVERIFIED_EXTERNAL",
+                        "reason": str(exc)[:240],
+                    }
+                )
+        result["status"] = (
+            "PASS"
+            if any(row.get("status") == "PASS" for row in result["source_results"])
+            else "UNVERIFIED_EXTERNAL"
+        )
         return result
 
     cfg = get_config()
@@ -1078,7 +1114,7 @@ def run(
         permission = (
             reference_only_permission(source)
             if reference_only
-            else ledger_permission(client, source_id)
+            else ledger_permission(client, source_id, account_id=source_account_id)
         )
 
         if not permission:
@@ -1409,6 +1445,7 @@ def main() -> int:
             "threads",
             "youtube",
             "tiktok",
+            "x",
         ],
     )
 
@@ -1455,6 +1492,11 @@ def main() -> int:
         action="store_true",
         help="use the bounded historical cursor even when general inventory is full",
     )
+    parser.add_argument(
+        "--verify-network",
+        action="store_true",
+        help="bounded public read-only fetch; never connects to or writes Sheets",
+    )
 
     args = parser.parse_args()
 
@@ -1482,6 +1524,14 @@ def main() -> int:
 
         return 1
 
+    if args.verify_network and args.apply:
+        print(json.dumps({"status": "BLOCKED", "reason": "--verify-network cannot be combined with --apply"}))
+        return 1
+
+    if args.verify_network and not args.reference_only:
+        print(json.dumps({"status": "BLOCKED", "reason": "--verify-network requires --reference-only"}))
+        return 1
+
     outcome = run(
         args.account_id,
         args.platform,
@@ -1491,6 +1541,7 @@ def main() -> int:
         reference_only=args.reference_only,
         media_filter=args.media_filter,
         force_backfill=args.force_backfill,
+        verify_network=args.verify_network,
     )
 
     print(
@@ -1507,6 +1558,8 @@ def main() -> int:
         in {
             "PLAN_ONLY",
             "APPLIED",
+            "PASS",
+            "UNVERIFIED_EXTERNAL",
         }
         else 1
     )

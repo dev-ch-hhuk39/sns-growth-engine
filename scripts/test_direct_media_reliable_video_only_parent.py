@@ -28,7 +28,7 @@ class Client:
                     "source_post_id": post_id,
                     "source_id": f"source_{post_id}",
                     "target_account_id": "night_scout",
-                    "platform": "threads",
+                    "platform": "x",
                 }
                 for post_id in ("image", "mixed", "video")
             ],
@@ -46,13 +46,12 @@ class Client:
 
 
 def media(post_id: str, index: int, media_type: str) -> dict[str, str]:
-    suffix = "mp4" if media_type == "video" else "jpg"
     return {
         "source_post_media_id": f"media_{post_id}_{index}",
         "source_post_id": post_id,
         "media_index": str(index),
         "media_type": media_type,
-        "original_media_url": f"https://cdn.example/{post_id}_{index}.{suffix}",
+        "original_media_url": f"https://x.com/owner/status/{1000 + index}",
         "download_status": "PENDING",
         "created_at": f"2026-08-10T00:0{index}:00+00:00",
     }
@@ -67,6 +66,10 @@ permissions = [
         "allow_cloudinary_storage": "true",
         "allow_original_repost": "true",
         "allow_new_caption": "true",
+        "evidence_type": "contract",
+        "evidence_reference": "fixture",
+        "approved_by": "owner",
+        "approved_at": "2026-08-10T00:00:00+00:00",
         "revoked": "false",
     }
     for post_id in ("image", "mixed", "video")

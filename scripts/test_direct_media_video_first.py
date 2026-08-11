@@ -35,6 +35,8 @@ def permission(source_id: str) -> dict:
         "revoked": "false",
         "evidence_type": "owner_attestation",
         "evidence_reference": "fixture",
+        "approved_by": "owner",
+        "approved_at": "2026-08-10T00:00:00+00:00",
     }
 
 
@@ -46,7 +48,7 @@ def post(
         "source_post_id": post_id,
         "source_id": source_id,
         "target_account_id": "night_scout",
-        "platform": "threads",
+        "platform": "x",
         "original_post_text": (
             "店選びでは条件だけでなく"
             "客層や相談しやすさも確認する。"

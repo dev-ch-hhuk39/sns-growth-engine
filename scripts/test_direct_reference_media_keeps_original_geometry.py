@@ -38,6 +38,23 @@ def main() -> int:
         "media_type": "video",
         "duration_seconds": 96,
         "aspect_ratio": "16:9",
+        "source_aspect_ratio": "16:9",
+        "media_origin": "approved_source_clip",
+        "public_post_text": GOOD_TEXT,
+        **ALIGNMENT,
+    })
+    forced_vertical = validate_media_post({
+        "rights_status": "approved_creator_clip",
+        "permission_status": "approved",
+        "media_url": "https://res.cloudinary.example/clip-force-vertical.mp4",
+        "media_asset_id": "asset-clip-force-vertical",
+        "platform": "threads",
+        "account_id": "liver_manager",
+        "media_type": "video",
+        "duration_seconds": 20,
+        "aspect_ratio": "16:9",
+        "source_aspect_ratio": "16:9",
+        "aspect_ratio_policy": "force_9_16",
         "media_origin": "approved_source_clip",
         "public_post_text": GOOD_TEXT,
         **ALIGNMENT,
@@ -59,7 +76,8 @@ def main() -> int:
     checks = [
         ("approved original media permits supported landscape geometry", direct["status"] == "PASS"),
         ("generated clip keeps strict duration guard", "duration_out_of_range" in generated["blocked_reasons"]),
-        ("generated clip keeps strict aspect guard", "aspect_ratio_not_9_16" in generated["blocked_reasons"]),
+        ("generated clip preserves source geometry by default", "aspect_ratio_not_9_16" not in generated["blocked_reasons"] and "aspect_ratio_not_preserved_from_source" not in generated["blocked_reasons"]),
+        ("explicit force_9_16 keeps strict vertical guard", "aspect_ratio_not_9_16" in forced_vertical["blocked_reasons"]),
         ("approved original may proceed when old metadata lacks duration", unknown_duration["status"] == "PASS"),
     ]
     for name, ok in checks:

@@ -49,8 +49,6 @@ jobs:
           cache-dependency-path: requirements-acquisition.txt
       - name: Install pinned acquisition dependencies
         run: python3 -m pip install --requirement requirements-acquisition.txt
-      - name: Install bounded public-browser backend
-        run: python3 -m playwright install --with-deps chromium
       - name: Dry-run acquisition plan
         run: python3 scripts/acquire_approved_source_posts.py --account-id all --platform all --max-posts 3 --dry-run
       - name: Guard acquisition persistence

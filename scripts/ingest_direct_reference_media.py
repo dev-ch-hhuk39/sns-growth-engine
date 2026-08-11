@@ -18,7 +18,9 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
+from generation.media_platform_policy import can_attempt_physical_media, normalize_platform  # noqa: E402
 from config_loader import get_config  # noqa: E402
+from media.permission_ledger import evaluate_permission  # noqa: E402
 from media.direct_content_understanding import analyze_local_media  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
@@ -41,6 +43,7 @@ _SAFE_INGEST_ERROR_CODES = {
     "media_content_understanding_blocked",
     "cloudinary_secure_url_missing",
     "source_post_media_read_after_write_failed",
+    "physical_media_platform_deferred",
 }
 
 
@@ -122,44 +125,38 @@ def permission_rows(client: SheetsClient) -> list[dict[str, Any]]:
     ]
 
 
-def permission_ok_from_rows(rows: list[dict[str, Any]], source_id: str) -> bool:
-    matches = [
-        (index, row)
-        for index, row in enumerate(rows)
-        if str(row.get("source_id", "")) == source_id
-    ]
-    if not matches:
-        return False
-    # Permission rows are append/update history.  Selecting the first match
-    # lets an obsolete denied row shadow the newer approval.  The latest
-    # timestamp (and sheet order as a deterministic fallback) is the single
-    # runtime authority; a latest revocation remains fail-closed.
-    _index, current = max(
-        matches,
-        key=lambda item: (str(item[1].get("updated_at") or item[1].get("approved_at") or ""), item[0]),
+def permission_ok_from_rows(
+    rows: list[dict[str, Any]],
+    source_id: str,
+    account_id: str = "",
+) -> bool:
+    decision = evaluate_permission(
+        rows,
+        source_id,
+        account_id=account_id,
+        required_flags=(
+            "allow_download",
+            "allow_cloudinary_storage",
+            "allow_original_repost",
+            "allow_new_caption",
+        ),
     )
-    if truthy(current.get("revoked")):
-        return False
-    if str(current.get("permission_status", "")).lower() != "approved":
-        return False
-    if str(current.get("rights_status", "")).lower() not in {"owned", "licensed", "approved_creator_clip"}:
-        return False
-    return all(truthy(current.get(key)) for key in (
-        "allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption",
-    ))
+    return bool(decision["allowed"])
 
 
-def permission_ok(client: SheetsClient, source_id: str) -> bool:
-    return permission_ok_from_rows(permission_rows(client), source_id)
+def permission_ok(client: SheetsClient, source_id: str, account_id: str = "") -> bool:
+    return permission_ok_from_rows(permission_rows(client), source_id, account_id)
 
 ALLOWLIST = {
     "youtube.com", "www.youtube.com", "youtu.be",
+    "x.com", "www.x.com", "twitter.com", "www.twitter.com",
     "tiktok.com", "www.tiktok.com", "threads.com", "www.threads.com",
     "res.cloudinary.com",
 }
 STREAM_HOST_SUFFIXES = {
     "googlevideo.com", "tiktokcdn.com", "tiktokcdn-us.com", "byteoversea.com",
     "ibytedtos.com", "akamaized.net", "muscdn.com", "cdninstagram.com", "fbcdn.net",
+    "twimg.com",
 }
 
 def col_letter(index: int) -> str:
@@ -247,9 +244,20 @@ def probe_video(path: Path) -> dict[str, str]:
     stream = next((item for item in data.get("streams", []) if item.get("width")), {})
     width, height = stream.get("width", ""), stream.get("height", "")
     duration = float(data.get("format", {}).get("duration") or 0)
-    return {"duration_seconds": f"{duration:.2f}", "width": str(width), "height": str(height), "aspect_ratio": "9:16" if width and height and int(height) > int(width) else ""}
+    ratio = ""
+    if width and height:
+        w, h = int(width), int(height)
+        if w * 16 == h * 9:
+            ratio = "9:16"
+        elif w * 9 == h * 16:
+            ratio = "16:9"
+        elif w == h:
+            ratio = "1:1"
+        else:
+            ratio = f"{w}:{h}"
+    return {"duration_seconds": f"{duration:.2f}", "width": str(width), "height": str(height), "aspect_ratio": ratio}
 
-def download_with_ytdlp(url: str, path: Path) -> None:
+def download_with_ytdlp(url: str, path: Path, *, platform: str) -> None:
     import yt_dlp
     def guard_resolved_stream(info: dict[str, Any]) -> None:
         resolved = str(info.get("url") or "")
@@ -261,7 +269,7 @@ def download_with_ytdlp(url: str, path: Path) -> None:
         if isinstance(info, dict):
             guard_resolved_stream(info)
 
-    platform = "youtube" if "youtu" in url.lower() else "tiktok"
+    platform = normalize_platform(platform, url)
     opts = metadata_options(platform, {
         "quiet": True,
         "noplaylist": True,
@@ -300,32 +308,22 @@ def download_source_media(
     media_type: str,
     platform: str,
 ) -> str:
-    """Use a bounded same-post fallback without mixing source parents.
+    """Acquire only the currently proven physical-video platforms.
 
-    Threads normally exposes a direct CDN object. If that resolved video URL
-    expires, retry only the exact individual Threads post through yt-dlp. An
-    account page, a different post, images and carousel members never enter
-    this fallback.
+    Reference discovery can still use TikTok/Threads, but new physical media
+    attempts are intentionally limited to X and YouTube. Both use yt-dlp on
+    the exact individual post URL so signed CDN URLs and source geometry stay
+    outside editorial selection logic.
     """
-    direct_cdn = media_url != canonical_post_url or platform == "threads"
-    if not direct_cdn:
-        download_with_ytdlp(media_url, path)
-        return "yt_dlp_individual_post"
-    try:
-        download_direct_https_media(media_url, path, media_type=media_type)
-        return "direct_https_media"
-    except Exception:
-        is_exact_threads_video = (
-            platform == "threads"
-            and media_type == "video"
-            and safe_https_url(canonical_post_url)
-            and "/post/" in canonical_post_url
-        )
-        if not is_exact_threads_video:
-            raise
-        path.unlink(missing_ok=True)
-        download_with_ytdlp(canonical_post_url, path)
-        return "threads_individual_post_ytdlp_fallback"
+    resolved_platform = normalize_platform(platform, canonical_post_url or media_url)
+    if not can_attempt_physical_media(resolved_platform, canonical_post_url or media_url):
+        raise RuntimeError(f"physical_media_platform_deferred:{resolved_platform or 'unknown'}")
+    target_url = canonical_post_url or media_url
+    if not safe_https_url(target_url):
+        raise RuntimeError("direct_media_url_blocked")
+    path.unlink(missing_ok=True)
+    download_with_ytdlp(target_url, path, platform=resolved_platform)
+    return f"yt_dlp_{resolved_platform}_individual_post"
 
 def update_media_row(client: SheetsClient, source_post_media_id: str, fields: dict[str, Any]) -> None:
     ws = client._ws("source_post_media")
@@ -713,7 +711,7 @@ def select_pending_media_id(
         post = posts.get(str(media.get("source_post_id", "")))
         if not post or str(post.get("target_account_id", "")) != account_id:
             continue
-        if not permission_ok_from_rows(permissions, str(post.get("source_id", ""))):
+        if not permission_ok_from_rows(permissions, str(post.get("source_id", "")), account_id):
             continue
         if str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and str(media.get("storage_url", "")):
             continue
@@ -721,6 +719,8 @@ def select_pending_media_id(
             continue
         url = str(media.get("original_media_url") or media.get("canonical_post_url") or "")
         platform = str(post.get("platform", "")).lower()
+        if not can_attempt_physical_media(platform, url):
+            continue
         if platform == "youtube" and not ("/watch" in url or "/shorts/" in url):
             continue
         if platform == "tiktok" and "/video/" not in url:
@@ -732,7 +732,7 @@ def select_pending_media_id(
             # Prefer short-form individual videos for a bounded direct-media
             # slot. They are normally much smaller than a channel long-form
             # upload and still fall back to the same permitted source set.
-            platform_priority = 0 if platform == "tiktok" else 1
+            platform_priority = 0 if platform == "x" else 1
             pending.append((platform_priority, str(media.get("created_at", "")), media_id))
     return sorted(pending)[0][2] if pending else ""
 
@@ -1122,7 +1122,7 @@ def main() -> int:
         print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_not_found"}))
         return 1
     post = record(client, "source_posts", "source_post_id", str(media.get("source_post_id", "")))
-    if not post or not permission_ok_from_rows(permissions, str(post.get("source_id", ""))):
+    if not post or not permission_ok_from_rows(permissions, str(post.get("source_id", "")), args.account_id):
         print(json.dumps({"status": "BLOCKED", "reason": "active_direct_media_permission_missing"}))
         return 1
     bundle = [media] if args.source_post_media_id else source_post_media_bundle(client, str(post["source_post_id"]))

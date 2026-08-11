@@ -12,9 +12,10 @@ def test_platform_detection_and_provider_chains() -> None:
     assert normalize_platform(url="https://x.com/a/status/1") == "x"
     assert normalize_platform(url="https://youtu.be/abc") == "youtube"
     assert provider_chain("youtube") == ("yt_dlp",)
-    assert provider_chain("tiktok")[:2] == ("direct_http", "gallery_dl")
-    assert provider_chain("threads") == ("direct_http", "threads_public_router")
-    assert "gallery_dl" in provider_chain("x")
+    assert provider_chain("x") == ("yt_dlp",)
+    assert provider_chain("tiktok") == ()
+    assert provider_chain("threads") == ()
+    assert provider_chain("unknown") == ()
 
 
 def test_merge_designated_sources_is_cross_platform_and_sheet_preferred() -> None:

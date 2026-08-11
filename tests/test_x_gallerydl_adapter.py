@@ -31,7 +31,14 @@ def test_bounded_gallery_dl_normalizes_only_individual_posts(monkeypatch):
 
     posts = adapter.acquire({"source_id": "s", "source_url": "https://x.com/meg_lsm", "target_account_ids": ["liver_manager"], "x_read_only": True}, limit=99)
 
-    assert captured["command"] == ["gallery-dl", "--dump-json", "--range", "1-20", "https://x.com/meg_lsm"]
+    command = captured["command"]
+    assert command[0] == "gallery-dl"
+    assert "--config-ignore" in command
+    assert "--no-input" in command
+    assert "--no-download" in command
+    assert "--dump-json" in command
+    assert command[command.index("--range") + 1] == "1-20"
+    assert command[-1] == "https://x.com/meg_lsm"
     assert len(posts) == 1
     assert posts[0].canonical_post_url == "https://x.com/meg_lsm/status/123"
     assert [item.media_index for item in posts[0].media_items] == [0, 1]

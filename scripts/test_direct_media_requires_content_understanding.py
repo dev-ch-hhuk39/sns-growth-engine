@@ -13,7 +13,7 @@ post = {
     "source_post_id": "post_1",
     "source_id": "src_1",
     "target_account_id": "night_scout",
-    "platform": "threads",
+    "platform": "x",
     "rights_status": "approved_creator_clip",
     "permission_status": "approved",
 }
@@ -45,6 +45,8 @@ permission = {
     "usage_mode": "direct_media_reuse",
     "evidence_type": "owner_attestation",
     "evidence_reference": "test_owner_attestation",
+    "approved_by": "owner",
+    "approved_at": "2026-08-10T00:00:00+00:00",
     "revoked": "false",
 }
 records = {

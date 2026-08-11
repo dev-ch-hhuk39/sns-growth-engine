@@ -1,33 +1,51 @@
-# SNS Growth Engine Completion Goal
+# SNS Growth Engine Reference-first Goal
 
-This repository is complete only when the machine-readable acceptance criteria
-in `config/goal_acceptance.json` all have real production evidence and
-`python3 scripts/evaluate_goal.py` exits with status 0.
+## Current product goal
 
-Both account rows in `docs/capability-matrix-status.json` must also have real
-production evidence and `python3 scripts/evaluate_capability_matrix.py` must
-exit with status 0. The original acceptance criteria are retained; the matrix
-adds parity, persona, media-type, metrics, and PDCA completion requirements.
+Build one reliable reference-first engine for `night_scout` and
+`liver_manager`:
 
-The required production system:
+`registered sources -> normalized SourcePost + ordered Media -> understand -> choose route -> generate -> human review -> READY -> later publish/metrics/PDCA`
 
-- discovers posts from approved Threads, YouTube, and TikTok account URLs;
-- keeps source text and every media item attached to one source-post identity;
-- prepares direct-reference media posts and transcript-grounded generated clips;
-- validates rights, media integrity, public text, and semantic alignment;
-- stores media in Cloudinary and state/evidence in Google Sheets;
-- posts the configured Night Scout and Liver Manager slots through the official
-  Threads publishing path;
-- recovers delayed slots without duplicate posts and quarantines repeatedly
-  failing assets;
-- runs production only on finite standard GitHub-hosted jobs;
-- never fetches or posts X and never activates or posts `beauty_account`.
+The current milestone prioritizes acquisition, exact parent/provenance binding,
+rights, content understanding, persona-safe generation and review reliability.
+It does not prioritize autonomous mass publishing.
 
-Mock, fixture, dry-run, workflow-success, text-fallback, or permalink-only
-evidence cannot satisfy a media acceptance criterion. Optional CPU/GPU-heavy
-generators may be unavailable on the free standard runner, but direct-media
-reuse and approved YouTube/TikTok clipping are required.
+## Required architecture
 
-Current evidence is tracked in `docs/goal-status.json` and
-`docs/goal-evidence.md`. Secrets, cookies, tokens, storage state, source media,
-and production-only configuration must never be committed.
+- Reference discovery priority: TikTok -> Threads -> X -> YouTube.
+- Stable physical-media phase: X and YouTube only.
+- X discovery: bounded metadata-only `gallery-dl`.
+- X individual-post media and YouTube media: `yt-dlp`, after permission.
+- Threads/TikTok desired active reference routes are non-browser.
+- Threads/TikTok new physical-media acquisition is deferred.
+- Content mix for both accounts: direct media 50%, reference text 30%, PDCA
+  10%, new text 5%, approved clip 5%.
+- Default geometry is `preserve_source`; forced 9:16 is explicit-only.
+- Live Sheets `media_permissions` is the runtime authority for reusable media.
+- X permission is source-specific and never inherits to Retweets, quotes or a
+  different author.
+- `WAITING_REVIEW` is not publishable; only human-approved `READY` inventory is
+  worker-eligible.
+
+## Completion and evidence
+
+The current Reference-first code milestone is complete only when active paths
+share the policy above, relevant regression is green and no permission,
+provenance or publication gate is weakened.
+
+The existing `config/goal_acceptance.json` and
+`config/production_capability_matrix.json` remain additive production-evidence
+contracts. Their historical criteria are not deleted or relaxed by this
+rebaseline. Criteria that require live Sheets, Cloudinary, publishing, metrics
+or scheduled-run evidence remain unverified until that evidence exists; a
+mock, fixture, dry-run or green workflow is not production proof.
+
+The whole product must not be called production-complete while X dual-account
+physical Goldens are blocked by missing source-specific reusable-media
+permission or while final destructive legacy cleanup remains gated behind
+those Goldens.
+
+X publishing and `beauty_account` activation are outside the current Goal.
+Secrets, cookies, tokens, storage state, source media and production-only
+configuration must never be committed.

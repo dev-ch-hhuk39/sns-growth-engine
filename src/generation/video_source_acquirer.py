@@ -13,6 +13,8 @@ from typing import Any
 from urllib.parse import urlparse
 
 from generation.video_clip_materializer import probe_media_streams
+from generation.media_platform_policy import can_attempt_physical_media, normalize_platform
+from media.permission_ledger import evaluate_permission
 
 AUTHORIZED_RIGHTS = {
     "allowed",
@@ -32,11 +34,42 @@ def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
-def is_download_authorized(candidate: dict[str, Any]) -> bool:
+def is_download_authorized(
+    candidate: dict[str, Any],
+    permission_rows: list[dict[str, Any]] | None = None,
+    *,
+    account_id: str = "",
+) -> bool:
     rights = _text(candidate.get("rights_status")).lower()
     risk = _text(candidate.get("media_reuse_risk") or "low").lower()
     permission = _text(candidate.get("permission_status")).lower()
-    return rights in AUTHORIZED_RIGHTS and risk != "high" and permission not in DENIED_PERMISSION
+    if rights not in AUTHORIZED_RIGHTS or risk == "high" or permission in DENIED_PERMISSION:
+        return False
+    source_id = _text(candidate.get("source_id"))
+    if not source_id or permission_rows is None:
+        return False
+    return bool(evaluate_permission(
+        permission_rows,
+        source_id,
+        account_id=account_id,
+        required_flags=("allow_download", "allow_cut"),
+    )["allowed"])
+
+
+def _x_handle(url: str, *, require_status: bool = False) -> str:
+    pattern = r"^https?://(?:www\.)?(?:x|twitter)\.com/([A-Za-z0-9_]+)"
+    if require_status:
+        pattern += r"/status/\d+(?:[/?#].*)?$"
+    match = re.match(pattern, _text(url), flags=re.I)
+    return match.group(1).lower() if match else ""
+
+
+def x_registered_author_matches(url: str, registered_source: dict[str, Any]) -> bool:
+    actual = _x_handle(url, require_status=True)
+    expected = _text(registered_source.get("source_handle")).lstrip("@").lower()
+    if not expected:
+        expected = _x_handle(_text(registered_source.get("source_url")))
+    return bool(actual and expected and actual == expected)
 
 
 def resolve_source_url(candidate: dict[str, Any], source: dict[str, Any]) -> str:
@@ -130,8 +163,10 @@ def acquire_authorized_public_source(
     cache_root: str | Path,
     account_id: str,
     source_video_id: str,
+    permission_rows: list[dict[str, Any]],
+    registered_source: dict[str, Any] | None = None,
 ) -> Path:
-    if not is_download_authorized(candidate):
+    if not is_download_authorized(candidate, permission_rows, account_id=account_id):
         raise PermissionError("candidate is not explicitly authorized for source acquisition")
     cached = find_cached_source(cache_root, account_id, source_video_id, require_video=True)
     if cached is not None:
@@ -139,6 +174,15 @@ def acquire_authorized_public_source(
     url = resolve_source_url(candidate, source)
     if not url:
         raise ValueError("no public source URL is available")
+    platform = normalize_platform(
+        candidate.get("source_platform") or candidate.get("platform")
+        or source.get("source_platform") or source.get("platform"),
+        url,
+    )
+    if not can_attempt_physical_media(platform, url):
+        raise RuntimeError(f"physical_media_platform_deferred:{platform or 'unknown'}")
+    if platform == "x" and not x_registered_author_matches(url, registered_source or {}):
+        raise PermissionError("x_status_author_does_not_match_registered_source")
     _validate_public_http_url(url)
     from yt_dlp import YoutubeDL
 

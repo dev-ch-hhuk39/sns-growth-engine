@@ -14,7 +14,7 @@ class Worksheet:
     def get_all_records(self):
         return [
             {"source_id": "source_1", "permission_status": "pending", "rights_status": "unknown", "revoked": "false", "updated_at": "2026-07-01T00:00:00+00:00"},
-            {"source_id": "source_1", "permission_status": "approved", "rights_status": "approved_creator_clip", "revoked": "false", "updated_at": "2026-07-22T00:00:00+00:00", "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true", "allow_new_caption": "true"},
+            {"source_id": "source_1", "permission_status": "approved", "rights_status": "approved_creator_clip", "revoked": "false", "updated_at": "2026-07-22T00:00:00+00:00", "evidence_type": "contract", "evidence_reference": "fixture", "approved_by": "owner", "approved_at": "2026-07-22T00:00:00+00:00", "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true", "allow_new_caption": "true"},
         ]
 
 

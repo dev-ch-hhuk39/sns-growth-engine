@@ -1,0 +1,92 @@
+{
+  "status": "OWNER_DECISION_REQUIRED",
+  "apply": false,
+  "warning": "This is not a permission grant. Do not copy it to media_permissions until the owner supplies source-specific evidence and scope.",
+  "golden_requirements": {
+    "night_scout": {
+      "source_selection_required": true,
+      "eligible_registry_candidates": [
+        "src_ns_x_cand_001 @takashimaanna",
+        "src_ns_x_cand_002 @cabalounge",
+        "src_ns_x_cand_003 @minatoku789",
+        "src_ns_x_cand_004 @amuxamudaily",
+        "src_ns_x_cand_005 @1okukure_",
+        "src_ns_x_cand_006 @onigiriscout_0",
+        "src_ns_x_cand_007 @urarament",
+        "src_ns_x_cand_008 @3j2c9q"
+      ]
+    },
+    "liver_manager": {
+      "source_selection_required": true,
+      "eligible_registry_candidates": [
+        "src_lm_x_cand_001 @meg_lsm",
+        "src_lm_x_cand_002 @ryoyan_1130"
+      ]
+    }
+  },
+  "required_owner_fields_per_selected_source": {
+    "source_id": null,
+    "account_id": null,
+    "usage_mode": null,
+    "rights_status": null,
+    "permission_status": null,
+    "allow_download": null,
+    "allow_cloudinary_storage": null,
+    "allow_original_repost": null,
+    "allow_cut": null,
+    "allow_clip_repost": null,
+    "allow_new_caption": null,
+    "allowed_accounts": null,
+    "evidence_type": null,
+    "evidence_reference": null,
+    "approved_by": null,
+    "approved_at": null,
+    "expires_at": null,
+    "attribution_required": null,
+    "attribution_text": null
+  },
+  "mandatory_limits": [
+    "Permission applies only to posts authored by the registered handle.",
+    "Retweets, quotes, reposts and third-party authors never inherit permission.",
+    "X publishing remains disabled.",
+    "No permission is inferred from public availability."
+  ],
+  "collision_audit": {
+    "checked_at": "2026-08-11",
+    "candidate_source_id_count": 10,
+    "candidate_handle_count": 10,
+    "duplicate_source_ids": [],
+    "duplicate_handles": [],
+    "registry_identity_mismatches": [],
+    "status": "PASS"
+  },
+  "exact_post_permission_limits": {
+    "authority": "live media_permissions row after owner approval",
+    "required_match_keys": [
+      "source_id",
+      "registered_author_handle",
+      "target_account_id",
+      "individual_status_url"
+    ],
+    "never_inherited_by": [
+      "retweet",
+      "quote_post",
+      "repost",
+      "third_party_author",
+      "profile_page"
+    ],
+    "physical_media_provider": "yt_dlp",
+    "discovery_provider": "x_gallery_dl_metadata_only",
+    "publishing_destination": "threads_only"
+  },
+  "golden_steps": [
+    "Owner selects at least one registered X source for each managed account and supplies source-specific permission evidence.",
+    "Create a live media_permissions row with approved rights, account scope, operation flags, evidence, approver and approval timestamp; do not infer any field.",
+    "Read the permission row back and require the exact source_id, registered handle and target account to match.",
+    "Run bounded gallery-dl metadata discovery and reject profile URLs, non-status URLs, retweets, quotes and author mismatches.",
+    "Select one exact individual /status/ URL for each account and verify that its author is the registered source handle.",
+    "Run yt-dlp physical acquisition only behind the explicit download environment and confirmation gates.",
+    "Require ffprobe video/audio stream evidence, preserve_source geometry and content-hash provenance.",
+    "Stop at WAITING_REVIEW; do not publish to X or Threads as part of the Golden acquisition proof."
+  ]
+}

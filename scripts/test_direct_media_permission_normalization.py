@@ -29,8 +29,8 @@ def owner_attestation(**overrides):
         "approved_at": "2026-07-18T09:00:00+00:00",
         "updated_at": "2026-07-18T09:00:00+00:00",
         "revoked": "false",
-        "rights_status": "",
-        "permission_status": "",
+        "rights_status": "approved_creator_clip",
+        "permission_status": "approved",
     }
 
     row.update(overrides)
@@ -101,6 +101,11 @@ assert module.permission_ok_from_rows(
             usage_mode="licensed_reuse",
         )
     ],
+    "source-1",
+)
+
+assert not module.permission_ok_from_rows(
+    [owner_attestation(rights_status="", permission_status="")],
     "source-1",
 )
 

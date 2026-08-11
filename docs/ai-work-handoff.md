@@ -6801,3 +6801,81 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 変更: `src/acquisition/threads_public.py`, `scripts/acquire_approved_source_posts.py`, `.github/workflows/direct-media-preparation.yml`, `scripts/test_threads_public_screen_adapter.py`。追加: `scripts/test_threads_direct_video_backfill_contract.py`。
 - focused PASS: video-only parent filter、mixed/image/empty parent block、start-position、bounded scroll、cursor high-watermark、session/public adapter、reliable selector、observability fail-soft、workflow safety 456/0、media-to-text fallback禁止、prepare-only no-publish、dry-run、`py_compile`、Ruff、`git diff --check`。
 - 実行しないもの: Threads投稿、X/Beauty、権利不明media、generated clip、scheduled activation。次タスクは通常マージ後にNight Scout準備runを再実行し、video-only parentのSheets保存・Cloudinary・Review同期を確認する。動画が見つからない窓はcursorを進め、上限内の次runで後続窓を探索する。
+
+## 2026-08-11 Codex Reference-First Local Completion
+
+### 本システムについて
+
+- 最新オーナー方針は `.codex-owner-context/OWNER_SOURCE_OF_TRUTH.md`。Night Scout / Liver Managerは共通取得基盤を使い、投稿配分はdirect reference media 50%、reference text 30%、MEASURED PDCA 10%、original 5%、generated clip 5%。媒体発見優先度はTikTok、Threads、X、YouTubeである。
+- 物理取得のstable providerは現時点でXとYouTubeのみ。X discoveryは登録済みsourceに限定したbounded `gallery-dl` metadata route、個別X media取得はsource-specific permissionを満たす個別`/status/` URLに対する`yt-dlp`、YouTubeは`yt-dlp`を使用する。Threads/TikTokの旧browser adapterは実行経路から外し、inactive legacyとして残した。
+- direct media、clip、download、cut、Cloudinary、publishは、最新のsource-specific `media_permissions`行、対象account、権利、証跡、operation flagがすべて一致した場合だけ候補になれる。candidate statusや古い空欄permissionを権限として扱わない。
+
+### 変更ファイル一覧
+
+- 権限・共通policy: `src/media/permission_ledger.py`, `src/generation/media_platform_policy.py`, `src/generation/multiplatform_media_router.py`, `src/generation/video_source_acquirer.py`, `src/reference/source_scoring.py`。
+- runner: `scripts/run_direct_reference_media_pipeline.py`, `scripts/ingest_direct_reference_media.py`, `scripts/ingest_direct_reference_media_reliable.py`, `scripts/materialize_video_clip_candidate.py`。
+- workflow: `.github/workflows/account-acquisition.yml`, `.github/workflows/threads-video-reference-preparation.yml`。active workflowのbrowser runtime installとstorage-state注入を除去した。
+- tests: platform router、X registered-author、TikTok/Threads legacy inactive、permission ledger、source selection、video acquisition、geometry、content understanding、E2E safety関連を更新・追加した。
+- durable docs: `.gitignore`, `AGENTS.md`, `GOAL.md`, `START_HERE.md`, `docs/current-work.md`, `docs/reference-first-media-core-20260811.md`, `docs/source-backend-decision.md`, `docs/x-reusable-media-permission-decision-package.json`。X判断packageだけをJSON ignoreから明示的に除外した。
+
+### 未完了事項・スケール方針・タスク
+
+- コード上のローカル整合は完了したが、本番取得、Sheets書込み、Cloudinary upload、Threads投稿、metrics、PDCAのlive evidenceは今回作成していない。システム全体を本番完成とは表現しない。
+- Xの再利用可能media permissionは最新監査で0件。`docs/x-reusable-media-permission-decision-package.json`は権限を付与せず、Night Scout 8source / Liver Manager 2sourceから各1sourceを選び、利用範囲・証跡・期限をオーナーが判断するための入力packageである。
+- スケール時もbackend別の独自権限判定を増やさず、共通permission ledgerとnormalized post/media契約へ接続する。Threads/TikTokの非browser stable adapterが実証されるまでは、物理取得providerへ自動昇格させない。
+- 次タスクは、オーナーのX権限判断後に限定permission rowを準備し、別の明示承認されたproduction作業でbounded fetchからreviewまでを検証すること。本タスクでは適用しない。
+
+### 残WARN・テスト結果
+
+- 残WARN: X source-specific permission未決定。Threads/TikTok物理取得はdeferred。実外部取得・Cloudinary・publishの成功証拠なし。`git diff --check`実行時にmacOS sandboxのxcrun/fsmonitor警告が出たがexit 0で差分エラーはなかった。
+- PASS: repository tests 815/815、workflow safety 455/455、Beauty inactive、X default fetch disabled、permission/no implicit promotion、publisher/media safety、`compileall`、Ruff E9/F63/F7/F82、`git diff --check`。
+- 未実行: 実fetch、download、transcription、cut、Cloudinary upload、Sheets apply、SNS投稿、commit、push、PR、merge。
+
+### 次に触ってよいファイル / 触らない方がよいファイル
+
+- 触ってよい: `docs/x-reusable-media-permission-decision-package.json`のowner入力欄、permission ledgerの追加focused tests、inactive legacy adapterの後続削除PR。
+- 触らない方がよい: publisher idempotency/confirm gate、media-to-text fallback禁止、account境界、Beauty/X publish block、`.env`、`data/`、`output/`、secrets、cookies、storage state。
+
+### 次AIへの引き継ぎメモ
+
+- 未コミット差分は意図的であり、reset/clean/rebaseで破棄しない。branchは`refactor/reference-first-media-core-20260811-20260811-054925`、base HEADは`2a886b8e79d833300081688ecc841965ee15ca64`。
+- `source candidate`、`active source`、`permission`を同一視しない。実media operationは必ず`src/media/permission_ledger.py`を通す。
+- X権限は推測で作らない。本番操作を行う次タスクでは、オーナーの明示決定と実行確認を別々に要求する。
+
+## 2026-08-11 Reference-first Autonomous Internal Completion
+
+### 本システムと完了判定
+
+- `scripts/evaluate_reference_first_completion.py` を機械的な完了gateとして追加し、`SOFTWARE_COMPLETE`、`INTEGRATION_COMPLETE`、`PRODUCTION_EVIDENCE_COMPLETE` を別々に判定する。最終結果は `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`、software=true、integration=true、production evidence=false。
+- `config/reference_first_completion.json` でworkflow 42/42、主要entrypoint 28/28をcanonical / inactive compatibility / obsolete-dead / external-blockedのいずれか1つに分類した。active workflowにPlaywright install、browser storage state、Threads/TikTok Playwright routeはない。
+- Night Scout / Liver Managerのno-write統合検証は、source identity、provenance、同一親のmedia順序、content understanding、direct/reference/clip route、persona、public validator、review status、`preserve_source`、permission contractが全てPASS。
+- publisherはREADYのみ、text/image/video/carousel、final validator、idempotency、posted-results read-after-write、24h/72h/7d metrics予約を機械確認。metricsはAVAILABLE/PARTIAL/NOT_AVAILABLE/AUTH_ERROR/POST_NOT_FOUND/COLLECTION_ERRORを区別し、PDCAはMEASUREDのみとWAITING_REVIEW/auto_apply=falseを機械確認。
+
+### 変更ファイル一覧
+
+- 追加: `config/reference_first_completion.json`, `scripts/evaluate_reference_first_completion.py`, `scripts/verify_reference_first_integration.py`, `scripts/test_reference_first_completion_evaluator.py`, `scripts/test_reference_first_integration_verification.py`, `scripts/test_acquire_approved_source_posts_x_read_only_contract.py`, `docs/reference-first-completion.md`, `docs/reference-first-entrypoint-classification.md`.
+- 更新: `scripts/acquire_approved_source_posts.py`, `config/source_backend_routing.json`, `docs/x-reusable-media-permission-decision-package.json`, `START_HERE.md`, `docs/current-work.md`, `docs/reference-first-media-core-20260811.md`, `.gitignore`, `scripts/test_post_acquisition_uses_incremental_policy.py`, 本引き継ぎ。
+- 先行未コミットReference-first差分の全ファイルは維持している。一覧は `git status --short` を正本とし、reset/clean/rebaseしない。
+
+### 実行・テスト結果
+
+- repository tests: 818/818 PASS、external probes 8件とoptional local tools 3件はハーネスの明示分類により除外。
+- workflow safety: 455/455 PASS、42 workflow検査。
+- PASS: Python compileall、Ruff E9/F63/F7/F82、`git diff --check`、uncommitted diff + untracked filesのgitleaks stdin scan。compileallで既存test fixtureのinvalid escape `\`` SyntaxWarningが1件あるがcompile成功。
+- bounded public no-write verification: YouTube PASS（1 normalized post / 1 media、yt-dlp）。Threads public HTTP、TikTok yt-dlp -> gallery-dl、X bounded gallery-dlは当該環境で `UNVERIFIED_EXTERNAL`。Sheets接続、download、cut、upload、publishは実行していない。
+- backup: `/tmp/sns-growth-engine-codex-backup-20260811/`。working-tree patch SHA256 `47c756f4e8852cc44c21aee84d8274734a14ed829d0acfc32e0331deaf7a567f`、untracked archive SHA256 `6c8c4d9f0f16183323d2d2cd7bf15c4bb4991c76be896d94d5c3a11e5c2c29c8`.
+
+### 未完了事項・スケール方針・残WARN
+
+- 内部実装タスクの残件は0。production capability matrixはコード22/22、live証拠0/22であり、後者をコード完成と言い換えない。
+- X物理mediaはコードreadyだが、有効な再利用permissionが0件のため `BLOCKED_EXTERNAL_PERMISSION`。Night Scout 8source / Liver Manager 2sourceのID・handle衝突は0。`docs/x-reusable-media-permission-decision-package.json` は権限付与ではない。
+- production Sheets/Cloudinary/download/cut/Threads publishは `BLOCKED_EXTERNAL_APPROVAL`。secrets・credentialsの存在や値は読み取っていない。
+- Threads/TikTok/Xのpublic reachabilityはprovider・ネットワーク依存の `UNVERIFIED_EXTERNAL`。コード経路はbounded検証コマンド付きでready。無制限scrapingやbrowser回避は追加しない。
+- 削除・retireは0。legacy/browser経路はactive routingから外したが、dual-account X/YouTube Golden後のreachability監査まで証跡とrollback用に残す。
+
+### 次に触ってよいファイル / 触らない方がよいファイル / 次AIメモ
+
+- 触ってよい: `docs/x-reusable-media-permission-decision-package.json`のowner判断値、別承認後のsource-specific live permission row作成経路、bounded Golden実証。
+- 触らない: `.env`, `data/`, `output/`, secrets/cookies/storage state、publisher idempotency/confirm gate、media-to-text fallback禁止、X/Beauty publish block。
+- 次AIはpermission決定後、packageのGolden stepsどおり、owner選定 -> live row -> read-after-write -> bounded discovery -> exact `/status/` author match -> yt-dlp -> ffprobe -> WAITING_REVIEWまでを行う。production書込みは別の明示承認が必要。
+- branch `refactor/reference-first-media-core-20260811-20260811-054925`、base HEAD `2a886b8e79d833300081688ecc841965ee15ca64`。本節を含む差分は後続の明示checkpoint指示により1つのローカルcommitに固定する。push/PR/mergeは行わない。commit SHAは本節を含む現在HEADを参照する。
