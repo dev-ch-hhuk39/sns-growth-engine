@@ -82,6 +82,11 @@ def build_report(registry: CapabilityRegistry | None = None) -> dict[str, Any]:
         "primary_missing": primary_missing,
         "backends": rows,
         "future_platforms": registry.future_platform_matrix(),
+        "threads_live_probe_command": (
+            "THREADS_DISCOVERY_ACCESS_TOKEN='<THREADS_ACCESS_TOKEN>' "
+            "python3 scripts/probe_threads_graph_live.py --account-id all --max-posts 5 "
+            "--output /private/tmp/threads-graph-live-v22.json"
+        ),
     }
 
 

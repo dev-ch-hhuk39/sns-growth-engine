@@ -143,6 +143,29 @@ post candidate; zero-auth profile-to-permalink discovery therefore remains the
 single Threads external gap. Search hits, if later returned, are candidate-only
 and must pass exact-author oEmbed validation.
 
+### Threads Graph runtime auth contract
+
+- Live runtime reads exactly `THREADS_DISCOVERY_ACCESS_TOKEN`. The discovery
+  adapter does not read an app ID or app secret at runtime and never logs the
+  token. App ID/secret are used only while provisioning OAuth outside this
+  read-only acquisition process.
+- Required permissions are `threads_basic` and
+  `threads_profile_discovery`. `threads_keyword_search` is optional; its
+  absence must not block profile lookup/profile posts.
+- The official host is `https://graph.threads.net`; the documented
+  `profile_lookup`, `profile_posts`, and `keyword_search` routes are
+  unversioned. Public profiles outside app roles/testers require the relevant
+  Advanced Access/App Review approval.
+- Exchange a short-lived Threads user token for the documented 60-day
+  long-lived token, then refresh that long-lived token while it is still
+  unexpired. `threads_basic` is sufficient for exchange/refresh, but not for
+  public-profile discovery itself.
+- Doctor: `python3 scripts/acquisition_doctor.py --json`.
+- Bounded live proof (placeholder only):
+  `THREADS_DISCOVERY_ACCESS_TOKEN='<THREADS_ACCESS_TOKEN>' python3 scripts/probe_threads_graph_live.py --account-id all --max-posts 5 --output /private/tmp/threads-graph-live-v22.json`.
+- With no token, the probe returns `THREADS_AUTH_SETUP_REQUIRED=true` before
+  network, Sheets, download, browser, cookie, upload, or publish activity.
+
 ## YouTube exact permission activation
 
 The owner decision in `config/youtube_source_permissions_20260811.json` covers

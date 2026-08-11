@@ -1,19 +1,19 @@
 # Current Work
 
-status: V21_SOFTWARE_COMPLETE_THREADS_ZERO_AUTH_DISCOVERY_EXTERNAL_BLOCKED
+status: V22_SOFTWARE_COMPLETE_THREADS_GRAPH_AUTH_SETUP_REQUIRED
 assigned_agent: Codex
 branch: refactor/reference-first-media-core-20260811-20260811-054925
 base_head: f0d938c6080ad580eb5e86f46c1ab8b880151565
-scope: finalize official Threads optional-auth/oEmbed/search routing, exact YouTube permission activation, future-platform registry, tests and docs
-working_tree: v21 bounded implementation; exactly one local checkpoint commit authorized; no push/PR/merge
+scope: finalize the exact Threads Graph runtime auth contract and bounded live-proof entrypoint without changing publish safety
+working_tree: v22 bounded implementation; exactly one local checkpoint commit authorized; no push/PR/merge
 production_operations: exact owner-authorized YouTube permission rows only; no Cloudinary upload or SNS publish
 x_permission_state: OWNER_AUTHORIZED_APPLIED; 24 exact source/account/handle rows verified read-after-write; third-party inheritance false
 youtube_permission_state: EXACT_2_OF_2_APPLIED_READ_AFTER_WRITE_PASS; physical A/V and WAITING_REVIEW 2/2 PASS
-threads_state: tokenless individual oEmbed live PASS; zero-auth profile-to-permalink discovery unavailable; official Graph optional-auth implemented
-safe_next: supply a dedicated Meta app token with approved threads_profile_discovery/threads_keyword_search, or wait for public index/profile payload recovery
+threads_state: tokenless individual oEmbed live PASS; official Graph probe returns THREADS_AUTH_SETUP_REQUIRED because THREADS_DISCOVERY_ACCESS_TOKEN is absent
+safe_next: provision a dedicated Meta app token with threads_basic + approved threads_profile_discovery; threads_keyword_search is optional
 do_not_do: reset/clean/rebase/amend/push/PR/merge; do not upload Cloudinary or publish
 checkpoint_scope: durable Reference-first code/config/workflows/docs/tests only; local owner context and /tmp evidence excluded
-completion_gate: pending final v21 regression; SOFTWARE_COMPLETE target true, PLATFORM_LIVE_EVIDENCE partial only because Threads profile discovery needs external authorization/public recovery, PRODUCTION_PUBLISH_EVIDENCE_COMPLETE=false
+completion_gate: final v22 regression PASS; SOFTWARE_COMPLETE=true, ACQUISITION_INTEGRATION_COMPLETE=true, PLATFORM_LIVE_EVIDENCE partial only because Threads profile discovery needs external authorization, PRODUCTION_PUBLISH_EVIDENCE_COMPLETE=false
 
 ## 2026-08-11 Agent Reach and Owner Permission Activation
 

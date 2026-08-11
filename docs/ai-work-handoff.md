@@ -7188,3 +7188,72 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   Cloudinary/SNS mutation。
 - `WAITING_REVIEW`はpublisher非対象、`READY`のみ対象、quality threshold
   85以上、`preserve_source`、media-to-text fallback禁止を維持する。
+
+## 2026-08-11 Codex Threads Auth + Final Live Proof v22
+
+### 本システムについて / 変更ファイル一覧
+
+- Reference-first取得基盤のうち、残っているThreads official Graph認証境界を
+  machine-readableに確定した。runtime secretは
+  `THREADS_DISCOVERY_ACCESS_TOKEN`だけで、required scopeは
+  `threads_basic` + `threads_profile_discovery`、optionalは
+  `threads_keyword_search`。Graph hostは`https://graph.threads.net`の
+  official unversioned route。app ID/secretはOAuth provisioning用であり、
+  acquisition runtimeは読まない。
+- 追加: `scripts/probe_threads_graph_live.py`,
+  `tests/test_threads_graph_live_probe.py`。更新:
+  `src/acquisition/threads_official.py`, `scripts/acquisition_doctor.py`,
+  `docs/current-work.md`, `docs/oss-acquisition-stack-20260811.md`, 本handoff。
+- probeはactive/fetch-enabledの登録済みThreads sourceだけを読み、Night
+  `src_ns_threads_user_chiishunin_s`、Liver
+  `src_lm_threads_user_me01_lsm`を優先する。最大5件、exact author、original
+  post、canonical permalinkを必須とし、oEmbedで同一author/permalinkを再確認。
+  browser/session/cookie、Sheets write、download、upload、publishは行わない。
+
+### 未完了事項 / 外部blocker / 残WARN
+
+- 現runtimeに`THREADS_DISCOVERY_ACCESS_TOKEN`がないため、live Graph probeは
+  network前に`THREADS_AUTH_SETUP_REQUIRED=true`で安全停止。profile lookup、
+  profile posts、keyword search、Threads physical live evidenceは未実行・未捏造。
+- Meta専用appでThreads use caseを作り、`threads_basic`と
+  `threads_profile_discovery`を承認し、外部public profile用のAdvanced
+  Access/App Reviewを完了する必要がある。keyword searchは任意で、権限が
+  なければ`OPTIONAL_AUTH_SCOPE_MISSING`としてprofile proofを止めない。
+- tokenless official oEmbedは既存public post
+  `https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs`で再度PASS。
+  author/permalink/textは一致、direct mediaは0でthumbnail/embedをvideo扱い
+  していない。
+- production publish evidenceはfalse。Cloudinary production upload、SNS
+  publish、mass post、X post、Beauty操作は未実行。
+
+### スケール方針 / タスク
+
+- Graph profile/postsは1source最大5件でserial実行。tokenをコード、docs、
+  artifactへ保存しない。認証後もquote/repost media inheritance、author
+  mismatch、malformed permalinkはfail-closed。
+- 次タスクはruntime secret設定後にplaceholder commandのbounded probeを1回
+  実行すること。direct videoが得られても、effective permissionがないsourceは
+  physical downloadへ進めない。production Cloudinary/Threads canaryは別の明示
+  owner承認が必要。
+
+### テスト結果 / 残作業
+
+- focused Threads official/probe/doctor: 15/15 PASS。
+- existing physical regression: X 4/4、YouTube 2/2、TikTok 1/1、合計7/7が
+  physical A/V、effective permission、persona/public validation PASSで
+  `WAITING_REVIEW`; `publisher_eligible=false`; Sheetsはread-only。
+- repository regression 825/825 PASS、workflow safety 455/455 PASS。
+  completion evaluatorは`SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`、
+  `software_complete=true`, `integration_complete=true`,
+  `production_evidence_complete=false`。
+- Ruff changed files PASS、compileall PASS。gitleaksは今回のtracked diffと新規
+  script/testを個別に検査してleak 0。`git diff --check`もPASS。
+
+### 次に触ってよい / 触らない方がよい / 次AIへの引き継ぎ
+
+- 触ってよい: `src/acquisition/threads_official.py`,
+  `scripts/probe_threads_graph_live.py`, doctor、関連tests/docs。
+- 触らない方がよい: `.env`, token/cookie/storage state, `data/`, `output/`,
+  publisher/rights/quality gate、X/Beauty publish、production Cloudinary/SNS。
+- 認証が来るまでsoftwareを作り直さない。`THREADS_AUTH_SETUP_REQUIRED`は外部
+  auth blockerであり、zero-auth scrapeや個人browser cookieで迂回しない。

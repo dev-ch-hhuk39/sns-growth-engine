@@ -27,6 +27,10 @@ from .models import (
 
 GRAPH_ROOT = "https://graph.threads.net"
 OEMBED_ENDPOINT = "https://graph.threads.com/oembed"
+DISCOVERY_TOKEN_ENV = "THREADS_DISCOVERY_ACCESS_TOKEN"
+DISCOVERY_REQUIRED_SCOPES = ("threads_basic", "threads_profile_discovery")
+DISCOVERY_OPTIONAL_SCOPES = ("threads_keyword_search",)
+GRAPH_API_VERSION = "unversioned-official-route"
 GRAPH_FIELDS = (
     "id,media_product_type,media_type,media_url,permalink,owner,username,"
     "text,timestamp,shortcode,thumbnail_url,children,is_quote_post,quoted_post,"
@@ -158,16 +162,25 @@ class ThreadsGraphPublicDiscoveryAdapter:
         token_loader: Callable[[], str] | None = None,
     ):
         self._json_loader = json_loader or _json_get
-        self._token_loader = token_loader or (lambda: os.environ.get("THREADS_DISCOVERY_ACCESS_TOKEN", ""))
+        self._token_loader = token_loader or (lambda: os.environ.get(DISCOVERY_TOKEN_ENV, ""))
 
     @classmethod
     def capability_status(cls) -> ProviderResult[dict[str, Any]]:
-        auth_present = bool(os.environ.get("THREADS_DISCOVERY_ACCESS_TOKEN"))
+        auth_present = bool(os.environ.get(DISCOVERY_TOKEN_ENV))
         return ProviderResult(
             cls.backend_name,
             cls.backend_version,
             "PASS" if auth_present else "BLOCKED",
-            data={"auth_present": auth_present, "active": auth_present, "browser_required": False},
+            data={
+                "auth_present": auth_present,
+                "active": auth_present,
+                "browser_required": False,
+                "token_env_name": DISCOVERY_TOKEN_ENV,
+                "required_scopes": list(DISCOVERY_REQUIRED_SCOPES),
+                "optional_scopes": list(DISCOVERY_OPTIONAL_SCOPES),
+                "graph_host": GRAPH_ROOT,
+                "graph_api_version": GRAPH_API_VERSION,
+            },
             reason="" if auth_present else "AUTH_REQUIRED:threads_profile_discovery",
         )
 
