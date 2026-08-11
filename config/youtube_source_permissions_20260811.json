@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "decision_id": "youtube_source_permissions_20260811",
+  "evidence_type": "owner_attestation",
+  "evidence_reference": "Owner explicitly authorized these exact two YouTube source accounts for reference, download/storage, edit/cut, original reuse/repost, new-caption, quote/reference, clip and derivative use on 2026-08-11 JST.",
+  "approved_by": "Chadult株式会社",
+  "allowed_platforms": ["threads"],
+  "prohibited_uses": ["x_post", "beauty_account", "third_party_repost_permission_inheritance"],
+  "required_flags": [
+    "allow_download",
+    "allow_cloudinary_storage",
+    "allow_original_repost",
+    "allow_transcription",
+    "allow_analysis",
+    "allow_cut",
+    "allow_clip_repost",
+    "allow_new_caption",
+    "allow_edit"
+  ],
+  "sources": [
+    {
+      "source_id": "src_ns_yt_cand_006",
+      "account_id": "night_scout",
+      "platform": "youtube",
+      "source_handle": "@ichijo_hibiki"
+    },
+    {
+      "source_id": "src_lm_yt_cand_001",
+      "account_id": "liver_manager",
+      "platform": "youtube",
+      "source_handle": "@suu-san_pococha"
+    }
+  ]
+}

@@ -46,8 +46,18 @@ assert media_cfg["target_aspect_ratio"] == "preserve_source"
 
 routing = json.loads((ROOT / "config/source_backend_routing.json").read_text(encoding="utf-8"))
 assert routing["routes"]["threads.profile_posts"]["primary"] == "threads_public_http"
-assert routing["routes"]["threads.profile_posts"]["fallbacks"] == []
+assert routing["routes"]["threads.profile_posts"]["fallbacks"] == [
+    "threads_search_index",
+    "threads_graph_public_discovery",
+]
 assert "playwright" not in json.dumps(routing["routes"]["threads.profile_posts"])
+assert routing["routes"]["threads.post_detail"] == {
+    "primary": "threads_oembed_detail",
+    "fallbacks": ["threads_public_http"],
+    "shadow": [],
+    "cooldown_seconds": 900,
+    "circuit_failure_threshold": 3,
+}
 assert routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_gallery_dl"]
 
 workflow = (ROOT / ".github/workflows/direct-media-preparation.yml").read_text(encoding="utf-8")

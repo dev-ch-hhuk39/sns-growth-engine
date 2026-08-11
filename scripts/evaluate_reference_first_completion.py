@@ -108,8 +108,11 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
     media = _load(MEDIA_PATH)
     issues: list[str] = []
     expected_routes = {
-        "threads.profile_posts": ("threads_public_http", []),
-        "threads.post_detail": ("threads_public_http", []),
+        "threads.profile_posts": (
+            "threads_public_http",
+            ["threads_search_index", "threads_graph_public_discovery"],
+        ),
+        "threads.post_detail": ("threads_oembed_detail", ["threads_public_http"]),
         "tiktok.profile_posts": ("tiktok_public_embed", ["tiktok_gallery_dl"]),
         "x.profile_posts": ("x_gallery_dl", []),
         "youtube.channel_videos": ("yt_dlp", []),
@@ -180,7 +183,7 @@ def _reference_discovery(routing: dict[str, Any]) -> dict[str, Any]:
             "external_status": {
                 "youtube": "PASS_AV_RECORDED",
                 "tiktok": "PASS_PUBLIC_EMBED_AND_AV_RECORDED",
-                "threads": "BLOCKED_APPLICATION_404_RECORDED",
+                "threads": "PARTIAL_OEMBED_LIVE_PROFILE_DISCOVERY_EXTERNAL_BLOCKED",
             }.get(platform, "UNVERIFIED_EXTERNAL"),
             "bounded_verification_command": commands[platform],
         }

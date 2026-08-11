@@ -6,7 +6,9 @@ Reference discovery: TikTok -> Threads -> X -> YouTube.
 
 Physical media acquisition: X and YouTube use yt-dlp. Owner-authorized TikTok
 individual posts use bounded public-embed direct HTTP after exact registered-
-author and permission-ledger checks. Threads physical media remains deferred.
+author and permission-ledger checks. Threads direct physical media remains
+unverified; its tokenless oEmbed route is detail/text metadata only unless an
+explicit direct media element is actually returned.
 
 The acquisition router now validates every active profile backend against
 `config/acquisition_backend_capabilities.json`. Browser, auth-only and opaque
@@ -16,7 +18,8 @@ See `docs/oss-acquisition-stack-20260811.md` and run
 
 TikTok and Threads remain valid text/structure reference sources. TikTok may
 also trigger physical acquisition only for exact owner-authorized individual
-posts. Threads does not trigger physical-media download attempts.
+posts. Threads does not trigger physical-media download attempts without an
+exact direct media URL from the official Graph/oEmbed response.
 
 The 2026-08-11 bounded audit found a safe anonymous TikTok route after the
 yt-dlp/gallery-dl and ssut profile paths failed. Public embed hydration now
@@ -25,7 +28,11 @@ owner-authorized post also passed physical A/V, provenance, permission and
 WAITING_REVIEW verification. Threads public HTML still returns a logged-out
 application-404 SSR payload for one Night and one Liver source, while maintained
 alternatives require Playwright/session state or an opaque conversion service.
-Threads remains an exact external blocker, not profile-text success.
+The v21 implementation adds official Meta Graph profile/posts/search as an
+OPTIONAL_AUTH fallback and official tokenless oEmbed as individual-post detail.
+oEmbed has live canonical-author-text evidence. Zero-auth profile-to-permalink
+discovery still returned no candidate, so that one step remains an exact
+external blocker rather than profile-text success.
 
 Content mix for Night Scout and Liver Manager: 50% direct reference media, 30% reference text, 10% PDCA, 5% new text, 5% approved clips.
 
@@ -117,3 +124,10 @@ never inherited by a retweet, quote, repost, or third-party author. This
 permission activation does not prove X physical acquisition: bounded X Golden
 probes remain blocked by explicit-auth/profile discovery and the absence of a
 video on the one known Night Scout individual status.
+
+The separate v21 decision grants the two exact YouTube identities only:
+`src_ns_yt_cand_006/@ichijo_hibiki` and
+`src_lm_yt_cand_001/@suu-san_pococha`. Live Sheets apply and read-after-write
+passed with zero invalid rows. Their existing A/V files now pass the rights
+gate and reach `WAITING_REVIEW`; this does not authorize any other YouTube
+source or production publication.

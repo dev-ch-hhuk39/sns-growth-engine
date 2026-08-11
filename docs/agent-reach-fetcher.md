@@ -43,7 +43,9 @@ post discovery, media ordering, or physical acquisition.
   `JsonImportFetcher`.
 - Canonical physical media remains X/YouTube through yt-dlp after the shared
   permission and provenance gates.
-- Threads/TikTok physical media remains deferred.
+- Threads physical media remains unverified. TikTok physical media now uses
+  the canonical public-embed route; Agent Reach remains analysis-only and is
+  not part of that physical path.
 
 See `docs/reference-first-media-core-20260811.md` and
 `config/source_backend_routing.json` for the canonical architecture.

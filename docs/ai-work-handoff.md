@@ -7088,3 +7088,103 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   acquisition registry/doctor/tests/docs. Do not touch `.env`, cookies, browser
   state, publisher gates, production state or rights inheritance without a new
   explicit owner authorization.
+
+## 2026-08-11 Codex Final System Completion v21
+
+### 本システムについて / 実装内容
+
+- Reference-first SNS Growth Engineの取得層を、X / YouTube / TikTokの実証済み
+  物理経路を壊さずにThreadsまで共通`NormalizedSourcePost + ordered
+  Media`契約へ接続した。
+- Threadsは3経路。`threads_public_http`をzero-auth profile primaryとし、
+  `threads_search_index`で最大5件のcanonical candidateを取得してofficial
+  oEmbedでauthorを再検証、`threads_graph_public_discovery`はMeta専用appの
+  tokenがある時だけofficial profile lookup/posts/keyword searchを使う
+  OPTIONAL_AUTH fallbackとした。browser/session/cookieは不使用。
+- official tokenless `graph.threads.com/oembed`は実在公開post 1件で
+  canonical URL / author / text取得PASS。試験responseは直接mediaを返さず、
+  thumbnail/embed iframeをvideoと誤認しない。quote/repostは本文参照だけで
+  media permissionを継承しない。
+- 将来platformはInstagram/Facebook/Reddit/Xiaohongshu/LinkedIn/Bilibili/
+  RSS/Web/GitHubをmachine-readable registryに追加。全て`enabled=false`で、
+  Agent Reachのreference能力とauth/physical evidenceの境界を明記した。
+- YouTubeはownerが明示許可した2 identityだけを別decisionにした。
+  `src_ns_yt_cand_006/@ichijo_hibiki`と
+  `src_lm_yt_cand_001/@suu-san_pococha`以外へgrantは波及しない。
+
+### 変更ファイル一覧
+
+- acquisition: `src/acquisition/threads_official.py`, `threads_search.py`,
+  `capability_registry.py`, `factory.py`.
+- config/policy: `config/acquisition_backend_capabilities.json`,
+  `source_backend_routing.json`, `youtube_source_permissions_20260811.json`,
+  `scripts/seed_owner_attested_media_permissions.py`, `.gitignore`.
+- doctor/evaluator: `scripts/acquisition_doctor.py`,
+  `evaluate_reference_first_completion.py`,
+  `test_reference_first_media_core_policy.py`.
+- tests: `tests/test_threads_official_acquisition.py`,
+  `test_youtube_owner_permission_decision.py`,
+  `test_acquisition_capability_registry.py`.
+- docs: `GOAL.md`, `START_HERE.md`, `docs/current-work.md`,
+  `oss-acquisition-stack-20260811.md`, `reference-first-media-core-20260811.md`,
+  `agent-reach-fetcher.md`, 本handoff。
+
+### Live適用 / read-after-write
+
+- owner-authorized YouTube 2件のみproduction `media_permissions`へapply。
+  `written=1`, `updated=1`, `revoked_skipped=0`, `invalid_rows=[]`,
+  `read_after_write=PASS`。全9 operation flagはtrue。
+- 既存実MP4の再検証は2/2 PASS。Nightは640x360 / 1278.21s /
+  A/V、Liverは360x640 / 58.65s / A/V。両方ともexact identity、permission、
+  provenance、understanding、persona、public validatorを通過し
+  `WAITING_REVIEW`、`publisher_eligible=false`、`preserve_source=true`。
+- Cloudinary upload、SNS publish、mass posting、X posting、Beauty操作は未実行。
+
+### 未完了事項 / 残WARN / 外部blocker
+
+- Threads tokenless individual-post detailはライブPASS。ただしregistered profileから
+  canonical individual permalinkを見つけるzero-auth経路は、public profileが
+  `Barcelona404ErrorRoot`、DuckDuckGoはHTTP 202で候補なし、Bingもbounded
+  候補なし。softwareはfail-soft実装済みだがlive discoveryはexternal-blocked。
+- 解除には、Metaの専用developer appで`threads_profile_discovery`と
+  `threads_keyword_search`のadvanced access/app reviewを取得し、
+  `THREADS_DISCOVERY_ACCESS_TOKEN`をruntime secretとして供給する。個人browser
+  sessionやcookieは不要・不使用。
+- Threads physical bytesは、official Graph/oEmbedが明示する直接media URLが
+  得られた時のみ取得対象。現在のライブoEmbedはmedia非公開のため
+  live physical evidenceは未確認。
+- twscrapeは`TOOL_NOT_INSTALLED/AUTH_REQUIRED`のOPTIONAL_AUTH。既存X
+  gallery-dl/yt-dlp経路はPASSのまま。TikTok commentsはpublic stable経路がなく
+  `COMMENTS_OPTIONAL_AUTH_OR_UNAVAILABLE_PUBLIC`扱い。
+
+### スケール方針 / タスク
+
+- profile discoveryはserial、Threads searchは最大5件、Graphは最大25件。
+  実投稿・実downloadとは分離し、author/rights/private/repost failureをfallbackで
+  回避しない。
+- 新sourceはconfig-drivenでidentity -> capability -> discovery/detail/media ->
+  rights -> normalizationの順。将来platformはownerがsourceを指定するまでOFF。
+- 次の安全タスクはThreads Meta appの外部承認後のbounded live profile
+  probe。production publish/canaryは別の明示承認ゲート。
+
+### テスト結果
+
+- focused acquisition: 34/34 PASS。X exact-status、YouTube/TikTok physical
+  Golden契約もPASS。
+- repository regression: 825/825 PASS。workflow safety: 455/455 PASS。
+- completion evaluator: `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`,
+  `software_complete=true`, `integration_complete=true`,
+  `production_evidence_complete=false`。
+- acquisition doctor: PASS、PRIMARY missing 0、secret-value read 0、side effect 0。
+- Ruff changed/full rules PASS、repo safety selection `E9,F63,F7,F82` PASS、
+  compileall PASS、gitleaks current diff+untracked leak 0、`git diff --check` PASS。
+
+### 次AIへの引き継ぎメモ
+
+- 次に触ってよい: `src/acquisition/threads_official.py`,
+  `threads_search.py`, capability registry/doctor、bounded live probe、関連tests/docs。
+- 触らない方がよい: `.env`, tokens/cookies/storage state, `data/`,
+  `output/`, publisher/quality/rights gateの緩和、X/Beauty publish、production
+  Cloudinary/SNS mutation。
+- `WAITING_REVIEW`はpublisher非対象、`READY`のみ対象、quality threshold
+  85以上、`preserve_source`、media-to-text fallback禁止を維持する。

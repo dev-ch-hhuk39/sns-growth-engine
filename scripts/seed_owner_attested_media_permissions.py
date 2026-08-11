@@ -22,7 +22,7 @@ from media.permission_ledger import evaluate_permission, latest_permission  # no
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 MEDIA_CAPABLE_PLATFORMS = {"threads", "youtube", "tiktok"}
-DECISION_PLATFORMS = {"x", "threads", "tiktok"}
+DECISION_PLATFORMS = {"x", "threads", "tiktok", "youtube"}
 APPROVABLE_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DECISION_REQUIRED_FLAGS = (
     "allow_download",

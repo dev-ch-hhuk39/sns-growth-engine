@@ -14,11 +14,13 @@ It does not prioritize autonomous mass publishing.
 ## Required architecture
 
 - Reference discovery priority: TikTok -> Threads -> X -> YouTube.
-- Stable physical-media phase: X and YouTube only.
+- Stable physical-media phase: X and YouTube, plus exact owner-authorized
+  TikTok individual posts.
 - X discovery: bounded metadata-only `gallery-dl`.
 - X individual-post media and YouTube media: `yt-dlp`, after permission.
-- Threads/TikTok desired active reference routes are non-browser.
-- Threads/TikTok new physical-media acquisition is deferred.
+- Threads/TikTok active reference routes are backend-only and non-browser.
+- Threads Graph public discovery is optional-auth; tokenless oEmbed is the
+  active canonical individual-post detail route.
 - Content mix for both accounts: direct media 50%, reference text 30%, PDCA
   10%, new text 5%, approved clip 5%.
 - Default geometry is `preserve_source`; forced 9:16 is explicit-only.
@@ -41,10 +43,9 @@ rebaseline. Criteria that require live Sheets, Cloudinary, publishing, metrics
 or scheduled-run evidence remain unverified until that evidence exists; a
 mock, fixture, dry-run or green workflow is not production proof.
 
-The whole product must not be called production-complete while X dual-account
-physical Goldens are blocked by missing source-specific reusable-media
-permission or while final destructive legacy cleanup remains gated behind
-those Goldens.
+The whole product must not be called production-complete without production
+publish/metrics evidence. Missing Threads profile discovery authorization is
+reported separately from software completion.
 
 X publishing and `beauty_account` activation are outside the current Goal.
 Secrets, cookies, tokens, storage state, source media and production-only

@@ -19,6 +19,8 @@ from .threads_public import (
     ThreadsPublicProfileAdapter,
     ThreadsPublicScreenAdapter,
 )
+from .threads_official import ThreadsGraphPublicDiscoveryAdapter, ThreadsOEmbedDetailAdapter
+from .threads_search import ThreadsSearchIndexAdapter
 from .tiktok_public import TikTokPublicProfileAdapter
 from .tiktok_embed import TikTokPublicEmbedAdapter
 from .tiktok_gallerydl import TikTokGalleryDlProfileAdapter
@@ -43,6 +45,9 @@ def build_router() -> AdapterRouter:
         "threads_public_playwright": ThreadsPublicProfileAdapter(),
         "threads_public_screen": ThreadsPublicScreenAdapter(),
         "threads_public_http": ThreadsPublicHttpAdapter(),
+        "threads_oembed_detail": ThreadsOEmbedDetailAdapter(),
+        "threads_search_index": ThreadsSearchIndexAdapter(),
+        "threads_graph_public_discovery": ThreadsGraphPublicDiscoveryAdapter(),
         "x_gallery_dl": XGalleryDlProfileAdapter(),
     }
     routes = {

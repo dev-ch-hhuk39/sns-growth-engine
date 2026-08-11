@@ -82,6 +82,7 @@ output/
 !config/acquisition_backend_capabilities.json
 !config/reference_first_completion.json
 !config/owner_source_permissions_20260811.json
+!config/youtube_source_permissions_20260811.json
 !config/physical_media_goldens.json
 !config/research_topics.json
 !docs/goal-status.json

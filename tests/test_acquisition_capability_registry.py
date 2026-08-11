@@ -20,11 +20,12 @@ def test_active_profile_routes_are_capability_compatible_and_backend_only() -> N
     router = build_router()
     assert not registry.validate_routes(router.routes, registered=set(router.adapters))
     for route in router.routes.values():
+        assert registry.get(route.primary).production_selectable
         for backend_id in (route.primary, *route.fallbacks):
             backend = registry.get(backend_id)
-            assert backend.production_selectable
             assert not backend.requires_browser
             assert not backend.requires_external_service
+            assert backend.read_only
 
 
 def test_browser_auth_and_opaque_candidates_are_not_production_selectable() -> None:
@@ -83,3 +84,26 @@ def test_twscrape_optional_adapter_reports_auth_without_secret_values(monkeypatc
     assert result.status == "BLOCKED"
     assert result.reason == "AUTH_REQUIRED:auth_token_and_ct0"
     assert result.data == {"installed": True, "auth_present": False, "active": False}
+
+
+def test_future_platforms_are_disabled_by_default() -> None:
+    registry = CapabilityRegistry.load()
+    rows = registry.future_platform_matrix()
+    assert {row["platform"] for row in rows} == {
+        "instagram", "facebook", "reddit", "xiaohongshu", "linkedin",
+        "bilibili", "rss", "web", "github",
+    }
+    assert all(row["enabled"] is False for row in rows)
+    assert all(row["physical_media"] != "PASS" for row in rows)
+
+
+def test_capability_matrix_has_operational_evidence_fields() -> None:
+    required = {
+        "backend_id", "platforms", "capabilities", "role",
+        "install_runtime_requirement", "auth_requirement", "browser_requirement",
+        "live_evidence_status", "last_verified_at", "failure_mode",
+        "security_privacy_notes",
+    }
+    rows = CapabilityRegistry.load().matrix()
+    assert rows
+    assert all(required <= set(row) for row in rows)

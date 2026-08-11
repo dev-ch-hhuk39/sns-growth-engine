@@ -14,11 +14,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from acquisition.capability_registry import CapabilityRegistry  # noqa: E402
+from acquisition.threads_official import ThreadsGraphPublicDiscoveryAdapter  # noqa: E402
+from acquisition.twscrape_optional import TwscrapeOptionalAdapter  # noqa: E402
 
 
 def _tool_status(row: dict[str, Any]) -> tuple[str, str]:
     tool = str(row.get("tool", ""))
     distribution = str(row.get("python_distribution", ""))
+    if tool == "agent-reach":
+        isolated = Path.home() / ".agent-reach-venv" / "bin" / "agent-reach"
+        if isolated.is_file():
+            return "INSTALLED", str(row.get("pin", ""))
     if tool:
         path = shutil.which(tool)
         if not path:
@@ -41,6 +47,10 @@ def build_report(registry: CapabilityRegistry | None = None) -> dict[str, Any]:
     registry = registry or CapabilityRegistry.load()
     rows: list[dict[str, Any]] = []
     primary_missing: list[str] = []
+    runtime_checks = {
+        "threads_graph_public_discovery": ThreadsGraphPublicDiscoveryAdapter.capability_status,
+        "twscrape": TwscrapeOptionalAdapter.capability_status,
+    }
     for item in registry.matrix():
         status, version = _tool_status(item)
         row = {
@@ -56,6 +66,12 @@ def build_report(registry: CapabilityRegistry | None = None) -> dict[str, Any]:
             "detected_version": version,
             "pin": item.get("pin", ""),
         }
+        check = runtime_checks.get(str(item["backend_id"]))
+        if check:
+            capability = check()
+            row["runtime_capability_status"] = capability.status
+            row["runtime_capability_reason"] = capability.reason
+            row["runtime_capability"] = capability.data
         rows.append(row)
         if row["role"] == "PRIMARY" and status == "NOT_INSTALLED" and item.get("tool") not in {"python3"}:
             primary_missing.append(str(item["backend_id"]))
@@ -65,6 +81,7 @@ def build_report(registry: CapabilityRegistry | None = None) -> dict[str, Any]:
         "secret_values_read": False,
         "primary_missing": primary_missing,
         "backends": rows,
+        "future_platforms": registry.future_platform_matrix(),
     }
 
 

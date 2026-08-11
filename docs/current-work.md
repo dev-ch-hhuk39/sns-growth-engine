@@ -1,17 +1,19 @@
 # Current Work
 
-status: OSS_ACQUISITION_SOFTWARE_COMPLETE_TIKTOK_LIVE_THREADS_EXTERNAL_BLOCKED
+status: V21_SOFTWARE_COMPLETE_THREADS_ZERO_AUTH_DISCOVERY_EXTERNAL_BLOCKED
 assigned_agent: Codex
 branch: refactor/reference-first-media-core-20260811-20260811-054925
-base_head: e4469b263492fc0099c8f031825f52142826876e
-scope: finish capability-oriented OSS acquisition registry, safe routing, doctor, audit evidence, and exact external blocker classification
-working_tree: v20 implementation in progress; one local checkpoint commit authorized; no push/PR/merge
-production_operations: no writes/uploads/publish; only public bounded probes, one owner-authorized local TikTok download, and read-only permission-ledger verification
+base_head: f0d938c6080ad580eb5e86f46c1ab8b880151565
+scope: finalize official Threads optional-auth/oEmbed/search routing, exact YouTube permission activation, future-platform registry, tests and docs
+working_tree: v21 bounded implementation; exactly one local checkpoint commit authorized; no push/PR/merge
+production_operations: exact owner-authorized YouTube permission rows only; no Cloudinary upload or SNS publish
 x_permission_state: OWNER_AUTHORIZED_APPLIED; 24 exact source/account/handle rows verified read-after-write; third-party inheritance false
-safe_next: production canary remains separate; TikTok discovery/physical Golden is complete, while Threads needs a future backend-only public response or an explicit dedicated non-personal auth decision
-do_not_do: reset/clean/rebase/amend/push/PR/merge; do not upload Cloudinary, mutate Sheets, or publish
+youtube_permission_state: EXACT_2_OF_2_APPLIED_READ_AFTER_WRITE_PASS; physical A/V and WAITING_REVIEW 2/2 PASS
+threads_state: tokenless individual oEmbed live PASS; zero-auth profile-to-permalink discovery unavailable; official Graph optional-auth implemented
+safe_next: supply a dedicated Meta app token with approved threads_profile_discovery/threads_keyword_search, or wait for public index/profile payload recovery
+do_not_do: reset/clean/rebase/amend/push/PR/merge; do not upload Cloudinary or publish
 checkpoint_scope: durable Reference-first code/config/workflows/docs/tests only; local owner context and /tmp evidence excluded
-completion_gate: pending final v20 regression; SOFTWARE_COMPLETE target true, PLATFORM_LIVE_EVIDENCE partial only because Threads is externally blocked, PRODUCTION_PUBLISH_EVIDENCE_COMPLETE=false
+completion_gate: pending final v21 regression; SOFTWARE_COMPLETE target true, PLATFORM_LIVE_EVIDENCE partial only because Threads profile discovery needs external authorization/public recovery, PRODUCTION_PUBLISH_EVIDENCE_COMPLETE=false
 
 ## 2026-08-11 Agent Reach and Owner Permission Activation
 

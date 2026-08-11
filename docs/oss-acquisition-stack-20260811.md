@@ -20,13 +20,14 @@ credentials and performs no network or production writes.
 |---|---|---|---|
 | X exact-status physical media | yt-dlp 2026.7.4 | none | 4/4 prior live A/V goldens; unchanged |
 | X bounded profile metadata | gallery-dl 1.32.9 | manual JSON/browser export only after explicit failure | public-or-explicit-auth per source |
-| YouTube channel/video/physical | yt-dlp 2026.7.4 | none | 2/2 prior live A/V goldens; reuse permission remains separate |
+| YouTube channel/video/physical | yt-dlp 2026.7.4 | none | 2/2 live A/V goldens and exact owner permission PASS |
 | YouTube comments | youtube-comment-downloader 0.1.78 | none | installed and dependency-pinned |
 | YouTube transcript | youtube-transcript-api 1.2.4 | yt-dlp subtitles, gated local faster-whisper | source-caption dependent |
 | Research | local aggregation | Agent Reach 1.5.0 shadow | Agent Reach measured 4/15 channels |
 | TikTok profile posts | internal public embed parser | gallery-dl | 3/3 registered profiles, 9/9 bounded individual posts in live probe |
 | TikTok approved physical media | public embed direct HTTP | yt-dlp individual-post fallback | 12,310,033-byte A/V Golden; permission, author and review gates PASS |
-| Threads public profile/post | internal public HTTP parser | none | public response contains a logged-out 404 shell/no post payload |
+| Threads public profile posts | internal public HTTP | bounded search-index, official Graph OPTIONAL_AUTH | zero-auth profile payload/search unresolved; official Graph fixture contract ready |
+| Threads individual post detail | official tokenless oEmbed | public HTTP parser | live canonical URL/author/text PASS; physical media not exposed in tested response |
 
 `twscrape` is OPTIONAL_AUTH only (`auth_token` and `ct0`); it does not replace
 working X physical acquisition. Browser Threads/TikTok tools and remote
@@ -122,6 +123,36 @@ rechecks classify Night Scout `@chiishunin_s` and Liver Manager `@me01_lsm` as
 a supported backend-only public response from Meta, or a later explicit owner
 decision for a dedicated non-personal authenticated acquisition account.
 Browser/session automation is not activated.
+
+The v21 official API audit confirmed documented Meta endpoints for public
+profile lookup, profile posts and keyword search. They expose canonical IDs,
+permalink, username, text, timestamp, media type/URL/thumbnail and ordered
+children. This route requires a Threads user access token from a dedicated Meta
+developer app, `threads_profile_discovery` for profile discovery and
+`threads_keyword_search` for keyword search; advanced access/app review is an
+external authorization step. `threads_graph_public_discovery` implements the
+bounded optional-auth contract and reports `AUTH_REQUIRED` without a token.
+
+The official `facebook/meta-embeds-for-wordpress` contract also confirms the
+tokenless `graph.threads.com/oembed` individual-post route. The implemented
+`threads_oembed_detail` adapter passed a live read of one existing public post:
+canonical URL, author and text were returned. Its response exposed no direct
+physical media, so no thumbnail/embed iframe was promoted to video. A bounded
+DuckDuckGo/Bing index probe for registered source handles returned no canonical
+post candidate; zero-auth profile-to-permalink discovery therefore remains the
+single Threads external gap. Search hits, if later returned, are candidate-only
+and must pass exact-author oEmbed validation.
+
+## YouTube exact permission activation
+
+The owner decision in `config/youtube_source_permissions_20260811.json` covers
+only `src_ns_yt_cand_006/@ichijo_hibiki` and
+`src_lm_yt_cand_001/@suu-san_pococha`. Production `media_permissions` apply
+completed with one append and one update; read-after-write was `PASS`, invalid
+rows were zero, and every download/storage/repost/transcript/analysis/cut/clip/
+caption/edit flag was true. Re-verification of the existing physical files
+produced two A/V PASS rows and two `WAITING_REVIEW` candidates with
+`publisher_eligible=false`. No other YouTube source inherits this grant.
 
 ## Optional future platform matrix
 

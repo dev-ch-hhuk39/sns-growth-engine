@@ -16,9 +16,8 @@ Updated: 2026-08-11
 ## Current local state
 
 - Branch: `refactor/reference-first-media-core-20260811-20260811-054925`
-- Base HEAD: `2a886b8e79d833300081688ecc841965ee15ca64`
-- This branch intentionally contains a large uncommitted Reference-first
-  refactor. Do not reset, clean, rebase, discard or reconstruct it from main.
+- v21 start HEAD: `f0d938c6080ad580eb5e86f46c1ab8b880151565`
+- Do not reset, clean, rebase, discard or reconstruct this branch from main.
 - Historical production evidence remains in `docs/ai-work-handoff.md`; it does
   not override current policy.
 
@@ -26,9 +25,11 @@ Updated: 2026-08-11
 
 - Managed accounts: `night_scout`, `liver_manager`
 - Reference priority: TikTok -> Threads -> X -> YouTube
-- Stable physical media: X + YouTube only, via `yt-dlp`
+- Stable physical media: X + YouTube via `yt-dlp`, plus exact owner-authorized
+  TikTok public-embed media
 - X discovery: bounded metadata-only `gallery-dl`
-- Threads/TikTok: non-browser reference acquisition; physical media deferred
+- Threads: public HTTP then bounded search, with official Graph optional-auth;
+  official tokenless oEmbed handles canonical individual-post detail
 - Mix: direct 50 / reference text 30 / PDCA 10 / new text 5 / clip 5
 - Geometry: `preserve_source`
 - Reusable media authority: live Sheets `media_permissions`
@@ -38,8 +39,8 @@ Updated: 2026-08-11
 
 ## Safety boundary
 
-- Current valid X reusable-media permissions: zero in the latest live read-only
-  audit. Do not grant, infer or mirror X rights.
+- Reusable-media permissions remain exact source/account/handle rows. Never
+  infer or mirror a grant to another source or a third-party repost.
 - Public X content is not reusable merely because it is publicly accessible.
 - X status author must match the registered source handle.
 - No X publish, no `beauty_account`, no production Sheets/Cloudinary/social
@@ -49,17 +50,17 @@ Updated: 2026-08-11
 
 ## Validation baseline
 
-The pre-task milestone was 815/815 repository tests, zero failures. After any
+The v20 milestone was 825/825 repository tests, zero failures. After any
 change, run focused tests, Python compile, the repository test runner, Ruff
 fatal rules and `git diff --check`. Never update `docs/goal-status.json` by
 hand.
 
 ## Remaining external decision
 
-YouTube physical acquisition has dual-account PASS_AV evidence. X physical
-Goldens remain blocked on explicit source-specific rights evidence. Use
-`docs/x-reusable-media-permission-decision-package.json` to request a decision;
-do not turn the template into a permission row without owner authorization.
+YouTube physical acquisition and exact owner permission now have dual-account
+PASS evidence. Threads tokenless oEmbed detail is live, while registered
+profile-to-permalink discovery requires public index recovery or a dedicated
+Meta app token with approved discovery permissions.
 
 Legacy/browser cleanup is intentionally deferred until both X and YouTube have
 dual-account Goldens and fresh reachability analysis proves deletion safe.

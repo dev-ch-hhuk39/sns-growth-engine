@@ -4,14 +4,19 @@
   "routes": {
     "threads.profile_posts": {
       "primary": "threads_public_http",
-      "fallbacks": [],
+      "fallbacks": [
+        "threads_search_index",
+        "threads_graph_public_discovery"
+      ],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
     },
     "threads.post_detail": {
-      "primary": "threads_public_http",
-      "fallbacks": [],
+      "primary": "threads_oembed_detail",
+      "fallbacks": [
+        "threads_public_http"
+      ],
       "shadow": [],
       "cooldown_seconds": 900,
       "circuit_failure_threshold": 3
@@ -103,6 +108,9 @@
     "threads_public_playwright": "DEPRECATED_INACTIVE",
     "threads_public_screen": "DEPRECATED_INACTIVE",
     "threads_public_http": "PRIMARY",
+    "threads_oembed_detail": "PRIMARY_TOKENLESS_INDIVIDUAL_POST_DETAIL",
+    "threads_search_index": "FALLBACK_CANDIDATE_DISCOVERY_REVALIDATED",
+    "threads_graph_public_discovery": "OPTIONAL_AUTH_OFFICIAL_PUBLIC_DISCOVERY",
     "x_gallery_dl": "PRIMARY_METADATA_DISCOVERY",
     "youtube_transcript_api": "PRIMARY",
     "youtube_comment_downloader": "PRIMARY",
