@@ -108,11 +108,6 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
     media = _load(MEDIA_PATH)
     issues: list[str] = []
     expected_routes = {
-        "threads.profile_posts": (
-            "threads_public_http",
-            ["threads_search_index", "threads_graph_public_discovery"],
-        ),
-        "threads.post_detail": ("threads_oembed_detail", ["threads_public_http"]),
         "tiktok.profile_posts": ("tiktok_public_embed", ["tiktok_gallery_dl"]),
         "x.profile_posts": ("x_gallery_dl", []),
         "youtube.channel_videos": ("yt_dlp", []),
@@ -123,10 +118,22 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
             issues.append(f"route_mismatch:{capability}")
         if row.get("shadow"):
             issues.append(f"active_shadow_not_allowed:{capability}")
+    active_threads_routes = sorted(
+        capability
+        for capability in routing.get("routes", {})
+        if capability.startswith("threads.")
+    )
+    if active_threads_routes:
+        issues.extend(f"threads_route_active_by_owner_policy:{item}" for item in active_threads_routes)
     if "playwright_processes" in routing.get("limits", {}):
         issues.append("stale_playwright_process_limit")
-    if list(contract["reference_priority"]) != ["tiktok", "threads", "x", "youtube"]:
+    if list(contract["reference_priority"]) != ["tiktok", "x", "youtube"]:
         issues.append("completion_contract_reference_priority_mismatch")
+    threads_deferred = contract.get("deferred_reference_acquisition", {}).get("threads", {})
+    if threads_deferred.get("status") != "DEFERRED_OSS_CANDIDATE":
+        issues.append("threads_deferred_status_mismatch")
+    if threads_deferred.get("reason") != "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN":
+        issues.append("threads_deferred_reason_mismatch")
     operational = mix.get("operational_threads_slot_mix", {})
     for account_id in contract["managed_accounts"]:
         if operational.get(account_id) != contract["content_mix"]:
@@ -164,11 +171,10 @@ def _reference_discovery(routing: dict[str, Any]) -> dict[str, Any]:
             f"--account-id all --platform {platform} --max-posts 5 "
             "--reference-only --verify-network"
         )
-        for platform in ("tiktok", "threads", "x", "youtube")
+        for platform in ("tiktok", "x", "youtube")
     }
     expected = {
         "tiktok": ("tiktok.profile_posts", "tiktok_public_embed"),
-        "threads": ("threads.profile_posts", "threads_public_http"),
         "x": ("x.profile_posts", "x_gallery_dl"),
         "youtube": ("youtube.channel_videos", "yt_dlp"),
     }
@@ -183,11 +189,22 @@ def _reference_discovery(routing: dict[str, Any]) -> dict[str, Any]:
             "external_status": {
                 "youtube": "PASS_AV_RECORDED",
                 "tiktok": "PASS_PUBLIC_EMBED_AND_AV_RECORDED",
-                "threads": "PARTIAL_OEMBED_LIVE_PROFILE_DISCOVERY_EXTERNAL_BLOCKED",
+                "x": "PASS_BOUNDED_DISCOVERY_AND_AV_RECORDED",
             }.get(platform, "UNVERIFIED_EXTERNAL"),
             "bounded_verification_command": commands[platform],
         }
-    return _state(ready, platform_statuses=statuses)
+    statuses["threads"] = {
+        "code_status": "DEFERRED_OSS_CANDIDATE",
+        "external_status": "NOT_AN_AUTH_BLOCKER",
+        "reason": "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN",
+        "bounded_verification_command": "",
+    }
+    return _state(
+        ready,
+        active_platforms=["x", "youtube", "tiktok"],
+        deferred_platforms=["threads"],
+        platform_statuses=statuses,
+    )
 
 
 def _code_paths(paths: list[str]) -> dict[str, Any]:
@@ -372,6 +389,12 @@ def evaluate(
         x_evidence.get(account_id) == "PASS_AV"
         for account_id in contract["managed_accounts"]
     ) and x_evidence.get("evidence_class") == "recorded_dual_account_physical_golden"
+    tiktok_evidence = physical_evidence.get("tiktok", {})
+    tiktok_golden_ready = (
+        tiktok_evidence.get("liver_manager") == "PASS_AV"
+        and tiktok_evidence.get("evidence_class")
+        == "recorded_owner_approved_physical_golden"
+    )
     approval = _load(production_approval_path) if production_approval_path and production_approval_path.is_file() else {}
     approval_granted = (
         approval.get("production_write_approval") is True
@@ -384,6 +407,9 @@ def evaluate(
         for item in (architecture, repository, reference, publisher, metrics_pdca, permission_code)
     ) and x_code_ready and youtube_ready and capabilities["code_complete"] == capabilities["code_required"]
     integration_complete = integration["status"] == "PASS"
+    active_scope_live_evidence_complete = bool(
+        x_golden_ready and youtube_ready and tiktok_golden_ready
+    )
     production_complete = (
         capabilities["status"] == "PASS"
         and approval_granted
@@ -400,8 +426,18 @@ def evaluate(
         "status": "PASS" if status in {"SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY", "COMPLETE"} else "FAIL",
         "completion_status": status,
         "software_complete": software_complete,
+        "active_scope_software_complete": software_complete and integration_complete,
+        "active_scope_live_evidence_complete": active_scope_live_evidence_complete,
+        "deferred_platform_count": 1,
+        "deferred_platforms": ["threads"],
+        "ACTIVE_SCOPE_SOFTWARE_COMPLETE": software_complete and integration_complete,
+        "ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE": active_scope_live_evidence_complete,
+        "DEFERRED_PLATFORM_COUNT": 1,
+        "DEFERRED_PLATFORMS": ["threads"],
         "integration_complete": integration_complete,
         "production_evidence_complete": production_complete,
+        "production_publish_evidence_complete": production_complete,
+        "PRODUCTION_PUBLISH_EVIDENCE_COMPLETE": production_complete,
         "architecture_consistent": architecture,
         "repository_regression_pass": repository,
         "reference_discovery_ready": reference,

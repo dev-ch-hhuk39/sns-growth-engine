@@ -7257,3 +7257,50 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   publisher/rights/quality gate、X/Beauty publish、production Cloudinary/SNS。
 - 認証が来るまでsoftwareを作り直さない。`THREADS_AUTH_SETUP_REQUIRED`は外部
   auth blockerであり、zero-auth scrapeや個人browser cookieで迂回しない。
+
+## 2026-08-12 Codex Owner Policy Correction + Non-Threads Finalization v23
+
+> この節がv21/v22のThreads認証方針を明示的に上書きする最新Source of Truth。
+
+### 本システムについて / 変更概要
+
+- Reference-first基盤はNight ScoutとLiver Managerに共通の`SourcePost`・順序付きmedia・provenance・permission・理解・persona生成・validation・人間reviewを提供する。
+- active reference acquisitionはX / YouTube / TikTok。Threadsは`DEFERRED_OSS_CANDIDATE`、理由は`NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN`。
+- Threads参照取得のMeta Graph、Meta oEmbed、Playwright、browser automation、browser sessionは全て`NOT_USED_BY_OWNER_POLICY`。active routeは0件で、doctorはThreads tokenを読まず、Meta認証をblockerにしない。
+- v21/v22のGraph/oEmbed/browser実験コードは履歴と将来候補のため削除せず、factoryから読めるがproduction routingからは選択不可とした。自社Threads publisherはこの方針変更の対象外。
+
+### 変更ファイル一覧
+
+- policy/config: `config/source_backend_routing.json`, `config/acquisition_backend_capabilities.json`, `config/reference_first_completion.json`, `config/media_growth_engine.json`, `src/generation/media_platform_policy.py`, `src/reference/source_scoring.py`, `src/acquisition/capability_registry.py`.
+- runtime/doctor/evaluator: `scripts/acquire_approved_source_posts.py`, `scripts/collect_source_posts.py`, `scripts/acquisition_doctor.py`, `scripts/evaluate_reference_first_completion.py`.
+- tests: Threads deferred契約の新規test、routing/browser/reference selection/incremental/evaluator/capability registryの既存test更新。
+- docs: `GOAL.md`, `START_HERE.md`, `docs/current-work.md`, `docs/oss-acquisition-stack-20260811.md`, `docs/reference-first-completion.md`, `docs/reference-first-media-core-20260811.md`, 本handoff。
+
+### Active scope / 証跡
+
+- X: `gallery-dl` bounded discovery + `yt-dlp` exact-status physical。Night 2件 / Liver 2件の記4件のA/V Golden、exact author、permission、provenance、persona/public validation、`WAITING_REVIEW`証跡あり。`twscrape`はOPTIONAL_AUTHのままでcompletionをblockしない。X publishは無効。
+- YouTube: `yt-dlp` PRIMARY、comments/transcript/subtitle fallbackを維持。`src_ns_yt_cand_006` / `src_lm_yt_cand_001`の2/2がphysical A/V、exact permission/provenance、`WAITING_REVIEW` PASS。
+- TikTok: `tiktok_public_embed` PRIMARY、gallery-dl / individual-post yt-dlp fallbackを維持。`src_lm_tt_user_001`がprofile discoveryからphysical A/V、permission/provenance、`WAITING_REVIEW`までPASS。browser/cookieは不使用。
+- 共通E2Eはquality 85以上、`preserve_source`、third-party permission非継承、media-to-text fallback禁止、`WAITING_REVIEW`はpublisher非対象、`READY`のみ対象を維持。
+
+### 未完了事項 / 残WARN / スケール方針 / タスク
+
+- Production publish evidenceは未完了。Cloudinary production upload、SNS publish、X publish、mass posting、Beauty操作は実行していない。コードとdry-run契約をproduction成功として扱わない。
+- Cloudinaryはenv + confirm gate、reviewはWAITING_REVIEW -> READY、publisherはREADY-only + final validator + idempotency + read-after-write、metricsは24h/72h/7d、PDCAはMEASURED-only + suggestion WAITING_REVIEWまでコード準備PASS。自動有効化はしていない。
+- Threadsは認証不足ではなくowner policyによるdeferred。将来、ownerがGitHub/OSS候補を提示した場合のみ、license監査 -> bounded read-only live proof -> exact author/provenance -> safety tests -> config route追加の順で再有効化する。
+- optional WARN: `twscrape` NOT_INSTALLED/AUTHなし。既存X経路をblockしない。TikTok comments/replies/slideshowもpublic stableでない限りoptionalで、active E2E completionをblockしない。
+
+### テスト結果 / Production readiness audit
+
+- focused Threads owner-policy/capability/doctor/evaluator: PASS。Threads明示指定はnetwork・Sheetsに進まず`DEFERRED_OSS_CANDIDATE`。
+- repository regression: **826/826 PASS**。workflow safety: **455/455 PASS**。
+- completion evaluator: `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`、`ACTIVE_SCOPE_SOFTWARE_COMPLETE=true`、`ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE=true`、`DEFERRED_PLATFORM_COUNT=1`、`DEFERRED_PLATFORMS=[threads]`、`PRODUCTION_PUBLISH_EVIDENCE_COMPLETE=false`。
+- acquisition doctor: PASS、PRIMARY missing 0、secret value read false、side effects false、Threads auth required false。
+- readiness focused: Cloudinary guard/idempotency、review->READY、READY-only publisher、delivery idempotency/read-after-write、metrics scheduling、PDCA safetyは全PASS。
+- Ruff changed files PASS、compileall PASS、gitleaks tracked diff + untracked test leak 0、`git diff --check` PASS。
+
+### 次に触ってよい / 触らない方がよい / 次AIへの引き継ぎ
+
+- 次に触ってよい: X/YouTube/TikTokのactive adapters、bounded live regression、review inventory、publisher/metricsの明示承認付きpreflight。ThreadsはownerがOSS候補を提示した場合のcapability auditのみ。
+- 触らない方がよい: `.env`, token/cookie/storage state, `data/`, `output/`, Meta auth setup, Threads Graph/oEmbed/browserのactive化、rights/provenance/quality/publisher gateの緩和、X/Beauty publish、production Cloudinary/SNS mutation。
+- 次AIは本v23節をv21/v22より優先する。active scopeとproduction evidenceを混同せず、Threadsのdeferredをexternal auth blockerとして戻さない。

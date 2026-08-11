@@ -23,7 +23,12 @@ from acquisition.failures import classify_failure  # noqa: E402
 from acquisition.models import NormalizedSourcePost, validate_source_post  # noqa: E402
 from acquisition.router import BackendFailure  # noqa: E402
 from config_loader import get_config  # noqa: E402
-from generation.media_platform_policy import is_retired_source  # noqa: E402
+from generation.media_platform_policy import (  # noqa: E402
+    DEFERRED_REFERENCE_PLATFORMS,
+    DEFERRED_REFERENCE_REASON,
+    DEFERRED_REFERENCE_STATUS,
+    is_retired_source,
+)
 from media_source_policy import media_usage_mode  # noqa: E402
 from media.permission_ledger import evaluate_permission  # noqa: E402
 from media_growth_schemas import build_source_video  # noqa: E402
@@ -56,7 +61,6 @@ def account_for(source: dict[str, Any]) -> str:
 
 def capability_for(platform: str) -> str:
     return {
-        "threads": "threads.profile_posts",
         "tiktok": "tiktok.profile_posts",
         "youtube": "youtube.channel_videos",
         "x": "x.profile_posts",
@@ -93,10 +97,20 @@ def selected_sources(
             continue
         if platform not in MEDIA_PLATFORMS or account in BLOCKED_ACCOUNTS:
             continue
+        if not truthy(source.get("active")):
+            continue
+        if platform in DEFERRED_REFERENCE_PLATFORMS:
+            blocked.append(
+                {
+                    "source_id": str(source.get("source_id", "")),
+                    "platform": platform,
+                    "status": DEFERRED_REFERENCE_STATUS,
+                    "reason": DEFERRED_REFERENCE_REASON,
+                }
+            )
+            continue
         if platform == "x" and not truthy(source.get("x_read_only")):
             blocked.append({"source_id": str(source.get("source_id", "")), "reason": "x_read_only_not_approved"})
-            continue
-        if not truthy(source.get("active")):
             continue
         if reference_only:
             # Reference acquisition never grants reuse rights. It is limited
@@ -1000,6 +1014,16 @@ def run(
             "run_hard_cap": max_scan_posts,
         },
     }
+
+    if platform_filter in DEFERRED_REFERENCE_PLATFORMS:
+        result.update(
+            {
+                "status": DEFERRED_REFERENCE_STATUS,
+                "deferred_reason": DEFERRED_REFERENCE_REASON,
+                "source_results": blocked,
+            }
+        )
+        return result
 
     if not apply:
         result["source_results"] = [

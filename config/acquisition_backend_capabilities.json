@@ -110,7 +110,7 @@
       "platforms": ["threads"],
       "route_capabilities": ["threads.profile_posts", "threads.post_detail"],
       "capabilities": ["profile_discovery", "post_discovery", "post_detail", "text_metadata", "engagement_metrics", "image_media", "video_media"],
-      "role": "PRIMARY",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": false,
       "requires_browser": false,
       "requires_external_service": false,
@@ -120,7 +120,7 @@
       "pin": "repository",
       "revision": "e4469b263492fc0099c8f031825f52142826876e",
       "license": "project-license",
-      "health": "FAIL_CLOSED_PROFILE_404_OR_NO_POST_PAYLOAD",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 5,
       "tool": "python3"
     },
@@ -130,7 +130,7 @@
       "platforms": ["threads"],
       "route_capabilities": ["threads.post_detail"],
       "capabilities": ["post_detail", "text_metadata", "embed_metadata", "video_media_when_explicitly_exposed"],
-      "role": "PRIMARY",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": false,
       "requires_browser": false,
       "requires_external_service": false,
@@ -140,7 +140,7 @@
       "pin": "official-contract-2026-08-11",
       "revision": "official-meta-oembed-contract",
       "license": "GPL-2.0-or-later",
-      "health": "LIVE_CANONICAL_AUTHOR_TEXT_PASS_MEDIA_UNEXPOSED",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 5,
       "tool": "python3"
     },
@@ -150,7 +150,7 @@
       "platforms": ["threads"],
       "route_capabilities": ["threads.profile_posts"],
       "capabilities": ["post_discovery_candidate", "canonical_permalink", "author_revalidation"],
-      "role": "FALLBACK",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": false,
       "requires_browser": false,
       "requires_external_service": false,
@@ -160,7 +160,7 @@
       "pin": "repository",
       "revision": "bounded-search-v1",
       "license": "project-license",
-      "health": "BOUNDED_LIVE_NO_CANDIDATES_REQUIRES_OEMBED_REVALIDATION",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 5,
       "tool": "python3",
       "security_privacy_notes": "No query credentials; serial bounded reads; search hits are never trusted directly."
@@ -171,7 +171,7 @@
       "platforms": ["threads"],
       "route_capabilities": ["threads.profile_posts"],
       "capabilities": ["profile_discovery", "post_discovery", "keyword_search", "post_detail", "text_metadata", "image_media", "video_media", "carousel_media"],
-      "role": "OPTIONAL_AUTH",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": true,
       "requires_browser": false,
       "requires_external_service": false,
@@ -181,7 +181,7 @@
       "pin": "official-contract-2026-08-11",
       "revision": "graph-public-v1",
       "license": "official-api-terms",
-      "health": "AUTH_REQUIRED_THREADS_PROFILE_DISCOVERY_ADVANCED_ACCESS",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 25,
       "tool": "python3",
       "security_privacy_notes": "Dedicated Meta developer app token supplied via environment; token never logged."
@@ -310,7 +310,7 @@
       "platforms": ["threads"],
       "route_capabilities": [],
       "capabilities": ["post_discovery", "post_detail", "text_metadata", "engagement_metrics", "image_media", "video_media"],
-      "role": "BENCHMARK_ONLY",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": false,
       "requires_browser": true,
       "requires_external_service": false,
@@ -320,7 +320,7 @@
       "pin": "9cc7055c8ef45779d1c468378e3f6d03778c058b",
       "revision": "9cc7055c8ef45779d1c468378e3f6d03778c058b",
       "license": "MIT",
-      "health": "BROWSER_REQUIRED",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 0
     },
     {
@@ -329,7 +329,7 @@
       "platforms": ["threads"],
       "route_capabilities": [],
       "capabilities": ["profile_discovery", "post_discovery", "post_detail", "text_metadata", "engagement_metrics", "image_media", "video_media"],
-      "role": "BENCHMARK_ONLY",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": false,
       "requires_browser": true,
       "requires_external_service": false,
@@ -339,7 +339,7 @@
       "pin": "a6ae79156df2b8a4ee56b8dfb1343101a2641b86",
       "revision": "a6ae79156df2b8a4ee56b8dfb1343101a2641b86",
       "license": "NOASSERTION",
-      "health": "BROWSER_REQUIRED_LICENSE_UNCLEAR",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 0
     },
     {
@@ -348,7 +348,7 @@
       "platforms": ["threads"],
       "route_capabilities": [],
       "capabilities": ["post_detail", "text_metadata", "comments"],
-      "role": "BENCHMARK_ONLY",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": false,
       "requires_browser": true,
       "requires_external_service": false,
@@ -358,7 +358,7 @@
       "pin": "feed562e321673693cb477651ec75c816b5e0eac",
       "revision": "feed562e321673693cb477651ec75c816b5e0eac",
       "license": "MIT",
-      "health": "BROWSER_REQUIRED",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 0
     },
     {
@@ -367,7 +367,7 @@
       "platforms": ["threads"],
       "route_capabilities": [],
       "capabilities": ["profile_discovery", "post_discovery", "post_detail", "text_metadata", "engagement_metrics", "image_media", "video_media"],
-      "role": "BENCHMARK_ONLY",
+      "role": "NOT_USED_BY_OWNER_POLICY",
       "requires_auth": true,
       "requires_browser": true,
       "requires_external_service": false,
@@ -377,7 +377,7 @@
       "pin": "2bde447ebbdfabe45198e6267929e60930a9eebc",
       "revision": "2bde447ebbdfabe45198e6267929e60930a9eebc",
       "license": "MIT",
-      "health": "BROWSER_AND_COOKIE_REQUIRED",
+      "health": "NOT_USED_BY_OWNER_POLICY",
       "bounded_limit": 0
     },
     {

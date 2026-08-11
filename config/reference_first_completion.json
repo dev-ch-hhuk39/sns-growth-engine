@@ -1,7 +1,15 @@
 {
   "schema_version": 1,
   "managed_accounts": ["night_scout", "liver_manager"],
-  "reference_priority": ["tiktok", "threads", "x", "youtube"],
+  "active_acquisition_platforms": ["x", "youtube", "tiktok"],
+  "reference_priority": ["tiktok", "x", "youtube"],
+  "deferred_reference_acquisition": {
+    "threads": {
+      "status": "DEFERRED_OSS_CANDIDATE",
+      "reason": "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN",
+      "future_reenable_model": "Owner supplies an approved GitHub/OSS backend candidate; bounded read-only evidence, capability registration, and safety tests must pass before an active route is added."
+    }
+  },
   "physical_media_providers": {"x": "yt_dlp", "youtube": "yt_dlp", "tiktok": "public_embed_direct_http"},
   "physical_media_evidence": {
     "youtube": {
@@ -10,9 +18,13 @@
       "evidence_class": "recorded_dual_account_physical_golden"
     },
     "x": {
-      "night_scout": "BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS",
-      "liver_manager": "BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS",
-      "evidence_class": "permission_applied_but_physical_golden_not_recorded"
+      "night_scout": "PASS_AV",
+      "liver_manager": "PASS_AV",
+      "evidence_class": "recorded_dual_account_physical_golden"
+    },
+    "tiktok": {
+      "liver_manager": "PASS_AV",
+      "evidence_class": "recorded_owner_approved_physical_golden"
     }
   },
   "deferred_physical_media_platforms": ["threads"],

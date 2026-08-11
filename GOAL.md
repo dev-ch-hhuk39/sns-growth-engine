@@ -13,14 +13,15 @@ It does not prioritize autonomous mass publishing.
 
 ## Required architecture
 
-- Reference discovery priority: TikTok -> Threads -> X -> YouTube.
+- Active reference discovery priority: TikTok -> X -> YouTube.
 - Stable physical-media phase: X and YouTube, plus exact owner-authorized
   TikTok individual posts.
 - X discovery: bounded metadata-only `gallery-dl`.
 - X individual-post media and YouTube media: `yt-dlp`, after permission.
-- Threads/TikTok active reference routes are backend-only and non-browser.
-- Threads Graph public discovery is optional-auth; tokenless oEmbed is the
-  active canonical individual-post detail route.
+- TikTok active reference routes are backend-only and non-browser.
+- Threads reference acquisition is `DEFERRED_OSS_CANDIDATE`. Meta Graph,
+  Meta oEmbed, Playwright, browser automation and browser sessions are
+  `NOT_USED_BY_OWNER_POLICY`; no Threads token or Meta auth is required.
 - Content mix for both accounts: direct media 50%, reference text 30%, PDCA
   10%, new text 5%, approved clip 5%.
 - Default geometry is `preserve_source`; forced 9:16 is explicit-only.
@@ -44,8 +45,9 @@ or scheduled-run evidence remain unverified until that evidence exists; a
 mock, fixture, dry-run or green workflow is not production proof.
 
 The whole product must not be called production-complete without production
-publish/metrics evidence. Missing Threads profile discovery authorization is
-reported separately from software completion.
+publish/metrics evidence. Deferred Threads acquisition does not block active-
+scope software or live-evidence completion. A future GitHub/OSS backend can be
+enabled only after bounded read-only evidence and safety tests pass.
 
 X publishing and `beauty_account` activation are outside the current Goal.
 Secrets, cookies, tokens, storage state, source media and production-only

@@ -4,8 +4,14 @@ from __future__ import annotations
 from urllib.parse import urlparse
 from typing import Any
 
-REFERENCE_PLATFORMS = ("tiktok", "threads", "x", "youtube")
-REFERENCE_PLATFORM_PRIORITY = {"tiktok": 0, "threads": 1, "x": 2, "youtube": 3}
+REFERENCE_PLATFORMS = ("tiktok", "x", "youtube")
+DEFERRED_REFERENCE_PLATFORMS = ("threads",)
+KNOWN_REFERENCE_PLATFORMS = REFERENCE_PLATFORMS + DEFERRED_REFERENCE_PLATFORMS
+REFERENCE_PLATFORM_PRIORITY = {"tiktok": 0, "x": 1, "youtube": 2}
+DEFERRED_REFERENCE_STATUS = "DEFERRED_OSS_CANDIDATE"
+DEFERRED_REFERENCE_REASON = (
+    "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN"
+)
 PHYSICAL_MEDIA_PLATFORMS = ("x", "youtube", "tiktok")
 DEFERRED_PHYSICAL_MEDIA_PLATFORMS = ("threads",)
 PHYSICAL_MEDIA_PROVIDER = {
@@ -27,7 +33,7 @@ def normalize_platform(value: Any = "", url: str = "") -> str:
         "youtube_streams": "youtube",
     }
     raw = aliases.get(raw, raw)
-    if raw in REFERENCE_PLATFORMS:
+    if raw in KNOWN_REFERENCE_PLATFORMS:
         return raw
     host = (urlparse(_text(url)).hostname or "").lower()
     if "youtu.be" in host or "youtube.com" in host:

@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from generation.media_platform_policy import (  # noqa: E402
     REFERENCE_PLATFORMS,
+    DEFERRED_REFERENCE_PLATFORMS,
     REFERENCE_PLATFORM_PRIORITY,
     PHYSICAL_MEDIA_PLATFORMS,
     DEFERRED_PHYSICAL_MEDIA_PLATFORMS,
@@ -20,8 +21,9 @@ from generation.media_platform_policy import (  # noqa: E402
 from generation.reference_first_router import load_operational_mix  # noqa: E402
 from reference.source_scoring import platform_priority_score  # noqa: E402
 
-assert REFERENCE_PLATFORMS == ("tiktok", "threads", "x", "youtube")
-assert REFERENCE_PLATFORM_PRIORITY == {"tiktok": 0, "threads": 1, "x": 2, "youtube": 3}
+assert REFERENCE_PLATFORMS == ("tiktok", "x", "youtube")
+assert DEFERRED_REFERENCE_PLATFORMS == ("threads",)
+assert REFERENCE_PLATFORM_PRIORITY == {"tiktok": 0, "x": 1, "youtube": 2}
 assert set(PHYSICAL_MEDIA_PLATFORMS) == {"x", "youtube", "tiktok"}
 assert set(DEFERRED_PHYSICAL_MEDIA_PLATFORMS) == {"threads"}
 assert can_attempt_physical_media("x")
@@ -31,8 +33,8 @@ assert can_attempt_physical_media("tiktok")
 assert physical_media_provider("x") == "yt_dlp"
 assert physical_media_provider("youtube") == "yt_dlp"
 assert physical_media_provider("tiktok") == "public_embed_direct_http"
-assert reference_priority_score("tiktok") > reference_priority_score("threads") > reference_priority_score("x") > reference_priority_score("youtube")
-assert platform_priority_score({"source_platform": "tiktok"}) > platform_priority_score({"source_platform": "threads"}) > platform_priority_score({"source_platform": "x"}) > platform_priority_score({"source_platform": "youtube"})
+assert reference_priority_score("tiktok") > reference_priority_score("x") > reference_priority_score("youtube") > reference_priority_score("threads")
+assert platform_priority_score({"source_platform": "tiktok"}) > platform_priority_score({"source_platform": "x"}) > platform_priority_score({"source_platform": "youtube"}) > platform_priority_score({"source_platform": "threads"})
 
 for account_id in ("night_scout", "liver_manager"):
     mix = load_operational_mix(account_id)
@@ -45,19 +47,7 @@ assert media_cfg["aspect_ratio_policy"] == "preserve_source"
 assert media_cfg["target_aspect_ratio"] == "preserve_source"
 
 routing = json.loads((ROOT / "config/source_backend_routing.json").read_text(encoding="utf-8"))
-assert routing["routes"]["threads.profile_posts"]["primary"] == "threads_public_http"
-assert routing["routes"]["threads.profile_posts"]["fallbacks"] == [
-    "threads_search_index",
-    "threads_graph_public_discovery",
-]
-assert "playwright" not in json.dumps(routing["routes"]["threads.profile_posts"])
-assert routing["routes"]["threads.post_detail"] == {
-    "primary": "threads_oembed_detail",
-    "fallbacks": ["threads_public_http"],
-    "shadow": [],
-    "cooldown_seconds": 900,
-    "circuit_failure_threshold": 3,
-}
+assert not any(key.startswith("threads.") for key in routing["routes"])
 assert routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_gallery_dl"]
 
 workflow = (ROOT / ".github/workflows/direct-media-preparation.yml").read_text(encoding="utf-8")

@@ -1,26 +1,7 @@
 {
   "schema_version": 1,
-  "notes": "Reference discovery remains TikTok/Threads/X/YouTube. Browser-based source acquisition is disabled in the active route. TikTok profile discovery uses the bounded public embed payload with gallery-dl as a metadata fallback. Physical media download is governed separately by media_platform_policy.",
+  "notes": "Active reference discovery is TikTok/X/YouTube. Threads is DEFERRED_OSS_CANDIDATE by owner policy and has no active route. TikTok profile discovery uses the bounded public embed payload with gallery-dl as a metadata fallback. Physical media download is governed separately by media_platform_policy.",
   "routes": {
-    "threads.profile_posts": {
-      "primary": "threads_public_http",
-      "fallbacks": [
-        "threads_search_index",
-        "threads_graph_public_discovery"
-      ],
-      "shadow": [],
-      "cooldown_seconds": 900,
-      "circuit_failure_threshold": 3
-    },
-    "threads.post_detail": {
-      "primary": "threads_oembed_detail",
-      "fallbacks": [
-        "threads_public_http"
-      ],
-      "shadow": [],
-      "cooldown_seconds": 900,
-      "circuit_failure_threshold": 3
-    },
     "tiktok.profile_posts": {
       "primary": "tiktok_public_embed",
       "fallbacks": [
@@ -53,12 +34,6 @@
     },
     "youtube.comments": {
       "primary": "youtube_comment_downloader",
-      "fallbacks": [],
-      "shadow": [],
-      "cooldown_seconds": 1800
-    },
-    "threads.comments": {
-      "primary": "threads_public_comments",
       "fallbacks": [],
       "shadow": [],
       "cooldown_seconds": 1800

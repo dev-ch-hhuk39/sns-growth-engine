@@ -24,12 +24,13 @@ Updated: 2026-08-11
 ## Active architecture
 
 - Managed accounts: `night_scout`, `liver_manager`
-- Reference priority: TikTok -> Threads -> X -> YouTube
+- Active reference priority: TikTok -> X -> YouTube
 - Stable physical media: X + YouTube via `yt-dlp`, plus exact owner-authorized
   TikTok public-embed media
 - X discovery: bounded metadata-only `gallery-dl`
-- Threads: public HTTP then bounded search, with official Graph optional-auth;
-  official tokenless oEmbed handles canonical individual-post detail
+- Threads reference acquisition: `DEFERRED_OSS_CANDIDATE`; Meta Graph,
+  Meta oEmbed, Playwright and browser/session routes are
+  `NOT_USED_BY_OWNER_POLICY`
 - Mix: direct 50 / reference text 30 / PDCA 10 / new text 5 / clip 5
 - Geometry: `preserve_source`
 - Reusable media authority: live Sheets `media_permissions`
@@ -55,15 +56,15 @@ change, run focused tests, Python compile, the repository test runner, Ruff
 fatal rules and `git diff --check`. Never update `docs/goal-status.json` by
 hand.
 
-## Remaining external decision
+## Deferred platform
 
-YouTube physical acquisition and exact owner permission now have dual-account
-PASS evidence. Threads tokenless oEmbed detail is live, while registered
-profile-to-permalink discovery requires public index recovery or a dedicated
-Meta app token with approved discovery permissions.
+YouTube physical acquisition and exact owner permission have dual-account PASS
+evidence. Threads requires no Meta authentication: it remains deferred until
+the owner supplies an acceptable GitHub/OSS backend candidate and that route
+passes bounded read-only, provenance and safety verification.
 
-Legacy/browser cleanup is intentionally deferred until both X and YouTube have
-dual-account Goldens and fresh reachability analysis proves deletion safe.
+Legacy Graph/oEmbed/browser code remains historical and inactive so useful
+evidence is not destroyed. It must not be selected by production routing.
 
 The current internal target is
 `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`. It does not authorize production

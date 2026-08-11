@@ -14,8 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from acquisition.capability_registry import CapabilityRegistry  # noqa: E402
-from acquisition.threads_official import ThreadsGraphPublicDiscoveryAdapter  # noqa: E402
 from acquisition.twscrape_optional import TwscrapeOptionalAdapter  # noqa: E402
+from generation.media_platform_policy import (  # noqa: E402
+    DEFERRED_REFERENCE_REASON,
+    DEFERRED_REFERENCE_STATUS,
+    REFERENCE_PLATFORMS,
+)
 
 
 def _tool_status(row: dict[str, Any]) -> tuple[str, str]:
@@ -48,7 +52,6 @@ def build_report(registry: CapabilityRegistry | None = None) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     primary_missing: list[str] = []
     runtime_checks = {
-        "threads_graph_public_discovery": ThreadsGraphPublicDiscoveryAdapter.capability_status,
         "twscrape": TwscrapeOptionalAdapter.capability_status,
     }
     for item in registry.matrix():
@@ -80,13 +83,17 @@ def build_report(registry: CapabilityRegistry | None = None) -> dict[str, Any]:
         "side_effects": False,
         "secret_values_read": False,
         "primary_missing": primary_missing,
+        "active_acquisition_platforms": list(REFERENCE_PLATFORMS),
+        "deferred_platforms": [
+            {
+                "platform": "threads",
+                "status": DEFERRED_REFERENCE_STATUS,
+                "reason": DEFERRED_REFERENCE_REASON,
+                "auth_required": False,
+            }
+        ],
         "backends": rows,
         "future_platforms": registry.future_platform_matrix(),
-        "threads_live_probe_command": (
-            "THREADS_DISCOVERY_ACCESS_TOKEN='<THREADS_ACCESS_TOKEN>' "
-            "python3 scripts/probe_threads_graph_live.py --account-id all --max-posts 5 "
-            "--output /private/tmp/threads-graph-live-v22.json"
-        ),
     }
 
 

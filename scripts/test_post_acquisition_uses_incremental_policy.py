@@ -21,8 +21,8 @@ from acquisition.models import (  # noqa: E402
 
 SOURCE = {
     "source_id": "src_post_policy",
-    "source_platform": "threads",
-    "source_url": ("https://www.threads.com/" "@sample"),
+    "source_platform": "youtube",
+    "source_url": "https://www.youtube.com/@sample",
     "target_account_ids": ["night_scout"],
     "active": True,
 }
@@ -44,7 +44,7 @@ CONFIG = {
 def post(number: int) -> NormalizedSourcePost:
     external = f"post{number}"
 
-    canonical = "https://www.threads.com/" f"@sample/post/{external}"
+    canonical = f"https://www.youtube.com/watch?v={external}"
 
     source_post_id = f"sp_src_post_policy_{external}"
 
@@ -62,7 +62,7 @@ def post(number: int) -> NormalizedSourcePost:
         source_post_id=source_post_id,
         source_id="src_post_policy",
         target_account_id="night_scout",
-        platform="threads",
+        platform="youtube",
         profile_url=SOURCE["source_url"],
         canonical_post_url=canonical,
         external_post_id=external,
@@ -88,7 +88,7 @@ class FakeRouter:
         self.adapters = {"fake": SimpleNamespace(backend_version="test")}
 
         self.routes = {
-            a.capability_for("threads"): SimpleNamespace(
+            a.capability_for("youtube"): SimpleNamespace(
                 primary="fake",
                 fallbacks=(),
             )
@@ -251,7 +251,7 @@ try:
 
     incremental_result = a.run(
         "night_scout",
-        "threads",
+        "youtube",
         30,
         apply=True,
         shadow=False,
@@ -325,7 +325,7 @@ try:
 
     backfill_result = a.run(
         "night_scout",
-        "threads",
+        "youtube",
         30,
         apply=True,
         shadow=False,

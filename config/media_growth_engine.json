@@ -141,9 +141,11 @@
   "max_total_new_source_posts_per_run": 12,
   "reference_source_platforms": [
     "tiktok",
-    "threads",
     "x",
     "youtube"
+  ],
+  "deferred_reference_acquisition_platforms": [
+    "threads"
   ],
   "physical_media_source_platforms": [
     "x",

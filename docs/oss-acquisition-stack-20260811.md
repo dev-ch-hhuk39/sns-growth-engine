@@ -14,6 +14,12 @@ no fallback around author, rights, private-source or third-party-repost blocks.
 Missing optional tools fail soft. `scripts/acquisition_doctor.py --json` reads no
 credentials and performs no network or production writes.
 
+The v23 owner policy limits active acquisition to X, YouTube and TikTok.
+Threads reference acquisition is `DEFERRED_OSS_CANDIDATE` with reason
+`NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN`. Every historical
+Threads Graph, oEmbed, Playwright and browser/session candidate is
+`NOT_USED_BY_OWNER_POLICY`; no Meta authentication is required.
+
 ## Adopted stack
 
 | Capability | Primary | Fallback / shadow | Current result |
@@ -26,8 +32,7 @@ credentials and performs no network or production writes.
 | Research | local aggregation | Agent Reach 1.5.0 shadow | Agent Reach measured 4/15 channels |
 | TikTok profile posts | internal public embed parser | gallery-dl | 3/3 registered profiles, 9/9 bounded individual posts in live probe |
 | TikTok approved physical media | public embed direct HTTP | yt-dlp individual-post fallback | 12,310,033-byte A/V Golden; permission, author and review gates PASS |
-| Threads public profile posts | internal public HTTP | bounded search-index, official Graph OPTIONAL_AUTH | zero-auth profile payload/search unresolved; official Graph fixture contract ready |
-| Threads individual post detail | official tokenless oEmbed | public HTTP parser | live canonical URL/author/text PASS; physical media not exposed in tested response |
+| Threads reference acquisition | none | future owner-approved GitHub/OSS candidate only | DEFERRED_OSS_CANDIDATE; no active route |
 
 `twscrape` is OPTIONAL_AUTH only (`auth_token` and `ct0`); it does not replace
 working X physical acquisition. Browser Threads/TikTok tools and remote
@@ -118,53 +123,15 @@ rejected.
 
 Thus public transport reachability is not reported as post discovery. Live
 rechecks classify Night Scout `@chiishunin_s` and Liver Manager `@me01_lsm` as
-`POST_DISCOVERY_UNAVAILABLE` with exact reasons
-`threads_profile_application_404:<handle>`. The minimal external requirement is
-a supported backend-only public response from Meta, or a later explicit owner
-decision for a dedicated non-personal authenticated acquisition account.
-Browser/session automation is not activated.
+unproven. The platform is deferred rather than treated as an authentication
+blocker. Browser/session automation is not activated.
 
-The v21 official API audit confirmed documented Meta endpoints for public
-profile lookup, profile posts and keyword search. They expose canonical IDs,
-permalink, username, text, timestamp, media type/URL/thumbnail and ordered
-children. This route requires a Threads user access token from a dedicated Meta
-developer app, `threads_profile_discovery` for profile discovery and
-`threads_keyword_search` for keyword search; advanced access/app review is an
-external authorization step. `threads_graph_public_discovery` implements the
-bounded optional-auth contract and reports `AUTH_REQUIRED` without a token.
-
-The official `facebook/meta-embeds-for-wordpress` contract also confirms the
-tokenless `graph.threads.com/oembed` individual-post route. The implemented
-`threads_oembed_detail` adapter passed a live read of one existing public post:
-canonical URL, author and text were returned. Its response exposed no direct
-physical media, so no thumbnail/embed iframe was promoted to video. A bounded
-DuckDuckGo/Bing index probe for registered source handles returned no canonical
-post candidate; zero-auth profile-to-permalink discovery therefore remains the
-single Threads external gap. Search hits, if later returned, are candidate-only
-and must pass exact-author oEmbed validation.
-
-### Threads Graph runtime auth contract
-
-- Live runtime reads exactly `THREADS_DISCOVERY_ACCESS_TOKEN`. The discovery
-  adapter does not read an app ID or app secret at runtime and never logs the
-  token. App ID/secret are used only while provisioning OAuth outside this
-  read-only acquisition process.
-- Required permissions are `threads_basic` and
-  `threads_profile_discovery`. `threads_keyword_search` is optional; its
-  absence must not block profile lookup/profile posts.
-- The official host is `https://graph.threads.net`; the documented
-  `profile_lookup`, `profile_posts`, and `keyword_search` routes are
-  unversioned. Public profiles outside app roles/testers require the relevant
-  Advanced Access/App Review approval.
-- Exchange a short-lived Threads user token for the documented 60-day
-  long-lived token, then refresh that long-lived token while it is still
-  unexpired. `threads_basic` is sufficient for exchange/refresh, but not for
-  public-profile discovery itself.
-- Doctor: `python3 scripts/acquisition_doctor.py --json`.
-- Bounded live proof (placeholder only):
-  `THREADS_DISCOVERY_ACCESS_TOKEN='<THREADS_ACCESS_TOKEN>' python3 scripts/probe_threads_graph_live.py --account-id all --max-posts 5 --output /private/tmp/threads-graph-live-v22.json`.
-- With no token, the probe returns `THREADS_AUTH_SETUP_REQUIRED=true` before
-  network, Sheets, download, browser, cookie, upload, or publish activity.
+The v21/v22 official Graph and oEmbed experiments remain readable historical
+code, but they are not candidates under the current owner policy. Future
+re-enablement requires an owner-provided GitHub/OSS backend, license review,
+bounded anonymous/read-only proof, exact-author provenance and focused safety
+tests before a route is added. Doctor remains
+`python3 scripts/acquisition_doctor.py --json` and reads no Threads token.
 
 ## YouTube exact permission activation
 

@@ -2,13 +2,13 @@
 
 ## Active architecture
 
-Reference discovery: TikTok -> Threads -> X -> YouTube.
+Active reference discovery: TikTok -> X -> YouTube. Threads is
+`DEFERRED_OSS_CANDIDATE` by the latest owner policy.
 
 Physical media acquisition: X and YouTube use yt-dlp. Owner-authorized TikTok
 individual posts use bounded public-embed direct HTTP after exact registered-
-author and permission-ledger checks. Threads direct physical media remains
-unverified; its tokenless oEmbed route is detail/text metadata only unless an
-explicit direct media element is actually returned.
+author and permission-ledger checks. Threads reference and physical acquisition
+are deferred and have no active route.
 
 The acquisition router now validates every active profile backend against
 `config/acquisition_backend_capabilities.json`. Browser, auth-only and opaque
@@ -16,10 +16,10 @@ external-service candidates cannot enter the backend-only production chain.
 See `docs/oss-acquisition-stack-20260811.md` and run
 `python3 scripts/acquisition_doctor.py --json` for the current matrix.
 
-TikTok and Threads remain valid text/structure reference sources. TikTok may
-also trigger physical acquisition only for exact owner-authorized individual
-posts. Threads does not trigger physical-media download attempts without an
-exact direct media URL from the official Graph/oEmbed response.
+TikTok remains an active text/structure source and may trigger physical
+acquisition only for exact owner-authorized individual posts. Registered
+Threads identities and permission history are retained, but no Threads
+reference acquisition or physical-media attempt runs while deferred.
 
 The 2026-08-11 bounded audit found a safe anonymous TikTok route after the
 yt-dlp/gallery-dl and ssut profile paths failed. Public embed hydration now
@@ -28,11 +28,10 @@ owner-authorized post also passed physical A/V, provenance, permission and
 WAITING_REVIEW verification. Threads public HTML still returns a logged-out
 application-404 SSR payload for one Night and one Liver source, while maintained
 alternatives require Playwright/session state or an opaque conversion service.
-The v21 implementation adds official Meta Graph profile/posts/search as an
-OPTIONAL_AUTH fallback and official tokenless oEmbed as individual-post detail.
-oEmbed has live canonical-author-text evidence. Zero-auth profile-to-permalink
-discovery still returned no candidate, so that one step remains an exact
-external blocker rather than profile-text success.
+The v21/v22 Graph and oEmbed experiments are retained only as historical code.
+Meta Graph, Meta oEmbed, Playwright, browser automation and browser sessions
+are `NOT_USED_BY_OWNER_POLICY` for Threads reference acquisition. Meta auth is
+not a blocker and is not required by the doctor or completion evaluator.
 
 Content mix for Night Scout and Liver Manager: 50% direct reference media, 30% reference text, 10% PDCA, 5% new text, 5% approved clips.
 
@@ -72,11 +71,11 @@ These paths are not hard-deleted in this refactor so rollback and evidence remai
 
 ## Regression-contract migration after first full harness
 
-The first repository harness after the refactor produced 10 failures. They were traced to stale contracts that assumed Threads physical download, Threads browser-session routing, Playwright TikTok fallback, an exact historical source count, or a scheduled Threads-centric direct-media preparation workflow. The updated contract keeps all four reference-discovery platforms and adds owner-authorized TikTok physical acquisition without reactivating browsers. Permission-ledger, exact-author, content-understanding, rights, video-first and review safety checks remain mandatory.
+The first repository harness after the refactor produced 10 failures. They were traced to stale contracts that assumed Threads physical download, Threads browser-session routing, Playwright TikTok fallback, an exact historical source count, or a scheduled Threads-centric direct-media preparation workflow. The updated contract keeps X/YouTube/TikTok active, defers Threads safely, and adds owner-authorized TikTok physical acquisition without reactivating browsers. Permission-ledger, exact-author, content-understanding, rights, video-first and review safety checks remain mandatory.
 
 ## Physical-source eligibility normalization
 
-The legacy `media_growth_engine.allowed_source_ids` list is physical-media inventory, not the four-platform reference registry. It is filtered by each registered source's actual normalized platform, retaining X, YouTube and explicitly owner-authorized TikTok sources. Threads remains reference-only. Regression contracts use the production rights policy and platform normalizer instead of requiring a raw `rights_status` field spelling.
+The legacy `media_growth_engine.allowed_source_ids` list is physical-media inventory, not the active reference registry. It is filtered by each registered source's actual normalized platform, retaining X, YouTube and explicitly owner-authorized TikTok sources. Threads remains registered but deferred. Regression contracts use the production rights policy and platform normalizer instead of requiring a raw `rights_status` field spelling.
 
 ## Discovery-plan rights contract
 

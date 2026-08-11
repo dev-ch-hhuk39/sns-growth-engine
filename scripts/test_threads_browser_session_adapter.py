@@ -36,12 +36,15 @@ posts = adapter.acquire(SOURCE, limit=5)
 post = posts[0]
 routing = json.loads((ROOT / "config/source_backend_routing.json").read_text(encoding="utf-8"))
 router = build_router()
-route = routing["routes"]["threads.profile_posts"]
-active_names = [route["primary"], *route.get("fallbacks", [])]
+active_names = [
+    backend
+    for route in routing["routes"].values()
+    for backend in [route["primary"], *route.get("fallbacks", [])]
+]
 checks = {
     "legacy adapter still parses parent": len(posts) == 1 and post.author_handle == "target",
     "legacy adapter retains ordered media": [item.media_type for item in post.media_items] == ["video", "image"],
-    "threads active primary is non-browser http": route["primary"] == "threads_public_http",
+    "threads has no active acquisition route": not any(key.startswith("threads.") for key in routing["routes"]),
     "threads browser session is inactive": "threads_browser_session" not in active_names,
     "threads playwright is inactive": all("playwright" not in name for name in active_names),
     "factory may retain legacy session adapter": "threads_browser_session" in router.adapters,

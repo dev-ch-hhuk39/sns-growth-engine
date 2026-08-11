@@ -16,6 +16,12 @@ gate. It separates three claims that must never be collapsed into one:
   implementation-bound production approval and required source permissions
   exist. Code alone can never make this true.
 
+The v23 report also exposes `ACTIVE_SCOPE_SOFTWARE_COMPLETE`,
+`ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE`, `DEFERRED_PLATFORM_COUNT`,
+`DEFERRED_PLATFORMS` and `PRODUCTION_PUBLISH_EVIDENCE_COMPLETE`. Active
+acquisition is X, YouTube and TikTok. Threads is a non-blocking
+`DEFERRED_OSS_CANDIDATE`, not an authentication blocker.
+
 Run after the repository harness:
 
 ```bash
@@ -44,11 +50,12 @@ completion-gate result, not permission to write production systems.
 - X permission: the 24 explicitly authorized X/Threads/TikTok identities were
   written source/account/handle-specifically and verified read-after-write on
   2026-08-11. Third-party repost inheritance remains disabled.
-- X physical Golden: code and permission are ready, but the bounded live probe
-  could not produce a video-bearing individual status for either account.
-  Registered-profile discovery requires explicit X authentication; the known
-  Night Scout status contained no video. This is
-  `BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS`, not a permission blocker.
+- X physical Golden: four exact status URLs have recorded A/V evidence across
+  Night Scout and Liver Manager. `twscrape` remains optional-auth and does not
+  block the proven gallery-dl plus yt-dlp route.
+- Threads reference acquisition: `DEFERRED_OSS_CANDIDATE` with reason
+  `NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN`. Meta Graph,
+  Meta oEmbed and browser routes are inactive by owner policy.
 - Production mutation: Sheets, Cloudinary, download/cut and Threads publishing
   require separate explicit approval and credentials.
 - Public reachability: a provider returning no posts during a bounded no-write

@@ -42,6 +42,26 @@ def test_browser_auth_and_opaque_candidates_are_not_production_selectable() -> N
         assert not registry.get(backend_id).production_selectable
 
 
+def test_threads_backends_are_inactive_by_owner_policy() -> None:
+    registry = CapabilityRegistry.load()
+    for backend_id in (
+        "threads_public_http",
+        "threads_oembed_detail",
+        "threads_search_index",
+        "threads_graph_public_discovery",
+        "threads_hasya_userscript",
+        "threads_zeeshan_playwright",
+        "threads_vdite_playwright",
+        "threads_galih_playwright",
+    ):
+        backend = registry.get(backend_id)
+        assert backend.role == "NOT_USED_BY_OWNER_POLICY"
+        assert not backend.production_selectable
+
+    router = build_router()
+    assert not any(capability.startswith("threads.") for capability in router.routes)
+
+
 def test_unknown_or_capability_mismatched_backend_fails_closed() -> None:
     registry = CapabilityRegistry.load()
     with pytest.raises(ValueError, match="backend_not_in_capability_registry"):

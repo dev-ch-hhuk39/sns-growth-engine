@@ -4,7 +4,7 @@
 方針(ユーザー共有済みルール):
 - 公式/メディア系は低優先 (media_official_penalty)
 - 個人インフルエンサー/ノウハウ発信者/伸びている配信者を高優先
-- platform優先度: TikTok > Threads/X > YouTube
+- active platform優先度: TikTok > X > YouTube (Threadsはowner policyでdeferred)
 - night_scout / liver_manager との適合度を重視
 - third-party media reuse リスクが高いものは REFERENCE_ONLY 前提
 
@@ -93,7 +93,7 @@ def active_recently_score(src: dict[str, Any]) -> float:
 
 
 def platform_priority_score(src: dict[str, Any]) -> float:
-    """platform優先度。TikTok > Threads > X > YouTube。0..1。"""
+    """Active platform優先度。TikTok > X > YouTube。Deferredは0。"""
     platform = str(src.get("source_platform") or src.get("platform") or "")
     canonical = reference_priority_score(
         platform,

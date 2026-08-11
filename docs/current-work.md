@@ -1,36 +1,20 @@
 # Current Work
 
-status: V22_SOFTWARE_COMPLETE_THREADS_GRAPH_AUTH_SETUP_REQUIRED
+status: V23_ACTIVE_SCOPE_COMPLETE_THREADS_DEFERRED_OSS_CANDIDATE
 assigned_agent: Codex
 branch: refactor/reference-first-media-core-20260811-20260811-054925
-base_head: f0d938c6080ad580eb5e86f46c1ab8b880151565
-scope: finalize the exact Threads Graph runtime auth contract and bounded live-proof entrypoint without changing publish safety
-working_tree: v22 bounded implementation; exactly one local checkpoint commit authorized; no push/PR/merge
-production_operations: exact owner-authorized YouTube permission rows only; no Cloudinary upload or SNS publish
-x_permission_state: OWNER_AUTHORIZED_APPLIED; 24 exact source/account/handle rows verified read-after-write; third-party inheritance false
-youtube_permission_state: EXACT_2_OF_2_APPLIED_READ_AFTER_WRITE_PASS; physical A/V and WAITING_REVIEW 2/2 PASS
-threads_state: tokenless individual oEmbed live PASS; official Graph probe returns THREADS_AUTH_SETUP_REQUIRED because THREADS_DISCOVERY_ACCESS_TOKEN is absent
-safe_next: provision a dedicated Meta app token with threads_basic + approved threads_profile_discovery; threads_keyword_search is optional
-do_not_do: reset/clean/rebase/amend/push/PR/merge; do not upload Cloudinary or publish
-checkpoint_scope: durable Reference-first code/config/workflows/docs/tests only; local owner context and /tmp evidence excluded
-completion_gate: final v22 regression PASS; SOFTWARE_COMPLETE=true, ACQUISITION_INTEGRATION_COMPLETE=true, PLATFORM_LIVE_EVIDENCE partial only because Threads profile discovery needs external authorization, PRODUCTION_PUBLISH_EVIDENCE_COMPLETE=false
-
-## 2026-08-11 Agent Reach and Owner Permission Activation
-
-- Agent Reach 1.5.0 was installed from the official repository at commit
-  `1221ecd0c3e0502ee37406f03543bedf7503f2c7` into
-  `~/.agent-reach-venv`. Doctor measured 4/15 usable channels. The repo adapter
-  now calls official WebChannel behavior and remains optional/analysis-only.
-- Live bounded probes: YouTube metadata/captions passed for both accounts;
-  Threads and TikTok profile text was readable only through generic Web and did
-  not discover individual posts; X required explicit authentication.
-- The owner decision covered 24 exact identities: Night Scout X 10, Threads 8;
-  Liver Manager X 2, Threads 1, TikTok 3. Two missing Night X handles received
-  collision-free source IDs. No Night TikTok or blanket YouTube/note permission
-  was added.
-- Production `media_permissions` activation was explicitly authorized for this
-  task. Final apply was idempotent (`written=0`, `updated=24`) and read-after-
-  write passed. No Cloudinary upload, SNS publish, or mass operation occurred.
-- X Golden remains externally blocked: the known Night status had no video;
-  registered-profile discovery requires explicit auth, and no Liver individual
-  status was available. Do not weaken author provenance or infer a URL.
+start_head: 4e313a8013cfc8a775c95f277fda64acf60643c1
+scope: apply the owner OSS-only Threads reference-acquisition policy and finalize the X/YouTube/TikTok active scope
+working_tree: one local checkpoint commit authorized after all checks; no push/PR/merge
+production_operations: audit only; no Sheets/Cloudinary/SNS mutation, download, cut, upload, or publish
+active_acquisition: X, YouTube, TikTok
+deferred_acquisition: Threads = DEFERRED_OSS_CANDIDATE
+deferred_reason: NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN
+threads_policy: Meta Graph, Meta oEmbed, Playwright, browser automation and browser sessions are NOT_USED_BY_OWNER_POLICY for reference acquisition
+threads_auth: not required and not a software-completion blocker
+x_state: gallery-dl bounded discovery plus yt-dlp exact-post physical; four recorded physical A/V goldens
+youtube_state: exact owner-approved 2/2 physical A/V, permission and WAITING_REVIEW evidence
+tiktok_state: bounded public-embed discovery and one owner-approved physical A/V Golden
+production_publish_evidence: incomplete; publisher remains gated and no production action is authorized
+safe_next: a future owner-provided GitHub/OSS Threads backend may be evaluated with bounded read-only evidence before routing is re-enabled
+do_not_do: reset/clean/rebase/amend/push/PR/merge; do not upload Cloudinary or publish to SNS

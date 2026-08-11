@@ -15,7 +15,6 @@ import json
 import re
 import shutil
 import sys
-import os
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,7 +26,7 @@ sys.path.insert(0, str(ROOT / "src"))
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 PUBLIC_TIMEOUT_SECONDS = 15
 
-from media.rights_policy import THIRD_PARTY_REFERENCE_ONLY
+from media.rights_policy import THIRD_PARTY_REFERENCE_ONLY  # noqa: E402
 
 
 def now_iso() -> str:
@@ -146,47 +145,15 @@ def discover_threads_post_urls(account_url: str, *, limit: int) -> dict[str, Any
 
 
 def fetch_threads_account_posts(src: dict[str, Any], *, limit: int) -> dict[str, Any]:
-    """Collect bounded public Threads posts through the shared adapter router.
-
-    The legacy collector previously used an HTTP regex independently from the
-    production acquisition router.  That meant the rendered-screen fallback
-    was never reached.  Returning normalized individual posts here keeps
-    source text and ordered media attached to the same source post.
-    """
-    try:
-        from acquisition.factory import build_router
-
-        routed = build_router().route("threads.profile_posts", src, limit=limit)
-        rows = [
-            {
-                "post_url": post.canonical_post_url,
-                "external_post_id": post.external_post_id,
-                "text": post.original_post_text,
-                "published_at": post.published_at,
-                "author_handle": post.author_handle,
-                "media_urls": [item.original_media_url for item in post.media_items],
-                "backend": routed.backend_name,
-            }
-            for post in routed.posts
-            if is_individual_post_url(post.canonical_post_url, "threads")
-        ]
-        if not rows:
-            raise RuntimeError("threads_router_returned_no_individual_posts")
-        return {
-            "status": "FETCHED",
-            "rows": rows[: max(1, limit)],
-            "reason": "",
-            "backend": routed.backend_name,
-            "fallback_used": routed.fallback_used,
-        }
-    except Exception:
-        return {
-            "status": "FALLBACK_REQUIRED",
-            "rows": [],
-            "reason": "browser_export_or_manual_json_required",
-            "backend": "",
-            "fallback_used": False,
-        }
+    """Fail closed: Threads reference acquisition is deferred by owner policy."""
+    del src, limit
+    return {
+        "status": "DEFERRED_OSS_CANDIDATE",
+        "rows": [],
+        "reason": "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN",
+        "backend": "",
+        "fallback_used": False,
+    }
 
 
 def plan_x_fetch_adapter(src: dict[str, Any], *, include_x: bool) -> dict[str, Any]:
@@ -232,7 +199,7 @@ def fetch_x_account_posts(src: dict[str, Any], *, limit: int) -> dict[str, Any]:
             "backend": routed.backend_name,
             "fallback_used": routed.fallback_used,
         }
-    except Exception as exc:
+    except Exception:
         return {"status": "FALLBACK_REQUIRED", "rows": [], "reason": "browser_export_or_manual_json_required"}
 
 
