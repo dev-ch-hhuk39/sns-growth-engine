@@ -80,3 +80,20 @@ exact parent/media attachment, understanding, direct/reference/clip routing,
 persona generation, final public validation, review eligibility,
 `preserve_source` geometry and permission checks all pass for Night Scout and
 Liver Manager. Production success remains a separate evidence class.
+
+## Agent Reach and owner permission activation
+
+Agent Reach 1.5.0 was installed from official commit
+`1221ecd0c3e0502ee37406f03543bedf7503f2c7` into the isolated user-home venv.
+Its repository role is limited to optional generic-Web analysis. It has no
+native Threads or TikTok channel, and its X route requires explicit auth. It
+does not replace the canonical acquisition router or reactivate browser paths.
+The measured matrix is in `docs/agent-reach-capability-audit-20260811.md`.
+
+The owner-attested permission decision for 24 exact X/Threads/TikTok source
+identities was applied to `media_permissions` and verified read-after-write.
+Permissions are source/account/handle-specific, Threads-destination-only, and
+never inherited by a retweet, quote, repost, or third-party author. This
+permission activation does not prove X physical acquisition: bounded X Golden
+probes remain blocked by explicit-auth/profile discovery and the absence of a
+video on the one known Night Scout individual status.

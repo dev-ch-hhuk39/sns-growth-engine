@@ -36,7 +36,7 @@ def test_bounded_gallery_dl_normalizes_only_individual_posts(monkeypatch):
     assert "--config-ignore" in command
     assert "--no-input" in command
     assert "--no-download" in command
-    assert "--dump-json" in command
+    assert "--resolve-json" in command
     assert command[command.index("--range") + 1] == "1-20"
     assert command[-1] == "https://x.com/meg_lsm"
     assert len(posts) == 1
@@ -55,6 +55,18 @@ def test_x_gallery_dl_empty_result_requires_manual_recovery(monkeypatch):
     monkeypatch.setattr("acquisition.x_gallerydl.shutil.which", lambda _: "/usr/bin/gallery-dl")
     monkeypatch.setattr("acquisition.x_gallerydl.subprocess.run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""))
     with pytest.raises(BackendFailure, match="browser_export_or_manual_json_required"):
+        adapter.acquire({"source_url": "https://x.com/meg_lsm", "x_read_only": True}, limit=1)
+
+
+def test_x_gallery_dl_reports_auth_required_without_cookie_extraction(monkeypatch):
+    adapter = XGalleryDlProfileAdapter()
+    monkeypatch.setattr("acquisition.x_gallerydl.shutil.which", lambda _: "/usr/bin/gallery-dl")
+    payload = [[-1, {"error": "AuthRequired", "message": "authenticated cookies needed"}]]
+    monkeypatch.setattr(
+        "acquisition.x_gallerydl.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr=""),
+    )
+    with pytest.raises(BackendFailure, match="auth_required_explicit_cookie_required"):
         adapter.acquire({"source_url": "https://x.com/meg_lsm", "x_read_only": True}, limit=1)
 
 

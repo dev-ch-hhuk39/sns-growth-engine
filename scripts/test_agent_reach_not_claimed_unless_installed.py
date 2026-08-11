@@ -4,11 +4,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 doc = (ROOT / "docs/dependency-inventory.md").read_text(encoding="utf-8")
-installed = shutil.which("agent-reach") is not None
+installed = shutil.which("agent-reach") is not None or (
+    Path.home() / ".agent-reach-venv" / "bin" / "agent-reach"
+).is_file()
 checks = [
     ("agent reach documented", "Agent Reach Clarification" in doc),
     ("not in requirements", "agent-reach" not in (ROOT / "requirements.txt").read_text(encoding="utf-8").lower()),
-    ("not claimed installed unless binary", installed or "Agent Reach | external signals | optional" in doc),
+    ("installation claim has binary evidence", installed),
     ("not direct generation", "must not directly generate SNS post body copy" in doc),
 ]
 bad = [n for n, ok in checks if not ok]

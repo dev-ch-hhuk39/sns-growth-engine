@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "checked_at": "2026-07-28T08:10:00+09:00",
+  "checked_at": "2026-08-11T10:30:00+09:00",
   "implementation_head": "33af92f50417ddd63d19ff09d61ae64adfc5f87d",
   "origin_main": "33af92f50417ddd63d19ff09d61ae64adfc5f87d",
   "branch": "main",
@@ -73,7 +73,7 @@
     "current_local_read": "UNAVAILABLE_DNS_OAUTH2_GOOGLEAPIS"
   },
   "libraries": {
-    "agent_reach_doctor": "PASS_15_CHANNELS_5_USABLE",
+    "agent_reach_doctor": "PASS_15_CHANNELS_4_USABLE_VERSION_1_5_0",
     "last30days_preflight": "PASS_SAFE_DEFAULTS",
     "youtube_live_metadata": "PARTIAL_PASS",
     "youtube_transcript_sheets": "FIXED_IN_ACQUISITION_ONLY",

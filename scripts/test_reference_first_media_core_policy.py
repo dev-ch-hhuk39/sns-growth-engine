@@ -61,8 +61,9 @@ for workflow_name in ("account-acquisition.yml", "threads-video-reference-prepar
     assert "THREADS_BROWSER_STORAGE_STATE_B64" not in active_workflow
 
 x_decision = json.loads((ROOT / "docs/x-reusable-media-permission-decision-package.json").read_text(encoding="utf-8"))
-assert x_decision["status"] == "OWNER_DECISION_REQUIRED"
-assert x_decision["apply"] is False
-assert all(value is None for value in x_decision["required_owner_fields_per_selected_source"].values())
+assert x_decision["status"] == "OWNER_AUTHORIZED_APPLIED"
+assert x_decision["apply"] is True
+assert x_decision["permission_ledger_read_after_write"] == "PASS"
+assert x_decision["collision_audit"]["status"] == "PASS"
 
 print("PASS test_reference_first_media_core_policy.py")

@@ -78,7 +78,9 @@ class XGalleryDlProfileAdapter:
             "--config-ignore",
             "--no-input",
             "--no-download",
-            "--dump-json",
+            # Profiles yield a child timeline queue. Resolve it while retaining
+            # the explicit no-download flag so only metadata messages are read.
+            "--resolve-json",
             "--range",
             f"1-{limit}",
             "-o",
@@ -117,13 +119,32 @@ class XGalleryDlProfileAdapter:
         if completed.returncode:
             raise BackendFailure(f"gallery_dl_x_profile_failed:exit_{completed.returncode}")
 
+        decoded: list[Any] = []
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            # Backward-compatible fixture/older gallery-dl JSONL handling.
+            for line in completed.stdout.splitlines():
+                try:
+                    decoded.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        else:
+            decoded = payload if isinstance(payload, list) else [payload]
+
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for line in completed.stdout.splitlines():
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
+        for entry in decoded:
+            if isinstance(entry, list) and entry and entry[0] == -1:
+                error = entry[-1] if isinstance(entry[-1], dict) else {}
+                if str(error.get("error") or "") == "AuthRequired":
+                    raise BackendFailure("x_gallery_dl_auth_required_explicit_cookie_required")
                 continue
-            if not isinstance(row, dict):
+            if isinstance(entry, list) and len(entry) >= 3 and entry[0] == 3:
+                metadata = entry[2] if isinstance(entry[2], dict) else {}
+                row = {**metadata, "url": entry[1]}
+            elif isinstance(entry, dict):
+                row = entry
+            else:
                 continue
             post_url = _post_url(row)
             if post_url:

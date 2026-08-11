@@ -6879,3 +6879,51 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 触らない: `.env`, `data/`, `output/`, secrets/cookies/storage state、publisher idempotency/confirm gate、media-to-text fallback禁止、X/Beauty publish block。
 - 次AIはpermission決定後、packageのGolden stepsどおり、owner選定 -> live row -> read-after-write -> bounded discovery -> exact `/status/` author match -> yt-dlp -> ffprobe -> WAITING_REVIEWまでを行う。production書込みは別の明示承認が必要。
 - branch `refactor/reference-first-media-core-20260811-20260811-054925`、base HEAD `2a886b8e79d833300081688ecc841965ee15ca64`。本節を含む差分は後続の明示checkpoint指示により1つのローカルcommitに固定する。push/PR/mergeは行わない。commit SHAは本節を含む現在HEADを参照する。
+
+## 2026-08-11 Agent Reach / Owner Permission Checkpoint
+
+### System and changed files
+
+- Reference-first architecture remains canonical: discovery priority TikTok,
+  Threads, X, YouTube; physical media X/YouTube through yt-dlp; Threads/TikTok
+  physical deferred; source geometry preserved; route mix 50/30/10/5/5.
+- Agent Reach 1.5.0 was installed from official commit
+  `1221ecd0c3e0502ee37406f03543bedf7503f2c7` in
+  `~/.agent-reach-venv`. Repo integration is optional Web/Jina analysis only.
+- Permission decision `config/owner_source_permissions_20260811.json` contains
+  24 exact identities. The seed/evaluator/schema, Agent Reach and X adapters,
+  source registry, completion evaluator, capability matrix, tests, and durable
+  docs were updated.
+- Production permission ledger apply was explicitly authorized. Final run:
+  `APPLIED`, written 0, updated 24, invalid 0, read-after-write PASS.
+
+### Incomplete items, scaling policy, tasks, and warnings
+
+- X dual-account physical Golden is not complete. Night Scout's known status
+  `1996442283076735119` had no video. Profile discovery for both accounts is
+  `AUTH_REQUIRED`; no Liver individual status was safely identified.
+- Agent Reach does not provide native Threads/TikTok discovery. Generic Web
+  profile reads are reference-only and must not be counted as physical media or
+  individual-post discovery.
+- Keep Agent Reach fail-optional. Add future platforms only after concrete owner
+  source URLs; never register speculative accounts.
+- Next task: with explicit X auth or owner-supplied registered-author individual
+  video statuses, run bounded author match -> permission -> yt-dlp -> ffprobe ->
+  preserve_source -> WAITING_REVIEW. Do not publish in the proof.
+- WARN: Agent Reach doctor had 4/15 usable channels; optional dependencies and
+  auth-required channels remain unavailable by design.
+
+### Tests and next-AI boundaries
+
+- Repository regression: 820/820 PASS. Workflow safety: 455/455 PASS across
+  42 workflows. Completion evaluator: PASS with software/integration true and
+  production evidence false. Dual-account no-write integration: PASS.
+- Explicit permission/provenance, X registered-author, preserve-source aspect,
+  publisher READY-only/idempotency tests, compileall, Ruff E9/F63/F7/F82, and
+  `git diff --check` all passed.
+- Safe to touch: listed adapters, permission seed/evaluator, completion evidence
+  config, and Agent Reach capability docs/tests.
+- Avoid: `.env`, `data/`, `output/`, cookies/storage state, publisher
+  idempotency/confirm gates, media-to-text fallback, X/Beauty publish gates.
+- No Cloudinary upload, Threads/X publish, Beauty operation, or mass posting was
+  performed. Only the explicitly authorized permission-ledger write occurred.

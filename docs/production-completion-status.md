@@ -1,5 +1,17 @@
 # Production Completion Status
 
+## 2026-08-11 Reference-first Status Override
+
+- Agent Reach 1.5.0 is installed in an isolated user-home venv and wired as an
+  optional generic-Web analysis backend. Older entries below saying it was not
+  installed are historical and no longer describe current state.
+- Owner-attested permission for 24 exact X/Threads/TikTok source identities was
+  applied source/account/handle-specifically and passed Sheets read-after-write.
+- X physical dual-account Golden is still not recorded: profile discovery needs
+  explicit X auth, and the known Night Scout status has no video. Production
+  evidence therefore remains incomplete.
+- No Cloudinary production upload or SNS publish was performed in this update.
+
 ## 2026-08-10 Phase 1 reference-media completion status
 
 - Threads individual-post metadata acquisition is operational for both accounts through a common router. Public Playwright has live Sheets evidence; an authenticated browser-session backend is now available as the preferred route when its secret is provisioned, with public adapters retained as independent fallbacks.

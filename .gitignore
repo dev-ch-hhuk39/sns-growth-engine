@@ -80,6 +80,7 @@ output/
 !config/external_libraries.json
 !config/source_backend_routing.json
 !config/reference_first_completion.json
+!config/owner_source_permissions_20260811.json
 !config/research_topics.json
 !docs/goal-status.json
 !docs/library-capability-matrix.json

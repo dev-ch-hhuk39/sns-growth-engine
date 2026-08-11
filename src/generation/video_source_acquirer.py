@@ -52,6 +52,7 @@ def is_download_authorized(
         permission_rows,
         source_id,
         account_id=account_id,
+        source_handle=_text(candidate.get("source_handle") or candidate.get("author_handle")),
         required_flags=("allow_download", "allow_cut"),
     )["allowed"])
 

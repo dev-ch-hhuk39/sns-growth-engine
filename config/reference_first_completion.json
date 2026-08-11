@@ -10,9 +10,9 @@
       "evidence_class": "recorded_dual_account_physical_golden"
     },
     "x": {
-      "night_scout": "BLOCKED_EXTERNAL_PERMISSION",
-      "liver_manager": "BLOCKED_EXTERNAL_PERMISSION",
-      "evidence_class": "no_valid_reusable_media_permission"
+      "night_scout": "BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS",
+      "liver_manager": "BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS",
+      "evidence_class": "permission_applied_but_physical_golden_not_recorded"
     }
   },
   "deferred_physical_media_platforms": ["tiktok", "threads"],

@@ -120,6 +120,7 @@ def ledger_permission(
     source_id: str,
     *,
     account_id: str = "",
+    source_handle: str = "",
 ) -> dict[str, Any] | None:
     client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
     rows = client._call_with_rate_limit_retry(
@@ -130,6 +131,7 @@ def ledger_permission(
         rows,
         source_id,
         account_id=account_id,
+        source_handle=source_handle,
         required_flags=(
             "allow_download",
             "allow_cloudinary_storage",
@@ -1114,7 +1116,12 @@ def run(
         permission = (
             reference_only_permission(source)
             if reference_only
-            else ledger_permission(client, source_id, account_id=source_account_id)
+            else ledger_permission(
+                client,
+                source_id,
+                account_id=source_account_id,
+                source_handle=str(source.get("source_handle") or source.get("author_handle") or ""),
+            )
         )
 
         if not permission:

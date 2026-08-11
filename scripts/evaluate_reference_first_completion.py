@@ -237,13 +237,21 @@ def _x_permission_state() -> dict[str, Any]:
         handles.append(handle)
     duplicate_handles = sorted({handle for handle in handles if handles.count(handle) > 1})
     blocked = package.get("status") == "OWNER_DECISION_REQUIRED" and package.get("apply") is False
+    authorized = (
+        package.get("status") == "OWNER_AUTHORIZED_APPLIED"
+        and package.get("apply") is True
+        and package.get("permission_ledger_read_after_write") == "PASS"
+        and not mismatches
+        and not duplicate_handles
+    )
     return {
-        "status": "BLOCKED_EXTERNAL_PERMISSION" if blocked else "FAIL",
+        "status": "PASS" if authorized else ("BLOCKED_EXTERNAL_PERMISSION" if blocked else "FAIL"),
         "blocker": blocked,
         "candidate_count": len(candidates),
         "registry_mismatches": mismatches,
         "duplicate_candidate_handles": duplicate_handles,
         "decision_package": str(X_DECISION_PATH.relative_to(ROOT)),
+        "permission_ledger_read_after_write": package.get("permission_ledger_read_after_write", ""),
     }
 
 
@@ -354,6 +362,11 @@ def evaluate(
         and not x_permission["registry_mismatches"]
         and not x_permission["duplicate_candidate_handles"]
     )
+    x_evidence = physical_evidence.get("x", {})
+    x_golden_ready = all(
+        x_evidence.get(account_id) == "PASS_AV"
+        for account_id in contract["managed_accounts"]
+    ) and x_evidence.get("evidence_class") == "recorded_dual_account_physical_golden"
     approval = _load(production_approval_path) if production_approval_path and production_approval_path.is_file() else {}
     approval_granted = (
         approval.get("production_write_approval") is True
@@ -388,9 +401,19 @@ def evaluate(
         "repository_regression_pass": repository,
         "reference_discovery_ready": reference,
         "x_physical_media_ready": {
-            "status": "BLOCKED_EXTERNAL_PERMISSION" if x_code_ready and x_permission["blocker"] else "PASS" if x_code_ready else "FAIL",
+            "status": (
+                "PASS_AV_RECORDED"
+                if x_code_ready and x_golden_ready
+                else "BLOCKED_EXTERNAL_PERMISSION"
+                if x_code_ready and x_permission["blocker"]
+                else "BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS"
+                if x_code_ready
+                else "FAIL"
+            ),
             "code_ready": x_code_ready,
             "permission_blocker": x_permission["blocker"],
+            "golden_evidence_ready": x_golden_ready,
+            "evidence_class": x_evidence.get("evidence_class", ""),
         },
         "youtube_physical_media_ready": {
             "status": "PASS_AV_RECORDED" if youtube_ready else "FAIL",

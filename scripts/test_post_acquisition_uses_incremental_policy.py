@@ -188,7 +188,7 @@ def apply_common(
     a.build_router = lambda: router
     a.build_provider_registry = lambda: {}
 
-    a.ledger_permission = lambda client, source_id, *, account_id="": {
+    a.ledger_permission = lambda client, source_id, *, account_id="", source_handle="": {
         "rights_status": ("approved_creator_clip"),
         "permission_status": ("approved"),
     }

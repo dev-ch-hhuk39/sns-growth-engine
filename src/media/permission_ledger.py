@@ -50,6 +50,7 @@ def evaluate_permission(
     source_id: str,
     *,
     account_id: str = "",
+    source_handle: str = "",
     required_flags: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Evaluate one source-specific latest ledger row without inferring rights."""
@@ -91,6 +92,12 @@ def evaluate_permission(
     scoped_accounts = _targets(row.get("allowed_accounts") or row.get("account_id"))
     if account_id and scoped_accounts and account_id not in scoped_accounts:
         reasons.append("permission_account_scope_mismatch")
+    expected_handle = str(source_handle or "").strip().lstrip("@").lower()
+    ledger_handle = str(row.get("source_handle") or "").strip().lstrip("@").lower()
+    if expected_handle and not ledger_handle:
+        reasons.append("permission_source_handle_missing")
+    elif expected_handle and ledger_handle != expected_handle:
+        reasons.append("permission_source_handle_mismatch")
     for flag in required_flags:
         if not truthy(row.get(flag)):
             reasons.append(f"permission_flag_missing:{flag}")

@@ -34,19 +34,25 @@ The evaluator is repository-contained. Recorded physical Golden evidence is
 declared in `config/reference_first_completion.json`; it never depends on the
 local-only `.codex-owner-context` directory at runtime.
 
-Expected state before owner decisions is
+Expected state while live production evidence remains incomplete is
 `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`: software and no-write integration
 are complete while production evidence is false. This is a successful
 completion-gate result, not permission to write production systems.
 
 ## External Blockers
 
-- X physical media: code ready, but current valid reusable-media permission
-  rows are zero. Owner selection and source-specific evidence are required.
+- X permission: the 24 explicitly authorized X/Threads/TikTok identities were
+  written source/account/handle-specifically and verified read-after-write on
+  2026-08-11. Third-party repost inheritance remains disabled.
+- X physical Golden: code and permission are ready, but the bounded live probe
+  could not produce a video-bearing individual status for either account.
+  Registered-profile discovery requires explicit X authentication; the known
+  Night Scout status contained no video. This is
+  `BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS`, not a permission blocker.
 - Production mutation: Sheets, Cloudinary, download/cut and Threads publishing
   require separate explicit approval and credentials.
 - Public reachability: a provider returning no posts during a bounded no-write
   probe is recorded as `UNVERIFIED_EXTERNAL`.
 
-The exact owner input and X Golden sequence are in
+The applied owner decision and remaining X Golden sequence are in
 `docs/x-reusable-media-permission-decision-package.json`.

@@ -655,7 +655,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     ],
     # User-operated permission ledger. Code never infers a direct-reuse grant.
     "media_permissions": [
-        "permission_id", "source_id", "source_url", "account_id", "usage_mode",
+        "permission_id", "source_id", "source_handle", "source_url", "account_id",
+        "allowed_accounts", "allowed_platforms", "usage_mode",
         "rights_status", "permission_status",
         "allow_download", "allow_cloudinary_storage", "allow_original_repost",
         "allow_transcription", "allow_analysis", "allow_cut", "allow_clip_repost",

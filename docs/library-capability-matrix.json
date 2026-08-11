@@ -14,14 +14,14 @@
       "id": "agent_reach",
       "repository": "https://github.com/Panniantong/Agent-Reach",
       "pinned_version": "1.5.0",
-      "pinned_revision": "1494c2ab239e7355a77e7cceaf3271453a1f34b5",
+      "pinned_revision": "1221ecd0c3e0502ee37406f03543bedf7503f2c7",
       "license": "MIT",
       "install_method": "requirements-oss.txt git SHA",
-      "capabilities": ["backend_doctor", "bounded_web_research"],
+      "capabilities": ["backend_doctor", "bounded_web_research", "youtube_upstream_readiness"],
       "adapter": "src/reference/fetchers/agent_reach_fetcher.py WebChannel.read",
       "github_actions_compatibility": "PASS",
       "production_status": "INTEGRATED_ANALYSIS_ONLY",
-      "constraints": ["no X network fetch", "no publisher access"]
+      "constraints": ["analysis-only", "X native route requires explicit cookies", "Threads/TikTok generic web only", "no publisher access"]
     },
     {
       "id": "last30days_skill",
@@ -124,8 +124,8 @@
       "capabilities": ["threads_profile_discovery", "threads_post_detail", "carousel_order"],
       "adapter": "src/acquisition/providers.py",
       "github_actions_compatibility": "PASS_WITH_LIVE_CANARY_REQUIRED",
-      "production_status": "INTEGRATED_PRIMARY",
-      "constraints": ["public pages only", "bounded posts", "no stealth or CAPTCHA bypass"]
+      "production_status": "INACTIVE_COMPATIBILITY",
+      "constraints": ["not selectable by active routing", "no storage state in active workflows", "retained for historical evidence only"]
     },
     {
       "id": "threads_public_http",
@@ -137,8 +137,8 @@
       "capabilities": ["threads_post_detail_fallback", "public_metadata"],
       "adapter": "src/acquisition/providers.py",
       "github_actions_compatibility": "PASS_WITH_LIVE_CANARY_REQUIRED",
-      "production_status": "INTEGRATED_FALLBACK",
-      "constraints": ["public content only", "explicit partial status on failure"]
+      "production_status": "INACTIVE_COMPATIBILITY",
+      "constraints": ["not selectable by active routing", "public content only", "retained for historical evidence only"]
     },
     {
       "id": "threads_public_screen",
@@ -150,8 +150,8 @@
       "capabilities": ["rendered_threads_profile_discovery", "bounded_visible_post_anchors", "same_handle_post_filter"],
       "adapter": "src/acquisition/threads_public.py",
       "github_actions_compatibility": "PASS_WITH_LIVE_CANARY_REQUIRED",
-      "production_status": "INTEGRATED_FALLBACK",
-      "constraints": ["fresh cookie-free context", "at most two small profile scrolls", "no stealth, login, proxy, or CAPTCHA bypass"]
+      "production_status": "INACTIVE_COMPATIBILITY",
+      "constraints": ["not selectable by active routing", "no active browser install", "retained for historical evidence only"]
     },
     {
       "id": "tiktok_public_playwright",
@@ -163,8 +163,8 @@
       "capabilities": ["bounded_tiktok_profile_discovery", "post_detail_fallback"],
       "adapter": "src/acquisition/providers.py",
       "github_actions_compatibility": "PASS_WITH_LIVE_CANARY_REQUIRED",
-      "production_status": "INTEGRATED_BOUNDED_FALLBACK",
-      "constraints": ["max posts enforced", "approved accounts only", "no login bypass"]
+      "production_status": "INACTIVE_COMPATIBILITY",
+      "constraints": ["not selectable by active routing", "physical TikTok acquisition deferred", "retained for historical evidence only"]
     },
     {
       "id": "threads_scraper_vdite",

@@ -22,7 +22,7 @@ required = {
 checks = [
     ("no unresolved audit placeholders", "AUDIT_PENDING" not in text and "UNVERIFIED" not in text),
     ("required capability rows", required <= set(rows)),
-    ("Agent-Reach exact SHA", rows["agent_reach"]["pinned_revision"] == "1494c2ab239e7355a77e7cceaf3271453a1f34b5"),
+    ("Agent-Reach exact SHA", rows["agent_reach"]["pinned_revision"] == "1221ecd0c3e0502ee37406f03543bedf7503f2c7"),
     ("last30days exact SHA", rows["last30days_skill"]["pinned_revision"] == "249c7a4c040558a903d6838dee31012980d4946d"),
     ("yt-dlp exact package pin", rows["yt_dlp"]["pinned_version"] == "2026.7.4"),
     ("automatic upgrades disabled", matrix["policy"]["automatic_dependency_upgrade"] is False),

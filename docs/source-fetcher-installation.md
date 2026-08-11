@@ -9,6 +9,7 @@ Phase 13 で使用するフェッチャー依存ツールの導入手順。
 | `yt-dlp` | `yt_dlp`, `tiktok_to_ytdlp` | 動画収集に必須 |
 | `ffmpeg` | `yt_dlp` (切り抜き時) | 動画 cut に必須 |
 | `youtube-transcript-api` | `youtube_transcript` | 字幕取得に必須 |
+| Agent Reach | `agent_reach` | Web/Jina参照補助に任意 |
 | Python 3.10+ | 全て | 必須 |
 
 ## 導入手順
@@ -83,11 +84,14 @@ Cookie なしでは多くの動画が取得できません。TikTok Cookie の�
 
 ## agent_reach アダプターについて
 
-`agent_reach` アダプターは X タイムラインをブラウザ経由で取得します:
+2026-08-11に公式GitHubのcommit `1221ecd0c3e0502ee37406f03543bedf7503f2c7`
+を `~/.agent-reach-venv` へ隔離installし、Agent Reach 1.5.0を実測した。repo adapterは
+generic Web/Jinaのread-only参照補助だけに限定する。Agent ReachにThreads/TikTokのnative
+channelはなく、プロファイルから個別投稿やメディアを発見できるとは扱わない。
 
-1. ローカルブラウザで X にログイン済みであること
-2. `requires_local_login: true` のソースは自動 fetch 不可
-3. Browser Export → `data/manual_exports/` に配置して `browser_export` アダプターで import
+X native channelは明示的なログイン/cookie設定が必要。cookieの自動抽出やbrowser経由の
+acquisitionは有効化しない。X physical mediaとYouTube physical mediaの正本は引き続き
+`yt-dlp`で、Threads/TikTok physical mediaはdeferredとする。
 
 ## 参考
 

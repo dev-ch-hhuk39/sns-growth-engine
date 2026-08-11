@@ -1,10 +1,13 @@
 {
-  "status": "OWNER_DECISION_REQUIRED",
-  "apply": false,
-  "warning": "This is not a permission grant. Do not copy it to media_permissions until the owner supplies source-specific evidence and scope.",
+  "status": "OWNER_AUTHORIZED_APPLIED",
+  "apply": true,
+  "decision_file": "config/owner_source_permissions_20260811.json",
+  "evidence_type": "owner_attestation",
+  "evidence_reference": "Owner explicitly authorized all previously confirmed X / Threads / TikTok reference sources for reference, analysis, media download/storage, cut/edit, original reuse/repost, new-caption, quote/reference, clip and derivative use on 2026-08-11 JST.",
+  "permission_ledger_read_after_write": "PASS",
   "golden_requirements": {
     "night_scout": {
-      "source_selection_required": true,
+      "source_selection_required": false,
       "eligible_registry_candidates": [
         "src_ns_x_cand_001 @takashimaanna",
         "src_ns_x_cand_002 @cabalounge",
@@ -13,80 +16,77 @@
         "src_ns_x_cand_005 @1okukure_",
         "src_ns_x_cand_006 @onigiriscout_0",
         "src_ns_x_cand_007 @urarament",
-        "src_ns_x_cand_008 @3j2c9q"
+        "src_ns_x_cand_008 @3j2c9q",
+        "src_ns_x_owner_kyaba_career @kyaba_career",
+        "src_ns_x_owner_kyabataihendane @kyabataihendane"
       ]
     },
     "liver_manager": {
-      "source_selection_required": true,
+      "source_selection_required": false,
       "eligible_registry_candidates": [
         "src_lm_x_cand_001 @meg_lsm",
         "src_lm_x_cand_002 @ryoyan_1130"
       ]
     }
   },
-  "required_owner_fields_per_selected_source": {
-    "source_id": null,
-    "account_id": null,
-    "usage_mode": null,
-    "rights_status": null,
-    "permission_status": null,
-    "allow_download": null,
-    "allow_cloudinary_storage": null,
-    "allow_original_repost": null,
-    "allow_cut": null,
-    "allow_clip_repost": null,
-    "allow_new_caption": null,
-    "allowed_accounts": null,
-    "evidence_type": null,
-    "evidence_reference": null,
-    "approved_by": null,
-    "approved_at": null,
-    "expires_at": null,
-    "attribution_required": null,
-    "attribution_text": null
+  "applied_permission_contract": {
+    "rights_status": "approved_creator_clip",
+    "permission_status": "approved",
+    "usage_mode": "direct_and_clip",
+    "allowed_accounts": "source-specific target account",
+    "allowed_platforms": ["threads"],
+    "required_flags": [
+      "allow_download",
+      "allow_cloudinary_storage",
+      "allow_original_repost",
+      "allow_transcription",
+      "allow_analysis",
+      "allow_cut",
+      "allow_clip_repost",
+      "allow_new_caption",
+      "allow_edit"
+    ],
+    "expires_at": "",
+    "attribution": "not_invented"
   },
   "mandatory_limits": [
     "Permission applies only to posts authored by the registered handle.",
     "Retweets, quotes, reposts and third-party authors never inherit permission.",
     "X publishing remains disabled.",
-    "No permission is inferred from public availability."
+    "Public availability alone never creates permission.",
+    "Cloudinary production upload and SNS publish are outside this permission activation run."
   ],
   "collision_audit": {
     "checked_at": "2026-08-11",
-    "candidate_source_id_count": 10,
-    "candidate_handle_count": 10,
-    "duplicate_source_ids": [],
-    "duplicate_handles": [],
-    "registry_identity_mismatches": [],
+    "runtime_candidate_source_id_count": 12,
+    "runtime_candidate_handle_count": 12,
+    "runtime_duplicate_source_ids": [],
+    "runtime_duplicate_handles": [],
+    "historical_example_id_collisions": [
+      "src_ns_x_cand_002",
+      "src_ns_x_cand_003",
+      "src_ns_x_cand_004",
+      "src_ns_x_cand_005",
+      "src_ns_x_cand_006",
+      "src_ns_x_cand_007",
+      "src_ns_x_cand_008"
+    ],
+    "new_collision_free_ids": [
+      "src_ns_x_owner_kyaba_career",
+      "src_ns_x_owner_kyabataihendane"
+    ],
     "status": "PASS"
   },
-  "exact_post_permission_limits": {
-    "authority": "live media_permissions row after owner approval",
-    "required_match_keys": [
-      "source_id",
-      "registered_author_handle",
-      "target_account_id",
-      "individual_status_url"
-    ],
-    "never_inherited_by": [
-      "retweet",
-      "quote_post",
-      "repost",
-      "third_party_author",
-      "profile_page"
-    ],
-    "physical_media_provider": "yt_dlp",
-    "discovery_provider": "x_gallery_dl_metadata_only",
-    "publishing_destination": "threads_only"
+  "golden_status": {
+    "night_scout": "BLOCKED_NO_VIDEO_ON_KNOWN_STATUS_AND_PROFILE_AUTH_REQUIRED",
+    "liver_manager": "BLOCKED_PROFILE_AUTH_REQUIRED_NO_INDIVIDUAL_STATUS"
   },
   "golden_steps": [
-    "Owner selects at least one registered X source for each managed account and supplies source-specific permission evidence.",
-    "Create a live media_permissions row with approved rights, account scope, operation flags, evidence, approver and approval timestamp; do not infer any field.",
-    "Read the permission row back and require the exact source_id, registered handle and target account to match.",
-    "Run bounded gallery-dl metadata discovery and reject profile URLs, non-status URLs, retweets, quotes and author mismatches.",
-    "Select one exact individual /status/ URL for each account and verify that its author is the registered source handle.",
-    "Run yt-dlp physical acquisition only behind the explicit download environment and confirmation gates.",
-    "Require ffprobe video/audio stream evidence, preserve_source geometry and content-hash provenance.",
-    "Stop at WAITING_REVIEW; do not publish to X or Threads as part of the Golden acquisition proof."
+    "Use bounded registered-profile discovery and reject profiles, retweets, quotes and author mismatches.",
+    "Require an exact individual /status/ URL authored by the registered handle.",
+    "Evaluate the latest live permission row for source ID, source handle, account and operation flags.",
+    "Use yt-dlp only for the approved individual post, then require ffprobe video/audio evidence.",
+    "Preserve source geometry and stop at WAITING_REVIEW.",
+    "Never publish to X or Threads during the Golden acquisition proof."
   ]
 }
