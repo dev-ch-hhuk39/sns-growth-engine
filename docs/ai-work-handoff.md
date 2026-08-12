@@ -7304,3 +7304,145 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 次に触ってよい: X/YouTube/TikTokのactive adapters、bounded live regression、review inventory、publisher/metricsの明示承認付きpreflight。ThreadsはownerがOSS候補を提示した場合のcapability auditのみ。
 - 触らない方がよい: `.env`, token/cookie/storage state, `data/`, `output/`, Meta auth setup, Threads Graph/oEmbed/browserのactive化、rights/provenance/quality/publisher gateの緩和、X/Beauty publish、production Cloudinary/SNS mutation。
 - 次AIは本v23節をv21/v22より優先する。active scopeとproduction evidenceを混同せず、Threadsのdeferredをexternal auth blockerとして戻さない。
+
+## 2026-08-12 Codex Final Acceptance Batch v25
+
+### 本システムについて / 変更ファイル一覧
+
+- Night Scout / Liver Managerの`direct reference media` / `reference text
+  generation` / `new text generation` / `approved source clip`を各1件、合計8件の
+  bounded受け入れbatchとしてproduction Sheetsのcanonical `queue` /
+  `publication_review` / 必要な`source_posts` / `source_post_media` /
+  `media_assets`へ登録した。新規queueは7件、既存未投稿のLiver direct候補1件を
+  合わせた8件で、すべて`WAITING_REVIEW`のまま。read-after-write PASS。
+- Geminiへはowner承認範囲の公開用本文、source URL、短い内容要約、対象accountと
+  routeだけを送信。secret / API key / token / cookie / queue内部ID /
+  transcript全文 / 動画ファイル本体は送信していない。合否と理由は対象8行の
+  `generation_policy_json.acceptance_v25_gate`とvalidator列、reviewミラーへ保存済み。
+- コード変更はなし。更新ファイルは本`docs/ai-work-handoff.md`のみ。
+
+### 受け入れ結果 / 未完了事項 / 残WARN
+
+- 結果は**0/8 PASS、8/8 BLOCKED**。owner条件の「8件すべてPASSの場合だけ
+  accountごとに最大1件をREADY/投稿」を満たさないため、READY化0件、新規
+  Cloudinary upload 0件、Threads本番投稿0件、metrics予約0件。
+- `q_prodcanary_lm_src_lm_yt_cand_001_vqJAu4GZyf0_e14c6df0`:
+  quality 94だが`source_fact_removed`。親source本文が実投稿本文ではなく内部参照メモで、
+  direct-source copyedit契約を満たさない。
+- Night direct reference media: quality 86だが
+  `source_preservation_similarity_below_threshold` / `source_voice_marker_lost`。
+- Night reference text / new text: quality 93 / 91だがともに
+  `generic_template_phrase_present`。
+- Night approved clip: `clip_transcript_noise_present`。さらにsource excerptは店舗運営者向け支援・
+  他社宣伝であり、Night Scoutの求職者personaに転用しない。
+- Liver reference / new text: quality 93 / 90だがpersona/account fit不足。new textは
+  `generic_template_phrase_present`も発生。
+- Liver approved clip: `ai_classification_rejected` /
+  `ai_source_usage_fit_failed` / 根拠不明の収益実績 / 誇大広告でfail-closed。
+- 既存POSTED行の流用・変更なし。X投稿、Beauty操作、3件目以降の投稿、
+  Threads参照取得へのMeta API利用なし。
+
+### スケール方針 / タスク
+
+- この8件を強制READY化しない。gateのthreshold、source-preserving契約、persona、
+  収益誇大ブロックは緩和しない。次回は表現の小修正ではなく、ルートに適合する
+  source/candidateに差し替える。
+- direct reference mediaは実際の個別投稿本文と順序付きmediaが同一parentに必要。
+  approved clipはtranscriptノイズを取り除いたうえで、B2C persona適合・収益誇大なしの
+  別候補を選ぶ。textは汎用定型句を含まない新規本文へ差し替える。
+- 8/8の権利・provenance・quality 85以上・persona・public/media validator PASSを
+  read-after-writeで確認できるまで、Cloudinary production uploadとpublisherは起動しない。
+
+### テスト結果 / 次に触ってよいファイル / 触らない方がよいファイル
+
+- Production Sheets canonical registration: 8 candidates、support rows、queue/review mirrorの
+  read-after-write PASS。posted_results件数不変。
+- Gemini scoped review + deterministic public validator: 8/8実行。全件BLOCKEDを
+  queue/reviewへ保存後にread-after-write PASS。安全条件によりpublisher dry-run以降は未実行。
+- 次に触ってよい: 上記8件の未投稿`queue` / `publication_review`、それらが参照する
+  `source_posts` / `source_videos` / `video_clip_candidates`。差し替え時は必ず新規個別source証拠を使う。
+- 触らない方がよい: 既存POSTED行、`.env`、secret/token/cookie/storage state、
+  X/Beauty publisher、品質・権利・provenance・idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- 現在の8件は「登録済みだが受け入れ不合格」。全件`WAITING_REVIEW`でvalidator
+  `BLOCKED`。投稿済みと誤報告しない。
+- owner承認の最大2投稿は条件付きであり、条件は未成立。同じ転記ミス・B2B宣伝・
+  根拠不明収益候補を言い換えて通さない。適合sourceの差し替えから再開する。
+
+## 2026-08-12 Codex Final Full-Matrix Production Acceptance v27
+
+### 本システムについて / 変更ファイル一覧
+
+- v25の8件は履歴として保存し、書き換えず、v27でNight Scout /
+  Liver Managerの5routeずつを新規canonical revisionとして作成した。routeは
+  `direct_reference_media`, `reference_text_generation`, `pdca_text_generation`,
+  `new_text_generation`, `approved_source_clip`。
+- production Sheetsへsupport record、queue 10件、publication review 10件を登録。
+  全10件でrights / provenance / persona / public validator / internal leak /
+  quality >=85 / batch diversity / topic coherence / restricted Gemini / hybrid gate /
+  publisher dry-runがPASS。media 4件はA/V probeとmedia validatorもPASS。
+- 作成したCloudinary assetはNight direct 1件、Night clip 1件、Liver clip
+  1件。Liver directは既存の承認済みassetを冪等再利用。動画は原寸法の
+  landscape / portraitを維持し、字幕は追加していない。
+- 本番投稿は承認システムが強制した「各account最大1件」の安全境界で
+  direct reference mediaを1件ずつ実行。コード、config、gateの変更はない。
+  更新ファイルは本handoffのみ。
+
+### Production証拠 / 未完了事項 / 残WARN
+
+- Night Scout direct reference media:
+  `q_acceptance_v27_20260812_night_scout_direct_reference_media` -> POSTED。
+  result `threads_q_acceptance_v27_20260812_night_scout_direct_reference_media_20260812000225`,
+  provider ID `18099634016194689`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db61AminHgx`。
+  `READ_AFTER_WRITE_PASS`、24h/72h/168h jobs 3件PASS。
+- Liver Manager direct reference media:
+  `q_acceptance_v27_20260812_liver_manager_direct_reference_media` -> POSTED。
+  result `threads_q_acceptance_v27_20260812_liver_manager_direct_reference_media_20260812000442`,
+  provider ID `18086873192644419`,
+  `https://www.threads.com/@ran.liver_pro/post/Db61UNbDZGV`。
+  `READ_AFTER_WRITE_PASS`、24h/72h/168h jobs 3件PASS。
+- 残り8routeは`READY`、publication review `APPROVED`、publisher dry-run PASSで保持。
+  コード上のblockerではないが、実行環境の承認上限により実投稿は行わなかった。
+  回避実行、再試行、一括投稿はしていない。
+- ambiguous write 0、duplicate 0、X post 0、Beauty operation 0。Threads reference
+  acquisitionはowner policyどおり`DEFERRED_OSS_CANDIDATE`のまま。
+- PDCA候補は各accountの実`MEASURED`証拠だけを使用してREADY。未投稿のため
+  v27 PDCA routeのproduction permalinkとmetrics jobは未作成。数値の损造なし。
+
+### スケール方針 / タスク
+
+- 残り8件を扱う場合は、追加の明示承認で対象queue IDを固定し、1件ずつ
+  serial実行する。既存POSTED 2件は再投稿しない。外部書込み結果が不明な場合は
+  即停止し、read-only照合が完了するまでretryしない。
+- 通常review policyは変更していない。v27のowner batch approvalは上記10行に限定して
+  `generation_policy_json` / `human_review_*` / publication reviewに固定済み。
+- metricsはPOSTED 2件の24h/72h/168h取得後、MEASUREDのみを次回PDCAに使う。
+  安全、権限、account境界、投稿上限をlearningが変更しない方針を維持する。
+
+### テスト結果 / 次に触ってよい / 触らない方がよい
+
+- production Sheets queue/review/support registration: 10/10 read-after-write PASS。
+- publisher dry-run: 10/10 PASS。media validator: media 4/4 PASS。restricted Gemini:
+  10/10 PASS、quality score 90〜95。Geminiへ送信したのは公開本文、source URL、
+  短い要約、persona情報のみ。secret/token/cookie/raw videoは未送信。
+- repository full 826/826とworkflow safety 455/455は直前v23のPASSを維持。
+  v27でcode/config変更はないためfull suiteは再実行していない。
+- 次に触ってよい: v27の未投稿8 queue/review、POSTED 2件のmetrics jobs /
+  metric snapshots / PDCA evidence。
+- 触らない方がよい: v25のBLOCKED行、v27 POSTED 2件、existing posted_results、
+  permission ledger、`.env`、secret/token/cookie/storage state、X/Beauty publisher、quality /
+  provenance / idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- v27は候補作成と安全検証が10/10完了。production証拠は両accountの
+  direct reference media各1件。「全routeがPOSTED」と報告しない。
+- 未投稿8件は生成し直さず、追加owner承認が得られた場合のみ、exact
+  queue IDでserial publishする。`q_acceptance_v27_20260812_*_direct_reference_media`
+  2件はPOSTED済みなので対象外。
+- CloudinaryのNight direct / Night clip / Liver clipはproduction URLとA/V probe証拠あり。
+  Liver directは既存`ma_6ef1a98162cac7c39187dd91`を利用。メディアをtextで
+  fallbackしない。
