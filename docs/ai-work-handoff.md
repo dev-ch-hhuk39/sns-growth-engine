@@ -7446,3 +7446,98 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - CloudinaryのNight direct / Night clip / Liver clipはproduction URLとA/V probe証拠あり。
   Liver directは既存`ma_6ef1a98162cac7c39187dd91`を利用。メディアをtextで
   fallbackしない。
+
+## 2026-08-12 Codex Remaining Batch Completion v28
+
+### 本システムについて / 変更ファイル一覧
+
+- v27で作成・承認済みだった残り8routeを、ownerが明示したexact queue IDに限定し、
+  Night Scout 4件、Liver Manager 4件の順でserial publishした。v27で投稿済みの
+  direct reference media 2件はread-only照合のみとし、再投稿していない。
+- 対象routeは両account共通で`reference_text_generation`, `pdca_text_generation`,
+  `new_text_generation`, `approved_source_clip`。全件で投稿直前publisher dry-run、
+  persona / public validator / internal leak / quality / provenance / permissionを再確認した。
+- コード、config、通常review policy、安全ゲートは変更していない。変更ファイルは
+  `docs/ai-work-handoff.md`のみ。
+
+### Production証拠 / 未完了事項 / 残WARN
+
+- Night Scout reference text:
+  `threads_q_acceptance_v27_20260812_night_scout_reference_text_generation_20260812002210`,
+  provider ID `18112463167978950`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63XJzkvG2`。
+- Night Scout PDCA text:
+  `threads_q_acceptance_v27_20260812_night_scout_pdca_text_generation_20260812002232`,
+  provider ID `18100539271981425`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63Z_nkklC`。
+- Night Scout new text:
+  `threads_q_acceptance_v27_20260812_night_scout_new_text_generation_20260812002254`,
+  provider ID `18100357529206546`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63ckSEtDp`。
+- Night Scout approved clip:
+  `threads_q_acceptance_v27_20260812_night_scout_approved_source_clip_20260812002348`,
+  provider ID `18105860717125189`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63gX5CjD1`,
+  media asset `ma_acceptance_v27_ns_clip_J8Gy_o6gxio_4095_4226`。
+- Liver Manager reference text:
+  `threads_q_acceptance_v27_20260812_liver_manager_reference_text_generation_20260812002411`,
+  provider ID `18138246571519988`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63l_hkvuK`。
+- Liver Manager PDCA text:
+  `threads_q_acceptance_v27_20260812_liver_manager_pdca_text_generation_20260812002437`,
+  provider ID `18483493639096316`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63pIDkuFQ`。
+- Liver Manager new text:
+  `threads_q_acceptance_v27_20260812_liver_manager_new_text_generation_20260812002457`,
+  provider ID `17884504071674231`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63ru6ktKJ`。
+- Liver Manager approved clip:
+  `threads_q_acceptance_v27_20260812_liver_manager_approved_source_clip_20260812002547`,
+  provider ID `18016254428876533`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63vQgiEcT`,
+  media asset `ma_acceptance_v27_lm_clip_Dr9B30jaTqs_126124_127850`。
+- v27 direct reference media 2件を含む最終canonical集計はqueue 10/10 `POSTED`、
+  posted_results 10/10、`READ_AFTER_WRITE_PASS` 10/10。Night Scout 5件、
+  Liver Manager 5件で、external post IDとpermalinkの重複は0件。
+- metrics jobsは各投稿24h/72h/168hの3件、合計30件。重複jobは0件。
+  取得時刻到来後のmetric実測は通常schedule待ちで、受け入れblockerではない。
+- v28でCloudinaryへの新規uploadは0件。approved clip 2件はv27で検証・保存済みの
+  exact assetを再利用した。ambiguous write 0、X post 0、Beauty operation 0、
+  追加投稿0。残WARNはThreads reference acquisitionの
+  `DEFERRED_OSS_CANDIDATE`のみで、今回のacceptanceを阻害しない。
+
+### スケール方針 / タスク
+
+- v27/v28の10件は全account/routeでproduction proofが揃った。追加のacceptance投稿を
+  自動許可しない。以後は通常review、account別上限、idempotency、permission、quality、
+  provenance gateへ戻す。
+- metricsは`MEASURED`になったsnapshotだけをPDCAへ利用する。単一投稿の結果だけで
+  配分を大きく変えず、安全・権利・account境界・投稿上限をlearningで変更しない。
+- 次タスクは24h/72h/168h jobsの通常収集と、結果に基づくaccount別PDCA。投稿やjobを
+  手動で重複作成しない。
+
+### テスト結果 / 次に触ってよいファイル / 触らない方がよいファイル
+
+- 投稿直前publisher dry-run: 新規8/8 PASS。approved clip media validator: 2/2 PASS。
+  text routeはmedia検査`NOT_REQUIRED`。全8件のproduction publish、posted_results保存、
+  read-after-write、metrics 3件作成を1件ずつ確認してから次へ進んだ。
+- 最終audit: queue 10、posted_results 10、metrics jobs 30、全queue `POSTED`、
+  全read-after-write PASS、全metric window PASS、duplicate 0。
+- repository full 826/826とworkflow safety 455/455は直前v23のPASSを維持。
+  v28でcode/config変更はないためfull suiteは再実行していない。
+- 次に触ってよい: 上記10 posted_resultsのmetric snapshots / metrics jobs / PDCA evidence、
+  通常review経路の新規候補。
+- 触らない方がよい: v27/v28のPOSTED queue・posted_results・metrics jobs、v25のBLOCKED行、
+  permission ledger、`.env`、secret/token/cookie/storage state、X/Beauty publisher、
+  quality / provenance / idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- v27/v28 acceptanceはNight Scout 5route、Liver Manager 5routeの全10件がproduction
+  `POSTED`。全件にprovider ID、permalink、posted_results read-after-write、
+  24h/72h/168h metrics予約がある。
+- 既存direct reference media 2件を再投稿せず、v28は残り8件だけをexact queue IDで
+  serial実行した。acceptance batch authorizationは消費済みで、今後の投稿許可として
+  流用しない。
+- 通常policyは弱めていない。metric実測が到来するまでは数値を0で補完せず、
+  AVAILABLE / PARTIAL / NOT_AVAILABLE等の実状態を保存する。
