@@ -62,7 +62,7 @@
           "と思う",
           "僕なら"
         ],
-        "maximum_conversational_endings": 4,
+        "maximum_conversational_endings": 3,
         "forbidden_template_phrases": [
           "確認することは一つ。",
           "この順番で考える理由はシンプル。",
@@ -164,7 +164,7 @@
           "私なら",
           "じゃなくて"
         ],
-        "maximum_conversational_endings": 4,
+        "maximum_conversational_endings": 3,
         "forbidden_template_phrases": [
           "確認することは一つ。",
           "この順番で考える理由はシンプル。",

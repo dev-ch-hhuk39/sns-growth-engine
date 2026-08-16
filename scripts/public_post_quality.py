@@ -661,12 +661,25 @@ def apply_account_voice(text: str, account_id: str) -> str:
             ("整えましょう。", "整えてみよ。"),
             ("してください。", "してみてね。"),
             ("ください。", "みてね。"),
+            ("伝えます。", "伝える。"),
+            ("作ります。", "作る。"),
+            ("確認します。", "確認する。"),
+            ("整えます。", "整える。"),
+            ("見直します。", "見直す。"),
+            ("決めます。", "決める。"),
+            ("できます。", "できるよ。"),
+            ("思います。", "思うよ。"),
             ("なります。", "なるよ。"),
         )
         for old, new in replacements:
             value = value.replace(old, new)
         parts = value.rsplit("\n\n", 1)
-        closing = "私ならまず、" + parts[-1]
+        closing_source = parts[-1]
+        if closing_source.startswith("まずは"):
+            closing_source = closing_source[len("まずは"):].lstrip("、 ")
+        elif closing_source.startswith("まず、"):
+            closing_source = closing_source[len("まず、"):].lstrip()
+        closing = "私ならまず、" + closing_source
         warm_markers = canonical_voice_profile(account_id).get("warm_markers", [])
         if not any(term in closing for term in warm_markers):
             ending_replacements = (

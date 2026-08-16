@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 from media_post_validator import validate_media_post
 
-TEXT = "夜職で店を選ぶ時、時給だけで決めると続かなくなることがあります。\n\n客層、ノルマ、出勤のしやすさ、相談できる人がいるか。\n条件を並べて、自分が無理なく続けられる場所かを見てみてください。"
+TEXT = (
+    "これからキャバを始める子は、時給だけで店を決めない方がいい。\n\n"
+    "客層、ノルマ、出勤のしやすさ、担当へ相談できるか。"
+    "条件を並べないと、入ってから続けにくいことって結構ある。\n\n"
+    "僕なら、無理なく続けられる店か体入前に見るんだよね。"
+)
 
 result = validate_media_post({
     "rights_status": "approved_creator_clip",

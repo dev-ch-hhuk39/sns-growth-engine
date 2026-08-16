@@ -798,10 +798,17 @@ class DeterministicSourceCopyeditProvider:
                 ),
             )
 
+        from public_post_quality import apply_account_voice
+
+        public_text = apply_account_voice(
+            source,
+            account_id,
+        )
+
         contract = (
             evaluate_source_copyedit_contract(
                 source_text=source,
-                public_post_text=source,
+                public_post_text=public_text,
                 account_id=account_id,
                 recent_posts=recent_posts,
             )
@@ -853,11 +860,11 @@ class DeterministicSourceCopyeditProvider:
                         "same_parent_direct_media"
                     ),
                 },
-                "public_post_text": source,
+                "public_post_text": public_text,
                 "claim_support": [
                     {
                         "caption_claim": (
-                            source
+                            public_text
                         ),
                         "source_evidence": (
                             source

@@ -10,6 +10,7 @@ sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 
 import cut_approved_clips as cutter
 from media_post_validator import validate_media_post
+from test_media_post_validator_requires_approved_rights import GOOD_TEXT
 
 
 def main() -> int:
@@ -30,7 +31,7 @@ def main() -> int:
         "content_type": "approved_source_clip", "duration_seconds": 20,
         "aspect_ratio": "16:9", "source_aspect_ratio": "16:9",
         "aspect_ratio_policy": "preserve_source",
-        "public_post_text": "配信で伸びない人ほど、最初から面白いことを言おうとしすぎる。\n\nでも初心者の配信で大事なのは、面白さより入りやすさ。\n\n入った瞬間に何を話していいかわからない。コメントしても拾われるかわからない。常連だけで盛り上がっていて入りづらい。\n\nまずは、来てくれてありがとう、今この話をしてるよ、気軽にコメントしてねを自然に言えること。\n\n配信は才能より、入りやすい空気を作れるかが大きい。",
+        "public_post_text": GOOD_TEXT,
         "alignment_status": "PASS", "final_alignment_score": 0.9,
         "main_claim_coverage": 0.9, "unsupported_claim_count": 0,
         "source_copy_similarity": 0.1, "recent_post_similarity": 0.1,

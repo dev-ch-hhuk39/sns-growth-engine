@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 from media_post_validator import validate_media_post
 
-GOOD_TEXT = "配信で伸びない人ほど、最初から面白いことを言おうとしすぎる。\n\nでも初心者の配信で大事なのは、面白さより入りやすさ。\n\n入った瞬間に何を話していいかわからない。\nコメントしても拾われるかわからない。\n常連だけで盛り上がっていて入りづらい。\n\nこの状態だと、初見はすぐ抜ける。\n\nまずは、来てくれてありがとう、今この話をしてるよ、気軽にコメントしてねを自然に言えること。\n\n配信は才能より、入りやすい空気を作れるかが大きい。"
+GOOD_TEXT = (
+    "コメントが止まると、話題を増やさなきゃって焦るよね。\n\n"
+    "でも『今日どうだった？』より、二択の方が初見さんも返しやすい。\n\n"
+    "私なら冒頭10分で使う二択を一つだけ用意するかな。"
+    "全部変えなくて大丈夫。次の配信で一つだけ試してみてね。"
+)
 
 def main() -> int:
     result = validate_media_post({"rights_status": "third_party_reference_only", "permission_status": "approved", "media_url": "https://cdn.example/v.mp4", "media_asset_id": "m", "platform": "threads", "account_id": "liver_manager", "media_type": "video", "duration_seconds": 20, "aspect_ratio": "9:16", "public_post_text": GOOD_TEXT})

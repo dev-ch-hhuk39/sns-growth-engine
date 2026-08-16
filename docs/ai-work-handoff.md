@@ -7541,3 +7541,184 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   流用しない。
 - 通常policyは弱めていない。metric実測が到来するまでは数値を0で補完せず、
   AVAILABLE / PARTIAL / NOT_AVAILABLE等の実状態を保存する。
+
+## 2026-08-16 Codex Persona / Voice Final Correction v29
+
+### VOICE_CORRECTION_STATUS / 本システムについて
+
+- `VOICE_CORRECTION_STATUS=PASS`。v27/v28で投稿された10件は内容品質を通過していても、
+  アカウント固有の話者・距離感・口調を独立gateにしていなかったため、
+  Night Scout / Liver Managerの本来の声になっていなかった。
+- Night Scoutは「男性スカウト / `僕` / casual-professional / 現場判断 / 口語主体」、
+  Liver Managerは「女性LIVE manager / `私` / 温かく寄り添う / 具体的な次回行動 / 口語主体」
+  をcanonical profileとした。Nightの敬体比率上限0.35、Liverは0.40。
+- deterministic voice validatorは一人称、敬体比率、ビジネス文末反復、コンサル/報告書表現、
+  account別NG表現、会話調、Liverの温かさを別証拠として保存する。
+  restricted Gemini semantic gateはidentity fit、対人距離、register、自然さ、persona固有の口調を別途採点する。
+- `VOICE_PERSONA_PASS`なしでは、他のquality / rights / provenanceがPASSでもREADY昇格できない。
+  queue / publication reviewにvoice evidenceを保存し、publisherに渡すのは最終`public_post_text`のみ。
+
+### Recovery / 変更ファイル一覧
+
+- 開始checkpointは`8cda5228e886422f571c6b719252c0a2b4c17062`。意図されたdirty worktreeを
+  reset / clean / rebaseせず保存し、KEEP / COMPLETE / FIXとして継続した。REMOVEは0件。
+- v29本体の主要変更: `config/account_voice_profiles.json`,
+  `config/hybrid_ai_gate.json`, `config/account_settings.json`,
+  `config/post_generation_rules.json`, `scripts/public_post_quality.py`,
+  `scripts/gemini_hybrid_gate.py`, `scripts/auto_approve_queue.py`,
+  `scripts/run_autonomous_loop.py`, `scripts/apply_v29_voice_correction.py`,
+  queue/review schema、v29 negative/positive/route-matrix tests。
+- 追加regression修正: `scripts/evidence_context_caption.py`,
+  `src/generation/source_copyedit.py`, `scripts/media_growth_test_fixtures.py`、
+  既存persona/media関連test fixture群。source-grounded captionとfallbackも同じvoice transformerを通す。
+
+### Old negative / Positive fixtures
+
+- v27/v28の実POSTED本文は新voice gateでNight 5/5 FAIL、Liver 5/5 FAIL。
+  過去のPOSTED行と本文は書き換えていない。
+- 新positive fixtureはNight / Liverともdeterministic + semantic voice checks PASS。
+  Liverを`僕`へ変換し得たsource-copyedit bugも修正した。
+
+### Production Sheets更新 / read-after-write
+
+- `SNS自動投稿ツール` (`1ZlBE0l2DF_A50Q3IApWTAQtNPTWfaa4lxaz8s9q2ljU`)の
+  `アカウント管理`にcanonical persona/toneを反映。`プロンプト管理`と`学習ルール`は
+  新revisionをinactive / review-onlyで追加し、既存active policyを破壊していない。
+- `投稿キュー`10件、`投稿レビュー`10件を新規登録。全件`WAITING_REVIEW`、
+  queue/review read-after-write 10/10 PASS。`posted_results_unchanged=true`。
+- Threads投稿0、Cloudinary upload 0、既存POSTED行変更0、X投稿0、Beauty操作0。
+
+### New route matrix（全文）
+
+#### Night Scout
+
+1. `direct_reference_media` / `q_voice_v29_20260816_night_scout_direct_reference_media`
+
+   キャバのお客さんへの接客で、ラストコールの痛客接客編に出てくるひめかさんの返しが印象に残った。
+
+   和田さんから『愛してるゲーム』を振られても否定せず、そのまま次の会話につなげてるんだよね。
+
+   僕が接客で見るのもここ。無理に盛り上げるより、店の空気を止めずに一度受けて次へ運べるかが大事だよ。
+
+   Voice 92 / semantic 95 / quality 92 / polite ratio 0.00 / first-person PASS。
+
+2. `reference_text_generation` / `q_voice_v29_20260816_night_scout_reference_text_generation`
+
+   現役キャバ嬢にこれだけは伝えたい
+
+   急な話題にすぐ正解・不正解を返すより、一回受けてから質問を返せる子の方が接客は安定するんだよね。客層が変わっても、この力は使える。
+
+   僕が見るのは、店の空気を切らずに会話を次へ運べるか。苦手な話題を無理に盛り上げなくていい。まず一言受ける、この切り替えが大事だよ。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+3. `pdca_text_generation` / `q_voice_v29_20260816_night_scout_pdca_text_generation`
+
+   夜職の時給の見方で迷ってる子に伝えたい
+
+   前回、時給と控除後の手取りを整理した投稿は表示102件、いいね1件だった。僕は『結局いくら残るのか』が具体的だったから、自分ごとで読まれたんだと思う。
+
+   次は控除前後の差を一例に絞る。表示といいねがどう変わるかを見るよ。
+
+   Voice 100 / semantic 95 / quality 94 / polite ratio 0.00 / first-person PASS。
+
+4. `new_text_generation` / `q_voice_v29_20260816_night_scout_new_text_generation`
+
+   これからキャバやりたい子は、体入前に時給だけで決めない方がいい。
+
+   僕が一番見るのは『週何回なら無理なく続けられるか』なんだよね。早上がり、ノルマの締め日、控除、客層で、同じ時給でも手取りと疲れ方はかなり変わる。
+
+   担当には、週2出勤で早上がりが続いた月の手取り例まで聞いておく。ここが働き方に合う店を選ぶのが大事だよ。
+
+   Voice 100 / semantic 95 / quality 96 / polite ratio 0.00 / first-person PASS。
+
+5. `approved_source_clip` / `q_voice_v29_20260816_night_scout_approved_source_clip`
+
+   店選びで周りの評判だけを信じると、入ってからズレることって結構ある。
+
+   一条響さんが『みんなが右でも、自分が左だと思えば左を選ぶ』って話してるの、夜職の店選びにもそのまま当てはまるんだよね。
+
+   僕なら評判より、出勤条件・客層・担当との相性を自分で見る。自分の基準で決めた方が、あとで納得できると思う。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+#### Liver Manager
+
+1. `direct_reference_media` / `q_voice_v29_20260816_liver_manager_direct_reference_media`
+
+   初見バトルのあと、せっかく出会えた人との会話がそこで終わるのはもったいないよね。
+
+   この動画は、配信の悩みに答えながら初見さんとの距離をどう縮めるかが分かりやすい。
+
+   私なら次の配信で、バトル後に一つだけ質問を続けてみるかな。『普段どんな配信を見る？』くらいで大丈夫。次も来やすい入口を残してみてね。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+2. `reference_text_generation` / `q_voice_v29_20260816_liver_manager_reference_text_generation`
+
+   応援してくれる人がいるのに枠が重くなる時って、『誰が一番支えてるか』を競わせてることがあるんだよね。
+
+   古参だけの話、ギフト額の比較、注意をリスナー任せにする。この3つが続くと、初見さんは入りづらい。
+
+   次の配信では内輪話をひとつだけ減らしてみて。私なら、みんなが答えられる質問を一つ置くかな。そこから枠の空気は変えられるよ。
+
+   Voice 93 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+3. `pdca_text_generation` / `q_voice_v29_20260816_liver_manager_pdca_text_generation`
+
+   前回のコメント導線の投稿は、表示5件、いいね0件、コメント0件だった。
+
+   私なら『声をかける』だけじゃなく、そのまま使える一言まで見せるかな。初見さんは返し方が分かるから、コメントしやすいんだよね。
+
+   次の配信では『今○○の話をしてるよ』を一例にして、表示とコメントがどう変わるか試してみる。
+
+   Voice 93 / semantic 95 / quality 94 / polite ratio 0.00 / first-person PASS。
+
+4. `new_text_generation` / `q_voice_v29_20260816_liver_manager_new_text_generation`
+
+   コメントが止まると、話題を増やさなきゃって焦るよね。
+
+   でも『今日どうだった？』より、『今日は忙しかった？ゆっくりできた？』の二択の方が、初見さんも返しやすい。
+
+   私なら冒頭10分で使う二択を3つだけ用意するかな。全部変えなくて大丈夫。答えやすい入口を一つ作るだけで、会話は始まりやすくなるよ。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+5. `approved_source_clip` / `q_voice_v29_20260816_liver_manager_approved_source_clip`
+
+   ライバー自身が配信企画を考える前に、何を届けたいか言葉にできると迷いにくいんだよね。
+
+   この動画では、目標や経験、好きなことを聞いてから、次の面談で企画を一緒に考える流れが紹介されてる。
+
+   私ならまず『誰に、何を届けたい？』を一文だけ書いてみるかな。目的が見えると、次の配信で試す企画も選びやすくなるよ。
+
+   Voice 93 / semantic 90 / quality 94 / polite ratio 0.00 / first-person PASS。
+
+### Validation / 未完了事項 / 残WARN
+
+- repository tests: 830/830 PASS（external network probes 8件とoptional local tool 3件は
+  suite policyどおり対象外）。workflow safety: 455/455 PASS。
+- v29 focused voice tests、old negative 10/10、new positive fixtures、READY voice requirement、
+  hybrid gate、5x2 route matrixは全PASS。Ruff `E9,F63,F7,F82` PASS、compileall PASS、
+  gitleaks diff scan PASS、`git diff --check` PASS。
+- 未完了: 10件のowner目視確認と個別承認。本タスクの承認範囲では投稿しない。
+- 残WARN: Threads reference acquisitionの`DEFERRED_OSS_CANDIDATE`と、実metrics取得時刻到来待ち。
+  新voice gateの通過をもって投稿権限やscheduleを自動拡大しない。
+
+### スケール方針 / 次に触ってよいファイル / 触らない方がよいファイル
+
+- voice変換はNight/Liverの全生成routeで共通のcanonical validatorを使う。句尾だけの
+  強制変換を増やさず、topic/sourceを保存したまま、生成段階でaccountの声にする。
+- 次に触ってよい: v29の10件の`WAITING_REVIEW` queue / review、本文生成route、
+  voice profile / validator / semantic voice evidence。ownerが明示承認した対象だけを別タスクでREADY化する。
+- 触らない方がよい: v27/v28のPOSTED queue / posted_results / metrics jobs、
+  permission ledger、`.env`、secret/token/cookie/storage state、X/Beauty publisher、
+  rights / provenance / idempotency / media-to-text-fallback prohibition gate。
+
+### 次AIへの引き継ぎメモ
+
+- v29の10件は全て新規候補で、完全文と証拠は本節にある。全件
+  `VOICE_PERSONA_PASS`、quality 92〜96、semantic voice 90〜95、敬体比率0.00。
+- productionではqueue/reviewへのreview-only登録まで実施済み。Threads/Cloudinaryは0件。
+  本タスクの承認を投稿承認に読み替えない。
+- runtimeが作成する`.runtime/`はリポジトリ管理対象外。今後もcommitしない。
