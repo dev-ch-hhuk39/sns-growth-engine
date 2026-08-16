@@ -351,7 +351,7 @@ def apply(client: Any, matrix: list[dict[str, Any]]) -> dict[str, Any]:
             "platform": "threads",
             "post_type": route,
             "queue_status": "WAITING_REVIEW",
-            "review_status": "WAITING_REVIEW",
+            "review_status": "PENDING_REVIEW",
             "public_post_text": item["public_post_text"],
             "media_asset_id": source.get("media_asset_id", ""),
             "media_preview_url": source.get("media_url", ""),
@@ -377,7 +377,10 @@ def apply(client: Any, matrix: list[dict[str, Any]]) -> dict[str, Any]:
         }
         existing_review = review_by_id.get(qid)
         if existing_review:
-            if str(existing_review.get("review_status", "")).upper() != "WAITING_REVIEW":
+            if str(existing_review.get("review_status", "")).upper() not in {
+                "PENDING_REVIEW",
+                "WAITING_REVIEW",
+            }:
                 raise RuntimeError(f"existing_v29_review_not_safely_replaceable:{qid}")
             _update_by_key(
                 client,
