@@ -78,6 +78,7 @@ def test_rewrite_uses_generation_and_semantic_fidelity(monkeypatch):
     )
     assert result["semantic_fidelity"]["pass"] is True
     assert result["generation_strategy"] == "source_grounded_gemini_v1"
+    assert result["feature_schema_version"] == "post_features_v1"
 
 
 def test_semantic_mismatch_is_blocked(monkeypatch):

@@ -254,7 +254,7 @@ def _reference_quality(
         "closing_topic_match": True,
         "visual_topic_match": True,
         "topic_blocked_reasons": [],
-        "quality_gate_version": "reference_source_grounded_v1",
+        "quality_gate_version": "generation_quality_v3",
         "status": "PASS" if passed else "BLOCKED",
     }
 
