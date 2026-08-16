@@ -65,6 +65,7 @@ Agent Reach is an optional runtime integration, not a hard dependency of the cur
 - requirements presence: optional official Git pin in `requirements-oss.txt`; absent from core `requirements.txt`.
 - import presence: the adapter calls official `agent_reach.channels.web.WebChannel` from the active interpreter or isolated user-home venv.
 - execution presence: Agent Reach 1.5.0 is installed in `~/.agent-reach-venv`; doctor measured 4/15 usable channels on 2026-08-11.
+- portability boundary: Installation is environment-local evidence, not a portable repository guarantee. CI and production runners may omit Agent Reach; the adapter must remain fail-optional in those environments.
 - current usable state: Web/Jina read-only reference enrichment. It is not profile discovery, physical media acquisition, or publishing.
 - auth boundary: native X requires explicit cookie/login configuration. The repository does not extract cookies or start a browser login.
 - not to confuse with: any separate Library Scout or other project-level plugin. This repo does not currently vendor such a system.
