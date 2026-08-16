@@ -7722,3 +7722,61 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - productionではqueue/reviewへのreview-only登録まで実施済み。Threads/Cloudinaryは0件。
   本タスクの承認を投稿承認に読み替えない。
 - runtimeが作成する`.runtime/`はリポジトリ管理対象外。今後もcommitしない。
+
+## 2026-08-16 PDCA Public-Text Semantics and Account Isolation Correction
+
+### 本システムについて / 根本原因 / 修正内容
+
+- PDCAの目的は、各アカウントの実`MEASURED` metricsから伸びたテーマ、フック、
+  情報順序、具体性、行動の絞り方を内部学習し、次の独立した新規投稿に反映すること。
+  過去投稿の数字や「前回の投稿」を読者へ報告するrouteではない。
+- 根本原因は`apply_measured_pdca_lineage()`が、適切に生成された新規本文を、
+  表示数・いいね数・仮説・次回検証を記載した公開用レポートで上書きしていたこと。
+  上位処理はaccount別だったが、低層関数単体のaccount fail-closedも不足していた。
+- 公開用metricsレポート上書きを廃止。Geminiが生成し、persona/public/quality gateを通過した
+  新規`public_post_text`を保持する。metrics・学習元result・分析仮説は`internal_analysis`とlineageにだけ保存する。
+- `build_measured_pdca_inputs()`でsnapshot / posted resultの`account_id`, `platform=threads`,
+  `metrics_status=MEASURED`, `status=POSTED`を再検査。queue、source metaが対象accountと一致しなければ停止する。
+  学習スコープは`account:night_scout` / `account:liver_manager`とし、今後accountが増えても混合しない。
+- `pdca_public_text_policy()`を追加。「前回の投稿」、表示数、いいね件数、コメント件数、
+  実測結果などの内部PDCA説明が公開本文に入ればBLOCKする。
+
+### 変更ファイル一覧 / 新PDCA本文
+
+- `scripts/generate_threads_ideas_from_references.py`: account分離、metrics非公開policy、
+  学習lineage、新規本文保持、安全なdeterministic fallback。
+- `src/generation/reference_source_rewriter.py`: PDCA学習時は過去投稿・metrics・PDCAに言及せず、
+  学習した構成だけを独立した新規ノウハウ投稿へ反映するprompt契約。
+- `scripts/apply_v29_voice_correction.py`: review-only matrixのPDCA 2件を修正。
+  Nightは体入前の控除・早上がり・バック条件の確認、Liverは配信終了時の次回予告という、
+  互いに独立したaccount専用の読者向け投稿にした。どちらもpublic validator / PDCA policy PASS。
+- tests: `scripts/test_pdca_account_isolation_and_learning_only.py`を追加し、
+  `scripts/test_pdca_measured_generation_grounding.py`,
+  `scripts/test_scheduled_autopost_preview_findings_contract.py`を新契約に更新。
+
+### 未完了事項 / 残WARN / スケール方針
+
+- 既にproduction Sheetsにあるv29の旧PDCA 2候補は`WAITING_REVIEW`のまま。本修正で本番Sheets書込み、
+  READY化、Threads投稿は行っていない。旧PDCA 2件を承認・投稿せず、次回の明示された
+  Sheets修正承認でsupersedeする。
+- PDCAは学習元本文を引用するrouteではない。source/result IDは監査lineageにだけ残し、
+  公開本文はアカウント別の新規ノウハウとする。reference textとPDCAを混同しない。
+- 今後accountを増やす場合、`ALLOWED_ACCOUNTS`、persona、theme inventoryを追加してから、
+  独立した`account:<id>`学習スコープで実行する。未登録accountをelse分岐でLiver扱いしない。
+
+### テスト結果 / 次に触ってよい / 触らない方がよい
+
+- repository tests: 831/831 PASS。workflow safety: 455/455 PASS。focused PDCA/account isolation、
+  measured snapshot、activation lineage、scheduled preview、v29 route matrixは全PASS。
+  Ruff PASS、compileall PASS、gitleaks diff scan PASS、`git diff --check` PASS。
+- 次に触ってよい: PDCA候補生成、account別metrics/learning lineage、v29の旧PDCA 2 review rowsの
+  supersede処理。本番Sheets書込みは明示承認後に対象rowを固定して行う。
+- 触らない方がよい: 既存POSTED行、metrics実測値、permission ledger、`.env`、
+  secret/token/cookie/storage state、X/Beauty publisher、rights/provenance/idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- PDCA routeのpublic textに過去投稿の成績、実測数値、「次は何を検証する」を書かない。
+  それらは内部学習証拠であり、読者向けコンテンツではない。
+- Night ScoutとLiver Managerのposted results / snapshots / category scores / learning rulesを同時に入力しても、
+  対象`account_id`以外は選定しない。mismatchは黙ってfallbackせずfail-closed。

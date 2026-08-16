@@ -7,12 +7,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
-from generate_threads_ideas_from_references import (
+from generate_threads_ideas_from_references import (  # noqa: E402
     build_measured_pdca_inputs,
     build_measured_pdca_public_text,
 )
-from public_post_quality import final_public_post_validator, generate_reader_facing_post
-from run_scheduled_autopost_preview_v2 import _quality
+from public_post_quality import final_public_post_validator, generate_reader_facing_post  # noqa: E402
+from run_scheduled_autopost_preview_v2 import _quality  # noqa: E402
 
 
 def posted(result_id: str, text: str) -> dict[str, str]:
@@ -61,8 +61,10 @@ pdca = build_measured_pdca_public_text(
     account_id="night_scout",
     meta=source_meta["r-positive"],
 )
-for marker in ("前回の投稿は100表示", "僕は", "可能性", "次は", "確認します"):
+for marker in ("体入", "僕が", "控除", "早上がり", "店"):
     assert marker in pdca, (marker, pdca)
+for internal_marker in ("前回の投稿", "100表示", "いいね1件", "検証します"):
+    assert internal_marker not in pdca, (internal_marker, pdca)
 
 original = generate_reader_facing_post("night_scout", 1)["public_post_text"]
 assert "僕" in original, original
