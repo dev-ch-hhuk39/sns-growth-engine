@@ -203,6 +203,7 @@ def evaluate_item(
     r_score, r_parts = risk_score(text, queue, rules)
     s_score, s_parts = safety_score(text, queue, rules)
     public_validation = final_public_post_validator(text, account_id)
+    voice_validation = dict(public_validation.get("voice_persona_check", {}))
     # The public validator is the stronger reader-facing quality contract. The
     # lightweight heuristic remains diagnostic and cannot reject a post that
     # already passes the public-quality evaluation.
@@ -240,6 +241,9 @@ def evaluate_item(
     if public_validation["status"] != "PASS":
         reasons.append("final_public_post_validator_blocked")
         reasons.extend(str(r) for r in public_validation["blocked_reasons"])
+    if voice_validation.get("status") != "VOICE_PERSONA_PASS":
+        reasons.append("voice_persona_not_pass")
+        reasons.extend(str(r) for r in voice_validation.get("reasons", []))
 
     # New production-composition candidates carry an auditable generation
     # contract. Once present, every field must pass before AUTO_READY.
@@ -296,6 +300,14 @@ def evaluate_item(
         "account_fit_score": public_validation["account_fit_score"],
         "cta_pressure_score": public_validation["cta_pressure_score"],
         "final_public_post_validator": public_validation["status"],
+        "voice_persona_status": voice_validation.get("status", "BLOCKED"),
+        "voice_persona_score": voice_validation.get("score", 0),
+        "polite_ending_ratio": voice_validation.get("details", {}).get("business_polite_ratio", 1.0),
+        "first_person_status": voice_validation.get("details", {}).get("first_person_status", "BLOCKED"),
+        "formal_consultant_penalty": voice_validation.get("details", {}).get("formal_consultant_penalty", 100),
+        "conversational_style_score": voice_validation.get("details", {}).get("conversational_style_score", 0),
+        "feminine_warmth_score": voice_validation.get("details", {}).get("feminine_warmth_score", 0),
+        "voice_blocked_reasons": voice_validation.get("reasons", []),
         "score_total": q_score + s_score - r_score,
         "quality_parts": q_parts,
         "safety_parts": s_parts,
@@ -480,6 +492,14 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
             "reader_value_score": str(r.get("reader_value_score", "")),
             "naturalness_score": str(r.get("naturalness_score", "")),
             "cta_pressure_score": str(r.get("cta_pressure_score", "")),
+            "voice_persona_status": str(r.get("voice_persona_status", "")),
+            "voice_persona_score": str(r.get("voice_persona_score", "")),
+            "polite_ending_ratio": str(r.get("polite_ending_ratio", "")),
+            "first_person_status": str(r.get("first_person_status", "")),
+            "formal_consultant_penalty": str(r.get("formal_consultant_penalty", "")),
+            "conversational_style_score": str(r.get("conversational_style_score", "")),
+            "feminine_warmth_score": str(r.get("feminine_warmth_score", "")),
+            "voice_blocked_reasons": json.dumps(r.get("voice_blocked_reasons", []), ensure_ascii=False),
             "rejected_reason": "",
             "blocked_reason": "",
             "updated_at": at,

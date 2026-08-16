@@ -51,6 +51,12 @@ class PromptCaptureClient:
                 "source_grounding": "PASS",
                 "account_fit": "PASS",
                 "public_safety": "PASS",
+                "voice_persona": "PASS",
+                "voice_persona_score": 95,
+                "identity_fit": "PASS",
+                "interpersonal_distance": "PASS",
+                "register_fit": "PASS",
+                "conversational_naturalness": "PASS",
                 "risk_flags": [],
                 "reasons": [],
             }
@@ -95,6 +101,12 @@ class ContractClient:
                 "source_grounding": "PASS",
                 "account_fit": "PASS",
                 "public_safety": "PASS",
+                "voice_persona": "PASS",
+                "voice_persona_score": 95,
+                "identity_fit": "PASS",
+                "interpersonal_distance": "PASS",
+                "register_fit": "PASS",
+                "conversational_naturalness": "PASS",
                 "risk_flags": [],
                 "reasons": [],
             }
@@ -132,14 +144,14 @@ def context(source_text: str) -> dict[str, Any]:
 
 
 night_current = (
-    "僕なら、本業と夜職を両立する時は、働ける日ではなく回復できる日から決めたい。\n\n"
-    "無理なく続いた週の出勤数を基準にして、忙しい時だけ増やす形の方が調整しやすい。\n\n"
-    "休みと睡眠を削らずに守れる出勤数を、自分の基準として決めてほしい。"
+    "本業と夜職を両立したい子に伝えたい。\n\n"
+    "僕なら、働ける日より回復できる日から決めるんだよね。無理なく続いた週の出勤数を基準にして、忙しい時だけ増やす方が調整しやすい。\n\n"
+    "休みと睡眠を削らずに守れる出勤数を、自分の基準にするのが大事だよ。"
 )
 night_generated_without_boku = (
-    "本業と夜職を両立する時は、働ける日ではなく、まず回復できる日から予定を決めるのがおすすめです。\n\n"
-    "無理なく続けられた週の出勤数を基準にして、忙しい時だけ増やす方が調整しやすくなります。\n\n"
-    "休みと睡眠を削らずに守れる出勤数を、自分の基準として決めておくことが大切です。"
+    "本業と夜職を両立したい子は、働ける日より回復できる日から予定を決めた方がいい。\n\n"
+    "無理なく続いた週の出勤数を基準にして、忙しい時だけ増やす方が調整しやすいんだよね。\n\n"
+    "休みと睡眠を削らずに守れる出勤数を、自分の基準にするのが大事だよ。"
 )
 original_result = HybridAiGate(
     ContractClient(night_generated_without_boku)
@@ -170,10 +182,9 @@ assert "僕" in direct_result.public_post_text, direct_result.public_post_text
 assert direct_result.generation["scheduled_text_contract"]["status"] == "REPAIRED"
 
 pdca_current = (
-    "前回の投稿は101表示で、いいね1件・コメント0件・再投稿0件・引用0件でした。\n\n"
-    "僕は、『夜職の条件を見る時は、表示額より引かれる金額を先に整理したい』という判断軸が具体的だったことが、"
-    "読者の反応につながった可能性があると見ています。\n\n"
-    "次は、同じテーマを入店前に確認する三つの項目へ絞り、表示数とコメント数が前回を上回るか確認します。"
+    "前回の夜職投稿は101表示で、いいね1件・コメント0件だった。\n\n"
+    "僕は、提示額より引かれる金額を先に整理する話が具体的だったから、読まれたんだと思う。\n\n"
+    "次は入店前に見る三つの項目へ絞って、表示とコメントがどう変わるか見るよ。"
 )
 pdca_generic = (
     "夜職の条件を見る時は、提示額より実際に引かれる金額を先に整理することが大切です。\n\n"
@@ -202,14 +213,14 @@ assert "INTERNAL_PROCESS_METRICS" in prompt_client.review_prompt, prompt_client.
 assert "秘密情報" in prompt_client.review_prompt, prompt_client.review_prompt
 
 liver_current = (
-    "初見がすぐ抜ける配信は、内容より最初に入りやすい説明があるかを見直したい。\n\n"
-    "冒頭の挨拶、話題の説明、最初の質問を固定すると、毎回の入口を改善しやすい。\n\n"
-    "初見がコメントしやすい入口を一つ整え、配信後に反応を確認してみましょう。"
+    "初見さんがすぐ抜けると、内容が悪いのかなって不安になるよね。\n\n"
+    "でも、冒頭の挨拶、今の話題、最初の質問を決めるだけで入口は作りやすい。\n\n"
+    "私なら次の配信で一つだけ整えるかな。全部変えなくて大丈夫。反応を見ながら試してみてね。"
 )
 liver_generated = (
-    "初見さんがすぐ抜けてしまう時は、配信内容より最初に入りやすい説明があるかを見直してみましょう。\n\n"
-    "冒頭の挨拶、今の話題、最初の質問を固定すると、毎回の入口を改善しやすくなります。\n\n"
-    "初見さんがコメントしやすい入口を一つ整えて、配信後の反応を確認してみてください。"
+    "初見さんがすぐ抜けると、何を変えればいいか迷うよね。\n\n"
+    "私は、冒頭の挨拶、今の話題、最初の質問を一つずつ決めるかな。入口が分かるとコメントもしやすい。\n\n"
+    "次の配信では一つだけ試してみてね。全部変えなくて大丈夫だよ。"
 )
 liver_result = HybridAiGate(ContractClient(liver_generated)).evaluate(
     queue("liver_manager", "original_text", liver_current),

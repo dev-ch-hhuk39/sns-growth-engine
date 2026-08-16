@@ -726,6 +726,8 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "account_id": account_id,
             "internal_leak_check": public_validation["internal_leak_check"]["status"],
             "account_fit_check": public_validation["account_fit_check"]["status"],
+            "voice_persona_status": public_validation.get("voice_persona_check", {}).get("status", "BLOCKED"),
+            "voice_persona_score": public_validation.get("voice_persona_check", {}).get("score", 0),
             "final_public_post_validator": "BLOCKED",
             "public_post_preview": public_preview(text),
         }
@@ -863,6 +865,8 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "public_post_preview": public_preview(text),
             "internal_leak_check": public_validation["internal_leak_check"]["status"],
             "account_fit_check": public_validation["account_fit_check"]["status"],
+            "voice_persona_status": public_validation.get("voice_persona_check", {}).get("status", "BLOCKED"),
+            "voice_persona_score": public_validation.get("voice_persona_check", {}).get("score", 0),
             "final_public_post_validator": public_validation["status"],
             "media_asset_id": media["media_asset_id"],
             "media_status": media["media_status"],

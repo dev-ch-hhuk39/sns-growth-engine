@@ -94,6 +94,7 @@ output/
 !.mcp.json
 !.claude/settings.json
 !config/accounts/*.json
+!config/account_voice_profiles.json
 !config/account_templates/*.json
 !config/source_accounts/*.json
 

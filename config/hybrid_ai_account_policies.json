@@ -19,7 +19,8 @@
         "business_operator"
       ],
       "blocked_contexts": ["B2B_SALES"],
-      "tone": "落ち着いた実務的な助言。断定や煽りを避ける。"
+      "tone": "config/account_voice_profiles.json#accounts.night_scout を必須参照",
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.night_scout"
     },
     "liver_manager": {
       "target_audience": "beginner_liver",
@@ -39,7 +40,8 @@
         "business_operator"
       ],
       "blocked_contexts": ["B2B_SALES"],
-      "tone": "初心者にも分かる教育的な助言。過度な収益訴求を避ける。"
+      "tone": "config/account_voice_profiles.json#accounts.liver_manager を必須参照",
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.liver_manager"
     }
   }
 }

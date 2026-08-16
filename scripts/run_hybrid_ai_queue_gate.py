@@ -236,11 +236,19 @@ def main() -> int:
         fields = {
             "public_post_text": result.public_post_text,
             "generation_policy_json": audit_json,
-            "generated_by": "hybrid_ai_gate_v2",
+            "generated_by": "hybrid_ai_gate_v3",
             "validator_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "text_policy_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "account_fit_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "internal_leak_status": "PASS" if result.status == "PASS" else "BLOCKED",
+            "voice_persona_status": result.deterministic_validation.get("voice_persona_check", {}).get("status", "BLOCKED"),
+            "voice_persona_score": result.deterministic_validation.get("voice_persona_check", {}).get("score", 0),
+            "polite_ending_ratio": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("business_polite_ratio", ""),
+            "first_person_status": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("first_person_status", "BLOCKED"),
+            "formal_consultant_penalty": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("formal_consultant_penalty", ""),
+            "conversational_style_score": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("conversational_style_score", ""),
+            "feminine_warmth_score": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("feminine_warmth_score", ""),
+            "voice_blocked_reasons": json.dumps(result.deterministic_validation.get("voice_persona_check", {}).get("reasons", []), ensure_ascii=False),
             "blocked_reason": "" if result.status == "PASS" else blocked_reason,
             "error": "" if result.status == "PASS" else blocked_reason,
             "internal_analysis": json.dumps(
@@ -255,7 +263,7 @@ def main() -> int:
                 separators=(",", ":"),
             ),
             "caption_provider": os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
-            "caption_provider_version": "hybrid_ai_gate_v2",
+            "caption_provider_version": "hybrid_ai_gate_v3",
             "updated_at": now_iso(),
         }
         if args.apply:
