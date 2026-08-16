@@ -522,7 +522,7 @@ def rewrite_reference_post(
         "source_sha256": source_hash,
         "generation_model": model_name,
         "generation_strategy": "source_grounded_gemini_v1",
-        "feature_schema_version": "source_grounded_v1",
+        "feature_schema_version": "post_features_v1",
         "generation_policy": {
             "policy": "source_grounded_gemini_v1",
             "semantic_fidelity_required": True,
