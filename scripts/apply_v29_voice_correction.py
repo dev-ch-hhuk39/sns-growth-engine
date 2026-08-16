@@ -110,6 +110,26 @@ def _append(client: Any, tab: str, row: dict[str, Any]) -> None:
     ws.append_row([str(row.get(name, "")) for name in headers], value_input_option="USER_ENTERED")
 
 
+def _update_by_key(
+    client: Any,
+    tab: str,
+    *,
+    key_name: str,
+    key_value: str,
+    fields: dict[str, Any],
+) -> None:
+    ws = client._ws(tab)
+    headers = ws.row_values(1)
+    matches = [
+        index
+        for index, row in enumerate(ws.get_all_records(), start=2)
+        if str(row.get(key_name, "")) == key_value
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(f"{tab}:{key_name}:{key_value}:expected_one_row:found_{len(matches)}")
+    client._batch_update_fields(ws, headers, matches[0], fields, label=f"{tab}:{key_value}:v29")
+
+
 def _posted_hash(rows: list[dict[str, Any]]) -> str:
     value = json.dumps(rows, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -248,20 +268,35 @@ def apply(client: Any, matrix: list[dict[str, Any]]) -> dict[str, Any]:
 
     queue_rows = _records(client, "queue")
     queue_by_id = {str(row.get("queue_id", "")): row for row in queue_rows}
+    review_by_id = {
+        str(row.get("queue_id", "")): row
+        for row in _records(client, "publication_review")
+    }
+    posted_queue_ids = {
+        str(row.get("queue_id", ""))
+        for row in posted_before
+        if row.get("queue_id")
+    }
     for item in matrix:
         account_id = item["account_id"]
         route = item["route"]
         qid = item["queue_id"]
-        if qid in queue_by_id:
-            continue
-        source = deepcopy(queue_by_id.get(old_queue_id(account_id, route), {}))
+        existing = deepcopy(queue_by_id.get(qid, {}))
+        source = existing or deepcopy(queue_by_id.get(old_queue_id(account_id, route), {}))
         if not source:
             raise RuntimeError(f"historical_provenance_queue_missing:{account_id}:{route}")
+        if existing:
+            if qid in posted_queue_ids or str(existing.get("status", "")).upper() != "WAITING_REVIEW":
+                raise RuntimeError(f"existing_v29_candidate_not_safely_replaceable:{qid}")
+            if existing.get("result_id") or existing.get("post_url") or existing.get("posted_at"):
+                raise RuntimeError(f"existing_v29_candidate_has_publish_evidence:{qid}")
+            if str(existing.get("account_id", "")) != account_id:
+                raise RuntimeError(f"existing_v29_candidate_account_mismatch:{qid}")
         validation = item["validation"]
         voice = validation["voice_persona_check"]
         details = voice["details"]
         semantic = item["semantic"]
-        source.update({
+        queue_fields = {
             "queue_id": qid,
             "draft_id": "",
             "account_id": account_id,
@@ -302,9 +337,14 @@ def apply(client: Any, matrix: list[dict[str, Any]]) -> dict[str, Any]:
             "result_id": "",
             "created_at": now_iso(),
             "updated_at": now_iso(),
-        })
-        _append(client, "queue", source)
-        _append(client, "publication_review", {
+        }
+        source.update(queue_fields)
+        if existing:
+            _update_by_key(client, "queue", key_name="queue_id", key_value=qid, fields=queue_fields)
+        else:
+            _append(client, "queue", source)
+
+        review_fields = {
             "review_id": f"review_{RUN_ID}_{account_id}_{route}",
             "queue_id": qid,
             "account_id": account_id,
@@ -334,7 +374,20 @@ def apply(client: Any, matrix: list[dict[str, Any]]) -> dict[str, Any]:
             "media_validator_status": source.get("media_validator_status", "PASS"),
             "created_at": now_iso(),
             "updated_at": now_iso(),
-        })
+        }
+        existing_review = review_by_id.get(qid)
+        if existing_review:
+            if str(existing_review.get("review_status", "")).upper() != "WAITING_REVIEW":
+                raise RuntimeError(f"existing_v29_review_not_safely_replaceable:{qid}")
+            _update_by_key(
+                client,
+                "publication_review",
+                key_name="queue_id",
+                key_value=qid,
+                fields=review_fields,
+            )
+        else:
+            _append(client, "publication_review", review_fields)
 
     queue_after = {str(row.get("queue_id", "")): row for row in _records(client, "queue")}
     review_after = {str(row.get("queue_id", "")): row for row in _records(client, "publication_review")}
