@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "managed_accounts": ["night_scout", "liver_manager"],
+  "active_acquisition_platforms": ["x", "youtube", "tiktok"],
+  "reference_priority": ["tiktok", "x", "youtube"],
+  "deferred_reference_acquisition": {
+    "threads": {
+      "status": "DEFERRED_OSS_CANDIDATE",
+      "reason": "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN",
+      "future_reenable_model": "Owner supplies an approved GitHub/OSS backend candidate; bounded read-only evidence, capability registration, and safety tests must pass before an active route is added."
+    }
+  },
+  "physical_media_providers": {"x": "yt_dlp", "youtube": "yt_dlp", "tiktok": "public_embed_direct_http"},
+  "physical_media_evidence": {
+    "youtube": {
+      "night_scout": "PASS_AV",
+      "liver_manager": "PASS_AV",
+      "evidence_class": "recorded_dual_account_physical_golden"
+    },
+    "x": {
+      "night_scout": "PASS_AV",
+      "liver_manager": "PASS_AV",
+      "evidence_class": "recorded_dual_account_physical_golden"
+    },
+    "tiktok": {
+      "liver_manager": "PASS_AV",
+      "evidence_class": "recorded_owner_approved_physical_golden"
+    }
+  },
+  "deferred_physical_media_platforms": ["threads"],
+  "content_mix": {
+    "direct_reference_media": 50,
+    "reference_text_generation": 30,
+    "pdca_text_generation": 10,
+    "new_text_generation": 5,
+    "approved_source_clip": 5
+  },
+  "aspect_ratio_policy": "preserve_source",
+  "workflow_classification": {
+    "canonical": [
+      "account-acquisition.yml",
+      "ci.yml",
+      "direct-media-preparation.yml",
+      "final-production-preparation.yml",
+      "hybrid-ai-gate-liver-manager.yml",
+      "hybrid-ai-gate-night-scout.yml",
+      "library-health.yml",
+      "publication-review-sync.yml",
+      "source-research.yml",
+      "threads-video-reference-preparation.yml"
+    ],
+    "inactive_compatibility": [
+      "autonomous-growth-loop.yml",
+      "content-daily-dry-run.yml",
+      "content-pilot-publish.yml",
+      "source-fetch-dry-run.yml",
+      "v2-dry-run-check.yml",
+      "video-reference-dry-run.yml"
+    ],
+    "obsolete_dead": [
+      "audit-existing-canary-evidence.yml",
+      "repair-canary-source-integrity.yml",
+      "wp3-production-readonly-verification.yml",
+      "wp3c-production-repair-plan.yml",
+      "wp3c2-duplicate-parent-inspection.yml",
+      "wp3c3-source-identity-inspection.yml",
+      "wp3c4-safe-url-shape-diagnostics.yml",
+      "wp3c5-safe-youtube-path-provenance.yml"
+    ],
+    "external_blocked": [
+      "autonomous-growth-loop-liver-manager.yml",
+      "autonomous-growth-loop-night-scout.yml",
+      "autopilot-auto-ready.yml",
+      "content-slot-recovery.yml",
+      "direct-reference-media-liver-manager.yml",
+      "direct-reference-media-night-scout.yml",
+      "media-activation-direct-repair.yml",
+      "media-approved-pilot.yml",
+      "media-growth-post-liver-manager.yml",
+      "media-growth-post-night-scout.yml",
+      "media-growth-production-night-scout.yml",
+      "media-growth-production.yml",
+      "media-transcription-production.yml",
+      "production-autopilot-aftercare.yml",
+      "production-integrity-reconcile.yml",
+      "refresh-threads-tokens.yml",
+      "seed-approved-media-permissions.yml",
+      "threads-queue-worker.yml"
+    ]
+  },
+  "entrypoint_classification": {
+    "canonical": [
+      "scripts/acquire_approved_source_posts.py",
+      "scripts/ingest_direct_reference_media.py",
+      "scripts/ingest_direct_reference_media_reliable.py",
+      "scripts/run_direct_reference_media_pipeline.py",
+      "scripts/discover_approved_source_videos.py",
+      "scripts/run_media_growth_engine.py",
+      "scripts/materialize_video_clip_candidate.py",
+      "scripts/generate_threads_ideas_from_references.py",
+      "scripts/run_autonomous_loop.py",
+      "scripts/publication_review_board.py",
+      "scripts/sync_publication_review.py",
+      "scripts/apply_publication_review_decisions.py",
+      "scripts/run_hybrid_ready_pipeline.py",
+      "scripts/metrics_collection_schedule.py",
+      "scripts/process_threads_metric_jobs.py",
+      "scripts/run_growth_attribution_cycle.py",
+      "scripts/run_pdca_cycle.py"
+    ],
+    "inactive_compatibility": [
+      "scripts/collect_source_posts.py",
+      "scripts/collect_references.py",
+      "scripts/prepare_video_reference.py"
+    ],
+    "obsolete_dead": [
+      "scripts/audit_existing_canary_evidence.py",
+      "scripts/inspect_wp3c_duplicate_parent.py",
+      "scripts/inspect_wp3c3_source_identity_collision.py"
+    ],
+    "external_blocked": [
+      "scripts/download_approved_media.py",
+      "scripts/cut_approved_clips.py",
+      "scripts/upload_media_assets.py",
+      "scripts/process_threads_queue.py",
+      "scripts/scheduled_publish_activation_gate.py"
+    ]
+  },
+  "production_code_evidence": {
+    "publisher": [
+      "scripts/process_threads_queue.py",
+      "src/publishers/threads_publisher.py",
+      "scripts/publisher_delivery_contract.py"
+    ],
+    "metrics_pdca": [
+      "scripts/metrics_collection_schedule.py",
+      "scripts/collect_threads_metrics.py",
+      "scripts/process_threads_metric_jobs.py",
+      "scripts/metrics_pdca_contract.py",
+      "scripts/run_pdca_cycle.py",
+      "src/learning/pdca_orchestrator.py"
+    ],
+    "permission_provenance": [
+      "src/media/permission_ledger.py",
+      "src/acquisition/x_gallerydl.py",
+      "src/generation/video_source_acquirer.py"
+    ]
+  }
+}

@@ -114,7 +114,16 @@ class NormalizedMediaItem:
         ratio = ""
         if self.width and self.height:
             try:
-                ratio = "9:16" if int(self.height) > int(self.width) else ""
+                width = int(self.width)
+                height = int(self.height)
+                if width * 16 == height * 9:
+                    ratio = "9:16"
+                elif width * 9 == height * 16:
+                    ratio = "16:9"
+                elif width == height:
+                    ratio = "1:1"
+                else:
+                    ratio = f"{width}:{height}"
             except ValueError:
                 pass
         return {

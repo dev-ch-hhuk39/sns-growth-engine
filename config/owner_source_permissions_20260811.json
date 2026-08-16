@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "decision_id": "owner_source_permissions_20260811",
+  "evidence_type": "owner_attestation",
+  "evidence_reference": "Owner explicitly authorized all previously confirmed X / Threads / TikTok reference sources for reference, analysis, media download/storage, cut/edit, original reuse/repost, new-caption, quote/reference, clip and derivative use on 2026-08-11 JST.",
+  "approved_by": "Chadult株式会社",
+  "allowed_platforms": ["threads"],
+  "prohibited_uses": ["x_post", "beauty_account", "third_party_repost_permission_inheritance"],
+  "required_flags": [
+    "allow_download",
+    "allow_cloudinary_storage",
+    "allow_original_repost",
+    "allow_transcription",
+    "allow_analysis",
+    "allow_cut",
+    "allow_clip_repost",
+    "allow_new_caption",
+    "allow_edit"
+  ],
+  "sources": [
+    {"source_id": "src_ns_x_cand_001", "account_id": "night_scout", "platform": "x", "source_handle": "@takashimaanna"},
+    {"source_id": "src_ns_x_cand_003", "account_id": "night_scout", "platform": "x", "source_handle": "@minatoku789"},
+    {"source_id": "src_ns_x_cand_004", "account_id": "night_scout", "platform": "x", "source_handle": "@amuxamudaily"},
+    {"source_id": "src_ns_x_cand_005", "account_id": "night_scout", "platform": "x", "source_handle": "@1okukure_"},
+    {"source_id": "src_ns_x_cand_007", "account_id": "night_scout", "platform": "x", "source_handle": "@urarament"},
+    {"source_id": "src_ns_x_cand_008", "account_id": "night_scout", "platform": "x", "source_handle": "@3j2c9q"},
+    {"source_id": "src_ns_x_owner_kyaba_career", "account_id": "night_scout", "platform": "x", "source_handle": "@kyaba_career"},
+    {"source_id": "src_ns_threads_required_001", "account_id": "night_scout", "platform": "threads", "source_handle": "@kyaba_ryo"},
+    {"source_id": "src_ns_threads_required_002", "account_id": "night_scout", "platform": "threads", "source_handle": "@mizuno9120"},
+    {"source_id": "src_ns_threads_shared_001", "account_id": "night_scout", "platform": "threads", "source_handle": "@kyaba_oohata"},
+    {"source_id": "src_ns_threads_shared_003", "account_id": "night_scout", "platform": "threads", "source_handle": "@chiikawan400"},
+    {"source_id": "src_ns_threads_required_003", "account_id": "night_scout", "platform": "threads", "source_handle": "@kyabaraunzi"},
+    {"source_id": "src_ns_threads_required_004", "account_id": "night_scout", "platform": "threads", "source_handle": "@levi_kyaba"},
+    {"source_id": "src_ns_threads_shared_002", "account_id": "night_scout", "platform": "threads", "source_handle": "@kyaba_rui_scout"},
+    {"source_id": "src_ns_threads_user_chiishunin_s", "account_id": "night_scout", "platform": "threads", "source_handle": "@chiishunin_s"},
+    {"source_id": "src_lm_x_cand_001", "account_id": "liver_manager", "platform": "x", "source_handle": "@meg_lsm"},
+    {"source_id": "src_lm_x_cand_002", "account_id": "liver_manager", "platform": "x", "source_handle": "@ryoyan_1130"},
+    {"source_id": "src_lm_threads_user_me01_lsm", "account_id": "liver_manager", "platform": "threads", "source_handle": "@me01_lsm"},
+    {"source_id": "src_lm_tt_user_001", "account_id": "liver_manager", "platform": "tiktok", "source_handle": "@user5597696107300"},
+    {"source_id": "src_lm_tt_user_002", "account_id": "liver_manager", "platform": "tiktok", "source_handle": "@me02_lsm"},
+    {"source_id": "src_lm_tt_user_003", "account_id": "liver_manager", "platform": "tiktok", "source_handle": "@uare.inc"}
+  ],
+  "retired_sources": [
+    {"source_id": "src_ns_x_cand_002", "account_id": "night_scout", "platform": "x", "source_handle": "@cabalounge", "retired_reason": "owner_removed_from_night_scout_reference_set"},
+    {"source_id": "src_ns_x_cand_006", "account_id": "night_scout", "platform": "x", "source_handle": "@onigiriscout_0", "retired_reason": "owner_removed_from_night_scout_reference_set"},
+    {"source_id": "src_ns_x_owner_kyabataihendane", "account_id": "night_scout", "platform": "x", "source_handle": "@kyabataihendane", "retired_reason": "owner_removed_from_night_scout_reference_set"}
+  ]
+}

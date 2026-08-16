@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,10 +17,20 @@ spec.loader.exec_module(module)
 def main() -> int:
     sources, blocked = module.selected_sources("liver_manager", "threads", reference_only=True)
     ids = {row["source_id"] for row in sources}
-    policy = module.reference_only_permission(next(row for row in sources if row["source_id"] == "src_lm_threads_user_me01_lsm"))
+    registry = json.loads(
+        (ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")
+    )["sources"]
+    registered = next(
+        row for row in registry if row["source_id"] == "src_lm_threads_user_me01_lsm"
+    )
+    policy = module.reference_only_permission(registered)
+    deferred = next(
+        row for row in blocked if row["source_id"] == "src_lm_threads_user_me01_lsm"
+    )
     checks = [
-        ("me01 Threads reference is selected", "src_lm_threads_user_me01_lsm" in ids),
-        ("reference fetch does not need media ledger", not any(row["source_id"] == "src_lm_threads_user_me01_lsm" for row in blocked)),
+        ("me01 Threads reference remains registered", registered["source_id"] == "src_lm_threads_user_me01_lsm"),
+        ("deferred Threads source is not selected", "src_lm_threads_user_me01_lsm" not in ids),
+        ("deferred status is explicit", deferred["status"] == "DEFERRED_OSS_CANDIDATE"),
         ("reuse remains reference only", policy["rights_status"] == "reference_only"),
         ("permission never becomes approved", policy["permission_status"] == "reference_only"),
     ]

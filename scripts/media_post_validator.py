@@ -61,7 +61,7 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     )
     duration = float(plan.get("duration_seconds") or 0)
     aspect = str(plan.get("aspect_ratio", ""))
-    aspect_policy = str(plan.get("aspect_ratio_policy", "force_9_16")).strip().lower()
+    aspect_policy = str(plan.get("aspect_ratio_policy", "preserve_source")).strip().lower()
     source_aspect = str(plan.get("source_aspect_ratio", "")).strip()
     media_origin = str(plan.get("media_origin", "approved_source_clip")).strip().lower()
     content_type = str(plan.get("content_type", "")).strip().lower()

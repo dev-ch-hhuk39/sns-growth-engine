@@ -28,6 +28,7 @@ from .router import BackendFailure
 MAX_X_PROFILE_POSTS = 20
 X_PROFILE = re.compile(r"^https://(?:www\.)?(?:x|twitter)\.com/(?P<handle>[A-Za-z0-9_]+)$", re.I)
 X_STATUS = re.compile(r"https?://(?:www\.)?(?:x|twitter)\.com/[A-Za-z0-9_]+/status/\d+", re.I)
+X_PROFILE_STATUS = re.compile(r"^https?://(?:www\.)?(?:x|twitter)\.com/(?P<handle>[A-Za-z0-9_]+)/status/\d+$", re.I)
 
 
 def _truthy(value: Any) -> bool:
@@ -69,9 +70,31 @@ class XGalleryDlProfileAdapter:
     backend_version = "gallery-dl-bounded-json"
 
     def _command(self, profile_url: str, *, limit: int) -> list[str]:
-        # --dump-json emits extraction metadata only.  Do not add cookie,
-        # browser, username, password, output, or download switches here.
-        return ["gallery-dl", "--dump-json", "--range", f"1-{limit}", profile_url]
+        # Keep X discovery metadata-only and independent of any user-level
+        # gallery-dl config that could enable cookies, retweets, quoted media,
+        # replies, conversations, or other child content.
+        return [
+            "gallery-dl",
+            "--config-ignore",
+            "--no-input",
+            "--no-download",
+            # Profiles yield a child timeline queue. Resolve it while retaining
+            # the explicit no-download flag so only metadata messages are read.
+            "--resolve-json",
+            "--range",
+            f"1-{limit}",
+            "-o",
+            "extractor.twitter.retweets=false",
+            "-o",
+            "extractor.twitter.quoted=false",
+            "-o",
+            "extractor.twitter.replies=false",
+            "-o",
+            "extractor.twitter.conversations=false",
+            "-o",
+            "extractor.twitter.expand=false",
+            profile_url,
+        ]
 
     def acquire(self, source: dict[str, Any], *, limit: int) -> list[NormalizedSourcePost]:
         if not _truthy(source.get("x_read_only")):
@@ -96,21 +119,51 @@ class XGalleryDlProfileAdapter:
         if completed.returncode:
             raise BackendFailure(f"gallery_dl_x_profile_failed:exit_{completed.returncode}")
 
+        decoded: list[Any] = []
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError:
+            # Backward-compatible fixture/older gallery-dl JSONL handling.
+            for line in completed.stdout.splitlines():
+                try:
+                    decoded.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        else:
+            decoded = payload if isinstance(payload, list) else [payload]
+
         grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for line in completed.stdout.splitlines():
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
+        for entry in decoded:
+            if isinstance(entry, list) and entry and entry[0] == -1:
+                error = entry[-1] if isinstance(entry[-1], dict) else {}
+                if str(error.get("error") or "") == "AuthRequired":
+                    raise BackendFailure("x_gallery_dl_auth_required_explicit_cookie_required")
                 continue
-            if not isinstance(row, dict):
+            if isinstance(entry, list) and len(entry) >= 3 and entry[0] == 3:
+                metadata = entry[2] if isinstance(entry[2], dict) else {}
+                row = {**metadata, "url": entry[1]}
+            elif isinstance(entry, dict):
+                row = entry
+            else:
                 continue
             post_url = _post_url(row)
             if post_url:
                 grouped[post_url].append(row)
 
         account_id = _account_id(source)
+        expected_handle = profile_url.rsplit("/", 1)[-1].lstrip("@").lower()
         posts: list[NormalizedSourcePost] = []
         for post_url, rows in list(grouped.items())[:bounded]:
+            status_match = X_PROFILE_STATUS.match(post_url)
+            if not status_match:
+                continue
+            status_handle = status_match.group("handle").lstrip("@").lower()
+            # Reusable-media permission belongs to the registered source
+            # account only. Third-party Retweets / quoted source posts must not
+            # inherit that permission merely because they appeared in a profile
+            # extraction result.
+            if status_handle != expected_handle:
+                continue
             first = rows[0]
             post_external_id = external_post_id(post_url, _field(first, "tweet_id", "tweetId", "id"))
             post_id = f"sp_{source.get('source_id', '')}_{post_external_id}"
@@ -119,12 +172,19 @@ class XGalleryDlProfileAdapter:
                 media_url = _field(row, "url", "media_url", "image_url")
                 if not media_url.startswith("https://"):
                     continue
-                media_type = "video" if _field(row, "extension", "filename").lower().endswith((".mp4", ".webm", ".mov")) else "image"
+                extension = _field(row, "extension").lower().lstrip(".")
+                filename = _field(row, "filename").lower()
+                media_path = media_url.split("?", 1)[0].lower()
+                is_video = (
+                    extension in {"mp4", "webm", "mov", "m4v", "m3u8"}
+                    or filename.endswith((".mp4", ".webm", ".mov", ".m4v", ".m3u8"))
+                    or media_path.endswith((".mp4", ".webm", ".mov", ".m4v", ".m3u8"))
+                )
                 media_items.append(NormalizedMediaItem(
                     source_post_media_id=f"spm_{post_id}_{index}",
                     source_post_id=post_id,
                     media_index=index,
-                    media_type=media_type,
+                    media_type="video" if is_video else "image",
                     canonical_post_url=post_url,
                     original_media_url=media_url,
                     resolver_backend=self.backend_name,
@@ -141,7 +201,7 @@ class XGalleryDlProfileAdapter:
                 external_post_id=post_external_id,
                 original_post_text=text,
                 published_at=_field(first, "date", "created_at", "tweet_date"),
-                author_handle=_field(first, "author", "user", "username") or profile_url.rsplit("/", 1)[-1],
+                author_handle=status_handle,
                 media_items=tuple(media_items),
                 collection_backend=self.backend_name,
                 backend_version=self.backend_version,

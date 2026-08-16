@@ -79,15 +79,22 @@ output/
 !config/content_mix/default_mix.json
 !config/external_libraries.json
 !config/source_backend_routing.json
+!config/acquisition_backend_capabilities.json
+!config/reference_first_completion.json
+!config/owner_source_permissions_20260811.json
+!config/youtube_source_permissions_20260811.json
+!config/physical_media_goldens.json
 !config/research_topics.json
 !docs/goal-status.json
 !docs/library-capability-matrix.json
 !docs/runtime-health.json
+!docs/x-reusable-media-permission-decision-package.json
 !tests/fixtures/*.json
 !fixtures/*.json
 !.mcp.json
 !.claude/settings.json
 !config/accounts/*.json
+!config/account_voice_profiles.json
 !config/account_templates/*.json
 !config/source_accounts/*.json
 

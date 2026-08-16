@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
+from generation.media_platform_policy import can_attempt_physical_media, normalize_platform  # noqa: E402
+from media.permission_ledger import evaluate_permission  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
@@ -233,24 +235,30 @@ def _source_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
     return {str(row.get("source_id", "")): row for row in rows if row.get("source_id")}
 
 
-def _permission_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
-    """Read user-entered rights; revoked/expired rows are never usable."""
+def _permission_map(client: SheetsClient, account_id: str) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:
+    """Read only current, evidence-backed, account-scoped direct permissions."""
     rows = _records(client, "media_permissions")
     result: dict[str, dict[str, Any]] = {}
-    now = datetime.now(timezone.utc).isoformat()
-    for row in rows:
+    blocked: dict[str, list[str]] = {}
+    for source_id in {str(row.get("source_id") or "") for row in rows if row.get("source_id")}:
+        decision_row = evaluate_permission(
+            rows,
+            source_id,
+            account_id=account_id,
+            required_flags=(
+                "allow_download",
+                "allow_cloudinary_storage",
+                "allow_original_repost",
+                "allow_new_caption",
+            ),
+        )
+        if not decision_row["allowed"]:
+            blocked[source_id] = list(decision_row["reasons"])
+            continue
+        row = dict(decision_row["row"])
         source_id = str(row.get("source_id", ""))
-        if not source_id or _true(row.get("revoked")):
-            continue
-        if str(row.get("expires_at", "")) and str(row["expires_at"]) < now:
-            continue
-        if not str(row.get("evidence_type", "")).strip() or not str(row.get("evidence_reference", "")).strip():
-            continue
-        normalized = dict(row)
-        normalized["rights_status"] = str(row.get("rights_status") or "approved_creator_clip")
-        normalized["permission_status"] = "approved"
-        result[source_id] = normalized
-    return result
+        result[source_id] = row
+    return result, blocked
 
 
 def select_direct_candidates(
@@ -278,7 +286,7 @@ def select_direct_candidates(
     )
     posts = {str(row.get("source_post_id", "")): row for row in _records(client, "source_posts")}
     sources = _source_map(client)
-    permissions = _permission_map(client)
+    permissions, blocked_permissions = _permission_map(client, account_id)
     posted = _records(client, "posted_results")
     source_usage: dict[str, int] = {}
     for row in posted:
@@ -317,7 +325,20 @@ def select_direct_candidates(
             reasons.append(f"{post_id}:source_post_quarantined")
             continue
         source = sources.get(str(post.get("source_id", "")), {})
+        source_platform = normalize_platform(
+            post.get("source_platform") or post.get("platform")
+            or source.get("source_platform") or source.get("platform"),
+            str(post.get("canonical_post_url") or post.get("post_url") or source.get("source_url") or ""),
+        )
+        if not can_attempt_physical_media(source_platform):
+            reasons.append(f"{post_id}:physical_media_platform_deferred:{source_platform or 'unknown'}")
+            continue
         permission = permissions.get(str(post.get("source_id", "")), {})
+        if not permission and str(post.get("source_id", "")) in blocked_permissions:
+            reasons.append(
+                f"{post_id}:permission_ledger_blocked:"
+                + ",".join(blocked_permissions[str(post.get("source_id", ""))])
+            )
         policy_fields = {key: post.get(key) or source.get(key, "") for key in ("rights_status", "permission_status", "permission_scope")}
         # The ledger has precedence and must explicitly allow every action.
         if permission:
@@ -618,8 +639,9 @@ def build_plan(
         allow_deterministic_fallback=True,
     )
     attempted: list[dict[str, Any]] = []
+    permission_map, _blocked_permissions = _permission_map(client, account_id)
     for post, media, source in candidates:
-        permission = _permission_map(client).get(
+        permission = permission_map.get(
             str(post.get("source_id", "")),
             {},
         )

@@ -15,12 +15,12 @@ from generation.source_copyedit import (
 )
 from hybrid_ai_policy import decide_route, requires_hybrid_ai_gate
 from hybrid_ai_source_context import hybrid_ai_source_context_hash
-from public_post_quality import final_public_post_validator
+from public_post_quality import canonical_voice_profile, canonical_voice_prompt, final_public_post_validator
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/hybrid_ai_account_policies.json"
-GATE_SCHEMA_VERSION = "hybrid_ai_gate_v2"
-PROMPT_VERSION = "hybrid_ai_prompts_v2"
+GATE_SCHEMA_VERSION = "hybrid_ai_gate_v3"
+PROMPT_VERSION = "hybrid_ai_prompts_v3"
 
 GENERIC_TEMPLATE_PHRASES = (
     "確認することは一つ。",
@@ -60,10 +60,10 @@ def _scheduled_text_contract_reasons(
             ("前回" in value or "実測" in value)
             and any(term in value for term in ("表示", "いいね", "コメント", "再投稿", "引用", "件"))
         )
-        hypothesis = any(term in value for term in ("仮説", "可能性", "理由", "と見ています"))
+        hypothesis = any(term in value for term in ("仮説", "可能性", "理由", "と思う", "かも", "読まれた"))
         next_test = (
             any(term in value for term in ("次は", "次回"))
-            and any(term in value for term in ("確認", "検証", "比べ", "上回"))
+            and any(term in value for term in ("見る", "試す", "比べ", "変わる", "上回"))
         )
         if not observation:
             reasons.append("pdca_measured_observation_missing")
@@ -81,6 +81,9 @@ def _scheduled_text_contract_instruction(queue: Mapping[str, Any]) -> str:
         return ""
     if _text(queue.get("account_id")) == "night_scout":
         instructions.append("最終本文では一人称の『僕』を少なくとも一度残してください。")
+    voice_contract = canonical_voice_prompt(_text(queue.get("account_id")))
+    if voice_contract:
+        instructions.append("アカウント音声契約: " + voice_contract)
     if content_type in {"pdca_text", "metrics_driven_pdca_text"}:
         instructions.append(
             "実測結果、反応理由の仮説、次回に比較する一つの検証を必ず明記し、"
@@ -140,6 +143,12 @@ REVIEW_SCHEMA = {
         "source_grounding",
         "account_fit",
         "public_safety",
+        "voice_persona",
+        "voice_persona_score",
+        "identity_fit",
+        "interpersonal_distance",
+        "register_fit",
+        "conversational_naturalness",
         "risk_flags",
         "reasons",
     ],
@@ -149,6 +158,12 @@ REVIEW_SCHEMA = {
         "source_grounding": {"type": "string", "enum": ["PASS", "FAIL"]},
         "account_fit": {"type": "string", "enum": ["PASS", "FAIL"]},
         "public_safety": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "voice_persona": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "voice_persona_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "identity_fit": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "interpersonal_distance": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "register_fit": {"type": "string", "enum": ["PASS", "FAIL"]},
+        "conversational_naturalness": {"type": "string", "enum": ["PASS", "FAIL"]},
         "risk_flags": {"type": "array", "items": {"type": "string"}},
         "reasons": {"type": "array", "items": {"type": "string"}},
     },
@@ -452,11 +467,13 @@ def _generation_prompt(
             "定型句を避け、3段落程度で簡潔にしてください。"
         )
     contract_instruction = _scheduled_text_contract_instruction(queue)
+    voice_profile = canonical_voice_profile(_text(queue.get("account_id")))
     return (
         f"{instruction}"
         f"{(' ' + contract_instruction) if contract_instruction else ''}\n\n"
         f"ROUTE={route}\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
+        f"CANONICAL_VOICE_PROFILE={json.dumps(voice_profile, ensure_ascii=False, sort_keys=True)}\n"
         f"CURRENT_QUEUE_TEXT={_text(queue.get('public_post_text'))}\n"
         f"SOURCE_EVIDENCE={source_text}"
     )
@@ -485,6 +502,7 @@ def _review_prompt(
         "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。"
         f"{(' ' + pdca_instruction) if pdca_instruction else ''}\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
+        f"CANONICAL_VOICE_PROFILE={json.dumps(canonical_voice_profile(_text(queue.get('account_id'))), ensure_ascii=False, sort_keys=True)}\n"
         f"QUEUE_ID={_text(queue.get('queue_id'))}\n"
         f"SOURCE_EVIDENCE={source_text}\n"
         f"CANDIDATE_TEXT={candidate_text}"
@@ -770,9 +788,15 @@ class HybridAiGate:
         review_failures: list[str] = []
         if review.get("decision") != "PASS":
             review_failures.append("ai_final_review_rejected")
-        for field in ("natural_japanese", "source_grounding", "account_fit", "public_safety"):
+        for field in (
+            "natural_japanese", "source_grounding", "account_fit", "public_safety",
+            "voice_persona", "identity_fit", "interpersonal_distance", "register_fit",
+            "conversational_naturalness",
+        ):
             if review.get(field) != "PASS":
                 review_failures.append(f"ai_{field}_failed")
+        if int(review.get("voice_persona_score", 0)) < 85:
+            review_failures.append("ai_voice_persona_score_below_threshold")
         review_failures.extend(str(flag) for flag in review.get("risk_flags", []))
         used = int(getattr(self.client, "actual_request_count", 0)) - before_requests
         return self._result(

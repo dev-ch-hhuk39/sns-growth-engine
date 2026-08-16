@@ -7,15 +7,18 @@ from __future__ import annotations
 
 from collections import Counter
 from typing import Any, Iterable
-from urllib.parse import urlparse
+from generation.media_platform_policy import (
+    REFERENCE_PLATFORMS,
+    REFERENCE_PLATFORM_PRIORITY,
+    PHYSICAL_MEDIA_PROVIDER,
+    normalize_platform,
+)
 
-SUPPORTED_PLATFORMS = {"youtube", "tiktok", "threads", "x"}
-PLATFORM_PRIORITY = {"threads": 0, "tiktok": 1, "x": 2, "youtube": 3}
+SUPPORTED_PLATFORMS = set(REFERENCE_PLATFORMS)
+PLATFORM_PRIORITY = dict(REFERENCE_PLATFORM_PRIORITY)
 PROVIDER_CHAINS = {
-    "youtube": ("yt_dlp",),
-    "tiktok": ("direct_http", "gallery_dl", "yt_dlp"),
-    "threads": ("direct_http", "threads_public_router"),
-    "x": ("direct_http", "gallery_dl"),
+    platform: ((provider,) if provider else ())
+    for platform, provider in {**{p: "" for p in REFERENCE_PLATFORMS}, **PHYSICAL_MEDIA_PROVIDER}.items()
 }
 
 
@@ -31,26 +34,8 @@ def target_accounts(source: dict[str, Any]) -> list[str]:
     return [value] if value else []
 
 
-def normalize_platform(value: Any = "", url: str = "") -> str:
-    raw = text(value).lower().replace("twitter", "x")
-    aliases = {"youtube_shorts": "youtube", "youtube_playlist": "youtube", "youtube_streams": "youtube"}
-    raw = aliases.get(raw, raw)
-    if raw in SUPPORTED_PLATFORMS:
-        return raw
-    host = (urlparse(text(url)).hostname or "").lower()
-    if "youtu.be" in host or "youtube.com" in host:
-        return "youtube"
-    if "tiktok.com" in host:
-        return "tiktok"
-    if "threads.com" in host or "threads.net" in host:
-        return "threads"
-    if host == "x.com" or host.endswith(".x.com") or "twitter.com" in host:
-        return "x"
-    return ""
-
-
 def provider_chain(platform: str) -> tuple[str, ...]:
-    return PROVIDER_CHAINS.get(normalize_platform(platform), ("direct_http",))
+    return PROVIDER_CHAINS.get(normalize_platform(platform), ())
 
 
 def source_rank(source: dict[str, Any]) -> tuple[int, int, str]:

@@ -1,100 +1,66 @@
-# 複数AI共通作業規約 (AGENTS.md)
+# 複数AI共通作業規約
 
-このドキュメントは、Codex、Antigravity、およびその他のAI開発ツールが、本プロジェクトで作業を行う際の恒久的なルールを定めたものです。頻繁に変更される進捗情報などは `START_HERE.md` を参照してください。
+この文書はSNS Growth Engine v2の恒久的な作業規約です。進捗は`START_HERE.md`、作業予約は`docs/current-work.md`、履歴は`docs/ai-work-handoff.md`を参照してください。
 
-## 1. プロジェクト概要
-SNS Growth Engine v2は、権利台帳に基づくソース取得、メディア理解、キャプション生成、および承認済みコンテンツのThreadsへの自動投稿を行うシステムです。
+## 1. 指示の優先順位
 
-## 2. 最終Goal
-`GOAL.md`、`config/goal_acceptance.json`、および
-`config/production_capability_matrix.json` で定義された要件を完全に満たし、実環境での稼働証跡を得ること。
+1. 現在の明示的なユーザー指示
+2. タスクで指定された最新のOwner Source of Truth
+3. `GOAL.md`と機械受入条件
+4. 本文書とその他のrepo docs
 
-## AIの役割と設計権限
+過去のhandoffは履歴証拠であり、最新オーナー方針より優先しません。validator、rights/provenance gate、投稿安全を古いdocsに合わせて弱めてはいけません。
 
-本プロジェクトでは、設計・方針・作業範囲は各タスクの明示的な実装指示で決定される。
+## 2. プロダクト目的
 
-実装を担当するAIは、指定された設計と受入条件に従ってコード変更、テスト、commit、push、PR更新を行う。
+`night_scout`と`liver_manager`の共通Reference-first基盤を構築します。
 
-実装AIは、以下を独自判断で行ってはならない。
+`registered reference sources -> normalized SourcePost + ordered Media -> understand -> route selection -> media/copy generation -> human review -> READY -> later publish/metrics/PDCA`
 
-- Goalの変更
-- Work Packageの再定義
-- 受入条件の緩和
-- validator閾値の変更
-- permission gateの変更
-- 投稿ゲートの恒久的な有効化
-- データモデルの大規模変更
-- 別の投稿先や別アカウントの追加
-- 指定範囲外のリファクタリング
+当面は自動投稿拡大よりも、参照取得、正確な親子関係、出典、権利、理解、生成、人間Reviewの信頼性を優先します。
 
-設計上の矛盾、既存コードとの重大な不一致、安全に実装できない問題を発見した場合は、勝手に再設計せず停止して報告する。
+## 3. 現行アーキテクチャ規約
 
-## 正本となる情報
+- 管理対象: `night_scout`, `liver_manager`
+- 参照discovery順: TikTok -> Threads -> X -> YouTube
+- 安定期の物理media: X + YouTubeのみ
+- X profile discovery: bounded metadata-only `gallery-dl`
+- Xの個別status media: source-specific permission後の`yt-dlp`
+- YouTube media: `yt-dlp`
+- Threads/TikTokの稼働中のdesired route: non-browser
+- Threads/TikTokの新規物理mediaは当面deferred
+- 比率: direct media 50 / reference text 30 / PDCA 10 / new text 5 / approved clip 5
+- geometry: `preserve_source`。9:16強制は明示変換時のみ
+- `media_permissions`の最新有効行が再利用mediaのruntime正本
+- XのRetweet/quote/第三者postに登録sourceの権限を継承しない
+- `WAITING_REVIEW`はworker対象外、`READY`のみworker対象
 
-- 最終Goal: `GOAL.md`
-- 合格条件: `config/goal_acceptance.json`
-- 実際の状態: Git、GitHub Actions、Google Sheets、Cloudinary、Threadsの実証証跡
-- 実装順序: `docs/goal-completion-implementation-plan.md`
-- 恒久的作業規約: `AGENTS.md`
-- 現在地の要約: `START_HERE.md`
-- セッション履歴: `docs/ai-work-handoff.md`
-- 現在の作業予約: `docs/current-work.md`
-- 機械評価結果: `docs/goal-status.json`
+## 4. アカウント境界
 
-`START_HERE.md`と`docs/ai-work-handoff.md`は実証証拠より優先しない。
-`docs/goal-status.json`はevidence collectorまたはGoal評価処理によって生成し、SHAだけを手作業で差し替えない。
+- Night Scout: 夜職女性向け、経験のある論理的なスカウト、一人称は`僕`。
+- Liver Manager: TikTok LIVE配信者向け、実務的な女性マネージャー、一人称は`私`。`僕`/`俺`は不可。
+- X投稿と`beauty_account`操作は現行Goal対象外。
 
-## 使用技術
-- Python 3 (バックエンド、バッチ処理)
-- GitHub Actions (CI/CD、スケジュール処理)
-- Google Sheets (データストア、権限台帳)
-- Cloudinary (メディアアセット管理)
+## 5. 権利・セキュリティ
 
-## ディレクトリ構成
-- `src/`: コアロジック
-- `scripts/`: エントリーポイント、バッチスクリプト
-- `scripts/test_*.py`: 単体・統合・契約テスト
-- `scripts/run_repository_tests.py`: リポジトリ全体テストランナー
-- `.github/workflows/`: CI、本番準備、投稿、回復、監査workflow
-- `docs/`: 運用ドキュメント、AI間引き継ぎ記録
-- `config/`: 設定ファイル
+- secret、cookie、token、storage stateを読み取り・表示・commitしない。
+- 公開されていることをmedia再利用許可とみなさない。
+- permission evidenceと必要operation flagsがなければdownload/cut/upload/repostしない。
+- X権限はsource-specificであり、登録handleと個別status authorの一致が必須。
+- 投稿、production Sheets書込み、Cloudinary uploadは明示承認なしに行わない。
+- validator閾値、permission/provenance/publish gate、テストassertionを緑化目的で弱めない。
 
-## Git運用ルール
-- **main**: 常に安定版。直接コミット禁止。
-- **目的別ブランチ**: `feature/` `fix/` `docs/` などをプレフィックスとし、ツール名への依存は不要。作業前に必ず最新のmainから分岐すること。
-- 他のAIが作成したブランチを無断で書き換えない。
-- 強制プッシュ (force push)、未確認のrebase、未コミット変更の無断破棄は禁止。
+## 6. Git・編集規約
 
-## PR・CIルール
-- 変更はPR経由でmainへマージする。
-- CI（GitHub Actions）をすべて通過すること。workflow successを機能成功と混同しないこと。
+- 明示指示なく`main`へ直接commitしない。
+- force push、未承認rebase、reset/clean、未commit差分の破棄をしない。
+- 他AI/ユーザーの変更を元に戻さず、共存させる。
+- 関連ファイル、呼出関係、型、テストを調査してから最小変更を行う。
+- legacy/deprecated pathはX+YouTubeの両アカウントGoldenが揃うまで物理削除せず、非稼働で残す。
 
-## テスト必須条件
-- テストを省略しないこと。
-- 新機能の追加・変更には対応するテストを追加・修正すること。
+## 7. 検証と引き継ぎ
 
-## セキュリティ規約・秘密情報の取扱い
-- secret、cookie、tokenはリポジトリにコミットしない。
-- 実行中のAIはこれらの情報を読み取ったり、出力したりしない。
-
-## 投稿ゲート・実投稿時の条件
-- **実投稿**: 明示されたcanary工程のみで行う。
-- テスト投稿、dry-runを本番のPASSとして扱わない。
-- 投稿ゲート (publish / Threads post gate) の権限や閾値を弱めないこと。
-
-## 変更禁止事項
-- validator閾値の低下
-- 既存テストの削除や弱体化
-
-## 現在のGoal対象外
-
-- Xへの実投稿
-- `beauty_account`の操作
-- X用scheduleの有効化
-
-これらは未実装項目としてGoal進捗に含めない。
-明示的に別Goalが作成されるまで、実装・実行・有効化しない。
-
-## AI間引き継ぎルール
-- 作業開始時: `git fetch origin` 後に本ファイル、`START_HERE.md`、`docs/current-work.md`、`docs/ai-work-handoff.md`の最新記録を読む。
-- 作業終了時: テスト実行、コミット、PR作成後、`START_HERE.md`、`docs/current-work.md`、`docs/ai-work-handoff.md`を更新する。ただし、`docs/goal-status.json`は証拠収集・評価処理を実行した場合だけ更新する。通常の文書更新や小規模実装ごとに、手作業でGoal statusを書き換えないこと。
+- 変更Pythonのcompile、focused tests、repository regression、Ruff fatal rules、`git diff --check`を実行する。
+- 機械受入条件は実production証拠が必要な項目をdry-run/mockでPASSにしない。
+- 作業終了時は`START_HERE.md`、`docs/current-work.md`、`docs/ai-work-handoff.md`を同期する。
+- `docs/goal-status.json`は正式なevidence collector/evaluator実行時だけ更新する。

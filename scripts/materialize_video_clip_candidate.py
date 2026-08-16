@@ -56,6 +56,15 @@ def main() -> int:
         print(f"STATUS=BLOCKED_SOURCE_VIDEO_MATCH_COUNT_{len(videos)}")
         return 2
     source = videos[0]
+    source_id = str(candidate.get("source_id") or source.get("source_id") or "").strip()
+    permission_rows = [dict(row) for row in read_records_safely(client, "media_permissions")]
+    registered_sources = [
+        dict(row)
+        for logical in ("source_accounts", "reference_sources")
+        for row in read_records_safely(client, logical)
+        if str(row.get("source_id") or "").strip() == source_id
+    ]
+    registered_source = registered_sources[0] if len(registered_sources) == 1 else {}
     configured = Path(str(source.get("local_path", ""))).expanduser()
     cached = find_cached_source(args.source_cache_dir, args.account_id, source_video_id)
     input_path = configured if configured.is_file() else cached
@@ -67,6 +76,8 @@ def main() -> int:
             cache_root=args.source_cache_dir,
             account_id=args.account_id,
             source_video_id=source_video_id,
+            permission_rows=permission_rows,
+            registered_source=registered_source,
         )
         acquisition_performed = True
     start = parse_timecode(candidate.get("start_seconds") or candidate.get("start_time"))

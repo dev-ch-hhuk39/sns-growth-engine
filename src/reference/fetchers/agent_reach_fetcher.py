@@ -1,9 +1,9 @@
-"""
-agent_reach_fetcher.py - Agent-Reach based Fetcher（Phase 9）
+"""Bounded Agent Reach WebChannel integration.
 
-Agent-Reach / browser経由でX/YouTube情報を取得する。
-confirm_fetch=True が必要。未インストールなら NOT_INSTALLED。
-APIなし方針: X API実呼び出しは禁止。Agent-Reachのlocal browserを経由する。
+Agent Reach is an installer/doctor/router, not a profile-post scraper.  This
+adapter exposes only its generic Jina WebChannel as an optional reference
+reader.  It never enables browser sessions, cookies, physical media, or SNS
+publishing and it must not be described as native Threads/TikTok support.
 """
 from __future__ import annotations
 
@@ -12,14 +12,27 @@ import hashlib
 import subprocess
 import tempfile
 import os
+import shutil
+from pathlib import Path
 from typing import Any
 
 from .base_fetcher import BaseFetcher, FetchResult, RawSourceItem, _now_jst
 from .json_import_fetcher import JsonImportFetcher
 
 
+def _agent_reach_commands() -> list[list[str]]:
+    commands: list[list[str]] = []
+    executable = shutil.which("agent-reach")
+    if executable:
+        commands.append([executable, "version"])
+    isolated = Path.home() / ".agent-reach-venv" / "bin" / "agent-reach"
+    if isolated.is_file():
+        commands.append([str(isolated), "version"])
+    return commands
+
+
 def _check_agent_reach() -> bool:
-    for cmd in [["agent-reach", "--version"], ["npx", "agent-reach", "--version"]]:
+    for cmd in _agent_reach_commands():
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
@@ -39,7 +52,7 @@ class AgentReachFetcher(BaseFetcher):
     """
 
     adapter_name = "agent_reach"
-    supported_platforms = ["x", "youtube"]
+    supported_platforms = ["web", "youtube", "threads", "tiktok", "x"]
 
     def __init__(self):
         self._json_importer = JsonImportFetcher()
@@ -72,7 +85,7 @@ class AgentReachFetcher(BaseFetcher):
                 message=f"MOCK: Agent-Reach {platform} {len(items)}件のモックデータを返します。",
                 mock=True,
                 dry_run=dry_run,
-                warn="Agent-Reach は local browser login / cookie が必要です。",
+                warn="Agent Reach mock is reference-only; no browser/cookie/media path is enabled.",
             )
 
         if not confirm_fetch:
@@ -87,7 +100,7 @@ class AgentReachFetcher(BaseFetcher):
         if not _check_agent_reach():
             return self._not_installed(
                 source,
-                "agent-reach (npm install -g agent-reach でインストールしてください)",
+                "official Agent Reach Python package (isolated venv or requirements-oss.txt)",
             )
 
         source_url = source.get("source_url", "")
@@ -144,9 +157,27 @@ class AgentReachFetcher(BaseFetcher):
     ) -> list[dict]:
         try:
             from agent_reach.channels.web import WebChannel
-        except ImportError as exc:
-            raise RuntimeError("agent_reach_python_package_unavailable") from exc
-        markdown = WebChannel().read(url)
+        except ImportError:
+            isolated_python = Path.home() / ".agent-reach-venv" / "bin" / "python"
+            if not isolated_python.is_file():
+                raise RuntimeError("agent_reach_python_package_unavailable")
+            code = (
+                "import sys; from agent_reach.channels.web import WebChannel; "
+                "sys.stdout.write(WebChannel().read(sys.argv[1]))"
+            )
+            completed = subprocess.run(
+                [str(isolated_python), "-c", code, url],
+                capture_output=True,
+                text=True,
+                timeout=45,
+                check=False,
+            )
+            if completed.returncode:
+                detail = (completed.stderr or "agent_reach_web_channel_failed").strip()
+                raise RuntimeError(detail[:400])
+            markdown = completed.stdout
+        else:
+            markdown = WebChannel().read(url)
         text = str(markdown or "").strip()
         if not text:
             raise RuntimeError("agent_reach_web_channel_empty")

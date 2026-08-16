@@ -13,7 +13,7 @@ Phase 9 で実装した API なし Source Fetcher アダプター群の一覧と
 | `manual_json` | manual_json / manual_csv / manual_url | 手動投入ファイル | 不要 |
 | `yt_dlp` | yt_dlp | YouTube / TikTok / Shorts メタデータ | yt-dlp CLI |
 | `tiktok_to_ytdlp` | tiktok_to_ytdlp | TikTok プロフィール → URL → yt-dlp | tiktok-to-ytdlp CLI |
-| `agent_reach` | agent_reach | X / YouTube Agent-Reach | agent-reach CLI |
+| `agent_reach` | agent_reach | Web/Jinaによるread-only参照補助 | Agent Reach Python package |
 | `last30days_skill` | last30days_skill | 30日トレンド抽出 | last30days-skill CLI |
 | `youtube_transcript` | youtube_transcript | YouTube 文字起こし | youtube-transcript-api |
 | `browser_export` | browser_export | ブラウザエクスポートJSON/CSV/MD | ローカルファイル |
@@ -77,3 +77,7 @@ python scripts/fetch_source_posts.py \
 - `media_policy=plan_only` のソースは動画ダウンロード禁止
 - `rights_policy=unknown` は WAITING_REVIEW 必須
 - `beauty_account` の生成物は常に WAITING_REVIEW
+
+`agent_reach` はAgent Reach 1.5.0の `WebChannel` のみを利用する。Xタイムライン、
+Threads/TikTokプロファイルの個別投稿discovery、physical media取得は行わない。
+X native channelは明示的なcookie/login設定が必要で、このadapterから自動抽出しない。

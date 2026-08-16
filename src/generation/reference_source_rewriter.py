@@ -193,8 +193,18 @@ def build_reference_rewrite_prompt(
         for key in ("category", "reusable_pattern", "reason")
         if _clean(score.get(key))
     )[:1000]
+    pdca_rules = ""
+    if slot_theme == "pdca_text":
+        pdca_rules = """
+PDCA LEARNING MODE:
+- SOURCEは公開本文で引用・紹介する対象ではなく、同一アカウントの内部学習証拠。
+- 過去投稿、前回、表示数、いいね数、コメント数、PDCA、検証中であることを公開本文に書かない。
+- 学習したフック、情報順序、具体性、行動の絞り方だけを使う。
+- 読者が単独で読んで理解できる、完全に新規のノウハウ投稿にする。
+"""
     return f"""あなたはSNS編集者です。以下のSOURCEを元に、{target_platform}向け投稿を1本だけ作成してください。
 STRUCTURE RULE: This is a structure-preserving rewrite, not free composition. Preserve the source hook, information order, paragraph/list/question pattern, and closing shape whenever the source is a text post. Change wording and account framing, not the content architecture.
+{pdca_rules}
 
 最重要ルール:
 - SOURCEの中心テーマ・出来事・主張を意味上の境界にする。

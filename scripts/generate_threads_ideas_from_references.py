@@ -962,6 +962,32 @@ PDCA_STRUCTURE_STRATEGIES = (
     "読者が今日試せる一つの行動に絞る",
 )
 
+PDCA_PUBLIC_DISCLOSURE_PATTERNS = (
+    r"前回の投稿",
+    r"前回[^\n。]{0,30}(?:表示|いいね|コメント)",
+    r"表示\s*\d+\s*件?",
+    r"いいね\s*\d+\s*件",
+    r"コメント\s*\d+\s*件",
+    r"前回を上回るか",
+    r"実測(?:値|結果)",
+)
+
+
+def pdca_public_text_policy(text: str) -> dict[str, Any]:
+    """Keep metrics and prior-post analysis out of reader-facing copy."""
+
+    value = str(text or "").strip()
+    hits = [
+        pattern
+        for pattern in PDCA_PUBLIC_DISCLOSURE_PATTERNS
+        if re.search(pattern, value, re.IGNORECASE)
+    ]
+    return {
+        "status": "PASS" if value and not hits else "BLOCKED",
+        "blocked_patterns": hits,
+        "reason": "" if value and not hits else "pdca_internal_learning_disclosed_in_public_text",
+    }
+
 
 def _pdca_metric_int(
     value: Any,
@@ -1048,6 +1074,9 @@ def build_measured_pdca_inputs(
 ]:
     """Convert measured owned posts into standard generation inputs."""
 
+    if account_id not in ALLOWED_ACCOUNTS:
+        raise ValueError("unsupported_pdca_account_id")
+
     posted_by_result = {
         str(
             row.get(
@@ -1064,6 +1093,8 @@ def build_measured_pdca_inputs(
                 )
             )
             == account_id
+            and str(row.get("platform", "threads")).lower() == "threads"
+            and str(row.get("status", "")).upper() == "POSTED"
             and str(
                 row.get(
                     "result_id",
@@ -1079,6 +1110,12 @@ def build_measured_pdca_inputs(
     ] = {}
 
     for snapshot in measured_rows:
+        if (
+            str(snapshot.get("account_id", "")) != account_id
+            or str(snapshot.get("platform", "threads")).lower() != "threads"
+            or str(snapshot.get("metrics_status", "")).upper() != "MEASURED"
+        ):
+            continue
         result_id = str(
             snapshot.get(
                 "result_id",
@@ -1186,6 +1223,7 @@ def build_measured_pdca_inputs(
 
         ranked.append(
             {
+                "account_id": account_id,
                 "result_id": result_id,
                 "source_text": source_text,
                 "source_route": (
@@ -1267,6 +1305,7 @@ def build_measured_pdca_inputs(
 
             posts.append(
                 {
+                    "account_id": account_id,
                     "post_id": (
                         synthetic_post_id
                     ),
@@ -1274,9 +1313,9 @@ def build_measured_pdca_inputs(
                         item["source_text"]
                     ),
                     "title": (
-                        "実測上位の自社投稿を"
-                        "別角度で展開する。"
-                        f"改善方針: {strategy}"
+                        "アカウント内で学習した構成を"
+                        "新規投稿に反映する。"
+                        f"公開本文の方針: {strategy}"
                     ),
                     "category": (
                         item["source_route"]
@@ -1285,6 +1324,7 @@ def build_measured_pdca_inputs(
                     "post_url": (
                         item["source_url"]
                     ),
+                    "pdca_learning_only": True,
                 }
             )
 
@@ -1318,10 +1358,9 @@ def build_measured_pdca_inputs(
                         strategy
                     ),
                     "reason": (
-                        "実測値で上位だった"
-                        "自社投稿を選定し、"
-                        "同一テーマを別構成で"
-                        "展開する"
+                        f"{account_id}だけのMEASURED自社投稿から"
+                        "内部学習した構成を、過去投稿や"
+                        "metricsに言及しない新規本文へ反映する"
                     ),
                 }
             )
@@ -1339,46 +1378,34 @@ def build_measured_pdca_public_text(
     account_id: str,
     meta: dict[str, Any],
 ) -> str:
-    """Render measured owned-post evidence as an explicit PDCA experiment."""
+    """Build a standalone fallback from learning, never a metrics report."""
 
+    if account_id not in ALLOWED_ACCOUNTS:
+        raise ValueError("unsupported_pdca_account_id")
     source = str(meta.get("source_text", "")).replace("\\n", "\n").strip()
-    first_sentence = next(
-        (
-            item.strip()
-            for item in re.split(r"[。！？!?\n]+", source)
-            if item.strip()
-        ),
-        "前回扱ったテーマ",
-    )[:90]
-    views = _pdca_metric_int(meta.get("views"))
-    likes = _pdca_metric_int(meta.get("likes"))
-    comments = _pdca_metric_int(meta.get("comments"))
-    reposts = _pdca_metric_int(meta.get("reposts"))
-    quotes = _pdca_metric_int(meta.get("quotes"))
-
-    observation = (
-        f"前回の投稿は{views}表示で、いいね{likes}件・"
-        f"コメント{comments}件・再投稿{reposts}件・引用{quotes}件でした。"
-    )
     if account_id == "night_scout":
-        hypothesis = (
-            f"僕は、「{first_sentence}」という判断軸が具体的だったことが、"
-            "読者の反応につながった可能性があると見ています。"
-        )
-        next_test = (
-            "次は、同じテーマを入店前に確認する三つの項目へ絞り、"
-            "表示数とコメント数が前回を上回るか確認します。"
-        )
+        if any(term in source for term in ("時給", "控除", "手取り")):
+            text = (
+                "体入で時給だけを見て決めると、給料日に『思ったより残らない』ってなることが結構ある。\n\n"
+                "僕が入店前に見るのは、控除の種類、早上がりの扱い、バックが付く条件。この3つなんだよね。\n\n"
+                "表示時給より、同じ出勤ペースで実際にいくら残るかを見る。ここまで聞いてから選ぶ方が、自分に合う店を見つけやすいよ。"
+            )
+        else:
+            text = (
+                "店選びで条件が良く見えても、客層と出勤ペースが合わないと続きにくい。\n\n"
+                "僕なら体入の日に、忙しい時間帯、早上がりの条件、担当に相談しやすいかを見る。\n\n"
+                "時給の高さだけじゃなく、自分が無理なく続けられるかで決めるのが大事だよ。"
+            )
     else:
-        hypothesis = (
-            f"運用側で見ると、「{first_sentence}」という一つの行動へ絞ったことが、"
-            "配信者に試す場面を伝えやすくした可能性があります。"
+        text = (
+            "配信の終わりに『また来てね』だけで終わると、初見さんは次に来る理由を作りにくい。\n\n"
+            "私なら最後の1分で、次の配信時間と話すテーマを一つだけ伝えるかな。予定が分かると、今日初めて来た人も戻りやすいんだよね。\n\n"
+            "次回予告は長くしなくて大丈夫。『明日21時に○○の話をするよ』まで用意してみてね。"
         )
-        next_test = (
-            "次は、初見対応の一つの行動だけを提示し、"
-            "表示数とコメント数が前回を上回るか確認します。"
-        )
-    return f"{observation}\n\n{hypothesis}\n\n{next_test}"
+    policy = pdca_public_text_policy(text)
+    if policy["status"] != "PASS":
+        raise ValueError(policy["reason"])
+    return text
 
 
 def apply_measured_pdca_lineage(
@@ -1398,6 +1425,9 @@ def apply_measured_pdca_lineage(
     list[dict[str, Any]],
 ]:
     """Keep only requested candidates and mark their real metric lineage."""
+
+    if account_id not in ALLOWED_ACCOUNTS:
+        raise ValueError("unsupported_pdca_account_id")
 
     selected_queues = [
         dict(row)
@@ -1423,6 +1453,8 @@ def apply_measured_pdca_lineage(
     ] = {}
 
     for queue in selected_queues:
+        if str(queue.get("account_id", "")).strip() != account_id:
+            raise ValueError("pdca_queue_account_mismatch")
         result_id = str(
             queue.get(
                 "source_id",
@@ -1434,19 +1466,19 @@ def apply_measured_pdca_lineage(
             result_id,
             {},
         )
-
-        queue["public_post_text"] = build_measured_pdca_public_text(
-            account_id=(account_id or str(queue.get("account_id", ""))),
-            meta=meta,
-        )
-        queue["key_claims_json"] = json.dumps(
-            [
-                "前回の実測結果",
-                "反応が出た理由の仮説",
-                "次回に検証する一つの変更",
-            ],
-            ensure_ascii=False,
-        )
+        if str(meta.get("account_id", "")) != account_id:
+            raise ValueError("pdca_source_account_mismatch")
+        public_text = str(queue.get("public_post_text", "")).strip()
+        if not public_text:
+            public_text = build_measured_pdca_public_text(account_id=account_id, meta=meta)
+        public_policy = pdca_public_text_policy(public_text)
+        if public_policy["status"] != "PASS":
+            raise ValueError(public_policy["reason"])
+        public_validation = final_public_post_validator(public_text, account_id)
+        if public_validation["status"] != "PASS":
+            raise ValueError("pdca_public_post_validator_blocked")
+        queue["public_post_text"] = public_text
+        queue["key_claims_json"] = "[]"
 
         queue[
             "generation_mode"
@@ -1482,13 +1514,13 @@ def apply_measured_pdca_lineage(
             )
         )
 
-        queue[
-            "transformation_type"
-        ] = "metrics_pdca_owned_post"
+        queue["transformation_type"] = "metrics_learned_original"
 
-        queue["source_credit"] = (
-            "owned_post_metrics"
-        )
+        queue["source_credit"] = "internal_learning_only"
+        queue["pdca_learning_account_id"] = account_id
+        queue["pdca_learning_scope_id"] = f"account:{account_id}"
+        queue["pdca_public_text_policy_status"] = "PASS"
+        queue["metrics_disclosure_status"] = "PASS"
 
         queue["confidence_level"] = (
             "high"
@@ -1499,13 +1531,12 @@ def apply_measured_pdca_lineage(
         )
 
         queue["internal_analysis"] = (
-            "Generated from a measured "
-            "owned Threads post. "
+            f"Account-isolated learning for {account_id}. "
             f"source_result_id={result_id}; "
             f"engagement_rate="
             f"{meta.get('engagement_rate', 0):.6f}; "
-            "public_post_text only is "
-            "publishable."
+            "metrics and prior-post analysis are internal only; "
+            "public_post_text is a standalone new post."
         )
 
         queue_meta_by_draft[
@@ -1583,22 +1614,17 @@ def apply_measured_pdca_lineage(
             "",
         )
 
-        copied[
-            "transformation_type"
-        ] = "metrics_pdca_owned_post"
+        copied["transformation_type"] = "metrics_learned_original"
 
-        copied["source_credit"] = (
-            "owned_post_metrics"
-        )
+        copied["source_credit"] = "internal_learning_only"
 
         copied["confidence_level"] = (
             "high"
         )
 
         copied["notes"] = (
-            "Generated from the highest-"
-            "performing eligible owned post "
-            "using measured Threads metrics. "
+            f"Account-isolated PDCA learning for {account_id}. "
+            "Metrics remain internal; public text is a standalone new post. "
             "WAITING_REVIEW only."
         )
 
@@ -1630,21 +1656,17 @@ def apply_measured_pdca_lineage(
             copied["text"] = pdca_text
             copied["char_count"] = str(len(pdca_text))
 
-        copied[
-            "transformation_type"
-        ] = "metrics_pdca_owned_post"
+        copied["transformation_type"] = "metrics_learned_original"
 
-        copied["source_credit"] = (
-            "owned_post_metrics"
-        )
+        copied["source_credit"] = "internal_learning_only"
 
         copied["text_policy_status"] = (
             "PASS"
         )
 
         copied["reason"] = (
-            "Measured owned-post PDCA "
-            "candidate. Review required."
+            "Account-isolated learned pattern applied to a new standalone post. "
+            "Review required."
         )
 
         selected_derivatives.append(

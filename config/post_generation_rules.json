@@ -11,6 +11,7 @@
   },
   "persona_profiles": {
     "night_scout": {
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.night_scout",
       "first_person": "僕",
       "forbidden_first_person": [
         "私",
@@ -54,13 +55,14 @@
       "source_copyedit": {
         "strategy": "preserve_source_then_polish",
         "preferred_markers": [
-          "なんよな",
-          "よな",
+          "なんだよね",
+          "なんよね",
+          "だよ",
           "かな",
           "と思う",
           "僕なら"
         ],
-        "maximum_conversational_endings": 2,
+        "maximum_conversational_endings": 3,
         "forbidden_template_phrases": [
           "確認することは一つ。",
           "この順番で考える理由はシンプル。",
@@ -70,6 +72,7 @@
       }
     },
     "liver_manager": {
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.liver_manager",
       "first_person": "私",
       "forbidden_first_person": [
         "僕",
@@ -125,13 +128,13 @@
         "重要だ。"
       ],
       "soft_markers": [
-        "ですよね",
-        "大丈夫です",
-        "してみてください",
-        "おすすめです",
-        "かもしれません",
-        "と思います",
-        "うれしいです",
+        "なんだよね",
+        "よね",
+        "大丈夫",
+        "してみて",
+        "かも",
+        "かな",
+        "だよ",
         "一緒に"
       ],
       "emoji_policy": {
@@ -152,15 +155,16 @@
       "source_copyedit": {
         "strategy": "preserve_source_then_polish",
         "preferred_markers": [
-          "なんですよね",
-          "ですよね",
-          "大丈夫です",
-          "してみてください",
-          "と思います",
+          "なんだよね",
+          "よね",
+          "大丈夫",
+          "してみて",
+          "かも",
+          "かな",
           "私なら",
           "じゃなくて"
         ],
-        "maximum_conversational_endings": 2,
+        "maximum_conversational_endings": 3,
         "forbidden_template_phrases": [
           "確認することは一つ。",
           "この順番で考える理由はシンプル。",

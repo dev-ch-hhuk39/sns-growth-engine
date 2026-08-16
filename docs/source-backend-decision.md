@@ -1,78 +1,56 @@
 # Source Backend Decision
 
-## Runtime policy
+## Reference discovery
 
-One PRIMARY backend runs for a capability. A FALLBACK runs only after PRIMARY
-failure. Router health and routing decisions are saved to `backend_health` and
-`backend_routing_history`; neither table stores cookies, browser state, source
-text, media URLs, or secrets.
+One bounded PRIMARY backend runs for a capability. A configured FALLBACK runs
+only after a real failure. Reference ordering is TikTok -> Threads -> X ->
+YouTube.
 
-| Capability | PRIMARY | FALLBACK | Status |
+| Capability | PRIMARY | FALLBACK | Role |
 | --- | --- | --- | --- |
-| YouTube/TikTok profile metadata | `yt-dlp` | none | PRIMARY |
-| Threads public profile posts | own public Playwright adapter | rendered-screen Playwright, own public HTTP | PRIMARY/FALLBACK |
-| X approved profile posts | `gallery-dl` bounded JSON adapter | browser export / manual JSON import | PRIMARY/RECOVERY |
-| YouTube transcript | `youtube-transcript-api` | yt-dlp subtitles, local faster-whisper | PRIMARY/FALLBACK |
-| Trend signals | local `source_posts` aggregator | none | PRIMARY |
-| Agent-Reach/last30days | not a posting or media truth backend | optional analysis shadow only | ANALYSIS_ONLY |
+| TikTok profile posts | `yt-dlp` | bounded `gallery-dl` metadata | reference only |
+| Threads public posts | own public HTTP adapter | none | reference only |
+| X registered profile posts | bounded `gallery-dl` metadata | manual/browser export outside active router | reference discovery |
+| YouTube channel videos | `yt-dlp` | none | reference + approved physical media |
+| YouTube transcript | `youtube-transcript-api` | yt-dlp subtitles, local faster-whisper | understanding |
 
-The Threads adapters use a fresh browser context, public HTML and visible public
-anchors only, no stored cookies, no private GraphQL, no proxy rotation, no
-stealth/CAPTCHA bypass, and serial requests.  The screen fallback performs at
-most two small profile scrolls and only accepts individual post URLs belonging
-to the configured handle. A normal public-page failure opens a 15-minute
-circuit breaker and then permits the next fallback.
+No Playwright/browser/session backend is active for Threads or TikTok desired
+routes. Legacy adapters remain in the factory for rollback and historical
+tests, but `config/source_backend_routing.json` cannot select them. Active
+acquisition workflows do not install Chromium or provide storage state.
 
-The X adapter is limited to registry rows with `x_read_only=true` and requests
-at most 20 recent posts per approved profile through `gallery-dl --dump-json`.
-It emits only `/status/<id>` posts with their original ordered media children;
-it never stores a profile URL as a post, downloads media, uses browser cookies,
-or enables X publishing. An extractor failure or unavailable local binary is a
-recoverable acquisition result: the operator may supply a bounded browser
-export or manual JSON containing individual post URLs. It is not reported as a
-successful live fetch.
+## Physical media
 
-## Repository audit
+The stable allowlist is X + YouTube only, both through `yt-dlp` on an exact
+individual post/video URL after the live permission ledger passes. TikTok and
+Threads remain valid reference sources but new physical acquisition is
+deferred.
 
-Audited on 2026-07-17 against each repository's then-current default branch.
-No listed repository is vendored here.
+X profile discovery is metadata-only, ignores user gallery-dl configuration,
+disables Retweets/quotes/replies/conversations/expand, requests at most 20
+items and accepts only `/status/<id>` URLs whose handle equals the registered
+source handle. It never downloads or enables X publishing.
 
-| Candidate | License / implementation observation | Decision |
-| --- | --- | --- |
-| `yt-dlp/yt-dlp` | Unlicense; active extractor already installed. | PRIMARY for public YouTube/TikTok discovery and approved individual-video download only. |
-| `Panniantong/Agent-Reach` | MIT; public-channel discovery plus optional Playwright/browser-cookie integrations. | ANALYSIS_ONLY, never media truth/repost input. |
-| `mvanhorn/last30days-skill` | MIT; optional third-party-token integrations. | ANALYSIS_ONLY shadow; local aggregation is production default. |
-| `firecrawl/firecrawl` | AGPL-3.0 and self-host needs several services. | REJECTED for the 2GB VPS. |
-| `HasData/tiktok-scraping` | paid API/proxy product model. | REJECTED. |
-| `Zeeshanahmad4/Threads-Scraper` | MIT; optional cookie/proxy configuration. | ANALYSIS_ONLY reference; no cookie/proxy path is used. |
-| `vdite/threads-scraper` | MIT; Playwright login/session-cookie persistence. | REJECTED for production. |
-| `galihkjaya/threadscraper` | MIT; token/cookie capture and private GraphQL-oriented workflow. | REJECTED for production. |
-| Existing transcript/processing stack | `youtube-transcript-api`, faster-whisper, Playwright, BeautifulSoup, ffmpeg, Cloudinary. | Retained with resource and permission gates. |
+## Rights and parent integrity
 
-## Media ownership boundary
+Every `NormalizedMediaItem` retains one `source_post_id` and media order. A
+profile/channel URL is never stored as an individual source post. Cross-parent
+text/media mixing is prohibited.
 
-`NormalizedSourcePost` and every `NormalizedMediaItem` carry the same
-`source_post_id`; validation rejects mismatched parents. `source_posts` is
-deduplicated by source-post ID/canonical post URL, and `source_post_media` by
-media ID and `media_index`.
+Live Sheets `media_permissions` is the runtime authority. The latest matching
+row must be approved, evidence-backed, unexpired, non-revoked, carry an
+approved media rights status and enable the exact requested operations. Public
+availability, repo metadata or a registered profile does not grant media reuse.
 
-Direct Threads/TikTok/YouTube reuse requires an active, non-revoked
-`media_permissions` row with direct download, Cloudinary storage, repost, and
-new-caption grants. Threads grants are direct-media-only; approved
-YouTube/TikTok sources retain clip permissions. `revoked=true` is never
-overwritten.
+## Geometry and review
 
-## Operational limits
+Source geometry is preserved by default. `force_9_16` is explicit-only.
+`WAITING_REVIEW` cannot be processed by workers; only a human-approved `READY`
+row can proceed. Media slots never fall back to text.
 
-- Threads: 5 posts/profile scan, one Chromium process, serial requests.
-- YouTube/TikTok: 10 posts/scan, bounded to 3 by production workflows.
-- No automatic TikTok profile expansion beyond bounded yt-dlp metadata.
-- `gallery-dl` is a bounded metadata-only discovery adapter for explicitly
-  approved X profiles. It never uses cookies or downloads. Any later media
-  resolver still requires a permission-approved individual source post and
-  cannot bypass source/media permission checks.
-- Mixed carousels require `ALLOW_THREADS_MIXED_CAROUSEL=true` and are false by
-  default. Homogeneous carousels use the official Threads container route only
-  when `ALLOW_THREADS_CAROUSEL=true` in the scoped apply step.
-- `source_videos` must be real discovered records and have real transcripts
-  before clip candidates are produced. Dry-run invents neither IDs nor text.
+## Deferred cleanup
+
+Playwright/browser adapters and historical physical-media paths are inactive
+cleanup candidates, not current production dependencies. Do not delete them
+until X and YouTube have dual-account physical Goldens and reachability
+analysis proves removal safe.

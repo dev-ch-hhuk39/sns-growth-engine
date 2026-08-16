@@ -1,24 +1,12 @@
 {
   "schema_version": 1,
-  "notes": "One PRIMARY backend is invoked for each capability. FALLBACK is used only after PRIMARY failure. Analysis-only tools never download, upload, or publish.",
+  "notes": "Active reference discovery is TikTok/X/YouTube. Threads is DEFERRED_OSS_CANDIDATE by owner policy and has no active route. TikTok profile discovery uses the bounded public embed payload with gallery-dl as a metadata fallback. Physical media download is governed separately by media_platform_policy.",
   "routes": {
-    "threads.profile_posts": {
-      "primary": "threads_browser_session",
-      "fallbacks": ["threads_public_screen", "threads_public_playwright", "threads_public_http"],
-      "shadow": [],
-      "cooldown_seconds": 900,
-      "circuit_failure_threshold": 3
-    },
-    "threads.post_detail": {
-      "primary": "threads_browser_session",
-      "fallbacks": ["threads_public_screen", "threads_public_playwright", "threads_public_http"],
-      "shadow": [],
-      "cooldown_seconds": 900,
-      "circuit_failure_threshold": 3
-    },
     "tiktok.profile_posts": {
-      "primary": "yt_dlp",
-      "fallbacks": ["tiktok_gallery_dl", "tiktok_public_playwright"],
+      "primary": "tiktok_public_embed",
+      "fallbacks": [
+        "tiktok_gallery_dl"
+      ],
       "shadow": [],
       "cooldown_seconds": 900
     },
@@ -37,21 +25,16 @@
     },
     "youtube.transcript": {
       "primary": "youtube_transcript_api",
-      "fallbacks": ["yt_dlp_subtitles", "local_faster_whisper"],
+      "fallbacks": [
+        "yt_dlp_subtitles",
+        "local_faster_whisper"
+      ],
       "shadow": [],
       "cooldown_seconds": 1800
     },
     "youtube.comments": {
       "primary": "youtube_comment_downloader",
       "fallbacks": [],
-      "shadow": [],
-      "cooldown_seconds": 1800
-    },
-    "threads.comments": {
-      "primary": "threads_public_comments",
-      "fallbacks": [
-        "vdite_threads_scraper"
-      ],
       "shadow": [],
       "cooldown_seconds": 1800
     },
@@ -84,19 +67,26 @@
     "research.trends": {
       "primary": "local_trend_aggregator",
       "fallbacks": [],
-      "shadow": ["agent_reach", "last30days_skill"],
+      "shadow": [
+        "agent_reach",
+        "last30days_skill"
+      ],
       "cooldown_seconds": 3600
     }
   },
   "backend_roles": {
-    "yt_dlp": "PRIMARY",
-    "tiktok_public_playwright": "FALLBACK",
-    "tiktok_gallery_dl": "FALLBACK",
-    "threads_browser_session": "PRIMARY_WHEN_RUNTIME_SESSION_CONFIGURED",
-    "threads_public_playwright": "FALLBACK",
-    "threads_public_screen": "FALLBACK",
-    "threads_public_http": "FALLBACK",
-    "x_gallery_dl": "PRIMARY",
+    "yt_dlp": "PRIMARY_PHYSICAL_X_YOUTUBE_POST_DETAIL",
+    "tiktok_public_embed": "PRIMARY_PUBLIC_PROFILE_DISCOVERY",
+    "tiktok_public_playwright": "DEPRECATED_INACTIVE",
+    "tiktok_gallery_dl": "FALLBACK_METADATA_ONLY",
+    "threads_browser_session": "DEPRECATED_INACTIVE",
+    "threads_public_playwright": "DEPRECATED_INACTIVE",
+    "threads_public_screen": "DEPRECATED_INACTIVE",
+    "threads_public_http": "PRIMARY",
+    "threads_oembed_detail": "PRIMARY_TOKENLESS_INDIVIDUAL_POST_DETAIL",
+    "threads_search_index": "FALLBACK_CANDIDATE_DISCOVERY_REVALIDATED",
+    "threads_graph_public_discovery": "OPTIONAL_AUTH_OFFICIAL_PUBLIC_DISCOVERY",
+    "x_gallery_dl": "PRIMARY_METADATA_DISCOVERY",
     "youtube_transcript_api": "PRIMARY",
     "youtube_comment_downloader": "PRIMARY",
     "threads_public_comments": "PRIMARY",
@@ -118,7 +108,6 @@
   "limits": {
     "threads_profile_posts_per_source": 5,
     "youtube_tiktok_posts_per_source": 10,
-    "playwright_processes": 1,
     "source_requests_serial": true
   }
 }

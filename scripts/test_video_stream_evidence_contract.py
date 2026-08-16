@@ -22,15 +22,10 @@ from run_media_production_pipeline import (
     select_candidate,
     select_saved_media_candidate,
 )
+from test_media_post_validator_requires_approved_rights import GOOD_TEXT
 
 
-TEXT = (
-    "配信で初見さんが入りやすい空気を作るなら、"
-    "最初に今の話題を一言伝えてみてください。"
-    "\n\n"
-    "何をコメントすればいいか分かるだけで、"
-    "参加のきっかけを作りやすくなります。"
-)
+TEXT = GOOD_TEXT
 
 CLIP = {
     "clip_candidate_id": "clip_av_contract",

@@ -42,16 +42,8 @@ def main():
     check("BLOCKED", result_blocked.status == "BLOCKED")
 
     print("\n[4] Xは常時BLOCK、YouTube研究経路は導入状態を正しく報告")
-    import subprocess
-    installed = False
-    for cmd in [["agent-reach", "--version"], ["npx", "agent-reach", "--version"]]:
-        try:
-            r = subprocess.run(cmd, capture_output=True, timeout=3)
-            if r.returncode == 0:
-                installed = True
-                break
-        except Exception:
-            pass
+    from src.reference.fetchers.agent_reach_fetcher import _check_agent_reach
+    installed = _check_agent_reach()
 
     x_result = fetcher.fetch(src, mock=False, confirm_fetch=True)
     check("X network fetch BLOCKED", x_result.status == "BLOCKED")

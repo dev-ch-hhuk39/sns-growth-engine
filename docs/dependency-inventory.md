@@ -1,6 +1,6 @@
 # Dependency Inventory
 
-Date: 2026-06-30
+Date: 2026-08-11
 
 This inventory separates dependency states:
 
@@ -16,7 +16,7 @@ No secret, token, cookie, browser storage-state content, or API key is documente
 
 | tool/library | category | status | current_location | target_script | purpose | risk / ToS note | install_action | next_action |
 |---|---|---|---|---|---|---|---|---|
-| Agent Reach | external signals | optional | `src/reference/fetchers/agent_reach_fetcher.py`, source registry `collection_method=agent_reach`, docs | `collect_source_posts.py` external signal candidate only | source discovery / shortlist enrichment | non-core CLI; may require logged-in local/browser context; do not use for direct post text generation | none this turn | install only after human confirms source/ToS; keep optional |
+| Agent Reach | external signals | optional / installed / wired / tested | isolated runtime `~/.agent-reach-venv`, `src/reference/fetchers/agent_reach_fetcher.py`, source registry | fetcher registry read-only path | generic Web/Jina reference enrichment | native X requires explicit auth; Threads/TikTok have no native channel; never use for physical media or publishing | official GitHub commit `1221ecd0c3e0502ee37406f03543bedf7503f2c7` installed in user-home venv | keep optional and analysis-only |
 | CLI-Anything | external signals | optional / not_found | no repo import; no requirements entry | none | possible external signal runner | unknown provenance/stability | none | do not claim installed unless binary/package exists |
 | last30days-skill | external signals | optional / wired | `src/reference/fetchers/last30days_fetcher.py`, docs, source registry | source fetcher path | trend query source | external skill availability/environment dependent | none | keep as optional trend source |
 | knowledge-work-plugins | external signals | optional / not_found | docs/search references only, no import | none | possible knowledge tooling | outside repo scope | none | do not wire until concrete package/CLI exists |
@@ -59,17 +59,18 @@ No secret, token, cookie, browser storage-state content, or API key is documente
 
 ## Agent Reach Clarification
 
-Agent Reach is not a runtime dependency of the current v2 production loop.
+Agent Reach is an optional runtime integration, not a hard dependency of the current v2 production loop.
 
 - repo presence: yes, `src/reference/fetchers/agent_reach_fetcher.py` and source registry `collection_method=agent_reach`.
-- requirements presence: no.
-- import presence: local fetcher code only; not imported by `collect_source_posts.py` as a hard dependency.
-- execution CLI presence: optional fetcher can check `agent-reach` / `npx agent-reach`, but this turn did not install or run it.
-- current usable state: optional only unless the local CLI is installed and human confirms ToS/session handling.
-- missing for production use: explicit install source, local login/session policy, terms review, and source ranking acceptance criteria.
+- requirements presence: optional official Git pin in `requirements-oss.txt`; absent from core `requirements.txt`.
+- import presence: the adapter calls official `agent_reach.channels.web.WebChannel` from the active interpreter or isolated user-home venv.
+- execution presence: Agent Reach 1.5.0 is installed in `~/.agent-reach-venv`; doctor measured 4/15 usable channels on 2026-08-11.
+- portability boundary: Installation is environment-local evidence, not a portable repository guarantee. CI and production runners may omit Agent Reach; the adapter must remain fail-optional in those environments.
+- current usable state: Web/Jina read-only reference enrichment. It is not profile discovery, physical media acquisition, or publishing.
+- auth boundary: native X requires explicit cookie/login configuration. The repository does not extract cookies or start a browser login.
 - not to confuse with: any separate Library Scout or other project-level plugin. This repo does not currently vendor such a system.
 
-Agent Reach, if later enabled, should feed source discovery, external signals, repo/library reputation, and account/source shortlist enrichment only. It must not directly generate SNS post body copy.
+Agent Reach may feed bounded reference analysis and shortlist enrichment only. It must not directly generate SNS post body copy, discover profile posts as if native, acquire physical media, or publish.
 
 ## CLI-Anything Clarification
 

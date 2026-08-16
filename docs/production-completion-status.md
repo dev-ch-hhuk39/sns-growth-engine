@@ -1,5 +1,50 @@
 # Production Completion Status
 
+## 2026-08-11 Multi-platform physical acquisition checkpoint
+
+- Night Scout retired `@onigiriscout_0`, `@cabalounge`, and
+  `@kyabataihendane` from runtime selection. Their historical registry rows
+  remain for audit, while append-only revocations are the latest effective
+  `media_permissions` rows. Live read-after-write passed and effective active
+  permission count for the three retired identities is zero.
+- Night Scout X video editorial selection is limited to `@3j2c9q` (priority 1)
+  and `@amuxamudaily` (priority 2). Five other active Night Scout X identities
+  remain text/image references only. Editorial selection never grants rights;
+  the live permission ledger remains an independent mandatory gate.
+- Four owner-specified exact X statuses were physically downloaded through
+  yt-dlp and passed canonical status ID, registered author, non-RT/non-quote,
+  video stream, audio stream, ffprobe and preserve-source checks. All four
+  reached local `WAITING_REVIEW`; that status remains publisher-ineligible.
+- One real YouTube video per account was physically downloaded and passed A/V
+  probing. The selected source IDs (`src_ns_yt_cand_006` and
+  `src_lm_yt_cand_001`) remain blocked before review because their exact live
+  permission-ledger grants are absent/not approved. No permission was inferred.
+- Bounded no-browser TikTok discovery was attempted for all three registered
+  Liver profiles. yt-dlp exposed candidate IDs but could not resolve the
+  secondary user identity; gallery-dl could not return individual posts.
+  Current physical status is `POST_DISCOVERY_UNAVAILABLE`, with zero video
+  bytes and no Golden promotion.
+- Public no-browser Threads profile fetches returned HTML for all nine listed
+  profiles, but no individual canonical post links. The executable route
+  reports `POST_DISCOVERY_UNAVAILABLE`; profile text is analysis-only and no
+  Threads video bytes were claimed.
+- Stable physical acquisition at this checkpoint: X and YouTube. Deferred:
+  TikTok and Threads. No Cloudinary production upload or SNS publish occurred.
+
+## 2026-08-11 Reference-first Status Override
+
+- Agent Reach 1.5.0 is installed in an isolated user-home venv and wired as an
+  optional generic-Web analysis backend. Older entries below saying it was not
+  installed are historical and no longer describe current state.
+- Owner-attested permission for 21 active exact X/Threads/TikTok source identities was
+  applied source/account/handle-specifically and passed Sheets read-after-write.
+- Three retired Night Scout X identities have later append-only revocations;
+  old grants are historical only. X physical dual-account Golden is now
+  recorded for four exact individual statuses, but multi-platform production
+  evidence remains incomplete because TikTok/Threads physical acquisition is
+  deferred and the two selected YouTube sources lack effective ledger grants.
+- No Cloudinary production upload or SNS publish was performed in this update.
+
 ## 2026-08-10 Phase 1 reference-media completion status
 
 - Threads individual-post metadata acquisition is operational for both accounts through a common router. Public Playwright has live Sheets evidence; an authenticated browser-session backend is now available as the preferred route when its secret is provisioned, with public adapters retained as independent fallbacks.

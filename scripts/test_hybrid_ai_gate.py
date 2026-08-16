@@ -42,6 +42,12 @@ class FakeClient:
             "source_grounding": "PASS",
             "account_fit": "PASS",
             "public_safety": "PASS",
+            "voice_persona": "PASS",
+            "voice_persona_score": 95,
+            "identity_fit": "PASS",
+            "interpersonal_distance": "PASS",
+            "register_fit": "PASS",
+            "conversational_naturalness": "PASS",
             "risk_flags": [],
             "reasons": [],
         }
@@ -72,7 +78,7 @@ def base_queue() -> dict[str, Any]:
         "generation_mode": "direct_reference_media",
         "transformation_type": "source_copyedit",
         "media_origin": "direct_reference",
-        "public_post_text": "枠が崩れそうって配信者が一番感じているからこそ、リスナー皆んなでで支えなきゃいけない！",
+        "public_post_text": "配信が崩れそうって不安になるよね。そんな時は、リスナー皆んなでで支えられる一言を次の配信で試してみてね。",
         "source_post_id": "sp_fixture",
         "rights_status": "allowed",
         "permission_status": "granted",
@@ -91,7 +97,7 @@ def source_context() -> dict[str, Any]:
 
 
 def main() -> None:
-    corrected = "枠が崩れそうって配信者が一番感じているからこそ、リスナーみんなで支えなきゃいけない！"
+    corrected = "配信が崩れそうって不安になるよね。そんな時は、リスナーみんなで支えられる一言を次の配信で試してみてね。"
     context = source_context()
     result = HybridAiGate(FakeClient(generated_text=corrected)).evaluate(base_queue(), context)
     assert result.status == "PASS", result.audit()

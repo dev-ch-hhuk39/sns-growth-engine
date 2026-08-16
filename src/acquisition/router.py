@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
+
+from .failures import classify_failure, fallback_allowed
 
 
 class BackendFailure(RuntimeError):
@@ -113,7 +115,19 @@ class AdapterRouter:
                 # source in that run. Cool down only after repeated failures.
                 if state.consecutive_failures >= route.circuit_failure_threshold:
                     state.cooldown_until = time.time() + route.cooldown_seconds
-                errors.append(f"{backend_name}:{type(exc).__name__}")
+                detail = str(exc).replace("\n", " ").strip()[:160]
+                errors.append(
+                    f"{backend_name}:{type(exc).__name__}"
+                    + (f":{detail}" if detail else "")
+                )
+                platform = str(
+                    source.get("source_platform") or source.get("platform") or ""
+                ).lower()
+                category = classify_failure(platform, str(exc))
+                if not fallback_allowed(category):
+                    raise BackendFailure(
+                        f"non_fallback_failure:{category.value}:{backend_name}"
+                    ) from exc
         raise BackendFailure("all_backends_failed:" + ",".join(errors))
 
     def health_rows(self) -> list[dict[str, Any]]:

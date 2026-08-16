@@ -5,15 +5,15 @@
       "x": {
         "single_post": 40,
         "thread_series": 30,
-        "reference_based": 20,
-        "video_clip_reference": 10,
+        "reference_based": 25,
+        "video_clip_reference": 5,
         "original_hypothesis": 0
       },
       "threads": {
         "single_post": 35,
         "thread_series": 35,
-        "reference_based": 20,
-        "video_clip_reference": 10,
+        "reference_based": 25,
+        "video_clip_reference": 5,
         "original_hypothesis": 0
       }
     },
@@ -21,15 +21,15 @@
       "x": {
         "single_post": 35,
         "thread_series": 35,
-        "reference_based": 20,
-        "video_clip_reference": 10,
+        "reference_based": 25,
+        "video_clip_reference": 5,
         "original_hypothesis": 0
       },
       "threads": {
         "single_post": 30,
         "thread_series": 40,
-        "reference_based": 20,
-        "video_clip_reference": 10,
+        "reference_based": 25,
+        "video_clip_reference": 5,
         "original_hypothesis": 0
       }
     },
@@ -54,20 +54,20 @@
     "x": {
       "single_post": 40,
       "thread_series": 30,
-      "reference_based": 20,
-      "video_clip_reference": 10,
+      "reference_based": 25,
+      "video_clip_reference": 5,
       "original_hypothesis": 0
     },
     "threads": {
       "single_post": 35,
       "thread_series": 35,
-      "reference_based": 20,
-      "video_clip_reference": 10,
+      "reference_based": 25,
+      "video_clip_reference": 5,
       "original_hypothesis": 0
     }
   },
   "operational_threads_slot_mix": {
-    "schema_version": "threads_reference_first_v2",
+    "schema_version": "threads_reference_first_v3_x_youtube_media",
     "selection_policy": "reference_first",
     "clip_policy": "exception_only_after_full_content_understanding",
     "night_scout": {

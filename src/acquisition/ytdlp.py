@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from .contracts import ProviderResult
@@ -208,6 +207,6 @@ class YtDlpProfilePostAdapter:
                 self.backend_name,
                 self.backend_version,
                 "FAILED",
-                reason=f"{type(exc).__name__}:profile_discovery_failed",
+                reason=str(exc) or f"{type(exc).__name__}:profile_discovery_failed",
                 retryable=True,
             )

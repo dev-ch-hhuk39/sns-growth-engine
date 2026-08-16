@@ -8,18 +8,28 @@ from generation.video_source_acquirer import (
     find_cached_source,
     is_download_authorized,
     resolve_source_url,
+    x_registered_author_matches,
     _validate_public_http_url,
 )
 
 
 def test_authorized_creator_clip_is_downloadable() -> None:
-    row = {"rights_status": "approved_creator_clip", "media_reuse_risk": "low"}
-    assert is_download_authorized(row) is True
+    row = {"source_id": "approved", "rights_status": "approved_creator_clip", "permission_status": "approved", "media_reuse_risk": "low"}
+    permission = [{"source_id": "approved", "rights_status": "approved_creator_clip", "permission_status": "approved", "evidence_type": "contract", "evidence_reference": "fixture", "approved_by": "owner", "approved_at": "2026-08-10T00:00:00+00:00", "account_id": "night_scout", "allow_download": True, "allow_cut": True}]
+    assert is_download_authorized(row, permission, account_id="night_scout") is True
 
 
 def test_unknown_or_high_risk_is_not_download_authorized() -> None:
     assert is_download_authorized({"rights_status": "unknown", "media_reuse_risk": "low"}) is False
     assert is_download_authorized({"rights_status": "allowed", "media_reuse_risk": "high"}) is False
+    assert is_download_authorized({"source_id": "missing", "rights_status": "approved_creator_clip", "permission_status": "approved"}) is False
+
+
+def test_x_status_must_match_registered_source() -> None:
+    source = {"source_handle": "@approved_owner", "source_url": "https://x.com/approved_owner"}
+    assert x_registered_author_matches("https://x.com/approved_owner/status/123", source)
+    assert not x_registered_author_matches("https://x.com/third_party/status/123", source)
+    assert not x_registered_author_matches("https://x.com/approved_owner", source)
 
 
 def test_resolve_source_url_prefers_candidate_then_source() -> None:

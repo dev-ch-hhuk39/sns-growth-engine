@@ -31,7 +31,14 @@ def test_bounded_gallery_dl_normalizes_only_individual_posts(monkeypatch):
 
     posts = adapter.acquire({"source_id": "s", "source_url": "https://x.com/meg_lsm", "target_account_ids": ["liver_manager"], "x_read_only": True}, limit=99)
 
-    assert captured["command"] == ["gallery-dl", "--dump-json", "--range", "1-20", "https://x.com/meg_lsm"]
+    command = captured["command"]
+    assert command[0] == "gallery-dl"
+    assert "--config-ignore" in command
+    assert "--no-input" in command
+    assert "--no-download" in command
+    assert "--resolve-json" in command
+    assert command[command.index("--range") + 1] == "1-20"
+    assert command[-1] == "https://x.com/meg_lsm"
     assert len(posts) == 1
     assert posts[0].canonical_post_url == "https://x.com/meg_lsm/status/123"
     assert [item.media_index for item in posts[0].media_items] == [0, 1]
@@ -48,6 +55,18 @@ def test_x_gallery_dl_empty_result_requires_manual_recovery(monkeypatch):
     monkeypatch.setattr("acquisition.x_gallerydl.shutil.which", lambda _: "/usr/bin/gallery-dl")
     monkeypatch.setattr("acquisition.x_gallerydl.subprocess.run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="", stderr=""))
     with pytest.raises(BackendFailure, match="browser_export_or_manual_json_required"):
+        adapter.acquire({"source_url": "https://x.com/meg_lsm", "x_read_only": True}, limit=1)
+
+
+def test_x_gallery_dl_reports_auth_required_without_cookie_extraction(monkeypatch):
+    adapter = XGalleryDlProfileAdapter()
+    monkeypatch.setattr("acquisition.x_gallerydl.shutil.which", lambda _: "/usr/bin/gallery-dl")
+    payload = [[-1, {"error": "AuthRequired", "message": "authenticated cookies needed"}]]
+    monkeypatch.setattr(
+        "acquisition.x_gallerydl.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr=""),
+    )
+    with pytest.raises(BackendFailure, match="auth_required_explicit_cookie_required"):
         adapter.acquire({"source_url": "https://x.com/meg_lsm", "x_read_only": True}, limit=1)
 
 

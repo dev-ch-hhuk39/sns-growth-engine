@@ -47,11 +47,21 @@ def permission(source_id):
         "allow_cloudinary_storage": "true",
         "allow_original_repost": "true",
         "allow_new_caption": "true",
+        "evidence_type": "contract",
+        "evidence_reference": "fixture",
+        "approved_by": "owner",
+        "approved_at": "2026-08-01T00:00:00+00:00",
         "revoked": "false",
     }
 
 
 posts = [
+    {
+        "source_post_id": "post-x",
+        "source_id": "source-x",
+        "target_account_id": "night_scout",
+        "platform": "x",
+    },
     {
         "source_post_id": "post-youtube",
         "source_id": "source-youtube",
@@ -79,6 +89,14 @@ posts = [
 ]
 
 media = [
+    {
+        "source_post_media_id": "media-x",
+        "source_post_id": "post-x",
+        "media_type": "video",
+        "original_media_url": "https://x.com/approved/status/456",
+        "download_status": "PENDING",
+        "created_at": "2026-08-01T05:00:00+00:00",
+    },
     {
         "source_post_media_id": "media-youtube",
         "source_post_id": "post-youtube",
@@ -134,6 +152,7 @@ media = [
 ]
 
 permissions = [
+    permission("source-x"),
     permission("source-youtube"),
     permission("source-tiktok"),
     permission("source-threads"),
@@ -157,7 +176,7 @@ try:
         permissions=permissions,
     )
 
-    assert selected == "media-threads"
+    assert selected == "media-x"
 
     without_threads = FakeClient(
         posts,
@@ -166,6 +185,7 @@ try:
             for row in media
             if row["source_post_media_id"]
             not in {
+                "media-x",
                 "media-threads",
                 "media-profile",
             }
@@ -210,7 +230,7 @@ try:
         permissions=permissions,
     )
 
-    assert selected == "media-threads"
+    assert selected == ""
 
 finally:
     module.core.safe_https_url = (

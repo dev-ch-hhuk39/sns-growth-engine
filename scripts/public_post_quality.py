@@ -16,6 +16,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 RULES_FILE = ROOT / "config/post_generation_rules.json"
+VOICE_PROFILES_FILE = ROOT / "config/account_voice_profiles.json"
 
 INTERNAL_LEAK_TERMS = [
     "今回の切り口",
@@ -92,6 +93,25 @@ def load_post_generation_rules(path: Path = RULES_FILE) -> dict[str, Any]:
     if not path.exists():
         return {"quality_thresholds": {}, "accounts": {}, "account_execution": {}}
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_account_voice_profiles(path: Path = VOICE_PROFILES_FILE) -> dict[str, Any]:
+    """Load the single canonical source for public account voice."""
+    if not path.exists():
+        return {"schema_version": "missing", "semantic_voice_score_min": 85, "accounts": {}}
+    value = json.loads(path.read_text(encoding="utf-8"))
+    return value if isinstance(value, dict) else {"accounts": {}}
+
+
+def canonical_voice_profile(account_id: str) -> dict[str, Any]:
+    profiles = load_account_voice_profiles().get("accounts", {})
+    profile = profiles.get(account_id, {}) if isinstance(profiles, dict) else {}
+    return dict(profile) if isinstance(profile, dict) else {}
+
+
+def canonical_voice_prompt(account_id: str) -> str:
+    """Return the exact generation/review contract consumed by runtime prompts."""
+    return str(canonical_voice_profile(account_id).get("prompt_contract", "")).strip()
 
 
 def extract_public_post_text(value: Any) -> str:
@@ -186,6 +206,163 @@ def _reader_value_score(text: str, account_id: str) -> int:
     return max(0, min(100, score))
 
 
+def _voice_sentence_units(text: str) -> list[str]:
+    units = []
+    for item in re.split(r"(?<=[。！？!?])|\n+", str(text or "")):
+        value = re.sub(r"^[・●■□\-\s]+", "", item.strip())
+        if value:
+            units.append(value)
+    return units
+
+
+def _business_polite_ending(sentence: str) -> bool:
+    value = re.sub(r"[。！？!?\s]+$", "", str(sentence or "").strip())
+    return bool(
+        re.search(
+            r"(?:です|ます|ました|ません|ましょう|ください|できます|なります|"
+            r"おります|いたします|思います|見ています|示します|判断します|確認します)$",
+            value,
+        )
+    )
+
+
+def voice_persona_validation(text: str, account_id: str) -> dict[str, Any]:
+    """Measure account voice separately from subject-matter/account fit."""
+    profile = canonical_voice_profile(account_id)
+    if account_id == "beauty_account":
+        return {"status": "BLOCKED", "score": 0, "reasons": ["blocked_account"], "details": {}}
+    if not profile:
+        return {
+            "status": "BLOCKED",
+            "score": 0,
+            "reasons": ["voice_profile_missing"],
+            "details": {},
+        }
+
+    value = str(text or "").strip()
+    sentences = _voice_sentence_units(value)
+    sentence_count = max(1, len(sentences))
+    polite_sentences = [sentence for sentence in sentences if _business_polite_ending(sentence)]
+    polite_ratio = len(polite_sentences) / sentence_count
+    max_ratio = float(profile.get("business_polite_ratio_max", 0.4))
+    first_person = str(profile.get("first_person", ""))
+    first_person_count = value.count(first_person) if first_person else 0
+    forbidden_first_person = [str(item) for item in profile.get("forbidden_first_person", []) if str(item)]
+    first_person_mismatches = [item for item in forbidden_first_person if item in value]
+    formal_phrases = [str(item) for item in profile.get("formal_consultant_phrases", []) if str(item)]
+    formal_hits = [item for item in formal_phrases if item in value]
+    preferred = [str(item) for item in profile.get("preferred_cadence", []) if str(item)]
+    preferred_hits = [item for item in preferred if item in value]
+    reasons: list[str] = []
+    score = 100
+
+    if first_person_mismatches:
+        reasons.append("voice_first_person_mismatch")
+        score -= 50
+    if first_person_count > 3:
+        reasons.append("voice_first_person_overuse")
+        score -= min(20, (first_person_count - 3) * 5)
+    if polite_ratio > max_ratio:
+        reasons.append("voice_business_polite_ratio_exceeded")
+        score -= 35 + min(20, int((polite_ratio - max_ratio) * 50))
+    if formal_hits:
+        reasons.append("voice_formal_consultant_phrase_present")
+        score -= min(36, len(formal_hits) * 12)
+    if value.count("ください") >= 2:
+        reasons.append("voice_repeated_business_command")
+        score -= 20
+
+    details: dict[str, Any] = {
+        "voice_profile_version": load_account_voice_profiles().get("schema_version", ""),
+        "first_person": first_person,
+        "first_person_count": first_person_count,
+        "first_person_mismatches": first_person_mismatches,
+        "first_person_status": "PASS" if not first_person_mismatches else "BLOCKED",
+        "sentence_count": len(sentences),
+        "business_polite_sentence_count": len(polite_sentences),
+        "business_polite_ratio": round(polite_ratio, 4),
+        "business_polite_ratio_max": max_ratio,
+        "formal_consultant_phrase_hits": formal_hits,
+        "preferred_cadence_hits": preferred_hits,
+    }
+
+    if account_id == "night_scout":
+        field_markers = [str(item) for item in profile.get("field_perspective_markers", []) if str(item)]
+        reader_markers = [str(item) for item in profile.get("reader_direct_markers", []) if str(item)]
+        field_hits = [item for item in field_markers if item in value]
+        reader_hits = [item for item in reader_markers if item in value]
+        details.update({
+            "field_perspective_hits": field_hits,
+            "reader_direct_hits": reader_hits,
+        })
+        if not field_hits:
+            reasons.append("voice_scout_field_perspective_missing")
+            score -= 20
+        if not reader_hits:
+            score -= 8
+        if not preferred_hits:
+            score -= 8
+    elif account_id == "liver_manager":
+        warm_markers = [str(item) for item in profile.get("warm_markers", []) if str(item)]
+        empathy_markers = [str(item) for item in profile.get("empathy_markers", []) if str(item)]
+        action_markers = [str(item) for item in profile.get("action_markers", []) if str(item)]
+        stereotypes = [str(item) for item in profile.get("forbidden_stereotypes", []) if str(item)]
+        warm_hits = [item for item in warm_markers if item in value]
+        empathy_hits = [item for item in empathy_markers if item in value]
+        action_hits = [item for item in action_markers if item in value]
+        stereotype_hits = [item for item in stereotypes if item in value]
+        details.update({
+            "warm_cadence_hits": warm_hits,
+            "empathy_hits": empathy_hits,
+            "next_stream_action_hits": action_hits,
+            "forbidden_stereotype_hits": stereotype_hits,
+        })
+        if not warm_hits:
+            reasons.append("voice_warm_conversational_cadence_missing")
+            score -= 22
+        if not action_hits:
+            reasons.append("voice_next_stream_action_missing")
+            score -= 18
+        if not empathy_hits:
+            score -= 7
+        if stereotype_hits:
+            reasons.append("voice_stereotyped_feminine_language")
+            score -= 35
+
+    formal_penalty = min(100, len(formal_hits) * 25 + (20 if value.count("ください") >= 2 else 0))
+    conversational_hits = set(preferred_hits)
+    if account_id == "liver_manager":
+        conversational_hits.update(details.get("warm_cadence_hits", []))
+    conversational_score = min(100, 55 + len(conversational_hits) * 12)
+    feminine_warmth_score = 0
+    if account_id == "liver_manager":
+        feminine_warmth_score = min(
+            100,
+            50
+            + len(details.get("warm_cadence_hits", [])) * 10
+            + len(details.get("empathy_hits", [])) * 8
+            + len(details.get("next_stream_action_hits", [])) * 6,
+        )
+    details.update({
+        "formal_consultant_penalty": formal_penalty,
+        "conversational_style_score": conversational_score,
+        "feminine_warmth_score": feminine_warmth_score,
+    })
+
+    minimum_score = int(load_account_voice_profiles().get("semantic_voice_score_min", 85))
+    score = max(0, min(100, score))
+    if score < minimum_score:
+        reasons.append("voice_persona_score_below_threshold")
+    reasons = sorted(set(reasons))
+    return {
+        "status": "VOICE_PERSONA_PASS" if not reasons else "BLOCKED",
+        "score": score,
+        "minimum_score": minimum_score,
+        "reasons": reasons,
+        "details": details,
+    }
+
+
 def persona_validation(text: str, account_id: str) -> dict[str, Any]:
     """Validate the reader-facing voice from the central account profile."""
     profiles = load_post_generation_rules().get("persona_profiles", {})
@@ -196,6 +373,7 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
         return {"status": "PASS", "score": 80, "reasons": [], "details": {"profile": "not_configured"}}
 
     reasons: list[str] = []
+    voice = voice_persona_validation(text, account_id)
     reader_terms = [str(term) for term in profile.get("reader_terms", [])]
     reader_hits = [term for term in reader_terms if term in text]
     if len(reader_hits) < int(profile.get("minimum_reader_terms", 1)):
@@ -210,11 +388,12 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
         reasons.append("persona_aggressive_recruiting")
 
     details: dict[str, Any] = {
-        "first_person": str(profile.get("first_person", "")),
+        "first_person": str(canonical_voice_profile(account_id).get("first_person", profile.get("first_person", ""))),
         "reader_term_count": len(reader_hits),
         "reader_terms": reader_hits,
         "first_person_mismatches": first_person_mismatches,
         "blocked_terms": blocked_hits,
+        "voice_persona": voice,
     }
     score = 72 + min(16, len(reader_hits) * 6)
 
@@ -356,6 +535,10 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
             emoji_count - emoji_max,
         ) * 5
 
+    if voice["status"] != "VOICE_PERSONA_PASS":
+        reasons.append("voice_persona_not_pass")
+        reasons.extend(str(reason) for reason in voice["reasons"])
+        score = min(score, int(voice["score"]))
     if first_person_mismatches:
         score -= 35
     if blocked_hits:
@@ -382,6 +565,7 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
     )
     reader = _reader_value_score(public_text, account_id)
     persona = persona_validation(public_text, account_id)
+    voice = persona.get("details", {}).get("voice_persona", voice_persona_validation(public_text, account_id))
     fit = int(persona["score"])
     quality = min(100, int((natural + reader + fit + max(0, 100 - cta) + max(0, 100 - risk)) / 5))
 
@@ -407,6 +591,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("reader_value_below_threshold")
     if persona["status"] != "PASS" or fit < 80:
         reasons.append("account_fit_below_threshold")
+    if voice.get("status") != "VOICE_PERSONA_PASS":
+        reasons.append("voice_persona_not_pass")
     reasons.extend(persona["reasons"])
     if quality < 85:
         reasons.append("quality_below_threshold")
@@ -430,6 +616,7 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
             "account_fit_score": fit,
             "persona": persona,
         },
+        "voice_persona_check": voice,
         "public_post_quality_score": quality,
         "reader_value_score": reader,
         "naturalness_score": natural,
@@ -442,13 +629,92 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
 
 
 def apply_account_voice(text: str, account_id: str) -> str:
-    """Add the account's declared first-person frame without changing facts."""
+    """Convert the topic-bearing closing itself; never append a new topic."""
 
     value = str(text or "").strip()
-    if account_id == "night_scout" and value and "僕" not in value:
-        # Keep the original topic-bearing hook intact. A generic extra hook
-        # changes topic inference and can exhaust otherwise valid fallbacks.
-        return f"僕なら、{value}"
+    if not value:
+        return value
+    if account_id == "night_scout" and "僕" not in value:
+        value = value.replace("確認してください。", "確認した方がいい。")
+        value = value.replace("整理してみてください。", "整理してみるのが大事だよ。")
+        value = value.replace("見てみてください。", "見てみた方がいい。")
+        parts = value.rsplit("\n\n", 1)
+        closing = parts[-1]
+        if not any(term in closing for term in canonical_voice_profile(account_id).get("preferred_cadence", [])):
+            if closing.endswith("したい。"):
+                closing = closing[:-1] + "んだよね。"
+            elif closing.endswith("大事。"):
+                closing = closing[:-3] + "大事だよ。"
+            elif closing.endswith("方がいい。"):
+                closing = closing[:-1] + "んだよね。"
+            else:
+                closing = closing.rstrip("。") + "と思うんだよね。"
+        parts[-1] = "僕なら、" + closing
+        return "\n\n".join(parts)
+    if account_id == "liver_manager" and "私" not in value:
+        replacements = (
+            ("確認してみてください。", "確認してみてね。"),
+            ("試してみてください。", "試してみてね。"),
+            ("整えてみてください。", "整えてみてね。"),
+            ("決めてみてください。", "決めてみてね。"),
+            ("してみましょう。", "してみよ。"),
+            ("整えましょう。", "整えてみよ。"),
+            ("してください。", "してみてね。"),
+            ("ください。", "みてね。"),
+            ("伝えます。", "伝える。"),
+            ("作ります。", "作る。"),
+            ("確認します。", "確認する。"),
+            ("整えます。", "整える。"),
+            ("見直します。", "見直す。"),
+            ("決めます。", "決める。"),
+            ("できます。", "できるよ。"),
+            ("思います。", "思うよ。"),
+            ("なります。", "なるよ。"),
+        )
+        for old, new in replacements:
+            value = value.replace(old, new)
+        parts = value.rsplit("\n\n", 1)
+        closing_source = parts[-1]
+        if closing_source.startswith("まずは"):
+            closing_source = closing_source[len("まずは"):].lstrip("、 ")
+        elif closing_source.startswith("まず、"):
+            closing_source = closing_source[len("まず、"):].lstrip()
+        closing = "私ならまず、" + closing_source
+        warm_markers = canonical_voice_profile(account_id).get("warm_markers", [])
+        if not any(term in closing for term in warm_markers):
+            ending_replacements = (
+                ("変わる。", "変わっていくんだよね。"),
+                ("大事。", "大事なんだよね。"),
+                ("十分。", "十分なんだよね。"),
+                ("強い。", "強いんだよね。"),
+                ("いい。", "いいんだよね。"),
+                ("なりやすい。", "なりやすいんだよね。"),
+                ("続きやすい。", "続きやすいんだよね。"),
+                ("安定しやすい。", "安定しやすいんだよね。"),
+            )
+            for old, new in ending_replacements:
+                if closing.endswith(old):
+                    closing = closing[: -len(old)] + new
+                    break
+            else:
+                closing = closing.rstrip("。") + "んだよね。"
+
+        action_markers = canonical_voice_profile(account_id).get("action_markers", [])
+        if not any(term in value for term in action_markers):
+            if "事務所" in value:
+                action = "事務所を比べる前に、確認項目を一つだけ書いてみてね。"
+            else:
+                action_options = (
+                    "次の配信では、気になった一つを実際に試してみてね。",
+                    "次に配信する時は、ここから一つだけ試してみてね。",
+                    "全部変えなくて大丈夫。次の配信で一つだけ試してみよ。",
+                    "次の配信で、できそうなことを一つだけ試してみてね。",
+                )
+                digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+                action = action_options[int(digest[:8], 16) % len(action_options)]
+            closing = f"{closing}\n{action}"
+        parts[-1] = closing
+        return "\n\n".join(parts)
     return value
 
 
@@ -849,17 +1115,17 @@ def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, An
 
     if account_id == "liver_manager":
         decision_support_repair = (
-            "私なら、条件だけで決めずに"
-            "無理なく続けられるかを先に確認します。"
+            "私なら、条件だけで決めずに、"
+            "無理なく続けられるかを先に見るかな。"
         )
         concrete_action_repair = (
-            "私が見ている中では、まず次の配信で"
-            "一つだけ試してみることからで大丈夫です。"
+            "私ならまず、次の配信で"
+            "一つだけ試してみるかな。それで大丈夫だよ。"
         )
     else:
         decision_support_repair = (
             "僕なら、条件だけで決めずに"
-            "無理なく続けられるかを先に確認する。"
+            "無理なく続けられるかを先に確認するのが大事だよ。"
         )
         concrete_action_repair = (
             "僕が見ている中では、まず避けたい条件を"

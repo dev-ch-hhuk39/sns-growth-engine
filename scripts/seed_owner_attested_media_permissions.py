@@ -17,11 +17,24 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from config_loader import get_config
-from sheets_client import TAB_DEFINITIONS, SheetsClient
+from config_loader import get_config  # noqa: E402
+from media.permission_ledger import evaluate_permission, latest_permission  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 MEDIA_CAPABLE_PLATFORMS = {"threads", "youtube", "tiktok"}
+DECISION_PLATFORMS = {"x", "threads", "tiktok", "youtube"}
 APPROVABLE_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
+DECISION_REQUIRED_FLAGS = (
+    "allow_download",
+    "allow_cloudinary_storage",
+    "allow_original_repost",
+    "allow_transcription",
+    "allow_analysis",
+    "allow_cut",
+    "allow_clip_repost",
+    "allow_new_caption",
+    "allow_edit",
+)
 
 
 def truthy(value: Any) -> bool:
@@ -46,27 +59,146 @@ def eligible_sources(source_ids: set[str] | None = None) -> list[dict[str, Any]]
     return result
 
 
-def permission_row(source: dict[str, Any], now: str) -> dict[str, str]:
+def _handle(value: Any) -> str:
+    text = str(value or "").strip().lstrip("@").lower()
+    return f"@{text}" if text else ""
+
+
+def load_owner_decision(path: Path) -> dict[str, Any]:
+    decision = json.loads(path.read_text(encoding="utf-8"))
+    if decision.get("evidence_type") != "owner_attestation":
+        raise ValueError("decision_evidence_type_must_be_owner_attestation")
+    if not str(decision.get("evidence_reference") or "").strip():
+        raise ValueError("decision_evidence_reference_required")
+    if not str(decision.get("approved_by") or "").strip():
+        raise ValueError("decision_approved_by_required")
+    if set(decision.get("required_flags") or []) != set(DECISION_REQUIRED_FLAGS):
+        raise ValueError("decision_required_flags_mismatch")
+    return decision
+
+
+def decision_sources(
+    decision: dict[str, Any], source_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
+    registry = json.loads(
+        (ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")
+    ).get("sources", [])
+    by_id = {str(row.get("source_id") or ""): row for row in registry}
+    selected: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_identities: set[tuple[str, str, str]] = set()
+    for item in decision.get("sources") or []:
+        source_id = str(item.get("source_id") or "").strip()
+        if source_ids is not None and source_id not in source_ids:
+            continue
+        if not source_id or source_id in seen_ids:
+            raise ValueError(f"decision_source_id_duplicate_or_missing:{source_id}")
+        source = by_id.get(source_id)
+        if source is None:
+            raise ValueError(f"decision_source_not_registered:{source_id}")
+        platform = str(source.get("source_platform") or source.get("platform") or "").lower()
+        registry_handle = _handle(source.get("source_handle") or source.get("author_handle"))
+        decision_handle = _handle(item.get("source_handle"))
+        targets = source.get("target_account_ids") or [source.get("target_account_id")]
+        account_id = str(item.get("account_id") or "")
+        if platform not in DECISION_PLATFORMS:
+            raise ValueError(f"decision_platform_not_allowed:{source_id}:{platform}")
+        if platform != str(item.get("platform") or "").lower():
+            raise ValueError(f"decision_platform_mismatch:{source_id}")
+        if not registry_handle or registry_handle != decision_handle:
+            raise ValueError(f"decision_handle_mismatch:{source_id}")
+        if account_id not in {str(value) for value in targets if value}:
+            raise ValueError(f"decision_account_mismatch:{source_id}")
+        identity = (platform, decision_handle, account_id)
+        if identity in seen_identities:
+            raise ValueError(f"decision_identity_duplicate:{platform}:{decision_handle}:{account_id}")
+        selected.append({**source, **item, "source_handle": decision_handle})
+        seen_ids.add(source_id)
+        seen_identities.add(identity)
+    if source_ids is not None and seen_ids != source_ids:
+        missing = sorted(source_ids - seen_ids)
+        raise ValueError(f"requested_source_not_in_decision:{','.join(missing)}")
+    return selected
+
+
+def retired_decision_sources(
+    decision: dict[str, Any], source_ids: set[str] | None = None
+) -> list[dict[str, Any]]:
+    """Validate retired identities against the registry without deleting history."""
+    retirement_decision = {**decision, "sources": decision.get("retired_sources") or []}
+    return decision_sources(retirement_decision, source_ids)
+
+
+def permission_row(
+    source: dict[str, Any],
+    now: str,
+    decision: dict[str, Any] | None = None,
+) -> dict[str, str]:
     source_id = str(source["source_id"])
     platform = str(source.get("source_platform") or source.get("platform") or "").lower()
     # A Threads profile grant permits direct reuse of its original post media,
     # but never turns a profile into a clip factory.  Video-source grants retain
     # the explicit clip fields.  Existing revoked rows are still never touched.
-    is_clip_source = platform in {"youtube", "tiktok"}
+    is_explicit_decision = decision is not None
+    is_clip_source = is_explicit_decision or platform in {"youtube", "tiktok"}
+    evidence_reference = (
+        str(decision.get("evidence_reference") or "")
+        if decision
+        else "global_owner_attestation_v1"
+    )
+    approved_by = (
+        str(decision.get("approved_by") or "") if decision else "Chadult株式会社"
+    )
+    allowed_platforms = ",".join(decision.get("allowed_platforms") or ["threads"]) if decision else "threads"
+    account_id = str(
+        source.get("account_id")
+        or (source.get("target_account_ids") or [source.get("target_account_id")])[0]
+        or ""
+    )
     return {
         "permission_id": f"owner_attestation_{source_id}", "source_id": source_id,
+        "source_handle": _handle(source.get("source_handle") or source.get("author_handle")),
         "source_url": str(source.get("canonical_url") or source.get("source_url") or ""),
-        "account_id": str((source.get("target_account_ids") or [source.get("target_account_id")])[0] or ""),
+        "account_id": account_id,
+        "allowed_accounts": account_id,
+        "allowed_platforms": allowed_platforms,
         "usage_mode": "direct_and_clip" if is_clip_source else "direct_media_reuse",
         "rights_status": "approved_creator_clip", "permission_status": "approved",
         "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true",
         "allow_transcription": str(is_clip_source).lower(), "allow_analysis": "true", "allow_cut": str(is_clip_source).lower(),
         "allow_clip_repost": str(is_clip_source).lower(), "allow_new_caption": "true", "allow_edit": str(is_clip_source).lower(),
         "attribution_required": "false", "attribution_text": "",
-        "evidence_type": "owner_attestation", "evidence_reference": "global_owner_attestation_v1",
-        "approved_by": "Chadult株式会社", "approved_at": now, "expires_at": "", "revoked": "false",
+        "evidence_type": "owner_attestation", "evidence_reference": evidence_reference,
+        "approved_by": approved_by, "approved_at": now, "expires_at": "", "revoked": "false",
         "revoked_at": "", "notes": "Owner-attested for direct original reuse" + (" and generated clips." if is_clip_source else "."), "updated_at": now,
     }
+
+
+def revocation_row(
+    source: dict[str, Any], now: str, decision: dict[str, Any]
+) -> dict[str, str]:
+    """Build an append-only owner revocation that wins latest-row evaluation."""
+    source_id = str(source["source_id"])
+    account_id = str(source.get("account_id") or "")
+    compact_time = now.replace("-", "").replace(":", "").replace("+", "_")
+    row = permission_row(source, now, decision)
+    row.update(
+        {
+            "permission_id": f"owner_retirement_{source_id}_{compact_time}",
+            "account_id": account_id,
+            "allowed_accounts": account_id,
+            "usage_mode": "blocked",
+            "rights_status": "restricted",
+            "permission_status": "revoked",
+            "revoked": "true",
+            "revoked_at": now,
+            "notes": "Owner retired source from runtime selection; historical grants remain audit-only.",
+            "updated_at": now,
+        }
+    )
+    for flag in DECISION_REQUIRED_FLAGS:
+        row[flag] = "false"
+    return row
 
 
 def main() -> int:
@@ -74,9 +206,15 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-owner-attestation", action="store_true")
+    parser.add_argument("--revoke-retired", action="store_true")
+    parser.add_argument("--confirm-retirement-revocation", action="store_true")
     parser.add_argument("--source-id", action="append", default=[], help="Explicit approved source ID; repeat for each source")
+    parser.add_argument("--decision-file", help="Owner decision JSON with exact source/account/handle scope")
     args = parser.parse_args()
-    if args.apply and not args.confirm_owner_attestation:
+    if args.apply and args.revoke_retired and not args.confirm_retirement_revocation:
+        print(json.dumps({"status": "BLOCKED", "reason": "--revoke-retired apply requires --confirm-retirement-revocation"}))
+        return 1
+    if args.apply and not args.revoke_retired and not args.confirm_owner_attestation:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-owner-attestation"}))
         return 1
     if args.apply and not args.source_id:
@@ -84,19 +222,42 @@ def main() -> int:
         return 1
     now = datetime.now(timezone.utc).isoformat()
     requested = {str(value).strip() for value in args.source_id if str(value).strip()} or None
-    rows = [permission_row(source, now) for source in eligible_sources(requested)]
+    try:
+        decision = load_owner_decision(Path(args.decision_file)) if args.decision_file else None
+        if args.revoke_retired and not decision:
+            raise ValueError("--revoke-retired requires --decision-file")
+        sources = (
+            retired_decision_sources(decision, requested)
+            if args.revoke_retired and decision
+            else decision_sources(decision, requested)
+            if decision
+            else eligible_sources(requested)
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(json.dumps({"status": "BLOCKED", "reason": str(exc)}, ensure_ascii=False))
+        return 1
+    rows = [
+        revocation_row(source, now, decision)
+        if args.revoke_retired and decision
+        else permission_row(source, now, decision)
+        for source in sources
+    ]
     result: dict[str, Any] = {
         "status": "PLAN_ONLY",
         "eligible_source_count": len(rows),
         "requested_source_count": len(requested or []),
         "selected_source_ids": [row["source_id"] for row in rows],
+        "selected_source_handles": [row["source_handle"] for row in rows],
         "would_write": len(rows),
         "revoked_preserved": True,
         "approved_rights_only": True,
+        "operation": "revoke_retired" if args.revoke_retired else "grant",
     }
     if not args.apply:
-        print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
-    cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     ws = client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
     headers = client._call_with_rate_limit_retry(
         "row_values:media_permissions:owner_seed",
@@ -114,6 +275,20 @@ def main() -> int:
     for row in rows:
         previous_entry = existing.get(row["source_id"])
         previous = previous_entry[1] if previous_entry else None
+        if args.revoke_retired:
+            effective = latest_permission(existing_rows, row["source_id"])
+            if effective and truthy(effective.get("revoked")):
+                revoked_skips += 1
+                continue
+            client._call_with_rate_limit_retry(
+                f"append_revocation:media_permissions:{row['source_id']}",
+                lambda row=row: ws.append_row(
+                    [row.get(header, "") for header in headers],
+                    value_input_option="USER_ENTERED",
+                ),
+            )
+            writes += 1
+            continue
         if previous and truthy(previous.get("revoked")):
             revoked_skips += 1
             continue
@@ -136,15 +311,60 @@ def main() -> int:
             ),
         )
         writes += 1
+    verified_rows = client._call_with_rate_limit_retry(
+        "get_all_records:media_permissions:owner_seed_verify",
+        lambda: ws.get_all_records(),
+    )
+    invalid_rows: list[dict[str, Any]] = []
+    expected_by_id = {row["source_id"]: row for row in rows}
+    for source_id, expected in expected_by_id.items():
+        actual = latest_permission(verified_rows, source_id)
+        if args.revoke_retired:
+            evaluation = evaluate_permission(
+                verified_rows,
+                source_id,
+                account_id=expected["account_id"],
+                source_handle=expected["source_handle"],
+                required_flags=DECISION_REQUIRED_FLAGS,
+            )
+            if evaluation["allowed"] or not truthy(actual.get("revoked")):
+                invalid_rows.append(
+                    {"source_id": source_id, "invalid_fields": ["effective_permission_not_revoked"]}
+                )
+            continue
+        exact_fields = (
+            "source_id",
+            "source_handle",
+            "account_id",
+            "rights_status",
+            "permission_status",
+            "evidence_type",
+            "evidence_reference",
+            "approved_by",
+            "approved_at",
+        )
+        invalid_fields = [
+            field
+            for field in exact_fields
+            if str(actual.get(field, "")) != str(expected.get(field, ""))
+        ]
+        invalid_fields.extend(
+            field for field in DECISION_REQUIRED_FLAGS if not truthy(actual.get(field))
+        )
+        if invalid_fields:
+            invalid_rows.append({"source_id": source_id, "invalid_fields": invalid_fields})
+    status = "APPLIED" if not invalid_rows else "PARTIAL_READ_AFTER_WRITE_FAILED"
     print(json.dumps({
         **result,
-        "status": "APPLIED",
+        "status": status,
         "written": writes,
         "updated": updates,
         "revoked_skipped": revoked_skips,
+        "read_after_write": "PASS" if not invalid_rows else "FAIL",
+        "invalid_rows": invalid_rows,
         "non_media_platforms_excluded": True,
     }, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if not invalid_rows else 1
 
 
 if __name__ == "__main__":

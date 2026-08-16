@@ -1,64 +1,71 @@
-updated_by: Antigravity
+# START HERE - Reference-first Media Core
 
-## 2026-07-28 WP3-C5 Confirmed Result
+Updated: 2026-08-11
 
-- Current merged `main`: `33af92f50417ddd63d19ff09d61ae64adfc5f87d`.
-- PR #36 and post-merge CI `30314336252` succeeded. The one new WP3-C5
-  read-only run `30314454246` made its renderer-validated safe JSON visible.
-- Classification: `HISTORICAL_CHANNEL_TAB_PSEUDO_ENTRIES`, with three parent
-  and three child rows, matched canonical URL groups, and an empty apply list.
-  The next action is manual repair review only; no mutation was performed.
-- All canary, source-bundle, and media-post evidence remains unverified.
-document_branch:
-ops/wp3c2-duplicate-parent-inspection
+## Read first
 
-related_pr:
-#29
+1. Current user task and any task-specific Owner Source of Truth
+2. `AGENTS.md`
+3. `GOAL.md`
+4. `docs/current-work.md`
+5. Latest section of `docs/ai-work-handoff.md`
+6. `docs/reference-first-media-core-20260811.md`
+7. `docs/reference-first-completion.md`
+8. `docs/reference-first-entrypoint-classification.md`
 
-audited_main_sha:
-a24d778925ddbad3b3ce9abdbf7ecc728a15fa45
+## Current local state
 
-PR #28:
-MERGED
+- Branch: `refactor/reference-first-media-core-20260811-20260811-054925`
+- v21 start HEAD: `f0d938c6080ad580eb5e86f46c1ab8b880151565`
+- Do not reset, clean, rebase, discard or reconstruct this branch from main.
+- Historical production evidence remains in `docs/ai-work-handoff.md`; it does
+  not override current policy.
 
-PR #28 merge commit:
-a24d778925ddbad3b3ce9abdbf7ecc728a15fa45
+## Active architecture
 
-post-merge CI:
-30182235955 / SUCCESS
+- Managed accounts: `night_scout`, `liver_manager`
+- Active reference priority: TikTok -> X -> YouTube
+- Stable physical media: X + YouTube via `yt-dlp`, plus exact owner-authorized
+  TikTok public-embed media
+- X discovery: bounded metadata-only `gallery-dl`
+- Threads reference acquisition: `DEFERRED_OSS_CANDIDATE`; Meta Graph,
+  Meta oEmbed, Playwright and browser/session routes are
+  `NOT_USED_BY_OWNER_POLICY`
+- Mix: direct 50 / reference text 30 / PDCA 10 / new text 5 / clip 5
+- Geometry: `preserve_source`
+- Reusable media authority: live Sheets `media_permissions`
+- Review: `WAITING_REVIEW` is ineligible; `READY` is eligible
+- Completion: software/integration evidence is evaluated separately from live
+  production evidence by `scripts/evaluate_reference_first_completion.py`
 
-WP3-C production repair-plan:
-30182297840 / SUCCESS
+## Safety boundary
 
-classification:
-BLOCKED
+- Reusable-media permissions remain exact source/account/handle rows. Never
+  infer or mirror a grant to another source or a third-party repost.
+- Public X content is not reusable merely because it is publicly accessible.
+- X status author must match the registered source handle.
+- No X publish, no `beauty_account`, no production Sheets/Cloudinary/social
+  mutation without explicit authorization.
+- Deprecated Playwright/browser acquisition code remains for rollback only and
+  is not part of active routing.
 
-blocking reason:
-MULTIPLE_PARENTS
+## Validation baseline
 
-current task:
-WP3-C2 duplicate parent inspection
+The v20 milestone was 825/825 repository tests, zero failures. After any
+change, run focused tests, Python compile, the repository test runner, Ruff
+fatal rules and `git diff --check`. Never update `docs/goal-status.json` by
+hand.
 
-document_status:
-DUPLICATE_PARENT_INSPECTION_IN_PROGRESS
-## 2026-07-28 Current Rebaseline
+## Deferred platform
 
-- Canonical merged `main`: `33af92f50417ddd63d19ff09d61ae64adfc5f87d`.
-- Repository visibility is `public`; `main` has required PR checks and force
-  push/deletion protection. The `production` Environment has a branch-policy
-  protection rule. These are GitHub API observations, not production-posting
-  evidence.
-- PR #35 and its post-merge CI are successful. Its WP3-C5 diagnostic run
-  `30313039483` also completed successfully, but the workflow did not expose
-  its validated safe JSON in the job log. Do not infer a provenance result
-  from that green conclusion.
-- Active work: `fix/wp3c5-safe-result-observability`. It makes only the
-  renderer-validated, redacted WP3-C5 JSON visible; it never prints raw
-  inspector stdout/stderr and performs no Sheets mutation, media operation,
-  or social post.
-- Goal evaluation remains incomplete. The evidence-backed baseline is tracked
-  in `docs/goal-status.json`; the additive cross-account completion contract
-  is in `config/production_capability_matrix.json` and begins `UNVERIFIED`
-  until evidence is checked by `scripts/evaluate_capability_matrix.py`; all
-  canaries and Liver Manager source-account
-  evidence remain unverified or blocked.
+YouTube physical acquisition and exact owner permission have dual-account PASS
+evidence. Threads requires no Meta authentication: it remains deferred until
+the owner supplies an acceptable GitHub/OSS backend candidate and that route
+passes bounded read-only, provenance and safety verification.
+
+Legacy Graph/oEmbed/browser code remains historical and inactive so useful
+evidence is not destroyed. It must not be selected by production routing.
+
+The current internal target is
+`SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`. It does not authorize production
+writes and must not be described as production evidence complete.

@@ -233,6 +233,11 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "validator_status", "internal_leak_status", "account_fit_status",
         "public_post_quality_score", "reader_value_score", "naturalness_score",
         "cta_pressure_score",
+        # Canonical persona/voice evidence. Topic fit alone is insufficient.
+        "voice_persona_status", "voice_persona_score", "polite_ending_ratio",
+        "first_person_status", "formal_consultant_penalty",
+        "conversational_style_score", "feminine_warmth_score",
+        "voice_blocked_reasons",
         "rejected_reason", "blocked_reason",
         "excluded_from_activation", "excluded_from_metrics_baseline",
         "repost_prohibited", "superseded_reason",
@@ -289,6 +294,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "media_asset_id", "media_preview_url", "media_type", "source_url",
         "primary_topic", "validator_status", "internal_leak_status",
         "account_fit_status", "topic_coherence_status", "batch_diversity_status",
+        "voice_persona_status", "voice_persona_score", "polite_ending_ratio",
+        "first_person_status", "formal_consultant_penalty",
+        "conversational_style_score", "feminine_warmth_score",
+        "voice_blocked_reasons",
         "media_validator_status", "created_at", "updated_at",
         "review_decision", "reviewer_note", "decision_applied_at",
         "decision_result", "last_sync_at",
@@ -655,7 +664,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
     ],
     # User-operated permission ledger. Code never infers a direct-reuse grant.
     "media_permissions": [
-        "permission_id", "source_id", "source_url", "account_id", "usage_mode",
+        "permission_id", "source_id", "source_handle", "source_url", "account_id",
+        "allowed_accounts", "allowed_platforms", "usage_mode",
         "rights_status", "permission_status",
         "allow_download", "allow_cloudinary_storage", "allow_original_repost",
         "allow_transcription", "allow_analysis", "allow_cut", "allow_clip_repost",

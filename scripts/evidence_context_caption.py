@@ -9,7 +9,7 @@ from typing import Any
 from generation.semantic_alignment import LocalSemanticAlignmentProvider
 from generation_quality_gates import evaluate_generation_quality
 from media_activation_source_suitability import clip_source_suitability
-from public_post_quality import final_public_post_validator
+from public_post_quality import apply_account_voice, final_public_post_validator
 
 PROVIDER_NAME = "deterministic_evidence_context"
 PROVIDER_VERSION = "2"
@@ -210,7 +210,10 @@ def generate_evidence_context_caption(
             variants = _variants(hook, claim, closing)
             offset = (seed + claim_index) % len(variants)
             for step in range(len(variants)):
-                public_text = variants[(offset + step) % len(variants)]
+                public_text = apply_account_voice(
+                    variants[(offset + step) % len(variants)],
+                    account_id,
+                )
                 validation = final_public_post_validator(public_text, account_id)
                 if validation.get("status") != "PASS":
                     rejections.update(str(item) for item in validation.get("blocked_reasons", []) if str(item))

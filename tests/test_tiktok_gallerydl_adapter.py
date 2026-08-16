@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from acquisition.factory import build_router
-from acquisition.tiktok_gallerydl import TikTokGalleryDlProfileAdapter
+from acquisition.factory import build_router  # noqa: E402
+from acquisition.tiktok_gallerydl import TikTokGalleryDlProfileAdapter  # noqa: E402
 
 
 def test_gallery_dl_is_bounded_fallback_and_returns_individual_video(monkeypatch):
@@ -25,6 +25,6 @@ def test_gallery_dl_is_bounded_fallback_and_returns_individual_video(monkeypatch
     assert posts[0].media_items[0].media_index == 0
 
 
-def test_router_places_gallery_dl_between_ytdlp_and_playwright():
+def test_router_uses_gallery_dl_without_playwright():
     route = build_router().routes["tiktok.profile_posts"]
-    assert route.fallbacks == ("tiktok_gallery_dl", "tiktok_public_playwright")
+    assert route.fallbacks == ("tiktok_gallery_dl",)

@@ -115,7 +115,7 @@ assert (
 )
 
 assert (
-    "実測値で上位"
+    "night_scoutだけのMEASURED"
     in scores[0]["reason"]
 )
 
@@ -142,7 +142,19 @@ fake_rows = {
         {
             "queue_id": "q1",
             "draft_id": "d1",
+            "account_id": "night_scout",
             "source_id": "r_high",
+            "public_post_text": (
+                "体入で時給だけを見て決めると、"
+                "給料日に思ったより残らないって"
+                "なることが結構ある。\n\n"
+                "僕が入店前に見るのは、控除の種類、"
+                "早上がりの扱い、バックが付く条件。"
+                "この3つなんだよね。\n\n"
+                "表示時給より、同じ出勤ペースで実際に"
+                "いくら残るかを見る。ここまで聞いてから"
+                "選ぶ方が、自分に合う店を見つけやすいよ。"
+            ),
         },
         {
             "queue_id": "q2",
@@ -154,6 +166,7 @@ fake_rows = {
 
 grounded = apply_measured_pdca_lineage(
     fake_rows,
+    account_id="night_scout",
     source_meta=source_meta,
     top_n=1,
 )
@@ -188,13 +201,17 @@ assert (
 
 assert (
     queue["transformation_type"]
-    == "metrics_pdca_owned_post"
+    == "metrics_learned_original"
 )
 
 assert (
     queue["source_credit"]
-    == "owned_post_metrics"
+    == "internal_learning_only"
 )
+
+assert queue["pdca_learning_scope_id"] == "account:night_scout"
+assert queue["metrics_disclosure_status"] == "PASS"
+assert "前回" not in queue["public_post_text"]
 
 source = (
     Path(__file__)

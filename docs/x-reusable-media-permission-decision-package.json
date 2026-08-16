@@ -1,0 +1,102 @@
+{
+  "status": "OWNER_AUTHORIZED_APPLIED",
+  "apply": true,
+  "decision_file": "config/owner_source_permissions_20260811.json",
+  "evidence_type": "owner_attestation",
+  "evidence_reference": "Owner explicitly authorized all previously confirmed X / Threads / TikTok reference sources for reference, analysis, media download/storage, cut/edit, original reuse/repost, new-caption, quote/reference, clip and derivative use on 2026-08-11 JST.",
+  "permission_ledger_read_after_write": "PASS",
+  "golden_requirements": {
+    "night_scout": {
+      "source_selection_required": false,
+      "eligible_registry_candidates": [
+        "src_ns_x_cand_001 @takashimaanna",
+        "src_ns_x_cand_003 @minatoku789",
+        "src_ns_x_cand_004 @amuxamudaily",
+        "src_ns_x_cand_005 @1okukure_",
+        "src_ns_x_cand_007 @urarament",
+        "src_ns_x_cand_008 @3j2c9q",
+        "src_ns_x_owner_kyaba_career @kyaba_career"
+      ],
+      "video_primary": [
+        "src_ns_x_cand_008 @3j2c9q priority=1",
+        "src_ns_x_cand_004 @amuxamudaily priority=2"
+      ],
+      "text_image_reference_only": [
+        "src_ns_x_cand_001 @takashimaanna",
+        "src_ns_x_cand_003 @minatoku789",
+        "src_ns_x_cand_005 @1okukure_",
+        "src_ns_x_cand_007 @urarament",
+        "src_ns_x_owner_kyaba_career @kyaba_career"
+      ],
+      "retired_and_revoked": [
+        "src_ns_x_cand_002 @cabalounge",
+        "src_ns_x_cand_006 @onigiriscout_0",
+        "src_ns_x_owner_kyabataihendane @kyabataihendane"
+      ]
+    },
+    "liver_manager": {
+      "source_selection_required": false,
+      "eligible_registry_candidates": [
+        "src_lm_x_cand_001 @meg_lsm",
+        "src_lm_x_cand_002 @ryoyan_1130"
+      ]
+    }
+  },
+  "applied_permission_contract": {
+    "rights_status": "approved_creator_clip",
+    "permission_status": "approved",
+    "usage_mode": "direct_and_clip",
+    "allowed_accounts": "source-specific target account",
+    "allowed_platforms": ["threads"],
+    "required_flags": [
+      "allow_download",
+      "allow_cloudinary_storage",
+      "allow_original_repost",
+      "allow_transcription",
+      "allow_analysis",
+      "allow_cut",
+      "allow_clip_repost",
+      "allow_new_caption",
+      "allow_edit"
+    ],
+    "expires_at": "",
+    "attribution": "not_invented"
+  },
+  "mandatory_limits": [
+    "Permission applies only to posts authored by the registered handle.",
+    "Retweets, quotes, reposts and third-party authors never inherit permission.",
+    "X publishing remains disabled.",
+    "Public availability alone never creates permission.",
+    "Cloudinary production upload and SNS publish are outside this permission activation run."
+  ],
+  "collision_audit": {
+    "checked_at": "2026-08-11",
+    "runtime_candidate_source_id_count": 9,
+    "runtime_candidate_handle_count": 9,
+    "runtime_duplicate_source_ids": [],
+    "runtime_duplicate_handles": [],
+    "historical_example_id_collisions": [
+      "src_ns_x_cand_002",
+      "src_ns_x_cand_003",
+      "src_ns_x_cand_004",
+      "src_ns_x_cand_005",
+      "src_ns_x_cand_006",
+      "src_ns_x_cand_007",
+      "src_ns_x_cand_008"
+    ],
+    "new_collision_free_ids": ["src_ns_x_owner_kyaba_career"],
+    "status": "PASS"
+  },
+  "golden_status": {
+    "night_scout": "PASS_TWO_EXACT_STATUS_PHYSICAL_AV_WAITING_REVIEW",
+    "liver_manager": "PASS_TWO_EXACT_STATUS_PHYSICAL_AV_WAITING_REVIEW"
+  },
+  "golden_steps": [
+    "Use bounded registered-profile discovery and reject profiles, retweets, quotes and author mismatches.",
+    "Require an exact individual /status/ URL authored by the registered handle.",
+    "Evaluate the latest live permission row for source ID, source handle, account and operation flags.",
+    "Use yt-dlp only for the approved individual post, then require ffprobe video/audio evidence.",
+    "Preserve source geometry and stop at WAITING_REVIEW.",
+    "Never publish to X or Threads during the Golden acquisition proof."
+  ]
+}

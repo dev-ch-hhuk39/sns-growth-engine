@@ -17,136 +17,22 @@ sys.path[:0] = [
 
 import ingest_direct_reference_media as core  # noqa: E402
 
+_CORE_PERMISSION_OK_FROM_ROWS = core.permission_ok_from_rows
+
 
 _PLATFORM_PRIORITY = {
-    "threads": 0,
-    "tiktok": 1,
-    "youtube": 2,
-}
-
-
-_ORIGINAL_PERMISSION_OK_FROM_ROWS = (
-    core.permission_ok_from_rows
-)
-
-_OWNER_ATTESTATION_EVIDENCE_TYPES = {
-    "owner_attestation",
-    "written_permission",
-    "contract",
-    "creator_approval",
-    "platform_permission",
+    "x": 0,
+    "youtube": 1,
 }
 
 
 def permission_ok_from_rows(
     rows: list[dict[str, Any]],
     source_id: str,
+    account_id: str = "",
 ) -> bool:
-    """Preserve explicit approvals and support bounded legacy attestations."""
-
-    # Existing explicit approvals retain the original production contract.
-    if _ORIGINAL_PERMISSION_OK_FROM_ROWS(
-        rows,
-        source_id,
-    ):
-        return True
-
-    matches = [
-        (index, row)
-        for index, row in enumerate(rows)
-        if str(row.get("source_id", "")) == source_id
-    ]
-
-    if not matches:
-        return False
-
-    _index, current = max(
-        matches,
-        key=lambda item: (
-            str(
-                item[1].get("updated_at")
-                or item[1].get("approved_at")
-                or ""
-            ),
-            item[0],
-        ),
-    )
-
-    if core.truthy(
-        current.get("revoked")
-    ):
-        return False
-
-    permission_status = str(
-        current.get(
-            "permission_status",
-            "",
-        )
-    ).strip().lower()
-
-    rights_status = str(
-        current.get(
-            "rights_status",
-            "",
-        )
-    ).strip().lower()
-
-    # The compatibility route is limited to fully legacy rows where both
-    # status columns are blank. Explicit or partially migrated values remain
-    # fail-closed.
-    if permission_status or rights_status:
-        return False
-
-    usage_mode = str(
-        current.get(
-            "usage_mode",
-            "",
-        )
-    ).strip().lower()
-
-    if usage_mode != "direct_media_reuse":
-        return False
-
-    evidence_type = str(
-        current.get(
-            "evidence_type",
-            "",
-        )
-    ).strip().lower()
-
-    if evidence_type not in _OWNER_ATTESTATION_EVIDENCE_TYPES:
-        return False
-
-    required_identity_fields = (
-        "evidence_reference",
-        "approved_by",
-        "approved_at",
-    )
-
-    if not all(
-        str(
-            current.get(
-                field,
-                "",
-            )
-        ).strip()
-        for field in required_identity_fields
-    ):
-        return False
-
-    required_flags = (
-        "allow_download",
-        "allow_cloudinary_storage",
-        "allow_original_repost",
-        "allow_new_caption",
-    )
-
-    return all(
-        core.truthy(
-            current.get(field)
-        )
-        for field in required_flags
-    )
+    """Use the same strict ledger decision as the core ingestion path."""
+    return _CORE_PERMISSION_OK_FROM_ROWS(rows, source_id, account_id)
 
 
 def _looks_like_threads_placeholder(url: str) -> bool:
@@ -256,6 +142,7 @@ def select_pending_media_id(
                     "",
                 )
             ),
+            account_id,
         ):
             continue
 
@@ -341,11 +228,21 @@ def select_pending_media_id(
             )
         ).lower()
 
+        if not core.can_attempt_physical_media(
+            platform,
+            str(media.get("original_media_url") or media.get("canonical_post_url") or ""),
+        ):
+            continue
+
         if platform == "youtube":
             if (
                 "/watch" not in url
                 and "/shorts/" not in url
             ):
+                continue
+
+        elif platform == "x":
+            if "/status/" not in url:
                 continue
 
         elif platform == "tiktok":

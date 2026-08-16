@@ -29,18 +29,21 @@ DEFAULT_FORBIDDEN_TEMPLATE_PHRASES = (
 
 DEFAULT_MARKERS = {
     "night_scout": (
-        "なんよな",
-        "よな",
+        "なんだよね",
+        "なんよね",
+        "だよ",
         "かな",
         "と思う",
         "僕なら",
     ),
     "liver_manager": (
-        "なんですよね",
-        "ですよね",
-        "だよね",
-        "と思います",
-        "僕",
+        "なんだよね",
+        "よね",
+        "大丈夫",
+        "してみて",
+        "かも",
+        "かな",
+        "私なら",
         "じゃなくて",
     ),
 }
@@ -132,10 +135,7 @@ def clean_source_post_text(
         " ",
     )
 
-    if account_id in {
-        "night_scout",
-        "liver_manager",
-    }:
+    if account_id == "night_scout":
         first_person_replacements = (
             ("私は", "僕は"),
             ("私が", "僕が"),
@@ -150,14 +150,28 @@ def clean_source_post_text(
             ("おれが", "僕が"),
             ("おれなら", "僕なら"),
         )
-
-        for old, new in (
-            first_person_replacements
-        ):
+        for old, new in first_person_replacements:
             value = value.replace(
                 old,
                 new,
             )
+    elif account_id == "liver_manager":
+        first_person_replacements = (
+            ("僕は", "私は"),
+            ("僕が", "私が"),
+            ("僕なら", "私なら"),
+            ("ぼくは", "私は"),
+            ("ぼくが", "私が"),
+            ("ぼくなら", "私なら"),
+            ("俺は", "私は"),
+            ("俺が", "私が"),
+            ("俺なら", "私なら"),
+            ("おれは", "私は"),
+            ("おれが", "私が"),
+            ("おれなら", "私なら"),
+        )
+        for old, new in first_person_replacements:
+            value = value.replace(old, new)
 
     value = re.sub(
         r"[ \t]+",
@@ -492,7 +506,7 @@ def evaluate_source_copyedit_contract(
         )
 
     ending_pattern = re.compile(
-        r"(?:なんよな|なんよね|だよね|よね|よな|かな)"
+        r"(?:なんだよね|なんよね|だよね|だよ|よね|よな|かな)"
         r"(?:[。！？!?]|$)"
     )
 
@@ -678,8 +692,8 @@ def validate_source_preserving_public_post(
 
     ending_count = len(
         re.findall(
-            r"(?:なんよな|なんよね|"
-            r"だよね|よね|よな|かな)"
+            r"(?:なんだよね|なんよね|"
+            r"だよね|だよ|よね|よな|かな)"
             r"(?:[。！？!?]|$)",
             public_text,
         )
@@ -784,10 +798,17 @@ class DeterministicSourceCopyeditProvider:
                 ),
             )
 
+        from public_post_quality import apply_account_voice
+
+        public_text = apply_account_voice(
+            source,
+            account_id,
+        )
+
         contract = (
             evaluate_source_copyedit_contract(
                 source_text=source,
-                public_post_text=source,
+                public_post_text=public_text,
                 account_id=account_id,
                 recent_posts=recent_posts,
             )
@@ -839,11 +860,11 @@ class DeterministicSourceCopyeditProvider:
                         "same_parent_direct_media"
                     ),
                 },
-                "public_post_text": source,
+                "public_post_text": public_text,
                 "claim_support": [
                     {
                         "caption_claim": (
-                            source
+                            public_text
                         ),
                         "source_evidence": (
                             source

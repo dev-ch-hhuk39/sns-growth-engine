@@ -11,7 +11,11 @@ sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 import run_direct_reference_media_pipeline as pipeline
 
 
-GOOD_TEXT = """店選びでは、条件だけでなく相性と相談しやすさも確認する。"""
+GOOD_TEXT = """夜職の店選びで迷ってる子は、条件だけで決めない方がいい。
+
+相性と相談しやすさまで確認しないと、入ってから続けにくいことって結構ある。
+
+僕なら、条件と相性を並べて、担当へ相談しやすい店か体入前に見るんだよね。"""
 
 
 def post(post_id: str) -> dict:

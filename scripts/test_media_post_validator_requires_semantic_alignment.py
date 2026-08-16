@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 from media_post_validator import validate_media_post
+from test_media_post_validator_requires_approved_rights import GOOD_TEXT
 
-TEXT = "配信で初見さんが入りやすい空気を作るなら、最初に今の話題を一言伝えてみてください。\n\n何をコメントすればいいか分かるだけで、参加のきっかけを作りやすくなります。"
+TEXT = GOOD_TEXT
 base = {
     "rights_status": "approved_creator_clip",
     "permission_status": "approved",

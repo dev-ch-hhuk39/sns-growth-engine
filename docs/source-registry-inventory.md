@@ -1,5 +1,21 @@
 # Source Registry Inventory
 
+## 2026-08-11 runtime selection override
+
+- Night Scout X video primary: `@3j2c9q` priority 1,
+  `@amuxamudaily` priority 2.
+- Night Scout X text/image reference only: `@takashimaanna`, `@minatoku789`,
+  `@1okukure_`, `@urarament`, `@kyaba_career`.
+- Runtime retired, historical rows retained, effective permission revoked:
+  `@onigiriscout_0`, `@cabalounge`, `@kyabataihendane`.
+- Editorial selection and permission are separate. A primary selection still
+  requires the latest effective permission row; a valid permission does not
+  make a text/image-only or retired identity an X video candidate.
+- Current physical proof: four exact X statuses and two YouTube videos contain
+  real A/V bytes. The YouTube pair remains blocked before `WAITING_REVIEW`
+  pending exact ledger approval. TikTok and Threads profile discovery currently
+  yield no individual physical video through allowed no-browser backends.
+
 ## 2026-07-17 Current Production Inventory
 
 The source of truth is `config/source_accounts/default_sources.json`: 73 rows total. Fourteen owner-attested media sources are currently approved and explicitly allow-listed by `config/media_growth_engine.json` (`night_scout=9`, `liver_manager=5`). Permission evidence, approved rights, account targeting, revocation checks and bounded discovery remain mandatory; approval never authorizes X or beauty use.

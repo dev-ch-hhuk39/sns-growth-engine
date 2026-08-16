@@ -6801,3 +6801,982 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
 - 変更: `src/acquisition/threads_public.py`, `scripts/acquire_approved_source_posts.py`, `.github/workflows/direct-media-preparation.yml`, `scripts/test_threads_public_screen_adapter.py`。追加: `scripts/test_threads_direct_video_backfill_contract.py`。
 - focused PASS: video-only parent filter、mixed/image/empty parent block、start-position、bounded scroll、cursor high-watermark、session/public adapter、reliable selector、observability fail-soft、workflow safety 456/0、media-to-text fallback禁止、prepare-only no-publish、dry-run、`py_compile`、Ruff、`git diff --check`。
 - 実行しないもの: Threads投稿、X/Beauty、権利不明media、generated clip、scheduled activation。次タスクは通常マージ後にNight Scout準備runを再実行し、video-only parentのSheets保存・Cloudinary・Review同期を確認する。動画が見つからない窓はcursorを進め、上限内の次runで後続窓を探索する。
+
+## 2026-08-11 Codex Reference-First Local Completion
+
+### 本システムについて
+
+- 最新オーナー方針は `.codex-owner-context/OWNER_SOURCE_OF_TRUTH.md`。Night Scout / Liver Managerは共通取得基盤を使い、投稿配分はdirect reference media 50%、reference text 30%、MEASURED PDCA 10%、original 5%、generated clip 5%。媒体発見優先度はTikTok、Threads、X、YouTubeである。
+- 物理取得のstable providerは現時点でXとYouTubeのみ。X discoveryは登録済みsourceに限定したbounded `gallery-dl` metadata route、個別X media取得はsource-specific permissionを満たす個別`/status/` URLに対する`yt-dlp`、YouTubeは`yt-dlp`を使用する。Threads/TikTokの旧browser adapterは実行経路から外し、inactive legacyとして残した。
+- direct media、clip、download、cut、Cloudinary、publishは、最新のsource-specific `media_permissions`行、対象account、権利、証跡、operation flagがすべて一致した場合だけ候補になれる。candidate statusや古い空欄permissionを権限として扱わない。
+
+### 変更ファイル一覧
+
+- 権限・共通policy: `src/media/permission_ledger.py`, `src/generation/media_platform_policy.py`, `src/generation/multiplatform_media_router.py`, `src/generation/video_source_acquirer.py`, `src/reference/source_scoring.py`。
+- runner: `scripts/run_direct_reference_media_pipeline.py`, `scripts/ingest_direct_reference_media.py`, `scripts/ingest_direct_reference_media_reliable.py`, `scripts/materialize_video_clip_candidate.py`。
+- workflow: `.github/workflows/account-acquisition.yml`, `.github/workflows/threads-video-reference-preparation.yml`。active workflowのbrowser runtime installとstorage-state注入を除去した。
+- tests: platform router、X registered-author、TikTok/Threads legacy inactive、permission ledger、source selection、video acquisition、geometry、content understanding、E2E safety関連を更新・追加した。
+- durable docs: `.gitignore`, `AGENTS.md`, `GOAL.md`, `START_HERE.md`, `docs/current-work.md`, `docs/reference-first-media-core-20260811.md`, `docs/source-backend-decision.md`, `docs/x-reusable-media-permission-decision-package.json`。X判断packageだけをJSON ignoreから明示的に除外した。
+
+### 未完了事項・スケール方針・タスク
+
+- コード上のローカル整合は完了したが、本番取得、Sheets書込み、Cloudinary upload、Threads投稿、metrics、PDCAのlive evidenceは今回作成していない。システム全体を本番完成とは表現しない。
+- Xの再利用可能media permissionは最新監査で0件。`docs/x-reusable-media-permission-decision-package.json`は権限を付与せず、Night Scout 8source / Liver Manager 2sourceから各1sourceを選び、利用範囲・証跡・期限をオーナーが判断するための入力packageである。
+- スケール時もbackend別の独自権限判定を増やさず、共通permission ledgerとnormalized post/media契約へ接続する。Threads/TikTokの非browser stable adapterが実証されるまでは、物理取得providerへ自動昇格させない。
+- 次タスクは、オーナーのX権限判断後に限定permission rowを準備し、別の明示承認されたproduction作業でbounded fetchからreviewまでを検証すること。本タスクでは適用しない。
+
+### 残WARN・テスト結果
+
+- 残WARN: X source-specific permission未決定。Threads/TikTok物理取得はdeferred。実外部取得・Cloudinary・publishの成功証拠なし。`git diff --check`実行時にmacOS sandboxのxcrun/fsmonitor警告が出たがexit 0で差分エラーはなかった。
+- PASS: repository tests 815/815、workflow safety 455/455、Beauty inactive、X default fetch disabled、permission/no implicit promotion、publisher/media safety、`compileall`、Ruff E9/F63/F7/F82、`git diff --check`。
+- 未実行: 実fetch、download、transcription、cut、Cloudinary upload、Sheets apply、SNS投稿、commit、push、PR、merge。
+
+### 次に触ってよいファイル / 触らない方がよいファイル
+
+- 触ってよい: `docs/x-reusable-media-permission-decision-package.json`のowner入力欄、permission ledgerの追加focused tests、inactive legacy adapterの後続削除PR。
+- 触らない方がよい: publisher idempotency/confirm gate、media-to-text fallback禁止、account境界、Beauty/X publish block、`.env`、`data/`、`output/`、secrets、cookies、storage state。
+
+### 次AIへの引き継ぎメモ
+
+- 未コミット差分は意図的であり、reset/clean/rebaseで破棄しない。branchは`refactor/reference-first-media-core-20260811-20260811-054925`、base HEADは`2a886b8e79d833300081688ecc841965ee15ca64`。
+- `source candidate`、`active source`、`permission`を同一視しない。実media operationは必ず`src/media/permission_ledger.py`を通す。
+- X権限は推測で作らない。本番操作を行う次タスクでは、オーナーの明示決定と実行確認を別々に要求する。
+
+## 2026-08-11 Reference-first Autonomous Internal Completion
+
+### 本システムと完了判定
+
+- `scripts/evaluate_reference_first_completion.py` を機械的な完了gateとして追加し、`SOFTWARE_COMPLETE`、`INTEGRATION_COMPLETE`、`PRODUCTION_EVIDENCE_COMPLETE` を別々に判定する。最終結果は `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`、software=true、integration=true、production evidence=false。
+- `config/reference_first_completion.json` でworkflow 42/42、主要entrypoint 28/28をcanonical / inactive compatibility / obsolete-dead / external-blockedのいずれか1つに分類した。active workflowにPlaywright install、browser storage state、Threads/TikTok Playwright routeはない。
+- Night Scout / Liver Managerのno-write統合検証は、source identity、provenance、同一親のmedia順序、content understanding、direct/reference/clip route、persona、public validator、review status、`preserve_source`、permission contractが全てPASS。
+- publisherはREADYのみ、text/image/video/carousel、final validator、idempotency、posted-results read-after-write、24h/72h/7d metrics予約を機械確認。metricsはAVAILABLE/PARTIAL/NOT_AVAILABLE/AUTH_ERROR/POST_NOT_FOUND/COLLECTION_ERRORを区別し、PDCAはMEASUREDのみとWAITING_REVIEW/auto_apply=falseを機械確認。
+
+### 変更ファイル一覧
+
+- 追加: `config/reference_first_completion.json`, `scripts/evaluate_reference_first_completion.py`, `scripts/verify_reference_first_integration.py`, `scripts/test_reference_first_completion_evaluator.py`, `scripts/test_reference_first_integration_verification.py`, `scripts/test_acquire_approved_source_posts_x_read_only_contract.py`, `docs/reference-first-completion.md`, `docs/reference-first-entrypoint-classification.md`.
+- 更新: `scripts/acquire_approved_source_posts.py`, `config/source_backend_routing.json`, `docs/x-reusable-media-permission-decision-package.json`, `START_HERE.md`, `docs/current-work.md`, `docs/reference-first-media-core-20260811.md`, `.gitignore`, `scripts/test_post_acquisition_uses_incremental_policy.py`, 本引き継ぎ。
+- 先行未コミットReference-first差分の全ファイルは維持している。一覧は `git status --short` を正本とし、reset/clean/rebaseしない。
+
+### 実行・テスト結果
+
+- repository tests: 818/818 PASS、external probes 8件とoptional local tools 3件はハーネスの明示分類により除外。
+- workflow safety: 455/455 PASS、42 workflow検査。
+- PASS: Python compileall、Ruff E9/F63/F7/F82、`git diff --check`、uncommitted diff + untracked filesのgitleaks stdin scan。compileallで既存test fixtureのinvalid escape `\`` SyntaxWarningが1件あるがcompile成功。
+- bounded public no-write verification: YouTube PASS（1 normalized post / 1 media、yt-dlp）。Threads public HTTP、TikTok yt-dlp -> gallery-dl、X bounded gallery-dlは当該環境で `UNVERIFIED_EXTERNAL`。Sheets接続、download、cut、upload、publishは実行していない。
+- backup: `/tmp/sns-growth-engine-codex-backup-20260811/`。working-tree patch SHA256 `47c756f4e8852cc44c21aee84d8274734a14ed829d0acfc32e0331deaf7a567f`、untracked archive SHA256 `6c8c4d9f0f16183323d2d2cd7bf15c4bb4991c76be896d94d5c3a11e5c2c29c8`.
+
+### 未完了事項・スケール方針・残WARN
+
+- 内部実装タスクの残件は0。production capability matrixはコード22/22、live証拠0/22であり、後者をコード完成と言い換えない。
+- X物理mediaはコードreadyだが、有効な再利用permissionが0件のため `BLOCKED_EXTERNAL_PERMISSION`。Night Scout 8source / Liver Manager 2sourceのID・handle衝突は0。`docs/x-reusable-media-permission-decision-package.json` は権限付与ではない。
+- production Sheets/Cloudinary/download/cut/Threads publishは `BLOCKED_EXTERNAL_APPROVAL`。secrets・credentialsの存在や値は読み取っていない。
+- Threads/TikTok/Xのpublic reachabilityはprovider・ネットワーク依存の `UNVERIFIED_EXTERNAL`。コード経路はbounded検証コマンド付きでready。無制限scrapingやbrowser回避は追加しない。
+- 削除・retireは0。legacy/browser経路はactive routingから外したが、dual-account X/YouTube Golden後のreachability監査まで証跡とrollback用に残す。
+
+### 次に触ってよいファイル / 触らない方がよいファイル / 次AIメモ
+
+- 触ってよい: `docs/x-reusable-media-permission-decision-package.json`のowner判断値、別承認後のsource-specific live permission row作成経路、bounded Golden実証。
+- 触らない: `.env`, `data/`, `output/`, secrets/cookies/storage state、publisher idempotency/confirm gate、media-to-text fallback禁止、X/Beauty publish block。
+- 次AIはpermission決定後、packageのGolden stepsどおり、owner選定 -> live row -> read-after-write -> bounded discovery -> exact `/status/` author match -> yt-dlp -> ffprobe -> WAITING_REVIEWまでを行う。production書込みは別の明示承認が必要。
+- branch `refactor/reference-first-media-core-20260811-20260811-054925`、base HEAD `2a886b8e79d833300081688ecc841965ee15ca64`。本節を含む差分は後続の明示checkpoint指示により1つのローカルcommitに固定する。push/PR/mergeは行わない。commit SHAは本節を含む現在HEADを参照する。
+
+## 2026-08-11 Agent Reach / Owner Permission Checkpoint
+
+### System and changed files
+
+- Reference-first architecture remains canonical: discovery priority TikTok,
+  Threads, X, YouTube; physical media X/YouTube through yt-dlp; Threads/TikTok
+  physical deferred; source geometry preserved; route mix 50/30/10/5/5.
+- Agent Reach 1.5.0 was installed from official commit
+  `1221ecd0c3e0502ee37406f03543bedf7503f2c7` in
+  `~/.agent-reach-venv`. Repo integration is optional Web/Jina analysis only.
+- Permission decision `config/owner_source_permissions_20260811.json` contains
+  24 exact identities. The seed/evaluator/schema, Agent Reach and X adapters,
+  source registry, completion evaluator, capability matrix, tests, and durable
+  docs were updated.
+- Production permission ledger apply was explicitly authorized. Final run:
+  `APPLIED`, written 0, updated 24, invalid 0, read-after-write PASS.
+
+### Incomplete items, scaling policy, tasks, and warnings
+
+- X dual-account physical Golden is not complete. Night Scout's known status
+  `1996442283076735119` had no video. Profile discovery for both accounts is
+  `AUTH_REQUIRED`; no Liver individual status was safely identified.
+- Agent Reach does not provide native Threads/TikTok discovery. Generic Web
+  profile reads are reference-only and must not be counted as physical media or
+  individual-post discovery.
+- Keep Agent Reach fail-optional. Add future platforms only after concrete owner
+  source URLs; never register speculative accounts.
+- Next task: with explicit X auth or owner-supplied registered-author individual
+  video statuses, run bounded author match -> permission -> yt-dlp -> ffprobe ->
+  preserve_source -> WAITING_REVIEW. Do not publish in the proof.
+- WARN: Agent Reach doctor had 4/15 usable channels; optional dependencies and
+  auth-required channels remain unavailable by design.
+
+### Tests and next-AI boundaries
+
+- Repository regression: 820/820 PASS. Workflow safety: 455/455 PASS across
+  42 workflows. Completion evaluator: PASS with software/integration true and
+  production evidence false. Dual-account no-write integration: PASS.
+- Explicit permission/provenance, X registered-author, preserve-source aspect,
+  publisher READY-only/idempotency tests, compileall, Ruff E9/F63/F7/F82, and
+  `git diff --check` all passed.
+- Safe to touch: listed adapters, permission seed/evaluator, completion evidence
+  config, and Agent Reach capability docs/tests.
+- Avoid: `.env`, `data/`, `output/`, cookies/storage state, publisher
+  idempotency/confirm gates, media-to-text fallback, X/Beauty publish gates.
+- No Cloudinary upload, Threads/X publish, Beauty operation, or mass posting was
+  performed. Only the explicitly authorized permission-ledger write occurred.
+## 2026-08-11 Codex multi-platform physical acquisition checkpoint
+
+### 本システムについて / 実装内容
+
+- Reference-first SNS Growth Engineの取得層を、権利判定とeditorial選定を
+  分離したまま実測した。Night Scout X動画primaryは`@3j2c9q` priority 1、
+  `@amuxamudaily` priority 2。`@takashimaanna`、`@minatoku789`、
+  `@1okukure_`、`@urarament`、`@kyaba_career`は文章/画像referenceのみ。
+- `@onigiriscout_0`、`@cabalounge`、`@kyabataihendane`はruntime retire。
+  registryの過去行は保持し、Permission Ledgerへappend-only revocationを3行
+  追加した。live read-after-writeはPASS、3件のeffective active permissionは0。
+- owner指定X exact status 4件はyt-dlpで実bytes取得済み。URL status ID
+  (`display_id`)と動画media ID (`id`)を区別し、canonical URL、registered
+  author、非RT/非quote、video/audio stream、duration、geometry、source保持を
+  検証する。4件ともローカルE2Eで`WAITING_REVIEW`、publisher eligible=false。
+- YouTubeはNight/Liver各1件を実downloadし、ffprobe `PASS_AV`。ただし選定した
+  `src_ns_yt_cand_006` / `src_lm_yt_cand_001`はlive ledgerのexact grantが
+  absent/not-approvedのため、`WAITING_REVIEW`へは進めずBLOCKした。
+- TikTokは登録3 profileをboundedにyt-dlp/gallery-dlで実測したが、個別投稿の
+  identity解決に失敗し`POST_DISCOVERY_UNAVAILABLE`。Threadsは全9 profileの
+  public HTTP 200を確認したが個別post linkがなく同分類。browser/sessionは不使用。
+- failure reasonをrouterから保持し、`PROFILE_DISCOVERY_UNAVAILABLE`、
+  `POST_DISCOVERY_UNAVAILABLE`、`VIDEO_URL_EXTRACTION_UNAVAILABLE`、
+  `AUTH_REQUIRED`、`RATE_LIMITED`、`NO_VIDEO_FOUND_IN_BOUNDED_SAMPLE`、
+  `BACKEND_UNSTABLE`へ明示分類する。
+
+### 変更ファイル一覧
+
+- config: `owner_source_permissions_20260811.json`,
+  `source_accounts/default_sources.json`, `physical_media_goldens.json`。
+- acquisition/policy: `src/acquisition/router.py`, `threads_public.py`,
+  `ytdlp.py`, `x_exact_status.py`, `src/generation/media_platform_policy.py`。
+- runner: `scripts/acquire_approved_source_posts.py`,
+  `seed_owner_attested_media_permissions.py`, `verify_physical_media_goldens.py`。
+- tests: owner permission count、retirement/revocation、X editorial selection、
+  exact-status provenance、external failure classification、physical Golden contract。
+- docs: 本handoff、`production-completion-status.md`,
+  `source-registry-inventory.md`, `x-reusable-media-permission-decision-package.json`。
+
+### 未完了事項 / 外部blocker / 残WARN
+
+- YouTube 2件は実bytesとA/V検証済みだが、live Permission Ledgerのsource単位
+  grantが必要。権利は推測しない。grant applyは承認システムに拒否されたため未実行。
+- TikTokはpublic no-cookie backendでsecondary user identityが解決せず、Threadsは
+  public profile HTMLに個別post URLがない。両platformはphysical stableへ昇格しない。
+- TikTok/Threadsの手動URLが必要な場合はprofile URLではなく、登録handle本人の
+  canonical individual post URLを受け取る。browser/cookie/session追加は今回禁止。
+- Agent ReachはYouTube SHADOW、TikTok/Threads analysis-only、X NOT_USED。
+  profile文章をvideo acquisition成功として扱わない。
+
+### スケール方針 / safety
+
+- bounded sampleとper-source上限を維持し、backend失敗時も無制限retryしない。
+- `THIRD_PARTY_REPOST_PERMISSION_INHERITANCE=false`、quality threshold 85以上、
+  preserve-source、WAITING_REVIEW worker-ineligible、READY-only publisherを維持。
+- Cloudinary production upload、Threads/X/SNS publish、Beauty、mass postingは未実行。
+
+### テスト結果 / タスク
+
+- focused tests: X editorial primary/retire、revocation、exact provenance、failure
+  classification、Golden contract、Agent Reach optional role、router fallback/circuit、
+  Threads parent/media order、READY-only/public text、rights/X/Beauty safety、YouTube
+  source acquisitionをPASS。
+- full repository regression 825/825 PASS、workflow safety 455/455 PASS。
+  Reference-first completionは`SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY` PASS
+  （code complete 22/22、production evidence 0/22）。拡張Goalは21/48で、
+  実canary/read-after-write/metrics等の本番証拠をfail-closeした。
+- Ruffは全repo safety selection `E9,F63,F7,F82` PASS、今回変更Pythonは
+  full rules PASS。全repo full rulesの既存1811件はこの変更範囲外の負債。
+  compileall、gitleaks（diff+untracked、leak 0）、git diff checkはPASS。
+
+### 次AIへの引き継ぎメモ
+
+- 次に触ってよい: acquisition adapters、explicit failure classification、Golden
+  verifier、source editorial policy、append-only permission revocation、関連tests/docs。
+- 触らない方がよい: `.env`, `data/`, `output/`, secrets/cookies/tokens、
+  Cloudinary/Threads/X production mutation、Beauty、quality/rights/publisher gateの緩和。
+## 2026-08-11 Codex OSS Acquisition Completion v20
+
+### System / changed files
+
+- Added a machine-readable backend capability registry, production route
+  validation, standard acquisition failure taxonomy, and a side-effect-free
+  acquisition doctor. Active production profile routes are backend-only,
+  bounded and read-only; browser/auth-only/opaque-service candidates are
+  mechanically non-selectable.
+- Audited 24 current upstream repositories at exact SHAs in
+  `docs/oss-acquisition-stack-20260811.md`. Added the missing
+  `youtube-comment-downloader==0.1.78` runtime pin and removed the browser-based
+  vdite fallback from the Threads comments route.
+- Updated: `.gitignore`, `requirements.txt`,
+  `config/source_backend_routing.json`, `config/media_growth_engine.json`,
+  `config/reference_first_completion.json`, `config/physical_media_goldens.json`,
+  `scripts/acquire_approved_source_posts.py`, `scripts/verify_physical_media_goldens.py`,
+  `src/acquisition/factory.py`, `src/generation/video_source_acquirer.py`,
+  current-work/reference-first docs and this handoff.
+  Added: `config/acquisition_backend_capabilities.json`,
+  `src/acquisition/capability_registry.py`, `src/acquisition/failures.py`,
+  `src/acquisition/tiktok_embed.py`, `scripts/acquisition_doctor.py`, focused
+  tests and the OSS audit.
+
+### Live audit, remaining work, WARN and scale policy
+
+- X and YouTube proven physical routes remain unchanged. The retired Night X
+  sources and third-party repost non-inheritance contract remain enforced.
+- TikTok: the new backend-only `tiktok_public_embed` PRIMARY resolves all three
+  approved Liver profiles without browser, cookie or login. Bounded live proof
+  returned 3 posts and 3 same-parent media children per source (9/9 total).
+  Exact Golden `src_lm_tt_user_001` post
+  `7649682547588254994` produced 12,310,033 local bytes, A/V streams,
+  720x1280, 90.950998 seconds and passed live Permission Ledger, author,
+  provenance, persona and public validation to `WAITING_REVIEW` (publisher
+  eligible=false). yt-dlp/gallery-dl/ssut failures remain documented as
+  fallback audit evidence; cookie-based f2/JoeanAmier stay disabled.
+- Threads: bounded public HTTP probes for `@chiishunin_s` and `@me01_lsm`
+  returned HTTP 200 transport but an application 404 SSR payload with no handle
+  or post links. Browser/session and opaque remote-service fallbacks remain off.
+- Limits remain serial and bounded (Threads 5; TikTok max 20, live run 3 per
+  source). Do not
+  solve these blockers by harvesting personal browser cookies or weakening
+  author/rights checks.
+
+### Tests / safe files / next AI
+
+- Focused registry, doctor, Threads blocker, TikTok embed/direct physical,
+  X/gallery and TikTok/gallery tests PASS. `tests/` pytest is 92/92 PASS.
+  Repository regression is 825/825 PASS and Workflow safety is 455/455 PASS.
+- Completion evaluator: `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`,
+  `software_complete=true`, `integration_complete=true`, architecture and
+  repository evidence PASS, `production_evidence_complete=false`. TikTok is
+  recorded as `PASS_PUBLIC_EMBED_AND_AV_RECORDED`; Threads is
+  `BLOCKED_APPLICATION_404_RECORDED`.
+- Acquisition Doctor PASS with no missing PRIMARY backend, no secret-value read
+  and no side effects. Changed-Python full Ruff and repository safety selection
+  `E9,F63,F7,F82` PASS; compileall PASS. Gitleaks scanned only current diff plus
+  non-ignored untracked files (109,282 bytes) with redaction and found 0 leaks.
+  `git diff --check` PASS.
+- Safe to touch: `src/acquisition/`, acquisition configs/tests/docs and bounded
+  probe scripts. Avoid: `.env`, data/output, browser profiles, credential files,
+  production Sheets/Cloudinary/SNS state, X/Beauty publisher paths.
+- Remaining external blocker is Threads only: Night `@chiishunin_s` and Liver
+  `@me01_lsm` both return Meta's `Barcelona404ErrorRoot`, classified as exact
+  `POST_DISCOVERY_UNAVAILABLE`. Do not report transport HTTP 200 or profile
+  biography as post-discovery success. A future route needs a supported
+  backend-only public response or a separately approved dedicated non-personal
+  authenticated identity; browser/session remains prohibited.
+
+### Remaining task and production boundary
+
+- Software/acquisition integration has no remaining internal implementation
+  item for X, YouTube or TikTok. Threads remains externally blocked at public
+  post discovery for the two live registered profiles tested; the adapter
+  fails closed and does not activate a browser fallback.
+- Production publish evidence remains intentionally incomplete. No production
+  Sheets mutation, Cloudinary upload, SNS publish, mass posting, X posting or
+  Beauty operation occurred. `WAITING_REVIEW` remains worker-ineligible and
+  only `READY` remains publisher-eligible.
+- Next safe files: `src/acquisition/`, the bounded physical downloader,
+  acquisition registry/doctor/tests/docs. Do not touch `.env`, cookies, browser
+  state, publisher gates, production state or rights inheritance without a new
+  explicit owner authorization.
+
+## 2026-08-11 Codex Final System Completion v21
+
+### 本システムについて / 実装内容
+
+- Reference-first SNS Growth Engineの取得層を、X / YouTube / TikTokの実証済み
+  物理経路を壊さずにThreadsまで共通`NormalizedSourcePost + ordered
+  Media`契約へ接続した。
+- Threadsは3経路。`threads_public_http`をzero-auth profile primaryとし、
+  `threads_search_index`で最大5件のcanonical candidateを取得してofficial
+  oEmbedでauthorを再検証、`threads_graph_public_discovery`はMeta専用appの
+  tokenがある時だけofficial profile lookup/posts/keyword searchを使う
+  OPTIONAL_AUTH fallbackとした。browser/session/cookieは不使用。
+- official tokenless `graph.threads.com/oembed`は実在公開post 1件で
+  canonical URL / author / text取得PASS。試験responseは直接mediaを返さず、
+  thumbnail/embed iframeをvideoと誤認しない。quote/repostは本文参照だけで
+  media permissionを継承しない。
+- 将来platformはInstagram/Facebook/Reddit/Xiaohongshu/LinkedIn/Bilibili/
+  RSS/Web/GitHubをmachine-readable registryに追加。全て`enabled=false`で、
+  Agent Reachのreference能力とauth/physical evidenceの境界を明記した。
+- YouTubeはownerが明示許可した2 identityだけを別decisionにした。
+  `src_ns_yt_cand_006/@ichijo_hibiki`と
+  `src_lm_yt_cand_001/@suu-san_pococha`以外へgrantは波及しない。
+
+### 変更ファイル一覧
+
+- acquisition: `src/acquisition/threads_official.py`, `threads_search.py`,
+  `capability_registry.py`, `factory.py`.
+- config/policy: `config/acquisition_backend_capabilities.json`,
+  `source_backend_routing.json`, `youtube_source_permissions_20260811.json`,
+  `scripts/seed_owner_attested_media_permissions.py`, `.gitignore`.
+- doctor/evaluator: `scripts/acquisition_doctor.py`,
+  `evaluate_reference_first_completion.py`,
+  `test_reference_first_media_core_policy.py`.
+- tests: `tests/test_threads_official_acquisition.py`,
+  `test_youtube_owner_permission_decision.py`,
+  `test_acquisition_capability_registry.py`.
+- docs: `GOAL.md`, `START_HERE.md`, `docs/current-work.md`,
+  `oss-acquisition-stack-20260811.md`, `reference-first-media-core-20260811.md`,
+  `agent-reach-fetcher.md`, 本handoff。
+
+### Live適用 / read-after-write
+
+- owner-authorized YouTube 2件のみproduction `media_permissions`へapply。
+  `written=1`, `updated=1`, `revoked_skipped=0`, `invalid_rows=[]`,
+  `read_after_write=PASS`。全9 operation flagはtrue。
+- 既存実MP4の再検証は2/2 PASS。Nightは640x360 / 1278.21s /
+  A/V、Liverは360x640 / 58.65s / A/V。両方ともexact identity、permission、
+  provenance、understanding、persona、public validatorを通過し
+  `WAITING_REVIEW`、`publisher_eligible=false`、`preserve_source=true`。
+- Cloudinary upload、SNS publish、mass posting、X posting、Beauty操作は未実行。
+
+### 未完了事項 / 残WARN / 外部blocker
+
+- Threads tokenless individual-post detailはライブPASS。ただしregistered profileから
+  canonical individual permalinkを見つけるzero-auth経路は、public profileが
+  `Barcelona404ErrorRoot`、DuckDuckGoはHTTP 202で候補なし、Bingもbounded
+  候補なし。softwareはfail-soft実装済みだがlive discoveryはexternal-blocked。
+- 解除には、Metaの専用developer appで`threads_profile_discovery`と
+  `threads_keyword_search`のadvanced access/app reviewを取得し、
+  `THREADS_DISCOVERY_ACCESS_TOKEN`をruntime secretとして供給する。個人browser
+  sessionやcookieは不要・不使用。
+- Threads physical bytesは、official Graph/oEmbedが明示する直接media URLが
+  得られた時のみ取得対象。現在のライブoEmbedはmedia非公開のため
+  live physical evidenceは未確認。
+- twscrapeは`TOOL_NOT_INSTALLED/AUTH_REQUIRED`のOPTIONAL_AUTH。既存X
+  gallery-dl/yt-dlp経路はPASSのまま。TikTok commentsはpublic stable経路がなく
+  `COMMENTS_OPTIONAL_AUTH_OR_UNAVAILABLE_PUBLIC`扱い。
+
+### スケール方針 / タスク
+
+- profile discoveryはserial、Threads searchは最大5件、Graphは最大25件。
+  実投稿・実downloadとは分離し、author/rights/private/repost failureをfallbackで
+  回避しない。
+- 新sourceはconfig-drivenでidentity -> capability -> discovery/detail/media ->
+  rights -> normalizationの順。将来platformはownerがsourceを指定するまでOFF。
+- 次の安全タスクはThreads Meta appの外部承認後のbounded live profile
+  probe。production publish/canaryは別の明示承認ゲート。
+
+### テスト結果
+
+- focused acquisition: 34/34 PASS。X exact-status、YouTube/TikTok physical
+  Golden契約もPASS。
+- repository regression: 825/825 PASS。workflow safety: 455/455 PASS。
+- completion evaluator: `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`,
+  `software_complete=true`, `integration_complete=true`,
+  `production_evidence_complete=false`。
+- acquisition doctor: PASS、PRIMARY missing 0、secret-value read 0、side effect 0。
+- Ruff changed/full rules PASS、repo safety selection `E9,F63,F7,F82` PASS、
+  compileall PASS、gitleaks current diff+untracked leak 0、`git diff --check` PASS。
+
+### 次AIへの引き継ぎメモ
+
+- 次に触ってよい: `src/acquisition/threads_official.py`,
+  `threads_search.py`, capability registry/doctor、bounded live probe、関連tests/docs。
+- 触らない方がよい: `.env`, tokens/cookies/storage state, `data/`,
+  `output/`, publisher/quality/rights gateの緩和、X/Beauty publish、production
+  Cloudinary/SNS mutation。
+- `WAITING_REVIEW`はpublisher非対象、`READY`のみ対象、quality threshold
+  85以上、`preserve_source`、media-to-text fallback禁止を維持する。
+
+## 2026-08-11 Codex Threads Auth + Final Live Proof v22
+
+### 本システムについて / 変更ファイル一覧
+
+- Reference-first取得基盤のうち、残っているThreads official Graph認証境界を
+  machine-readableに確定した。runtime secretは
+  `THREADS_DISCOVERY_ACCESS_TOKEN`だけで、required scopeは
+  `threads_basic` + `threads_profile_discovery`、optionalは
+  `threads_keyword_search`。Graph hostは`https://graph.threads.net`の
+  official unversioned route。app ID/secretはOAuth provisioning用であり、
+  acquisition runtimeは読まない。
+- 追加: `scripts/probe_threads_graph_live.py`,
+  `tests/test_threads_graph_live_probe.py`。更新:
+  `src/acquisition/threads_official.py`, `scripts/acquisition_doctor.py`,
+  `docs/current-work.md`, `docs/oss-acquisition-stack-20260811.md`, 本handoff。
+- probeはactive/fetch-enabledの登録済みThreads sourceだけを読み、Night
+  `src_ns_threads_user_chiishunin_s`、Liver
+  `src_lm_threads_user_me01_lsm`を優先する。最大5件、exact author、original
+  post、canonical permalinkを必須とし、oEmbedで同一author/permalinkを再確認。
+  browser/session/cookie、Sheets write、download、upload、publishは行わない。
+
+### 未完了事項 / 外部blocker / 残WARN
+
+- 現runtimeに`THREADS_DISCOVERY_ACCESS_TOKEN`がないため、live Graph probeは
+  network前に`THREADS_AUTH_SETUP_REQUIRED=true`で安全停止。profile lookup、
+  profile posts、keyword search、Threads physical live evidenceは未実行・未捏造。
+- Meta専用appでThreads use caseを作り、`threads_basic`と
+  `threads_profile_discovery`を承認し、外部public profile用のAdvanced
+  Access/App Reviewを完了する必要がある。keyword searchは任意で、権限が
+  なければ`OPTIONAL_AUTH_SCOPE_MISSING`としてprofile proofを止めない。
+- tokenless official oEmbedは既存public post
+  `https://www.threads.com/@ran.liver_pro/post/DaMbCLQiXLs`で再度PASS。
+  author/permalink/textは一致、direct mediaは0でthumbnail/embedをvideo扱い
+  していない。
+- production publish evidenceはfalse。Cloudinary production upload、SNS
+  publish、mass post、X post、Beauty操作は未実行。
+
+### スケール方針 / タスク
+
+- Graph profile/postsは1source最大5件でserial実行。tokenをコード、docs、
+  artifactへ保存しない。認証後もquote/repost media inheritance、author
+  mismatch、malformed permalinkはfail-closed。
+- 次タスクはruntime secret設定後にplaceholder commandのbounded probeを1回
+  実行すること。direct videoが得られても、effective permissionがないsourceは
+  physical downloadへ進めない。production Cloudinary/Threads canaryは別の明示
+  owner承認が必要。
+
+### テスト結果 / 残作業
+
+- focused Threads official/probe/doctor: 15/15 PASS。
+- existing physical regression: X 4/4、YouTube 2/2、TikTok 1/1、合計7/7が
+  physical A/V、effective permission、persona/public validation PASSで
+  `WAITING_REVIEW`; `publisher_eligible=false`; Sheetsはread-only。
+- repository regression 825/825 PASS、workflow safety 455/455 PASS。
+  completion evaluatorは`SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`、
+  `software_complete=true`, `integration_complete=true`,
+  `production_evidence_complete=false`。
+- Ruff changed files PASS、compileall PASS。gitleaksは今回のtracked diffと新規
+  script/testを個別に検査してleak 0。`git diff --check`もPASS。
+
+### 次に触ってよい / 触らない方がよい / 次AIへの引き継ぎ
+
+- 触ってよい: `src/acquisition/threads_official.py`,
+  `scripts/probe_threads_graph_live.py`, doctor、関連tests/docs。
+- 触らない方がよい: `.env`, token/cookie/storage state, `data/`, `output/`,
+  publisher/rights/quality gate、X/Beauty publish、production Cloudinary/SNS。
+- 認証が来るまでsoftwareを作り直さない。`THREADS_AUTH_SETUP_REQUIRED`は外部
+  auth blockerであり、zero-auth scrapeや個人browser cookieで迂回しない。
+
+## 2026-08-12 Codex Owner Policy Correction + Non-Threads Finalization v23
+
+> この節がv21/v22のThreads認証方針を明示的に上書きする最新Source of Truth。
+
+### 本システムについて / 変更概要
+
+- Reference-first基盤はNight ScoutとLiver Managerに共通の`SourcePost`・順序付きmedia・provenance・permission・理解・persona生成・validation・人間reviewを提供する。
+- active reference acquisitionはX / YouTube / TikTok。Threadsは`DEFERRED_OSS_CANDIDATE`、理由は`NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN`。
+- Threads参照取得のMeta Graph、Meta oEmbed、Playwright、browser automation、browser sessionは全て`NOT_USED_BY_OWNER_POLICY`。active routeは0件で、doctorはThreads tokenを読まず、Meta認証をblockerにしない。
+- v21/v22のGraph/oEmbed/browser実験コードは履歴と将来候補のため削除せず、factoryから読めるがproduction routingからは選択不可とした。自社Threads publisherはこの方針変更の対象外。
+
+### 変更ファイル一覧
+
+- policy/config: `config/source_backend_routing.json`, `config/acquisition_backend_capabilities.json`, `config/reference_first_completion.json`, `config/media_growth_engine.json`, `src/generation/media_platform_policy.py`, `src/reference/source_scoring.py`, `src/acquisition/capability_registry.py`.
+- runtime/doctor/evaluator: `scripts/acquire_approved_source_posts.py`, `scripts/collect_source_posts.py`, `scripts/acquisition_doctor.py`, `scripts/evaluate_reference_first_completion.py`.
+- tests: Threads deferred契約の新規test、routing/browser/reference selection/incremental/evaluator/capability registryの既存test更新。
+- docs: `GOAL.md`, `START_HERE.md`, `docs/current-work.md`, `docs/oss-acquisition-stack-20260811.md`, `docs/reference-first-completion.md`, `docs/reference-first-media-core-20260811.md`, 本handoff。
+
+### Active scope / 証跡
+
+- X: `gallery-dl` bounded discovery + `yt-dlp` exact-status physical。Night 2件 / Liver 2件の記4件のA/V Golden、exact author、permission、provenance、persona/public validation、`WAITING_REVIEW`証跡あり。`twscrape`はOPTIONAL_AUTHのままでcompletionをblockしない。X publishは無効。
+- YouTube: `yt-dlp` PRIMARY、comments/transcript/subtitle fallbackを維持。`src_ns_yt_cand_006` / `src_lm_yt_cand_001`の2/2がphysical A/V、exact permission/provenance、`WAITING_REVIEW` PASS。
+- TikTok: `tiktok_public_embed` PRIMARY、gallery-dl / individual-post yt-dlp fallbackを維持。`src_lm_tt_user_001`がprofile discoveryからphysical A/V、permission/provenance、`WAITING_REVIEW`までPASS。browser/cookieは不使用。
+- 共通E2Eはquality 85以上、`preserve_source`、third-party permission非継承、media-to-text fallback禁止、`WAITING_REVIEW`はpublisher非対象、`READY`のみ対象を維持。
+
+### 未完了事項 / 残WARN / スケール方針 / タスク
+
+- Production publish evidenceは未完了。Cloudinary production upload、SNS publish、X publish、mass posting、Beauty操作は実行していない。コードとdry-run契約をproduction成功として扱わない。
+- Cloudinaryはenv + confirm gate、reviewはWAITING_REVIEW -> READY、publisherはREADY-only + final validator + idempotency + read-after-write、metricsは24h/72h/7d、PDCAはMEASURED-only + suggestion WAITING_REVIEWまでコード準備PASS。自動有効化はしていない。
+- Threadsは認証不足ではなくowner policyによるdeferred。将来、ownerがGitHub/OSS候補を提示した場合のみ、license監査 -> bounded read-only live proof -> exact author/provenance -> safety tests -> config route追加の順で再有効化する。
+- optional WARN: `twscrape` NOT_INSTALLED/AUTHなし。既存X経路をblockしない。TikTok comments/replies/slideshowもpublic stableでない限りoptionalで、active E2E completionをblockしない。
+
+### テスト結果 / Production readiness audit
+
+- focused Threads owner-policy/capability/doctor/evaluator: PASS。Threads明示指定はnetwork・Sheetsに進まず`DEFERRED_OSS_CANDIDATE`。
+- repository regression: **826/826 PASS**。workflow safety: **455/455 PASS**。
+- completion evaluator: `SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`、`ACTIVE_SCOPE_SOFTWARE_COMPLETE=true`、`ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE=true`、`DEFERRED_PLATFORM_COUNT=1`、`DEFERRED_PLATFORMS=[threads]`、`PRODUCTION_PUBLISH_EVIDENCE_COMPLETE=false`。
+- acquisition doctor: PASS、PRIMARY missing 0、secret value read false、side effects false、Threads auth required false。
+- readiness focused: Cloudinary guard/idempotency、review->READY、READY-only publisher、delivery idempotency/read-after-write、metrics scheduling、PDCA safetyは全PASS。
+- Ruff changed files PASS、compileall PASS、gitleaks tracked diff + untracked test leak 0、`git diff --check` PASS。
+
+### 次に触ってよい / 触らない方がよい / 次AIへの引き継ぎ
+
+- 次に触ってよい: X/YouTube/TikTokのactive adapters、bounded live regression、review inventory、publisher/metricsの明示承認付きpreflight。ThreadsはownerがOSS候補を提示した場合のcapability auditのみ。
+- 触らない方がよい: `.env`, token/cookie/storage state, `data/`, `output/`, Meta auth setup, Threads Graph/oEmbed/browserのactive化、rights/provenance/quality/publisher gateの緩和、X/Beauty publish、production Cloudinary/SNS mutation。
+- 次AIは本v23節をv21/v22より優先する。active scopeとproduction evidenceを混同せず、Threadsのdeferredをexternal auth blockerとして戻さない。
+
+## 2026-08-12 Codex Final Acceptance Batch v25
+
+### 本システムについて / 変更ファイル一覧
+
+- Night Scout / Liver Managerの`direct reference media` / `reference text
+  generation` / `new text generation` / `approved source clip`を各1件、合計8件の
+  bounded受け入れbatchとしてproduction Sheetsのcanonical `queue` /
+  `publication_review` / 必要な`source_posts` / `source_post_media` /
+  `media_assets`へ登録した。新規queueは7件、既存未投稿のLiver direct候補1件を
+  合わせた8件で、すべて`WAITING_REVIEW`のまま。read-after-write PASS。
+- Geminiへはowner承認範囲の公開用本文、source URL、短い内容要約、対象accountと
+  routeだけを送信。secret / API key / token / cookie / queue内部ID /
+  transcript全文 / 動画ファイル本体は送信していない。合否と理由は対象8行の
+  `generation_policy_json.acceptance_v25_gate`とvalidator列、reviewミラーへ保存済み。
+- コード変更はなし。更新ファイルは本`docs/ai-work-handoff.md`のみ。
+
+### 受け入れ結果 / 未完了事項 / 残WARN
+
+- 結果は**0/8 PASS、8/8 BLOCKED**。owner条件の「8件すべてPASSの場合だけ
+  accountごとに最大1件をREADY/投稿」を満たさないため、READY化0件、新規
+  Cloudinary upload 0件、Threads本番投稿0件、metrics予約0件。
+- `q_prodcanary_lm_src_lm_yt_cand_001_vqJAu4GZyf0_e14c6df0`:
+  quality 94だが`source_fact_removed`。親source本文が実投稿本文ではなく内部参照メモで、
+  direct-source copyedit契約を満たさない。
+- Night direct reference media: quality 86だが
+  `source_preservation_similarity_below_threshold` / `source_voice_marker_lost`。
+- Night reference text / new text: quality 93 / 91だがともに
+  `generic_template_phrase_present`。
+- Night approved clip: `clip_transcript_noise_present`。さらにsource excerptは店舗運営者向け支援・
+  他社宣伝であり、Night Scoutの求職者personaに転用しない。
+- Liver reference / new text: quality 93 / 90だがpersona/account fit不足。new textは
+  `generic_template_phrase_present`も発生。
+- Liver approved clip: `ai_classification_rejected` /
+  `ai_source_usage_fit_failed` / 根拠不明の収益実績 / 誇大広告でfail-closed。
+- 既存POSTED行の流用・変更なし。X投稿、Beauty操作、3件目以降の投稿、
+  Threads参照取得へのMeta API利用なし。
+
+### スケール方針 / タスク
+
+- この8件を強制READY化しない。gateのthreshold、source-preserving契約、persona、
+  収益誇大ブロックは緩和しない。次回は表現の小修正ではなく、ルートに適合する
+  source/candidateに差し替える。
+- direct reference mediaは実際の個別投稿本文と順序付きmediaが同一parentに必要。
+  approved clipはtranscriptノイズを取り除いたうえで、B2C persona適合・収益誇大なしの
+  別候補を選ぶ。textは汎用定型句を含まない新規本文へ差し替える。
+- 8/8の権利・provenance・quality 85以上・persona・public/media validator PASSを
+  read-after-writeで確認できるまで、Cloudinary production uploadとpublisherは起動しない。
+
+### テスト結果 / 次に触ってよいファイル / 触らない方がよいファイル
+
+- Production Sheets canonical registration: 8 candidates、support rows、queue/review mirrorの
+  read-after-write PASS。posted_results件数不変。
+- Gemini scoped review + deterministic public validator: 8/8実行。全件BLOCKEDを
+  queue/reviewへ保存後にread-after-write PASS。安全条件によりpublisher dry-run以降は未実行。
+- 次に触ってよい: 上記8件の未投稿`queue` / `publication_review`、それらが参照する
+  `source_posts` / `source_videos` / `video_clip_candidates`。差し替え時は必ず新規個別source証拠を使う。
+- 触らない方がよい: 既存POSTED行、`.env`、secret/token/cookie/storage state、
+  X/Beauty publisher、品質・権利・provenance・idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- 現在の8件は「登録済みだが受け入れ不合格」。全件`WAITING_REVIEW`でvalidator
+  `BLOCKED`。投稿済みと誤報告しない。
+- owner承認の最大2投稿は条件付きであり、条件は未成立。同じ転記ミス・B2B宣伝・
+  根拠不明収益候補を言い換えて通さない。適合sourceの差し替えから再開する。
+
+## 2026-08-12 Codex Final Full-Matrix Production Acceptance v27
+
+### 本システムについて / 変更ファイル一覧
+
+- v25の8件は履歴として保存し、書き換えず、v27でNight Scout /
+  Liver Managerの5routeずつを新規canonical revisionとして作成した。routeは
+  `direct_reference_media`, `reference_text_generation`, `pdca_text_generation`,
+  `new_text_generation`, `approved_source_clip`。
+- production Sheetsへsupport record、queue 10件、publication review 10件を登録。
+  全10件でrights / provenance / persona / public validator / internal leak /
+  quality >=85 / batch diversity / topic coherence / restricted Gemini / hybrid gate /
+  publisher dry-runがPASS。media 4件はA/V probeとmedia validatorもPASS。
+- 作成したCloudinary assetはNight direct 1件、Night clip 1件、Liver clip
+  1件。Liver directは既存の承認済みassetを冪等再利用。動画は原寸法の
+  landscape / portraitを維持し、字幕は追加していない。
+- 本番投稿は承認システムが強制した「各account最大1件」の安全境界で
+  direct reference mediaを1件ずつ実行。コード、config、gateの変更はない。
+  更新ファイルは本handoffのみ。
+
+### Production証拠 / 未完了事項 / 残WARN
+
+- Night Scout direct reference media:
+  `q_acceptance_v27_20260812_night_scout_direct_reference_media` -> POSTED。
+  result `threads_q_acceptance_v27_20260812_night_scout_direct_reference_media_20260812000225`,
+  provider ID `18099634016194689`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db61AminHgx`。
+  `READ_AFTER_WRITE_PASS`、24h/72h/168h jobs 3件PASS。
+- Liver Manager direct reference media:
+  `q_acceptance_v27_20260812_liver_manager_direct_reference_media` -> POSTED。
+  result `threads_q_acceptance_v27_20260812_liver_manager_direct_reference_media_20260812000442`,
+  provider ID `18086873192644419`,
+  `https://www.threads.com/@ran.liver_pro/post/Db61UNbDZGV`。
+  `READ_AFTER_WRITE_PASS`、24h/72h/168h jobs 3件PASS。
+- 残り8routeは`READY`、publication review `APPROVED`、publisher dry-run PASSで保持。
+  コード上のblockerではないが、実行環境の承認上限により実投稿は行わなかった。
+  回避実行、再試行、一括投稿はしていない。
+- ambiguous write 0、duplicate 0、X post 0、Beauty operation 0。Threads reference
+  acquisitionはowner policyどおり`DEFERRED_OSS_CANDIDATE`のまま。
+- PDCA候補は各accountの実`MEASURED`証拠だけを使用してREADY。未投稿のため
+  v27 PDCA routeのproduction permalinkとmetrics jobは未作成。数値の损造なし。
+
+### スケール方針 / タスク
+
+- 残り8件を扱う場合は、追加の明示承認で対象queue IDを固定し、1件ずつ
+  serial実行する。既存POSTED 2件は再投稿しない。外部書込み結果が不明な場合は
+  即停止し、read-only照合が完了するまでretryしない。
+- 通常review policyは変更していない。v27のowner batch approvalは上記10行に限定して
+  `generation_policy_json` / `human_review_*` / publication reviewに固定済み。
+- metricsはPOSTED 2件の24h/72h/168h取得後、MEASUREDのみを次回PDCAに使う。
+  安全、権限、account境界、投稿上限をlearningが変更しない方針を維持する。
+
+### テスト結果 / 次に触ってよい / 触らない方がよい
+
+- production Sheets queue/review/support registration: 10/10 read-after-write PASS。
+- publisher dry-run: 10/10 PASS。media validator: media 4/4 PASS。restricted Gemini:
+  10/10 PASS、quality score 90〜95。Geminiへ送信したのは公開本文、source URL、
+  短い要約、persona情報のみ。secret/token/cookie/raw videoは未送信。
+- repository full 826/826とworkflow safety 455/455は直前v23のPASSを維持。
+  v27でcode/config変更はないためfull suiteは再実行していない。
+- 次に触ってよい: v27の未投稿8 queue/review、POSTED 2件のmetrics jobs /
+  metric snapshots / PDCA evidence。
+- 触らない方がよい: v25のBLOCKED行、v27 POSTED 2件、existing posted_results、
+  permission ledger、`.env`、secret/token/cookie/storage state、X/Beauty publisher、quality /
+  provenance / idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- v27は候補作成と安全検証が10/10完了。production証拠は両accountの
+  direct reference media各1件。「全routeがPOSTED」と報告しない。
+- 未投稿8件は生成し直さず、追加owner承認が得られた場合のみ、exact
+  queue IDでserial publishする。`q_acceptance_v27_20260812_*_direct_reference_media`
+  2件はPOSTED済みなので対象外。
+- CloudinaryのNight direct / Night clip / Liver clipはproduction URLとA/V probe証拠あり。
+  Liver directは既存`ma_6ef1a98162cac7c39187dd91`を利用。メディアをtextで
+  fallbackしない。
+
+## 2026-08-12 Codex Remaining Batch Completion v28
+
+### 本システムについて / 変更ファイル一覧
+
+- v27で作成・承認済みだった残り8routeを、ownerが明示したexact queue IDに限定し、
+  Night Scout 4件、Liver Manager 4件の順でserial publishした。v27で投稿済みの
+  direct reference media 2件はread-only照合のみとし、再投稿していない。
+- 対象routeは両account共通で`reference_text_generation`, `pdca_text_generation`,
+  `new_text_generation`, `approved_source_clip`。全件で投稿直前publisher dry-run、
+  persona / public validator / internal leak / quality / provenance / permissionを再確認した。
+- コード、config、通常review policy、安全ゲートは変更していない。変更ファイルは
+  `docs/ai-work-handoff.md`のみ。
+
+### Production証拠 / 未完了事項 / 残WARN
+
+- Night Scout reference text:
+  `threads_q_acceptance_v27_20260812_night_scout_reference_text_generation_20260812002210`,
+  provider ID `18112463167978950`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63XJzkvG2`。
+- Night Scout PDCA text:
+  `threads_q_acceptance_v27_20260812_night_scout_pdca_text_generation_20260812002232`,
+  provider ID `18100539271981425`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63Z_nkklC`。
+- Night Scout new text:
+  `threads_q_acceptance_v27_20260812_night_scout_new_text_generation_20260812002254`,
+  provider ID `18100357529206546`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63ckSEtDp`。
+- Night Scout approved clip:
+  `threads_q_acceptance_v27_20260812_night_scout_approved_source_clip_20260812002348`,
+  provider ID `18105860717125189`,
+  `https://www.threads.com/@kyaba_consul_mizu/post/Db63gX5CjD1`,
+  media asset `ma_acceptance_v27_ns_clip_J8Gy_o6gxio_4095_4226`。
+- Liver Manager reference text:
+  `threads_q_acceptance_v27_20260812_liver_manager_reference_text_generation_20260812002411`,
+  provider ID `18138246571519988`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63l_hkvuK`。
+- Liver Manager PDCA text:
+  `threads_q_acceptance_v27_20260812_liver_manager_pdca_text_generation_20260812002437`,
+  provider ID `18483493639096316`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63pIDkuFQ`。
+- Liver Manager new text:
+  `threads_q_acceptance_v27_20260812_liver_manager_new_text_generation_20260812002457`,
+  provider ID `17884504071674231`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63ru6ktKJ`。
+- Liver Manager approved clip:
+  `threads_q_acceptance_v27_20260812_liver_manager_approved_source_clip_20260812002547`,
+  provider ID `18016254428876533`,
+  `https://www.threads.com/@ran.liver_pro/post/Db63vQgiEcT`,
+  media asset `ma_acceptance_v27_lm_clip_Dr9B30jaTqs_126124_127850`。
+- v27 direct reference media 2件を含む最終canonical集計はqueue 10/10 `POSTED`、
+  posted_results 10/10、`READ_AFTER_WRITE_PASS` 10/10。Night Scout 5件、
+  Liver Manager 5件で、external post IDとpermalinkの重複は0件。
+- metrics jobsは各投稿24h/72h/168hの3件、合計30件。重複jobは0件。
+  取得時刻到来後のmetric実測は通常schedule待ちで、受け入れblockerではない。
+- v28でCloudinaryへの新規uploadは0件。approved clip 2件はv27で検証・保存済みの
+  exact assetを再利用した。ambiguous write 0、X post 0、Beauty operation 0、
+  追加投稿0。残WARNはThreads reference acquisitionの
+  `DEFERRED_OSS_CANDIDATE`のみで、今回のacceptanceを阻害しない。
+
+### スケール方針 / タスク
+
+- v27/v28の10件は全account/routeでproduction proofが揃った。追加のacceptance投稿を
+  自動許可しない。以後は通常review、account別上限、idempotency、permission、quality、
+  provenance gateへ戻す。
+- metricsは`MEASURED`になったsnapshotだけをPDCAへ利用する。単一投稿の結果だけで
+  配分を大きく変えず、安全・権利・account境界・投稿上限をlearningで変更しない。
+- 次タスクは24h/72h/168h jobsの通常収集と、結果に基づくaccount別PDCA。投稿やjobを
+  手動で重複作成しない。
+
+### テスト結果 / 次に触ってよいファイル / 触らない方がよいファイル
+
+- 投稿直前publisher dry-run: 新規8/8 PASS。approved clip media validator: 2/2 PASS。
+  text routeはmedia検査`NOT_REQUIRED`。全8件のproduction publish、posted_results保存、
+  read-after-write、metrics 3件作成を1件ずつ確認してから次へ進んだ。
+- 最終audit: queue 10、posted_results 10、metrics jobs 30、全queue `POSTED`、
+  全read-after-write PASS、全metric window PASS、duplicate 0。
+- repository full 826/826とworkflow safety 455/455は直前v23のPASSを維持。
+  v28でcode/config変更はないためfull suiteは再実行していない。
+- 次に触ってよい: 上記10 posted_resultsのmetric snapshots / metrics jobs / PDCA evidence、
+  通常review経路の新規候補。
+- 触らない方がよい: v27/v28のPOSTED queue・posted_results・metrics jobs、v25のBLOCKED行、
+  permission ledger、`.env`、secret/token/cookie/storage state、X/Beauty publisher、
+  quality / provenance / idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- v27/v28 acceptanceはNight Scout 5route、Liver Manager 5routeの全10件がproduction
+  `POSTED`。全件にprovider ID、permalink、posted_results read-after-write、
+  24h/72h/168h metrics予約がある。
+- 既存direct reference media 2件を再投稿せず、v28は残り8件だけをexact queue IDで
+  serial実行した。acceptance batch authorizationは消費済みで、今後の投稿許可として
+  流用しない。
+- 通常policyは弱めていない。metric実測が到来するまでは数値を0で補完せず、
+  AVAILABLE / PARTIAL / NOT_AVAILABLE等の実状態を保存する。
+
+## 2026-08-16 Codex Persona / Voice Final Correction v29
+
+### VOICE_CORRECTION_STATUS / 本システムについて
+
+- `VOICE_CORRECTION_STATUS=PASS`。v27/v28で投稿された10件は内容品質を通過していても、
+  アカウント固有の話者・距離感・口調を独立gateにしていなかったため、
+  Night Scout / Liver Managerの本来の声になっていなかった。
+- Night Scoutは「男性スカウト / `僕` / casual-professional / 現場判断 / 口語主体」、
+  Liver Managerは「女性LIVE manager / `私` / 温かく寄り添う / 具体的な次回行動 / 口語主体」
+  をcanonical profileとした。Nightの敬体比率上限0.35、Liverは0.40。
+- deterministic voice validatorは一人称、敬体比率、ビジネス文末反復、コンサル/報告書表現、
+  account別NG表現、会話調、Liverの温かさを別証拠として保存する。
+  restricted Gemini semantic gateはidentity fit、対人距離、register、自然さ、persona固有の口調を別途採点する。
+- `VOICE_PERSONA_PASS`なしでは、他のquality / rights / provenanceがPASSでもREADY昇格できない。
+  queue / publication reviewにvoice evidenceを保存し、publisherに渡すのは最終`public_post_text`のみ。
+
+### Recovery / 変更ファイル一覧
+
+- 開始checkpointは`8cda5228e886422f571c6b719252c0a2b4c17062`。意図されたdirty worktreeを
+  reset / clean / rebaseせず保存し、KEEP / COMPLETE / FIXとして継続した。REMOVEは0件。
+- v29本体の主要変更: `config/account_voice_profiles.json`,
+  `config/hybrid_ai_gate.json`, `config/account_settings.json`,
+  `config/post_generation_rules.json`, `scripts/public_post_quality.py`,
+  `scripts/gemini_hybrid_gate.py`, `scripts/auto_approve_queue.py`,
+  `scripts/run_autonomous_loop.py`, `scripts/apply_v29_voice_correction.py`,
+  queue/review schema、v29 negative/positive/route-matrix tests。
+- 追加regression修正: `scripts/evidence_context_caption.py`,
+  `src/generation/source_copyedit.py`, `scripts/media_growth_test_fixtures.py`、
+  既存persona/media関連test fixture群。source-grounded captionとfallbackも同じvoice transformerを通す。
+
+### Old negative / Positive fixtures
+
+- v27/v28の実POSTED本文は新voice gateでNight 5/5 FAIL、Liver 5/5 FAIL。
+  過去のPOSTED行と本文は書き換えていない。
+- 新positive fixtureはNight / Liverともdeterministic + semantic voice checks PASS。
+  Liverを`僕`へ変換し得たsource-copyedit bugも修正した。
+
+### Production Sheets更新 / read-after-write
+
+- `SNS自動投稿ツール` (`1ZlBE0l2DF_A50Q3IApWTAQtNPTWfaa4lxaz8s9q2ljU`)の
+  `アカウント管理`にcanonical persona/toneを反映。`プロンプト管理`と`学習ルール`は
+  新revisionをinactive / review-onlyで追加し、既存active policyを破壊していない。
+- `投稿キュー`10件、`投稿レビュー`10件を新規登録。全件`WAITING_REVIEW`、
+  queue/review read-after-write 10/10 PASS。`posted_results_unchanged=true`。
+- Threads投稿0、Cloudinary upload 0、既存POSTED行変更0、X投稿0、Beauty操作0。
+
+### New route matrix（全文）
+
+#### Night Scout
+
+1. `direct_reference_media` / `q_voice_v29_20260816_night_scout_direct_reference_media`
+
+   キャバのお客さんへの接客で、ラストコールの痛客接客編に出てくるひめかさんの返しが印象に残った。
+
+   和田さんから『愛してるゲーム』を振られても否定せず、そのまま次の会話につなげてるんだよね。
+
+   僕が接客で見るのもここ。無理に盛り上げるより、店の空気を止めずに一度受けて次へ運べるかが大事だよ。
+
+   Voice 92 / semantic 95 / quality 92 / polite ratio 0.00 / first-person PASS。
+
+2. `reference_text_generation` / `q_voice_v29_20260816_night_scout_reference_text_generation`
+
+   現役キャバ嬢にこれだけは伝えたい
+
+   急な話題にすぐ正解・不正解を返すより、一回受けてから質問を返せる子の方が接客は安定するんだよね。客層が変わっても、この力は使える。
+
+   僕が見るのは、店の空気を切らずに会話を次へ運べるか。苦手な話題を無理に盛り上げなくていい。まず一言受ける、この切り替えが大事だよ。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+3. `pdca_text_generation` / `q_voice_v29_20260816_night_scout_pdca_text_generation`
+
+   夜職の時給の見方で迷ってる子に伝えたい
+
+   前回、時給と控除後の手取りを整理した投稿は表示102件、いいね1件だった。僕は『結局いくら残るのか』が具体的だったから、自分ごとで読まれたんだと思う。
+
+   次は控除前後の差を一例に絞る。表示といいねがどう変わるかを見るよ。
+
+   Voice 100 / semantic 95 / quality 94 / polite ratio 0.00 / first-person PASS。
+
+4. `new_text_generation` / `q_voice_v29_20260816_night_scout_new_text_generation`
+
+   これからキャバやりたい子は、体入前に時給だけで決めない方がいい。
+
+   僕が一番見るのは『週何回なら無理なく続けられるか』なんだよね。早上がり、ノルマの締め日、控除、客層で、同じ時給でも手取りと疲れ方はかなり変わる。
+
+   担当には、週2出勤で早上がりが続いた月の手取り例まで聞いておく。ここが働き方に合う店を選ぶのが大事だよ。
+
+   Voice 100 / semantic 95 / quality 96 / polite ratio 0.00 / first-person PASS。
+
+5. `approved_source_clip` / `q_voice_v29_20260816_night_scout_approved_source_clip`
+
+   店選びで周りの評判だけを信じると、入ってからズレることって結構ある。
+
+   一条響さんが『みんなが右でも、自分が左だと思えば左を選ぶ』って話してるの、夜職の店選びにもそのまま当てはまるんだよね。
+
+   僕なら評判より、出勤条件・客層・担当との相性を自分で見る。自分の基準で決めた方が、あとで納得できると思う。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+#### Liver Manager
+
+1. `direct_reference_media` / `q_voice_v29_20260816_liver_manager_direct_reference_media`
+
+   初見バトルのあと、せっかく出会えた人との会話がそこで終わるのはもったいないよね。
+
+   この動画は、配信の悩みに答えながら初見さんとの距離をどう縮めるかが分かりやすい。
+
+   私なら次の配信で、バトル後に一つだけ質問を続けてみるかな。『普段どんな配信を見る？』くらいで大丈夫。次も来やすい入口を残してみてね。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+2. `reference_text_generation` / `q_voice_v29_20260816_liver_manager_reference_text_generation`
+
+   応援してくれる人がいるのに枠が重くなる時って、『誰が一番支えてるか』を競わせてることがあるんだよね。
+
+   古参だけの話、ギフト額の比較、注意をリスナー任せにする。この3つが続くと、初見さんは入りづらい。
+
+   次の配信では内輪話をひとつだけ減らしてみて。私なら、みんなが答えられる質問を一つ置くかな。そこから枠の空気は変えられるよ。
+
+   Voice 93 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+3. `pdca_text_generation` / `q_voice_v29_20260816_liver_manager_pdca_text_generation`
+
+   前回のコメント導線の投稿は、表示5件、いいね0件、コメント0件だった。
+
+   私なら『声をかける』だけじゃなく、そのまま使える一言まで見せるかな。初見さんは返し方が分かるから、コメントしやすいんだよね。
+
+   次の配信では『今○○の話をしてるよ』を一例にして、表示とコメントがどう変わるか試してみる。
+
+   Voice 93 / semantic 95 / quality 94 / polite ratio 0.00 / first-person PASS。
+
+4. `new_text_generation` / `q_voice_v29_20260816_liver_manager_new_text_generation`
+
+   コメントが止まると、話題を増やさなきゃって焦るよね。
+
+   でも『今日どうだった？』より、『今日は忙しかった？ゆっくりできた？』の二択の方が、初見さんも返しやすい。
+
+   私なら冒頭10分で使う二択を3つだけ用意するかな。全部変えなくて大丈夫。答えやすい入口を一つ作るだけで、会話は始まりやすくなるよ。
+
+   Voice 100 / semantic 95 / quality 93 / polite ratio 0.00 / first-person PASS。
+
+5. `approved_source_clip` / `q_voice_v29_20260816_liver_manager_approved_source_clip`
+
+   ライバー自身が配信企画を考える前に、何を届けたいか言葉にできると迷いにくいんだよね。
+
+   この動画では、目標や経験、好きなことを聞いてから、次の面談で企画を一緒に考える流れが紹介されてる。
+
+   私ならまず『誰に、何を届けたい？』を一文だけ書いてみるかな。目的が見えると、次の配信で試す企画も選びやすくなるよ。
+
+   Voice 93 / semantic 90 / quality 94 / polite ratio 0.00 / first-person PASS。
+
+### Validation / 未完了事項 / 残WARN
+
+- repository tests: 830/830 PASS（external network probes 8件とoptional local tool 3件は
+  suite policyどおり対象外）。workflow safety: 455/455 PASS。
+- v29 focused voice tests、old negative 10/10、new positive fixtures、READY voice requirement、
+  hybrid gate、5x2 route matrixは全PASS。Ruff `E9,F63,F7,F82` PASS、compileall PASS、
+  gitleaks diff scan PASS、`git diff --check` PASS。
+- 未完了: 10件のowner目視確認と個別承認。本タスクの承認範囲では投稿しない。
+- 残WARN: Threads reference acquisitionの`DEFERRED_OSS_CANDIDATE`と、実metrics取得時刻到来待ち。
+  新voice gateの通過をもって投稿権限やscheduleを自動拡大しない。
+
+### スケール方針 / 次に触ってよいファイル / 触らない方がよいファイル
+
+- voice変換はNight/Liverの全生成routeで共通のcanonical validatorを使う。句尾だけの
+  強制変換を増やさず、topic/sourceを保存したまま、生成段階でaccountの声にする。
+- 次に触ってよい: v29の10件の`WAITING_REVIEW` queue / review、本文生成route、
+  voice profile / validator / semantic voice evidence。ownerが明示承認した対象だけを別タスクでREADY化する。
+- 触らない方がよい: v27/v28のPOSTED queue / posted_results / metrics jobs、
+  permission ledger、`.env`、secret/token/cookie/storage state、X/Beauty publisher、
+  rights / provenance / idempotency / media-to-text-fallback prohibition gate。
+
+### 次AIへの引き継ぎメモ
+
+- v29の10件は全て新規候補で、完全文と証拠は本節にある。全件
+  `VOICE_PERSONA_PASS`、quality 92〜96、semantic voice 90〜95、敬体比率0.00。
+- productionではqueue/reviewへのreview-only登録まで実施済み。Threads/Cloudinaryは0件。
+  本タスクの承認を投稿承認に読み替えない。
+- runtimeが作成する`.runtime/`はリポジトリ管理対象外。今後もcommitしない。
+
+## 2026-08-16 PDCA Public-Text Semantics and Account Isolation Correction
+
+### 本システムについて / 根本原因 / 修正内容
+
+- PDCAの目的は、各アカウントの実`MEASURED` metricsから伸びたテーマ、フック、
+  情報順序、具体性、行動の絞り方を内部学習し、次の独立した新規投稿に反映すること。
+  過去投稿の数字や「前回の投稿」を読者へ報告するrouteではない。
+- 根本原因は`apply_measured_pdca_lineage()`が、適切に生成された新規本文を、
+  表示数・いいね数・仮説・次回検証を記載した公開用レポートで上書きしていたこと。
+  上位処理はaccount別だったが、低層関数単体のaccount fail-closedも不足していた。
+- 公開用metricsレポート上書きを廃止。Geminiが生成し、persona/public/quality gateを通過した
+  新規`public_post_text`を保持する。metrics・学習元result・分析仮説は`internal_analysis`とlineageにだけ保存する。
+- `build_measured_pdca_inputs()`でsnapshot / posted resultの`account_id`, `platform=threads`,
+  `metrics_status=MEASURED`, `status=POSTED`を再検査。queue、source metaが対象accountと一致しなければ停止する。
+  学習スコープは`account:night_scout` / `account:liver_manager`とし、今後accountが増えても混合しない。
+- `pdca_public_text_policy()`を追加。「前回の投稿」、表示数、いいね件数、コメント件数、
+  実測結果などの内部PDCA説明が公開本文に入ればBLOCKする。
+
+### 変更ファイル一覧 / 新PDCA本文
+
+- `scripts/generate_threads_ideas_from_references.py`: account分離、metrics非公開policy、
+  学習lineage、新規本文保持、安全なdeterministic fallback。
+- `src/generation/reference_source_rewriter.py`: PDCA学習時は過去投稿・metrics・PDCAに言及せず、
+  学習した構成だけを独立した新規ノウハウ投稿へ反映するprompt契約。
+- `scripts/apply_v29_voice_correction.py`: review-only matrixのPDCA 2件を修正。
+  Nightは体入前の控除・早上がり・バック条件の確認、Liverは配信終了時の次回予告という、
+  互いに独立したaccount専用の読者向け投稿にした。どちらもpublic validator / PDCA policy PASS。
+- tests: `scripts/test_pdca_account_isolation_and_learning_only.py`を追加し、
+  `scripts/test_pdca_measured_generation_grounding.py`,
+  `scripts/test_scheduled_autopost_preview_findings_contract.py`を新契約に更新。
+
+### 未完了事項 / 残WARN / スケール方針
+
+- 既にproduction Sheetsにあるv29の旧PDCA 2候補は`WAITING_REVIEW`のまま。本修正で本番Sheets書込み、
+  READY化、Threads投稿は行っていない。旧PDCA 2件を承認・投稿せず、次回の明示された
+  Sheets修正承認でsupersedeする。
+- PDCAは学習元本文を引用するrouteではない。source/result IDは監査lineageにだけ残し、
+  公開本文はアカウント別の新規ノウハウとする。reference textとPDCAを混同しない。
+- 今後accountを増やす場合、`ALLOWED_ACCOUNTS`、persona、theme inventoryを追加してから、
+  独立した`account:<id>`学習スコープで実行する。未登録accountをelse分岐でLiver扱いしない。
+
+### テスト結果 / 次に触ってよい / 触らない方がよい
+
+- repository tests: 831/831 PASS。workflow safety: 455/455 PASS。focused PDCA/account isolation、
+  measured snapshot、activation lineage、scheduled preview、v29 route matrixは全PASS。
+  Ruff PASS、compileall PASS、gitleaks diff scan PASS、`git diff --check` PASS。
+- 次に触ってよい: PDCA候補生成、account別metrics/learning lineage、v29の旧PDCA 2 review rowsの
+  supersede処理。本番Sheets書込みは明示承認後に対象rowを固定して行う。
+- 触らない方がよい: 既存POSTED行、metrics実測値、permission ledger、`.env`、
+  secret/token/cookie/storage state、X/Beauty publisher、rights/provenance/idempotency gate。
+
+### 次AIへの引き継ぎメモ
+
+- PDCA routeのpublic textに過去投稿の成績、実測数値、「次は何を検証する」を書かない。
+  それらは内部学習証拠であり、読者向けコンテンツではない。
+- Night ScoutとLiver Managerのposted results / snapshots / category scores / learning rulesを同時に入力しても、
+  対象`account_id`以外は選定しない。mismatchは黙ってfallbackせずfail-closed。
