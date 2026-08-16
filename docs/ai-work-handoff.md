@@ -7800,6 +7800,11 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   kill switchとreport-onlyはOFF。1 run 1投稿、account別daily cap 5、cooldown 90分を維持する。
 - GitHub repository secretsは値を表示せずpresenceのみ確認済み。Sheets、Night/Liver Threads、Gemini、
   Cloudinaryの必要secret名が登録されている。
+- Night Scoutの後続scheduleを止めていた2026-08-06開始のstale `waiting` run
+  `31124090337`と、recovery run `31121045017`をキャンセルした。削除や投稿は行っていない。
+  解放後、最新mainのworkflow_dispatch `dry_run_only`はNight Scout run `31930556406`、
+  Liver Manager run `31930095996`とも成功した。どちらもapply/publish stepはskipされ、実投稿0件。
+  確認時点のActions waiting / pending / in-progress滞留は0件。
 
 ### 新しい参照アカウントの追加
 
