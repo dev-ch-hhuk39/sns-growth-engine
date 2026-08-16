@@ -7780,3 +7780,48 @@ v2はsource registry / Sheets / dry-run導線を持つSNS Growth Engine。今回
   それらは内部学習証拠であり、読者向けコンテンツではない。
 - Night ScoutとLiver Managerのposted results / snapshots / category scores / learning rulesを同時に入力しても、
   対象`account_id`以外は選定しない。mismatchは黙ってfallbackせずfail-closed。
+
+## 2026-08-16 Production Rollout and Future Account Onboarding
+
+### 本番反映
+
+- PR #173を通常マージし、reference-first acquisition、account voice、PDCA account isolationをmainへ反映した。
+- PR #174/#175で、V29 review-only Sheets applyを冪等化した。既存候補を更新できるのは、queueが
+  `WAITING_REVIEW`、reviewが`PENDING_REVIEW`またはlegacy `WAITING_REVIEW`、かつ投稿証拠がない場合だけ。
+  READY / APPROVED / POSTED / result_id / post_url付きはfail-closedで上書きしない。
+- production SheetsへV29候補10件を反映し、queue 10/10、publication review 10/10の
+  read-after-writeが完全一致した。`posted_results_unchanged=true`。Threads投稿とCloudinary uploadは実行していない。
+- PDCA候補はNight Scout / Liver Managerを別々の`account:<id>`学習スコープで生成し、公開本文に
+  過去投稿の数値・成績・PDCA説明を含めない。production反映時のsemantic voice scoreはNight 95、Liver 90。
+- 定期Liver Manager runで、参照生成側の旧schema名とAUTO_READY側の現行schema名が不一致のため、
+  品質91以上でも全件REJECTされる実障害を確認した。PR #176で生成側を`post_features_v1` /
+  `generation_quality_v3`へ統一した。validator・品質閾値・権利gateは緩和していない。
+- `config/autonomous_mode.json`はautonomous / AUTO_READY / auto post / production activation / scheduled publishがON、
+  kill switchとreport-onlyはOFF。1 run 1投稿、account別daily cap 5、cooldown 90分を維持する。
+- GitHub repository secretsは値を表示せずpresenceのみ確認済み。Sheets、Night/Liver Threads、Gemini、
+  Cloudinaryの必要secret名が登録されている。
+
+### 新しい参照アカウントの追加
+
+- Threads / YouTubeなど既存adapter対応platformなら、原則としてsource registryへの正規URL、対象account、
+  使用目的、fetch設定、rights分類を追加すれば共通収集・生成基盤を再利用できる。
+- reference textだけなら`reference_only`または`third_party_reference_only`でよい。元メディア再利用やclipには、
+  `owned` / `licensed` / `approved_creator_clip`、permission evidence、対象accountとThreads利用許可が必要。
+- profile/channel URLを個別postとして保存しない。direct media / clipは個別post/video URLとparent integrityを必要とする。
+
+### Beauty accountを有効化する前にownerが用意するもの
+
+1. 投稿先Threads handle / user IDとaccount別credential。secret値はGitHub Secretsへ登録し、文書へ書かない。
+2. 読者、目的、一人称、口調、主要テーマ、避けるテーマ、CTA、リンク。既存
+   `config/accounts/beauty_account.json`はdraftなので、owner確定値で更新する。
+3. 参照source URL一覧。各URLにplatform、用途（reference text / direct media / clip）、優先度、対象accountを付ける。
+4. メディア利用するsourceごとの権利状態、permission evidence、許可操作、Threads利用可否、有効期限。
+   reference-only sourceの権利を推測でmedia利用可へ変更しない。
+5. 美容・美容医療表現の禁止事項。効果保証、医療代替、before/after保証、過度なコンプレックス訴求などの
+   account固有validator条件をownerが最終確認する。
+6. 投稿時間、1日上限、content mix、review必須期間、AUTOPOST開始条件。初回はreview-only canaryから開始する。
+
+Beautyは現在`draft_only`で、generator / AUTO_READY / publisher / workflowsに明示的なblockがある。
+上記入力だけで既存2accountへ影響は出ないが、実稼働には入力確定後、Beauty専用persona validator、
+account allowlist、credential mapping、独立workflow、metrics / `account:beauty_account` PDCA scopeを追加し、
+dry-runとbounded canaryを通してからblockを解除する。単なるsource追加だけで自動投稿を有効化しない。
