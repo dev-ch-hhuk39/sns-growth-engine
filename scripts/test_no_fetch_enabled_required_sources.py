@@ -4,5 +4,5 @@ from required_source_url_checks import assert_no_fetch_enabled_required_sources,
 
 if __name__ == "__main__":
     raise SystemExit(run_checks([
-        ("required sources never fetch/download/cut/upload", assert_no_fetch_enabled_required_sources),
+        ("required sources use bounded reference fetch and never download/cut/upload", assert_no_fetch_enabled_required_sources),
     ]))

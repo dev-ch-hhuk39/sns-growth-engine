@@ -55,6 +55,14 @@ jobs:
           cache-dependency-path: requirements-acquisition.txt
       - name: Install bounded acquisition and generation dependencies
         run: python3 -m pip install --requirement requirements-acquisition.txt
+      - name: Install pinned anonymous Threads CLI
+        env:
+          THREADS_CLI_INSTALL_DIR: ${{ runner.temp }}/threads-cli
+        run: |
+          bash scripts/install_threads_cli.sh
+          echo "${THREADS_CLI_INSTALL_DIR}" >> "$GITHUB_PATH"
+      - name: Install public browser fallback
+        run: python3 -m playwright install --with-deps chromium
       - name: Guard review-only preparation
         run: |
           test "${{ inputs.confirm_preparation }}" = "PREPARE_VIDEO_REFERENCES"

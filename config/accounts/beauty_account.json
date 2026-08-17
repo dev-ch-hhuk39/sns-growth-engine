@@ -1,28 +1,23 @@
 {
   "account_id": "beauty_account",
-  "display_name": "美容アドバイザー",
+  "display_name": "美容アカウント",
   "status": "draft_only",
-  "_status_note": "draft_only: 設計検証中。実投稿禁止。human review必須。READY化・POSTED化禁止。active化にはユーザー明示承認が必要。",
-  "platforms": ["x", "threads"],
-  "persona": "美容アドバイザー。スキンケア・コスメ・美容知識を発信。プロ視点のリアルな美容情報を届ける。",
-  "target_audience": "美容に興味のある女性・スキンケアに悩む20〜40代・コスメ購入検討層",
-  "primary_goal": "LINE相談獲得",
-  "secondary_goals": ["フォロワー獲得", "認知拡大", "美容知識の普及"],
-  "tone": "丁寧で親しみやすい・専門知識あり・押しつけがましくない・読者目線",
+  "_status_note": "認証・canary前の安全停止状態。候補はWAITING_REVIEWまで。READY化・POSTED化・予約本番投稿はactivation後のみ。",
+  "platforms": ["threads"],
+  "persona": "美容に詳しい、少しお姉さん寄りの女友達。コスメやケアを日常で試しやすい判断基準にして届ける。",
+  "target_audience": "美容・コスメが好きな20〜30代女性",
+  "primary_goal": "フォロー・保存・リーチ獲得",
+  "secondary_goals": ["美容の判断基準の提供", "アカウントの信頼形成", "販売前の認知拡大"],
+  "tone": "女性的・柔らかい・口語中心。美容に詳しい少し年上の女友達の距離感で、広告臭や押し売りを出さない。",
   "first_person": "私",
   "content_categories": [
     "スキンケアあるある",
-    "美容知識・成分解説",
-    "コスメレビュー視点",
-    "美容ルーティン",
-    "美容の誤解を解く",
-    "季節の美容対策",
-    "プチプラ美容",
-    "美容と健康の関係",
-    "垢抜けノウハウ",
-    "夜職・インフルエンサー向け美容投資",
-    "美容医療比較・基礎知識",
-    "肌管理・小顔・髪・体型の実践知"
+    "コスメ",
+    "スキンケア",
+    "メイク",
+    "ヘアケア",
+    "美容家電",
+    "サロン"
   ],
   "forbidden_themes": [
     "医療行為の代替推奨",
@@ -74,14 +69,19 @@
     }
   },
   "cta_policy": {
-    "cta_type": "LINE",
-    "cta_text": "美容相談はLINEで↓",
-    "line_url": ""
+    "cta_required": false,
+    "cta_frequency_percent": 10,
+    "allowed_cta_types": ["save", "like", "follow"],
+    "sales_cta_allowed": false,
+    "line_cta_allowed": false,
+    "maximum_cta_per_post": 1
   },
   "reference_source_policy": {
-    "allowed_platforms": ["tiktok", "youtube_shorts", "instagram"],
-    "min_follower_count": 10000,
-    "max_age_days": 60
+    "allowed_platforms": ["x", "youtube", "tiktok"],
+    "declared_source_count": 22,
+    "mapping_manifest": "config/source_accounts/owner_reference_sources_20260817.json",
+    "reference_analysis_allowed": true,
+    "media_reuse_requires_explicit_permission": true
   },
   "video_policy": {
     "enabled": false,
@@ -102,12 +102,51 @@
   },
   "learning_policy": {
     "min_results_for_learning": 15,
-    "auto_activate_rules": false
+    "auto_activate_rules": false,
+    "account_scope": "beauty_account",
+    "strict_account_isolation": true,
+    "cross_account_learning": false,
+    "suggestion_status": "WAITING_REVIEW"
+  },
+  "medical_content_policy": {
+    "enabled": true,
+    "separate_review_lane": true,
+    "requires_human_review": true,
+    "auto_ready_allowed": false,
+    "publish_without_human_review": false
+  },
+  "generation_policy": {
+    "routes": [
+      "new_text_generation",
+      "reference_text_generation",
+      "pdca_text_generation",
+      "direct_reference_media",
+      "approved_source_clip"
+    ],
+    "default_candidate_status": "WAITING_REVIEW",
+    "auto_ready_allowed": false
+  },
+  "posting_schedule": {
+    "timezone": "Asia/Tokyo",
+    "daily_target_min": 1,
+    "daily_target_max": 2,
+    "planned_review_slots_jst": ["11:30", "20:30"],
+    "candidate_preparation_enabled": true,
+    "scheduled_publish_enabled": false,
+    "activation_requires_credentials": true
+  },
+  "threads_credentials": {
+    "handle": "",
+    "user_id": "",
+    "handle_secret_name": "THREADS_HANDLE_BEAUTY_ACCOUNT",
+    "access_token_secret_name": "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT",
+    "user_id_secret_name": "THREADS_USER_ID_BEAUTY_ACCOUNT",
+    "oauth_status": "WAITING_OWNER_INPUT"
   },
   "safety_policy": {
     "requires_human_review_before_post": true,
     "allow_real_post": false,
-    "min_publish_score": 70,
+    "min_publish_score": 85,
     "brand_risk_threshold": 20,
     "draft_only_enforcement": "STRICT",
     "medical_ad_risk_check": true

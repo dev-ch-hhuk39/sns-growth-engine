@@ -17,7 +17,7 @@ def main() -> int:
         ("confirm checked before env post", "if not confirm_real_post:" in src),
         ("missing gate blocks", '"status": "BLOCKED"' in src and "--confirm-real-post required" in src),
         ("media real post blocked", "SAFETY_STOP_MEDIA" in src),
-        ("beauty blocked", "beauty_account" in src and "BEAUTY_BLOCKED" in src),
+        ("beauty separately gated", "beauty_publish_gate" in src and "BEAUTY_PRODUCTION_ENABLED" in src),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

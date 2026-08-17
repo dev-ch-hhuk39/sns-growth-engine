@@ -8,17 +8,16 @@ posts, download media and collect comments. Runtime selection is described by
 `config/acquisition_backend_capabilities.json` and validated before the router
 starts.
 
-Production rules are fixed: backend-only, bounded, read-only acquisition; no
-automatic cookie extraction; no browser runtime; no opaque downloader service;
+Production rules are fixed: bounded, read-only acquisition; no automatic
+cookie extraction; no opaque downloader service; public browser fallback only;
 no fallback around author, rights, private-source or third-party-repost blocks.
 Missing optional tools fail soft. `scripts/acquisition_doctor.py --json` reads no
 credentials and performs no network or production writes.
 
-The v23 owner policy limits active acquisition to X, YouTube and TikTok.
-Threads reference acquisition is `DEFERRED_OSS_CANDIDATE` with reason
-`NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN`. Every historical
-Threads Graph, oEmbed, Playwright and browser/session candidate is
-`NOT_USED_BY_OWNER_POLICY`; no Meta authentication is required.
+The 2026-08-17 owner policy activates Threads reference acquisition without
+Meta authentication. The route is pinned `tamnd/threads-cli` public crawling,
+then a logged-out persisted query, then public Playwright. All three failing is
+reported as `DEFERRED`; it is never fabricated as acquisition success.
 
 ## Adopted stack
 
@@ -32,11 +31,12 @@ Threads Graph, oEmbed, Playwright and browser/session candidate is
 | Research | local aggregation | Agent Reach 1.5.0 shadow | Agent Reach measured 4/15 channels |
 | TikTok profile posts | internal public embed parser | gallery-dl | 3/3 registered profiles, 9/9 bounded individual posts in live probe |
 | TikTok approved physical media | public embed direct HTTP | yt-dlp individual-post fallback | 12,310,033-byte A/V Golden; permission, author and review gates PASS |
-| Threads reference acquisition | none | future owner-approved GitHub/OSS candidate only | DEFERRED_OSS_CANDIDATE; no active route |
+| Threads reference acquisition | tamnd/threads-cli v0.1.1 crawler | logged-out persisted query, then public Playwright | active, bounded to 5 posts/source; exact-author individual posts only |
 
 `twscrape` is OPTIONAL_AUTH only (`auth_token` and `ct0`); it does not replace
-working X physical acquisition. Browser Threads/TikTok tools and remote
-download-conversion websites are not selectable by production routing.
+working X physical acquisition. A public, cookie-free Playwright adapter is
+selectable only as the final Threads reference fallback. Remote conversion
+websites and browser-backed physical media acquisition remain excluded.
 
 ## Candidate audit
 

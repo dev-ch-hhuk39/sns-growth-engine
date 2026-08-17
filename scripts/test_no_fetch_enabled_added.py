@@ -12,7 +12,7 @@ def main() -> int:
     enabled = [s for s in sources if s.get("fetch_enabled") is True]
     checks = [
         ("source registry is populated", len(sources) >= 63),
-        ("fetch-enabled set is bounded", 1 <= len(enabled) <= 8),
+        ("fetch-enabled set is bounded", 1 <= len(enabled) <= 20),
         ("fetch-enabled sources are active", all(s.get("active") is True for s in enabled)),
         ("only approved bounded X is fetch-enabled", all(
             s.get("source_platform") != "x" or (

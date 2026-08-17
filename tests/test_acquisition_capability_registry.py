@@ -15,17 +15,21 @@ from acquisition.router import AdapterRouter, BackendFailure, BackendRoute  # no
 from acquisition.twscrape_optional import TwscrapeOptionalAdapter  # noqa: E402
 
 
-def test_active_profile_routes_are_capability_compatible_and_backend_only() -> None:
+def test_active_profile_routes_are_capability_compatible_and_bounded() -> None:
     registry = CapabilityRegistry.load()
     router = build_router()
     assert not registry.validate_routes(router.routes, registered=set(router.adapters))
-    for route in router.routes.values():
-        assert registry.get(route.primary).production_selectable
-        for backend_id in (route.primary, *route.fallbacks):
+    for capability, route in router.routes.items():
+        primary = registry.get(route.primary)
+        assert primary.production_selectable
+        assert not primary.requires_browser
+        for position, backend_id in enumerate((route.primary, *route.fallbacks)):
             backend = registry.get(backend_id)
-            assert not backend.requires_browser
             assert not backend.requires_external_service
             assert backend.read_only
+            if backend.requires_browser:
+                assert capability == "threads.profile_posts"
+                assert position == len(route.fallbacks)
 
 
 def test_browser_auth_and_opaque_candidates_are_not_production_selectable() -> None:
@@ -42,24 +46,19 @@ def test_browser_auth_and_opaque_candidates_are_not_production_selectable() -> N
         assert not registry.get(backend_id).production_selectable
 
 
-def test_threads_backends_are_inactive_by_owner_policy() -> None:
+def test_threads_three_stage_route_is_active_without_auth() -> None:
     registry = CapabilityRegistry.load()
-    for backend_id in (
-        "threads_public_http",
-        "threads_oembed_detail",
-        "threads_search_index",
-        "threads_graph_public_discovery",
-        "threads_hasya_userscript",
-        "threads_zeeshan_playwright",
-        "threads_vdite_playwright",
-        "threads_galih_playwright",
-    ):
-        backend = registry.get(backend_id)
-        assert backend.role == "NOT_USED_BY_OWNER_POLICY"
-        assert not backend.production_selectable
-
     router = build_router()
-    assert not any(capability.startswith("threads.") for capability in router.routes)
+    route = router.routes["threads.profile_posts"]
+    assert route.primary == "threads_cli_public"
+    assert route.fallbacks == (
+        "threads_logged_out_graphql",
+        "threads_public_screen",
+    )
+    for backend_id in route.primary, *route.fallbacks:
+        backend = registry.get(backend_id)
+        assert not backend.requires_auth
+        assert backend.read_only
 
 
 def test_unknown_or_capability_mismatched_backend_fails_closed() -> None:

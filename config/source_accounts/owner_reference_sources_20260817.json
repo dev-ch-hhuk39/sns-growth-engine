@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "declared_at": "2026-08-17",
+  "policy": "Canonical owner reference-account list. Presence grants reference analysis only; it does not grant media reuse permission.",
+  "accounts": {
+    "beauty_account": {
+      "x": [
+        "https://x.com/saraparin",
+        "https://x.com/hondayuni",
+        "https://x.com/mochi__cosme",
+        "https://x.com/fortune_sachiko",
+        "https://x.com/chicoecco",
+        "https://x.com/soi_beauty"
+      ],
+      "youtube": [
+        "https://www.youtube.com/@CosmeWotaSara",
+        "https://www.youtube.com/@hirobeautychannel",
+        "https://www.youtube.com/@aratatomori",
+        "https://www.youtube.com/@775nanako",
+        "https://www.youtube.com/@fukurena",
+        "https://www.youtube.com/@shikanoma",
+        "https://www.youtube.com/@arichan_make",
+        "https://www.youtube.com/@EGA.channel",
+        "https://www.youtube.com/@shushu_223_"
+      ],
+      "tiktok": [
+        "https://www.tiktok.com/@egachannel1",
+        "https://www.tiktok.com/@miwa_asmr",
+        "https://www.tiktok.com/@mote_cosme",
+        "https://www.tiktok.com/@machimachi_877",
+        "https://www.tiktok.com/@snam8_",
+        "https://www.tiktok.com/@shushu_223_",
+        "https://www.tiktok.com/@coscoslife"
+      ]
+    },
+    "night_scout": {
+      "x": [
+        "https://x.com/3j2c9q",
+        "https://x.com/_nomination__",
+        "https://x.com/amuxamudaily",
+        "https://x.com/takashimaanna",
+        "https://x.com/minatoku789",
+        "https://x.com/1okukure_",
+        "https://x.com/urarament",
+        "https://x.com/kyaba_career"
+      ],
+      "youtube": [
+        "https://www.youtube.com/@shingekinoa3485",
+        "https://www.youtube.com/@amiru327",
+        "https://www.youtube.com/@lastcall_official",
+        "https://www.youtube.com/@ichijo_hibiki",
+        "https://www.youtube.com/@sakuraimizuki",
+        "https://www.youtube.com/@ClubUNJOURTOKYO",
+        "https://www.youtube.com/@kyaba_camera"
+      ],
+      "threads": [
+        "https://www.threads.com/@kyaba_oohata",
+        "https://www.threads.com/@kyaba_rui_scout",
+        "https://www.threads.com/@chiikawan400",
+        "https://www.threads.com/@kyaba_ryo",
+        "https://www.threads.com/@mizuno9120",
+        "https://www.threads.com/@kyabaraunzi",
+        "https://www.threads.com/@levi_kyaba",
+        "https://www.threads.com/@chiishunin_s"
+      ]
+    },
+    "liver_manager": {
+      "x": [
+        "https://x.com/meg_lsm",
+        "https://x.com/ryoyan_1130"
+      ],
+      "youtube": [
+        "https://www.youtube.com/@suu-san_pococha",
+        "https://youtube.com/channel/UCzFzty7aEd4tw3NqCW6pkLQ"
+      ],
+      "tiktok": [
+        "https://www.tiktok.com/@user5597696107300",
+        "https://www.tiktok.com/@me02_lsm",
+        "https://www.tiktok.com/@uare.inc",
+        "https://www.tiktok.com/@ikkyu___san_"
+      ],
+      "threads": [
+        "https://www.threads.com/@me01_lsm"
+      ]
+    }
+  }
+}

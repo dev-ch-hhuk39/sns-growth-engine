@@ -23,8 +23,8 @@ try:
 except ImportError:
     pass
 
-from learning.pdca_orchestrator import PDCAOrchestrator
-from metrics_pdca_contract import measured_results_only, pdca_input_summary
+from learning.pdca_orchestrator import PDCAOrchestrator  # noqa: E402
+from metrics_pdca_contract import measured_results_only, pdca_input_summary  # noqa: E402
 
 
 # サンプルposted_results（mock用）
@@ -96,17 +96,22 @@ def main() -> None:
     print(f"  generate_next    : {args.generate_next_plan}")
     print(f"  max_suggestions  : {args.max_suggestions}")
 
-    # beauty_account は draft_only なので mock/fixture 分析のみ
+    # draft_only でも同一accountのMEASURED実績は読み取れる。自動適用はしない。
     try:
         from accounts.account_config import load_account_config
         acct_cfg = load_account_config(account_id)
         if acct_cfg.is_draft_only():
-            print(f"\n  [INFO] {account_id} は draft_only です。mock/fixture 分析のみ実行します。")
-            results_to_analyze = [
-                r for r in _MOCK_RESULTS if r.get("account_id") == account_id
-            ]
-            if not results_to_analyze:
-                results_to_analyze = []
+            print(f"\n  [INFO] {account_id} は draft_only です。提案はWAITING_REVIEW固定です。")
+            if args.use_sheets and not args.mock:
+                try:
+                    results_to_analyze = load_measured_results_from_sheets(account_id, platform)
+                except Exception as exc:
+                    print(f"  [WARN] metrics read unavailable: {type(exc).__name__}")
+                    results_to_analyze = []
+            else:
+                results_to_analyze = [
+                    r for r in _MOCK_RESULTS if r.get("account_id") == account_id
+                ] if args.mock else []
         elif args.use_sheets:
             try:
                 results_to_analyze = load_measured_results_from_sheets(account_id, platform)
@@ -120,8 +125,6 @@ def main() -> None:
 
     if not results_to_analyze and args.mock:
         results_to_analyze = [r for r in _MOCK_RESULTS if r.get("account_id") == account_id]
-        if not results_to_analyze:
-            results_to_analyze = _MOCK_RESULTS
 
     orchestrator = PDCAOrchestrator()
     result = orchestrator.run(
@@ -133,29 +136,29 @@ def main() -> None:
         max_suggestions=args.max_suggestions,
     )
 
-    print(f"\n--- PDCA分析結果 ---")
+    print("\n--- PDCA分析結果 ---")
     print(f"  pdca_run_id      : {result['pdca_run_id']}")
     print(f"  total_results    : {result['analysis']['total_results']}")
     print(f"  suggestion_count : {result['suggestion_count']}")
     print(f"  next_jobs_count  : {result['next_jobs_count']}")
 
-    print(f"\n  コンテンツタイプ比較:")
+    print("\n  コンテンツタイプ比較:")
     for ct, stats in result["analysis"]["content_type_comparison"].items():
         print(f"    {ct}: n={stats['count']} avg_er={stats['avg_engagement_rate']:.4f}")
 
     if result["improvement_suggestions"]:
-        print(f"\n  改善提案（全て WAITING_REVIEW）:")
+        print("\n  改善提案（全て WAITING_REVIEW）:")
         for s in result["improvement_suggestions"]:
             print(f"    [{s['suggestion_id']}] {s['title']}")
             print(f"      {s['body'][:60]}...")
             print(f"      status={s['status']} active={s['active']}")
 
     if result["next_generation_jobs"]:
-        print(f"\n  次回generation_jobs候補（全て PLANNED）:")
+        print("\n  次回generation_jobs候補（全て PLANNED）:")
         for j in result["next_generation_jobs"]:
             print(f"    [{j['job_id']}] mode={j['generation_mode']} status={j['status']}")
 
-    print(f"\n  安全注記:")
+    print("\n  安全注記:")
     for note in result["safety_notes"]:
         print(f"    - {note}")
 
@@ -163,7 +166,7 @@ def main() -> None:
     print(f"  metrics_input     : {input_summary['metrics_status']} ({input_summary['measured_result_count']})")
 
     if args.test_write or args.apply:
-        print(f"\n--- test-write ---")
+        print("\n--- test-write ---")
         if args.dry_run or not args.apply or not args.confirm_pdca:
             print("  [BLOCKED] PDCA audit write requires --no-dry-run --apply --confirm-pdca")
         elif args.use_sheets:
@@ -182,18 +185,18 @@ def main() -> None:
                     "suggestion_count": result["suggestion_count"],
                     "created_at": result["created_at"],
                 })
-                print(f"  [OK] pdca_runs 書き込み完了")
+                print("  [OK] pdca_runs 書き込み完了")
             except Exception as e:
                 print(f"  [WARN] Sheets write error: {type(e).__name__}")
         else:
             print(f"  [MockSheets] pdca_run を保存（mock）: {result['pdca_run_id']}")
 
     if args.output_json:
-        print(f"\n--- JSON出力 ---")
+        print("\n--- JSON出力 ---")
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
-    print(f"\n[DONE] run_pdca_cycle 完了")
-    print(f"  実投稿なし / 自動反映なし / learning_rules active=false")
+    print("\n[DONE] run_pdca_cycle 完了")
+    print("  実投稿なし / 自動反映なし / learning_rules active=false")
 
 
 if __name__ == "__main__":

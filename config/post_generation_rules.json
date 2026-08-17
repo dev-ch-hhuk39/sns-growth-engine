@@ -172,6 +172,23 @@
           "次に試すこと："
         ]
       }
+    },
+    "beauty_account": {
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.beauty_account",
+      "first_person": "私",
+      "forbidden_first_person": ["僕", "ぼく", "俺", "おれ"],
+      "reader_terms": ["コスメ", "スキンケア", "肌", "メイク", "ファンデ", "髪", "ヘアケア", "美容家電", "サロン"],
+      "action_markers": ["まず", "試す", "選ぶ", "見直す", "確認", "比べる", "一つ", "ひとつ"],
+      "blocked_terms": ["絶対に効く", "必ず変わる", "100%安全", "効果を保証", "今すぐ購入", "LINEで相談", "DMして"],
+      "minimum_reader_terms": 2,
+      "minimum_action_markers": 1,
+      "cta_frequency_percent": 10,
+      "source_copyedit": {
+        "strategy": "extract_structure_then_write_original",
+        "preferred_markers": ["なんだよね", "かも", "だと思う", "してみて", "で大丈夫", "私なら"],
+        "maximum_conversational_endings": 3,
+        "forbidden_template_phrases": ["この商品で変わる", "絶対に買うべき", "今すぐチェック"]
+      }
     }
   },
   "account_execution": {
@@ -242,6 +259,12 @@
         "精神論だけ",
         "AIの分析メモ"
       ]
+    },
+    "beauty_account": {
+      "reader": ["美容やコスメが好きな20〜30代女性", "スキンケアやメイク選びに迷う女性"],
+      "purpose": ["日常で試せる美容の判断基準を渡す", "保存したくなる実用情報を増やす", "販売より先に信頼とリーチを作る"],
+      "post_structure": ["美容の迷いを一つ言語化", "よくある選び方のズレ", "具体的な判断基準", "日常で試す一つの行動"],
+      "forbidden": ["広告臭", "押し売り", "効果保証", "コンプレックス煽り", "毎回のCTA", "作り物の女言葉", "内部語", "AIの分析メモ"]
     }
   }
 }

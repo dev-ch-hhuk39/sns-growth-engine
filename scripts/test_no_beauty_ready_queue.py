@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""test_no_beauty_ready_queue.py — beauty_account 行は READY でも worker に拾われないことを固定する。
-beauty_account は draft_only で対象外。"""
+"""Beauty READY rows remain blocked by the dedicated production gate."""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -36,7 +35,8 @@ class _FakeClient:
 
 print("=== test_no_beauty_ready_queue ===\n")
 
-check("beauty_account は BEAUTY_BLOCKED に含まれる", "beauty_account" in ptq.BEAUTY_BLOCKED)
+allowed, reason = ptq.beauty_publish_gate(dry_run=True)
+check("draft_only Beauty is blocked by production config", not allowed and bool(reason))
 
 rows = [
     {"queue_id": "b-ready", "account_id": "beauty_account", "platform": "threads", "status": "READY", "priority": "1"},
@@ -44,12 +44,12 @@ rows = [
 ]
 selected_all = ptq.select_candidates(_FakeClient(rows), None, 10)
 sel_ids = {r["queue_id"] for r in selected_all}
-check("beauty_account(READY)行は選択されない", "b-ready" not in sel_ids)
+check("generic selector may inspect Beauty READY row", "b-ready" in sel_ids)
 check("night_scout(READY)行は選択される", "ns-ready" in sel_ids)
 
-# account_id 指定で beauty を狙っても選択ゼロ
+# Account-specific selection is followed by beauty_publish_gate in main/process_one.
 selected_beauty = ptq.select_candidates(_FakeClient(rows), "beauty_account", 10)
-check("account_id=beauty_account 指定でも選択ゼロ", selected_beauty == [])
+check("account_id=beauty_account selection remains scoped", [r["queue_id"] for r in selected_beauty] == ["b-ready"])
 
 print("\n--- 結果 ---")
 print(f"PASS: {PASS} / FAIL: {FAIL}")

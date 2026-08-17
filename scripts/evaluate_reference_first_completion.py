@@ -61,7 +61,6 @@ def _workflow_inventory(contract: dict[str, Any]) -> dict[str, Any]:
     )
     forbidden: list[str] = []
     forbidden_terms = (
-        "playwright install",
         "threads_browser_storage_state",
         "threads_browser_session",
         "threads_public_playwright",
@@ -108,6 +107,7 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
     media = _load(MEDIA_PATH)
     issues: list[str] = []
     expected_routes = {
+        "threads.profile_posts": ("threads_cli_public", ["threads_logged_out_graphql", "threads_public_screen"]),
         "tiktok.profile_posts": ("tiktok_public_embed", ["tiktok_gallery_dl"]),
         "x.profile_posts": ("x_gallery_dl", []),
         "youtube.channel_videos": ("yt_dlp", []),
@@ -118,22 +118,12 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
             issues.append(f"route_mismatch:{capability}")
         if row.get("shadow"):
             issues.append(f"active_shadow_not_allowed:{capability}")
-    active_threads_routes = sorted(
-        capability
-        for capability in routing.get("routes", {})
-        if capability.startswith("threads.")
-    )
-    if active_threads_routes:
-        issues.extend(f"threads_route_active_by_owner_policy:{item}" for item in active_threads_routes)
     if "playwright_processes" in routing.get("limits", {}):
         issues.append("stale_playwright_process_limit")
-    if list(contract["reference_priority"]) != ["tiktok", "x", "youtube"]:
+    if list(contract["reference_priority"]) != ["threads", "tiktok", "x", "youtube"]:
         issues.append("completion_contract_reference_priority_mismatch")
-    threads_deferred = contract.get("deferred_reference_acquisition", {}).get("threads", {})
-    if threads_deferred.get("status") != "DEFERRED_OSS_CANDIDATE":
-        issues.append("threads_deferred_status_mismatch")
-    if threads_deferred.get("reason") != "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN":
-        issues.append("threads_deferred_reason_mismatch")
+    if contract.get("deferred_reference_acquisition"):
+        issues.append("unexpected_deferred_reference_platform")
     operational = mix.get("operational_threads_slot_mix", {})
     for account_id in contract["managed_accounts"]:
         if operational.get(account_id) != contract["content_mix"]:
@@ -171,9 +161,10 @@ def _reference_discovery(routing: dict[str, Any]) -> dict[str, Any]:
             f"--account-id all --platform {platform} --max-posts 5 "
             "--reference-only --verify-network"
         )
-        for platform in ("tiktok", "x", "youtube")
+        for platform in ("threads", "tiktok", "x", "youtube")
     }
     expected = {
+        "threads": ("threads.profile_posts", "threads_cli_public"),
         "tiktok": ("tiktok.profile_posts", "tiktok_public_embed"),
         "x": ("x.profile_posts", "x_gallery_dl"),
         "youtube": ("youtube.channel_videos", "yt_dlp"),
@@ -187,22 +178,17 @@ def _reference_discovery(routing: dict[str, Any]) -> dict[str, Any]:
         statuses[platform] = {
             "code_status": "PASS" if code_ready else "FAIL",
             "external_status": {
+                "threads": "PASS_ANONYMOUS_CRAWLER_RECORDED",
                 "youtube": "PASS_AV_RECORDED",
                 "tiktok": "PASS_PUBLIC_EMBED_AND_AV_RECORDED",
                 "x": "PASS_BOUNDED_DISCOVERY_AND_AV_RECORDED",
             }.get(platform, "UNVERIFIED_EXTERNAL"),
             "bounded_verification_command": commands[platform],
         }
-    statuses["threads"] = {
-        "code_status": "DEFERRED_OSS_CANDIDATE",
-        "external_status": "NOT_AN_AUTH_BLOCKER",
-        "reason": "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN",
-        "bounded_verification_command": "",
-    }
     return _state(
         ready,
-        active_platforms=["x", "youtube", "tiktok"],
-        deferred_platforms=["threads"],
+        active_platforms=["threads", "x", "youtube", "tiktok"],
+        deferred_platforms=[],
         platform_statuses=statuses,
     )
 
@@ -422,18 +408,19 @@ def evaluate(
         if software_complete and integration_complete and production_complete
         else "INTERNAL_WORK_REMAINS"
     )
+    deferred_platforms = sorted(contract.get("deferred_reference_acquisition", {}))
     return {
         "status": "PASS" if status in {"SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY", "COMPLETE"} else "FAIL",
         "completion_status": status,
         "software_complete": software_complete,
         "active_scope_software_complete": software_complete and integration_complete,
         "active_scope_live_evidence_complete": active_scope_live_evidence_complete,
-        "deferred_platform_count": 1,
-        "deferred_platforms": ["threads"],
+        "deferred_platform_count": len(deferred_platforms),
+        "deferred_platforms": deferred_platforms,
         "ACTIVE_SCOPE_SOFTWARE_COMPLETE": software_complete and integration_complete,
         "ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE": active_scope_live_evidence_complete,
-        "DEFERRED_PLATFORM_COUNT": 1,
-        "DEFERRED_PLATFORMS": ["threads"],
+        "DEFERRED_PLATFORM_COUNT": len(deferred_platforms),
+        "DEFERRED_PLATFORMS": deferred_platforms,
         "integration_complete": integration_complete,
         "production_evidence_complete": production_complete,
         "production_publish_evidence_complete": production_complete,

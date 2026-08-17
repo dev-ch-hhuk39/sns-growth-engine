@@ -2,36 +2,36 @@
 
 ## Active architecture
 
-Active reference discovery: TikTok -> X -> YouTube. Threads is
-`DEFERRED_OSS_CANDIDATE` by the latest owner policy.
+Active reference discovery: Threads -> TikTok -> X -> YouTube. Threads uses a
+bounded three-stage public route: threads-cli crawler, logged-out persisted
+query, then public Playwright. Exhaustion is `DEFERRED` per source.
 
 Physical media acquisition: X and YouTube use yt-dlp. Owner-authorized TikTok
 individual posts use bounded public-embed direct HTTP after exact registered-
-author and permission-ledger checks. Threads reference and physical acquisition
-are deferred and have no active route.
+author and permission-ledger checks. Threads reference acquisition is active;
+Threads physical-media reuse remains deferred and permission-gated.
 
 The acquisition router now validates every active profile backend against
-`config/acquisition_backend_capabilities.json`. Browser, auth-only and opaque
-external-service candidates cannot enter the backend-only production chain.
+`config/acquisition_backend_capabilities.json`. Auth-only and opaque external-
+service candidates cannot enter the production chain. Browser execution is
+permitted only as the final cookie-free Threads reference fallback.
 See `docs/oss-acquisition-stack-20260811.md` and run
 `python3 scripts/acquisition_doctor.py --json` for the current matrix.
 
 TikTok remains an active text/structure source and may trigger physical
 acquisition only for exact owner-authorized individual posts. Registered
-Threads identities and permission history are retained, but no Threads
-reference acquisition or physical-media attempt runs while deferred.
+Threads identities can provide exact-author individual-post text and ordered
+media metadata, but no Threads physical-media attempt is authorized by that.
 
 The 2026-08-11 bounded audit found a safe anonymous TikTok route after the
 yt-dlp/gallery-dl and ssut profile paths failed. Public embed hydration now
 resolves exact individual posts for all three registered Liver sources; one
 owner-authorized post also passed physical A/V, provenance, permission and
-WAITING_REVIEW verification. Threads public HTML still returns a logged-out
-application-404 SSR payload for one Night and one Liver source, while maintained
-alternatives require Playwright/session state or an opaque conversion service.
-The v21/v22 Graph and oEmbed experiments are retained only as historical code.
-Meta Graph, Meta oEmbed, Playwright, browser automation and browser sessions
-are `NOT_USED_BY_OWNER_POLICY` for Threads reference acquisition. Meta auth is
-not a blocker and is not required by the doctor or completion evaluator.
+WAITING_REVIEW verification. The 2026-08-17 live bounded Threads probe used the
+pinned public CLI route without login, API key or browser. Seven of nine owner
+profiles returned 14 individual posts and 22 ordered media metadata items. Two
+profiles exposed no public crawler-visible posts and exhausted all configured
+routes; they are `DEFERRED`, not global failures. Meta auth is not required.
 
 Content mix for Night Scout and Liver Manager: 50% direct reference media, 30% reference text, 10% PDCA, 5% new text, 5% approved clips.
 
@@ -39,10 +39,9 @@ Both accounts share acquisition, normalization, route selection, media handling,
 
 Aspect-ratio default is preserve_source. Vertical conversion requires an explicit transformation request.
 
-Active scheduled/manual reference-acquisition workflows do not install a
-browser runtime or pass browser storage state. Legacy browser adapters remain
-registered only so old evidence and rollback paths are readable; the routing
-configuration cannot select them.
+Active acquisition workflows install the pinned CLI. Workflows that can reach
+the final Threads fallback also install Playwright Chromium, but never pass
+browser storage state or login credentials.
 
 ## Runtime permission contract
 
@@ -59,8 +58,9 @@ permission.
 
 ## Deprecated from the active path
 
-- Threads browser-session acquisition for scheduled media preparation.
-- Playwright Threads media preparation.
+- Authenticated Threads browser-session acquisition.
+- Playwright Threads physical-media preparation; public Playwright remains a
+  reference-only final fallback.
 - TikTok Playwright physical-media fallback.
 - New physical-media acquisition for Threads. TikTok browser acquisition stays
   deprecated; the active TikTok route is public HTTP only.
@@ -71,11 +71,11 @@ These paths are not hard-deleted in this refactor so rollback and evidence remai
 
 ## Regression-contract migration after first full harness
 
-The first repository harness after the refactor produced 10 failures. They were traced to stale contracts that assumed Threads physical download, Threads browser-session routing, Playwright TikTok fallback, an exact historical source count, or a scheduled Threads-centric direct-media preparation workflow. The updated contract keeps X/YouTube/TikTok active, defers Threads safely, and adds owner-authorized TikTok physical acquisition without reactivating browsers. Permission-ledger, exact-author, content-understanding, rights, video-first and review safety checks remain mandatory.
+The first repository harness after the refactor produced 10 failures. They were traced to stale contracts that assumed Threads physical download, Threads browser-session routing, Playwright TikTok fallback, an exact historical source count, or a scheduled Threads-centric direct-media preparation workflow. The updated contract keeps X/YouTube/TikTok active, enables bounded Threads reference acquisition, and keeps Threads physical reuse deferred. Permission-ledger, exact-author, content-understanding, rights, video-first and review safety checks remain mandatory.
 
 ## Physical-source eligibility normalization
 
-The legacy `media_growth_engine.allowed_source_ids` list is physical-media inventory, not the active reference registry. It is filtered by each registered source's actual normalized platform, retaining X, YouTube and explicitly owner-authorized TikTok sources. Threads remains registered but deferred. Regression contracts use the production rights policy and platform normalizer instead of requiring a raw `rights_status` field spelling.
+The legacy `media_growth_engine.allowed_source_ids` list is physical-media inventory, not the active reference registry. It is filtered by each registered source's actual normalized platform, retaining X, YouTube and explicitly owner-authorized TikTok sources. Threads reference identities are active; Threads physical media remains deferred. Regression contracts use the production rights policy and platform normalizer instead of requiring a raw `rights_status` field spelling.
 
 ## Discovery-plan rights contract
 
@@ -83,14 +83,15 @@ The legacy `media_growth_engine.allowed_source_ids` list is physical-media inven
 
 ## Cleanup candidates, not deletion targets
 
-- Threads browser-session/public Playwright/screen adapters
+- Threads authenticated browser-session adapters; keep the cookie-free public
+  screen adapter because it is the active final reference fallback
 - TikTok Playwright adapter
 - Browser installation steps retained only in legacy workflows
 - historical force-9:16 assumptions and Threads/TikTok physical-media tests
 
-Active workflows no longer select or install these browser routes. The source
-files remain until X and YouTube both have dual-account physical Goldens and a
-fresh reachability audit confirms deletion is safe.
+Active workflows do not select authenticated browser routes or provide storage
+state. The public Threads screen fallback is installed only where its route can
+be reached.
 
 ## Completion and runtime classification
 

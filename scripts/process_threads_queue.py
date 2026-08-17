@@ -6,8 +6,9 @@ Default mode is dry-run. Real posting requires all of:
 - PUBLISH_ENABLED=true
 - ALLOW_REAL_THREADS_POST=true
 
-This worker never posts X, never posts beauty_account, and never retries
-immediately after a failure.
+This worker never posts X and never retries immediately after a failure.
+Beauty rows require the normal READY review gate plus the dedicated
+BEAUTY_PRODUCTION_ENABLED runtime gate.
 """
 from __future__ import annotations
 
@@ -53,7 +54,8 @@ FINAL_OR_LOCKED_STATUSES = {
     "PUBLISH_OUTCOME_UNVERIFIED",
     "DUPLICATE_BLOCKED",
 }
-BEAUTY_BLOCKED = {"beauty_account"}
+BEAUTY_ACCOUNT = "beauty_account"
+BEAUTY_PIPELINE_CONFIG = ROOT / "config" / "beauty_account_pipeline.json"
 
 # media_status がこれらのときだけ「投稿に使える media」とみなす
 MEDIA_OK_STATUSES = {"ATTACHED", "UPLOADED"}
@@ -70,6 +72,27 @@ def now_iso() -> str:
 
 def is_true(value: Any) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes"}
+
+
+def beauty_production_configured() -> bool:
+    try:
+        config = json.loads(BEAUTY_PIPELINE_CONFIG.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(
+        config.get("status") == "review_required_production"
+        and config.get("scheduled_publish_enabled") is True
+        and config.get("real_post_enabled") is True
+        and config.get("auto_ready_enabled") is False
+    )
+
+
+def beauty_publish_gate(*, dry_run: bool) -> tuple[bool, str]:
+    if not beauty_production_configured():
+        return False, "beauty_production_config_not_enabled"
+    if not dry_run and not is_true(os.environ.get("BEAUTY_PRODUCTION_ENABLED", "false")):
+        return False, "BEAUTY_PRODUCTION_ENABLED is not true"
+    return True, ""
 
 
 def get_ws(client: SheetsClient, logical: str):
@@ -284,8 +307,6 @@ def select_candidates(client: SheetsClient, account_id: str | None, max_posts: i
         row_account = str(row.get("account_id", ""))
         status = str(row.get("status", "")).upper()
         platform = str(row.get("platform", "")).lower()
-        if row_account in BEAUTY_BLOCKED:
-            continue
         if account_id and row_account != account_id:
             continue
         if queue_ids is not None and str(row.get("queue_id", "")) not in queue_ids:
@@ -660,8 +681,12 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     draft = find_draft_for_queue(queue_row, row_by_key(draft_rows, "draft_id"))
     text = text_for_queue(queue_row, social, draft)
 
-    if account_id in BEAUTY_BLOCKED:
-        return {"status": "BLOCKED", "reason": "beauty_account is blocked", "queue_id": queue_id}
+    if account_id == BEAUTY_ACCOUNT:
+        allowed, reason = beauty_publish_gate(dry_run=dry_run)
+        if not allowed:
+            return {"status": "BLOCKED", "reason": reason, "queue_id": queue_id}
+        if str(queue_row.get("review_lane", "BEAUTY_STANDARD")).upper() == "BEAUTY_MEDICAL":
+            return {"status": "BLOCKED", "reason": "beauty_medical_requires_human_review", "queue_id": queue_id}
     if str(queue_row.get("platform", "")).lower() != "threads":
         return {"status": "SKIPPED", "reason": "non-threads row ignored", "queue_id": queue_id}
     if not text:
@@ -1122,9 +1147,11 @@ def main() -> int:
     parser.add_argument("--queue-id", action="append", default=[], help="Process only this approved queue ID; repeatable")
     args = parser.parse_args()
 
-    if args.account_id == "beauty_account":
-        print("[BLOCKED] beauty_account is draft_only and cannot be posted")
-        return 1
+    if args.account_id == BEAUTY_ACCOUNT:
+        allowed, reason = beauty_publish_gate(dry_run=args.dry_run)
+        if not allowed:
+            print(f"[BLOCKED] {reason}")
+            return 1
     if args.max_posts < 1:
         print("[ERROR] --max-posts must be >= 1")
         return 1

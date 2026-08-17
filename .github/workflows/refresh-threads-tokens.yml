@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       account:
-        description: "Account to refresh (all / night_scout / liver_manager)"
+        description: "Account to refresh (all / night_scout / liver_manager / beauty_account)"
         required: false
         default: "all"
         type: choice
@@ -12,6 +12,7 @@ on:
           - all
           - night_scout
           - liver_manager
+          - beauty_account
       dry_run:
         description: "Dry run — no actual refresh, no secret update"
         required: false
@@ -44,6 +45,8 @@ jobs:
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
       THREADS_APP_ID_LIVER_MANAGER: ${{ secrets.THREADS_APP_ID_LIVER_MANAGER }}
       THREADS_APP_SECRET_LIVER_MANAGER: ${{ secrets.THREADS_APP_SECRET_LIVER_MANAGER }}
+      THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: ${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}
+      THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
 
     steps:
       - name: Checkout
@@ -146,6 +149,33 @@ jobs:
           jq -r '.access_token' "$TOKEN_FILE" \
             | gh secret set THREADS_ACCESS_TOKEN_LIVER_MANAGER --repo "$GH_REPO"
           echo "GitHub Secret THREADS_ACCESS_TOKEN_LIVER_MANAGER: 更新完了"
+
+      # ============================================================
+      # beauty_account
+      # ============================================================
+      - name: "[beauty_account] Refresh token"
+        if: env.ACCOUNT == 'all' || env.ACCOUNT == 'beauty_account'
+        run: |
+          if [ "$DRY_RUN" = "true" ]; then
+            python3 scripts/refresh_threads_token.py --account-id beauty_account --dry-run
+          else
+            python3 scripts/refresh_threads_token.py --account-id beauty_account --confirm-refresh
+          fi
+
+      - name: "[beauty_account] Update GitHub Secret"
+        if: (env.ACCOUNT == 'all' || env.ACCOUNT == 'beauty_account') && env.DRY_RUN == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          TOKEN_FILE="data/threads_tokens/beauty_account.json"
+          if [ ! -f "$TOKEN_FILE" ]; then
+            echo "ERROR: $TOKEN_FILE が見つかりません。リフレッシュが成功しなかった可能性があります。"
+            exit 1
+          fi
+          jq -r '.access_token' "$TOKEN_FILE" \
+            | gh secret set THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT --repo "$GH_REPO"
+          echo "GitHub Secret THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: 更新完了"
 
       # ============================================================
       # 通知

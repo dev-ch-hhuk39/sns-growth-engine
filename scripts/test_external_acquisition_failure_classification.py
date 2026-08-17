@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from acquire_approved_source_posts import classify_external_failure  # noqa: E402
 
 checks = {
+    "Threads all fallbacks deferred": classify_external_failure("threads", "all_backends_failed:threads_cli_public:no_public_posts,threads_logged_out_graphql:profile_not_found,threads_public_screen:public_screen_failed") == "DEFERRED",
     "Threads profile links missing": classify_external_failure("threads", "threads_profile_post_links_unavailable") == "POST_DISCOVERY_UNAVAILABLE",
     "Threads detail missing": classify_external_failure("threads", "threads_post_detail_unavailable") == "VIDEO_URL_EXTRACTION_UNAVAILABLE",
     "Threads auth": classify_external_failure("threads", "threads_http_status:403") == "AUTH_REQUIRED",

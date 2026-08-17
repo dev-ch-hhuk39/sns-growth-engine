@@ -15,11 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from acquisition.capability_registry import CapabilityRegistry  # noqa: E402
 from acquisition.twscrape_optional import TwscrapeOptionalAdapter  # noqa: E402
-from generation.media_platform_policy import (  # noqa: E402
-    DEFERRED_REFERENCE_REASON,
-    DEFERRED_REFERENCE_STATUS,
-    REFERENCE_PLATFORMS,
-)
+from generation.media_platform_policy import REFERENCE_PLATFORMS  # noqa: E402
 
 
 def _tool_status(row: dict[str, Any]) -> tuple[str, str]:
@@ -84,14 +80,7 @@ def build_report(registry: CapabilityRegistry | None = None) -> dict[str, Any]:
         "secret_values_read": False,
         "primary_missing": primary_missing,
         "active_acquisition_platforms": list(REFERENCE_PLATFORMS),
-        "deferred_platforms": [
-            {
-                "platform": "threads",
-                "status": DEFERRED_REFERENCE_STATUS,
-                "reason": DEFERRED_REFERENCE_REASON,
-                "auth_required": False,
-            }
-        ],
+        "deferred_platforms": [],
         "backends": rows,
         "future_platforms": registry.future_platform_matrix(),
     }

@@ -103,8 +103,10 @@ def assert_required_threads() -> None:
         assert row_targets(row) == ["night_scout"], row.get("source_id")
         assert row.get("target_account_id") == "night_scout", row.get("source_id")
         assert row.get("active") is True, row.get("source_id")
-        assert row.get("fetch_enabled") is False, row.get("source_id")
-        assert row.get("manual_only") is True, row.get("source_id")
+        assert row.get("fetch_enabled") is True, row.get("source_id")
+        assert row.get("allow_network_fetch") is True, row.get("source_id")
+        assert row.get("manual_only") is False, row.get("source_id")
+        assert row.get("collection_method") == "threads_cli_public", row.get("source_id")
         assert row.get("source_track") == "night_scout_reference", row.get("source_id")
 
 
@@ -144,7 +146,11 @@ def assert_no_fetch_enabled_required_sources() -> None:
     for req in load_required():
         row = find_required_row(req, sources)
         assert row is not None, req["url"]
-        assert row.get("fetch_enabled") is False, row.get("source_id")
+        if req["platform"] == "threads":
+            assert row.get("fetch_enabled") is True, row.get("source_id")
+            assert row.get("allow_network_fetch") is True, row.get("source_id")
+        else:
+            assert row.get("fetch_enabled") is False, row.get("source_id")
         assert row.get("allow_download") is False, row.get("source_id")
         assert row.get("allow_cut") is False, row.get("source_id")
         assert row.get("allow_upload") is False, row.get("source_id")

@@ -23,8 +23,8 @@ assert result["completion_status"] == "SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY"
 assert result["software_complete"] is True
 assert result["active_scope_software_complete"] is True
 assert result["active_scope_live_evidence_complete"] is True
-assert result["deferred_platform_count"] == 1
-assert result["deferred_platforms"] == ["threads"]
+assert result["deferred_platform_count"] == 0
+assert result["deferred_platforms"] == []
 assert result["integration_complete"] is True
 assert result["production_evidence_complete"] is False
 assert result["architecture_consistent"]["status"] == "PASS"

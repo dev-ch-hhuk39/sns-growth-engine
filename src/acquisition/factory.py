@@ -19,6 +19,7 @@ from .threads_public import (
     ThreadsPublicProfileAdapter,
     ThreadsPublicScreenAdapter,
 )
+from .threads_cli import ThreadsCliPublicAdapter, ThreadsLoggedOutGraphQLAdapter
 from .threads_official import ThreadsGraphPublicDiscoveryAdapter, ThreadsOEmbedDetailAdapter
 from .threads_search import ThreadsSearchIndexAdapter
 from .tiktok_public import TikTokPublicProfileAdapter
@@ -42,6 +43,8 @@ def build_router() -> AdapterRouter:
         "tiktok_public_playwright": TikTokPublicProfileAdapter(),
         "tiktok_gallery_dl": TikTokGalleryDlProfileAdapter(),
         "threads_browser_session": ThreadsBrowserSessionAdapter(),
+        "threads_cli_public": ThreadsCliPublicAdapter(),
+        "threads_logged_out_graphql": ThreadsLoggedOutGraphQLAdapter(),
         "threads_public_playwright": ThreadsPublicProfileAdapter(),
         "threads_public_screen": ThreadsPublicScreenAdapter(),
         "threads_public_http": ThreadsPublicHttpAdapter(),

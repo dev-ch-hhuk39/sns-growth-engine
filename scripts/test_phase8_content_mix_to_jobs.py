@@ -19,7 +19,7 @@ import sys
 _V2_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_V2_ROOT, "src"))
 
-from generation.content_mix_planner import plan_content_mix, build_generation_jobs_candidates
+from generation.content_mix_planner import build_generation_jobs_candidates, plan_content_mix  # noqa: E402
 
 PASS = 0
 FAIL = 0
@@ -97,7 +97,7 @@ else:
     _check("reference_with_source_planned", True)
 
 # 8. beauty_account → WAITING_REVIEW
-mix_beauty = plan_content_mix("beauty_account", "x", count=5, seed=42)
+mix_beauty = plan_content_mix("beauty_account", "threads", count=5, seed=42)
 jobs_beauty = build_generation_jobs_candidates(mix_beauty)
 _check("beauty_waiting_review", mix_beauty.get("safety_status") == "DRAFT_ONLY")
 beauty_jobs = jobs_beauty.get("jobs", [])
@@ -114,8 +114,8 @@ _check("jobs_has_warnings", isinstance(jobs_result.get("warnings"), list))
 # 10. 安全確認
 _check("no_real_post", True)
 
-print(f"\n=================================================================")
+print("\n=================================================================")
 print(f"  PASS={PASS}  FAIL={FAIL}")
-print(f"=================================================================")
+print("=================================================================")
 if FAIL > 0:
     sys.exit(1)

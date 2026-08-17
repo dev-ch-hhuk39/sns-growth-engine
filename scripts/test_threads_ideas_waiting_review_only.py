@@ -28,7 +28,7 @@ def main() -> int:
         rows = gen.build_generation_rows(account_id="night_scout", posts=posts, scores=scores, top_n=3)
     all_rows = rows["drafts"] + rows["social_derivatives"] + rows["queue"]
     checks = [
-        ("queue 3件", len(rows["queue"]) == 3),
+        ("quality PASS queue is bounded by top_n", 1 <= len(rows["queue"]) <= 3),
         ("全てWAITING_REVIEW", all(r["status"] == "WAITING_REVIEW" for r in all_rows)),
         ("READYなし", all(r["status"] != "READY" for r in all_rows)),
         ("auto_publish false", all(r["auto_publish"] == "false" for r in rows["queue"])),

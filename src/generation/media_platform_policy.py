@@ -4,10 +4,10 @@ from __future__ import annotations
 from urllib.parse import urlparse
 from typing import Any
 
-REFERENCE_PLATFORMS = ("tiktok", "x", "youtube")
-DEFERRED_REFERENCE_PLATFORMS = ("threads",)
+REFERENCE_PLATFORMS = ("threads", "tiktok", "x", "youtube")
+DEFERRED_REFERENCE_PLATFORMS: tuple[str, ...] = ()
 KNOWN_REFERENCE_PLATFORMS = REFERENCE_PLATFORMS + DEFERRED_REFERENCE_PLATFORMS
-REFERENCE_PLATFORM_PRIORITY = {"tiktok": 0, "x": 1, "youtube": 2}
+REFERENCE_PLATFORM_PRIORITY = {"threads": 0, "tiktok": 1, "x": 2, "youtube": 3}
 DEFERRED_REFERENCE_STATUS = "DEFERRED_OSS_CANDIDATE"
 DEFERRED_REFERENCE_REASON = (
     "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN"

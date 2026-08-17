@@ -11,19 +11,18 @@ root_hook から始まる reply ツリーを生成し、全投稿は WAITING_REV
 """
 from __future__ import annotations
 
-import json
 import os
 import sys
 import uuid
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 _V2_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, _V2_ROOT + "/src")
 
-from llm_client import call_gemini_json
-from seeds import ACCOUNT_FORBIDDEN_KEYWORDS, ACCOUNT_FORBIDDEN_THEMES
+from llm_client import call_gemini_json  # noqa: E402
+from seeds import ACCOUNT_FORBIDDEN_KEYWORDS, ACCOUNT_FORBIDDEN_THEMES  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
 
@@ -67,15 +66,15 @@ _MOCK_RESPONSES: dict[str, dict[str, Any]] = {
     },
     "beauty_account": {
         "series_theme": "毎日のスキンケアで差がつく3つのポイント",
-        "target_audience": "美容に興味のある女性・スキンケアに悩む20〜40代",
+        "target_audience": "美容・コスメが好きな20〜30代女性",
         "risk_level": "low",
         "rights_review_required": False,
         "posts": [
-            {"role": "hook", "text": "スキンケアを頑張っているのに肌が変わらない理由、知ってる？"},
-            {"role": "context", "text": "美容の知識がある人でも意外と見落としているポイントがある。\n順番と選び方が全てを決める。"},
-            {"role": "reason", "text": "化粧水をたっぷりつけるより、洗顔後の5分が大事。\n肌の吸収タイミングを逃すと効果が半減する。"},
-            {"role": "example", "text": "私のお客様の多くが「洗顔をやめた」だけで肌トラブルが改善した。\n正しい順番に変えるだけで肌の反応が変わる。"},
-            {"role": "cta", "text": "肌の悩みを教えてください。\n美容相談はLINEで↓"},
+            {"role": "hook", "text": "スキンケアを増やす前に、一度見てほしいことがあるんだよね。"},
+            {"role": "context", "text": "肌がゆらぐと、足りないものを探したくなる。\nでも、一度に変えると何が合わないか分からなくなる。"},
+            {"role": "reason", "text": "まずは化粧水か乳液のどちらか一つだけ見直す。\n肌の変化を見分けやすくできるよ。"},
+            {"role": "example", "text": "コスメを買い足す前に、今使っている量と順番も確認してみて。\n私なら一週間は一つの変更だけで見る。"},
+            {"role": "cta", "text": "無理に増やさなくて大丈夫。\n自分の肌が分かるケアの方が続けやすいよ。"},
         ],
     },
 }

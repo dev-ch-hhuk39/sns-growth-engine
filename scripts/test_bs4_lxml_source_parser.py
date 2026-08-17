@@ -4,7 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location("s", ROOT / "scripts/collect_source_posts.py")
-s = importlib.util.module_from_spec(spec); spec.loader.exec_module(s)
+s = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(s)
 html = '<html><head><meta property="og:title" content="Title"><meta property="og:description" content="Desc"><meta property="og:image" content="https://example.com/a.jpg"></head></html>'
 meta = s.parse_og_metadata(html, "https://www.threads.com/@handle/post/id")
 checks = [
@@ -12,7 +13,7 @@ checks = [
     ("description parsed", meta["og_description"] == "Desc"),
     ("image parsed", meta["og_image"].endswith("a.jpg")),
     ("handle parsed", meta["author_handle"] == "handle"),
-    ("adapter status", s.adapter_status()["threads_public_og"] == "wired"),
+    ("adapter status", s.adapter_status()["threads_logged_out_graphql"] == "wired"),
 ]
 bad = [n for n, ok in checks if not ok]
 for n, ok in checks:

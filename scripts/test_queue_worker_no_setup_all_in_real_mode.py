@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """test_queue_worker_no_setup_all_in_real_mode.py — real_post モードで setup_all が呼ばれないことを確認。"""
 from __future__ import annotations
-import sys, ast
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
+
+import scripts.process_threads_queue as ptq  # noqa: E402
 
 PASS_COUNT = FAIL_COUNT = 0
 
@@ -56,10 +58,10 @@ for line in lines:
     if in_append_row:
         append_row_lines.append(line)
 
-append_uses_cache = any("_get_headers" in l for l in append_row_lines)
+append_uses_cache = any("_get_headers" in source_line for source_line in append_row_lines)
 append_direct_row_values = any(
-    "ws.row_values(1)" in l and not l.strip().startswith("#")
-    for l in append_row_lines
+    "ws.row_values(1)" in source_line and not source_line.strip().startswith("#")
+    for source_line in append_row_lines
 )
 check("append_row が _get_headers を使っている", append_uses_cache)
 check("append_row が ws.row_values(1) を直接呼ばない", not append_direct_row_values)
@@ -75,29 +77,29 @@ for line in lines:
     if in_update_row:
         update_row_lines.append(line)
 
-update_uses_cache = any("_get_headers" in l for l in update_row_lines)
+update_uses_cache = any("_get_headers" in source_line for source_line in update_row_lines)
 update_direct_row_values = any(
-    "ws.row_values(1)" in l and not l.strip().startswith("#")
-    for l in update_row_lines
+    "ws.row_values(1)" in source_line and not source_line.strip().startswith("#")
+    for source_line in update_row_lines
 )
 check("update_row が _get_headers を使っている", update_uses_cache)
 check("update_row が ws.row_values(1) を直接呼ばない", not update_direct_row_values)
 
 # 7. ELIGIBLE_STATUSES に PROCESSING が含まれないこと（PROCESSING 行を再処理しない）
-import scripts.process_threads_queue as ptq
 check("ELIGIBLE_STATUSES に PROCESSING が含まれない", "PROCESSING" not in ptq.ELIGIBLE_STATUSES)
 
 # 8. FINAL_OR_LOCKED_STATUSES に PROCESSING が含まれること
 check("FINAL_OR_LOCKED_STATUSES に PROCESSING が含まれる", "PROCESSING" in ptq.FINAL_OR_LOCKED_STATUSES)
 
-# 9. beauty_account は BEAUTY_BLOCKED に含まれること
-check("beauty_account は BEAUTY_BLOCKED に含まれる", "beauty_account" in ptq.BEAUTY_BLOCKED)
+# 9. Beauty is protected by a dedicated config + runtime gate.
+allowed, reason = ptq.beauty_publish_gate(dry_run=True)
+check("beauty_account draft_only is blocked by dedicated gate", not allowed and bool(reason))
 
 # 10. workflow ファイルに setup_all が含まれないこと（念のため確認）
 workflow_path = ROOT / ".github" / "workflows" / "threads-queue-worker.yml"
 workflow_src = workflow_path.read_text(encoding="utf-8")
 check("threads-queue-worker.yml に setup_all が含まれない", "setup_all" not in workflow_src)
 
-print(f"\n--- 結果 ---")
+print("\n--- 結果 ---")
 print(f"PASS: {PASS_COUNT} / FAIL: {FAIL_COUNT}")
 sys.exit(0 if FAIL_COUNT == 0 else 1)
