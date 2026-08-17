@@ -35,6 +35,17 @@ TOPICS = (
     "メイク前の保湿は量と待ち時間を分けて見る",
 )
 
+TOPIC_CONTEXT_TERMS = {
+    TOPICS[0]: ("スキンケア", "肌"),
+    TOPICS[1]: ("メイク", "ファンデ"),
+    TOPICS[2]: ("ヘアケア", "髪"),
+    TOPICS[3]: ("美容家電", "スキンケア"),
+    TOPICS[4]: ("コスメ", "メイク"),
+    TOPICS[5]: ("サロン", "髪"),
+    TOPICS[6]: ("肌", "スキンケア"),
+    TOPICS[7]: ("メイク", "肌"),
+}
+
 
 def _slot_identity(slot_index: int, now: datetime | None = None) -> tuple[str, str, str]:
     current = (now or datetime.now(JST)).astimezone(JST)
@@ -44,12 +55,20 @@ def _slot_identity(slot_index: int, now: datetime | None = None) -> tuple[str, s
     return business_date, slot_id, queue_id
 
 
-def _prompt(topic: str, sequence_number: int) -> str:
+def _prompt(topic: str, sequence_number: int, blocked: list[str] | None = None) -> str:
     cta = (
         "最後に保存を促す軽いCTAを1つだけ入れる。"
         if sequence_number % 10 == 0
         else "CTAは入れない。"
     )
+    context_terms = TOPIC_CONTEXT_TERMS[topic]
+    correction = ""
+    if blocked:
+        correction = (
+            "\n前回は読者と美容テーマの具体性が不足しました。"
+            f"本文に「{context_terms[0]}」と「{context_terms[1]}」を、羅列ではなく自然な文脈で必ず入れ、"
+            "読者が今日試せる行動を1つ示して作り直してください。"
+        )
     return f"""
 Threadsの美容アカウント用に、読者向けの新規投稿を1件作ってください。
 主題: {topic}
@@ -57,9 +76,11 @@ Threadsの美容アカウント用に、読者向けの新規投稿を1件作っ
 話者: 美容に詳しい、少しお姉さん寄りの女友達。一人称は「私」。
 口調: 女性的で柔らかい口語。広告臭、押し売り、説教、大げさな効果断定を禁止。
 構成: 悩みまたは気づきを1つ、理由、今日試せる具体的な行動。主題は1つに限る。
+美容文脈: 「{context_terms[0]}」と「{context_terms[1]}」を、不自然な羅列にせず本文にどちらも入れる。
 文字数: 100〜450文字。ハッシュタグなし。Markdownなし。
 禁止: 美容医療、疾病・治療、薬機的効果、before/after保証、内部用語、参照元名、AIへの言及。
 {cta}
+{correction}
 JSONで public_post_text と primary_topic だけを返してください。
 """.strip()
 
@@ -71,9 +92,9 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return {"status": "BLOCKED", "reason": "GEMINI_API_KEY_MISSING"}
     blocked: list[str] = []
-    for attempt in range(1, 4):
+    for attempt in range(1, 6):
         response = call_gemini_json(
-            _prompt(topic, sequence_number) + (f"\n前回の不合格理由: {','.join(blocked)}" if blocked else ""),
+            _prompt(topic, sequence_number, blocked),
             temperature=0.85,
         )
         text = str(response.get("public_post_text", "")).strip()
