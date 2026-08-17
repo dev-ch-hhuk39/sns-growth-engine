@@ -156,7 +156,13 @@ def select_beauty_reference_context(rows: list[dict]) -> dict:
         and str(row.get("source_id") or row.get("source_account_id") or "") in allowed_source_ids
         and str(row.get("source_post_id") or "").strip()
         and str(row.get("original_post_text") or row.get("post_text") or "").strip()
-        and str(row.get("individual_post_url") or row.get("source_post_url") or row.get("source_url") or "").strip()
+        and str(
+            row.get("canonical_post_url")
+            or row.get("individual_post_url")
+            or row.get("source_post_url")
+            or row.get("source_url")
+            or ""
+        ).strip()
     ]
     if not selected:
         return {"status": "BLOCKED", "reason": "beauty_reference_source_post_missing"}
@@ -166,7 +172,13 @@ def select_beauty_reference_context(rows: list[dict]) -> dict:
         "source_ids": [str(row.get("source_id") or row.get("source_account_id") or "")],
         "source_id": str(row.get("source_id") or row.get("source_account_id") or ""),
         "source_post_id": str(row.get("source_post_id") or ""),
-        "source_url": str(row.get("individual_post_url") or row.get("source_post_url") or row.get("source_url") or ""),
+        "source_url": str(
+            row.get("canonical_post_url")
+            or row.get("individual_post_url")
+            or row.get("source_post_url")
+            or row.get("source_url")
+            or ""
+        ),
         "internal_evidence": str(row.get("original_post_text") or row.get("post_text") or "")[:4000],
     }
 

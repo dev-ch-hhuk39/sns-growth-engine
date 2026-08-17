@@ -99,7 +99,7 @@ def main() -> None:
             "source_id": profile["voice_reference_source_ids"][0],
             "target_account_id": "beauty_account",
             "source_post_id": "beauty_post_1",
-            "individual_post_url": "https://example.test/beauty/post/1",
+            "canonical_post_url": "https://example.test/beauty/post/1",
             "original_post_text": "美容の参考本文",
         },
         {
@@ -112,6 +112,7 @@ def main() -> None:
     ])
     assert reference["status"] == "PASS"
     assert reference["source_post_id"] == "beauty_post_1"
+    assert reference["source_url"] == "https://example.test/beauty/post/1"
     assert "夜職" not in reference["internal_evidence"]
 
     pdca = select_beauty_pdca_context([
