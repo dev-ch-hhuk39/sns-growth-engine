@@ -2681,7 +2681,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="run one approved media production post")
-    parser.add_argument("--account-id", default="liver_manager", choices=["liver_manager", "night_scout"])
+    parser.add_argument("--account-id", default="liver_manager", choices=["liver_manager", "night_scout", "beauty_account"])
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-production-media", action="store_true")

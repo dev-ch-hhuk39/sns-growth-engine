@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping
 
-TARGET_ACCOUNTS = {"night_scout", "liver_manager"}
+TARGET_ACCOUNTS = {"night_scout", "liver_manager", "beauty_account"}
 GATED_GENERATION_MODES = {
     "original_text",
     "reference_text",
@@ -17,6 +17,11 @@ GATED_GENERATION_MODES = {
     "system_owned_media",
     "safe_original_fallback_threads",
     "approved_source_clip",
+    "beauty_new_text_generation",
+    "beauty_reference_text_generation",
+    "beauty_pdca_text_generation",
+    "beauty_direct_reference_media",
+    "beauty_approved_source_clip",
 }
 
 
@@ -84,7 +89,10 @@ def decide_route(candidate: Mapping[str, Any]) -> AiRoute:
         return AiRoute("approved_clip_transform", True, True, True, 3, "clip_requires_fit_generation_and_review")
     if ownership in {"owned", "system_owned"} or source_id.startswith("system_owned_"):
         return AiRoute("owned_media_transform", True, True, True, 3, "owned_media_allows_grounded_transform")
-    if generation_mode in {"original_text", "reference_text", "metrics_driven_pdca_text", "reference_score_to_threads"}:
+    if generation_mode in {
+        "original_text", "reference_text", "metrics_driven_pdca_text", "reference_score_to_threads",
+        "beauty_new_text_generation", "beauty_reference_text_generation", "beauty_pdca_text_generation",
+    }:
         return AiRoute("new_text_generation", True, True, True, 3, "text_candidate_requires_fit_generation_and_review")
     return AiRoute("semantic_review", True, False, True, 2, "unknown_candidate_requires_classification_and_review")
 

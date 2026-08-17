@@ -15,6 +15,7 @@ on:
           - all
           - night_scout
           - liver_manager
+          - beauty_account
         default: all
 
 permissions:
@@ -42,13 +43,13 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        account_id: ${{ fromJSON((github.event.inputs.target_account == 'all') && '["night_scout","liver_manager"]' || format('["{0}"]', github.event.inputs.target_account)) }}
+        account_id: ${{ fromJSON((github.event.inputs.target_account == 'all') && '["night_scout","liver_manager","beauty_account"]' || format('["{0}"]', github.event.inputs.target_account)) }}
     concurrency:
       group: sns-growth-direct-preparation-${{ matrix.account_id }}
       cancel-in-progress: false
     env:
       ACCOUNT_ID: ${{ matrix.account_id }}
-      CONTENT_SLOT_ID: ${{ matrix.account_id == 'night_scout' && 'ns_1800_direct_media' || 'lm_1600_direct_media' }}
+      CONTENT_SLOT_ID: ${{ matrix.account_id == 'night_scout' && 'ns_1800_direct_media' || (matrix.account_id == 'liver_manager' && 'lm_1600_direct_media' || 'beauty_direct_media_review') }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}

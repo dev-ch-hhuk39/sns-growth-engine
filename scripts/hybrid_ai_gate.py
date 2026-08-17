@@ -34,6 +34,9 @@ SCHEDULED_TEXT_TYPES = {
     "reference_text",
     "pdca_text",
     "metrics_driven_pdca_text",
+    "new_text_generation",
+    "reference_text_generation",
+    "pdca_text_generation",
     "direct_reference_media",
 }
 
@@ -46,7 +49,7 @@ def _scheduled_text_contract_reasons(
     queue: Mapping[str, Any],
     text: str,
 ) -> list[str]:
-    """Validate account voice and measured PDCA structure after AI rewriting."""
+    """Validate account voice while keeping PDCA evidence internal."""
 
     content_type = _scheduled_text_type(queue)
     if content_type not in SCHEDULED_TEXT_TYPES:
@@ -55,22 +58,13 @@ def _scheduled_text_contract_reasons(
     reasons: list[str] = []
     if _text(queue.get("account_id")) == "night_scout" and "僕" not in value:
         reasons.append("night_scout_first_person_boku_missing")
-    if content_type in {"pdca_text", "metrics_driven_pdca_text"}:
-        observation = (
-            ("前回" in value or "実測" in value)
-            and any(term in value for term in ("表示", "いいね", "コメント", "再投稿", "引用", "件"))
+    if content_type in {"pdca_text", "metrics_driven_pdca_text", "pdca_text_generation"}:
+        public_process_terms = (
+            "前回の投稿", "実測", "PDCA", "反応理由", "次回検証",
+            "表示数", "いいね数", "コメント数", "成果を分析",
         )
-        hypothesis = any(term in value for term in ("仮説", "可能性", "理由", "と思う", "かも", "読まれた"))
-        next_test = (
-            any(term in value for term in ("次は", "次回"))
-            and any(term in value for term in ("見る", "試す", "比べ", "変わる", "上回"))
-        )
-        if not observation:
-            reasons.append("pdca_measured_observation_missing")
-        if not hypothesis:
-            reasons.append("pdca_hypothesis_missing")
-        if not next_test:
-            reasons.append("pdca_next_test_missing")
+        if any(term in value for term in public_process_terms):
+            reasons.append("pdca_internal_learning_exposed_in_public_text")
     return sorted(set(reasons))
 
 
@@ -84,10 +78,10 @@ def _scheduled_text_contract_instruction(queue: Mapping[str, Any]) -> str:
     voice_contract = canonical_voice_prompt(_text(queue.get("account_id")))
     if voice_contract:
         instructions.append("アカウント音声契約: " + voice_contract)
-    if content_type in {"pdca_text", "metrics_driven_pdca_text"}:
+    if content_type in {"pdca_text", "metrics_driven_pdca_text", "pdca_text_generation"}:
         instructions.append(
-            "実測結果、反応理由の仮説、次回に比較する一つの検証を必ず明記し、"
-            "通常の助言投稿へ置き換えないでください。"
+            "metrics、過去投稿、仮説、検証計画は内部学習にだけ使い、"
+            "公開本文で言及しないでください。学習結果を反映した、独立した通常の新規投稿にしてください。"
         )
     return ("追加必須条件: " + "".join(instructions)) if instructions else ""
 
@@ -214,6 +208,8 @@ def _queue_prompt_view(queue: Mapping[str, Any]) -> dict[str, str]:
         "source_post_id",
         "source_video_id",
         "clip_candidate_id",
+        "pdca_account_scope",
+        "pdca_result_id",
         "rights_status",
         "permission_status",
         "public_post_text",
@@ -247,6 +243,8 @@ def hybrid_ai_input_hash(queue: Mapping[str, Any]) -> str:
         "content_hash",
         "source_url",
         "source_time_range",
+        "pdca_account_scope",
+        "pdca_result_id",
     )
     payload = {field: _text(queue.get(field)) for field in fields}
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
@@ -355,6 +353,19 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
         reasons.append("excluded_from_activation")
     if _is_true(queue.get("repost_prohibited")):
         reasons.append("repost_prohibited")
+
+    content_type = _scheduled_text_type(queue)
+    if account_id == "beauty_account":
+        if content_type == "reference_text_generation":
+            if not _text(queue.get("source_id")) or not _text(queue.get("source_post_id")):
+                reasons.append("beauty_reference_lineage_missing")
+            if source_target != "beauty_account":
+                reasons.append("beauty_reference_account_isolation_failed")
+        if content_type == "pdca_text_generation":
+            if _text(queue.get("pdca_account_scope")) != "beauty_account":
+                reasons.append("beauty_pdca_account_scope_missing")
+            if not _text(queue.get("pdca_result_id")):
+                reasons.append("beauty_measured_pdca_lineage_missing")
 
     route = decide_route(queue).route
     media_route = route in {
@@ -491,10 +502,9 @@ def _review_prompt(
         and _text(queue.get("generation_mode")).lower() == "metrics_driven_pdca_text"
     ):
         pdca_instruction = (
-            "この候補はPDCA枠です。SOURCE_EVIDENCEにある公開済み自社投稿の表示数、いいね数、"
-            "コメント数、再投稿数、引用数は、反応を説明するために意図的に使う公開可能な実測根拠です。"
-            "これらの公開投稿パフォーマンス値だけを理由にINTERNAL_PROCESS_METRICSやaccount_fit不一致として"
-            "REJECTしないでください。ただし秘密情報、非公開の社内KPI、運用手順、認証情報は引き続きREJECTしてください。"
+            "この候補はPDCA枠ですが、SOURCE_EVIDENCEのmetrics、過去投稿、仮説、"
+            "検証計画は内部学習のみに使います。公開本文は、過去投稿や数値に言及しない"
+            "独立した通常の新規コンテンツでなければREJECTしてください。"
         )
     return (
         "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"

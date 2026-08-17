@@ -24,6 +24,10 @@ beauty_queue = {
     **text_queue,
     "queue_id": "q_beauty",
     "account_id": "beauty_account",
+    "style_fingerprint_status": "VOICE_PERSONA_PASS",
+    "style_fingerprint_score": "100",
+    "semantic_voice_status": "PASS",
+    "semantic_voice_score": "95",
 }
 
 row = review_row(text_queue, {"review_decision": "OK", "reviewer_note": "内容確認済み"})
@@ -34,6 +38,7 @@ checks = [
     ("beauty candidate is reviewable", is_reviewable(beauty_queue)),
     ("beauty remains human-gated", decision_for_row({}, beauty_queue, allow_media_posts=False)[0] == "SKIP"),
     ("explicit OK promotes beauty to READY", decision_for_row({"review_decision": "OK"}, beauty_queue, allow_media_posts=False)[0] == "READY"),
+    ("Beauty without semantic voice cannot become READY", decision_for_row({"review_decision": "OK"}, {**beauty_queue, "semantic_voice_status": "BLOCKED"}, allow_media_posts=False)[0] == "BLOCKED_BEAUTY_VOICE"),
     ("OK text becomes READY only after validation", decision_for_row({"review_decision": "OK"}, text_queue, allow_media_posts=False)[0] == "READY"),
     ("OK prepared media becomes READY without publishing", decision_for_row({"review_decision": "OK"}, media_queue, allow_media_posts=False)[0] == "READY"),
     ("missing media stays pending", decision_for_row({"review_decision": "OK"}, {**media_queue, "media_url": ""}, allow_media_posts=True)[0] == "APPROVED_PENDING_MEDIA_GATE"),

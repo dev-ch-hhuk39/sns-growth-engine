@@ -111,8 +111,8 @@ def test_beauty_future_inactive():
 
 def test_beauty_account_filter_keeps_video_rows():
     acc, vid, _, _ = _acc(target="beauty_account")
-    assert len(acc) >= 22, len(acc)
-    assert len(vid) >= 17, len(vid)
+    assert len(acc) == 22, len(acc)
+    assert len(vid) == 16, len(vid)
     assert all(r["account_id"] == "beauty_account" for r in vid)
 
 

@@ -125,6 +125,12 @@ jobs:
           DRY_RUN: "false"
         run: python3 scripts/prepare_beauty_review_candidates.py --slot-index "$SLOT_INDEX" --apply --confirm-prepare
 
+      - name: Beauty semantic voice review
+        if: env.ACTION == 'prepare'
+        env:
+          DRY_RUN: "false"
+        run: python3 scripts/run_hybrid_ai_queue_gate.py --account-id beauty_account --max-candidates 1 --apply --use-sheets
+
       # The worker re-reads the selected Beauty READY row and runs account,
       # persona, public-text, media and idempotency gates before publishing.
       # Repository-wide historical drift must not block this scoped preflight.

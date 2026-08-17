@@ -163,7 +163,7 @@ def candidate_rows(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--max-candidates", type=int, default=2)
     parser.add_argument("--slot-id", default="")
     parser.add_argument("--require-human-review", action="store_true")
@@ -233,6 +233,9 @@ def main() -> int:
 
         audit_json = merge_gate_audit(queue.get("generation_policy_json", ""), result)
         blocked_reason = ",".join(result.blocked_reasons)[:500]
+        public_validation = result.deterministic_validation.get("public_validation", {})
+        voice_evidence = public_validation.get("voice_persona_check", {})
+        voice_details = voice_evidence.get("details", {})
         fields = {
             "public_post_text": result.public_post_text,
             "generation_policy_json": audit_json,
@@ -241,14 +244,19 @@ def main() -> int:
             "text_policy_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "account_fit_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "internal_leak_status": "PASS" if result.status == "PASS" else "BLOCKED",
-            "voice_persona_status": result.deterministic_validation.get("voice_persona_check", {}).get("status", "BLOCKED"),
-            "voice_persona_score": result.deterministic_validation.get("voice_persona_check", {}).get("score", 0),
-            "polite_ending_ratio": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("business_polite_ratio", ""),
-            "first_person_status": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("first_person_status", "BLOCKED"),
-            "formal_consultant_penalty": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("formal_consultant_penalty", ""),
-            "conversational_style_score": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("conversational_style_score", ""),
-            "feminine_warmth_score": result.deterministic_validation.get("voice_persona_check", {}).get("details", {}).get("feminine_warmth_score", ""),
-            "voice_blocked_reasons": json.dumps(result.deterministic_validation.get("voice_persona_check", {}).get("reasons", []), ensure_ascii=False),
+            "voice_persona_status": voice_evidence.get("status", "BLOCKED"),
+            "voice_persona_score": voice_evidence.get("score", 0),
+            "voice_style_profile_version": voice_evidence.get("style_profile_version", ""),
+            "style_fingerprint_status": voice_evidence.get("status", "BLOCKED"),
+            "style_fingerprint_score": voice_evidence.get("score", 0),
+            "semantic_voice_status": result.review.get("voice_persona", "BLOCKED"),
+            "semantic_voice_score": result.review.get("voice_persona_score", 0),
+            "polite_ending_ratio": voice_details.get("business_polite_ratio", ""),
+            "first_person_status": voice_details.get("first_person_status", "BLOCKED"),
+            "formal_consultant_penalty": voice_details.get("formal_consultant_penalty", ""),
+            "conversational_style_score": voice_details.get("conversational_style_score", ""),
+            "feminine_warmth_score": voice_details.get("feminine_warmth_score", ""),
+            "voice_blocked_reasons": json.dumps(voice_evidence.get("reasons", []), ensure_ascii=False),
             "blocked_reason": "" if result.status == "PASS" else blocked_reason,
             "error": "" if result.status == "PASS" else blocked_reason,
             "internal_analysis": json.dumps(

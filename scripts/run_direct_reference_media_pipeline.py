@@ -61,11 +61,13 @@ def _true(value: Any) -> bool:
 SCHEDULED_DIRECT_SLOT_IDS = {
     "night_scout": "ns_1800_direct_media",
     "liver_manager": "lm_1600_direct_media",
+    "beauty_account": "beauty_direct_media_review",
 }
 SCHEDULED_DIRECT_MIN_CHARS = 65
 SCHEDULED_DIRECT_DOMAIN_TERMS = {
     "night_scout": ("夜職", "キャバ", "店", "時給", "ノルマ", "担当", "出勤", "移籍", "指名", "売上"),
     "liver_manager": ("配信", "ライバー", "リスナー", "初見", "コメント", "ギフト", "事務所", "LIVE"),
+    "beauty_account": ("美容", "コスメ", "スキンケア", "メイク", "ヘアケア", "美容家電", "サロン"),
 }
 
 
@@ -1279,7 +1281,7 @@ def dispatch_ready(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="post an explicitly permitted direct-reference media slot")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--slot-id", default="")
     parser.add_argument(
         "--queue-id",

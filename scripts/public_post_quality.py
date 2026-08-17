@@ -20,6 +20,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from accounts.beauty_policy import beauty_compliance_validation  # noqa: E402
+from generation.beauty_voice import beauty_style_fingerprint_validation  # noqa: E402
 
 RULES_FILE = ROOT / "config/post_generation_rules.json"
 VOICE_PROFILES_FILE = ROOT / "config/account_voice_profiles.json"
@@ -187,7 +188,7 @@ def _naturalness_score(
     score = 86
     if (
         "。" not in text
-        and account_id != "liver_manager"
+        and account_id not in {"liver_manager", "beauty_account"}
     ):
         score -= 15
     if len(text) < 80 or len(text) > 520:
@@ -237,6 +238,8 @@ def _business_polite_ending(sentence: str) -> bool:
 
 def voice_persona_validation(text: str, account_id: str) -> dict[str, Any]:
     """Measure account voice separately from subject-matter/account fit."""
+    if account_id == "beauty_account":
+        return beauty_style_fingerprint_validation(text)
     profile = canonical_voice_profile(account_id)
     if not profile:
         return {
@@ -335,40 +338,6 @@ def voice_persona_validation(text: str, account_id: str) -> dict[str, Any]:
         if stereotype_hits:
             reasons.append("voice_stereotyped_feminine_language")
             score -= 35
-    elif account_id == "beauty_account":
-        warm_markers = [str(item) for item in profile.get("warm_markers", []) if str(item)]
-        beauty_markers = [str(item) for item in profile.get("beauty_markers", []) if str(item)]
-        practical_markers = [str(item) for item in profile.get("practical_markers", []) if str(item)]
-        stereotypes = [str(item) for item in profile.get("forbidden_stereotypes", []) if str(item)]
-        ad_phrases = [str(item) for item in profile.get("forbidden_ad_phrases", []) if str(item)]
-        warm_hits = [item for item in warm_markers if item in value]
-        beauty_hits = [item for item in beauty_markers if item in value]
-        practical_hits = [item for item in practical_markers if item in value]
-        stereotype_hits = [item for item in stereotypes if item in value]
-        ad_hits = [item for item in ad_phrases if item in value]
-        details.update({
-            "warm_cadence_hits": warm_hits,
-            "beauty_context_hits": beauty_hits,
-            "practical_action_hits": practical_hits,
-            "forbidden_stereotype_hits": stereotype_hits,
-            "forbidden_ad_phrase_hits": ad_hits,
-        })
-        if not warm_hits:
-            reasons.append("voice_beauty_warmth_missing")
-            score -= 20
-        if not beauty_hits:
-            reasons.append("voice_beauty_context_missing")
-            score -= 25
-        if not practical_hits:
-            reasons.append("voice_beauty_practical_action_missing")
-            score -= 20
-        if stereotype_hits:
-            reasons.append("voice_stereotyped_feminine_language")
-            score -= 35
-        if ad_hits:
-            reasons.append("voice_beauty_advertising_phrase_present")
-            score -= 40
-
     formal_penalty = min(100, len(formal_hits) * 25 + (20 if value.count("ください") >= 2 else 0))
     conversational_hits = set(preferred_hits)
     if account_id in {"liver_manager", "beauty_account"}:
@@ -576,6 +545,8 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
         ) * 5
     elif account_id == "beauty_account":
         action_hits = [term for term in profile.get("action_markers", []) if str(term) in text]
+        if re.search(r"(?:試し|比べ|見直|見て|確認|選ん|決め|メモし|並べ)", text):
+            action_hits.append("beauty_action_sentence_structure")
         details.update({
             "action_marker_count": len(action_hits),
             "action_markers": action_hits,

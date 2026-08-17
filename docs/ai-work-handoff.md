@@ -7858,3 +7858,27 @@ dry-runとbounded canaryを通してからblockを解除する。単なるsource
   dry-runとbounded canaryを実行し、read-after-write成功後だけ本番設定PRと`BEAUTY_ACTIVATION_APPROVED=true`を適用する。
 - Beauty候補はAUTO_READYしない。美容医療は別レーンで全件人間レビュー。PDCAは`account_id=beauty_account`の
   `MEASURED`のみを使い、Night Scout / Liver Managerと混ぜない。
+
+## 2026-08-17 Chadult Beauty Voice correction
+
+- Content ReferenceとVoice Referenceを分離。`config/beauty_voice_profile.json`はBeauty専用の5〜10 source、各10〜30投稿の集合特徴だけをStyle Fingerprintにし、特定人物の文章をコピーしない。
+- 決定的Voice gateは絵文字数、短文・改行リズム、句点密度、人間的な言い回し、柔らかい語尾、広告/コンサル口調を別個に評価する。
+- BeautyをHybrid AI classification/generation/semantic voice reviewの正式対象にした。候補保存後にsemantic reviewを実行し、deterministic/semanticとも85未満ならHuman ReviewのOKでもREADYにできない。
+- queue / `投稿レビュー`にstyle profile version、Style Fingerprint status/score、semantic voice status/scoreを保存する。
+- GitHub正本のBeauty sourceは22/22（X 6 / YouTube 9 / TikTok 7）。旧YouTube 3件は削除せず`LEGACY_QUARANTINED_NOT_IN_OWNER_MANIFEST`としてtarget mappingから外した。
+- 5生成routeは正本mix selectorに接続。direct media / clipに権利・mediaがない場合はtext代替せず`AWAITING_APPROVED_MEDIA`で停止する。
+- PDCAのmetrics、過去投稿、仮説、次回検証は内部学習のみ。公開本文は過去成績に言及しない通常の新規投稿に統一した。
+- `q_beauty_20260817_2`は`REJECTED_FOR_VOICE`として実投稿対象外。この修正でThreads投稿は実行していない。
+
+### Beauty production state correction
+
+- 上の過去節にある`draft_only`とcredential未入力の記載は古い。現在の正本は
+  `config/beauty_account_pipeline.json`=`review_required_production`、scheduled publish有効、real post有効、
+  AUTO_READY無効、全件human review必須である。
+- Beautyの実投稿は`BEAUTY_PRODUCTION_ENABLED=true`、account別Threads credential、`READY`、
+  current Hybrid AI gate、deterministic Style Fingerprint 85以上、semantic voice 85以上の全てが必要。
+- textはBeauty専用Content ReferenceまたはBeauty専用MEASURED PDCAだけを参照する。Night Scout / Liver Managerの
+  source、metrics、learningをBeauty候補に渡さない。PDCA証拠は公開文本に出さない。
+- direct media / approved clipの共通pipelineはBeauty account IDを受理できる。ただし、
+  Beautyの22参照元にmedia利用権限を推測せず、approved permission / provenance / prepared mediaがなければ
+  `NO_READY_MEDIA`で停止する。text fallbackは行わない。
