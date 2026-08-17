@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate X is disabled for the recovery operation."""
+"""Validate X posting is disabled and bounded reference reads remain isolated."""
 from __future__ import annotations
 
 import importlib.util
@@ -24,6 +24,11 @@ def main() -> int:
     _, socials, queues = mod.draft_social_queue_rows()
     src_accounts, _ = mod.source_rows()
     x_sources = [r for r in src_accounts if r["source_platform"] == "x"]
+    voice_profile = mod.json.loads((ROOT / "config/beauty_voice_profile.json").read_text(encoding="utf-8"))
+    beauty_voice_x_ids = {
+        source_id for source_id in voice_profile["voice_reference_source_ids"]
+        if source_id.startswith("src_ba_x_")
+    }
     workflow_daily = (ROOT / ".github/workflows/content-daily-dry-run.yml").read_text(encoding="utf-8")
     workflow_worker = (ROOT / ".github/workflows/threads-queue-worker.yml").read_text(encoding="utf-8")
     refill_source = (ROOT / "scripts/refill_threads_queue.py").read_text(encoding="utf-8")
@@ -33,7 +38,16 @@ def main() -> int:
         ("x prompts inactive", prompts["night_scout_x"]["active"] == "FALSE" and prompts["liver_manager_x"]["active"] == "FALSE"),
         ("no x queue", all(r["platform"] != "x" for r in queues)),
         ("no x social", all(r["platform"] != "x" for r in socials)),
-        ("x source fetch disabled", bool(x_sources) and all(str(r["fetch_enabled"]).lower() == "false" for r in x_sources)),
+        ("x source fetch is bounded", bool(x_sources) and {
+            r["source_id"] for r in x_sources if str(r["fetch_enabled"]).lower() == "true"
+        } == beauty_voice_x_ids),
+        ("x source media reuse disabled", all(
+            r["rights_policy"] == "reference_only"
+            and str(r["can_reuse_media"]).lower() == "false"
+            and str(r["allow_download"]).lower() == "false"
+            and str(r["allow_upload"]).lower() == "false"
+            for r in x_sources
+        )),
         ("daily workflow no x publisher", "publish_x_post.py" not in workflow_daily),
         ("queue worker no x publisher", "publish_x_post.py" not in workflow_worker),
         ("refill no x queue", '"platform": "x"' not in refill_source),

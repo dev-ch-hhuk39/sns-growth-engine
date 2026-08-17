@@ -22,7 +22,7 @@ if str(SRC) not in sys.path:
 from generation.beauty_review_pipeline import build_beauty_review_batch  # noqa: E402
 from generation.beauty_review_pipeline import build_beauty_review_candidate  # noqa: E402
 from generation.beauty_review_pipeline import select_beauty_route  # noqa: E402
-from generation.beauty_voice import beauty_voice_prompt  # noqa: E402
+from generation.beauty_voice import beauty_voice_prompt, build_voice_corpus_summary  # noqa: E402
 from llm_client import call_gemini_json  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
@@ -89,6 +89,27 @@ def _prompt(
             "読者が今日試せる行動を1つ示して作り直してください。"
         )
     internal_evidence = str((route_context or {}).get("internal_evidence", "")).strip()
+    corpus = dict((route_context or {}).get("voice_corpus") or {})
+    corpus_instruction = (
+        "\nBeauty Voice Corpus集計: "
+        + json.dumps(
+            {
+                "status": corpus.get("status", "INSUFFICIENT_CORPUS"),
+                "source_account_count": corpus.get("source_account_count", 0),
+                "post_count": corpus.get("post_count", 0),
+                "emoji_frequency": corpus.get("emoji_frequency", {}),
+                "humanity_marker_frequency": corpus.get("humanity_marker_frequency", {}),
+                "soft_ending_frequency": corpus.get("soft_ending_frequency", {}),
+                "emoji_per_post": corpus.get("emoji_per_post", 0),
+                "full_stops_per_post": corpus.get("full_stops_per_post", 0),
+                "average_nonempty_lines_per_post": corpus.get("average_nonempty_lines_per_post", 0),
+                "average_line_length": corpus.get("average_line_length", 0),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        + "\nこれは複数話者から抽出した集計特徴だけで、特定人物の文章・語順・固有表現はコピーしない。"
+    )
     evidence_instruction = (
         "\n内部参考情報: " + internal_evidence
         + "\nこの情報のテーマ・構成・学習結果だけを使い、source名、URL、過去投稿、metrics、PDCAを公開本文に書かない。"
@@ -108,6 +129,7 @@ Threadsの美容アカウント用に、読者向けの新規投稿を1件作っ
 禁止: 美容医療、疾病・治療、薬機的効果、before/after保証、内部用語、参照元名、AIへの言及。「浸透する」「キューティクルが閉じる」「効果が半減」などの科学的な因果を言い切らない。美容家電は機種ごとに使用条件が異なるため、シートマスクや化粧水との併用方法を推測で教えない。
 {cta}
 {evidence_instruction}
+{corpus_instruction}
 {correction}
 JSONで public_post_text と primary_topic だけを返してください。
 """.strip()
@@ -176,8 +198,6 @@ def select_beauty_pdca_context(rows: list[dict]) -> dict:
 
 def load_route_context(route: str) -> dict:
     """Read only Beauty-scoped evidence; never substitute another account."""
-    if route == "new_text_generation":
-        return {"status": "PASS", "source_ids": [], "internal_evidence": ""}
     if route in {"direct_reference_media", "approved_source_clip"}:
         return {
             "status": "DELEGATED_MEDIA_ROUTE",
@@ -190,12 +210,24 @@ def load_route_context(route: str) -> dict:
 
         config = get_config()
         client = SheetsClient(config["sheet_id"], config["sa_dict"], dry_run=False)
+        source_rows = [dict(row) for row in read_records_safely(client, "source_posts")]
+        corpus = build_voice_corpus_summary(source_rows)
+        if route == "new_text_generation":
+            return {
+                "status": "PASS",
+                "source_ids": [],
+                "internal_evidence": "",
+                "voice_corpus": corpus,
+            }
         if route == "reference_text_generation":
-            rows = [dict(row) for row in read_records_safely(client, "source_posts")]
-            return select_beauty_reference_context(rows)
+            selected = select_beauty_reference_context(source_rows)
+            selected["voice_corpus"] = corpus
+            return selected
         if route == "pdca_text_generation":
             rows = [dict(row) for row in read_records_safely(client, "posted_results")]
-            return select_beauty_pdca_context(rows)
+            selected = select_beauty_pdca_context(rows)
+            selected["voice_corpus"] = corpus
+            return selected
     except Exception as exc:  # fail closed without leaking credential details
         return {"status": "BLOCKED", "reason": f"beauty_route_context_unavailable:{type(exc).__name__}"}
     return {"status": "BLOCKED", "reason": "beauty_route_not_supported"}
@@ -273,6 +305,7 @@ def queue_row(candidate: dict) -> dict:
     text = candidate["public_post_text"]
     route = str(candidate.get("generation_route") or "new_text_generation")
     route_context = candidate.get("route_context") or {}
+    voice_corpus = dict(route_context.get("voice_corpus") or {})
     media_required = route in {"direct_reference_media", "approved_source_clip"}
     return {
         "queue_id": candidate["queue_id"],
@@ -301,6 +334,9 @@ def queue_row(candidate: dict) -> dict:
         "style_fingerprint_score": validation["voice_persona_check"]["score"],
         "semantic_voice_status": "PENDING_HYBRID_AI_REVIEW",
         "semantic_voice_score": "",
+        "voice_corpus_status": voice_corpus.get("status", "INSUFFICIENT_CORPUS"),
+        "voice_corpus_source_count": voice_corpus.get("source_account_count", 0),
+        "voice_corpus_post_count": voice_corpus.get("post_count", 0),
         "review_lane": candidate["review_lane"],
         "primary_topic": candidate["primary_topic"],
         "slot_id": candidate["slot_id"],

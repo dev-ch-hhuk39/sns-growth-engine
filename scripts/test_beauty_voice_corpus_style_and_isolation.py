@@ -23,6 +23,8 @@ from prepare_beauty_review_candidates import (  # noqa: E402
 from process_threads_queue import beauty_production_configured  # noqa: E402
 from publication_review_board import decision_for_row, review_row  # noqa: E402
 from sheets_client import TAB_DEFINITIONS  # noqa: E402
+from acquire_approved_source_posts import selected_sources  # noqa: E402
+from recover_production_sheets_threads_first import source_rows  # noqa: E402
 
 GOOD = (
     "スキンケアを一度に変えたくなる時って\n"
@@ -39,6 +41,14 @@ def main() -> None:
     assert profile["style_profile_version"] == "chadult_beauty_voice_v1"
     assert profile["corpus_policy"]["content_reference_separated"] is True
     assert profile["corpus_policy"]["copy_verbatim_examples"] is False
+    collection = profile["bounded_reference_collection"]
+    assert collection["enabled"] is True
+    assert collection["reference_only"] is True
+    assert collection["x_read_only"] is True
+    assert collection["allow_media_reuse"] is False
+    assert collection["allow_x_post"] is False
+    assert collection["max_new_posts_per_source_per_run"] == 10
+    assert collection["max_total_new_posts_per_run"] == 30
 
     good = beauty_style_fingerprint_validation(GOOD)
     assert good["status"] == "VOICE_PERSONA_PASS", good
@@ -73,6 +83,9 @@ def main() -> None:
     assert corpus["source_account_count"] == 5
     assert corpus["post_count"] == 50
     assert corpus["raw_post_text_included"] is False
+    assert corpus["emoji_per_post"] > 0
+    assert "humanity_marker_frequency" in corpus
+    assert "soft_ending_frequency" in corpus
     assert "src_ns_forbidden" not in corpus["posts_per_source"]
     insufficient = build_voice_corpus_summary(rows[:9])
     assert insufficient["status"] == "INSUFFICIENT_CORPUS"
@@ -146,6 +159,7 @@ def main() -> None:
     required_voice_columns = {
         "voice_style_profile_version", "style_fingerprint_status", "style_fingerprint_score",
         "semantic_voice_status", "semantic_voice_score",
+        "voice_corpus_status", "voice_corpus_source_count", "voice_corpus_post_count",
         "pdca_account_scope", "pdca_result_id",
     }
     assert required_voice_columns <= set(TAB_DEFINITIONS["queue"])
@@ -158,9 +172,12 @@ def main() -> None:
         "style_fingerprint_status": "VOICE_PERSONA_PASS", "style_fingerprint_score": 100,
         "semantic_voice_status": "PASS", "semantic_voice_score": 95,
         "voice_style_profile_version": "chadult_beauty_voice_v1",
+        "voice_corpus_status": "READY", "voice_corpus_source_count": 5,
+        "voice_corpus_post_count": 50,
     }
     mirrored = review_row(queue)
     assert mirrored["voice_style_profile_version"] == "chadult_beauty_voice_v1"
+    assert mirrored["voice_corpus_status"] == "READY"
     assert decision_for_row({"review_decision": "OK"}, queue, allow_media_posts=False)[0] == "READY"
     assert decision_for_row(
         {"review_decision": "OK"}, {**queue, "semantic_voice_status": "BLOCKED"}, allow_media_posts=False
@@ -172,6 +189,19 @@ def main() -> None:
     assert all(row.get("target_account_ids") == ["beauty_account"] for row in beauty_sources)
     legacy = [row for row in default_sources if row.get("legacy_status") == "LEGACY_QUARANTINED_NOT_IN_OWNER_MANIFEST"]
     assert len(legacy) == 3 and all(not row.get("target_account_ids") for row in legacy)
+
+    voice_ids = set(profile["voice_reference_source_ids"])
+    selected_sources_rows, blocked = selected_sources("beauty_account", "all", reference_only=True)
+    assert {row["source_id"] for row in selected_sources_rows} == voice_ids
+    assert blocked == []
+    assert all(row.get("rights_policy") == "reference_only" for row in selected_sources_rows)
+    assert all(row.get("can_reuse_media") is False for row in selected_sources_rows)
+    selected_media_rows, _ = selected_sources("beauty_account", "all", reference_only=False)
+    assert selected_media_rows == []
+    account_rows, _video_rows = source_rows()
+    beauty_registry = [row for row in account_rows if row.get("target_account_id") == "beauty_account"]
+    assert {row["source_id"] for row in beauty_registry if row["fetch_enabled"] == "true"} == voice_ids
+    assert all(row["can_reuse_media"] == "false" for row in beauty_registry)
 
     gate_source = (ROOT / "scripts/hybrid_ai_gate.py").read_text(encoding="utf-8")
     assert "pdca_internal_learning_exposed_in_public_text" in gate_source

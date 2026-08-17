@@ -44,7 +44,16 @@ from source_discovery_policy import (  # noqa: E402
 )
 
 MEDIA_PLATFORMS = {"threads", "youtube", "tiktok", "x"}
-BLOCKED_ACCOUNTS = {"beauty_account"}
+BLOCKED_ACCOUNTS: set[str] = set()
+
+
+def beauty_voice_reference_policy() -> tuple[set[str], dict[str, Any]]:
+    path = ROOT / "config/beauty_voice_profile.json"
+    profile = json.loads(path.read_text(encoding="utf-8"))
+    return (
+        {str(value) for value in profile.get("voice_reference_source_ids", [])},
+        dict(profile.get("bounded_reference_collection") or {}),
+    )
 
 
 def truthy(value: Any) -> bool:
@@ -79,11 +88,18 @@ def selected_sources(
     data = json.loads(
         (ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")
     )
+    voice_source_ids, voice_policy = beauty_voice_reference_policy()
+    voice_collection_enabled = truthy(voice_policy.get("enabled"))
     selected: list[dict[str, Any]] = []
     blocked: list[dict[str, str]] = []
     for source in data.get("sources", []):
         platform = source_platform(source)
         account = account_for(source)
+        is_beauty_voice_source = (
+            account == "beauty_account"
+            and str(source.get("source_id") or "") in voice_source_ids
+            and voice_collection_enabled
+        )
         if account_id != "all" and account != account_id:
             continue
         if platform_filter != "all" and platform != platform_filter:
@@ -98,7 +114,7 @@ def selected_sources(
             continue
         if platform not in MEDIA_PLATFORMS or account in BLOCKED_ACCOUNTS:
             continue
-        if not truthy(source.get("active")):
+        if not truthy(source.get("active")) and not is_beauty_voice_source:
             continue
         if platform in DEFERRED_REFERENCE_PLATFORMS:
             blocked.append(
@@ -110,13 +126,16 @@ def selected_sources(
                 }
             )
             continue
-        if platform == "x" and not truthy(source.get("x_read_only")):
+        if platform == "x" and not (
+            truthy(source.get("x_read_only"))
+            or (is_beauty_voice_source and truthy(voice_policy.get("x_read_only")))
+        ):
             blocked.append({"source_id": str(source.get("source_id", "")), "reason": "x_read_only_not_approved"})
             continue
         if reference_only:
             # Reference acquisition never grants reuse rights. It is limited
             # to sources that were explicitly enabled for bounded fetching.
-            if truthy(source.get("fetch_enabled")):
+            if truthy(source.get("fetch_enabled")) or is_beauty_voice_source:
                 selected.append(source)
             continue
         if platform == "x" and source.get("x_video_candidate_enabled") is not True:
@@ -956,6 +975,16 @@ def run(
     )
 
     discovery_config = load_discovery_config()
+    if reference_only and account_id == "beauty_account":
+        _voice_ids, voice_policy = beauty_voice_reference_policy()
+        discovery_config["max_new_videos_per_source_per_run"] = min(
+            10,
+            max(1, int(voice_policy.get("max_new_posts_per_source_per_run", 10))),
+        )
+        discovery_config["max_total_new_videos_per_run"] = min(
+            30,
+            max(1, int(voice_policy.get("max_total_new_posts_per_run", 30))),
+        )
 
     if force_backfill:
         discovery_config = {
@@ -1490,6 +1519,7 @@ def main() -> int:
             "all",
             "night_scout",
             "liver_manager",
+            "beauty_account",
         ],
     )
 

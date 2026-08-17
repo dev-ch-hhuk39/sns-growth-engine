@@ -7,9 +7,9 @@ config/source_accounts/default_sources.json を真実源とし、
 upsert層 (_upsert_many) を再利用して Sheets へ反映する。並行スキーマ/並行writerは作らない。
 
 現フェーズ安全方針 (source_rows() が強制):
-- 全 source: fetch_enabled=false / allow_download/cut/upload=false / auto_priority_change_allowed=false
-- X: active=false / fetch_enabled=false / manual_only (reference source として保持・投稿/開発対象外)
-- beauty (future_track=beauty_future, target=beauty_account): active=false / BLOCKED
+- Beauty Voice Corpusの明示8 sourceだけをbounded reference-only取得対象にする
+- Xはその8 sourceに含まれる場合だけread-only。X投稿・media再利用は常に禁止
+- Beautyの残りのsourceは登録のみ、fetchなし
 - TikTok/YouTube: reuse_policy=reference_only / media_policy=do_not_download (can_reuse_media=false)
 - status=WAITING_URL_INPUT: fetch 不可 (source_url 空)
 
@@ -142,9 +142,16 @@ def _summary(acc: list[dict], vid: list[dict], raw_by_id: dict) -> dict:
         "by_platform": dict(plat),
         "active_true": sum(1 for r in acc if str(r.get("active", "")).lower() == "true"),
         "fetch_enabled_true": sum(1 for r in acc if str(r.get("fetch_enabled", "")).lower() == "true"),
-        "x_manual_only": all(str(r.get("active", "")).lower() == "false" and str(r.get("fetch_enabled", "")).lower() == "false" for r in x_rows),
+        "x_posting_disabled_reference_only": all(
+            r.get("rights_policy") == "reference_only"
+            and r.get("use_policy") == "REFERENCE_ONLY"
+            and str(r.get("can_reuse_media", "")).lower() == "false"
+            for r in x_rows
+        ),
         "x_count": len(x_rows),
-        "beauty_future_inactive": all(str(r.get("active", "")).lower() == "false" for r in beauty),
+        "beauty_voice_reference_fetch_count": sum(
+            1 for r in beauty if str(r.get("fetch_enabled", "")).lower() == "true"
+        ),
         "beauty_future_count": len(beauty),
         "beauty_target_account_id_preserved": all(
             "beauty_account" in str(r.get("target_account_ids", ""))

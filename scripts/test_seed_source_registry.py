@@ -4,9 +4,9 @@
 カバー範囲(タスクJの統合):
 - test_source_url_discovery: 既存共有URLが registry に回収されている
 - test_source_registry_classification: platform/target/future_track 分類
-- test_x_sources_manual_only: X は active=false / fetch_enabled=false
+- test_x_sources_read_only_bounded: Beauty Voice指定Xだけbounded read-only
 - test_video_sources_reference_only: TikTok/YouTube は reference_only / 再利用不可
-- test_beauty_future_inactive: beauty_future は active=false
+- test_beauty_voice_sources_bounded: 明示8件だけreference fetch可
 - test_waiting_url_input_not_fetchable: URL未入力は fetch 不可
 - test_seed_source_registry_duplicates: dedup で重複skip
 - test_source_priority_rules: scoring/優先順位ルール
@@ -65,12 +65,14 @@ def test_source_registry_classification():
     assert "beauty_future" not in tgts, "beauty_future must never be a target_account_id"
 
 
-def test_x_sources_manual_only():
+def test_x_sources_read_only_bounded():
     acc, _, _, _ = _acc(platform="x")
     assert acc, "no x sources"
+    voice_ids = set(json.loads((ROOT / "config/beauty_voice_profile.json").read_text())["voice_reference_source_ids"])
     for r in acc:
-        assert r["active"] == "false", r["source_id"]
-        assert r["fetch_enabled"] == "false", r["source_id"]
+        assert r["fetch_enabled"] == "false" or r["source_id"] in voice_ids, r["source_id"]
+        assert r["rights_policy"] == "reference_only", r["source_id"]
+        assert r["can_reuse_media"] == "false", r["source_id"]
 
 
 def test_video_sources_reference_only():
@@ -91,22 +93,23 @@ def test_video_sources_reference_only():
             assert r["can_reuse_media"] == "false", r["source_id"]
 
 
-def test_beauty_future_inactive():
+def test_beauty_voice_sources_bounded():
     acc, vid, _, raw_by_id = _acc(target="beauty_future")
     assert acc, "no beauty_future sources"
-    assert vid, "beauty future video reference rows should remain seedable as blocked metadata"
+    assert vid, "beauty video reference rows should remain seedable"
+    voice_ids = set(json.loads((ROOT / "config/beauty_voice_profile.json").read_text())["voice_reference_source_ids"])
+    assert {r["source_id"] for r in acc if r["fetch_enabled"] == "true"} == voice_ids
     for r in acc:
-        assert r["active"] == "false", r["source_id"]
-        assert r["fetch_enabled"] == "false", r["source_id"]
         assert r["target_account_ids"] == "beauty_account", r["source_id"]
         assert r["future_track"] == "beauty_future", r["source_id"]
-        assert r["source_track"] == "beauty_future", r["source_id"]
-        assert r["usage_scope"] == "future_reference_only", r["source_id"]
+        if r["source_id"] in voice_ids:
+            assert r["source_track"] == "beauty_voice_reference", r["source_id"]
+            assert r["usage_scope"] == "voice_reference", r["source_id"]
+            assert r["review_status"] == "WAITING_REVIEW", r["source_id"]
         assert r["rights_policy"] == "reference_only", r["source_id"]
         assert r["use_policy"] == "REFERENCE_ONLY", r["source_id"]
         assert r["can_reuse_media"] == "false", r["source_id"]
         assert r["default_queue_status"] == "WAITING_REVIEW", r["source_id"]
-        assert r["review_status"] == "BLOCKED_BEAUTY_ACCOUNT", r["source_id"]
 
 
 def test_beauty_account_filter_keeps_video_rows():
@@ -171,9 +174,9 @@ def main() -> int:
     tests = [
         test_source_url_discovery,
         test_source_registry_classification,
-        test_x_sources_manual_only,
+        test_x_sources_read_only_bounded,
         test_video_sources_reference_only,
-        test_beauty_future_inactive,
+        test_beauty_voice_sources_bounded,
         test_beauty_account_filter_keeps_video_rows,
         test_query_platform_filter,
         test_waiting_url_input_not_fetchable,

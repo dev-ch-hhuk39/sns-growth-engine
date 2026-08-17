@@ -27,9 +27,9 @@ BY_ID = {s.get("source_id"): s for s in RAW}
 CHECK_NAMES = [
     "source_registry_has_required_categories",
     "source_urls_are_deduped",
-    "x_sources_manual_only_current_phase",
+    "x_sources_read_only_bounded",
     "video_sources_rights_classified",
-    "beauty_future_inactive",
+    "beauty_voice_sources_bounded",
     "beauty_target_account_id_preserved",
     "beauty_reference_only_safety",
     "waiting_url_input_not_fetchable",
@@ -60,10 +60,12 @@ def test_urls_deduped():
     assert len(urls) == len(set(urls)), "duplicate source_url in registry"
 
 
-def test_x_manual_only():
+def test_x_read_only_bounded():
     xs = [r for r in ACC if r["source_platform"] == "x"]
     assert xs
-    assert all(r["active"] == "false" and r["fetch_enabled"] == "false" for r in xs)
+    voice_ids = set(json.loads((ROOT / "config/beauty_voice_profile.json").read_text())["voice_reference_source_ids"])
+    assert all(r["fetch_enabled"] == "false" or r["source_id"] in voice_ids for r in xs)
+    assert all(r["rights_policy"] == "reference_only" and r["can_reuse_media"] == "false" for r in xs)
 
 
 def test_tiktok_youtube_reference_only():
@@ -81,10 +83,12 @@ def test_tiktok_youtube_reference_only():
             assert row["can_reuse_media"] == "false"
 
 
-def test_beauty_future_inactive():
+def test_beauty_voice_sources_bounded():
     bs = [r for r in ACC if BY_ID.get(r["source_id"], {}).get("future_track") == "beauty_future"]
     assert bs
-    assert all(r["active"] == "false" for r in bs)
+    voice_ids = set(json.loads((ROOT / "config/beauty_voice_profile.json").read_text())["voice_reference_source_ids"])
+    assert {r["source_id"] for r in bs if r["fetch_enabled"] == "true"} == voice_ids
+    assert all(r["can_reuse_media"] == "false" for r in bs)
 
 
 def test_beauty_target_account_id_preserved():
@@ -122,9 +126,9 @@ def main() -> int:
         test_check_names_wired,
         test_has_required_categories,
         test_urls_deduped,
-        test_x_manual_only,
+        test_x_read_only_bounded,
         test_tiktok_youtube_reference_only,
-        test_beauty_future_inactive,
+        test_beauty_voice_sources_bounded,
         test_beauty_target_account_id_preserved,
         test_beauty_reference_only_safety,
         test_waiting_url_input_not_fetchable,

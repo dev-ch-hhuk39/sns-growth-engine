@@ -61,6 +61,8 @@ jobs:
         run: python3 -m playwright install --with-deps chromium
       - name: Dry-run acquisition plan
         run: python3 scripts/acquire_approved_source_posts.py --account-id all --platform all --max-posts 3 --dry-run
+      - name: Dry-run Beauty Voice Corpus acquisition plan
+        run: python3 scripts/acquire_approved_source_posts.py --account-id beauty_account --platform all --max-posts 30 --reference-only --dry-run
       - name: Guard acquisition persistence
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_acquisition == 'true'
         run: |
@@ -77,3 +79,6 @@ jobs:
       - name: Acquire approved source bundles
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_acquisition == 'true'
         run: python3 scripts/acquire_approved_source_posts_failsoft.py --account-id all --platform all --max-posts 30 --apply --confirm-acquisition
+      - name: Acquire bounded Beauty Voice Corpus references
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_acquisition == 'true'
+        run: python3 scripts/acquire_approved_source_posts_failsoft.py --account-id beauty_account --platform all --max-posts 30 --reference-only --apply --confirm-acquisition

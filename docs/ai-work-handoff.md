@@ -7882,3 +7882,21 @@ dry-runとbounded canaryを通してからblockを解除する。単なるsource
 - direct media / approved clipの共通pipelineはBeauty account IDを受理できる。ただし、
   Beautyの22参照元にmedia利用権限を推測せず、approved permission / provenance / prepared mediaがなければ
   `NO_READY_MEDIA`で停止する。text fallbackは行わない。
+
+## 2026-08-17 Beauty Voice Corpus production connection
+
+- `config/beauty_voice_profile.json`の8件（X 6 / TikTok 2）だけを、Beauty Voice Corpus用の
+  bounded read-only取得対象にした。1 source scanは最大30件、新規保存は1 sourceあたり最大10件、
+  1 run合計最大30件。その他14件は登録のみで、取得対象にしない。
+- Voice Corpusは`source_posts` から`target_account_id=beauty_account`かつ明示source IDの行だけを集計する。
+  raw文本を複製せず、絵文字、humanity marker、柔らかい語尾、句点、感嘆符、改行、行長の
+  集計特徴だけを全text routeの生成promptに渡す。Content Reference本文とVoice Reference集計は別物として保持する。
+- queue / `投稿レビュー`に`voice_corpus_status` / source count / post countを保存する。
+  deterministic Style Fingerprintと85点以上、Beauty対応Hybrid AI semantic voiceと85点以上、
+  human reviewの全てが通るまでREADYにしない。
+- Xは公開参照のread-only取得だけ。X投稿、download、cut、upload、media再利用は全件false。
+  TikTok参照も同様にreference-onlyで、Voice Corpus取得はメディア利用許可を与えない。
+- `Approved Account Acquisition`の明示confirm付きdispatchにBeauty reference-only取得を追加した。
+  定期scheduleから新しいSheets書込みは追加していない。
+- regression: repository tests 832/832 PASS、workflow safety 467/467 PASS、Ruff E9/F63/F7/F82 PASS、
+  compileall PASS、`git diff --check` PASS。Threads / X投稿とmedia取得・uploadはこの修正で実行していない。
