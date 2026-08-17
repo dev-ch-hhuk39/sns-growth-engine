@@ -18,7 +18,9 @@ gate. It separates three claims that must never be collapsed into one:
 
 The v23 report also exposes `ACTIVE_SCOPE_SOFTWARE_COMPLETE`,
 `ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE`, `DEFERRED_PLATFORM_COUNT`,
-`DEFERRED_PLATFORMS` and `PRODUCTION_PUBLISH_EVIDENCE_COMPLETE`. Active
+`DEFERRED_PLATFORMS` and `PRODUCTION_PUBLISH_EVIDENCE_COMPLETE`. As of
+2026-08-17, reference acquisition has no globally deferred platform; individual
+Threads sources may still return `DEFERRED` after all bounded fallbacks fail. Active
 acquisition is X, YouTube and TikTok. Threads is a non-blocking
 `DEFERRED_OSS_CANDIDATE`, not an authentication blocker.
 
@@ -53,13 +55,14 @@ completion-gate result, not permission to write production systems.
 - X physical Golden: four exact status URLs have recorded A/V evidence across
   Night Scout and Liver Manager. `twscrape` remains optional-auth and does not
   block the proven gallery-dl plus yt-dlp route.
-- Threads reference acquisition: `DEFERRED_OSS_CANDIDATE` with reason
-  `NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN`. Meta Graph,
-  Meta oEmbed and browser routes are inactive by owner policy.
+- Threads reference acquisition: active bounded public route using pinned
+  threads-cli, logged-out persisted GraphQL, then cookie-free Playwright.
+  A source that exhausts all three is reported as `DEFERRED`; Meta credentials
+  are not required.
 - Production mutation: Sheets, Cloudinary, download/cut and Threads publishing
   require separate explicit approval and credentials.
-- Public reachability: a provider returning no posts during a bounded no-write
-  probe is recorded as `UNVERIFIED_EXTERNAL`.
+- Public reachability: a Threads source returning no posts after all bounded
+  fallbacks is recorded as `DEFERRED`, never as successful acquisition.
 
 The applied owner decision and remaining X Golden sequence are in
 `docs/x-reusable-media-permission-decision-package.json`.

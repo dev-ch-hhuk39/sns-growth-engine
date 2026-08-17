@@ -83,6 +83,13 @@
       "pdca_text_generation": 10,
       "direct_reference_media": 50,
       "approved_source_clip": 5
+    },
+    "beauty_account": {
+      "new_text_generation": 25,
+      "reference_text_generation": 35,
+      "pdca_text_generation": 20,
+      "direct_reference_media": 15,
+      "approved_source_clip": 5
     }
   }
 }

@@ -53,7 +53,7 @@ def test_safety_flags_in_all_new_workflows():
             if flag not in content:
                 failed.append(f"{name}: {flag} が未定義")
     assert not failed, "\n".join(failed)
-    print(f"  [PASS] 全workflow に安全フラグ設定確認")
+    print("  [PASS] 全workflow に安全フラグ設定確認")
 
 
 def test_publish_enabled_false_in_schedule_workflows():
@@ -62,7 +62,7 @@ def test_publish_enabled_false_in_schedule_workflows():
         content = _load(name)
         assert 'PUBLISH_ENABLED: "false"' in content or "PUBLISH_ENABLED: 'false'" in content, \
             f"{name}: schedule workflow の PUBLISH_ENABLED が false でありません"
-    print(f"  [PASS] schedule workflow の PUBLISH_ENABLED=false 確認")
+    print("  [PASS] schedule workflow の PUBLISH_ENABLED=false 確認")
 
 
 def test_beauty_account_guard_in_pilot_publish():
@@ -70,15 +70,13 @@ def test_beauty_account_guard_in_pilot_publish():
     assert "beauty_account" in content, "content-pilot-publish.yml に beauty_account ガードがありません"
     assert "exit 1" in content or "BLOCKED" in content, \
         "content-pilot-publish.yml に beauty_account ブロック処理がありません"
-    print(f"  [PASS] content-pilot-publish.yml に beauty_account ガード確認")
+    print("  [PASS] content-pilot-publish.yml に beauty_account ガード確認")
 
 
 def test_no_direct_expression_in_run_steps():
     """run: ブロック内のシェルスクリプト行に ${{ github.event.inputs.* }} を直接埋め込んでいないことを確認。
     env: / name: / if: フィールドは安全なので除外。$VAR 形式での利用は安全。"""
     unsafe_inputs = re.compile(r'\$\{\{[^}]*github\.event\.inputs\.[^}]+\}\}')
-    # YAML キーとして安全なコンテキスト（値がシェル実行されない）
-    safe_yaml_keys = re.compile(r'^\s*(name|env|if|id|uses|with|needs|outputs)\s*:')
     failed = []
     for wf_name in EXPECTED_WORKFLOWS:
         content = _load(wf_name)
@@ -105,16 +103,11 @@ def test_no_direct_expression_in_run_steps():
             if in_run_block and unsafe_inputs.search(line):
                 failed.append(f"{wf_name}:{i}: シェル実行行に ${{{{ inputs.* }}}} が直接使われています: {line.strip()!r}")
     assert not failed, "\n".join(failed)
-    print(f"  [PASS] run: ブロック内の直接 expression 展開なし確認")
+    print("  [PASS] run: ブロック内の直接 expression 展開なし確認")
 
 
 def test_secrets_via_env_not_run():
     """secrets.* を run: ブロック内に直接埋め込んでいないことを確認。"""
-    # run: 内で ${{ secrets.* }} を使っているパターン（env: での参照は安全）
-    unsafe_pattern = re.compile(
-        r'run:.*\$\{\{\s*secrets\.',
-        re.MULTILINE | re.DOTALL
-    )
     failed = []
     for name in EXPECTED_WORKFLOWS:
         content = _load(name)
@@ -126,7 +119,7 @@ def test_secrets_via_env_not_run():
             if re.search(r'\$\{\{\s*secrets\.', stripped) and stripped.startswith("run:"):
                 failed.append(f"{name}:{i}: run: 行に secrets が直接展開されています")
     assert not failed, "\n".join(failed)
-    print(f"  [PASS] secrets の直接 run: 展開なし確認")
+    print("  [PASS] secrets の直接 run: 展開なし確認")
 
 
 def test_pilot_publish_x_blocked_in_actions():
@@ -136,7 +129,7 @@ def test_pilot_publish_x_blocked_in_actions():
         "content-pilot-publish.yml に X 402 ブロッカー対応の説明がありません"
     assert 'ALLOW_REAL_X_POST: "true"' not in content and "ALLOW_REAL_X_POST: 'true'" not in content, \
         "content-pilot-publish.yml で ALLOW_REAL_X_POST=true が設定されています（禁止）"
-    print(f"  [PASS] content-pilot-publish.yml の X 実投稿ブロック確認")
+    print("  [PASS] content-pilot-publish.yml の X 実投稿ブロック確認")
 
 
 def test_pilot_publish_account_specific_secrets():
@@ -169,7 +162,8 @@ def test_threads_queue_worker_manual_only_and_safe():
     assert content.find("Queue worker dry-run") < content.find("Process queue"), \
         "実処理前の Queue worker dry-run が確認できません"
     assert "publish_x_post.py" not in content, "threads-queue-worker.yml が X publisher を呼んでいます"
-    assert '"beauty_account"' not in content, "threads-queue-worker.yml に beauty_account option が入っています"
+    assert '"beauty_account"' in content and "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT" in content, \
+        "threads-queue-worker.yml の Beauty option / account-specific gate が不足しています"
     assert "confirm_real_post" in content and "ALLOW_REAL_THREADS_POST" in content, \
         "real_post 安全確認が不足しています"
     assert "THREADS_ACCESS_TOKEN_NIGHT_SCOUT" in content and "GCP_SA_JSON_BASE64" in content, \

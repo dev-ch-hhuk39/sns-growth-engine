@@ -1,5 +1,22 @@
 # Source Registry Inventory
 
+## 2026-08-17 Owner Reference Source of Truth
+
+`config/source_accounts/owner_reference_sources_20260817.json` is the canonical owner-provided reference list. URLs are canonicalized, tracking query parameters are removed, and repeated handles are stored once.
+
+| account | X | YouTube | TikTok | Threads | total |
+|---|---:|---:|---:|---:|---:|
+| `beauty_account` | 6 | 9 | 7 | 0 | 22 |
+| `night_scout` | 8 | 7 | 0 | 8 | 23 |
+| `liver_manager` | 2 | 2 | 4 | 1 | 9 |
+| total | 16 | 18 | 11 | 9 | 54 |
+
+All 54 canonical URLs are present in `default_sources.json`. Six previously missing identities were added. Presence in this list grants reference analysis only; it never infers download, cut, upload or repost permission.
+
+The nine Threads sources use bounded read-only acquisition in this order: `threads_cli_public`, `threads_logged_out_graphql`, `threads_public_screen`, then `DEFERRED`. They may store exact individual-post text, URL and ordered media metadata. Physical media reuse remains permission-ledger gated.
+
+`beauty_account` keeps `target_account_id=beauty_account`, remains inactive with zero fetch-enabled rows, and is never renamed to `beauty_future`. X publishing remains disabled.
+
 ## 2026-08-11 runtime selection override
 
 - Night Scout X video primary: `@3j2c9q` priority 1,
@@ -18,9 +35,9 @@
 
 ## 2026-07-17 Current Production Inventory
 
-The source of truth is `config/source_accounts/default_sources.json`: 73 rows total. Fourteen owner-attested media sources are currently approved and explicitly allow-listed by `config/media_growth_engine.json` (`night_scout=9`, `liver_manager=5`). Permission evidence, approved rights, account targeting, revocation checks and bounded discovery remain mandatory; approval never authorizes X or beauty use.
+The runtime source of truth is `config/source_accounts/default_sources.json`: 82 rows total as of 2026-08-17. Fourteen owner-attested media sources remain separately allow-listed by `config/media_growth_engine.json` (`night_scout=9`, `liver_manager=5`). Reference identity and physical media permission are separate contracts.
 
-Five rows have `fetch_enabled=true` for the separate bounded text/reference collection path. This flag alone does not permit media download, cutting, Cloudinary upload or reposting. Media execution additionally requires `media_autopilot_enabled`, approved permission evidence, the media-engine allow-list, a real individual-video record and step-scoped environment/confirm gates.
+Fourteen rows have `fetch_enabled=true` for bounded text/reference collection, including all nine owner Threads references. This flag alone does not permit media download, cutting, Cloudinary upload or reposting. Media execution additionally requires `media_autopilot_enabled`, approved permission evidence, the media-engine allow-list, a real individual-video record and step-scoped environment/confirm gates.
 
 Current Sheets evidence: `source_posts=25`, `source_post_media=24`, `source_videos=69`, `video_transcripts=16`, `video_clip_candidates=20`, and `media_assets=12`. Uploaded generated-clip inventory is three per account; direct-reference inventory is one for Night Scout and five for Liver Manager. Discovery is bounded and subtitle burn-in is disabled.
 
@@ -40,17 +57,17 @@ Generated from `config/source_accounts/default_sources.json` on 2026-07-02. This
 
 ## Summary
 
-- Total source registry rows: 68
+- Total source registry rows: 82
 - Inventoried Threads/X/YouTube/TikTok/local rows shown below: 61
 - Platform counts: {"local": 1, "threads": 7, "tiktok": 9, "x": 16, "youtube": 28}
-- `fetch_enabled=true`: 0
+- `fetch_enabled=true`: 14
 - `clip_enabled=true`: 0
 - `media_pipeline_eligible=true`: 0
 - TODO/placeholders needing human URL or rights review: 5
 
 ## Autonomous Mode Source Use
 
-Autonomous mode does not bulk-enable the registry. `fetch_enabled=true` remains 0 in the registry by default. The autonomous loop selects only reviewed pilot source candidates at runtime:
+Autonomous mode does not bulk-enable physical media. The nine enabled Threads rows are bounded reference acquisition only; physical reuse remains separately permission-gated. The autonomous loop selects reviewed source candidates at runtime:
 
 - `src_ns_threads_required_001`
 - `src_ns_threads_required_002`
@@ -167,7 +184,7 @@ Use `config/source_accounts/owned_media_asset_template.json` and `docs/media-rig
 
 ## Production Pilot Candidates
 
-These are candidates only. `fetch_enabled=true` remains 0 until a human explicitly runs `prepare_pilot_sources.py --apply --confirm-pilot`.
+These are bounded reference candidates. Threads reference acquisition is enabled, but this does not authorize media download, cut, upload or repost.
 
 | account_id | source_id | platform | source_url | current_use |
 |---|---|---|---|---|

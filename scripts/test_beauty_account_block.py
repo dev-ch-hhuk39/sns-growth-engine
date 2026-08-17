@@ -32,9 +32,9 @@ def main() -> int:
         ("beauty no CTA", beauty["cta_type"] == "NONE"),
         ("beauty sources blocked", bool(beauty_sources) and all(str(r["blocked"]).lower() == "true" for r in beauty_sources)),
         ("beauty no media actions", all(str(r[k]).lower() == "false" for r in beauty_sources for k in ["allow_download", "allow_cut", "allow_upload"])),
-        ("queue worker blocks beauty", "beauty_account is blocked" in process_source),
+        ("queue worker has dedicated beauty gate", "beauty_publish_gate" in process_source and "BEAUTY_PRODUCTION_ENABLED" in process_source),
         ("refill blocks beauty", "beauty_account is draft_only" in refill_source),
-        ("workflow has no beauty option", '"beauty_account"' not in worker_workflow),
+        ("workflow beauty option remains explicitly gated", '"beauty_account"' in worker_workflow and "confirm_real_post" in worker_workflow),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

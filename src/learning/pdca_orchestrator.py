@@ -310,7 +310,7 @@ def _generate_next_jobs(
     account_id: str,
     platform: str,
 ) -> list[dict[str, Any]]:
-    """次回 generation_jobs 候補を PLANNED ステータスで生成する。"""
+    """次回 generation_jobs 候補を安全なレビュー状態で生成する。"""
     jobs: list[dict[str, Any]] = []
     content_comparison = analysis.get("content_type_comparison", {})
 
@@ -326,7 +326,7 @@ def _generate_next_jobs(
             "account_id": account_id,
             "platform": platform,
             "generation_mode": best_type,
-            "status": "PLANNED",
+            "status": "WAITING_REVIEW" if account_id == "beauty_account" else "PLANNED",
             "source": "pdca_orchestrator",
             "created_at": _now_jst(),
         })
@@ -362,7 +362,11 @@ class PDCAOrchestrator:
         Returns:
             分析結果・改善提案・次回jobs候補を含む辞書
         """
+        input_account_ids = sorted({str(row.get("account_id", "")) for row in results if row.get("account_id")})
         filtered = _filter_results(results, account_id, platform, days)
+        excluded_account_count = sum(
+            1 for row in results if account_id and row.get("account_id") != account_id
+        )
 
         content_comparison = _compare_content_types(filtered)
         content_route_comparison = _compare_content_routes(filtered)
@@ -396,6 +400,9 @@ class PDCAOrchestrator:
             "content_route_comparison": content_route_comparison,
             "hook_analysis": hook_analysis,
             "dropoff": dropoff,
+            "account_scope_status": "PASS" if account_id else "UNSCOPED",
+            "input_account_ids": input_account_ids,
+            "excluded_cross_account_result_count": excluded_account_count,
         }
 
         suggestions = _generate_improvement_suggestions(
@@ -422,6 +429,7 @@ class PDCAOrchestrator:
                 "improvement_suggestions は全て WAITING_REVIEW（自動適用禁止）",
                 "learning_rules.active は false のまま",
                 "next_generation_jobs は PLANNED（自動実行禁止）",
+                f"PDCA入力は account_id={account_id or 'UNSCOPED'} に分離",
             ],
             "created_at": _now_jst(),
         }

@@ -11,7 +11,6 @@ generation_jobs の各レコードに対してGemini APIを呼び出し、
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -280,7 +279,9 @@ def normalize_generated_draft(
     text_policy_status が FAIL の場合は status="WAITING_REVIEW" にする。
     """
     policy_status = str(generation_result.get("text_policy_status", "OK"))
-    if policy_status == "FAIL":
+    if account_id == "beauty_account":
+        draft_status = "WAITING_REVIEW"
+    elif policy_status == "FAIL":
         draft_status = "WAITING_REVIEW"
     else:
         draft_status = "DRAFT"

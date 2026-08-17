@@ -24,13 +24,10 @@ def main() -> int:
         row for row in registry if row["source_id"] == "src_lm_threads_user_me01_lsm"
     )
     policy = module.reference_only_permission(registered)
-    deferred = next(
-        row for row in blocked if row["source_id"] == "src_lm_threads_user_me01_lsm"
-    )
     checks = [
         ("me01 Threads reference remains registered", registered["source_id"] == "src_lm_threads_user_me01_lsm"),
-        ("deferred Threads source is not selected", "src_lm_threads_user_me01_lsm" not in ids),
-        ("deferred status is explicit", deferred["status"] == "DEFERRED_OSS_CANDIDATE"),
+        ("enabled Threads source is selected", "src_lm_threads_user_me01_lsm" in ids),
+        ("enabled Threads source is not blocked", all(row["source_id"] != "src_lm_threads_user_me01_lsm" for row in blocked)),
         ("reuse remains reference only", policy["rights_status"] == "reference_only"),
         ("permission never becomes approved", policy["permission_status"] == "reference_only"),
     ]

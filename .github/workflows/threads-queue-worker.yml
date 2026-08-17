@@ -12,6 +12,7 @@ on:
         options:
           - "night_scout"
           - "liver_manager"
+          - "beauty_account"
       mode:
         description: "dry_run validates only; real_post requires confirm_real_post=true"
         required: true
@@ -71,6 +72,8 @@ jobs:
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
       THREADS_APP_ID_LIVER_MANAGER: ${{ secrets.THREADS_APP_ID_LIVER_MANAGER }}
       THREADS_APP_SECRET_LIVER_MANAGER: ${{ secrets.THREADS_APP_SECRET_LIVER_MANAGER }}
+      THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: ${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}
+      THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -86,7 +89,7 @@ jobs:
 
       - name: Guard account and mode
         run: |
-          if [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ]; then
+          if [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ] && [ "$ACCOUNT_ID" != "beauty_account" ]; then
             echo "[BLOCKED] unsupported account"
             exit 1
           fi
@@ -125,6 +128,7 @@ jobs:
         env:
           PUBLISH_ENABLED: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
           ALLOW_REAL_THREADS_POST: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
+          BEAUTY_PRODUCTION_ENABLED: ${{ github.event.inputs.account_id == 'beauty_account' && github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
         run: |
           if [ "$MODE" = "real_post" ] && [ "$CONFIRM_REAL_POST" = "true" ]; then
             python3 scripts/process_threads_queue.py \

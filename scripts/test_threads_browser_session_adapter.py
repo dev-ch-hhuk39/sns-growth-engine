@@ -44,9 +44,9 @@ active_names = [
 checks = {
     "legacy adapter still parses parent": len(posts) == 1 and post.author_handle == "target",
     "legacy adapter retains ordered media": [item.media_type for item in post.media_items] == ["video", "image"],
-    "threads has no active acquisition route": not any(key.startswith("threads.") for key in routing["routes"]),
+    "threads public route is active": routing["routes"]["threads.profile_posts"]["primary"] == "threads_cli_public",
     "threads browser session is inactive": "threads_browser_session" not in active_names,
-    "threads playwright is inactive": all("playwright" not in name for name in active_names),
+    "public screen is final fallback": routing["routes"]["threads.profile_posts"]["fallbacks"][-1] == "threads_public_screen",
     "factory may retain legacy session adapter": "threads_browser_session" in router.adapters,
 }
 for name, passed in checks.items():

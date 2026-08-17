@@ -1,7 +1,17 @@
 {
   "schema_version": 1,
-  "notes": "Active reference discovery is TikTok/X/YouTube. Threads is DEFERRED_OSS_CANDIDATE by owner policy and has no active route. TikTok profile discovery uses the bounded public embed payload with gallery-dl as a metadata fallback. Physical media download is governed separately by media_platform_policy.",
+  "notes": "Active reference discovery is Threads/TikTok/X/YouTube. Threads uses pinned threads-cli crawler reads, logged-out persisted GraphQL, then public Playwright with a circuit breaker. Physical media reuse is governed separately by permission and media_platform_policy.",
   "routes": {
+    "threads.profile_posts": {
+      "primary": "threads_cli_public",
+      "fallbacks": [
+        "threads_logged_out_graphql",
+        "threads_public_screen"
+      ],
+      "shadow": [],
+      "cooldown_seconds": 900,
+      "circuit_failure_threshold": 3
+    },
     "tiktok.profile_posts": {
       "primary": "tiktok_public_embed",
       "fallbacks": [
@@ -81,7 +91,9 @@
     "tiktok_gallery_dl": "FALLBACK_METADATA_ONLY",
     "threads_browser_session": "DEPRECATED_INACTIVE",
     "threads_public_playwright": "DEPRECATED_INACTIVE",
-    "threads_public_screen": "DEPRECATED_INACTIVE",
+    "threads_cli_public": "PRIMARY_ANONYMOUS_CRAWLER_SSR",
+    "threads_logged_out_graphql": "FALLBACK_LOGGED_OUT_PERSISTED_QUERY",
+    "threads_public_screen": "FINAL_PUBLIC_PLAYWRIGHT_FALLBACK",
     "threads_public_http": "PRIMARY",
     "threads_oembed_detail": "PRIMARY_TOKENLESS_INDIVIDUAL_POST_DETAIL",
     "threads_search_index": "FALLBACK_CANDIDATE_DISCOVERY_REVALIDATED",

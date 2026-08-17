@@ -49,6 +49,7 @@ production_scheduled = {
     "media-growth-post-night-scout.yml",
     "media-growth-post-liver-manager.yml",
     "content-slot-recovery.yml",
+    "beauty-threads-production.yml",
 }
 actual_scheduled_publishers: set[str] = set()
 for name, src in workflows.items():

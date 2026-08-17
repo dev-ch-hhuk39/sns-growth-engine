@@ -1,55 +1,29 @@
 # beauty_account ロードマップ
 
-## 現状（2026-06-11）
+## コード準備済み
 
-**Phase 6.1: draft_only 設計・基盤構築**
+- [x] `beauty_account` のdraft-only設定
+- [x] オーナー指定22参照元のmapping
+- [x] personaとcanonical voice profile
+- [x] voice / public post validator
+- [x] 美容固有compliance
+- [x] 美容医療の別レビュー・レーン
+- [x] `beauty_account` 完全分離PDCA
+- [x] 5生成ルート
+- [x] 全候補 `WAITING_REVIEW`
+- [x] 初期1〜2件/日の予定枠
+- [x] credential名のプレースホルダー
+- [x] focused tests
 
-- [x] account_config JSON 作成（status=draft_only）
-- [x] seeds.py に beauty_account エントリ追加（active=FALSE）
-- [x] 禁止キーワード・テーマ設定
-- [x] thread_series_generator による mock 生成確認
-- [x] テストスクリプト作成・全 PASS 確認
-- [ ] thread_series 実生成（LLM実API）：ユーザー承認後
-- [ ] status = active への変更：条件達成後のみ
+## オーナー入力後
 
----
+1. Threads handleを設定
+2. Threads user IDをsecretへ設定
+3. OAuth credentialをsecretへ設定
+4. `check_beauty_activation_readiness.py` で `READY_FOR_CANARY` を確認
+5. WAITING_REVIEW候補を人間が確認
+6. bounded canaryを1件ずつ実行
+7. posted_results、read-after-write、metrics予約を確認
+8. 問題がない場合だけ1〜2件/日の本番スケジュールを有効化
 
-## ロードマップ
-
-### Phase 6.1（現在）: draft_only 基盤
-- account_config / seeds / thread_series 基盤を整備
-- mock LLM でサンプル生成・レビューを繰り返す
-- 禁止キーワード・テーマの検証
-
-### Phase 6.1b（将来）: コンテンツ設計確定
-- 10件以上のサンプル生成・人間レビュー
-- カテゴリ別の投稿パターン確定
-- CTAテキスト・LINE URL の準備
-
-### Phase 6.1c（将来）: active 化前の最終確認
-- 全サンプルの禁止キーワード・ブランドリスクチェック
-- ユーザー承認
-- status = "active" への変更
-
-### Phase 6.1d（将来）: 本格運用
-- 実LLM生成開始
-- Sheets への投稿管理
-- 投稿結果のラーニング
-
----
-
-## READY 化の禁止事項
-
-以下は自動実行・スクリプト自動化してはいけない:
-
-- beauty_account の status = "active" への変更（ユーザー承認必須）
-- beauty_account の queue.status = "READY" への変更
-- beauty_account の実投稿（X / Threads）
-- beauty_account の posted_results への保存
-
----
-
-## 更新履歴
-
-- Phase 6.1: 初期ロードマップ作成（2026-06-11）
-- Phase 8: 活性化条件CLIを追加（check_beauty_activation_readiness.py）。現時点で常にBLOCKED/NOT_READY。詳細は `docs/beauty-account-activation-checklist.md` 参照（2026-06-13）
+認証入力前にactive化、AUTO_READY、実投稿を行うことは禁止します。

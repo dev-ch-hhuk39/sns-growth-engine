@@ -19,7 +19,7 @@ def main() -> int:
         ("dry-run before process", content.find("Queue worker dry-run") < content.find("Process queue")),
         ("real env scoped", "PUBLISH_ENABLED:" in content and "ALLOW_REAL_THREADS_POST:" in content),
         ("no x publisher", "publish_x_post.py" not in content),
-        ("no beauty option", '"beauty_account"' not in content),
+        ("beauty option is explicit", '"beauty_account"' in content and "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT" in content),
         ("verify after", "Sheets verify after processing" in content),
         ("verify after real_post only", "mode == 'real_post'" in content and content.index("mode == 'real_post'") < content.index("Sheets verify after processing") + 200),
         ("account-specific secrets", "THREADS_ACCESS_TOKEN_NIGHT_SCOUT" in content and "THREADS_ACCESS_TOKEN_LIVER_MANAGER" in content),

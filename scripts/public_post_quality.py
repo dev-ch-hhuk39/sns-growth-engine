@@ -10,11 +10,17 @@ import difflib
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+import sys
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+from accounts.beauty_policy import beauty_compliance_validation  # noqa: E402
+
 RULES_FILE = ROOT / "config/post_generation_rules.json"
 VOICE_PROFILES_FILE = ROOT / "config/account_voice_profiles.json"
 
@@ -86,6 +92,7 @@ AGGRESSIVE_OR_RISKY_TERMS = [
 ACCOUNT_TERMS = {
     "night_scout": ("夜職", "キャバ", "店", "働く", "時給", "ノルマ", "担当", "相談", "出勤", "移籍"),
     "liver_manager": ("配信", "ライバー", "TikTok LIVE", "LIVE", "リスナー", "初見", "コメント", "事務所", "ギフト"),
+    "beauty_account": ("コスメ", "スキンケア", "肌", "メイク", "ファンデ", "髪", "ヘアケア", "美容家電", "サロン"),
 }
 
 
@@ -203,6 +210,8 @@ def _reader_value_score(text: str, account_id: str) -> int:
         score += 8
     if account_id == "liver_manager" and any(k in text for k in ("初見", "コメント", "配信", "リスナー", "空気")):
         score += 8
+    if account_id == "beauty_account" and any(k in text for k in ACCOUNT_TERMS["beauty_account"]):
+        score += 8
     return max(0, min(100, score))
 
 
@@ -229,8 +238,6 @@ def _business_polite_ending(sentence: str) -> bool:
 def voice_persona_validation(text: str, account_id: str) -> dict[str, Any]:
     """Measure account voice separately from subject-matter/account fit."""
     profile = canonical_voice_profile(account_id)
-    if account_id == "beauty_account":
-        return {"status": "BLOCKED", "score": 0, "reasons": ["blocked_account"], "details": {}}
     if not profile:
         return {
             "status": "BLOCKED",
@@ -328,20 +335,55 @@ def voice_persona_validation(text: str, account_id: str) -> dict[str, Any]:
         if stereotype_hits:
             reasons.append("voice_stereotyped_feminine_language")
             score -= 35
+    elif account_id == "beauty_account":
+        warm_markers = [str(item) for item in profile.get("warm_markers", []) if str(item)]
+        beauty_markers = [str(item) for item in profile.get("beauty_markers", []) if str(item)]
+        practical_markers = [str(item) for item in profile.get("practical_markers", []) if str(item)]
+        stereotypes = [str(item) for item in profile.get("forbidden_stereotypes", []) if str(item)]
+        ad_phrases = [str(item) for item in profile.get("forbidden_ad_phrases", []) if str(item)]
+        warm_hits = [item for item in warm_markers if item in value]
+        beauty_hits = [item for item in beauty_markers if item in value]
+        practical_hits = [item for item in practical_markers if item in value]
+        stereotype_hits = [item for item in stereotypes if item in value]
+        ad_hits = [item for item in ad_phrases if item in value]
+        details.update({
+            "warm_cadence_hits": warm_hits,
+            "beauty_context_hits": beauty_hits,
+            "practical_action_hits": practical_hits,
+            "forbidden_stereotype_hits": stereotype_hits,
+            "forbidden_ad_phrase_hits": ad_hits,
+        })
+        if not warm_hits:
+            reasons.append("voice_beauty_warmth_missing")
+            score -= 20
+        if not beauty_hits:
+            reasons.append("voice_beauty_context_missing")
+            score -= 25
+        if not practical_hits:
+            reasons.append("voice_beauty_practical_action_missing")
+            score -= 20
+        if stereotype_hits:
+            reasons.append("voice_stereotyped_feminine_language")
+            score -= 35
+        if ad_hits:
+            reasons.append("voice_beauty_advertising_phrase_present")
+            score -= 40
 
     formal_penalty = min(100, len(formal_hits) * 25 + (20 if value.count("ください") >= 2 else 0))
     conversational_hits = set(preferred_hits)
-    if account_id == "liver_manager":
+    if account_id in {"liver_manager", "beauty_account"}:
         conversational_hits.update(details.get("warm_cadence_hits", []))
     conversational_score = min(100, 55 + len(conversational_hits) * 12)
     feminine_warmth_score = 0
-    if account_id == "liver_manager":
+    if account_id in {"liver_manager", "beauty_account"}:
         feminine_warmth_score = min(
             100,
             50
             + len(details.get("warm_cadence_hits", [])) * 10
             + len(details.get("empathy_hits", [])) * 8
-            + len(details.get("next_stream_action_hits", [])) * 6,
+            + len(details.get("next_stream_action_hits", [])) * 6
+            + len(details.get("beauty_context_hits", [])) * 5
+            + len(details.get("practical_action_hits", [])) * 5,
         )
     details.update({
         "formal_consultant_penalty": formal_penalty,
@@ -367,8 +409,6 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
     """Validate the reader-facing voice from the central account profile."""
     profiles = load_post_generation_rules().get("persona_profiles", {})
     profile = profiles.get(account_id)
-    if account_id == "beauty_account":
-        return {"status": "BLOCKED", "score": 0, "reasons": ["blocked_account"], "details": {}}
     if not isinstance(profile, dict):
         return {"status": "PASS", "score": 80, "reasons": [], "details": {"profile": "not_configured"}}
 
@@ -534,6 +574,15 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
             0,
             emoji_count - emoji_max,
         ) * 5
+    elif account_id == "beauty_account":
+        action_hits = [term for term in profile.get("action_markers", []) if str(term) in text]
+        details.update({
+            "action_marker_count": len(action_hits),
+            "action_markers": action_hits,
+        })
+        if len(action_hits) < int(profile.get("minimum_action_markers", 1)):
+            reasons.append("persona_beauty_practical_action_missing")
+        score += min(10, len(action_hits) * 4)
 
     if voice["status"] != "VOICE_PERSONA_PASS":
         reasons.append("voice_persona_not_pass")
@@ -566,6 +615,11 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
     reader = _reader_value_score(public_text, account_id)
     persona = persona_validation(public_text, account_id)
     voice = persona.get("details", {}).get("voice_persona", voice_persona_validation(public_text, account_id))
+    beauty_compliance = (
+        beauty_compliance_validation(public_text)
+        if account_id == "beauty_account"
+        else {"status": "NOT_APPLICABLE", "requires_human_review": False, "blocked_reasons": []}
+    )
     fit = int(persona["score"])
     quality = min(100, int((natural + reader + fit + max(0, 100 - cta) + max(0, 100 - risk)) / 5))
 
@@ -593,6 +647,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("account_fit_below_threshold")
     if voice.get("status") != "VOICE_PERSONA_PASS":
         reasons.append("voice_persona_not_pass")
+    if beauty_compliance.get("status") == "BLOCKED":
+        reasons.extend(str(reason) for reason in beauty_compliance.get("blocked_reasons", []))
     reasons.extend(persona["reasons"])
     if quality < 85:
         reasons.append("quality_below_threshold")
@@ -617,6 +673,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
             "persona": persona,
         },
         "voice_persona_check": voice,
+        "beauty_compliance_check": beauty_compliance,
+        "requires_human_review": bool(beauty_compliance.get("requires_human_review")),
         "public_post_quality_score": quality,
         "reader_value_score": reader,
         "naturalness_score": natural,
@@ -1652,7 +1710,6 @@ def generate_production_post(
         output.setdefault("blocked_reasons", []).append("GENERATION_EMPTY_TEXT")
         return output
 
-    persona = persona_validation(text, account_id)
     output["public_post_text"] = text
     from generation_quality_gates import evaluate_generation_quality
     quality_topic = str(output.get("grounding_summary", {}).get("quality_topic", ""))

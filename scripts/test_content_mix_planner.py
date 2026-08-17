@@ -65,6 +65,7 @@ def test_different_seeds():
     # （全く同じ場合もゼロではないが極めて稀）
     all_types = {"single_post", "thread_series", "reference_based", "video_clip_reference"}
     assert all(m in all_types or m == "original_hypothesis" for m in plan1["selected_modes"])
+    assert all(m in all_types or m == "original_hypothesis" for m in plan2["selected_modes"])
 
 
 def test_content_types_mixed():
@@ -78,7 +79,7 @@ def test_content_types_mixed():
 def test_beauty_account_waiting_review():
     """beauty_account は draft_only なので全アイテムが WAITING_REVIEW。"""
     from generation.content_mix_planner import plan_content_mix
-    plan = plan_content_mix("beauty_account", "x", count=5, seed=42)
+    plan = plan_content_mix("beauty_account", "threads", count=5, seed=42)
     assert plan["safety_status"] == "DRAFT_ONLY"
     for item in plan["items"]:
         assert item["status"] == "WAITING_REVIEW", (
@@ -89,10 +90,10 @@ def test_beauty_account_waiting_review():
 def test_beauty_account_not_planned():
     """beauty_account のアイテムは PLANNED ステータスにならない。"""
     from generation.content_mix_planner import plan_content_mix
-    plan = plan_content_mix("beauty_account", "x", count=5, seed=42)
+    plan = plan_content_mix("beauty_account", "threads", count=5, seed=42)
     for item in plan["items"]:
         assert item["status"] != "PLANNED", (
-            f"beauty_account のアイテムが PLANNED になっています（禁止）"
+            "beauty_account のアイテムが PLANNED になっています（禁止）"
         )
         assert item["status"] != "READY", "beauty_account のアイテムが READY になっています（禁止）"
         assert item["status"] != "POSTED", "beauty_account のアイテムが POSTED になっています（禁止）"

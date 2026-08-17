@@ -61,6 +61,7 @@ def account_for(source: dict[str, Any]) -> str:
 
 def capability_for(platform: str) -> str:
     return {
+        "threads": "threads.profile_posts",
         "tiktok": "tiktok.profile_posts",
         "youtube": "youtube.channel_videos",
         "x": "x.profile_posts",

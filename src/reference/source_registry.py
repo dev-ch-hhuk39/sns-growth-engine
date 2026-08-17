@@ -63,6 +63,7 @@ COLLECTION_METHODS = [
     # Explicitly approved, bounded, read-only X API access. This method does
     # not enable X publishing or media reuse and requires --include-x at run time.
     "x_api_read_only",
+    "threads_cli_public",
 ]
 
 JST = timezone(timedelta(hours=9))

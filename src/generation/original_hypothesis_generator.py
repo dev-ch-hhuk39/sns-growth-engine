@@ -48,16 +48,16 @@ ACCOUNT_TONES = {
         ],
     },
     "beauty_account": {
-        "persona": "美容・エステ・スキンケア提案",
-        "style": "上品、専門的、信頼感重視",
+        "persona": "美容に詳しい、少しお姉さん寄りの女友達",
+        "style": "女性的で柔らかい口語。広告臭と効果断定を避け、1投稿1テーマ",
         "hook_patterns": [
-            "肌悩みを解決した方法",
-            "美容のプロが教えるケアの基本",
-            "毎日続けるだけで変わる習慣",
+            "スキンケアを増やす前に見てほしいこと",
+            "コスメ選びで意外と見落としやすいポイント",
+            "メイクがしっくりこない日にまず見直すところ",
         ],
         "cta_patterns": [
-            "詳しくはプロフィールへ",
-            "気になる方はコメントください",
+            "", "", "", "", "", "", "", "", "",
+            "あとで見返せるように保存してみてね",
         ],
     },
 }
@@ -180,7 +180,7 @@ class OriginalHypothesisGenerator:
                 "platform": platform,
                 "account_id": account_id,
                 **draft,
-                "status": "DRAFT",
+                "status": "WAITING_REVIEW" if account_id == "beauty_account" else "DRAFT",
                 "generation_mode": "original_hypothesis",
                 "safety_checked": True,
             })
@@ -213,8 +213,8 @@ class OriginalHypothesisGenerator:
         posts = [
             f"🧵 {hook}\n\n{hypothesis or topic}について詳しく解説します。",
             f"1/ まず最初に知っておくべきこと：\n\n{topic}では○○が最も重要です。",
-            f"2/ 実践方法：\n\n・ステップ1\n・ステップ2\n・ステップ3",
-            f"3/ よくある間違い：\n\n✗ こういう方が多いですが...\n✓ 正しくはこうします。",
+            "2/ 実践方法：\n\n・ステップ1\n・ステップ2\n・ステップ3",
+            "3/ よくある間違い：\n\n✗ こういう方が多いですが...\n✓ 正しくはこうします。",
             f"4/ まとめ：\n\n{cta}",
         ]
         return {
@@ -266,7 +266,7 @@ class OriginalHypothesisGenerator:
                 "platform": platform,
                 "account_id": account_id,
                 **draft_content,
-                "status": "DRAFT",
+                "status": "WAITING_REVIEW" if account_id == "beauty_account" else "DRAFT",
                 "generation_mode": "original_hypothesis",
                 "safety_checked": True,
                 "mock": True,

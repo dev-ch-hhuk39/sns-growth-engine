@@ -65,8 +65,9 @@ def adapter_status() -> dict[str, str]:
         "gallery_dl": "installed" if shutil.which("gallery-dl") else "not_installed",
         "agent_reach": "installed" if shutil.which("agent-reach") else "optional_not_installed",
         "cli_anything": "installed" if shutil.which("cli-anything") else "optional_not_installed",
-        "threads_public_og": "wired",
-        "threads_public_screen": "wired",
+        "threads_cli_public": "installed" if shutil.which("th") else "not_installed",
+        "threads_logged_out_graphql": "wired",
+        "threads_public_screen": "wired_final_fallback",
         "x_fetch": "bounded_read_only_with_explicit_include_x",
     }
 
@@ -145,15 +146,37 @@ def discover_threads_post_urls(account_url: str, *, limit: int) -> dict[str, Any
 
 
 def fetch_threads_account_posts(src: dict[str, Any], *, limit: int) -> dict[str, Any]:
-    """Fail closed: Threads reference acquisition is deferred by owner policy."""
-    del src, limit
-    return {
-        "status": "DEFERRED_OSS_CANDIDATE",
-        "rows": [],
-        "reason": "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN",
-        "backend": "",
-        "fallback_used": False,
-    }
+    """Use the shared three-stage public Threads router without media download."""
+    try:
+        from acquisition.factory import build_router
+
+        routed = build_router().route("threads.profile_posts", src, limit=min(5, limit))
+        rows = [
+            {
+                "post_url": post.canonical_post_url,
+                "external_post_id": post.external_post_id,
+                "text": post.original_post_text,
+                "published_at": post.published_at,
+                "media_urls": [item.original_media_url for item in post.media_items],
+                "media_order": [item.media_index for item in post.media_items],
+            }
+            for post in routed.posts
+        ]
+        return {
+            "status": "FETCHED",
+            "rows": rows,
+            "reason": "",
+            "backend": routed.backend_name,
+            "fallback_used": routed.fallback_used,
+        }
+    except Exception as exc:
+        return {
+            "status": "DEFERRED",
+            "rows": [],
+            "reason": str(exc).replace("\n", " ")[:240],
+            "backend": "",
+            "fallback_used": False,
+        }
 
 
 def plan_x_fetch_adapter(src: dict[str, Any], *, include_x: bool) -> dict[str, Any]:

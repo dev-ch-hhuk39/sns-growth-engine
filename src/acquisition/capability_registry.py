@@ -119,7 +119,6 @@ class CapabilityRegistry:
             raise ValueError(f"backend_capability_mismatch:{backend_id}:{route_capability}")
         if (
             backend.role not in FALLBACK_ROLES
-            or backend.requires_browser
             or backend.requires_external_service
             or not backend.read_only
             or backend.bounded_limit <= 0

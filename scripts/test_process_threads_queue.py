@@ -25,7 +25,7 @@ def main() -> int:
         ("waiting_review not eligible", "WAITING_REVIEW" not in mod.ELIGIBLE_STATUSES),
         ("planned not eligible", "PLANNED" not in mod.ELIGIBLE_STATUSES),
         ("final statuses skipped", {"POSTED", "PROCESSING", "FAILED", "POSTED_SAVE_FAILED"}.issubset(mod.FINAL_OR_LOCKED_STATUSES)),
-        ("beauty blocked", "beauty_account" in mod.BEAUTY_BLOCKED),
+        ("beauty has dedicated production gate", "beauty_publish_gate" in source and "BEAUTY_PRODUCTION_ENABLED" in source),
         ("threads only selector", 'platform != "threads"' in source),
         ("real requires confirm", "--confirm-real-post required" in source),
         ("real requires env flags", "PUBLISH_ENABLED" in source and "ALLOW_REAL_THREADS_POST" in source),

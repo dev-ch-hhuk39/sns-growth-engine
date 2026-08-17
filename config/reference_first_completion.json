@@ -1,15 +1,9 @@
 {
   "schema_version": 1,
   "managed_accounts": ["night_scout", "liver_manager"],
-  "active_acquisition_platforms": ["x", "youtube", "tiktok"],
-  "reference_priority": ["tiktok", "x", "youtube"],
-  "deferred_reference_acquisition": {
-    "threads": {
-      "status": "DEFERRED_OSS_CANDIDATE",
-      "reason": "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN",
-      "future_reenable_model": "Owner supplies an approved GitHub/OSS backend candidate; bounded read-only evidence, capability registration, and safety tests must pass before an active route is added."
-    }
-  },
+  "active_acquisition_platforms": ["threads", "x", "youtube", "tiktok"],
+  "reference_priority": ["threads", "tiktok", "x", "youtube"],
+  "deferred_reference_acquisition": {},
   "physical_media_providers": {"x": "yt_dlp", "youtube": "yt_dlp", "tiktok": "public_embed_direct_http"},
   "physical_media_evidence": {
     "youtube": {
@@ -84,6 +78,7 @@
       "production-autopilot-aftercare.yml",
       "production-integrity-reconcile.yml",
       "refresh-threads-tokens.yml",
+      "beauty-threads-production.yml",
       "seed-approved-media-permissions.yml",
       "threads-queue-worker.yml"
     ]

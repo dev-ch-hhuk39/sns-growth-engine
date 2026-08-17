@@ -5,6 +5,7 @@ from enum import StrEnum
 
 
 class FailureCategory(StrEnum):
+    DEFERRED = "DEFERRED"
     TOOL_NOT_INSTALLED = "TOOL_NOT_INSTALLED"
     TOOL_UNHEALTHY = "TOOL_UNHEALTHY"
     UNSUPPORTED_PLATFORM = "UNSUPPORTED_PLATFORM"
@@ -42,6 +43,8 @@ NON_FALLBACK_FAILURES = {
 
 def classify_failure(platform: str, reason: str) -> FailureCategory:
     text = str(reason or "").lower()
+    if platform == "threads" and text.startswith("all_backends_failed:"):
+        return FailureCategory.DEFERRED
     markers = (
         (("not_installed", "not found", "missing_tool"), FailureCategory.TOOL_NOT_INSTALLED),
         (("unsupported_platform",), FailureCategory.UNSUPPORTED_PLATFORM),

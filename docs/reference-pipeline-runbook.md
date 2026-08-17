@@ -1,12 +1,17 @@
 # Reference Pipeline Runbook
 
-## Threads reference-media route - 2026-08-10
+## Threads reference acquisition route - 2026-08-17
 
-The production path is now `bounded profile discovery -> individual /post/ -> same-parent text and ordered media -> permission lookup -> direct HTTPS/individual-post fallback -> Cloudinary -> grounded new caption -> WAITING_REVIEW`. Night Scout and Liver Manager share this path; topic fit and persona are account-specific.
+The bounded reference path is `threads-cli public crawler -> logged-out persisted GraphQL -> public Playwright -> DEFERRED`. Night Scout and Liver Manager share this route; topic fit and persona remain account-specific.
 
-The preferred backend is `threads_browser_session` when `THREADS_BROWSER_STORAGE_STATE_B64` or a local storage-state path is explicitly configured. It scopes text, video and images to one rendered individual-post root. If no session is configured, routing continues to public screen/Playwright/HTTP adapters. A missing session is not reported as successful acquisition.
+- Primary: pinned `tamnd/threads-cli` v0.1.1, crawler/server-rendered public data, no login, token or browser.
+- Fallback 1: logged-out persisted query for profile posts. It uses no Meta API credential or browser state.
+- Fallback 2: public Playwright screen extraction. Structured data and individual `/post/` links are preferred; the router circuit opens after three consecutive backend failures for 900 seconds.
+- Exhaustion: `DEFERRED`. Empty or inaccessible public profiles are not reported as tool success and do not block other sources.
 
-Live evidence before this change: public Playwright saved three Liver Manager individual posts and three same-parent media children; the Night Scout run found four already-known individual posts and skipped them as duplicates. No video child was fabricated. Reference-only rows continue to support text/structure analysis, but direct download/repost requires a separate approved `media_permissions` row.
+The normalized record always requires an exact-author individual post URL. Text and ordered media metadata remain attached to the same `source_post_id`; quote-post media is excluded. Reference-only rows support text, hook, tone and topic analysis. Media download, Cloudinary upload or repost still requires a separate approved `media_permissions` record.
+
+Install the pinned primary locally with `scripts/install_threads_cli.sh`. GitHub acquisition workflows install the same release and verify its SHA-256 before use.
 
 Date: 2026-06-27
 
@@ -67,8 +72,8 @@ python3 scripts/collect_source_posts.py --platform threads --account-id all --dr
   --fetch-real
 ```
 
-- 本番source registryでは `fetch_enabled=true` が0件のため、標準dry-runは `selected_count=0` が正常。
-- 小さく試す場合は `--source-url` か、レビュー済みsourceを1〜2件だけ `fetch_enabled=true` にする。大量ONは禁止。
+- 2026-08-17のowner Threads 9アカウントは `fetch_enabled=true`。一回の取得は最大5投稿に制限される。
+- `--verify-network --dry-run` は公開ページ取得と正規化だけを行い、Sheetsには書かない。大量巡回や無制限scrapingは行わない。
 - Xは既定OFF。`manual_only=true` のX sourceはこの工程ではfetchしない。
 - raw payloadはtoken/cookie/secret系キーをredactしたうえでplanに含める。第三者media本体はdownloadしない。
 - 保存先は `source_account_posts`。`post_url` 重複はdry-run/applyともskipする。

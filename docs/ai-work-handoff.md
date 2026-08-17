@@ -7830,3 +7830,31 @@ Beautyは現在`draft_only`で、generator / AUTO_READY / publisher / workflows�
 上記入力だけで既存2accountへ影響は出ないが、実稼働には入力確定後、Beauty専用persona validator、
 account allowlist、credential mapping、独立workflow、metrics / `account:beauty_account` PDCA scopeを追加し、
 dry-runとbounded canaryを通してからblockを解除する。単なるsource追加だけで自動投稿を有効化しない。
+## 2026-08-17 Owner source registry and Threads three-stage acquisition
+
+- Canonical owner list: `config/source_accounts/owner_reference_sources_20260817.json`, 54 unique normalized references (`beauty_account=22`, `night_scout=23`, `liver_manager=9`). All are represented in `default_sources.json`; six missing identities were added.
+- Threads reference route: pinned `threads-cli` public crawler -> logged-out persisted GraphQL -> public Playwright -> `DEFERRED`. Limit is five posts per source, exact author and individual `/post/` are mandatory, media order stays under the same parent, and quote media is excluded.
+- Live read-only proof: 7/9 profiles returned 14 individual posts and 22 ordered media metadata items. `@kyaba_rui_scout` and `@chiikawan400` exposed no public posts and are safely `DEFERRED`.
+- Reference presence does not infer media reuse rights. No Sheets, Cloudinary, download, posting or Beauty activation was performed. `beauty_account` remains the target ID and inactive; X posting remains disabled.
+# Beauty account preparation (2026-08-17)
+
+- `beauty_account` は `draft_only` のまま、20〜30代女性向けの美容・コスメアカウントとして再定義した。
+- オーナー指定22参照元は `config/source_accounts/owner_reference_sources_20260817.json` に固定。X 6 / YouTube 9 / TikTok 7。
+- persona、canonical voice、beauty compliance、美容医療の別レビュー、5生成ルートを実装。
+- 5ルートはすべて `WAITING_REVIEW`。AUTO_READY、scheduled publish、実投稿は無効。
+- PDCAは `account_id=beauty_account` のMEASURED結果だけを使用し、他アカウントを除外する。
+- 初期予定は1〜2件/日。認証情報入力後にcanaryを行い、成功後だけ本番スケジュールを有効化する。
+- 残るオーナー入力: Threads handle、Threads user ID、OAuth credential。
+
+## 2026-08-17 Beauty Threads credentials and scheduled review pipeline
+
+- GitHub Environment `production`に`THREADS_HANDLE_BEAUTY_ACCOUNT`、`THREADS_USER_ID_BEAUTY_ACCOUNT`、
+  `THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT`を登録する。secret値はリポジトリやログへ出さない。
+- `Refresh Threads Tokens`はBeautyを含む全3accountを毎週refreshし、`GH_SECRET_WRITE_TOKEN`で更新後の長期トークンを
+  account別secretへ書き戻す。
+- `Beauty Threads Production`は09:30 / 18:30 JSTにGeminiで原文候補を作り、必ず`WAITING_REVIEW`でSheetsへ保存する。
+  11:30 / 20:30 JSTのpublish枠は、人間が`READY`にした候補のみを1件処理する。
+- 現在は`draft_only`、`scheduled_publish_enabled=false`、`real_post_enabled=false`を維持。credential投入後に
+  dry-runとbounded canaryを実行し、read-after-write成功後だけ本番設定PRと`BEAUTY_ACTIVATION_APPROVED=true`を適用する。
+- Beauty候補はAUTO_READYしない。美容医療は別レーンで全件人間レビュー。PDCAは`account_id=beauty_account`の
+  `MEASURED`のみを使い、Night Scout / Liver Managerと混ぜない。

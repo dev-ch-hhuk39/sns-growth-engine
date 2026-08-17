@@ -99,7 +99,7 @@ class VideoReferenceGenerator:
             "account_id": account_id,
             "text": post_text,
             "char_count": len(post_text),
-            "status": "DRAFT",
+            "status": "WAITING_REVIEW" if is_beauty else "DRAFT",
             "generation_mode": generation_mode,
             "generation_model": rewritten.get("generation_model", ""),
             "generation_strategy": rewritten.get("generation_strategy", "source_grounded_gemini_v1"),
