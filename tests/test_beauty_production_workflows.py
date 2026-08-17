@@ -114,6 +114,18 @@ def test_beauty_prompt_encodes_account_fit_contract() -> None:
     assert "自然な文脈で必ず入れ" in retry_prompt
 
 
+def test_beauty_safety_fallbacks_all_pass_public_validator() -> None:
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    for topic, text in prepare.SAFE_TOPIC_FALLBACKS.items():
+        candidate = prepare.build_beauty_review_candidate(
+            "new_text_generation",
+            public_post_text=text,
+            sequence_number=1,
+        )
+        assert candidate["public_post_validator"]["status"] == "PASS", topic
+        assert candidate["beauty_compliance"]["status"] == "PASS", topic
+
+
 def test_beauty_secrets_are_referenced_by_name_only() -> None:
     _, beauty = _workflow("beauty-threads-production.yml")
     assert "${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}" in beauty
