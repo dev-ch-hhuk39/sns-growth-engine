@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 import sys
 from pathlib import Path
 
@@ -43,6 +42,11 @@ def test_beauty_workflow_prepares_then_publishes_only_reviewed_ready_rows() -> N
     assert "ALLOW_REAL_X_POST: \"false\"" in text
     assert "ALLOW_MEDIA_POSTS: \"false\"" in text
     assert "auto_approve_queue.py" not in text
+    assert "Repository-wide Sheets diagnostic" in text
+    assert "continue-on-error: true" in text
+    assert "Strict Sheets verify before publish" in text
+    assert "Strict Sheets verify after publish" in text
+    assert "queue-level read-after-write" in text
 
 
 def test_token_refresh_workflow_includes_beauty_without_logging_token() -> None:
