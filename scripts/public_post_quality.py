@@ -639,6 +639,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("too_short")
     if len(public_text) > 520:
         reasons.append("too_long")
+    if account_id == "beauty_account" and len(public_text) > 320:
+        reasons.append("beauty_text_too_long")
     if natural < 80:
         reasons.append("naturalness_below_threshold")
     if reader < 80:
