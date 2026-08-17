@@ -46,6 +46,17 @@ TOPIC_CONTEXT_TERMS = {
     TOPICS[7]: ("メイク", "肌"),
 }
 
+SAFE_TOPIC_FALLBACKS = {
+    TOPICS[0]: "スキンケアを一度に全部変えると、肌に合うものが分かりにくくなるよね。\n\n気になるアイテムが複数あっても、まずは一つだけ試すと比べやすい。使い始めた日をメモして、その他のケアはいつも通りにする。\n\n買い足す前に、今のスキンケアの役割を一度整理してみて。",
+    TOPICS[1]: "夕方にベースメイクが崩れると、ファンデを足したくなるよね。\n\nでも、厚く重ねる前に、朝に使う量を一度見直すと比べやすい。預や小鼻は薄く、必要な部分だけ少量ずつ。\n\nまずは使うコスメを変えず、塗る量だけ変えて、夕方の状態を確認してみて。",
+    TOPICS[2]: "ヘアケアを買い足しても髪の扱いにくさが気になる時は、乾かし方を先に見直すのも一つ。\n\nタオルで強くこすらずに水気を取って、ドライヤーは根元から。毛先は長く熱を当てすぎないようにする。\n\nまずはアイテムを変えず、乾かす順番だけ比べてみて。無理に買い足さなくて大丈夫。",
+    TOPICS[3]: "美容家電を選ぶ時は、機能の多さより、使う時間が決まっているかを見た方が続けやすいよね。\n\n朝のメイク前なのか、夜のスキンケア後なのか。毎日の流れに入らないものは、多機能でも出番が減りがち。\n\nまずは説明書で使えるタイミングと所要時間を確認して、無理なく続けられる一台か比べてみて。",
+    TOPICS[4]: "新しいコスメが気になる時ほど、まず手持ちのメイクアイテムを役割ごとに分けてみて。\n\n下地、ファンデ、血色を足すもの、質感を変えるもの。同じ役割が重なっていると、買っても使う場面が少なくなりやすい。\n\n次に買う前に、今足りない役割を一つだけ決めてみて。焦って買い足さなくて大丈夫。",
+    TOPICS[5]: "サロンを選ぶ時、仕上がり写真だけでは、次の日に自分で髪を整えられるかまでは分からないよね。\n\n普段のケア時間、使っているアイテム、苦手なセットを伝えた時に、家での再現方法まで説明してくれるかを確認する。\n\n予約前に、普段の手入れまで相談できるか見てみて。",
+    TOPICS[6]: "肌がゆらいでいると感じる日は、スキンケアをたくさん足すより、使っているものを一度整理する。\n\n新しいアイテムを重ねると、どれが合っているか比べにくい。まずは普段のケアに戻して、使う順番と量を確認してみて。\n\n強い違和感が続く時は、無理に試さず専門家へ相談してね。",
+    TOPICS[7]: "メイク前の保湿は、量だけでなく、なじむまでの時間も分けて見ると比べやすい。\n\n肌がべたついたまますぐベースメイクを重ねると、塗る量が多くなりがち。保湿を薄くなじませて、少し待ってからメイクを始める。\n\nまずは一週間、使うアイテムを変えずに待ち時間だけ見直してみて。",
+}
+
 
 def _slot_identity(slot_index: int, now: datetime | None = None) -> tuple[str, str, str]:
     current = (now or datetime.now(JST)).astimezone(JST)
@@ -98,6 +109,9 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
             temperature=0.65,
         )
         text = str(response.get("public_post_text", "")).strip()
+        if not text:
+            blocked = ["empty_llm_response"]
+            continue
         candidate = build_beauty_review_candidate(
             "new_text_generation",
             public_post_text=text,
@@ -115,7 +129,24 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
                 "generation_attempt": attempt,
             })
             return candidate
-    return {"status": "QUALITY_EXHAUSTED", "blocked_reasons": sorted(set(blocked))}
+    fallback = build_beauty_review_candidate(
+        "new_text_generation",
+        public_post_text=SAFE_TOPIC_FALLBACKS[topic],
+        sequence_number=sequence_number,
+    )
+    fallback_blocked = list(fallback["public_post_validator"].get("blocked_reasons", []))
+    fallback_blocked.extend(fallback["beauty_compliance"].get("blocked_reasons", []))
+    if not fallback_blocked and str(fallback["review_lane"]).upper() == "BEAUTY_STANDARD":
+        fallback.update({
+            "status": "WAITING_REVIEW",
+            "queue_id": queue_id,
+            "slot_id": slot_id,
+            "business_date_jst": business_date,
+            "primary_topic": topic,
+            "generation_attempt": "safety_fallback",
+        })
+        return fallback
+    return {"status": "QUALITY_EXHAUSTED", "blocked_reasons": sorted(set(blocked + fallback_blocked))}
 
 
 def queue_row(candidate: dict) -> dict:
