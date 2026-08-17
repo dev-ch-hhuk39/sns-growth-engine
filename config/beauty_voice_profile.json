@@ -5,14 +5,16 @@
   "display_name": "Chadult Beauty Voice",
   "derivation_policy": "aggregate_style_features_only_never_copy_a_person",
   "voice_reference_source_ids": [
+    "src_ba_tt_cand_001",
+    "src_ba_tt_cand_002",
+    "src_ba_tt_cand_003",
+    "src_ba_tt_cand_004",
+    "src_ba_tt_cand_005",
+    "src_ba_tt_cand_006",
+    "src_ba_tt_cand_007",
     "src_ba_x_cand_001",
     "src_ba_x_cand_002",
-    "src_ba_x_cand_003",
-    "src_ba_x_cand_004",
-    "src_ba_x_cand_005",
-    "src_ba_x_cand_006",
-    "src_ba_tt_cand_001",
-    "src_ba_tt_cand_006"
+    "src_ba_x_cand_003"
   ],
   "bounded_reference_collection": {
     "enabled": true,
@@ -20,7 +22,7 @@
     "x_read_only": true,
     "max_posts_per_source_scan": 30,
     "max_new_posts_per_source_per_run": 10,
-    "max_total_new_posts_per_run": 30,
+    "max_total_new_posts_per_run": 50,
     "allow_media_reuse": false,
     "allow_download": false,
     "allow_cut": false,

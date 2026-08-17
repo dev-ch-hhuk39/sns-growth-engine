@@ -48,7 +48,11 @@ def main() -> None:
     assert collection["allow_media_reuse"] is False
     assert collection["allow_x_post"] is False
     assert collection["max_new_posts_per_source_per_run"] == 10
-    assert collection["max_total_new_posts_per_run"] == 30
+    assert collection["max_total_new_posts_per_run"] == 50
+    voice_ids = set(profile["voice_reference_source_ids"])
+    assert len(voice_ids) == 10
+    assert len({source_id for source_id in voice_ids if "_tt_" in source_id}) == 7
+    assert len({source_id for source_id in voice_ids if "_x_" in source_id}) == 3
 
     good = beauty_style_fingerprint_validation(GOOD)
     assert good["status"] == "VOICE_PERSONA_PASS", good
@@ -190,7 +194,6 @@ def main() -> None:
     legacy = [row for row in default_sources if row.get("legacy_status") == "LEGACY_QUARANTINED_NOT_IN_OWNER_MANIFEST"]
     assert len(legacy) == 3 and all(not row.get("target_account_ids") for row in legacy)
 
-    voice_ids = set(profile["voice_reference_source_ids"])
     selected_sources_rows, blocked = selected_sources("beauty_account", "all", reference_only=True)
     assert {row["source_id"] for row in selected_sources_rows} == voice_ids
     assert blocked == []
