@@ -108,7 +108,13 @@ jobs:
             done
           fi
 
-      - name: Verify Sheets
+      - name: Repository-wide Sheets diagnostic
+        if: env.ACTION == 'dry_run' || env.ACTION == 'prepare'
+        continue-on-error: true
+        run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
+
+      - name: Strict Sheets verify before publish
+        if: env.ACTION == 'publish'
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
 
       - name: Preview candidate
@@ -148,6 +154,7 @@ jobs:
         if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED != 'true'
         run: echo "[NO_POST] Beauty activation is not approved; candidate preparation remains available."
 
-      - name: Verify Sheets after write
-        if: env.ACTION == 'prepare' || env.ACTION == 'publish'
+      # Candidate preparation performs its own queue-level read-after-write.
+      - name: Strict Sheets verify after publish
+        if: env.ACTION == 'publish'
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
