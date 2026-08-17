@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from generation.beauty_review_pipeline import ROUTES, select_beauty_route  # noqa: E402
+import prepare_beauty_review_candidates as beauty_prepare  # noqa: E402
 from generation.beauty_voice import (  # noqa: E402
     beauty_style_fingerprint_validation,
     build_voice_corpus_summary,
@@ -150,9 +152,39 @@ def main() -> None:
     pipeline = json.loads((ROOT / "config/beauty_account_pipeline.json").read_text(encoding="utf-8"))
     assert pipeline["status"] == "review_required_production"
     assert pipeline["candidate_status"] == "WAITING_REVIEW"
+    assert pipeline["emergency_static_fallback_enabled"] is False
     assert pipeline["auto_ready_enabled"] is False
     assert set(pipeline["generation_routes"]) == set(ROUTES)
     assert beauty_production_configured() is True
+
+    original_route = beauty_prepare.select_beauty_route
+    original_context = beauty_prepare.load_route_context
+    original_gemini = beauty_prepare.call_gemini_json
+    original_key = os.environ.get("GEMINI_API_KEY")
+    try:
+        beauty_prepare.select_beauty_route = lambda _sequence: "new_text_generation"
+        beauty_prepare.load_route_context = lambda _route: {
+            "status": "PASS",
+            "source_ids": [],
+            "voice_corpus": {"status": "READY", "source_account_count": 5, "post_count": 50},
+        }
+        beauty_prepare.call_gemini_json = lambda *_args, **_kwargs: {
+            "public_post_text": "美容の話です。",
+            "primary_topic": "美容",
+        }
+        os.environ["GEMINI_API_KEY"] = "focused-test-key"
+        exhausted = beauty_prepare.generate_candidate(slot_index=0, sequence_number=1)
+        assert exhausted["status"] == "QUALITY_EXHAUSTED", exhausted
+        assert exhausted["static_fallback_used"] is False
+        assert exhausted["generation_route"] == "new_text_generation"
+    finally:
+        beauty_prepare.select_beauty_route = original_route
+        beauty_prepare.load_route_context = original_context
+        beauty_prepare.call_gemini_json = original_gemini
+        if original_key is None:
+            os.environ.pop("GEMINI_API_KEY", None)
+        else:
+            os.environ["GEMINI_API_KEY"] = original_key
 
     media_config = json.loads((ROOT / "config/media_growth_engine.json").read_text(encoding="utf-8"))
     assert "beauty_account" in media_config["allowed_target_account_ids"]
