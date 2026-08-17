@@ -196,6 +196,14 @@ def main() -> None:
     assert blocked == []
     assert all(row.get("rights_policy") == "reference_only" for row in selected_sources_rows)
     assert all(row.get("can_reuse_media") is False for row in selected_sources_rows)
+    assert all(row.get("active") is True for row in selected_sources_rows)
+    assert all(row.get("fetch_enabled") is True for row in selected_sources_rows)
+    assert all(row.get("allow_network_fetch") is True for row in selected_sources_rows)
+    assert all(
+        row.get("x_read_only") is True
+        for row in selected_sources_rows
+        if row.get("source_platform") == "x"
+    )
     selected_media_rows, _ = selected_sources("beauty_account", "all", reference_only=False)
     assert selected_media_rows == []
     account_rows, _video_rows = source_rows()

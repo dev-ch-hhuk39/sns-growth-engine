@@ -136,6 +136,17 @@ def selected_sources(
             # Reference acquisition never grants reuse rights. It is limited
             # to sources that were explicitly enabled for bounded fetching.
             if truthy(source.get("fetch_enabled")) or is_beauty_voice_source:
+                if is_beauty_voice_source:
+                    source = {
+                        **source,
+                        # Runtime-only adapter flags. The Voice Corpus policy
+                        # is the authority for these eight IDs; no permission
+                        # or media-reuse fields are promoted.
+                        "active": True,
+                        "fetch_enabled": True,
+                        "allow_network_fetch": True,
+                        "x_read_only": platform == "x",
+                    }
                 selected.append(source)
             continue
         if platform == "x" and source.get("x_video_candidate_enabled") is not True:
