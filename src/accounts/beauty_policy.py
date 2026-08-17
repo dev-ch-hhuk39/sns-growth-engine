@@ -49,6 +49,18 @@ SALES_OR_PRESSURE_TERMS = (
     "限定価格",
 )
 
+FABRICATED_EXPERIENCE_TERMS = (
+    "私も前は",
+    "私も昔",
+    "私もそうだった",
+    "私もつい",
+)
+
+UNVERIFIED_USAGE_TERMS = (
+    "シートマスクの上から",
+    "化粧水をつけるついでに",
+)
+
 ALLOWED_CTA_MARKERS = {
     "save": ("保存", "見返"),
     "like": ("いいね",),
@@ -67,6 +79,8 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
     medical_hits = [term for term in MEDICAL_TERMS if term in value]
     prohibited_hits = [term for term in PROHIBITED_CLAIMS if term in value]
     pressure_hits = [term for term in SALES_OR_PRESSURE_TERMS if term in value]
+    fabricated_hits = [term for term in FABRICATED_EXPERIENCE_TERMS if term in value]
+    unverified_usage_hits = [term for term in UNVERIFIED_USAGE_TERMS if term in value]
     cta_hits = {
         cta_type: [term for term in markers if term in value]
         for cta_type, markers in ALLOWED_CTA_MARKERS.items()
@@ -82,6 +96,12 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
         blocked_reasons.append("beauty_multiple_cta_types")
     if "!" in value or "！" in value:
         blocked_reasons.append("beauty_exclamatory_ad_tone")
+    if "ねぇ、みんな" in value or "ねぇ、みんな" in value:
+        blocked_reasons.append("beauty_overfamiliar_opening")
+    if fabricated_hits:
+        blocked_reasons.append("beauty_fabricated_personal_experience")
+    if unverified_usage_hits:
+        blocked_reasons.append("beauty_unverified_product_usage")
 
     requires_medical_review = bool(medical_hits)
     status = "BLOCKED" if blocked_reasons else (
@@ -96,6 +116,8 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
         "medical_term_hits": medical_hits,
         "prohibited_claim_hits": prohibited_hits,
         "sales_or_pressure_hits": pressure_hits,
+        "fabricated_experience_hits": fabricated_hits,
+        "unverified_usage_hits": unverified_usage_hits,
         "cta_types": cta_types,
         "cta_type_count": len(cta_types),
         "blocked_reasons": blocked_reasons,

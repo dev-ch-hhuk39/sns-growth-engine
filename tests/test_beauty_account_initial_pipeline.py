@@ -73,6 +73,10 @@ def test_beauty_compliance_blocks_claims_and_separates_medical_review() -> None:
     generated_claim = beauty_compliance_validation("冷風でキューティクルが閉じて、毎日のヘアケアが効果的になるはず。")
     assert generated_claim["status"] == "BLOCKED"
     assert beauty_compliance_validation("きっと肌が変わるはず！")["status"] == "BLOCKED"
+    unsafe_usage = beauty_compliance_validation("ねぇ、みんな。私もつい後回しにしていた。シートマスクの上から美顔器を使って。")
+    assert unsafe_usage["status"] == "BLOCKED"
+    assert "beauty_fabricated_personal_experience" in unsafe_usage["blocked_reasons"]
+    assert "beauty_unverified_product_usage" in unsafe_usage["blocked_reasons"]
 
 
 def test_beauty_public_post_is_bounded_to_320_characters() -> None:
