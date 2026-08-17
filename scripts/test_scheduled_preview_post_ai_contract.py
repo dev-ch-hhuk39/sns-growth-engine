@@ -8,9 +8,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
-from hybrid_ai_gate import HybridAiGate
-from run_direct_reference_media_pipeline import scheduled_direct_caption_blockers
-from run_media_production_pipeline import (
+from hybrid_ai_gate import HybridAiGate  # noqa: E402
+from run_direct_reference_media_pipeline import scheduled_direct_caption_blockers  # noqa: E402
+from run_media_production_pipeline import (  # noqa: E402
     approved_clip_duration_blockers,
     approved_clip_duration_seconds,
 )
@@ -182,35 +182,33 @@ assert "僕" in direct_result.public_post_text, direct_result.public_post_text
 assert direct_result.generation["scheduled_text_contract"]["status"] == "REPAIRED"
 
 pdca_current = (
-    "前回の夜職投稿は101表示で、いいね1件・コメント0件だった。\n\n"
-    "僕は、提示額より引かれる金額を先に整理する話が具体的だったから、読まれたんだと思う。\n\n"
-    "次は入店前に見る三つの項目へ絞って、表示とコメントがどう変わるか見るよ。"
+    "僕なら、夜職の条件を見る時は提示額より、引かれる金額を先に聞くんだよね。\n\n"
+    "ノルマ、控除、バックの計算を分けて聞くと、働いた後の手取りを想像しやすい。\n\n"
+    "入店前に質問できるかも、お店選びの大事な判断材料だよ。"
 )
-pdca_generic = (
-    "夜職の条件を見る時は、提示額より実際に引かれる金額を先に整理することが大切です。\n\n"
-    "ノルマや控除、バックの計算方法を分けて聞くと、働いた後の金額を想像しやすくなります。\n\n"
-    "入店前に費用を質問できるかどうかも、お店を選ぶ判断材料になります。"
+pdca_generated = (
+    "僕は、時給を見る時ほど控除も一緒に聞いてほしいんだよね。\n\n"
+    "ノルマとバックの条件まで分けると、実際の手取りがイメージしやすい。\n\n"
+    "お店を決める前に、給料から引かれる項目を一つずつ確認するのが大事だよ。"
 )
-pdca_result = HybridAiGate(ContractClient(pdca_generic)).evaluate(
+pdca_result = HybridAiGate(ContractClient(pdca_generated)).evaluate(
     queue("night_scout", "pdca_text", pdca_current),
-    context(pdca_current),
+    context("過去のmetricsと仮説は内部学習用"),
 )
 assert pdca_result.status == "PASS", pdca_result.audit()
-assert pdca_result.public_post_text == pdca_current
-contract = pdca_result.generation["scheduled_text_contract"]
-assert contract["fallback_to_current_queue_text"] is True, contract
-assert "pdca_measured_observation_missing" in contract["rejected_generated_contract_reasons"]
+assert pdca_result.public_post_text == pdca_generated
+assert "前回の投稿" not in pdca_result.public_post_text
+assert "表示数" not in pdca_result.public_post_text
 
-# Owned public-post metrics are intentional evidence for PDCA, not secret internal process metrics.
-prompt_client = PromptCaptureClient(pdca_generic)
+# PDCA evidence stays internal; the public post must be ordinary new content.
+prompt_client = PromptCaptureClient(pdca_generated)
 prompt_result = HybridAiGate(prompt_client).evaluate(
     queue("night_scout", "pdca_text", pdca_current),
-    context(pdca_current),
+    context("過去のmetricsと仮説は内部学習用"),
 )
 assert prompt_result.status == "PASS", prompt_result.audit()
-assert "公開済み自社投稿" in prompt_client.review_prompt, prompt_client.review_prompt
-assert "INTERNAL_PROCESS_METRICS" in prompt_client.review_prompt, prompt_client.review_prompt
-assert "秘密情報" in prompt_client.review_prompt, prompt_client.review_prompt
+assert "内部学習のみ" in prompt_client.review_prompt, prompt_client.review_prompt
+assert "独立した通常の新規コンテンツ" in prompt_client.review_prompt, prompt_client.review_prompt
 
 liver_current = (
     "初見さんがすぐ抜けると、内容が悪いのかなって不安になるよね。\n\n"

@@ -4,7 +4,8 @@
   "target_account_id": "liver_manager",
   "allowed_target_account_ids": [
     "liver_manager",
-    "night_scout"
+    "night_scout",
+    "beauty_account"
   ],
   "allowed_rights_statuses": [
     "owned",
@@ -76,6 +77,10 @@
     "liver_manager": {
       "direct_reference_media": 3,
       "approved_source_clip": 3
+    },
+    "beauty_account": {
+      "direct_reference_media": 2,
+      "approved_source_clip": 1
     }
   },
   "auto_save_discovered_videos": false,

@@ -71,6 +71,19 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
         "account_fit_status": text(queue.get("account_fit_status")).upper(),
         "topic_coherence_status": text(queue.get("topic_coherence_status")).upper(),
         "batch_diversity_status": text(queue.get("batch_diversity_status")).upper(),
+        "voice_persona_status": text(queue.get("voice_persona_status")).upper(),
+        "voice_persona_score": text(queue.get("voice_persona_score")),
+        "polite_ending_ratio": text(queue.get("polite_ending_ratio")),
+        "first_person_status": text(queue.get("first_person_status")).upper(),
+        "formal_consultant_penalty": text(queue.get("formal_consultant_penalty")),
+        "conversational_style_score": text(queue.get("conversational_style_score")),
+        "feminine_warmth_score": text(queue.get("feminine_warmth_score")),
+        "voice_style_profile_version": text(queue.get("voice_style_profile_version")),
+        "style_fingerprint_status": text(queue.get("style_fingerprint_status")).upper(),
+        "style_fingerprint_score": text(queue.get("style_fingerprint_score")),
+        "semantic_voice_status": text(queue.get("semantic_voice_status")).upper(),
+        "semantic_voice_score": text(queue.get("semantic_voice_score")),
+        "voice_blocked_reasons": text(queue.get("voice_blocked_reasons")),
         "media_validator_status": text(queue.get("media_status")).upper(),
         "created_at": text(existing.get("created_at")) or now_iso(),
         "updated_at": now_iso(),
@@ -103,6 +116,18 @@ def decision_for_row(review: Mapping[str, Any], queue: Mapping[str, Any], *, all
 
     if text(queue.get("validator_status")).upper() != "PASS" or text(queue.get("internal_leak_status")).upper() not in {"", "PASS"}:
         return "BLOCKED_VALIDATION", {}
+    if text(queue.get("account_id")) == "beauty_account":
+        deterministic_pass = text(queue.get("style_fingerprint_status")).upper() in {
+            "PASS", "VOICE_PERSONA_PASS"
+        }
+        semantic_pass = text(queue.get("semantic_voice_status")).upper() == "PASS"
+        try:
+            deterministic_score = float(queue.get("style_fingerprint_score") or 0)
+            semantic_score = float(queue.get("semantic_voice_score") or 0)
+        except (TypeError, ValueError):
+            deterministic_score = semantic_score = 0
+        if not deterministic_pass or deterministic_score < 85 or not semantic_pass or semantic_score < 85:
+            return "BLOCKED_BEAUTY_VOICE", {}
     if text(queue.get("media_required")).lower() in {"true", "1", "yes"}:
         if not text(queue.get("media_asset_id")) or not text(queue.get("media_url")):
             return "APPROVED_PENDING_MEDIA_GATE", {}

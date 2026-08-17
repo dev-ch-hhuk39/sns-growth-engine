@@ -1073,7 +1073,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="ingest one permissioned direct source-post media asset")
     parser.add_argument("--source-post-media-id", default="")
     parser.add_argument("--source-post-id", default="", help="ingest the complete ordered media bundle for one source post")
-    parser.add_argument("--account-id", choices=["night_scout", "liver_manager"], default="")
+    parser.add_argument("--account-id", choices=["night_scout", "liver_manager", "beauty_account"], default="")
     parser.add_argument("--max-assets", type=int, default=10, help="hard cap for one source-post bundle")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")

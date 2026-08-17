@@ -74,6 +74,10 @@ jobs:
           python3 scripts/test_generated_queue_lifecycle_status.py
           python3 scripts/test_feature_attribution_cycle.py
           python3 scripts/test_auto_ready_requires_generation_contract.py
+          python3 scripts/test_beauty_voice_corpus_style_and_isolation.py
+          python3 scripts/test_hybrid_ai_gate.py
+          python3 scripts/test_publication_review_board.py
+          python3 scripts/test_scheduled_preview_post_ai_contract.py
           python3 scripts/test_final_production_contracts.py
           python3 scripts/test_media_pipeline_never_falls_back_to_text.py
           python3 scripts/test_final_production_contracts.py

@@ -186,7 +186,65 @@ def main() -> None:
     ok, reason = hybrid_ai_gate_passed(passed_queue, changed_context)
     assert ok is False and reason == "source_context_stale"
 
-    print("PASS 20 tests")
+    beauty_text = (
+        "スキンケアを一度に変えたくなる時って\n"
+        "ほんとに何から試すか迷うんだよね🥺\n\n"
+        "個人的には、まず一つだけ変えるのが結構大事\n"
+        "肌の変化と理由を分けて見やすい気がする💭\n\n"
+        "使い始めた日をメモして\n"
+        "その他はいつも通りで試してみてほしい🤍"
+    )
+    beauty_queue = {
+        "queue_id": "q_beauty_fixture",
+        "account_id": "beauty_account",
+        "target_account_id": "beauty_account",
+        "platform": "threads",
+        "generation_mode": "beauty_new_text_generation",
+        "content_type": "new_text_generation",
+        "public_post_text": beauty_text,
+    }
+    beauty_classification = {
+        "decision": "PASS",
+        "target_account_match": "PASS",
+        "target_audience_match": "PASS",
+        "source_audience": "beauty_cosmetics_women_20s_30s",
+        "commercial_context": "B2C",
+        "source_usage_fit": "PASS",
+        "risk_flags": [],
+        "reasons": [],
+    }
+    beauty_result = HybridAiGate(
+        FakeClient(classification=beauty_classification, generated_text=beauty_text)
+    ).evaluate(beauty_queue, {**context, "source_text": beauty_text})
+    assert beauty_result.status == "PASS", beauty_result.audit()
+    assert beauty_result.review["voice_persona"] == "PASS"
+    assert beauty_result.deterministic_validation["public_validation"]["voice_persona_check"]["style_profile_version"] == "chadult_beauty_voice_v1"
+
+    beauty_reference = {
+        **beauty_queue,
+        "generation_mode": "beauty_reference_text_generation",
+        "content_type": "reference_text_generation",
+    }
+    missing_lineage = HybridAiGate(
+        FakeClient(classification=beauty_classification, generated_text=beauty_text)
+    ).evaluate(beauty_reference, {**context, "source_text": beauty_text})
+    assert missing_lineage.status == "BLOCKED"
+    assert "beauty_reference_lineage_missing" in missing_lineage.blocked_reasons
+
+    beauty_pdca = {
+        **beauty_queue,
+        "generation_mode": "beauty_pdca_text_generation",
+        "content_type": "pdca_text_generation",
+        "pdca_result_id": "beauty_result_1",
+        "pdca_account_scope": "liver_manager",
+    }
+    wrong_scope = HybridAiGate(
+        FakeClient(classification=beauty_classification, generated_text=beauty_text)
+    ).evaluate(beauty_pdca, {**context, "source_text": beauty_text})
+    assert wrong_scope.status == "BLOCKED"
+    assert "beauty_pdca_account_scope_missing" in wrong_scope.blocked_reasons
+
+    print("PASS hybrid AI gate including Beauty lineage and PDCA isolation")
 
 
 if __name__ == "__main__":

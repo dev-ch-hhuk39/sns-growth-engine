@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Beauty READY rows remain blocked by the dedicated production gate."""
+"""Beauty READY rows remain scoped and require the dedicated runtime gate."""
 from __future__ import annotations
 import sys
 from pathlib import Path
@@ -36,7 +36,9 @@ class _FakeClient:
 print("=== test_no_beauty_ready_queue ===\n")
 
 allowed, reason = ptq.beauty_publish_gate(dry_run=True)
-check("draft_only Beauty is blocked by production config", not allowed and bool(reason))
+check("Beauty dry-run is enabled by canonical review-gated config", allowed and not reason)
+real_allowed, real_reason = ptq.beauty_publish_gate(dry_run=False)
+check("Beauty real publish still requires its runtime gate", not real_allowed and bool(real_reason))
 
 rows = [
     {"queue_id": "b-ready", "account_id": "beauty_account", "platform": "threads", "status": "READY", "priority": "1"},

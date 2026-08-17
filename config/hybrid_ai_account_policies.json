@@ -1,5 +1,5 @@
 {
-  "schema_version": "hybrid_ai_account_policies_v1",
+  "schema_version": "hybrid_ai_account_policies_v2",
   "accounts": {
     "night_scout": {
       "target_audience": "night_work_job_seeker",
@@ -42,6 +42,34 @@
       "blocked_contexts": ["B2B_SALES"],
       "tone": "config/account_voice_profiles.json#accounts.liver_manager を必須参照",
       "voice_profile_ref": "config/account_voice_profiles.json#accounts.liver_manager"
+    },
+    "beauty_account": {
+      "target_audience": "beauty_cosmetics_women_20s_30s",
+      "commercial_context": "B2C",
+      "purpose": "20〜30代の美容・コスメ好きの女性が、無理な売込みなしでコスメ、スキンケア、メイク、ヘアケア、美容家電、サロンの選び方を学べる投稿",
+      "allowed_topics": [
+        "cosmetics",
+        "skin_care",
+        "makeup",
+        "hair_care",
+        "beauty_devices",
+        "beauty_salons"
+      ],
+      "blocked_source_audiences": [
+        "night_work_job_seeker",
+        "beginner_liver",
+        "store_owner",
+        "agency_owner",
+        "business_operator"
+      ],
+      "blocked_contexts": ["B2B_SALES", "NIGHT_WORK", "LIVER_RECRUITMENT"],
+      "strict_account_isolation": true,
+      "cross_account_learning": false,
+      "medical_topics_require_human_review": true,
+      "tone": "config/beauty_voice_profile.json と config/account_voice_profiles.json#accounts.beauty_account を必須参照",
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.beauty_account",
+      "style_fingerprint_ref": "config/beauty_voice_profile.json#style_fingerprint",
+      "voice_corpus_ref": "config/beauty_voice_profile.json#voice_reference_source_ids"
     }
   }
 }

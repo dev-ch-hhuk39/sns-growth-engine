@@ -93,7 +93,9 @@ check("FINAL_OR_LOCKED_STATUSES に PROCESSING が含まれる", "PROCESSING" in
 
 # 9. Beauty is protected by a dedicated config + runtime gate.
 allowed, reason = ptq.beauty_publish_gate(dry_run=True)
-check("beauty_account draft_only is blocked by dedicated gate", not allowed and bool(reason))
+check("beauty_account dry-run is enabled by dedicated config", allowed and not reason)
+real_allowed, real_reason = ptq.beauty_publish_gate(dry_run=False)
+check("beauty_account real post still requires runtime gate", not real_allowed and bool(real_reason))
 
 # 10. workflow ファイルに setup_all が含まれないこと（念のため確認）
 workflow_path = ROOT / ".github" / "workflows" / "threads-queue-worker.yml"

@@ -15,8 +15,9 @@ assert (
 ) in workflow
 
 assert "target_account:" in workflow
-assert '["night_scout","liver_manager"]' in workflow
+assert '["night_scout","liver_manager","beauty_account"]' in workflow
 assert "github.event.inputs.target_account" in workflow
+assert "beauty_direct_media_review" in workflow
 
 assert (
     "ingest_direct_reference_media_reliable.py"

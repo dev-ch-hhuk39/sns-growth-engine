@@ -31,35 +31,59 @@ ROUTES = (
 
 DEFAULT_ROUTE_TEXTS = {
     "new_text_generation": (
-        "スキンケアを増やしているのに肌が安定しない時は、"
-        "足りないものより重ねすぎを見た方がいいかも。\n\n"
-        "化粧水、美容液、クリームを一度に変えると、どれが合わないのか分からなくなるんだよね。"
-        "私ならまず一つだけ残して、一週間の肌の変化を見る。無理に増やさなくて大丈夫。"
+        "スキンケアを増やしたのに肌が安定しない時って\n"
+        "ほんとに何を変えればいいか迷うんだよね🥺\n\n"
+        "個人的には、足すより一つだけ残すのが結構大事\n"
+        "一度に変えると、どれが合わないか分かりにくい気がする💭\n\n"
+        "使い始めた日をメモして\n"
+        "その他はいつも通りで試してみてほしい🤍"
     ),
     "reference_text_generation": (
-        "夕方にファンデが崩れると、コスメの持ちだけを疑いたくなるよね。\n\n"
-        "でも、厚く塗るほど皮脂と混ざってヨレやすいこともある。"
-        "まずはメイク前の保湿を薄くなじませて、ファンデを預けすぎないところから試してみて。"
-        "アイテムを買い足す前に塗る量を見直すと、意外と変わるかも。"
+        "夕方にファンデが崩れると\nコスメの持ちだけを疑いたくなるんだけど💭\n\n"
+        "個人的には、まず塗る量を見るのが結構大事\n"
+        "厚く重ねるほど、頜や小鼻はヨレやすい気がする🥺\n\n"
+        "アイテムを買い足す前に\n明日は使う量だけ変えてみてほしい✨"
     ),
     "pdca_text_generation": (
-        "髪の手触りが変わらない時、ヘアケアを全部変える必要はないんだよね。\n\n"
-        "トリートメントの種類より、洗った後に長く濡れたままにしていないかをまず確認してみて。"
-        "毛先から水分をやさしく取って、根元から乾かす。このひとつを続けてから、次のアイテムを比べるので大丈夫。"
+        "ヘアケアを変えても髪の手触りが同じだと\nほんとに次は何を買うか迷うよね🥺\n\n"
+        "個人的には、商品より乾かす順番を先に見る\n"
+        "毛先の水分をやさしく取って根元から乾かすの、これ結構大事💭\n\n"
+        "今のアイテムはそのままで\n一週間だけ順番を比べてみてほしい✨"
     ),
     "direct_reference_media": (
-        "美容家電は機能が多いほどいい、とは限らないんだよね。\n\n"
-        "大事なのは、自分のスキンケアのどこに入れるか。"
-        "朝は時間がないのか、夜にじっくり使えるのかで、続く機種は変わる。"
-        "私ならまず使う時間を決めて、その時間に無理なく続けられる一台を選ぶよ。"
+        "美容家電って機能が多いほど良さそうに見えるんだけど\n個人的には、使う時間を先に決めるのが結構大事🥺\n\n"
+        "朝のメイク前か、夜のスキンケア後か\n"
+        "毎日の流れに入らないと、ほんとに出番が減りがち💭\n\n"
+        "所要時間と使えるタイミングを見て\n無理なく続けられそうか比べてみてほしい🤍"
     ),
     "approved_source_clip": (
-        "サロンを選ぶ時は、仕上がりの写真だけで決めない方がいいかも。\n\n"
-        "髪質や普段のメイク、朝にかけられる時間まで聞いてくれるかで、家で再現できるかが変わるんだよね。"
-        "まずはカウンセリングで普段の手入れまで伝えてみて。"
-        "その日だけじゃなく、次の日も自分で整えられる仕上がりが一番使いやすいよ。"
+        "サロンの仕上がり写真って素敵だけど\n"
+        "次の日も自分で髪を整えられるかまでは、意外と分からないんだよね💭\n\n"
+        "個人的には、普段の手入れや苦手なセットを聞いてくれるかが結構大事\n"
+        "家でのやり方まで分かると、ほんとに安心する🤍\n\n"
+        "予約前に、普段のケアも相談できるか見てみてほしい✨"
     ),
 }
+
+
+def select_beauty_route(sequence_number: int, *, config: dict[str, Any] | None = None) -> str:
+    """Select one of all five production routes from the canonical weighted mix."""
+    pipeline = config or load_pipeline_config()
+    weighted = pipeline["generation_routes"]
+    if set(weighted) != set(ROUTES):
+        raise ValueError("beauty_generation_routes_incomplete")
+    total = sum(int(weighted[route]["weight"]) for route in ROUTES)
+    if total != 100:
+        raise ValueError("beauty_generation_route_weights_must_sum_to_100")
+    from generation.content_mix_planner import plan_operational_threads_routes
+
+    canonical_mix = {
+        "operational_threads_slot_mix": {
+            "beauty_account": {route: int(weighted[route]["weight"]) for route in ROUTES}
+        }
+    }
+    plan = plan_operational_threads_routes("beauty_account", 100, config=canonical_mix)
+    return plan[(max(1, int(sequence_number)) - 1) % len(plan)]
 
 
 def load_pipeline_config() -> dict[str, Any]:
@@ -100,6 +124,10 @@ def build_beauty_review_candidate(
         "status": "WAITING_REVIEW",
         "public_post_text": text,
         "source_ids": list(source_ids or []),
+        "style_profile_version": "chadult_beauty_voice_v1",
+        "pdca_account_scope": "beauty_account" if route == "pdca_text_generation" else "",
+        "cross_account_learning": False,
+        "pdca_public_metrics_allowed": False,
         "cta_applied": cta_applied,
         "beauty_compliance": compliance,
         "public_post_validator": validator,
