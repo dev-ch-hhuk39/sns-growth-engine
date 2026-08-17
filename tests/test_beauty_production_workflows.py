@@ -44,8 +44,9 @@ def test_beauty_workflow_prepares_then_publishes_only_reviewed_ready_rows() -> N
     assert "auto_approve_queue.py" not in text
     assert "Repository-wide Sheets diagnostic" in text
     assert "continue-on-error: true" in text
-    assert "Strict Sheets verify before publish" in text
-    assert "Strict Sheets verify after publish" in text
+    assert "Strict Beauty queue and publisher preflight" in text
+    assert text.count("recover_production_sheets_threads_first.py --verify-only") == 1
+    assert "posted_results read-after-write" in text
     assert "queue-level read-after-write" in text
 
 

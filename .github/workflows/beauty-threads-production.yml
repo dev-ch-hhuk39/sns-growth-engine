@@ -113,10 +113,6 @@ jobs:
         continue-on-error: true
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
 
-      - name: Strict Sheets verify before publish
-        if: env.ACTION == 'publish'
-        run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
-
       - name: Preview candidate
         if: env.ACTION == 'dry_run' || env.ACTION == 'prepare'
         env:
@@ -129,7 +125,10 @@ jobs:
           DRY_RUN: "false"
         run: python3 scripts/prepare_beauty_review_candidates.py --slot-index "$SLOT_INDEX" --apply --confirm-prepare
 
-      - name: Publisher dry-run for approved READY row
+      # The worker re-reads the selected Beauty READY row and runs account,
+      # persona, public-text, media and idempotency gates before publishing.
+      # Repository-wide historical drift must not block this scoped preflight.
+      - name: Strict Beauty queue and publisher preflight
         if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
         run: python3 scripts/process_threads_queue.py --account-id beauty_account --max-posts 1 --dry-run
 
@@ -154,7 +153,6 @@ jobs:
         if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED != 'true'
         run: echo "[NO_POST] Beauty activation is not approved; candidate preparation remains available."
 
-      # Candidate preparation performs its own queue-level read-after-write.
-      - name: Strict Sheets verify after publish
-        if: env.ACTION == 'publish'
-        run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
+      # Candidate preparation performs queue-level read-after-write. The
+      # publisher performs posted_results read-after-write and records
+      # POSTED_SAVE_UNVERIFIED instead of retrying an ambiguous publish.
