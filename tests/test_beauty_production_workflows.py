@@ -105,6 +105,15 @@ def test_beauty_generated_candidate_is_never_ready(monkeypatch) -> None:
     assert row["validator_status"] == "PASS"
 
 
+def test_beauty_prompt_encodes_account_fit_contract() -> None:
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    for topic, terms in prepare.TOPIC_CONTEXT_TERMS.items():
+        prompt = prepare._prompt(topic, 1)
+        assert all(term in prompt for term in terms)
+    retry_prompt = prepare._prompt(prepare.TOPICS[2], 1, ["persona_reader_context_insufficient"])
+    assert "自然な文脈で必ず入れ" in retry_prompt
+
+
 def test_beauty_secrets_are_referenced_by_name_only() -> None:
     _, beauty = _workflow("beauty-threads-production.yml")
     assert "${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}" in beauty
