@@ -36,6 +36,9 @@ PROHIBITED_CLAIMS = (
     "効果も半減",
     "効果的になるはず",
     "きっともっと綺麗",
+    "きっと",
+    "変わるはず",
+    "感じるはず",
 )
 
 SALES_OR_PRESSURE_TERMS = (
@@ -77,6 +80,8 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
         blocked_reasons.append("beauty_sales_or_pressure_cta")
     if len(cta_types) > 1:
         blocked_reasons.append("beauty_multiple_cta_types")
+    if "!" in value or "！" in value:
+        blocked_reasons.append("beauty_exclamatory_ad_tone")
 
     requires_medical_review = bool(medical_hits)
     status = "BLOCKED" if blocked_reasons else (

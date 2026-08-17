@@ -72,6 +72,14 @@ def test_beauty_compliance_blocks_claims_and_separates_medical_review() -> None:
     assert blocked["blocked_reasons"]
     generated_claim = beauty_compliance_validation("冷風でキューティクルが閉じて、毎日のヘアケアが効果的になるはず。")
     assert generated_claim["status"] == "BLOCKED"
+    assert beauty_compliance_validation("きっと肌が変わるはず！")["status"] == "BLOCKED"
+
+
+def test_beauty_public_post_is_bounded_to_320_characters() -> None:
+    text = "肌とスキンケアをまず見直す。" + "あ" * 310
+    result = final_public_post_validator(text, "beauty_account")
+    assert result["status"] == "BLOCKED"
+    assert "beauty_text_too_long" in result["blocked_reasons"]
 
 
 def test_beauty_cta_policy_is_ten_percent_and_lightweight() -> None:

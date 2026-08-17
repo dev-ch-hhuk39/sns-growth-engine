@@ -65,7 +65,7 @@ def _prompt(topic: str, sequence_number: int, blocked: list[str] | None = None) 
     correction = ""
     if blocked:
         correction = (
-            "\n前回は読者と美容テーマの具体性が不足しました。"
+            "\n前回は品質基準を満たしませんでした。感嘆符と「きっと」「〜はず」の結果予測を削除し、320文字以内にしてください。"
             f"本文に「{context_terms[0]}」と「{context_terms[1]}」を、羅列ではなく自然な文脈で必ず入れ、"
             "読者が今日試せる行動を1つ示して作り直してください。"
         )
