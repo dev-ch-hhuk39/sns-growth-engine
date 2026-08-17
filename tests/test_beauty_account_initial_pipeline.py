@@ -70,6 +70,8 @@ def test_beauty_compliance_blocks_claims_and_separates_medical_review() -> None:
     blocked = beauty_compliance_validation("この施術なら絶対に治る。今すぐ購入して。")
     assert blocked["status"] == "BLOCKED"
     assert blocked["blocked_reasons"]
+    generated_claim = beauty_compliance_validation("冷風でキューティクルが閉じて、毎日のヘアケアが効果的になるはず。")
+    assert generated_claim["status"] == "BLOCKED"
 
 
 def test_beauty_cta_policy_is_ten_percent_and_lightweight() -> None:
