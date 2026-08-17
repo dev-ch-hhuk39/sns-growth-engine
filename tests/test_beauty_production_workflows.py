@@ -39,6 +39,7 @@ def test_beauty_workflow_prepares_then_publishes_only_reviewed_ready_rows() -> N
     assert "WAITING_REVIEW" in text
     assert "process_threads_queue.py --account-id beauty_account" in text
     assert "BEAUTY_PRODUCTION_ENABLED: \"true\"" in text
+    assert 'if [ "$ACTION" = "publish" ] && [ "$BEAUTY_ACTIVATION_APPROVED" = "true" ]; then' in text
     assert "ALLOW_REAL_X_POST: \"false\"" in text
     assert "ALLOW_MEDIA_POSTS: \"false\"" in text
     assert "auto_approve_queue.py" not in text

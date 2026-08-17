@@ -99,7 +99,7 @@ jobs:
               exit 1
             fi
           done
-          if [ "$ACTION" = "publish" ]; then
+          if [ "$ACTION" = "publish" ] && [ "$BEAUTY_ACTIVATION_APPROVED" = "true" ]; then
             for name in THREADS_HANDLE_BEAUTY_ACCOUNT THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT THREADS_USER_ID_BEAUTY_ACCOUNT; do
               if [ -z "${!name}" ]; then
                 echo "[BLOCKED] Beauty Threads credential is missing: $name"
