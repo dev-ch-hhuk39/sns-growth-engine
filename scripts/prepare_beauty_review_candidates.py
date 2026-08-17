@@ -83,10 +83,13 @@ def _prompt(
     context_terms = TOPIC_CONTEXT_TERMS[topic]
     correction = ""
     if blocked:
+        blocked_summary = ", ".join(sorted(set(str(reason) for reason in blocked))[:12])
         correction = (
-            "\n前回は品質基準を満たしませんでした。感嘆符と「きっと」「〜はず」の結果予測を削除し、320文字以内にしてください。"
+            f"\n前回のBLOCK理由: {blocked_summary}。"
+            "語尾や句読点だけでなく、構成と言葉選びを作り直す。"
+            "感嘆符と「きっと」「〜はず」の結果予測を削除し、320文字以内にする。"
             f"本文に「{context_terms[0]}」と「{context_terms[1]}」を、羅列ではなく自然な文脈で必ず入れ、"
-            "読者が今日試せる行動を1つ示して作り直してください。"
+            "読者が今日試せる行動を1つ示して作り直す。"
         )
     internal_evidence = str((route_context or {}).get("internal_evidence", "")).strip()
     corpus = dict((route_context or {}).get("voice_corpus") or {})
@@ -289,6 +292,15 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
                 "route_context": route_context,
             })
             return candidate
+    pipeline = json.loads((ROOT / "config" / "beauty_account_pipeline.json").read_text(encoding="utf-8"))
+    if not bool(pipeline.get("emergency_static_fallback_enabled", False)):
+        return {
+            "status": "QUALITY_EXHAUSTED",
+            "generation_route": route,
+            "blocked_reasons": sorted(set(blocked or ["beauty_llm_quality_exhausted"])),
+            "static_fallback_used": False,
+        }
+
     fallback = build_beauty_review_candidate(
         route,
         public_post_text=SAFE_TOPIC_FALLBACKS[topic],
@@ -309,7 +321,12 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
             "route_context": route_context,
         })
         return fallback
-    return {"status": "QUALITY_EXHAUSTED", "blocked_reasons": sorted(set(blocked + fallback_blocked))}
+    return {
+        "status": "QUALITY_EXHAUSTED",
+        "generation_route": route,
+        "blocked_reasons": sorted(set(blocked + fallback_blocked)),
+        "static_fallback_used": False,
+    }
 
 
 def queue_row(candidate: dict) -> dict:

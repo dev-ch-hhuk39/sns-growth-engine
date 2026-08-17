@@ -16,6 +16,7 @@
   },
   "candidate_status": "WAITING_REVIEW",
   "medical_candidate_status": "WAITING_REVIEW",
+  "emergency_static_fallback_enabled": false,
   "auto_ready_enabled": false,
   "scheduled_publish_enabled": true,
   "real_post_enabled": true,
