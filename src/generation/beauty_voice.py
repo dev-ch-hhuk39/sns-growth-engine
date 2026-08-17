@@ -141,15 +141,25 @@ def build_voice_corpus_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, A
         if len(by_source[source_id]) < maximum:
             by_source[source_id].append(text)
     emoji_counts: Counter[str] = Counter()
+    humanity_counts: Counter[str] = Counter()
+    soft_ending_counts: Counter[str] = Counter()
     total_lines = 0
     total_characters = 0
+    total_full_stops = 0
+    total_exclamations = 0
     for posts in by_source.values():
         for value in posts:
             for emoji in profile["style_fingerprint"]["allowed_emojis"]:
                 emoji_counts[emoji] += value.count(emoji)
+            for marker in profile["style_fingerprint"]["humanity_markers"]:
+                humanity_counts[marker] += value.count(marker)
+            for ending in profile["style_fingerprint"]["soft_endings"]:
+                soft_ending_counts[ending] += value.count(ending)
             lines = [line for line in value.splitlines() if line.strip()]
             total_lines += len(lines)
             total_characters += sum(len(line.strip()) for line in lines)
+            total_full_stops += value.count("。")
+            total_exclamations += value.count("！") + value.count("!")
     post_count = sum(len(posts) for posts in by_source.values())
     eligible_source_count = sum(1 for posts in by_source.values() if len(posts) >= minimum)
     return {
@@ -160,6 +170,12 @@ def build_voice_corpus_summary(rows: Iterable[Mapping[str, Any]]) -> dict[str, A
         "post_count": post_count,
         "posts_per_source": {key: len(value) for key, value in sorted(by_source.items())},
         "emoji_frequency": dict(emoji_counts),
+        "humanity_marker_frequency": dict(humanity_counts),
+        "soft_ending_frequency": dict(soft_ending_counts),
+        "emoji_per_post": round(sum(emoji_counts.values()) / post_count, 2) if post_count else 0.0,
+        "full_stops_per_post": round(total_full_stops / post_count, 2) if post_count else 0.0,
+        "exclamations_per_post": round(total_exclamations / post_count, 2) if post_count else 0.0,
+        "average_nonempty_lines_per_post": round(total_lines / post_count, 2) if post_count else 0.0,
         "average_line_length": round(total_characters / total_lines, 2) if total_lines else 0.0,
         "raw_post_text_included": False,
     }

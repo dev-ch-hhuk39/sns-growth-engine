@@ -577,6 +577,9 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
     data = json.loads(path.read_text())
     rows_accounts: list[dict[str, Any]] = []
     rows_video: list[dict[str, Any]] = []
+    voice_profile = json.loads((ROOT / "config/beauty_voice_profile.json").read_text(encoding="utf-8"))
+    voice_source_ids = {str(value) for value in voice_profile.get("voice_reference_source_ids", [])}
+    voice_policy = dict(voice_profile.get("bounded_reference_collection") or {})
     for src in data.get("sources", []):
         targets = src.get("target_account_ids") or []
         account_id = targets[0] if targets else ""
@@ -584,14 +587,26 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
         future_track = str(src.get("future_track", "") or "")
         is_beauty = "beauty_account" in targets or future_track == "beauty_future"
         is_x = platform == "x"
-        blocked = is_beauty
-        active = "false" if blocked or is_x else str(bool(src.get("active", False))).lower()
+        is_voice_reference = (
+            "beauty_account" in targets
+            and str(src.get("source_id") or "") in voice_source_ids
+            and bool(voice_policy.get("enabled"))
+        )
+        is_legacy = bool(src.get("legacy_status")) or src.get("canonical_source") is False
+        blocked = is_legacy
+        effective_active = is_voice_reference or (bool(src.get("active", False)) and not blocked)
+        active = str(effective_active).lower()
         fetch_enabled = str(
             not blocked
-            and not is_x
-            and bool(src.get("active", False))
-            and bool(src.get("fetch_enabled", False))
-            and bool(src.get("allow_network_fetch", False))
+            and (
+                is_voice_reference
+                or (
+                    not is_x
+                    and bool(src.get("active", False))
+                    and bool(src.get("fetch_enabled", False))
+                    and bool(src.get("allow_network_fetch", False))
+                )
+            )
         ).lower()
         rights_policy = "reference_only" if is_beauty else src.get("rights_policy", "reference_only")
         rights_status = "reference_only" if is_beauty else str(src.get("rights_status") or rights_policy)
@@ -604,13 +619,13 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
             return "gated" if media_approved and requested and not blocked and not is_x else "false"
         reuse_policy = src.get("reuse_policy", "reference_only")
         media_policy = src.get("media_policy", "do_not_download")
-        review_status = "BLOCKED_BEAUTY_ACCOUNT" if is_beauty else src.get("review_status", "WAITING_REVIEW")
+        review_status = "WAITING_REVIEW" if is_beauty and not blocked else src.get("review_status", "WAITING_REVIEW")
         default_queue_status = "WAITING_REVIEW" if is_beauty else src.get("default_queue_status", "DRAFT")
-        source_track = src.get("source_track") or future_track
-        usage_scope = src.get("usage_scope") or ("future_reference_only" if is_beauty else "reference_only")
+        source_track = "beauty_voice_reference" if is_voice_reference else (src.get("source_track") or future_track)
+        usage_scope = "voice_reference" if is_voice_reference else (src.get("usage_scope") or ("reference_only" if is_beauty else "reference_only"))
         use_policy = src.get("use_policy") or "REFERENCE_ONLY"
         can_reuse_media = bool(src.get("can_reuse_media", False)) and not is_beauty
-        draft_only = bool(src.get("draft_only", False)) or is_beauty
+        draft_only = bool(src.get("draft_only", False)) and not is_voice_reference
         beauty_account_status = src.get("beauty_account_status") or ("WAITING_REVIEW" if is_beauty else "")
         note_bits = [
             str(src.get("notes", "")),
@@ -619,8 +634,10 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
         ]
         if is_x:
             note_bits.append("X posting disabled; source is reference-only")
-        if is_beauty:
-            note_bits.append("BLOCKED_BEAUTY_ACCOUNT")
+        if is_voice_reference:
+            note_bits.append("bounded Beauty Voice Corpus reference-only collection")
+        elif blocked and is_beauty:
+            note_bits.append("LEGACY_BEAUTY_SOURCE_QUARANTINED")
         common = {
             "source_id": src.get("source_id"),
             "source_name": src.get("source_name", src.get("source_id")),
@@ -642,9 +659,9 @@ def source_rows(source_path: "str | Path | None" = None) -> tuple[list[dict[str,
             "created_at": src.get("created_at", now_iso()),
             "updated_at": now_iso(),
             "source_category": _join(src.get("source_category", "")),
-            "candidate_status": "BLOCKED_BEAUTY_ACCOUNT" if is_beauty else src.get("candidate_status", "candidate"),
+            "candidate_status": "READY_FOR_REFERENCE_FETCH" if is_voice_reference else ("LEGACY_QUARANTINED" if blocked else src.get("candidate_status", "candidate")),
             "fetch_enabled": fetch_enabled,
-            "allow_network_fetch": str(bool(src.get("allow_network_fetch", True))).lower(),
+            "allow_network_fetch": str(is_voice_reference or bool(src.get("allow_network_fetch", True))).lower(),
             "allow_download": _action_gate("allow_download"),
             "allow_cut": _action_gate("allow_cut"),
             "allow_upload": _action_gate("allow_upload"),
@@ -1321,8 +1338,18 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     )
     _reg_urls = [_norm_reg_url(s.get("source_url", "")) for s in _reg if str(s.get("source_url", "")).strip()]
     _urls_deduped = len(_reg_urls) == len(set(_reg_urls))
+    _beauty_voice_profile = json.loads((ROOT / "config/beauty_voice_profile.json").read_text(encoding="utf-8"))
+    _beauty_voice_ids = {str(value) for value in _beauty_voice_profile.get("voice_reference_source_ids", [])}
     _x_reg = [r for r in _reg_acc if r["source_platform"] == "x"]
-    _x_manual_only = all(r["active"] == "false" and r["fetch_enabled"] == "false" for r in _x_reg)
+    _x_read_only_bounded = all(
+        r["rights_policy"] == "reference_only"
+        and r["can_reuse_media"] == "false"
+        and r["allow_download"] == "false"
+        and r["allow_cut"] == "false"
+        and r["allow_upload"] == "false"
+        and (r["fetch_enabled"] == "false" or r["source_id"] in _beauty_voice_ids)
+        for r in _x_reg
+    )
     _vid_reg = [r for r in _reg_acc if r["source_platform"] in ("tiktok", "youtube")]
     _approved_rights = {"owned", "licensed", "approved_creator_clip", "approved_media", "own_media"}
     _vid_rights_classified = all(
@@ -1344,7 +1371,10 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         for r in _vid_reg
     )
     _beauty_reg = [r for r in _reg_acc if _reg_by_id.get(r["source_id"], {}).get("future_track") == "beauty_future"]
-    _beauty_inactive = all(r["active"] == "false" for r in _beauty_reg)
+    _beauty_voice_bounded = (
+        {r["source_id"] for r in _beauty_reg if r["fetch_enabled"] == "true"} == _beauty_voice_ids
+        and all(r["can_reuse_media"] == "false" for r in _beauty_reg)
+    )
     _beauty_raw = [
         s for s in _reg
         if s.get("future_track") == "beauty_future" or "beauty_account" in (s.get("target_account_ids") or [])
@@ -1374,7 +1404,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "night_scout_cta": accounts.get("night_scout", {}).get("cta_type") == "LINE_AND_DM",
         "liver_manager_cta": accounts.get("liver_manager", {}).get("cta_type") == "LINE_AND_DM",
         "beauty_cta_none": accounts.get("beauty_account", {}).get("cta_type") == "NONE",
-        "beauty_inactive": not _bool(accounts.get("beauty_account", {}).get("active")),
+        "beauty_account_present": "beauty_account" in accounts,
         "categories_night_scout_8": sum(1 for r in categories if r.get("account_id") == "night_scout") >= 8,
         "categories_liver_manager_8": sum(1 for r in categories if r.get("account_id") == "liver_manager") >= 8,
         "prompts_5": len(prompts) >= 5,
@@ -1448,9 +1478,9 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         # --- 回収済み共有 source registry の不変条件 ---
         "source_registry_has_required_categories": _has_required_cats,
         "source_urls_are_deduped": _urls_deduped,
-        "x_sources_manual_only_current_phase": _x_manual_only,
+        "x_sources_read_only_bounded": _x_read_only_bounded,
         "video_sources_rights_classified": _vid_rights_classified,
-        "beauty_future_inactive": _beauty_inactive,
+        "beauty_voice_sources_bounded": _beauty_voice_bounded,
         "beauty_target_account_id_preserved": _beauty_target_safe,
         "beauty_reference_only_safety": _beauty_reference_only,
         "waiting_url_input_not_fetchable": _waiting_not_fetchable,

@@ -14,6 +14,19 @@
     "src_ba_tt_cand_001",
     "src_ba_tt_cand_006"
   ],
+  "bounded_reference_collection": {
+    "enabled": true,
+    "reference_only": true,
+    "x_read_only": true,
+    "max_posts_per_source_scan": 30,
+    "max_new_posts_per_source_per_run": 10,
+    "max_total_new_posts_per_run": 30,
+    "allow_media_reuse": false,
+    "allow_download": false,
+    "allow_cut": false,
+    "allow_upload": false,
+    "allow_x_post": false
+  },
   "corpus_policy": {
     "minimum_source_accounts": 5,
     "maximum_source_accounts": 10,

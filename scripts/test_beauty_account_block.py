@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate beauty_account stays blocked in recovery seeds."""
+"""Validate Beauty publication stays gated while Voice sources are read-only."""
 from __future__ import annotations
 
 import importlib.util
@@ -22,6 +22,8 @@ def main() -> int:
     beauty = {r["account_id"]: r for r in mod.account_rows()}["beauty_account"]
     src_accounts, _ = mod.source_rows()
     beauty_sources = [r for r in src_accounts if r["target_account_ids"] == "beauty_account"]
+    voice_profile = mod.json.loads((ROOT / "config/beauty_voice_profile.json").read_text(encoding="utf-8"))
+    voice_ids = set(voice_profile["voice_reference_source_ids"])
     process_source = (ROOT / "scripts/process_threads_queue.py").read_text(encoding="utf-8")
     refill_source = (ROOT / "scripts/refill_threads_queue.py").read_text(encoding="utf-8")
     worker_workflow = (ROOT / ".github/workflows/threads-queue-worker.yml").read_text(encoding="utf-8")
@@ -30,7 +32,10 @@ def main() -> int:
         ("beauty draft_only", beauty["status"] == "draft_only"),
         ("beauty threads disabled", str(beauty["threads_enabled"]).lower() == "false"),
         ("beauty no CTA", beauty["cta_type"] == "NONE"),
-        ("beauty sources blocked", bool(beauty_sources) and all(str(r["blocked"]).lower() == "true" for r in beauty_sources)),
+        ("beauty voice sources bounded", {
+            r["source_id"] for r in beauty_sources if str(r["fetch_enabled"]).lower() == "true"
+        } == voice_ids),
+        ("beauty source media reuse blocked", all(str(r["can_reuse_media"]).lower() == "false" for r in beauty_sources)),
         ("beauty no media actions", all(str(r[k]).lower() == "false" for r in beauty_sources for k in ["allow_download", "allow_cut", "allow_upload"])),
         ("queue worker has dedicated beauty gate", "beauty_publish_gate" in process_source and "BEAUTY_PRODUCTION_ENABLED" in process_source),
         ("refill blocks beauty", "beauty_account is draft_only" in refill_source),
