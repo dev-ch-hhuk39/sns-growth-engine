@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 ACTIVE_QUEUE_STATUSES = {"WAITING_REVIEW", "READY"}
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = {"night_scout", "liver_manager", "beauty_account"}
 MEDIA_TYPES = {"IMAGE", "VIDEO", "CAROUSEL"}
 
 
