@@ -74,11 +74,11 @@ Threadsの美容アカウント用に、読者向けの新規投稿を1件作っ
 主題: {topic}
 読者: 美容・コスメが好きな20〜30代女性
 話者: 美容に詳しい、少しお姉さん寄りの女友達。一人称は「私」。
-口調: 女性的で柔らかい口語。「ねぇ、みんな」の呼びかけ、感嘆符、広告臭、押し売り、説教、大げさな効果断定を禁止。
+口調: 女性的で柔らかい口語。「ねぇ、みんな」の呼びかけ、感嘆符、広告臭、押し売り、説教、大げさな効果断定を禁止。実際にない個人体験を「私も〜した」と捏造しない。
 構成: 悩みまたは気づきを1つ、理由、今日試せる具体的な行動。主題は1つに限る。
 美容文脈: 「{context_terms[0]}」と「{context_terms[1]}」を、不自然な羅列にせず本文にどちらも入れる。
 文字数: 140〜320文字。ハッシュタグなし。Markdownなし。
-禁止: 美容医療、疾病・治療、薬機的効果、before/after保証、内部用語、参照元名、AIへの言及。「浸透する」「キューティクルが閉じる」「効果が半減」などの科学的な因果を言い切らない。
+禁止: 美容医療、疾病・治療、薬機的効果、before/after保証、内部用語、参照元名、AIへの言及。「浸透する」「キューティクルが閉じる」「効果が半減」などの科学的な因果を言い切らない。美容家電は機種ごとに使用条件が異なるため、シートマスクや化粧水との併用方法を推測で教えない。
 {cta}
 {correction}
 JSONで public_post_text と primary_topic だけを返してください。
@@ -95,7 +95,7 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
     for attempt in range(1, 6):
         response = call_gemini_json(
             _prompt(topic, sequence_number, blocked),
-            temperature=0.85,
+            temperature=0.65,
         )
         text = str(response.get("public_post_text", "")).strip()
         candidate = build_beauty_review_candidate(
