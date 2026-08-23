@@ -55,7 +55,8 @@ log line before JSON
     assert '"--post-type"' in scheduled
     recovery = (ROOT / ".github/workflows/threads-queue-worker.yml").read_text(encoding="utf-8")
     assert "queue_id:" in recovery
-    assert recovery.count('--queue-id "$QUEUE_ID"') == 3
+    # Approval, dry-run and real processing must all use the same exact row.
+    assert recovery.count('--queue-id "$QUEUE_ID"') == 4
     assert "Scoped runtime activation gate" in recovery
     print("PASS test_scheduled_exact_candidate_contract.py")
     return 0
