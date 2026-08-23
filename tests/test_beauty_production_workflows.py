@@ -309,4 +309,5 @@ def test_beauty_secrets_are_referenced_by_name_only() -> None:
     assert "${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}" in beauty
     assert "${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}" in beauty
     assert "${{ secrets.THREADS_HANDLE_BEAUTY_ACCOUNT }}" in beauty
+    assert "GEMINI_MODEL: ${{ vars.GEMINI_GENERATOR_MODEL || 'gemini-3.5-flash' }}" in beauty
     assert "access_token=" not in beauty.lower()
