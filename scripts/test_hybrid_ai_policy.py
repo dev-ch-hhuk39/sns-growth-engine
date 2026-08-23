@@ -21,13 +21,23 @@ def main() -> None:
         "media_origin": "direct_reference",
     }
     assert decide_route(owned).route == "owned_media_transform"
+    beauty_prepared = {
+        "account_id": "beauty_account",
+        "platform": "threads",
+        "generation_mode": "beauty_new_text_generation",
+        "generated_by": "prepare_beauty_review_candidates.py",
+        "semantic_voice_status": "PENDING_HYBRID_AI_REVIEW",
+    }
+    assert decide_route(beauty_prepared).route == "semantic_review"
+    assert decide_route(beauty_prepared).generate is False
+    assert decide_route(beauty_prepared).estimated_requests == 2
     candidates = [source_copy, owned, {"account_id": "night_scout", "platform": "threads", "generation_mode": "reference_text"}]
     assert estimate_requests(candidates) == 9
     batches = chunk_candidates(candidates, max_requests_per_batch=6)
     assert len(batches) == 2
     assert batches[0]["estimated_requests"] == 6
     assert batches[1]["estimated_requests"] == 3
-    print("PASS 8 tests")
+    print("PASS 11 tests")
 
 
 if __name__ == "__main__":

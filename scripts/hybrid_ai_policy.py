@@ -74,6 +74,31 @@ def decide_route(candidate: Mapping[str, Any]) -> AiRoute:
     ownership = _value(candidate, "ownership", "source_ownership").lower()
     source_id = _value(candidate, "source_id").lower()
 
+    # Beauty production preparation already performs Gemini generation plus
+    # deterministic persona/compliance validation.  The following Hybrid AI
+    # step is a semantic review boundary, not a second writer of public text.
+    # Keeping that boundary explicit prevents a review pass from introducing
+    # claims or fabricated experiences into an already validated candidate.
+    beauty_text_modes = {
+        "beauty_new_text_generation",
+        "beauty_reference_text_generation",
+        "beauty_pdca_text_generation",
+    }
+    if (
+        account_id == "beauty_account"
+        and generation_mode in beauty_text_modes
+        and _value(candidate, "generated_by") == "prepare_beauty_review_candidates.py"
+        and _value(candidate, "semantic_voice_status").upper() == "PENDING_HYBRID_AI_REVIEW"
+    ):
+        return AiRoute(
+            "semantic_review",
+            True,
+            False,
+            True,
+            2,
+            "validated_beauty_candidate_requires_review_without_rewrite",
+        )
+
     if caption_mode == "source_copyedit" or (
         media_origin == "direct_reference" and not (ownership in {"owned", "system_owned"} or source_id.startswith("system_owned_"))
     ):
