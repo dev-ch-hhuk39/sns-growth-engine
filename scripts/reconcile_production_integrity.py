@@ -19,8 +19,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from config_loader import get_config
-from sheets_client import TAB_DEFINITIONS, SheetsClient
+from config_loader import get_config  # noqa: E402
+from media.rights_policy import rights_allows_media_use  # noqa: E402
+from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 
 FINAL_STATUS_PRIORITY = {
@@ -222,6 +223,102 @@ def plan_stale_slot_run_recovery(
     return repairs
 
 
+def _media_ids(row: dict[str, Any]) -> set[str]:
+    values = {
+        str(row.get("media_asset_id", "")).strip(),
+        str(row.get("media_id", "")).strip(),
+    }
+    raw = row.get("media_asset_ids_json")
+    if raw:
+        try:
+            parsed = json.loads(str(raw))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            parsed = []
+        if isinstance(parsed, list):
+            values.update(str(value).strip() for value in parsed)
+    return {value for value in values if value}
+
+
+def _uploaded_media(row: dict[str, Any]) -> bool:
+    return bool(
+        str(row.get("upload_status", "")).strip().upper() == "UPLOADED"
+        or str(row.get("cloudinary_url", "")).strip()
+        or (
+            str(row.get("storage_provider", "")).strip().lower() == "cloudinary"
+            and str(row.get("storage_url", "")).strip()
+        )
+    )
+
+
+def _row_level_media_approved(row: dict[str, Any]) -> bool:
+    rights = row.get("rights_status") or row.get("rights_policy")
+    permission = str(row.get("permission_status", "")).strip().lower()
+    approval = str(row.get("approval_status", "")).strip().upper()
+    status = str(row.get("status", "")).strip().upper()
+    reuse = str(row.get("reuse_status", "")).strip().lower()
+    explicit_approval = approval == "APPROVED" or status in {
+        "APPROVED", "READY", "SELF_GENERATED",
+    } or reuse in {"approved", "approved_creator_clip"}
+    if explicit_approval and rights_allows_media_use(rights) and permission in {
+        "approved", "granted", "not_required",
+    }:
+        return True
+    return (
+        str(row.get("rights_policy", "")).strip().lower() == "owned"
+        and status in {"APPROVED", "READY", "SELF_GENERATED"}
+    )
+
+
+def plan_inactive_media_quarantine(
+    media_rows: list[dict[str, Any]],
+    queue_rows: list[dict[str, Any]],
+    posted_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Quarantine only inactive historical uploads with no usable approval.
+
+    URLs and identifiers remain untouched for audit. A READY/PROCESSING queue
+    or a non-historical POSTED result always protects its referenced assets.
+    """
+    active_ids: set[str] = set()
+    for row in queue_rows:
+        if str(row.get("status", "")).strip().upper() in {"READY", "PROCESSING"}:
+            active_ids.update(_media_ids(row))
+    for row in posted_rows:
+        if str(row.get("status", "")).strip().upper() != "POSTED":
+            continue
+        if "HISTORICAL_MEDIA_EVIDENCE_MISSING" in str(row.get("verification_status", "")):
+            continue
+        active_ids.update(_media_ids(row))
+
+    plans: list[dict[str, Any]] = []
+    marker = "HISTORICAL_UNAPPROVED_UPLOAD_NOT_ACTIVE"
+    for row_number, row in enumerate(media_rows, start=2):
+        media_ids = _media_ids(row)
+        if not media_ids or media_ids & active_ids:
+            continue
+        if not _uploaded_media(row) or _row_level_media_approved(row):
+            continue
+        if (
+            str(row.get("reuse_status", "")).strip().upper() == "QUARANTINED"
+            or str(row.get("upload_status", "")).strip().upper() == "QUARANTINED"
+            or marker in str(row.get("notes", ""))
+        ):
+            continue
+        plans.append({
+            "row_number": row_number,
+            "media_id": str(row.get("media_id", "")).strip(),
+            "changes": {
+                "reuse_status": "QUARANTINED",
+                "allow_download": "false",
+                "allow_cut": "false",
+                "allow_upload": "false",
+                "upload_status": "QUARANTINED",
+                "notes": _add_marker(row.get("notes"), marker),
+            },
+        })
+    return plans
+
+
 def _read(client: SheetsClient, logical: str) -> tuple[Any, list[str], list[dict[str, Any]]]:
     ws = client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     headers = client._call_with_rate_limit_retry(f"headers:{logical}:reconcile", lambda: ws.row_values(1))
@@ -276,9 +373,11 @@ def main() -> int:
     queue_ws, queue_headers, queue_rows = _read(client, "queue")
     posted_ws, posted_headers, posted_rows = _read(client, "posted_results")
     slot_ws, slot_headers, slot_rows = _read(client, "content_slot_runs")
+    media_ws, media_headers, media_rows = _read(client, "media_assets")
     queue_repairs = plan_queue_duplicate_repairs(queue_rows)
     posted_annotations = plan_posted_annotations(posted_rows)
     stale_slot_repairs = plan_stale_slot_run_recovery(slot_rows)
+    inactive_media_quarantine = plan_inactive_media_quarantine(media_rows, queue_rows, posted_rows)
     result = {
         "status": "PLAN_ONLY" if not args.apply else "APPLYING",
         "queue_duplicate_row_repair_count": len(queue_repairs),
@@ -288,6 +387,7 @@ def main() -> int:
         ),
         "posted_annotation_count": len(posted_annotations),
         "stale_content_slot_recovery_count": len(stale_slot_repairs),
+        "inactive_unapproved_media_quarantine_count": len(inactive_media_quarantine),
         "historical_media_evidence_missing_count": sum(
             "HISTORICAL_MEDIA_EVIDENCE_MISSING" in item["markers"] for item in posted_annotations
         ),
@@ -303,10 +403,18 @@ def main() -> int:
     _apply_plans(client, queue_ws, queue_headers, queue_repairs, label="queue_reconcile_batch")
     _apply_plans(client, posted_ws, posted_headers, posted_annotations, label="posted_reconcile_batch")
     _apply_plans(client, slot_ws, slot_headers, stale_slot_repairs, label="content_slot_reconcile_batch")
+    _apply_plans(
+        client,
+        media_ws,
+        media_headers,
+        inactive_media_quarantine,
+        label="inactive_media_quarantine_batch",
+    )
     result["status"] = "APPLIED"
     result["updated_queue_rows"] = len(queue_repairs)
     result["updated_posted_rows"] = len(posted_annotations)
     result["updated_content_slot_rows"] = len(stale_slot_repairs)
+    result["updated_media_asset_rows"] = len(inactive_media_quarantine)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 

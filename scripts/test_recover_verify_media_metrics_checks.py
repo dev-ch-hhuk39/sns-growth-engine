@@ -163,11 +163,9 @@ def main() -> int:
     historical["media_assets"] = [
         {"media_id": "m_legacy", "approval_status": "WAITING_REVIEW", "status": "WAITING_REVIEW",
          "rights_policy": "owned", "reuse_policy": "allow_reuse", "media_policy": "owned",
-         "cloudinary_url": "https://res.cloudinary.com/x/legacy.png"},
-    ]
-    historical["posted_results"] = [
-        {"result_id": "legacy_result", "platform": "threads", "status": "POSTED",
-         "media_asset_id": "m_legacy", "verification_status": "HISTORICAL_MEDIA_EVIDENCE_MISSING"},
+         "cloudinary_url": "https://res.cloudinary.com/x/legacy.png",
+         "reuse_status": "QUARANTINED", "upload_status": "QUARANTINED",
+         "notes": "HISTORICAL_UNAPPROVED_UPLOAD_NOT_ACTIVE"},
     ]
     res = mod.verify_state(_FakeClient(historical))["checks"]
     checks.append(("historical quarantine: upload checks do not block fresh queue",
