@@ -35,7 +35,7 @@ TOPICS = (
     "コスメを買い足す前に手持ちの役割を整理する",
     "サロンは仕上がり写真より再現性で選ぶ",
     "アイメイクは色を足す前に主役を一つ決める",
-    "朝のメイクは使う順番を先に並べる",
+    "朝のメイクは前夜に使うコスメを並べて迷いを減らす",
 )
 
 TOPIC_CONTEXT_TERMS = {
@@ -143,6 +143,7 @@ Threadsの美容アカウント用に、読者向けの新規投稿を1件作っ
 - ハッシュタグなし。Markdownなし。
 禁止: 美容医療、疾病・治療、薬機的効果、before/after保証、内部用語、参照元名、AIへの言及。「浸透する」「キューティクルが閉じる」「効果が半減」などの科学的な因果を言い切らない。美容家電は機種ごとに使用条件が異なるため、シートマスクや化粧水との併用方法を推測で教えない。
 化粧品の使用量や待ち時間は、製品表示や説明書の根拠がないのに「たっぷり」「○分」と断定しない。「たった数分で」「全然変わる」「格段に良くなる」などの結果保証も書かない。
+主題にない美容効果、肌状態、成分、使用順序の因果を追加しない。コスメを並べる話では、探す時間と迷いの整理だけを扱い、仕上がりや効果が変わると書かない。
 {cta}
 {evidence_instruction}
 {corpus_instruction}
@@ -489,8 +490,22 @@ def apply_candidate(candidate: dict) -> dict:
     client = SheetsClient(config["sheet_id"], config["sa_dict"], dry_run=False)
     existing = client.get_queue_item(candidate["queue_id"])
     if existing:
-        same = str(existing.get("content_hash", "")) == queue_row(candidate)["content_hash"]
-        return {"status": "ALREADY_EXISTS" if same else "CONFLICT", "queue_id": candidate["queue_id"], "read_after_write": same}
+        content_hash = queue_row(candidate)["content_hash"]
+        same = str(existing.get("content_hash", "")) == content_hash
+        if same:
+            return {"status": "ALREADY_EXISTS", "queue_id": candidate["queue_id"], "read_after_write": True}
+        existing_status = str(existing.get("status", "")).upper()
+        if not existing_status.startswith(("REJECTED", "SUPERSEDED", "BLOCKED")):
+            return {"status": "CONFLICT", "queue_id": candidate["queue_id"], "read_after_write": False}
+        candidate["queue_id"] = f"{candidate['queue_id']}_r_{content_hash[:8]}"
+        revised = client.get_queue_item(candidate["queue_id"])
+        if revised:
+            revised_same = str(revised.get("content_hash", "")) == content_hash
+            return {
+                "status": "ALREADY_EXISTS" if revised_same else "CONFLICT",
+                "queue_id": candidate["queue_id"],
+                "read_after_write": revised_same,
+            }
     row = queue_row(candidate)
     client.append_queue_item(row)
     saved = client.get_queue_item(candidate["queue_id"]) or {}
