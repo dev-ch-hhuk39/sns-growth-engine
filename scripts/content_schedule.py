@@ -8,6 +8,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEDULE_FILE = ROOT / "config/content_schedule.json"
+BEAUTY_SCHEDULE_FILE = ROOT / "config/beauty_account_pipeline.json"
 TEXT_POST_TYPES = {"original_text", "reference_text", "pdca_text"}
 MEDIA_POST_TYPES = {"direct_reference_media", "approved_source_clip"}
 POST_TYPES = TEXT_POST_TYPES | MEDIA_POST_TYPES
@@ -19,6 +20,20 @@ def load_content_schedule() -> dict[str, Any]:
 
 
 def slots_for_account(account_id: str) -> list[dict[str, Any]]:
+    if account_id == "beauty_account":
+        beauty = json.loads(BEAUTY_SCHEDULE_FILE.read_text(encoding="utf-8"))
+        cron_by_target = {"11:30": "30 2 * * *", "20:30": "30 11 * * *"}
+        return [
+            {
+                "slot_id": f"beauty_{str(target).replace(':', '')}",
+                "target_jst": str(target),
+                "cron_utc": cron_by_target.get(str(target), ""),
+                "post_type": "original_text",
+                "fallback_chain": [],
+                "theme": "beauty_route_selector",
+            }
+            for target in beauty.get("schedule_slots_jst", [])
+        ]
     return list(load_content_schedule().get("accounts", {}).get(account_id, []))
 
 

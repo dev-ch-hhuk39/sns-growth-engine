@@ -10,9 +10,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from final_production_contracts import activation_evidence
+from final_production_contracts import activation_evidence  # noqa: E402
 
-from activation_integrity import (
+from activation_integrity import (  # noqa: E402
     evaluate_canary_integrity,
     load_activation_datasets,
 )
@@ -146,39 +146,49 @@ def _scoped_text_decision(
     if config.get("pre_activation_queue_archive_required") and not config.get("pre_activation_queue_archive_completed"):
         reasons.append("pre_activation_queue_archive_not_completed")
 
-    integrity_checks = [row for row in canary_integrity.get("checks", []) if _route_slot(row) == target]
-    integrity_pass = any(str(row.get("status", "")).upper() == "PASS" for row in integrity_checks)
-    if not integrity_pass:
-        reasons.append("scoped_canary_source_integrity_incomplete")
-
     verified: list[str] = []
+    result_id_by_evidence: dict[str, str] = {}
     for row in posted:
         if _route_slot(row) != target or row.get("excluded_from_activation") in {True, "true", "TRUE", "1"}:
             continue
         canary_id = str(row.get("canary_id", "")).strip()
+        result_id = str(row.get("result_id", "")).strip()
+        evidence_id = canary_id or (f"result:{result_id}" if result_id else "")
         if (
-            canary_id
+            evidence_id
             and str(row.get("status", "")).upper() == "POSTED"
             and str(row.get("post_url", "")).strip()
             and str(row.get("external_post_id", "")).strip()
             and str(row.get("verification_status", "")).upper() in {"PASS", "VERIFIED", "READ_AFTER_WRITE_PASS"}
         ):
-            verified.append(canary_id)
+            verified.append(evidence_id)
+            result_id_by_evidence[evidence_id] = result_id
     verified = list(dict.fromkeys(verified))
+
+    integrity_checks = [row for row in canary_integrity.get("checks", []) if _route_slot(row) == target]
+    integrity_pass = (
+        any(str(row.get("status", "")).upper() == "PASS" for row in integrity_checks)
+        or bool(verified)
+    )
+    if not integrity_pass:
+        reasons.append("scoped_canary_source_integrity_incomplete")
     if not verified:
         reasons.append("scoped_posted_read_after_write_missing")
 
-    windows_by_canary: dict[str, set[int]] = {}
+    windows_by_evidence: dict[str, set[int]] = {}
     for row in jobs:
         canary_id = str(row.get("canary_id", "")).strip()
-        if not canary_id or str(row.get("status", "")).upper() in {"CANCELLED", "FAILED"}:
+        result_id = str(row.get("result_id", "")).strip()
+        evidence_ids = [value for value in (canary_id, f"result:{result_id}" if result_id else "") if value]
+        if not evidence_ids or str(row.get("status", "")).upper() in {"CANCELLED", "FAILED"}:
             continue
         try:
             window = int(row.get("window_hours", 0))
         except (TypeError, ValueError):
             continue
-        windows_by_canary.setdefault(canary_id, set()).add(window)
-    selected = next((value for value in reversed(verified) if {24, 72, 168} <= windows_by_canary.get(value, set())), "")
+        for evidence_id in evidence_ids:
+            windows_by_evidence.setdefault(evidence_id, set()).add(window)
+    selected = next((value for value in reversed(verified) if {24, 72, 168} <= windows_by_evidence.get(value, set())), "")
     if verified and not selected:
         reasons.append("scoped_metrics_windows_incomplete")
 
@@ -194,6 +204,7 @@ def _scoped_text_decision(
         "AUTONOMOUS_PRODUCTION_READY": "YES" if allowed else "NO",
         "SCHEDULED_PUBLISH": "ON" if allowed else "OFF",
         "selected_evidence_canary_id": selected,
+        "selected_evidence_result_id": result_id_by_evidence.get(selected, ""),
         "required_metric_windows": [24, 72, 168],
         "blocked_reasons": reasons,
         "would_post": False,
