@@ -127,6 +127,8 @@ def test_beauty_generated_candidate_is_never_ready(monkeypatch) -> None:
 
 def test_beauty_prompt_encodes_account_fit_contract() -> None:
     prepare = _load_script("prepare_beauty_review_candidates.py")
+    assert all("肌がゆらぐ" not in topic for topic in prepare.TOPICS)
+    assert all("待ち時間" not in topic for topic in prepare.TOPICS)
     for topic, terms in prepare.TOPIC_CONTEXT_TERMS.items():
         prompt = prepare._prompt(topic, 1, "new_text_generation")
         assert all(term in prompt for term in terms)
