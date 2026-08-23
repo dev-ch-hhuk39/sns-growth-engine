@@ -124,6 +124,19 @@ ok_row = {
 repairs3 = simulate_repair([ok_row])
 check("正常行はスキップ（補正なし）", len(repairs3) == 0)
 
+media_ok_row = {
+    "result_id": "test_media_posted_01",
+    "account_id": "liver_manager",
+    "platform": "threads",
+    "status": "POSTED",
+    "metrics_status": "PENDING",
+    "real_post": "true",
+    "media_used": "true",
+    "external_post_id": "media-99999",
+}
+media_repairs = simulate_repair([media_ok_row])
+check("承認済みメディア投稿の media_used=true は正常", len(media_repairs) == 0)
+
 # 4. platform 空・manual_memo なしの行はスキップ
 skip_row = {
     "result_id": "test_skip_01",
@@ -193,6 +206,10 @@ check("repo-wide診断のdry-run非遮断はreal_postへ広がらない",
 repair_source = open(repair_path).read()
 check("posted_results 修復は batch_update を使う", "ws.batch_update(" in repair_source)
 check("posted_results 修復は update_cell を使わない", "ws.update_cell(" not in repair_source)
+check(
+    "read-after-write は media_used=true/false の両方を許可",
+    'media_used", "")).lower() not in {"true", "false"}' in repair_source,
+)
 
 print("\n--- 結果 ---")
 print(f"PASS: {PASS_COUNT} / FAIL: {FAIL_COUNT}")

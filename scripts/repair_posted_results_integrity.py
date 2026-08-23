@@ -247,7 +247,11 @@ def main() -> int:
             if status == "POSTED":
                 if str(row.get("real_post", "")).lower() != "true":
                     bad.append(f"{row.get('result_id')} real_post={row.get('real_post')!r}")
-                if str(row.get("media_used", "")).lower() != "false":
+                # Both text-only (false) and authorized media posts (true) are
+                # valid. Rights/provenance for true rows is enforced by the
+                # production Sheets verifier; this repair only normalizes the
+                # boolean integrity field.
+                if str(row.get("media_used", "")).lower() not in {"true", "false"}:
                     bad.append(f"{row.get('result_id')} media_used={row.get('media_used')!r}")
         if bad:
             print(f"[WARN] read-after-write で残課題あり: {bad}", file=sys.stderr)
