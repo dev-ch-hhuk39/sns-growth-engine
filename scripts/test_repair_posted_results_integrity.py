@@ -187,6 +187,8 @@ check("threads-queue-worker.yml の repair は verify 前",
       wf_text.index("repair_posted_results_integrity.py") < wf_text.index("--verify-only"))
 check("worker dry-run は posted_results を書き換えない",
       "repair_posted_results_integrity.py --dry-run" in wf_text)
+check("repo-wide診断のdry-run非遮断はreal_postへ広がらない",
+      "continue-on-error: ${{ github.event.inputs.mode == 'dry_run' }}" in wf_text)
 
 repair_source = open(repair_path).read()
 check("posted_results 修復は batch_update を使う", "ws.batch_update(" in repair_source)
