@@ -125,10 +125,59 @@ def test_beauty_generated_candidate_is_never_ready(monkeypatch) -> None:
     assert row["validator_status"] == "PASS"
 
 
+def test_beauty_rejected_slot_uses_content_revision_id(monkeypatch) -> None:
+    import config_loader
+    import sheets_client
+
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    monkeypatch.setenv("GEMINI_API_KEY", "set-for-test")
+    monkeypatch.setattr(prepare, "select_beauty_route", lambda _sequence: "new_text_generation")
+    monkeypatch.setattr(
+        prepare,
+        "load_route_context",
+        lambda _route, _topic="": {
+            "status": "PASS",
+            "source_ids": [],
+            "voice_corpus": {"status": "READY", "source_account_count": 5, "post_count": 50},
+        },
+    )
+    monkeypatch.setattr(
+        prepare,
+        "call_gemini_json",
+        lambda *_args, **_kwargs: {
+            "public_post_text": prepare.SAFE_TOPIC_FALLBACKS[prepare.TOPICS[6]],
+            "primary_topic": prepare.TOPICS[6],
+        },
+    )
+    candidate = prepare.generate_candidate(slot_index=0, sequence_number=1)
+    base_id = candidate["queue_id"]
+    rows = {base_id: {"queue_id": base_id, "status": "REJECTED", "content_hash": "old"}}
+
+    class FakeSheets:
+        def get_queue_item(self, queue_id):
+            return rows.get(queue_id)
+
+        def append_queue_item(self, row):
+            rows[row["queue_id"]] = dict(row)
+
+    monkeypatch.setattr(config_loader, "get_config", lambda: {"sheet_id": "id", "sa_dict": {}})
+    monkeypatch.setattr(sheets_client, "SheetsClient", lambda *_args, **_kwargs: FakeSheets())
+
+    result = prepare.apply_candidate(candidate)
+    assert result["status"] == "APPLIED"
+    assert result["read_after_write"] is True
+    assert candidate["queue_id"].startswith(f"{base_id}_r_")
+    assert rows[base_id]["status"] == "REJECTED"
+    assert rows[candidate["queue_id"]]["status"] == "WAITING_REVIEW"
+
+
 def test_beauty_prompt_encodes_account_fit_contract() -> None:
     prepare = _load_script("prepare_beauty_review_candidates.py")
     assert all("肌がゆらぐ" not in topic for topic in prepare.TOPICS)
     assert all("待ち時間" not in topic for topic in prepare.TOPICS)
+    assert "探す時間と迷いの整理" in prepare._prompt(
+        prepare.TOPICS[7], 1, "new_text_generation"
+    )
     for topic, terms in prepare.TOPIC_CONTEXT_TERMS.items():
         prompt = prepare._prompt(topic, 1, "new_text_generation")
         assert all(term in prompt for term in terms)
@@ -245,6 +294,14 @@ def test_beauty_compliance_blocks_unsupported_outcome_promises() -> None:
         result = beauty_compliance_validation(usage)
         assert result["status"] == "BLOCKED", (usage, result)
         assert "beauty_unverified_product_usage" in result["blocked_reasons"]
+    for claim in (
+        "効果を感じにくい",
+        "コスメの良さを引き出す",
+        "確認するだけでも全然違う",
+        "肌がデリケートな時は肌を休ませる",
+    ):
+        result = beauty_compliance_validation(claim)
+        assert result["status"] == "BLOCKED", (claim, result)
 
 
 def test_beauty_secrets_are_referenced_by_name_only() -> None:
