@@ -161,7 +161,7 @@ def main() -> int:
     # is covered by the failing case above.
     historical = _base_tabs()
     historical["media_assets"] = [
-        {"media_asset_id": "m_legacy", "approval_status": "WAITING_REVIEW", "status": "WAITING_REVIEW",
+        {"media_id": "m_legacy", "approval_status": "WAITING_REVIEW", "status": "WAITING_REVIEW",
          "rights_policy": "owned", "reuse_policy": "allow_reuse", "media_policy": "owned",
          "cloudinary_url": "https://res.cloudinary.com/x/legacy.png"},
     ]

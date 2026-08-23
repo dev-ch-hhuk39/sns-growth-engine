@@ -967,15 +967,35 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     # Historical rows explicitly quarantined from activation remain available
     # for audit, but must not block an unrelated fresh exact queue. New or
     # unmarked assets still fail closed below.
-    historical_media_asset_ids = {
-        str(row.get("media_asset_id", "")).strip()
-        for row in posted
+    historical_media_rows = [
+        row for row in posted
         if "HISTORICAL_MEDIA_EVIDENCE_MISSING" in str(row.get("verification_status", ""))
-        and str(row.get("media_asset_id", "")).strip()
+    ]
+    historical_media_asset_ids = {
+        value
+        for row in historical_media_rows
+        for value in {
+            str(row.get("media_asset_id", "")).strip(),
+            str(row.get("media_id", "")).strip(),
+        }
+        if value
+    }
+    historical_media_urls = {
+        str(row.get("media_url", "")).strip()
+        for row in historical_media_rows
+        if str(row.get("media_url", "")).strip()
     }
 
     def _historical_quarantined_asset(asset: dict[str, Any]) -> bool:
-        return str(asset.get("media_asset_id", "")).strip() in historical_media_asset_ids
+        asset_ids = {
+            str(asset.get("media_asset_id", "")).strip(),
+            str(asset.get("media_id", "")).strip(),
+        }
+        asset_url = (resolve_media_url(asset) or "").strip()
+        return bool(
+            any(asset_id and asset_id in historical_media_asset_ids for asset_id in asset_ids)
+            or (asset_url and asset_url in historical_media_urls)
+        )
 
     # APPROVED な media は必ず権利クリアであること（no_reuse/high/plan_only 等を承認しない）
     approved_not_clear = [
