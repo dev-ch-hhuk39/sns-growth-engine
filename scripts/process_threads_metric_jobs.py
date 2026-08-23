@@ -35,6 +35,7 @@ from publishers.threads_credentials import (  # noqa: E402
 ALLOWED_ACCOUNTS = {
     "night_scout",
     "liver_manager",
+    "beauty_account",
 }
 
 VERIFIED_RESULT_STATUSES = {
@@ -1226,6 +1227,7 @@ def main() -> int:
             "all",
             "night_scout",
             "liver_manager",
+            "beauty_account",
         ],
     )
 
