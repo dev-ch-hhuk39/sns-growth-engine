@@ -21,6 +21,7 @@ def main() -> int:
         ("no x publisher", "publish_x_post.py" not in content),
         ("beauty option is explicit", '"beauty_account"' in content and "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT" in content),
         ("verify after", "Sheets verify after processing" in content),
+        ("verify scoped to exact text queue", content.count('--exact-text-queue-id "$QUEUE_ID"') == 2),
         ("verify after real_post only", "mode == 'real_post'" in content and content.index("mode == 'real_post'") < content.index("Sheets verify after processing") + 200),
         ("account-specific secrets", "THREADS_ACCESS_TOKEN_NIGHT_SCOUT" in content and "THREADS_ACCESS_TOKEN_LIVER_MANAGER" in content),
         ("sheets secret fallback", "secrets.SNS_MASTER_SHEET_ID" in content and "secrets.SA_JSON_BASE64" in content),
