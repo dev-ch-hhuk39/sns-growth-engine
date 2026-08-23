@@ -187,7 +187,7 @@ def test_beauty_prompt_encodes_account_fit_contract() -> None:
         assert "average_line_length" not in prompt
         assert "full_stops_per_post" not in prompt
         assert "製品表示や説明書" in prompt
-        assert "確認する・比べる・見直す・待つ・変える・メモする" in prompt
+        assert "確認する・比べる・見直す・待つ・変える・メモする・並べる" in prompt
         assert "読者が自分で試して判断" in prompt
     no_emoji_prompt = prepare._prompt(prepare.TOPICS[0], 10, "new_text_generation")
     assert "絵文字は0個" in no_emoji_prompt
@@ -309,5 +309,5 @@ def test_beauty_secrets_are_referenced_by_name_only() -> None:
     assert "${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}" in beauty
     assert "${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}" in beauty
     assert "${{ secrets.THREADS_HANDLE_BEAUTY_ACCOUNT }}" in beauty
-    assert "GEMINI_MODEL: ${{ vars.GEMINI_GENERATOR_MODEL || 'gemini-3.5-flash' }}" in beauty
+    assert "GEMINI_MODEL: ${{ vars.BEAUTY_GEMINI_MODEL || 'gemini-2.5-flash-lite' }}" in beauty
     assert "access_token=" not in beauty.lower()
