@@ -114,7 +114,7 @@ jobs:
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
 
       - name: Preview candidate
-        if: env.ACTION == 'dry_run' || env.ACTION == 'prepare'
+        if: env.ACTION == 'dry_run'
         env:
           DRY_RUN: "false"
         run: python3 scripts/prepare_beauty_review_candidates.py --slot-index "$SLOT_INDEX" --dry-run
