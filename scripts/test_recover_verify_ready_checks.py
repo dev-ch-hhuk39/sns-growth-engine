@@ -132,6 +132,21 @@ def main() -> int:
     res = mod.verify_state(_FakeClient(v2))["checks"]
     checks.append(("bad: x/beauty の READY は違反 (=False)", res["no_ready_for_x_or_beauty"] is False))
 
+    # === clean: Beauty READY with explicit human approval trail ===
+    beauty_approved = _base_tabs()
+    beauty_approved["queue"] = [
+        {"queue_id": "q_beauty_approved", "account_id": "beauty_account", "target_account_id": "beauty_account",
+         "platform": "threads", "status": "READY", "generation_mode": "manual"},
+    ]
+    beauty_approved["logs"] = [
+        {"operation": "queue_approved", "status": "OK",
+         "message": "queue_approved: queue_id=q_beauty_approved WAITING_REVIEW→READY",
+         "details": "queue_id=q_beauty_approved platform=threads reason='owner review'"},
+    ]
+    res = mod.verify_state(_FakeClient(beauty_approved))["checks"]
+    checks.append(("clean: 人間承認済みBeauty READYは許可", res["no_ready_for_x_or_beauty"] is True))
+    checks.append(("clean: Beauty queueのaccount/platform境界", res["queue_beauty_0"] is True))
+
     # === violation: media 必須なのに media 参照なし ===
     v3 = _base_tabs()
     v3["queue"] = [

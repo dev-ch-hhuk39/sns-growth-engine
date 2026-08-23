@@ -240,7 +240,6 @@ def account_rows() -> list[dict[str, Any]]:
             "sns_dm_cta_enabled": "false",
             "auto_publish": "false",
             "default_queue_status": "DRAFT",
-            "active": "false",
             "notes": "実投稿禁止。READY/POSTED化禁止。",
         },
     ]
@@ -965,15 +964,28 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             )
         )
 
+    # Historical rows explicitly quarantined from activation remain available
+    # for audit, but must not block an unrelated fresh exact queue. New or
+    # unmarked assets still fail closed below.
+    historical_media_asset_ids = {
+        str(row.get("media_asset_id", "")).strip()
+        for row in posted
+        if "HISTORICAL_MEDIA_EVIDENCE_MISSING" in str(row.get("verification_status", ""))
+        and str(row.get("media_asset_id", "")).strip()
+    }
+
+    def _historical_quarantined_asset(asset: dict[str, Any]) -> bool:
+        return str(asset.get("media_asset_id", "")).strip() in historical_media_asset_ids
+
     # APPROVED な media は必ず権利クリアであること（no_reuse/high/plan_only 等を承認しない）
     approved_not_clear = [
         r for r in media
-        if _approval_marker(r) and not _asset_rights_clear(r)
+        if _approval_marker(r) and not _asset_rights_clear(r) and not _historical_quarantined_asset(r)
     ]
     # upload 済み（cloudinary_url 等あり / upload_status=UPLOADED）の media は承認済みのみ
     uploaded_unapproved = [
         r for r in media
-        if _cloudinary_uploaded(r) and not _approved(r)
+        if _cloudinary_uploaded(r) and not _approved(r) and not _historical_quarantined_asset(r)
     ]
 
     # --- metrics ループの安全（生成候補が worker に拾われない）---
@@ -1007,6 +1019,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             or str(r.get("upload_status", "")).upper() == "READY"
         )
         and not _asset_rights_clear(r)
+        and not _historical_quarantined_asset(r)
     ]
     unsafe_sources = [
         r for r in source_accounts
@@ -1199,10 +1212,13 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
             _approved_qids.add(_mt.strip())
 
     generated_ready = [r for r in ready_rows if _is_generated_candidate(r)]
-    ready_x_or_beauty = [
+    ready_x_or_unapproved_beauty = [
         r for r in ready_rows
         if str(r.get("platform", "")).lower() == "x"
-        or str(r.get("account_id", "")) == "beauty_account"
+        or (
+            str(r.get("account_id", "")) == "beauty_account"
+            and str(r.get("queue_id", "")).strip() not in _approved_qids
+        )
     ]
 
     # media は queue 行から media_url（埋め込み）か media_asset_id（参照）のどちらでも辿れる。
@@ -1411,7 +1427,14 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         # FAIL: queue が 0 件なら即 FAIL。1〜2 件は WARN（上記 warning_list に追加済み）
         "queue_night_scout_min1": ns_count >= 1,
         "queue_liver_manager_min1": lm_count >= 1,
-        "queue_beauty_0": q_count("beauty_account") == 0,
+        # Legacy key retained for dashboards. Beauty is now active, so its
+        # contract is account-scoped Threads inventory, not an empty queue.
+        "queue_beauty_0": all(
+            str(r.get("platform", "")).lower() == "threads"
+            and str(r.get("target_account_id") or r.get("account_id") or "") == "beauty_account"
+            for r in queue
+            if str(r.get("account_id", "")) == "beauty_account"
+        ),
         "posted_threads_result": any(
             str(r.get("platform", "")).lower() == "threads"
             or "threads" in str(r.get("manual_memo", "")).lower()
@@ -1470,7 +1493,9 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         "planned_not_postable_or_documented": "PLANNED" not in worker_eligible,
         "generated_candidates_not_ready_by_default": not generated_ready_unapproved,
         "approve_queue_required_for_ready": "READY" in approve_allowed,
-        "no_ready_for_x_or_beauty": not ready_x_or_beauty,
+        # Legacy key retained: X READY is always blocked; Beauty READY requires
+        # an explicit queue_approved human-review audit trail.
+        "no_ready_for_x_or_beauty": not ready_x_or_unapproved_beauty,
         "no_media_required_without_media_url": not ready_media_missing,
         "no_unapproved_media_ready": not ready_media_unapproved,
         "no_reference_only_media_ready": not ready_media_reference_only,
