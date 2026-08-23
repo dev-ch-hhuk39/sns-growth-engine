@@ -96,17 +96,17 @@ if ref_jobs_ok:
 else:
     _check("reference_with_source_planned", True)
 
-# 8. beauty_account → WAITING_REVIEW
+# 8. activation後のBeautyは計画のみ。このplannerはREADY/POSTEDにしない。
 mix_beauty = plan_content_mix("beauty_account", "threads", count=5, seed=42)
 jobs_beauty = build_generation_jobs_candidates(mix_beauty)
-_check("beauty_waiting_review", mix_beauty.get("safety_status") == "DRAFT_ONLY")
+_check("beauty_active_plan", mix_beauty.get("safety_status") == "OK")
 beauty_jobs = jobs_beauty.get("jobs", [])
 for j in beauty_jobs:
-    if j.get("status") not in ("WAITING_REVIEW", "NOT_READY"):
-        _check("beauty_all_waiting_review", False, f"status={j.get('status')}")
+    if j.get("status") not in ("PLANNED", "NOT_READY"):
+        _check("beauty_jobs_plan_only", False, f"status={j.get('status')}")
         break
 else:
-    _check("beauty_all_waiting_review", True)
+    _check("beauty_jobs_plan_only", True)
 
 # 9. warnings list存在
 _check("jobs_has_warnings", isinstance(jobs_result.get("warnings"), list))

@@ -381,3 +381,11 @@ Reference collection is bounded. Only sources with
 loop. A fetch failure is non-blocking because safe original posts can refill
 the queue; a collected reference selects a transformed reader-facing topic,
 not an internal analysis or a copy of the source.
+
+## 2026-08-23 Three-account execution contract
+
+Night Scout and Liver Manager use independent scheduled generation, exact-candidate Hybrid review, AUTO_READY, exact publication, posted-results persistence, and 24h/72h/7d metrics reservation. Beauty uses the same publisher and persistence but intentionally keeps human READY approval between Hybrid review and publication. PDCA reads are always filtered by `account_id` and MEASURED status.
+
+Reference acquisition is a separate bounded scheduled workflow. Saved source posts retain individual post identity, text, ordered media metadata, provenance, and target account. Acquisition failure is fail-soft/DEFERRED and never fabricates a source or grants rights. X publishing remains off.
+
+Media slots never fall back to text. Approved READY inventory may publish through its account-specific slot, but automatic download, cutting, Cloudinary upload, and Beauty media reuse stay blocked unless the exact source permission and runtime gates are present.

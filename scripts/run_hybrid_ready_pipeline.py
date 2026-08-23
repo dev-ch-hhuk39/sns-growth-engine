@@ -38,6 +38,7 @@ def gate_command(
     apply: bool,
     *,
     approval_mode: str = "text",
+    queue_id: str = "",
 ) -> list[str]:
     command = [
         sys.executable,
@@ -53,6 +54,8 @@ def gate_command(
     ]
     if approval_mode == "media":
         command.append("--require-human-review")
+    if queue_id:
+        command.extend(["--queue-id", queue_id])
     return command
 
 
@@ -102,6 +105,7 @@ def command_plan(
         max_candidates,
         apply,
         approval_mode=approval_mode,
+        queue_id=queue_id,
     )]
     if queue_id:
         commands.append(approval_command(account_id, slot_id, queue_id, apply=apply, approval_mode=approval_mode))
@@ -141,6 +145,7 @@ def execute(
     *,
     apply: bool,
     approval_mode: str = "text",
+    queue_id: str = "",
     runner: Callable[[list[str]], subprocess.CompletedProcess[str]] = run_command,
 ) -> dict[str, Any]:
     stages: list[dict[str, Any]] = []
@@ -152,6 +157,7 @@ def execute(
             max_candidates,
             apply,
             approval_mode=approval_mode,
+            queue_id=queue_id,
         ),
         runner,
     )
@@ -169,6 +175,8 @@ def execute(
         }
 
     reviewed_ids = reviewed_pass_queue_ids(gate_stage["payload"])
+    if queue_id:
+        reviewed_ids = [item for item in reviewed_ids if item == queue_id]
     if not reviewed_ids:
         return {
             "status": "NO_READY_CANDIDATE",
@@ -231,6 +239,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
     parser.add_argument("--slot-id", required=True)
+    parser.add_argument("--queue-id", default="")
     parser.add_argument("--max-candidates", type=int, default=1)
     parser.add_argument("--approval-mode", choices=["text", "media"], default="text")
     parser.add_argument("--apply", action="store_true")
@@ -250,6 +259,7 @@ def main() -> int:
         args.max_candidates,
         apply=args.apply,
         approval_mode=args.approval_mode,
+        queue_id=args.queue_id,
     )
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     print(rendered)

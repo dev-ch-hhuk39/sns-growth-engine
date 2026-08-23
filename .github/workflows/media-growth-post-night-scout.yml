@@ -2,7 +2,7 @@ name: Media Growth Post Night Scout
 
 on:
   schedule:
-    - cron: "2 12 * * *"
+    - cron: "45 11 * * *"
   workflow_dispatch:
     inputs:
       confirm_media_post:

@@ -61,12 +61,12 @@ def assert_activation_config() -> None:
 
 
 def assert_all_slot_schedules() -> None:
-    assert schedules(TEXT_WORKFLOWS["night_scout"]) == {"2 5 * * *", "2 7 * * *", "2 16 * * *"}
-    assert schedules(TEXT_WORKFLOWS["liver_manager"]) == {"4 1 * * *", "4 4 * * *", "4 12 * * *"}
-    assert schedules(MEDIA_PUBLISH_WORKFLOWS["night_scout_direct"]) == {"2 9 * * *"}
-    assert schedules(MEDIA_PUBLISH_WORKFLOWS["night_scout_clip"]) == {"2 12 * * *"}
-    assert schedules(MEDIA_PUBLISH_WORKFLOWS["liver_manager_direct"]) == {"4 7 * * *"}
-    assert schedules(MEDIA_PUBLISH_WORKFLOWS["liver_manager_clip"]) == {"4 9 * * *"}
+    assert schedules(TEXT_WORKFLOWS["night_scout"]) == {"45 4 * * *", "45 6 * * *", "45 15 * * *"}
+    assert schedules(TEXT_WORKFLOWS["liver_manager"]) == {"45 0 * * *", "45 3 * * *", "45 11 * * *"}
+    assert schedules(MEDIA_PUBLISH_WORKFLOWS["night_scout_direct"]) == {"45 8 * * *"}
+    assert schedules(MEDIA_PUBLISH_WORKFLOWS["night_scout_clip"]) == {"45 11 * * *"}
+    assert schedules(MEDIA_PUBLISH_WORKFLOWS["liver_manager_direct"]) == {"45 6 * * *"}
+    assert schedules(MEDIA_PUBLISH_WORKFLOWS["liver_manager_clip"]) == {"45 8 * * *"}
 
 
 def assert_text_workflow_contract(account_id: str) -> None:

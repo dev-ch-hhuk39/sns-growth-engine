@@ -2,9 +2,9 @@ name: Autonomous Growth Loop Night Scout
 
 on:
   schedule:
-    - cron: "2 5 * * *"
-    - cron: "2 7 * * *"
-    - cron: "2 16 * * *"
+    - cron: "45 4 * * *"
+    - cron: "45 6 * * *"
+    - cron: "45 15 * * *"
   workflow_dispatch:
     inputs:
       confirm_autonomous:
@@ -84,9 +84,9 @@ jobs:
             slot="$MANUAL_SLOT_ID"
           else
             case "${{ github.event.schedule }}" in
-              "2 5 * * *") slot="ns_1400_reference" ;;
-              "2 7 * * *") slot="ns_1600_original" ;;
-              "2 16 * * *") slot="ns_2500_pdca" ;;
+              "45 4 * * *") slot="ns_1400_reference" ;;
+              "45 6 * * *") slot="ns_1600_original" ;;
+              "45 15 * * *") slot="ns_2500_pdca" ;;
               *) slot="manual_text" ;;
             esac
           fi

@@ -1,8 +1,8 @@
 {
   "account_id": "beauty_account",
   "display_name": "美容アカウント",
-  "status": "draft_only",
-  "_status_note": "認証・canary前の安全停止状態。候補はWAITING_REVIEWまで。READY化・POSTED化・予約本番投稿はactivation後のみ。",
+  "status": "active",
+  "_status_note": "Beauty Threads production activation approved. Every candidate remains WAITING_REVIEW until explicit human approval; medical content uses its separate mandatory review lane.",
   "platforms": ["threads"],
   "persona": "美容に詳しい、少しお姉さん寄りの女友達。コスメやケアを日常で試しやすい判断基準にして届ける。",
   "target_audience": "美容・コスメが好きな20〜30代女性",
@@ -132,7 +132,7 @@
     "daily_target_max": 2,
     "planned_review_slots_jst": ["11:30", "20:30"],
     "candidate_preparation_enabled": true,
-    "scheduled_publish_enabled": false,
+    "scheduled_publish_enabled": true,
     "activation_requires_credentials": true
   },
   "threads_credentials": {
@@ -141,14 +141,14 @@
     "handle_secret_name": "THREADS_HANDLE_BEAUTY_ACCOUNT",
     "access_token_secret_name": "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT",
     "user_id_secret_name": "THREADS_USER_ID_BEAUTY_ACCOUNT",
-    "oauth_status": "WAITING_OWNER_INPUT"
+    "oauth_status": "GITHUB_ENVIRONMENT_SECRETS"
   },
   "safety_policy": {
     "requires_human_review_before_post": true,
-    "allow_real_post": false,
+    "allow_real_post": true,
     "min_publish_score": 85,
     "brand_risk_threshold": 20,
-    "draft_only_enforcement": "STRICT",
+    "draft_only_enforcement": "DISABLED_AFTER_OWNER_ACTIVATION",
     "medical_ad_risk_check": true
   }
 }

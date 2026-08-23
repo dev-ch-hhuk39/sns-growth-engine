@@ -23,7 +23,7 @@ from generate_threads_ideas_from_references import original_text_similarity_guar
 from content_slot_runs import build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from collect_video_references import build_video_reference, fetch_video_metadata, fetch_ytdlp_metadata, fetch_youtube_transcript  # noqa: E402
 from generate_video_reference_posts import build_video_posts  # noqa: E402
-from prepare_pilot_sources import load_sources, select_pilot_sources, source_platform  # noqa: E402
+from prepare_pilot_sources import load_sources, select_pilot_sources  # noqa: E402
 from public_post_quality import generate_production_post, independent_account_order, final_public_post_validator, public_preview  # noqa: E402
 from content_schedule import TEXT_POST_TYPES, slot_by_id  # noqa: E402
 
@@ -539,7 +539,14 @@ def infer_no_post_reason(result: dict[str, Any]) -> str:
         return "POSTED_SAVE_FAILED"
     if result.get("returncode") not in {0, None}:
         return "COMMAND_FAILED"
-    return "NO_POST_UNKNOWN"
+    status = str(payload.get("status", "")).upper()
+    if status == "NO_DATA":
+        return str(payload.get("reason") or "GENERATION_NO_DATA").upper()
+    if status == "SAFE_NO_CANDIDATE":
+        return str(payload.get("reason") or "QUALITY_BLOCKED").upper()
+    if result.get("reason") == "stop_before_post":
+        return "AWAITING_HYBRID_REVIEW"
+    return "NO_POST_RESULT_MISSING"
 
 
 def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[str, Any]]) -> dict[str, Any]:
@@ -548,7 +555,7 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
         if (
             "process_threads_queue.py" in str(r.get("cmd", ""))
             or "run_slot_text_fallback.py" in str(r.get("cmd", ""))
-        ) and r.get("status") != "PLAN_ONLY"
+        ) and r.get("status") not in {"PLAN_ONLY", "SKIPPED"}
     ]
     auto_ready_results = [
         r for r in results
@@ -561,6 +568,20 @@ def summarize_autonomous_results(account_id: str, mode: str, results: list[dict[
     )
     no_post_reasons = [infer_no_post_reason(r) for r in post_results]
     no_post_reasons = [r for r in no_post_reasons if r]
+    if not no_post_reasons:
+        for result in reversed(results):
+            payload = result.get("payload") or {}
+            status = str(payload.get("status") or result.get("status") or "").upper()
+            if status in {"NO_DATA", "SAFE_NO_CANDIDATE"}:
+                no_post_reasons.append(
+                    str(payload.get("reason") or result.get("reason") or "NO_AI_APPROVED_CANDIDATE").upper()
+                )
+                break
+    if not no_post_reasons:
+        for result in reversed(results):
+            if result.get("reason") == "stop_before_post":
+                no_post_reasons.append("AWAITING_HYBRID_REVIEW")
+                break
     def _auto_ready_rejected_all(result: dict[str, Any]) -> bool:
         text = str(result.get("stdout_tail", ""))
         compact = text.replace(" ", "")
@@ -649,7 +670,8 @@ def save_text_slot_result(plan: dict[str, Any], results: list[dict[str, Any]]) -
     try:
         from config_loader import get_config
         from sheets_client import SheetsClient
-        cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
         if existing_slot_status(client, account, str(slot["slot_id"])) in {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}:
             return {"status": "SKIPPED", "reason": "slot_already_posted"}
         worker = next((row for row in reversed(results) if "process_threads_queue.py" in str(row.get("cmd", ""))), {})
@@ -822,6 +844,8 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             account,
             "--apply",
             "--confirm-generate",
+            "--top-n",
+            "1",
             *slot_args,
         ]
         if str(slot.get("post_type", "")) == "pdca_text":
@@ -832,6 +856,28 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
             generation_result["status"] = "SAFE_NO_CANDIDATE"
             generation_result["recovery_reason"] = "generation_failed_without_template_fallback"
             return results
+        generation_payload = generation_result.get("payload") or {}
+        effective_queue_ids = [
+            str(value) for value in generation_payload.get("effective_queue_ids", generation_payload.get("queue_ids", []))
+            if str(value)
+        ]
+        if not effective_queue_ids:
+            results.append({
+                "cmd": "generation/exact_candidate",
+                "returncode": 0,
+                "status": "SAFE_NO_CANDIDATE",
+                "reason": str(generation_payload.get("reason") or "NO_AI_APPROVED_CANDIDATE").upper(),
+            })
+            continue
+        if getattr(args, "stop_before_post", False):
+            results.append({
+                "cmd": "generation/exact_candidate",
+                "returncode": 0,
+                "status": "GENERATED_WAITING_HYBRID_REVIEW",
+                "queue_ids": effective_queue_ids,
+                "would_post": False,
+            })
+            continue
         approval = _run([sys.executable, "scripts/auto_approve_queue.py", "--account-id", account, "--apply", "--confirm-auto-ready", "--max-ready", "1", "--use-sheets", "--skip-setup"])
         results.append(approval)
         if approval.get("returncode") != 0:
@@ -877,7 +923,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--dry-run", action="store_true", help="plan only (default)")
     parser.add_argument("--preflight", action="store_true", help="read-only production readiness check; never posts")
-    parser.add_argument("--stop-before-post", action="store_true", help="apply score/generate/AUTO_READY only; skip process_threads_queue and never post")
+    parser.add_argument("--stop-before-post", action="store_true", help="apply score/generate only; exact-candidate Hybrid review and posting run separately")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-autonomous", action="store_true")
     parser.add_argument("--slot-id", default="", help="canonical text content slot resolved by a scheduled workflow")

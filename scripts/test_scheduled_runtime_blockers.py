@@ -29,7 +29,15 @@ def main() -> int:
         event_name="schedule",
     )
     assert within["status"] == "PASS"
-    assert within["delay_minutes"] == 10
+    assert within["delay_minutes"] == 12
+
+    early = guard.scheduled_window_decision(
+        "ns_1800_direct_media",
+        now=datetime(2026, 8, 6, 17, 45, tzinfo=JST),
+        event_name="schedule",
+    )
+    assert early["status"] == "PASS"
+    assert early["delay_minutes"] == -15
 
     delayed = guard.scheduled_window_decision(
         "ns_1800_direct_media",

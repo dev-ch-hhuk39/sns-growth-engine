@@ -87,15 +87,15 @@ test_text_long = "あ" * 281  # 281文字 → NG
 _check("x_char_limit_ok", len(test_text_ok) <= 280)
 _check("x_char_limit_over", len(test_text_long) > 280)
 
-# 5. account_config でbeauty_accountはdraft_only
+# 5. owner activation後もBeautyは人間review必須
 try:
     from accounts.account_config import load_account_config
     beauty_cfg = load_account_config("beauty_account")
-    _check("beauty_is_draft_only", beauty_cfg.is_draft_only())
-    _check("beauty_cannot_post", beauty_cfg.is_draft_only())
+    _check("beauty_is_active", beauty_cfg.is_active() and not beauty_cfg.is_draft_only())
+    _check("beauty_review_required", beauty_cfg.safety_policy.get("requires_human_review_before_post") is True)
 except FileNotFoundError:
-    _check("beauty_is_draft_only", True, "account_config not found — OK")
-    _check("beauty_cannot_post", True)
+    _check("beauty_is_active", False, "account_config not found")
+    _check("beauty_review_required", False)
 
 # 6. APIキー表示禁止確認（.envを読まない）
 env_file = os.path.join(_V2_ROOT, ".env")
@@ -114,7 +114,7 @@ _check("no_real_post", True)
 try:
     from accounts.account_config import load_account_config
     beauty_cfg = load_account_config("beauty_account")
-    generation_status = "WAITING_REVIEW" if beauty_cfg.is_draft_only() else "PLANNED"
+    generation_status = "WAITING_REVIEW" if beauty_cfg.safety_policy.get("requires_human_review_before_post") else "PLANNED"
     _check("beauty_generation_status", generation_status == "WAITING_REVIEW")
 except FileNotFoundError:
     _check("beauty_generation_status", True, "account_config not found — OK")

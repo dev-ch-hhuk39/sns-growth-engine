@@ -245,14 +245,15 @@ def test_improvement_suggestions_not_auto_activated():
         assert status != "ACTIVE", f"improvement_suggestions に ACTIVE があります（禁止）"
 
 
-def test_beauty_account_excluded_from_learning_loop():
-    """beauty_account（draft_only）は learning loop から自動的に除外される。"""
+def test_beauty_account_learning_is_isolated_and_reviewed():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     cfg = load_account_config("beauty_account")
-    assert cfg.is_draft_only(), "beauty_account は draft_only でなければなりません"
-    # learning loop は active account のみ
-    assert not cfg.is_active(), "beauty_account は active になっていてはいけません"
+    assert cfg.is_active()
+    policy = cfg.learning_policy
+    assert policy.get("account_scope") == "beauty_account"
+    assert policy.get("cross_account_learning") is False
+    assert policy.get("auto_activate_rules") is False
 
 
 def test_series_id_format():
@@ -291,7 +292,7 @@ if __name__ == "__main__":
     _test("series_fixture_series_status", test_series_fixture_series_status)
     _test("learning_rules_auto_activate_false", test_learning_rules_auto_activate_false)
     _test("improvement_suggestions_not_auto_activated", test_improvement_suggestions_not_auto_activated)
-    _test("beauty_account_excluded_from_learning_loop", test_beauty_account_excluded_from_learning_loop)
+    _test("beauty_account_learning_is_isolated_and_reviewed", test_beauty_account_learning_is_isolated_and_reviewed)
     _test("series_id_format", test_series_id_format)
 
     print(f"\n{'=' * 65}")

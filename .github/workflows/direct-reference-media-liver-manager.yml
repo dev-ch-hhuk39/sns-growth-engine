@@ -2,7 +2,7 @@ name: Direct Reference Media Liver Manager
 
 on:
   schedule:
-    - cron: "4 7 * * *"
+    - cron: "45 6 * * *"
   workflow_dispatch:
     inputs:
       confirm_direct_media:

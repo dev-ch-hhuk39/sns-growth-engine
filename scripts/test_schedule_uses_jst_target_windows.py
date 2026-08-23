@@ -9,8 +9,8 @@ def main() -> int:
     liver = (ROOT / ".github/workflows/autonomous-growth-loop-liver-manager.yml").read_text(encoding="utf-8")
     guard = (ROOT / "scripts/scheduled_execution_guard.py").read_text(encoding="utf-8")
     ok = (
-        all(cron in night for cron in ['cron: "2 5 * * *"', 'cron: "2 7 * * *"', 'cron: "2 16 * * *"'])
-        and all(cron in liver for cron in ['cron: "4 1 * * *"', 'cron: "4 4 * * *"', 'cron: "4 12 * * *"'])
+        all(cron in night for cron in ['cron: "45 4 * * *"', 'cron: "45 6 * * *"', 'cron: "45 15 * * *"'])
+        and all(cron in liver for cron in ['cron: "45 0 * * *"', 'cron: "45 3 * * *"', 'cron: "45 11 * * *"'])
         and "Early runtime preflight" in night
         and "Early runtime preflight" in liver
         and "scheduled_window_decision" in night + liver

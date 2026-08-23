@@ -66,22 +66,22 @@ _check("has_checklist", any(word in output for word in ["チェックリスト",
 # 5. 禁止事項が明記される
 _check("has_restriction_notice", "draft_only" in output or "active化" in output)
 
-# 6. beauty_account account_config確認
+# 6. owner activation後のaccount configとreview gateを確認
 try:
     from accounts.account_config import load_account_config
     cfg = load_account_config("beauty_account")
-    _check("beauty_is_draft_only", cfg.is_draft_only())
-    _check("beauty_no_active", not cfg.is_active() or cfg.is_draft_only())
+    _check("beauty_is_active", cfg.is_active() and not cfg.is_draft_only())
+    _check("beauty_human_review_required", cfg.safety_policy.get("requires_human_review_before_post") is True)
 except FileNotFoundError:
-    _check("beauty_is_draft_only", True, "account_config not found")
-    _check("beauty_no_active", True)
+    _check("beauty_is_active", False, "account_config not found")
+    _check("beauty_human_review_required", False)
 
 # 7. 実投稿なし
 _check("no_real_post", True)
 _check("no_api_call", True)
 
-print(f"\n=================================================================")
+print("\n=================================================================")
 print(f"  PASS={PASS}  FAIL={FAIL}")
-print(f"=================================================================")
+print("=================================================================")
 if FAIL > 0:
     sys.exit(1)

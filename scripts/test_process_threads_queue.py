@@ -20,6 +20,23 @@ def _load():
 def main() -> int:
     mod = _load()
     source = SCRIPT.read_text(encoding="utf-8")
+    class FakeClient:
+        def __init__(self):
+            self.rows = [
+                {"queue_id": "old", "account_id": "beauty_account", "platform": "threads", "status": "READY", "slot_id": "beauty_1130", "business_date_jst": "2026-08-22"},
+                {"queue_id": "current", "account_id": "beauty_account", "platform": "threads", "status": "READY", "slot_id": "beauty_1130", "business_date_jst": "2026-08-23"},
+                {"queue_id": "wrong-slot", "account_id": "beauty_account", "platform": "threads", "status": "READY", "slot_id": "beauty_2030", "business_date_jst": "2026-08-23"},
+            ]
+
+        def _ws(self, _logical):
+            return self
+
+        def get_all_records(self):
+            return self.rows
+
+    exact = mod.select_candidates(
+        FakeClient(), "beauty_account", 1, slot_id="beauty_1130", business_date_jst="2026-08-23"
+    )
     checks = [
         ("eligible statuses READY only", mod.ELIGIBLE_STATUSES == {"READY"}),
         ("waiting_review not eligible", "WAITING_REVIEW" not in mod.ELIGIBLE_STATUSES),
@@ -32,6 +49,7 @@ def main() -> int:
         ("posted save fallback", "POSTED_SAVE_FAILED" in source and "posted_results_fallback" in source),
         ("pdca waiting review", "WAITING_REVIEW" in source and "auto_apply=false" in source),
         ("dry-run read-only output", "[READ_ONLY]" in source and '"read_only": True' in source),
+        ("exact Beauty slot and date selection", [row["queue_id"] for row in exact] == ["current"]),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
