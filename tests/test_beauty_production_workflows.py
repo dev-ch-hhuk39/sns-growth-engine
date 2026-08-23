@@ -49,6 +49,12 @@ def test_beauty_workflow_prepares_then_publishes_only_reviewed_ready_rows() -> N
     assert text.count("recover_production_sheets_threads_first.py --verify-only") == 1
     assert "posted_results read-after-write" in text
     assert "queue-level read-after-write" in text
+    preview_step = next(
+        step for step in data["jobs"]["beauty-production"]["steps"]
+        if step.get("name") == "Preview candidate"
+    )
+    assert preview_step["if"] == "env.ACTION == 'dry_run'"
+    assert text.count("prepare_beauty_review_candidates.py") == 2
 
 
 def test_token_refresh_workflow_includes_beauty_without_logging_token() -> None:
