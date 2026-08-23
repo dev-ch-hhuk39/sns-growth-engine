@@ -198,7 +198,22 @@ def main() -> int:
             details=ready_payload,
         )
 
-    activation = [sys.executable, "scripts/scheduled_publish_activation_gate.py", "--use-sheets"]
+    activation = [
+        sys.executable,
+        "scripts/scheduled_publish_activation_gate.py",
+        "--use-sheets",
+        "--account-id",
+        args.account_id,
+        "--post-type",
+        str(window.get("post_type") or "") or {
+            "ns_1600_original": "original_text",
+            "ns_1400_reference": "reference_text",
+            "ns_2500_pdca": "pdca_text",
+            "lm_1000_original": "original_text",
+            "lm_1300_reference": "reference_text",
+            "lm_2100_pdca": "pdca_text",
+        }.get(args.slot_id, "original_text"),
+    ]
     rc, activation_payload = run_stage("runtime_activation_gate", activation, safe_env)
     append_job_summary("Runtime activation gate", activation_payload)
     if rc != 0:

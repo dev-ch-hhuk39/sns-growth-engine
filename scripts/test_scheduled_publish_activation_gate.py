@@ -12,6 +12,7 @@ from final_production_contracts import (
 )
 from scheduled_publish_activation_gate import (
     _decision,
+    _scoped_text_decision,
     evaluate,
 )
 
@@ -203,6 +204,37 @@ assert (
     "kill_switch_enabled"
     in killed["blocked_reasons"]
 )
+
+scoped_integrity = {
+    "status": "FAIL",
+    "checks": [
+        {"account_id": "night_scout", "canary_type": "original_text", "status": "PASS"},
+        {"account_id": "liver_manager", "canary_type": "direct_reference_media", "status": "FAIL"},
+    ],
+}
+scoped = _scoped_text_decision(
+    {**config, "kill_switch": False},
+    posted,
+    jobs,
+    evidence_source="READ_OK",
+    canary_integrity=scoped_integrity,
+    account_id="night_scout",
+    post_type="original_text",
+)
+assert scoped["status"] == "ALLOW"
+assert scoped["selected_evidence_canary_id"]
+
+wrong_route = _scoped_text_decision(
+    {**config, "kill_switch": False},
+    posted,
+    jobs,
+    evidence_source="READ_OK",
+    canary_integrity=scoped_integrity,
+    account_id="night_scout",
+    post_type="pdca_text",
+)
+assert wrong_route["status"] == "BLOCKED"
+assert "scoped_canary_source_integrity_incomplete" in wrong_route["blocked_reasons"]
 
 print(
     "PASS "

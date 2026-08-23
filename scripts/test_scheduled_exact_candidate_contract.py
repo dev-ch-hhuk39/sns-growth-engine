@@ -50,6 +50,9 @@ log line before JSON
     source = (ROOT / "scripts/run_autonomous_loop.py").read_text(encoding="utf-8")
     assert '"--top-n",\n            "1"' in source
     assert "NO_POST_UNKNOWN" not in source
+    scheduled = (ROOT / "scripts/run_scheduled_text_slot_pipeline.py").read_text(encoding="utf-8")
+    assert '"--account-id"' in scheduled
+    assert '"--post-type"' in scheduled
     print("PASS test_scheduled_exact_candidate_contract.py")
     return 0
 
