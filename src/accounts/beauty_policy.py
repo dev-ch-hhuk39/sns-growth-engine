@@ -45,6 +45,7 @@ PROHIBITED_CLAIMS = (
     "たった数分で",
     "たった数分でも",
     "仕上がりが変わる",
+    "肌が疲れてるサイン",
 )
 
 SALES_OR_PRESSURE_TERMS = (
@@ -70,6 +71,9 @@ FABRICATED_EXPERIENCE_PATTERNS = (
 UNVERIFIED_USAGE_TERMS = (
     "シートマスクの上から",
     "化粧水をつけるついでに",
+    "たっぷり塗",
+    "数分待",
+    "数分長く",
 )
 
 ALLOWED_CTA_MARKERS = {

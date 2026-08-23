@@ -231,6 +231,13 @@ def test_beauty_compliance_blocks_unsupported_outcome_promises() -> None:
     assert fabricated["status"] == "BLOCKED", fabricated
     assert "beauty_fabricated_personal_experience" in fabricated["blocked_reasons"]
 
+    tired_skin = beauty_compliance_validation("肌が疲れてるサインかもしれない")
+    assert tired_skin["status"] == "BLOCKED", tired_skin
+    for usage in ("化粧水をたっぷり塗る", "数分待ってメイク", "数分長く待つ"):
+        result = beauty_compliance_validation(usage)
+        assert result["status"] == "BLOCKED", (usage, result)
+        assert "beauty_unverified_product_usage" in result["blocked_reasons"]
+
 
 def test_beauty_secrets_are_referenced_by_name_only() -> None:
     _, beauty = _workflow("beauty-threads-production.yml")
