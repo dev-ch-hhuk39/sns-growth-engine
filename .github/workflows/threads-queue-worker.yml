@@ -37,6 +37,19 @@ on:
         options:
           - "false"
           - "true"
+      queue_id:
+        description: "Exact approved queue row to validate and process"
+        required: true
+        type: string
+      post_type:
+        description: "Activation-evidence route for Night/Liver real posting"
+        required: true
+        default: "original_text"
+        type: choice
+        options:
+          - "original_text"
+          - "reference_text"
+          - "pdca_text"
 
 env:
   PUBLISH_ENABLED: "false"
@@ -60,6 +73,8 @@ jobs:
       MODE: ${{ github.event.inputs.mode }}
       MAX_POSTS: ${{ github.event.inputs.max_posts }}
       CONFIRM_REAL_POST: ${{ github.event.inputs.confirm_real_post }}
+      QUEUE_ID: ${{ github.event.inputs.queue_id }}
+      POST_TYPE: ${{ github.event.inputs.post_type }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
@@ -74,6 +89,7 @@ jobs:
       THREADS_APP_SECRET_LIVER_MANAGER: ${{ secrets.THREADS_APP_SECRET_LIVER_MANAGER }}
       THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: ${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}
       THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
+      BEAUTY_ACTIVATION_APPROVED: ${{ secrets.BEAUTY_ACTIVATION_APPROVED }}
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -95,6 +111,14 @@ jobs:
           fi
           if [ "$MODE" = "real_post" ] && [ "$CONFIRM_REAL_POST" != "true" ]; then
             echo "[BLOCKED] real_post mode requires confirm_real_post=true"
+            exit 1
+          fi
+          if [ -z "$QUEUE_ID" ]; then
+            echo "[BLOCKED] exact queue_id is required"
+            exit 1
+          fi
+          if [ "$ACCOUNT_ID" = "beauty_account" ] && [ "$MODE" = "real_post" ] && [ "$BEAUTY_ACTIVATION_APPROVED" != "true" ]; then
+            echo "[BLOCKED] Beauty production activation is not approved"
             exit 1
           fi
 
@@ -128,8 +152,17 @@ jobs:
         run: |
           python3 scripts/process_threads_queue.py \
             --account-id "$ACCOUNT_ID" \
+            --queue-id "$QUEUE_ID" \
             --max-posts "$MAX_POSTS" \
             --dry-run
+
+      - name: Scoped runtime activation gate
+        if: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.account_id != 'beauty_account' }}
+        run: |
+          python3 scripts/scheduled_publish_activation_gate.py \
+            --use-sheets \
+            --account-id "$ACCOUNT_ID" \
+            --post-type "$POST_TYPE"
 
       - name: Process queue
         env:
@@ -140,11 +173,13 @@ jobs:
           if [ "$MODE" = "real_post" ] && [ "$CONFIRM_REAL_POST" = "true" ]; then
             python3 scripts/process_threads_queue.py \
               --account-id "$ACCOUNT_ID" \
+              --queue-id "$QUEUE_ID" \
               --max-posts "$MAX_POSTS" \
               --confirm-real-post
           else
             python3 scripts/process_threads_queue.py \
               --account-id "$ACCOUNT_ID" \
+              --queue-id "$QUEUE_ID" \
               --max-posts "$MAX_POSTS" \
               --dry-run
           fi
