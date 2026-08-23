@@ -81,6 +81,12 @@ def _prompt(
         if sequence_number % 10 == 0
         else "CTAは入れない。"
     )
+    emoji_mode = sequence_number % 10 != 0
+    expression_rule = (
+        "絵文字は🥺✨🤍🫶🏻😭💭から2〜3個を使い、感嘆符は0個にする。"
+        if emoji_mode
+        else "絵文字は0個にし、感嘆符は投稿全体で1個だけ使う。"
+    )
     context_terms = TOPIC_CONTEXT_TERMS[topic]
     correction = ""
     if blocked:
@@ -88,7 +94,7 @@ def _prompt(
         correction = (
             f"\n前回のBLOCK理由: {blocked_summary}。"
             "語尾や句読点だけでなく、構成と言葉選びを作り直す。"
-            "絵文字と感嘆符を混ぜず、絵文字なしの場合だけ感嘆符1個までにする。"
+            f"{expression_rule}"
             "「きっと」「〜はず」の結果予測を削除し、320文字以内にする。"
             f"本文に「{context_terms[0]}」と「{context_terms[1]}」を、羅列ではなく自然な文脈で必ず入れ、"
             "読者が今日試せる行動を1つ示して作り直す。"
@@ -106,9 +112,6 @@ def _prompt(
                 "humanity_marker_frequency": corpus.get("humanity_marker_frequency", {}),
                 "soft_ending_frequency": corpus.get("soft_ending_frequency", {}),
                 "emoji_per_post": corpus.get("emoji_per_post", 0),
-                "full_stops_per_post": corpus.get("full_stops_per_post", 0),
-                "average_nonempty_lines_per_post": corpus.get("average_nonempty_lines_per_post", 0),
-                "average_line_length": corpus.get("average_line_length", 0),
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -126,17 +129,25 @@ Threadsの美容アカウント用に、読者向けの新規投稿を1件作っ
 主題: {topic}
 生成ルート: {route}
 読者: 美容・コスメが好きな20〜30代女性
-話者: 美容に詳しい、少しお姉さん寄りの女友達。一人称は「私」。
+話者: 美容に詳しい、少しお姉さん寄りの女友達。一人称は「私」。「個人的には」等の意見はよいが、実際には確認できない愛用歴、習慣、体験を一人称で作らない。
 口調: {beauty_voice_prompt()}「ねぇ、みんな」の呼びかけ、広告臭、押し売り、説教、大げさな効果断定を禁止。実際にない個人体験を「私も〜した」と捏造しない。
 構成: 悩みまたは気づきを1つ、理由、今日試せる具体的な行動。主題は1つに限る。
+具体行動の文には「確認する・比べる・見直す・待つ・変える・メモする」のどれか1つを自然に使う。結果を保証するのではなく、読者が自分で試して判断できる書き方にする。
 美容文脈: 「{context_terms[0]}」と「{context_terms[1]}」を、不自然な羅列にせず本文にどちらも入れる。
-文字数: 140〜320文字。ハッシュタグなし。Markdownなし。
+必須の出力形式:
+- 全体140〜260文字。
+- 3〜5段落。段落の間は空行を1つ入れる。
+- 1行40文字以内を目安に、1段落は1〜2行。
+- 句点「。」は原則0個、最大1個。
+- {expression_rule}
+- ハッシュタグなし。Markdownなし。
 禁止: 美容医療、疾病・治療、薬機的効果、before/after保証、内部用語、参照元名、AIへの言及。「浸透する」「キューティクルが閉じる」「効果が半減」などの科学的な因果を言い切らない。美容家電は機種ごとに使用条件が異なるため、シートマスクや化粧水との併用方法を推測で教えない。
+化粧品の使用量や待ち時間は、製品表示や説明書の根拠がないのに「たっぷり」「○分」と断定しない。「たった数分で」「全然変わる」「格段に良くなる」などの結果保証も書かない。
 {cta}
 {evidence_instruction}
 {corpus_instruction}
 {correction}
-JSONで public_post_text と primary_topic だけを返してください。
+JSONで public_post_text と primary_topic だけを返す。返す前に必須の出力形式を自己点検する。
 """.strip()
 
 

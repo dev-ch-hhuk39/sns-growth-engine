@@ -124,6 +124,17 @@ def test_beauty_prompt_encodes_account_fit_contract() -> None:
     for topic, terms in prepare.TOPIC_CONTEXT_TERMS.items():
         prompt = prepare._prompt(topic, 1, "new_text_generation")
         assert all(term in prompt for term in terms)
+        assert "全体140〜260文字" in prompt
+        assert "3〜5段落" in prompt
+        assert "感嘆符は0個" in prompt
+        assert "average_line_length" not in prompt
+        assert "full_stops_per_post" not in prompt
+        assert "製品表示や説明書" in prompt
+        assert "確認する・比べる・見直す・待つ・変える・メモする" in prompt
+        assert "読者が自分で試して判断" in prompt
+    no_emoji_prompt = prepare._prompt(prepare.TOPICS[0], 10, "new_text_generation")
+    assert "絵文字は0個" in no_emoji_prompt
+    assert "投稿全体で1個だけ" in no_emoji_prompt
     retry_prompt = prepare._prompt(
         prepare.TOPICS[2], 1, "new_text_generation", {}, ["persona_reader_context_insufficient"]
     )
@@ -205,6 +216,20 @@ def test_beauty_gemini_errors_are_sanitized_and_classified() -> None:
     }
     for error, expected in cases.items():
         assert prepare._gemini_failure_reason({"_error": error, "_raw": "private"}) == expected
+
+
+def test_beauty_compliance_blocks_unsupported_outcome_promises() -> None:
+    from accounts.beauty_policy import beauty_compliance_validation
+
+    for phrase in ("全然変わる", "格段に良くなる", "たった数分で"):
+        result = beauty_compliance_validation(f"スキンケアは{phrase}")
+        assert result["status"] == "BLOCKED", (phrase, result)
+        assert "beauty_prohibited_effect_or_medical_claim" in result["blocked_reasons"]
+    fabricated = beauty_compliance_validation(
+        "私、保湿の量と待ち時間を分けて考えるようにしてる"
+    )
+    assert fabricated["status"] == "BLOCKED", fabricated
+    assert "beauty_fabricated_personal_experience" in fabricated["blocked_reasons"]
 
 
 def test_beauty_secrets_are_referenced_by_name_only() -> None:

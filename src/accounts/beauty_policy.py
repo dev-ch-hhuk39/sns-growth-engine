@@ -6,6 +6,7 @@ policy evidence is account scoped.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 
@@ -39,6 +40,11 @@ PROHIBITED_CLAIMS = (
     "きっと",
     "変わるはず",
     "感じるはず",
+    "全然変わる",
+    "格段に良くなる",
+    "たった数分で",
+    "たった数分でも",
+    "仕上がりが変わる",
 )
 
 SALES_OR_PRESSURE_TERMS = (
@@ -54,6 +60,11 @@ FABRICATED_EXPERIENCE_TERMS = (
     "私も昔",
     "私もそうだった",
     "私もつい",
+)
+
+FABRICATED_EXPERIENCE_PATTERNS = (
+    r"私[、は].{0,80}ようにして(?:る|いる)",
+    r"私[、は].{0,80}(?:愛用|使い続け|通って)",
 )
 
 UNVERIFIED_USAGE_TERMS = (
@@ -82,6 +93,11 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
     prohibited_hits = [term for term in PROHIBITED_CLAIMS if term in value]
     pressure_hits = [term for term in SALES_OR_PRESSURE_TERMS if term in value]
     fabricated_hits = [term for term in FABRICATED_EXPERIENCE_TERMS if term in value]
+    fabricated_hits.extend(
+        match.group(0)
+        for pattern in FABRICATED_EXPERIENCE_PATTERNS
+        for match in re.finditer(pattern, value)
+    )
     unverified_usage_hits = [term for term in UNVERIFIED_USAGE_TERMS if term in value]
     cta_hits = {
         cta_type: [term for term in markers if term in value]
