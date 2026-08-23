@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_cloudinary_config, get_config  # noqa: E402
 from publishers.threads_credentials import has_required_for_publish, resolve_credentials  # noqa: E402
+from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import SheetsClient, TAB_DEFINITIONS, TAB_DISPLAY_NAMES  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
@@ -1626,6 +1627,82 @@ def scope_verification_to_exact_text_queue(
     return result
 
 
+def verify_exact_text_post_evidence(
+    client: SheetsClient,
+    *,
+    queue_id: str,
+    account_id: str,
+) -> dict[str, Any]:
+    """Verify one completed text post without rereading the entire workbook.
+
+    The publisher already performs the global preflight before posting.  This
+    post-publish check intentionally reads only the three rows needed to prove
+    delivery persistence and metric scheduling, avoiding a second workbook-wide
+    scan that can exhaust the Sheets per-minute read quota after a successful
+    post.
+    """
+    queue_rows = [
+        row
+        for row in read_records_safely(client, "queue")
+        if str(row.get("queue_id", "")).strip() == queue_id
+    ]
+    posted_rows = [
+        row
+        for row in read_records_safely(client, "posted_results")
+        if str(row.get("queue_id", "")).strip() == queue_id
+        and str(row.get("account_id", "")).strip() == account_id
+        and str(row.get("platform", "")).strip().lower() == "threads"
+    ]
+    result_id = str(posted_rows[0].get("result_id", "")).strip() if len(posted_rows) == 1 else ""
+    metric_rows = [
+        row
+        for row in read_records_safely(client, "metrics_collection_jobs")
+        if result_id and str(row.get("result_id", "")).strip() == result_id
+    ]
+
+    queue_row = queue_rows[0] if len(queue_rows) == 1 else {}
+    posted_row = posted_rows[0] if len(posted_rows) == 1 else {}
+    metric_windows = {
+        str(row.get("window_hours", "")).strip()
+        for row in metric_rows
+    }
+    checks = {
+        "exact_queue_identity_unique": len(queue_rows) == 1,
+        "exact_queue_account_matches": str(queue_row.get("account_id", "")).strip() == account_id,
+        "exact_queue_is_threads": str(queue_row.get("platform", "")).strip().lower() == "threads",
+        "exact_queue_is_posted": str(queue_row.get("status", "")).strip().upper() == "POSTED",
+        "posted_result_identity_unique": len(posted_rows) == 1,
+        "posted_result_external_id_present": bool(str(posted_row.get("external_post_id", "")).strip()),
+        "posted_result_permalink_present": bool(str(posted_row.get("post_url", "")).strip()),
+        "posted_result_read_after_write_pass": (
+            str(posted_row.get("verification_status", "")).strip().upper()
+            == "READ_AFTER_WRITE_PASS"
+        ),
+        "metric_windows_24_72_168_scheduled": {"24", "72", "168"}.issubset(metric_windows),
+    }
+    failed = [name for name, passed in checks.items() if not passed]
+    return {
+        "checks": checks,
+        "failed": failed,
+        "passed": len(checks) - len(failed),
+        "counts": {
+            "exact_queue_rows": len(queue_rows),
+            "exact_posted_results": len(posted_rows),
+            "exact_metrics_collection_jobs": len(metric_rows),
+        },
+        "warnings": {"warning_list": [], "refill_needed_accounts": []},
+        "verification_scope": {
+            "mode": "EXACT_TEXT_POST_EVIDENCE",
+            "queue_id": queue_id,
+            "account_id": account_id,
+            "result_id": result_id,
+            "status": "PASS" if not failed else "BLOCKED",
+            "blocked_reasons": failed,
+            "non_applicable_checks": [],
+        },
+    }
+
+
 def _col_letter(n: int) -> str:
     result = ""
     while n:
@@ -1640,6 +1717,11 @@ def main() -> int:
     parser.add_argument("--audit-only", action="store_true", help="Only read tab state")
     parser.add_argument("--verify-only", action="store_true", help="Only run read-after-write verification")
     parser.add_argument("--exact-text-queue-id", help="Scope unrelated media inventory checks to one text-only queue")
+    parser.add_argument(
+        "--post-publish-evidence-only",
+        action="store_true",
+        help="Read only exact queue/result/metric evidence after a successful text post",
+    )
     parser.add_argument("--account-id", choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--json", action="store_true", help="Print compact JSON summary")
     args = parser.parse_args()
@@ -1649,17 +1731,26 @@ def main() -> int:
     if args.audit_only:
         result = {"audit": _audit_tabs(client), "credentials": credential_status()}
     elif args.verify_only:
-        _refresh_ws_cache(client)
-        verification = verify_state(client)
-        if args.exact_text_queue_id:
-            if not args.account_id:
-                parser.error("--exact-text-queue-id requires --account-id")
-            verification = scope_verification_to_exact_text_queue(
+        if args.post_publish_evidence_only:
+            if not args.exact_text_queue_id or not args.account_id:
+                parser.error("--post-publish-evidence-only requires --exact-text-queue-id and --account-id")
+            verification = verify_exact_text_post_evidence(
                 client,
-                verification,
                 queue_id=args.exact_text_queue_id,
                 account_id=args.account_id,
             )
+        else:
+            _refresh_ws_cache(client)
+            verification = verify_state(client)
+            if args.exact_text_queue_id:
+                if not args.account_id:
+                    parser.error("--exact-text-queue-id requires --account-id")
+                verification = scope_verification_to_exact_text_queue(
+                    client,
+                    verification,
+                    queue_id=args.exact_text_queue_id,
+                    account_id=args.account_id,
+                )
         result = {"verification": verification, "credentials": credential_status()}
     else:
         result = run_recovery(client)

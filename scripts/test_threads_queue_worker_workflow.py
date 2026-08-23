@@ -19,12 +19,18 @@ def main() -> int:
         ("initial canary authorization is explicit", "initial_canary_authorization:" in content
          and '"INITIAL_CANARY_APPROVED"' in content),
         ("initial canary remains one post", "initial canary authorization requires max_posts=1" in content),
+        ("exact Beauty approval is explicit", "exact_queue_approval:" in content
+         and '"OWNER_APPROVED_EXACT_QUEUE"' in content),
+        ("exact Beauty approval remains one post", "exact queue approval is limited to one Beauty queue" in content),
+        ("exact Beauty approval uses normal approval gates", "scripts/approve_queue.py" in content
+         and '--queue-id "$QUEUE_ID"' in content),
         ("dry-run before process", content.find("Queue worker dry-run") < content.find("Process queue")),
         ("real env scoped", "PUBLISH_ENABLED:" in content and "ALLOW_REAL_THREADS_POST:" in content),
         ("no x publisher", "publish_x_post.py" not in content),
         ("beauty option is explicit", '"beauty_account"' in content and "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT" in content),
         ("verify after", "Sheets verify after processing" in content),
         ("verify scoped to exact text queue", content.count('--exact-text-queue-id "$QUEUE_ID"') == 2),
+        ("post verify uses bounded evidence reads", "--post-publish-evidence-only" in content),
         ("existing evidence remains default", 'default: "REQUIRE_EXISTING_EVIDENCE"' in content),
         ("evidence gate skipped only by exact approval",
          "initial_canary_authorization != 'INITIAL_CANARY_APPROVED'" in content),
