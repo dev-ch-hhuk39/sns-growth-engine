@@ -60,7 +60,8 @@ _MOCK_DERIVATIVE_THREADS = {
 
 
 def call_gemini(prompt: str, system_prompt: str | None = None,
-                temperature: float = 0.9, max_tokens: int = 8192) -> str:
+                temperature: float = 0.9, max_tokens: int = 8192,
+                response_mime_type: str | None = None) -> str:
     """Gemini REST API を呼び出してテキストを返す。"""
     if _is_mock():
         return json.dumps(_DRY_RUN_DRAFT_JSON, ensure_ascii=False)
@@ -82,6 +83,8 @@ def call_gemini(prompt: str, system_prompt: str | None = None,
             "maxOutputTokens": max_tokens,
         },
     }
+    if response_mime_type:
+        payload["generationConfig"]["responseMimeType"] = response_mime_type
 
     try:
         resp = requests.post(url, json=payload, timeout=90)
@@ -89,7 +92,7 @@ def call_gemini(prompt: str, system_prompt: str | None = None,
     except requests.HTTPError as e:
         raise RuntimeError(f"Gemini API エラー (HTTP {e.response.status_code})") from e
     except requests.RequestException as e:
-        raise RuntimeError(f"Gemini API 接続エラー") from e
+        raise RuntimeError("Gemini API 接続エラー") from e
 
     data = resp.json()
     candidates = data.get("candidates", [])
@@ -121,7 +124,12 @@ def call_gemini_json(prompt: str, system_prompt: str | None = None,
         return dict(_DRY_RUN_DRAFT_JSON)
 
     try:
-        raw = call_gemini(prompt, system_prompt, temperature=temperature)
+        raw = call_gemini(
+            prompt,
+            system_prompt,
+            temperature=temperature,
+            response_mime_type="application/json",
+        )
         return extract_json(raw)
     except Exception as e:
         return {"_error": str(e), "_raw": ""}
