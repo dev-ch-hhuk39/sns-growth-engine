@@ -5,7 +5,9 @@ Mock Sheets を使って、空フィールド補正ロジックを検証する�
 Sheets への実書き込みは行わない。
 """
 from __future__ import annotations
-import sys, os
+
+import os
+import sys
 from typing import Any
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -183,7 +185,13 @@ wf_text = open(wf_path).read()
 check("threads-queue-worker.yml に repair ステップがある", "repair_posted_results_integrity.py" in wf_text)
 check("threads-queue-worker.yml の repair は verify 前",
       wf_text.index("repair_posted_results_integrity.py") < wf_text.index("--verify-only"))
+check("worker dry-run は posted_results を書き換えない",
+      "repair_posted_results_integrity.py --dry-run" in wf_text)
 
-print(f"\n--- 結果 ---")
+repair_source = open(repair_path).read()
+check("posted_results 修復は batch_update を使う", "ws.batch_update(" in repair_source)
+check("posted_results 修復は update_cell を使わない", "ws.update_cell(" not in repair_source)
+
+print("\n--- 結果 ---")
 print(f"PASS: {PASS_COUNT} / FAIL: {FAIL_COUNT}")
 sys.exit(0 if FAIL_COUNT == 0 else 1)

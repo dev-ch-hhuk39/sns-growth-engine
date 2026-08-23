@@ -12,7 +12,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -23,7 +22,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
-from sheets_client import SheetsClient  # noqa: E402
+from sheets_client import SheetsClient, _col_letter  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
 ALLOWED_STATUS = {"POSTED", "RECOVERED"}
@@ -110,10 +109,18 @@ def repair(client: SheetsClient, dry_run: bool) -> list[dict[str, Any]]:
             "changes": changes,
         })
 
-        if not dry_run:
-            for field, value in changes.items():
-                if field in headers:
-                    ws.update_cell(idx, headers.index(field) + 1, value)
+    if not dry_run and repairs:
+        updates = []
+        for item in repairs:
+            for field, value in item["changes"].items():
+                if field not in headers:
+                    continue
+                column = _col_letter(headers.index(field) + 1)
+                updates.append({"range": f"{column}{item['row_idx']}", "values": [[value]]})
+        if updates:
+            # One Sheets API request keeps this preflight below the per-minute
+            # write quota even when historical rows need several fields fixed.
+            ws.batch_update(updates, value_input_option="USER_ENTERED")
 
     return repairs
 
