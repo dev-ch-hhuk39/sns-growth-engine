@@ -67,6 +67,8 @@ ALLOWED_CTA_MARKERS = {
     "follow": ("フォロー",),
 }
 
+BEAUTY_EMOJIS = ("🥺", "✨", "🤍", "🫶🏻", "😭", "💭")
+
 
 def beauty_cta_allowed_for_sequence(sequence_number: int) -> bool:
     """Allow one light CTA on roughly ten percent of generated candidates."""
@@ -94,7 +96,9 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
         blocked_reasons.append("beauty_sales_or_pressure_cta")
     if len(cta_types) > 1:
         blocked_reasons.append("beauty_multiple_cta_types")
-    if "!" in value or "！" in value:
+    exclamation_count = value.count("!") + value.count("！")
+    emoji_count = sum(value.count(emoji) for emoji in BEAUTY_EMOJIS)
+    if exclamation_count > 1 or (exclamation_count and emoji_count):
         blocked_reasons.append("beauty_exclamatory_ad_tone")
     if "ねぇ、みんな" in value or "ねぇ、みんな" in value:
         blocked_reasons.append("beauty_overfamiliar_opening")
@@ -120,6 +124,8 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
         "unverified_usage_hits": unverified_usage_hits,
         "cta_types": cta_types,
         "cta_type_count": len(cta_types),
+        "emoji_count": emoji_count,
+        "exclamation_count": exclamation_count,
         "blocked_reasons": blocked_reasons,
         "auto_ready_allowed": False,
     }

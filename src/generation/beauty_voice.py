@@ -22,7 +22,8 @@ def beauty_voice_prompt() -> str:
     return (
         "Chadult Beauty Voiceで書く。特定人物の文体や文章はコピーしない。"
         "20〜30代の美容好きに、少しお姉さん寄りの女友達が一対一で話す。"
-        f"絵文字は{''.join(fingerprint['allowed_emojis'])}から1〜4個。"
+        f"絵文字は{''.join(fingerprint['allowed_emojis'])}から0〜4個。"
+        "絵文字を使わない投稿だけ感嘆符1個を使ってよいが、絵文字と感嘆符は混ぜない。"
         "句点の。はほとんど使わず、短い文と改行でSNSらしいリズムを作る。"
         "〜なんだけど、これ結構大事、個人的には、ほんとに、意外と、"
         "〜な気がする、〜してみてほしい等を文脈に合わせて2つ以上使う。"
@@ -52,6 +53,7 @@ def beauty_style_fingerprint_validation(text: str) -> dict[str, Any]:
     sentence_like_count = max(1, len(re.findall(r"[\n。！!?？]", value)))
     full_stop_ratio = value.count("。") / sentence_like_count
     emoji_count, emoji_hits = _emoji_count(value, fingerprint["allowed_emojis"])
+    exclamation_count = value.count("！") + value.count("!")
     humanity_hits = [term for term in fingerprint["humanity_markers"] if term in value]
     soft_ending_hits = [term for term in fingerprint["soft_endings"] if term in value]
     formal_hits = [term for term in fingerprint["formal_or_ad_phrases"] if term in value]
@@ -72,9 +74,15 @@ def beauty_style_fingerprint_validation(text: str) -> dict[str, Any]:
     if full_stop_ratio > fingerprint["full_stop_ratio_max"]:
         reasons.append("beauty_voice_full_stop_ratio_too_high")
         score -= 18
-    if value.count("！") + value.count("!") > fingerprint["exclamation_count_max"]:
+    if exclamation_count > fingerprint["exclamation_count_max"]:
         reasons.append("beauty_voice_exclamation_overuse")
         score -= 12
+    if emoji_count == 0 and exclamation_count != 1:
+        reasons.append("beauty_voice_expression_marker_missing")
+        score -= 22
+    if emoji_count > 0 and exclamation_count > 0:
+        reasons.append("beauty_voice_emoji_exclamation_mixed")
+        score -= 22
     if len(humanity_hits) < fingerprint["minimum_humanity_marker_count"]:
         reasons.append("beauty_voice_humanity_insufficient")
         score -= 22
@@ -107,6 +115,7 @@ def beauty_style_fingerprint_validation(text: str) -> dict[str, Any]:
             "first_person_status": "PASS" if not forbidden_first_person else "BLOCKED",
             "emoji_count": emoji_count,
             "emoji_hits": emoji_hits,
+            "exclamation_count": exclamation_count,
             "paragraph_count": len(paragraphs),
             "average_line_length": round(average_line_length, 2),
             "full_stop_ratio": round(full_stop_ratio, 4),
