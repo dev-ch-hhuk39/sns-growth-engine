@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -87,7 +88,8 @@ def _prompt(
         correction = (
             f"\n前回のBLOCK理由: {blocked_summary}。"
             "語尾や句読点だけでなく、構成と言葉選びを作り直す。"
-            "感嘆符と「きっと」「〜はず」の結果予測を削除し、320文字以内にする。"
+            "絵文字と感嘆符を混ぜず、絵文字なしの場合だけ感嘆符1個までにする。"
+            "「きっと」「〜はず」の結果予測を削除し、320文字以内にする。"
             f"本文に「{context_terms[0]}」と「{context_terms[1]}」を、羅列ではなく自然な文脈で必ず入れ、"
             "読者が今日試せる行動を1つ示して作り直す。"
         )
@@ -149,7 +151,16 @@ def _canonical_beauty_source_ids() -> set[str]:
     }
 
 
-def select_beauty_reference_context(rows: list[dict]) -> dict:
+def _content_reference_text(value: object) -> str:
+    """Keep topic evidence while excluding source-specific social styling."""
+    text = re.sub(r"(?<!\w)#[^\s#]+", "", str(value or ""))
+    text = re.sub(r"[!！]+", "", text)
+    return re.sub(r"[ \t]+", " ", text).strip()[:4000]
+
+
+def select_beauty_reference_context(
+    rows: list[dict], *, topic_terms: tuple[str, ...] = ()
+) -> dict:
     """Select an individual Beauty source post from canonical sources only."""
     allowed_source_ids = _canonical_beauty_source_ids()
     selected = [
@@ -169,6 +180,18 @@ def select_beauty_reference_context(rows: list[dict]) -> dict:
     ]
     if not selected:
         return {"status": "BLOCKED", "reason": "beauty_reference_source_post_missing"}
+    if topic_terms:
+        selected = [
+            row for row in selected
+            if any(
+                term.casefold() in str(
+                    row.get("original_post_text") or row.get("post_text") or ""
+                ).casefold()
+                for term in topic_terms
+            )
+        ]
+        if not selected:
+            return {"status": "BLOCKED", "reason": "beauty_reference_topic_match_missing"}
     row = selected[-1]
     return {
         "status": "PASS",
@@ -182,7 +205,9 @@ def select_beauty_reference_context(rows: list[dict]) -> dict:
             or row.get("source_url")
             or ""
         ),
-        "internal_evidence": str(row.get("original_post_text") or row.get("post_text") or "")[:4000],
+        "internal_evidence": _content_reference_text(
+            row.get("original_post_text") or row.get("post_text") or ""
+        ),
     }
 
 
@@ -211,7 +236,7 @@ def select_beauty_pdca_context(rows: list[dict]) -> dict:
     }
 
 
-def load_route_context(route: str) -> dict:
+def load_route_context(route: str, topic: str = "") -> dict:
     """Read only Beauty-scoped evidence; never substitute another account."""
     if route in {"direct_reference_media", "approved_source_clip"}:
         return {
@@ -235,7 +260,9 @@ def load_route_context(route: str) -> dict:
                 "voice_corpus": corpus,
             }
         if route == "reference_text_generation":
-            selected = select_beauty_reference_context(source_rows)
+            selected = select_beauty_reference_context(
+                source_rows, topic_terms=TOPIC_CONTEXT_TERMS.get(topic, ())
+            )
             selected["voice_corpus"] = corpus
             return selected
         if route == "pdca_text_generation":
@@ -253,7 +280,7 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
     topic_index = (datetime.now(JST).date().toordinal() * 2 + slot_index) % len(TOPICS)
     topic = TOPICS[topic_index]
     route = select_beauty_route(sequence_number)
-    route_context = load_route_context(route)
+    route_context = load_route_context(route, topic)
     if route_context.get("status") != "PASS":
         return {
             "status": "BLOCKED",

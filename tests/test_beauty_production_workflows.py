@@ -63,6 +63,7 @@ def test_token_refresh_workflow_includes_beauty_without_logging_token() -> None:
 def test_beauty_publisher_requires_config_and_dedicated_runtime_gate(monkeypatch, tmp_path) -> None:
     worker = _load_script("process_threads_queue.py")
     monkeypatch.delenv("BEAUTY_PRODUCTION_ENABLED", raising=False)
+    monkeypatch.setattr(worker, "BEAUTY_PIPELINE_CONFIG", tmp_path / "missing.json")
     allowed, reason = worker.beauty_publish_gate(dry_run=True)
     assert allowed is False
     assert reason == "beauty_production_config_not_enabled"
@@ -84,14 +85,27 @@ def test_beauty_publisher_requires_config_and_dedicated_runtime_gate(monkeypatch
 def test_beauty_generated_candidate_is_never_ready(monkeypatch) -> None:
     prepare = _load_script("prepare_beauty_review_candidates.py")
     monkeypatch.setenv("GEMINI_API_KEY", "set-for-test")
+    monkeypatch.setattr(prepare, "select_beauty_route", lambda _sequence: "new_text_generation")
+    monkeypatch.setattr(
+        prepare,
+        "load_route_context",
+        lambda _route, _topic="": {
+            "status": "PASS",
+            "source_ids": [],
+            "voice_corpus": {"status": "READY", "source_account_count": 5, "post_count": 50},
+        },
+    )
     monkeypatch.setattr(
         prepare,
         "call_gemini_json",
         lambda *_args, **_kwargs: {
             "public_post_text": (
-                "夕方のベースメイクが崩れる日は、ファンデを増やす前に朝の保湿量を見直してみて。\n\n"
-                "私も重ねるほど安心だと思っていたけど、なじむ前に塗るとヨレやすいんだよね。"
-                "保湿を薄くのばして少し待ち、ファンデは頬の中心から少量ずつ。まずは塗る量だけ変えると比べやすいよ。"
+                "スキンケアを一度に変えたくなる時って\n"
+                "ほんとに何から試すか迷うんだよね🥺\n\n"
+                "個人的には、まず一つだけ変えるのが結構大事\n"
+                "肌の変化と理由を分けて見やすい気がする💭\n\n"
+                "使い始めた日をメモして\n"
+                "その他はいつも通りで試してみてほしい🤍"
             ),
             "primary_topic": "ベースメイク前の保湿量",
         },
@@ -108,9 +122,11 @@ def test_beauty_generated_candidate_is_never_ready(monkeypatch) -> None:
 def test_beauty_prompt_encodes_account_fit_contract() -> None:
     prepare = _load_script("prepare_beauty_review_candidates.py")
     for topic, terms in prepare.TOPIC_CONTEXT_TERMS.items():
-        prompt = prepare._prompt(topic, 1)
+        prompt = prepare._prompt(topic, 1, "new_text_generation")
         assert all(term in prompt for term in terms)
-    retry_prompt = prepare._prompt(prepare.TOPICS[2], 1, ["persona_reader_context_insufficient"])
+    retry_prompt = prepare._prompt(
+        prepare.TOPICS[2], 1, "new_text_generation", {}, ["persona_reader_context_insufficient"]
+    )
     assert "自然な文脈で必ず入れ" in retry_prompt
 
 

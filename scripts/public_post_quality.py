@@ -545,7 +545,7 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
         ) * 5
     elif account_id == "beauty_account":
         action_hits = [term for term in profile.get("action_markers", []) if str(term) in text]
-        if re.search(r"(?:試し|比べ|見直|見て|確認|選ん|決め|メモし|並べ)", text):
+        if re.search(r"(?:試し|比べ|見直|見て|確認|選ん|決め|変え|メモし|並べ)", text):
             action_hits.append("beauty_action_sentence_structure")
         details.update({
             "action_marker_count": len(action_hits),

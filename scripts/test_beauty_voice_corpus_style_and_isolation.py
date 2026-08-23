@@ -62,12 +62,32 @@ def main() -> None:
     assert good["details"]["emoji_count"] >= 1
     assert good["details"]["conversational_style_score"] >= 85
 
+    no_emoji_text = (
+        "スキンケアを一度に変えたくなる時って\n"
+        "ほんとに何から試すか迷うんだよね\n\n"
+        "個人的には、まず一つだけ変えるのが結構大事\n"
+        "肌の変化と理由を分けて見やすい気がする\n\n"
+        "使い始めた日をメモして、その他はいつも通りで試してみてほしい！"
+    )
+    no_emoji = beauty_style_fingerprint_validation(no_emoji_text)
+    assert no_emoji["status"] == "VOICE_PERSONA_PASS", no_emoji
+    assert no_emoji["details"]["emoji_count"] == 0
+    assert no_emoji["details"]["exclamation_count"] == 1
+
+    mixed = beauty_style_fingerprint_validation(GOOD + "！")
+    assert mixed["status"] == "BLOCKED", mixed
+    assert "beauty_voice_emoji_exclamation_mixed" in mixed["reasons"]
+
+    no_expression = beauty_style_fingerprint_validation(no_emoji_text.replace("！", ""))
+    assert no_expression["status"] == "BLOCKED", no_expression
+    assert "beauty_voice_expression_marker_missing" in no_expression["reasons"]
+
     weak = beauty_style_fingerprint_validation(
         "美容家電は使う時間から選ぶと良いよね。\n\n"
         "私なら機能を確認します。\n\n比べてみてください。"
     )
     assert weak["status"] == "BLOCKED", weak
-    assert "beauty_voice_emoji_count_out_of_range" in weak["reasons"]
+    assert "beauty_voice_expression_marker_missing" in weak["reasons"]
 
     foreign = beauty_style_fingerprint_validation(GOOD + "\n\n配信時間と初見コメントも見てみて")
     assert foreign["status"] == "BLOCKED", foreign
@@ -117,6 +137,26 @@ def main() -> None:
     assert reference["source_url"] == "https://example.test/beauty/post/1"
     assert "夜職" not in reference["internal_evidence"]
 
+    topic_reference = select_beauty_reference_context([
+        {
+            "source_id": profile["voice_reference_source_ids"][0],
+            "target_account_id": "beauty_account",
+            "source_post_id": "skin_post",
+            "canonical_post_url": "https://example.test/beauty/post/skin",
+            "original_post_text": "#PR 肌とスキンケアの順番！！",
+        },
+        {
+            "source_id": profile["voice_reference_source_ids"][1],
+            "target_account_id": "beauty_account",
+            "source_post_id": "hair_post",
+            "canonical_post_url": "https://example.test/beauty/post/hair",
+            "original_post_text": "髪とヘアケアの話",
+        },
+    ], topic_terms=("肌", "スキンケア"))
+    assert topic_reference["source_post_id"] == "skin_post", topic_reference
+    assert "#PR" not in topic_reference["internal_evidence"]
+    assert "！" not in topic_reference["internal_evidence"]
+
     pdca = select_beauty_pdca_context([
         {"result_id": "night_result", "account_id": "night_scout", "metrics_status": "MEASURED"},
         {
@@ -163,7 +203,7 @@ def main() -> None:
     original_key = os.environ.get("GEMINI_API_KEY")
     try:
         beauty_prepare.select_beauty_route = lambda _sequence: "new_text_generation"
-        beauty_prepare.load_route_context = lambda _route: {
+        beauty_prepare.load_route_context = lambda _route, _topic="": {
             "status": "PASS",
             "source_ids": [],
             "voice_corpus": {"status": "READY", "source_account_count": 5, "post_count": 50},
