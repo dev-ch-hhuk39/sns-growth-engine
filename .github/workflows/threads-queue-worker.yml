@@ -117,7 +117,10 @@ jobs:
             python3 scripts/repair_posted_results_integrity.py --dry-run
           fi
 
+      # Dry-run may inspect a scoped candidate even when unrelated legacy
+      # evidence is incomplete. Real posting keeps this diagnostic blocking.
       - name: Sheets verify before processing
+        continue-on-error: ${{ github.event.inputs.mode == 'dry_run' }}
         run: |
           python3 scripts/recover_production_sheets_threads_first.py --verify-only
 
