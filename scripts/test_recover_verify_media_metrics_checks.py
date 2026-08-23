@@ -156,6 +156,23 @@ def main() -> int:
     checks.append(("bad: reference_scores_high_risk_reference_only=False", res["reference_scores_high_risk_reference_only"] is False))
     checks.append(("bad: reference_scores_not_postable=False", res["reference_scores_not_postable"] is False))
 
+    # Explicitly quarantined legacy evidence remains auditable but does not
+    # block a fresh exact queue. The same unapproved asset without the marker
+    # is covered by the failing case above.
+    historical = _base_tabs()
+    historical["media_assets"] = [
+        {"media_asset_id": "m_legacy", "approval_status": "WAITING_REVIEW", "status": "WAITING_REVIEW",
+         "rights_policy": "owned", "reuse_policy": "allow_reuse", "media_policy": "owned",
+         "cloudinary_url": "https://res.cloudinary.com/x/legacy.png"},
+    ]
+    historical["posted_results"] = [
+        {"result_id": "legacy_result", "platform": "threads", "status": "POSTED",
+         "media_asset_id": "m_legacy", "verification_status": "HISTORICAL_MEDIA_EVIDENCE_MISSING"},
+    ]
+    res = mod.verify_state(_FakeClient(historical))["checks"]
+    checks.append(("historical quarantine: upload checks do not block fresh queue",
+                   res["media_no_unapproved_upload"] is True and res["media_uploaded_only_if_approved"] is True))
+
     failed = [n for n, ok in checks if not ok]
     for n, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'} {n}")

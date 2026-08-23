@@ -81,23 +81,14 @@ def repair(client: SheetsClient, dry_run: bool) -> list[dict[str, Any]]:
         real_post_lower = real_post_raw.lower()
         if not real_post_raw or real_post_lower not in ("true", "false"):
             changes["real_post"] = "true"
-        elif real_post_lower in ("1", "yes", "true"):
-            if real_post_raw != "true":
-                changes["real_post"] = "true"
-        elif real_post_lower in ("0", "no", "false"):
-            if real_post_raw != "false":
-                changes["real_post"] = "false"
 
         # media_used 補正
         media_used_raw = str(row.get("media_used", "")).strip()
         media_used_lower = media_used_raw.lower()
         if not media_used_raw or media_used_lower not in ("true", "false"):
             changes["media_used"] = "false"
-        elif media_used_lower in ("0", "no", "false"):
-            if media_used_raw != "false":
-                changes["media_used"] = "false"
-        elif media_used_lower in ("1", "yes", "true"):
-            pass  # true は変更しない
+        # gspread returns USER_ENTERED booleans as Python True/False. Their
+        # string forms are valid and must not be rewritten on every worker run.
 
         if not changes:
             continue

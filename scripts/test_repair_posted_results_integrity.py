@@ -137,6 +137,19 @@ media_ok_row = {
 media_repairs = simulate_repair([media_ok_row])
 check("承認済みメディア投稿の media_used=true は正常", len(media_repairs) == 0)
 
+sheet_boolean_row = {
+    "result_id": "test_sheet_bool_01",
+    "account_id": "night_scout",
+    "platform": "threads",
+    "status": "POSTED",
+    "metrics_status": "PENDING",
+    "real_post": True,
+    "media_used": False,
+    "external_post_id": "sheet-bool-99999",
+}
+sheet_boolean_repairs = simulate_repair([sheet_boolean_row])
+check("Sheets由来のTrue/Falseを毎回再書込しない", len(sheet_boolean_repairs) == 0)
+
 # 4. platform 空・manual_memo なしの行はスキップ
 skip_row = {
     "result_id": "test_skip_01",
@@ -206,6 +219,7 @@ check("repo-wide診断のdry-run非遮断はreal_postへ広がらない",
 repair_source = open(repair_path).read()
 check("posted_results 修復は batch_update を使う", "ws.batch_update(" in repair_source)
 check("posted_results 修復は update_cell を使わない", "ws.update_cell(" not in repair_source)
+check("Sheets booleanの大小文字を再正規化しない", 'real_post_raw != "true"' not in repair_source)
 check(
     "read-after-write は media_used=true/false の両方を許可",
     'media_used", "")).lower() not in {"true", "false"}' in repair_source,
