@@ -50,6 +50,14 @@ on:
           - "original_text"
           - "reference_text"
           - "pdca_text"
+      initial_canary_authorization:
+        description: "Normally REQUIRE_EXISTING_EVIDENCE. Use INITIAL_CANARY_APPROVED only for an explicitly approved exact one-row canary."
+        required: true
+        default: "REQUIRE_EXISTING_EVIDENCE"
+        type: choice
+        options:
+          - "REQUIRE_EXISTING_EVIDENCE"
+          - "INITIAL_CANARY_APPROVED"
 
 env:
   PUBLISH_ENABLED: "false"
@@ -75,6 +83,7 @@ jobs:
       CONFIRM_REAL_POST: ${{ github.event.inputs.confirm_real_post }}
       QUEUE_ID: ${{ github.event.inputs.queue_id }}
       POST_TYPE: ${{ github.event.inputs.post_type }}
+      INITIAL_CANARY_AUTHORIZATION: ${{ github.event.inputs.initial_canary_authorization }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
@@ -115,6 +124,10 @@ jobs:
           fi
           if [ -z "$QUEUE_ID" ]; then
             echo "[BLOCKED] exact queue_id is required"
+            exit 1
+          fi
+          if [ "$MODE" = "real_post" ] && [ "$INITIAL_CANARY_AUTHORIZATION" = "INITIAL_CANARY_APPROVED" ] && [ "$MAX_POSTS" != "1" ]; then
+            echo "[BLOCKED] initial canary authorization requires max_posts=1"
             exit 1
           fi
           if [ "$ACCOUNT_ID" = "beauty_account" ] && [ "$MODE" = "real_post" ] && [ "$BEAUTY_ACTIVATION_APPROVED" != "true" ]; then
@@ -161,7 +174,10 @@ jobs:
             --dry-run
 
       - name: Scoped runtime activation gate
-        if: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.account_id != 'beauty_account' }}
+        if: >-
+          github.event.inputs.mode == 'real_post' &&
+          github.event.inputs.initial_canary_authorization != 'INITIAL_CANARY_APPROVED' &&
+          github.event.inputs.account_id != 'beauty_account'
         run: |
           python3 scripts/scheduled_publish_activation_gate.py \
             --use-sheets \
