@@ -54,6 +54,7 @@ THREADS_POST_INSIGHT_METRICS = (
 ALLOWED_ACCOUNTS = {
     "night_scout",
     "liver_manager",
+    "beauty_account",
 }
 
 PUBLIC_TIMEOUT_SECONDS = 15
@@ -698,10 +699,6 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--post-url", action="append", default=[], help="Public Threads post URL for dry-run adapter checks")
     args = parser.parse_args()
-
-    if args.account_id == "beauty_account":
-        print(json.dumps({"status": "BLOCKED", "reason": "beauty_account metrics collection is disabled"}, ensure_ascii=False))
-        return 1
 
     supplied = {key: parse_metric(getattr(args, key)) for key in METRIC_KEYS}
     if any(v is not None and v < 0 for v in supplied.values()):

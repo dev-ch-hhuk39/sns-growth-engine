@@ -68,7 +68,11 @@ def _load_input(path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager"])
+    parser.add_argument(
+        "--account-id",
+        default="all",
+        choices=["all", "night_scout", "liver_manager", "beauty_account"],
+    )
     parser.add_argument("--input-json", help="Offline input containing posted_results and metric_snapshots")
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--dry-run", action="store_true")

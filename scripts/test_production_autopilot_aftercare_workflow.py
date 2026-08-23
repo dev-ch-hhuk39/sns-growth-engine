@@ -94,6 +94,11 @@ checks = [
                 "LIVER_MANAGER"
                 in workflow
             )
+            and (
+                "THREADS_ACCESS_TOKEN_"
+                "BEAUTY_ACCOUNT"
+                in workflow
+            )
         ),
     ),
     (
