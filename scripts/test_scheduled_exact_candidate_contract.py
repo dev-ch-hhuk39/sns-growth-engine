@@ -53,6 +53,10 @@ log line before JSON
     scheduled = (ROOT / "scripts/run_scheduled_text_slot_pipeline.py").read_text(encoding="utf-8")
     assert '"--account-id"' in scheduled
     assert '"--post-type"' in scheduled
+    recovery = (ROOT / ".github/workflows/threads-queue-worker.yml").read_text(encoding="utf-8")
+    assert "queue_id:" in recovery
+    assert recovery.count('--queue-id "$QUEUE_ID"') == 3
+    assert "Scoped runtime activation gate" in recovery
     print("PASS test_scheduled_exact_candidate_contract.py")
     return 0
 
