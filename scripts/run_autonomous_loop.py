@@ -504,14 +504,21 @@ def _last_json_object(text: str) -> dict[str, Any]:
         pass
     decoder = json.JSONDecoder()
     found: dict[str, Any] = {}
-    for index, char in enumerate(text):
-        if char != "{":
-            continue
+    index = 0
+    while index < len(text):
+        start = text.find("{", index)
+        if start < 0:
+            break
         try:
-            value, _ = decoder.raw_decode(text[index:])
+            value, consumed = decoder.raw_decode(text[start:])
         except (ValueError, json.JSONDecodeError):
+            index = start + 1
             continue
-        if isinstance(value, dict) and (not found or "status" in value):
+        # Advance past the complete top-level value. This deliberately skips
+        # nested status objects such as video_reference_analysis, which must
+        # never replace the generator's final queue result.
+        index = start + consumed
+        if isinstance(value, dict):
             found = value
     return found
 
