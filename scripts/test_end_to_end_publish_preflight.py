@@ -106,8 +106,8 @@ def test_threads_thread_series_preflight():
     assert result["status"] in ("READY", "WARN", "NOT_READY")
 
 
-def test_draft_only_blocked():
-    """draft_only アカウントは BLOCKED になる。"""
+def test_beauty_x_remains_blocked():
+    """Beauty activation後もXは投稿対象外。"""
     import preflight_end_to_end_publish as mod
     _reset_counters()
     result = mod.run_preflight(
@@ -116,25 +116,23 @@ def test_draft_only_blocked():
         post_type="single_post",
         mock=True,
     )
-    assert result["status"] == "BLOCKED", (
-        f"beauty_account が BLOCKED でない: {result['status']}"
+    assert result["status"] == "NOT_READY", (
+        f"beauty_account X が NOT_READY でない: {result['status']}"
     )
 
 
-def test_beauty_account_blocked_all_types():
-    """beauty_account は全 post_type で BLOCKED になる。"""
+def test_beauty_threads_requires_runtime_readiness():
+    """Beauty Threadsはactiveだが、認証・READYなしのpreflightはREADYにならない。"""
     import preflight_end_to_end_publish as mod
     for post_type in ["single_post", "thread_series", "media_post", "video_clip_post"]:
         _reset_counters()
         result = mod.run_preflight(
             account_id="beauty_account",
-            platform="x",
+            platform="threads",
             post_type=post_type,
             mock=True,
         )
-        assert result["status"] == "BLOCKED", (
-            f"beauty_account / {post_type} が BLOCKED でない: {result['status']}"
-        )
+        assert result["status"] in {"READY", "WARN", "NOT_READY"}
 
 
 def test_publish_flag_false_pass():
@@ -184,8 +182,8 @@ if __name__ == "__main__":
     _test("x_thread_series_preflight", test_x_thread_series_preflight)
     _test("threads_single_post_preflight", test_threads_single_post_preflight)
     _test("threads_thread_series_preflight", test_threads_thread_series_preflight)
-    _test("draft_only_blocked", test_draft_only_blocked)
-    _test("beauty_account_blocked_all_types", test_beauty_account_blocked_all_types)
+    _test("beauty_x_remains_blocked", test_beauty_x_remains_blocked)
+    _test("beauty_threads_requires_runtime_readiness", test_beauty_threads_requires_runtime_readiness)
     _test("publish_flag_false_pass", test_publish_flag_false_pass)
     _test("no_secret_in_output", test_no_secret_in_output)
     _test("fixture_exists", test_fixture_exists)

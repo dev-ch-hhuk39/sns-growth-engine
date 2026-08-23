@@ -7900,3 +7900,13 @@ dry-runとbounded canaryを通してからblockを解除する。単なるsource
   定期scheduleから新しいSheets書込みは追加していない。
 - regression: repository tests 832/832 PASS、workflow safety 467/467 PASS、Ruff E9/F63/F7/F82 PASS、
   compileall PASS、`git diff --check` PASS。Threads / X投稿とmedia取得・uploadはこの修正で実行していない。
+
+## 2026-08-23 Three-account production stability correction
+
+- Night Scout / Liver Manager scheduled runs were firing. Repeated `processed_count=1 / posted_count=0 / NO_POST_UNKNOWN` came from four combined defects: queue delay outside a one-sided time window, Gemini `429 RESOURCE_EXHAUSTED`, a synthetic skipped publisher counted as processed, and recurring-slot selection admitting stale candidates.
+- Scheduled dispatch now starts 15 minutes before each target and publication remains fail-closed outside target +/-15 minutes. Text generation creates one date-and-slot-specific queue ID, and Hybrid review plus publication receive that exact ID.
+- `NO_POST_UNKNOWN` is removed. Concrete reasons include `GEMINI_RATE_LIMITED`, `NO_AI_APPROVED_CANDIDATE`, `NO_READY_CANDIDATE`, `QUALITY_BLOCKED`, cap/cooldown, credential, and persistence failures.
+- Beauty owner activation is applied. The account is active, token refresh and scheduled prepare/publish are connected, and only a human-approved READY row from the exact current slot/date can publish. Beauty AUTO_READY remains disabled; medical content remains in its mandatory review lane.
+- `Approved Account Acquisition` now persists bounded reference acquisition on schedule. Threads uses anonymous CLI -> logged-out GraphQL -> public screen fallback; unavailable sources are DEFERRED. X publishing remains disabled.
+- Source, credential, persona, voice, and PDCA scopes remain account-isolated. Reference-only media never gains reuse rights.
+- Broad autonomous download/cut/Cloudinary/video-post activation was not applied. Those side effects remain permission- and runtime-gated.

@@ -170,8 +170,7 @@ def t_generate_beauty_account():
     )
     assert series.account_id == "beauty_account"
     assert series.status == "WAITING_REVIEW"
-    # draft_only チェック
-    assert "draft_only" in series.generation_notes
+    assert all(post.status == "WAITING_REVIEW" for post in series.posts)
 
 
 def t_all_posts_waiting_review():

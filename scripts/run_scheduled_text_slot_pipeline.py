@@ -13,7 +13,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from scheduled_execution_guard import append_job_summary, scheduled_window_decision
+from scheduled_execution_guard import append_job_summary, scheduled_window_decision  # noqa: E402
 
 
 def extract_json_objects(text: str) -> list[dict[str, Any]]:
@@ -66,6 +66,31 @@ def no_post(reason: str, *, account_id: str, slot_id: str, queue_id: str = "", d
     return 2
 
 
+def generated_queue_ids(payload: dict[str, Any]) -> list[str]:
+    """Return only queue IDs created/refreshed by this generation run."""
+    for result in payload.get("results", []):
+        if "generate_threads_ideas_from_references.py" not in str(result.get("cmd", "")):
+            continue
+        generation = result.get("payload") or {}
+        values = generation.get("effective_queue_ids", generation.get("queue_ids", []))
+        return list(dict.fromkeys(str(value) for value in values if str(value)))
+    return []
+
+
+def generation_failure_reason(payload: dict[str, Any]) -> str:
+    for result in payload.get("results", []):
+        if "generate_threads_ideas_from_references.py" not in str(result.get("cmd", "")):
+            continue
+        stderr = str(result.get("stderr_tail", ""))
+        if "HTTP 429" in stderr or "RESOURCE_EXHAUSTED" in stderr:
+            return "GEMINI_RATE_LIMITED"
+        generation = result.get("payload") or {}
+        reason = str(generation.get("reason", "")).strip()
+        if reason:
+            return reason.upper()
+    return "NO_GENERATED_SLOT_CANDIDATE"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
@@ -112,6 +137,19 @@ def main() -> int:
             details=generation_payload,
         )
 
+    queue_ids = generated_queue_ids(generation_payload)
+    if len(queue_ids) != 1:
+        return no_post(
+            "NO_AI_APPROVED_CANDIDATE",
+            account_id=args.account_id,
+            slot_id=args.slot_id,
+            details={
+                "generation_reason": generation_failure_reason(generation_payload),
+                "generated_queue_ids": queue_ids,
+            },
+        )
+    generated_queue_id = queue_ids[0]
+
     ready_output = Path(f"/tmp/hybrid-ready-text-{args.account_id}-{args.slot_id}.json")
     ready_command = [
         sys.executable,
@@ -120,6 +158,8 @@ def main() -> int:
         args.account_id,
         "--slot-id",
         args.slot_id,
+        "--queue-id",
+        generated_queue_id,
         "--max-candidates",
         "1",
         "--approval-mode",
@@ -133,15 +173,24 @@ def main() -> int:
     if ready_output.exists():
         ready_payload = json.loads(ready_output.read_text(encoding="utf-8"))
     if rc != 0:
+        ready_status = str(ready_payload.get("status", ""))
+        ready_reason = str(ready_payload.get("reason", ""))
+        reason = (
+            "QUALITY_BLOCKED"
+            if ready_status == "NO_READY_CANDIDATE" and ready_reason == "no_hybrid_pass_candidate_for_exact_slot"
+            else "NO_READY_CANDIDATE"
+            if ready_status == "NO_READY_CANDIDATE"
+            else "HYBRID_REVIEW_FAILED"
+        )
         return no_post(
-            "HYBRID_REVIEW_FAILED",
+            reason,
             account_id=args.account_id,
             slot_id=args.slot_id,
             details=ready_payload,
         )
 
     queue_id = str(ready_payload.get("selected_queue_id", "")).strip()
-    if not queue_id:
+    if not queue_id or queue_id != generated_queue_id:
         return no_post(
             "NO_AI_APPROVED_SLOT_CANDIDATE",
             account_id=args.account_id,

@@ -13,16 +13,16 @@ JST = ZoneInfo("Asia/Tokyo")
 MAX_SCHEDULE_DELAY_MINUTES = int(os.environ.get("MAX_SCHEDULE_DELAY_MINUTES", "15"))
 
 SLOT_TARGET_MINUTES_JST = {
-    "ns_1400_reference": 14 * 60 + 2,
-    "ns_1600_original": 16 * 60 + 2,
-    "ns_1800_direct_media": 18 * 60 + 2,
-    "ns_2100_clip_media": 21 * 60 + 2,
-    "ns_2500_pdca": 1 * 60 + 2,
-    "lm_1000_original": 10 * 60 + 4,
-    "lm_1300_reference": 13 * 60 + 4,
-    "lm_1600_direct_media": 16 * 60 + 4,
-    "lm_1800_clip_media": 18 * 60 + 4,
-    "lm_2100_pdca": 21 * 60 + 4,
+    "ns_1400_reference": 14 * 60,
+    "ns_1600_original": 16 * 60,
+    "ns_1800_direct_media": 18 * 60,
+    "ns_2100_clip_media": 21 * 60,
+    "ns_2500_pdca": 1 * 60,
+    "lm_1000_original": 10 * 60,
+    "lm_1300_reference": 13 * 60,
+    "lm_1600_direct_media": 16 * 60,
+    "lm_1800_clip_media": 18 * 60,
+    "lm_2100_pdca": 21 * 60,
 }
 
 
@@ -79,7 +79,9 @@ def scheduled_window_decision(
     elif delay > 720:
         delay -= 1440
 
-    allowed = 0 <= delay <= max_delay_minutes
+    # Dispatch 15 minutes before the target. GitHub's queue delay provides
+    # bounded jitter while publication remains fail-closed outside +/-15 min.
+    allowed = -15 <= delay <= max_delay_minutes
     return {
         "status": "PASS" if allowed else "BLOCKED",
         "reason": "within_schedule_window" if allowed else "scheduled_run_out_of_window",

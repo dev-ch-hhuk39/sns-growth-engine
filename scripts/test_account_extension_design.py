@@ -116,18 +116,18 @@ def t_all_configs_account_id_matches_filename():
 
 
 # --------------------------------------------------------
-# status 整合性: beauty_account は draft_only
+# status 整合性: owner activation後のBeautyはactive
 # --------------------------------------------------------
 
-def t_beauty_account_is_draft_only():
+def t_beauty_account_is_active():
     p = os.path.join(_V2_ROOT, "config", "accounts", "beauty_account.json")
     with open(p, encoding="utf-8") as f:
         d = json.load(f)
-    assert d["status"] == "draft_only", f"beauty_account は draft_only のはず。実際: {d['status']}"
+    assert d["status"] == "active", f"beauty_account activation後は active。実際: {d['status']}"
 
 
 def t_existing_accounts_not_draft_only():
-    for account_id in ("night_scout", "liver_manager"):
+    for account_id in ("night_scout", "liver_manager", "beauty_account"):
         p = os.path.join(_V2_ROOT, "config", "accounts", f"{account_id}.json")
         if not os.path.isfile(p):
             continue
@@ -157,7 +157,7 @@ def t_all_configs_have_thread_series_policy():
 # safety_policy.allow_real_post チェック
 # --------------------------------------------------------
 
-def t_all_configs_allow_real_post_false():
+def t_account_real_post_policy_is_explicit():
     accounts_dir = os.path.join(_V2_ROOT, "config", "accounts")
     for filename in os.listdir(accounts_dir):
         if not filename.endswith(".json"):
@@ -166,8 +166,12 @@ def t_all_configs_allow_real_post_false():
         with open(p, encoding="utf-8") as f:
             d = json.load(f)
         safety = d.get("safety_policy", {})
-        assert safety.get("allow_real_post") is False, \
-            f"{filename}: safety_policy.allow_real_post は false のはず"
+        if filename == "beauty_account.json":
+            assert safety.get("allow_real_post") is True
+            assert safety.get("requires_human_review_before_post") is True
+        else:
+            assert safety.get("allow_real_post") is False, \
+                f"{filename}: safety_policy.allow_real_post は false のはず"
 
 
 for fn in [
@@ -179,10 +183,10 @@ for fn in [
     t_gitignore_allows_account_json,
     t_gitignore_allows_account_templates_json,
     t_all_configs_account_id_matches_filename,
-    t_beauty_account_is_draft_only,
+    t_beauty_account_is_active,
     t_existing_accounts_not_draft_only,
     t_all_configs_have_thread_series_policy,
-    t_all_configs_allow_real_post_false,
+    t_account_real_post_policy_is_explicit,
 ]:
     _test(fn.__name__[2:], fn)
 

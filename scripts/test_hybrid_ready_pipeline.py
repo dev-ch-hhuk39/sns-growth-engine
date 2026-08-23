@@ -22,6 +22,8 @@ def main() -> int:
         queue_id="q1",
     )
     assert len(exact) == 2
+    assert "--queue-id" in exact[0]
+    assert exact[0][exact[0].index("--queue-id") + 1] == "q1"
     assert "--queue-id" in exact[1]
     assert "q1" in exact[1]
 
@@ -68,12 +70,14 @@ def main() -> int:
         1,
         apply=True,
         approval_mode="text",
+        queue_id="q1",
         runner=runner,
     )
     assert result["status"] == "READY"
     assert result["selected_queue_id"] == "q1"
     assert "--queue-id" in commands[1]
     assert commands[1][commands[1].index("--queue-id") + 1] == "q1"
+    assert commands[0][commands[0].index("--queue-id") + 1] == "q1"
 
     no_candidate_calls = 0
 

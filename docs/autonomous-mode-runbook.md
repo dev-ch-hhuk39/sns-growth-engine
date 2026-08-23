@@ -573,3 +573,12 @@ This avoids a media preparation failure turning into an empty scheduled slot.
 
 Emergency stop remains `kill_switch=true` in `config/autonomous_mode.json`,
 then commit and push. It blocks both text and approved-media scheduled posting.
+
+## 2026-08-23 Operational correction
+
+- Night/Liver cron starts 15 minutes before each target. Publication is allowed only from 15 minutes before through 15 minutes after the canonical target.
+- The scheduled text wrapper generates exactly one candidate and passes that queue ID through Hybrid review and the exact publisher. It cannot substitute an unrelated legacy READY row.
+- `run_autonomous_loop.py --stop-before-post` performs score/generation only. It does not AUTO_READY and does not fabricate `processed_count=1`.
+- `NO_POST_UNKNOWN` is forbidden. Inspect `generation_reason`, `no_post_reason`, and the exact queue row. `GEMINI_RATE_LIMITED` is an external retryable quota state; do not weaken quality gates.
+- Beauty production is active but review-required. Prepare runs at 09:30/18:30 JST; a human-approved READY row for the exact date/slot may publish at 11:30/20:30 JST. AUTO_READY is disabled.
+- Bounded source acquisition saves daily. It never posts or grants media reuse permission; failed providers are DEFERRED while other sources continue.

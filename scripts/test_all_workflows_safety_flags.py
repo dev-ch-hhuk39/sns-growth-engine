@@ -30,22 +30,22 @@ REAL_ACTION_CMDS = (
 TEXT_SCHEDULED = {
     "autonomous-growth-loop-night-scout.yml": (
         'ACCOUNT_ID: "night_scout"',
-        'cron: "2 5 * * *"',
-        'cron: "2 7 * * *"',
-        'cron: "2 16 * * *"',
+        'cron: "45 4 * * *"',
+        'cron: "45 6 * * *"',
+        'cron: "45 15 * * *"',
     ),
     "autonomous-growth-loop-liver-manager.yml": (
         'ACCOUNT_ID: "liver_manager"',
-        'cron: "4 1 * * *"',
-        'cron: "4 4 * * *"',
-        'cron: "4 12 * * *"',
+        'cron: "45 0 * * *"',
+        'cron: "45 3 * * *"',
+        'cron: "45 11 * * *"',
     ),
 }
 MEDIA_SCHEDULED = {
-    "direct-reference-media-night-scout.yml": ('ACCOUNT_ID: "night_scout"', 'cron: "2 9 * * *"'),
-    "direct-reference-media-liver-manager.yml": ('ACCOUNT_ID: "liver_manager"', 'cron: "4 7 * * *"'),
-    "media-growth-post-night-scout.yml": ('ACCOUNT_ID: "night_scout"', 'cron: "2 12 * * *"'),
-    "media-growth-post-liver-manager.yml": ('ACCOUNT_ID: "liver_manager"', 'cron: "4 9 * * *"'),
+    "direct-reference-media-night-scout.yml": ('ACCOUNT_ID: "night_scout"', 'cron: "45 8 * * *"'),
+    "direct-reference-media-liver-manager.yml": ('ACCOUNT_ID: "liver_manager"', 'cron: "45 6 * * *"'),
+    "media-growth-post-night-scout.yml": ('ACCOUNT_ID: "night_scout"', 'cron: "45 11 * * *"'),
+    "media-growth-post-liver-manager.yml": ('ACCOUNT_ID: "liver_manager"', 'cron: "45 8 * * *"'),
 }
 
 

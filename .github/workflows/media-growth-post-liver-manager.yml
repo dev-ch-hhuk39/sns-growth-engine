@@ -2,7 +2,7 @@ name: Media Growth Post Liver Manager
 
 on:
   schedule:
-    - cron: "4 9 * * *"
+    - cron: "45 8 * * *"
   workflow_dispatch:
     inputs:
       confirm_media_post:

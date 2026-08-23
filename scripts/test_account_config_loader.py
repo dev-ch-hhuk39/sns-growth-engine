@@ -95,13 +95,14 @@ def t_liver_manager_json_valid():
     assert "thread_series_policy" in d
 
 
-def t_beauty_account_json_draft_only():
+def t_beauty_account_json_active_review_required():
     p = os.path.join(_V2_ROOT, "config", "accounts", "beauty_account.json")
     with open(p, encoding="utf-8") as f:
         d = json.load(f)
     assert d["account_id"] == "beauty_account"
-    assert d["status"] == "draft_only", f"beauty_account は draft_only のはず。実際: {d['status']}"
-    assert d["safety_policy"].get("allow_real_post") is False, "allow_real_post は false のはず"
+    assert d["status"] == "active", f"beauty_account activation後は active。実際: {d['status']}"
+    assert d["safety_policy"].get("allow_real_post") is True
+    assert d["safety_policy"].get("requires_human_review_before_post") is True
 
 
 def t_beauty_account_forbidden_keywords():
@@ -142,16 +143,17 @@ def t_load_beauty_account_config():
     invalidate_cache()
     cfg = load_account_config("beauty_account")
     assert cfg.account_id == "beauty_account"
-    assert cfg.status == "draft_only"
-    assert cfg.is_draft_only()
-    assert not cfg.is_active()
+    assert cfg.status == "active"
+    assert not cfg.is_draft_only()
+    assert cfg.is_active()
 
 
-def t_beauty_account_allow_real_post_false():
+def t_beauty_account_allow_real_post_with_review():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     cfg = load_account_config("beauty_account")
-    assert cfg.safety_policy.get("allow_real_post") is False
+    assert cfg.safety_policy.get("allow_real_post") is True
+    assert cfg.safety_policy.get("requires_human_review_before_post") is True
 
 
 def t_seeds_forbidden_merge():
@@ -176,7 +178,7 @@ def t_get_all_account_ids():
 def t_is_draft_only_function():
     from accounts.account_config import is_draft_only, invalidate_cache
     invalidate_cache()
-    assert is_draft_only("beauty_account"), "beauty_account は draft_only のはず"
+    assert not is_draft_only("beauty_account"), "beauty_account activation後は draft_only ではない"
     assert not is_draft_only("night_scout"), "night_scout は draft_only でないはず"
 
 
@@ -184,7 +186,7 @@ def t_is_active_function():
     from accounts.account_config import is_active, invalidate_cache
     invalidate_cache()
     assert is_active("night_scout"), "night_scout は active のはず"
-    assert not is_active("beauty_account"), "beauty_account は active でないはず"
+    assert is_active("beauty_account"), "beauty_account activation後は active のはず"
 
 
 def t_get_char_limits():
@@ -240,12 +242,12 @@ for fn in [
     t_base_template_json_exists,
     t_night_scout_json_valid,
     t_liver_manager_json_valid,
-    t_beauty_account_json_draft_only,
+    t_beauty_account_json_active_review_required,
     t_beauty_account_forbidden_keywords,
     t_load_night_scout_config,
     t_load_liver_manager_config,
     t_load_beauty_account_config,
-    t_beauty_account_allow_real_post_false,
+    t_beauty_account_allow_real_post_with_review,
     t_seeds_forbidden_merge,
     t_get_all_account_ids,
     t_is_draft_only_function,

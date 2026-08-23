@@ -76,25 +76,19 @@ def test_content_types_mixed():
     assert len(modes_used) >= 2, f"種別が1つしかない: {modes_used}"
 
 
-def test_beauty_account_waiting_review():
-    """beauty_account は draft_only なので全アイテムが WAITING_REVIEW。"""
+def test_beauty_account_active_planning():
+    """Activation後のBeauty計画はactiveだが、投稿そのものは行わない。"""
     from generation.content_mix_planner import plan_content_mix
     plan = plan_content_mix("beauty_account", "threads", count=5, seed=42)
-    assert plan["safety_status"] == "DRAFT_ONLY"
+    assert plan["safety_status"] == "OK"
     for item in plan["items"]:
-        assert item["status"] == "WAITING_REVIEW", (
-            f"beauty_account のアイテムが WAITING_REVIEW でない: {item['status']}"
-        )
+        assert item["status"] == "PLANNED"
 
 
-def test_beauty_account_not_planned():
-    """beauty_account のアイテムは PLANNED ステータスにならない。"""
+def test_beauty_account_planner_never_posts():
     from generation.content_mix_planner import plan_content_mix
     plan = plan_content_mix("beauty_account", "threads", count=5, seed=42)
     for item in plan["items"]:
-        assert item["status"] != "PLANNED", (
-            "beauty_account のアイテムが PLANNED になっています（禁止）"
-        )
         assert item["status"] != "READY", "beauty_account のアイテムが READY になっています（禁止）"
         assert item["status"] != "POSTED", "beauty_account のアイテムが POSTED になっています（禁止）"
 
@@ -159,8 +153,8 @@ if __name__ == "__main__":
     _test("seed_reproducible", test_seed_reproducible)
     _test("different_seeds", test_different_seeds)
     _test("content_types_mixed", test_content_types_mixed)
-    _test("beauty_account_waiting_review", test_beauty_account_waiting_review)
-    _test("beauty_account_not_planned", test_beauty_account_not_planned)
+    _test("beauty_account_active_planning", test_beauty_account_active_planning)
+    _test("beauty_account_planner_never_posts", test_beauty_account_planner_never_posts)
     _test("active_account_planned", test_active_account_planned)
     _test("force_mode", test_force_mode)
     _test("threads_platform", test_threads_platform)

@@ -2,9 +2,9 @@ name: Autonomous Growth Loop Liver Manager
 
 on:
   schedule:
-    - cron: "4 1 * * *"
-    - cron: "4 4 * * *"
-    - cron: "4 12 * * *"
+    - cron: "45 0 * * *"
+    - cron: "45 3 * * *"
+    - cron: "45 11 * * *"
   workflow_dispatch:
     inputs:
       confirm_autonomous:
@@ -84,9 +84,9 @@ jobs:
             slot="$MANUAL_SLOT_ID"
           else
             case "${{ github.event.schedule }}" in
-              "4 1 * * *") slot="lm_1000_original" ;;
-              "4 4 * * *") slot="lm_1300_reference" ;;
-              "4 12 * * *") slot="lm_2100_pdca" ;;
+              "45 0 * * *") slot="lm_1000_original" ;;
+              "45 3 * * *") slot="lm_1300_reference" ;;
+              "45 11 * * *") slot="lm_2100_pdca" ;;
               *) slot="manual_text" ;;
             esac
           fi

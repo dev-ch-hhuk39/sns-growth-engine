@@ -78,12 +78,12 @@ def t_seeds_beauty_no_mlm_keywords():
 # account_config の beauty_account
 # --------------------------------------------------------
 
-def t_account_config_beauty_draft_only():
+def t_account_config_beauty_active_review_required():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     cfg = load_account_config("beauty_account")
-    assert cfg.is_draft_only(), "beauty_account は draft_only のはず"
-    assert not cfg.is_active(), "beauty_account は active でないはず"
+    assert not cfg.is_draft_only(), "beauty_account activation後は draft_only ではない"
+    assert cfg.is_active(), "beauty_account activation後は active のはず"
 
 
 def t_account_config_beauty_strict_safety():
@@ -91,9 +91,9 @@ def t_account_config_beauty_strict_safety():
     invalidate_cache()
     cfg = load_account_config("beauty_account")
     safety = cfg.safety_policy
-    assert safety.get("allow_real_post") is False
+    assert safety.get("allow_real_post") is True
     assert safety.get("requires_human_review_before_post") is True
-    assert safety.get("draft_only_enforcement") == "STRICT"
+    assert safety.get("draft_only_enforcement") == "DISABLED_AFTER_OWNER_ACTIVATION"
 
 
 def t_account_config_beauty_has_thread_series():
@@ -120,15 +120,12 @@ def t_account_config_beauty_forbidden_kw_merged():
 # beauty_account は POSTED 化されていないこと
 # --------------------------------------------------------
 
-def t_beauty_account_not_posted():
-    """beauty_account の queue が POSTED 状態でないことを確認（セーフティチェック）。"""
-    # この段階ではまだ queue が存在しないので PASS
-    # 実運用では check_pipeline_integrity.py で確認する
+def t_beauty_account_real_post_requires_review():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     cfg = load_account_config("beauty_account")
-    assert cfg.safety_policy.get("allow_real_post") is False, \
-        "allow_real_post=false のはず"
+    assert cfg.safety_policy.get("allow_real_post") is True
+    assert cfg.safety_policy.get("requires_human_review_before_post") is True
 
 
 # --------------------------------------------------------
@@ -158,8 +155,8 @@ def t_thread_series_beauty_stays_waiting_review():
         del os.environ["MOCK_LLM"]
 
 
-def t_thread_series_beauty_has_draft_only_note():
-    """beauty_account の generation_notes に draft_only の注記があるか。"""
+def t_thread_series_beauty_remains_review_only():
+    """Activation後もBeautyのseriesは実投稿せずreview対象に留まる。"""
     import os
     os.environ["MOCK_LLM"] = "true"
     try:
@@ -174,8 +171,7 @@ def t_thread_series_beauty_has_draft_only_note():
             post_count=2,
             mock_llm=True,
         )
-        assert "draft_only" in series.generation_notes, \
-            f"generation_notes に draft_only の注記が必要: {series.generation_notes}"
+        assert series.status == "WAITING_REVIEW"
     finally:
         del os.environ["MOCK_LLM"]
 
@@ -186,13 +182,13 @@ for fn in [
     t_seeds_beauty_forbidden_keywords_not_empty,
     t_seeds_beauty_forbidden_themes_not_empty,
     t_seeds_beauty_no_mlm_keywords,
-    t_account_config_beauty_draft_only,
+    t_account_config_beauty_active_review_required,
     t_account_config_beauty_strict_safety,
     t_account_config_beauty_has_thread_series,
     t_account_config_beauty_forbidden_kw_merged,
-    t_beauty_account_not_posted,
+    t_beauty_account_real_post_requires_review,
     t_thread_series_beauty_stays_waiting_review,
-    t_thread_series_beauty_has_draft_only_note,
+    t_thread_series_beauty_remains_review_only,
 ]:
     _test(fn.__name__[2:], fn)
 

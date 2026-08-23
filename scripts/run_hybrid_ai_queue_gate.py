@@ -108,6 +108,7 @@ def candidate_rows(
     max_candidates: int,
     slot_id: str = "",
     require_human_review: bool = False,
+    queue_ids: set[str] | None = None,
 ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], list[dict[str, str]]]:
     statuses = ["READY"] if require_human_review else ["WAITING_REVIEW"]
     rows_by_id: dict[str, dict[str, Any]] = {}
@@ -125,6 +126,7 @@ def candidate_rows(
             or str(row.get("human_review_decision", "")).upper() == "OK"
         )
         and (not slot_id or str(row.get("slot_id", "")) == slot_id)
+        and (not queue_ids or str(row.get("queue_id", "")) in queue_ids)
         and str(row.get("excluded_from_activation", "")).lower() not in {"true", "1", "yes"}
         and str(row.get("repost_prohibited", "")).lower() not in {"true", "1", "yes"}
     ]
@@ -166,6 +168,7 @@ def main() -> int:
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
     parser.add_argument("--max-candidates", type=int, default=2)
     parser.add_argument("--slot-id", default="")
+    parser.add_argument("--queue-id", action="append", default=[])
     parser.add_argument("--require-human-review", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -198,6 +201,7 @@ def main() -> int:
         args.max_candidates,
         args.slot_id,
         require_human_review=args.require_human_review,
+        queue_ids=set(args.queue_id),
     )
     posted_before = records(client, "posted_results")
     statuses_before = {

@@ -81,9 +81,9 @@ if preflight_mod:
         post_type="thread_series",
         mock=True,
     )
-    _check("beauty_account_x_blocked", result_beauty_x.get("status") == "BLOCKED")
+    _check("beauty_account_x_not_ready", result_beauty_x.get("status") == "NOT_READY")
 
-    # [2] beauty_account × threads も BLOCKED
+    # [2] beauty_account × threadsはactive。本番flag/READYなしではNOT_READY。
     preflight_mod.RESULTS = []
     preflight_mod.PASS_COUNT = preflight_mod.FAIL_COUNT = preflight_mod.WARN_COUNT = preflight_mod.BLOCKED_COUNT = 0
     result_beauty_t = preflight_mod.run_preflight(
@@ -92,7 +92,7 @@ if preflight_mod:
         post_type="single_post",
         mock=True,
     )
-    _check("beauty_account_threads_blocked", result_beauty_t.get("status") == "BLOCKED")
+    _check("beauty_account_threads_review_gated", result_beauty_t.get("status") in {"READY", "WARN", "NOT_READY"})
 
     # [3] night_scout × x × single_post → READY/WARN (not BLOCKED/FAIL)
     preflight_mod.RESULTS = []

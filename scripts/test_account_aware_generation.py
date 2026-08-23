@@ -119,12 +119,13 @@ def t_thread_series_uses_account_config_char_limit():
 # draft_only の投稿をREADY化しないガード
 # --------------------------------------------------------
 
-def t_draft_only_cannot_be_ready():
+def t_beauty_activation_keeps_human_review():
     from accounts.account_config import load_account_config, is_draft_only, invalidate_cache
     invalidate_cache()
-    assert is_draft_only("beauty_account"), "beauty_account は draft_only のはず"
+    assert not is_draft_only("beauty_account")
     cfg = load_account_config("beauty_account")
-    assert not cfg.is_active(), "beauty_account は is_active()=False のはず"
+    assert cfg.is_active()
+    assert cfg.safety_policy.get("requires_human_review_before_post") is True
 
 
 def t_active_accounts_can_post():
@@ -183,7 +184,7 @@ for fn in [
     t_forbidden_block_night_scout,
     t_forbidden_block_beauty_account,
     t_thread_series_uses_account_config_char_limit,
-    t_draft_only_cannot_be_ready,
+    t_beauty_activation_keeps_human_review,
     t_active_accounts_can_post,
     t_generator_loads_account_config,
     t_pipeline_check_script_exists,

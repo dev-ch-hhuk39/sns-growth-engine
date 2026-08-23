@@ -65,12 +65,12 @@ def test_safety_flag_check():
             del os.environ["ALLOW_REAL_THREADS_POST"]
 
 
-def test_draft_only_blocked():
-    """beauty_account（draft_only）は BLOCKED になる。"""
+def test_beauty_active_review_required():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     cfg = load_account_config("beauty_account")
-    assert cfg.is_draft_only(), "beauty_account は draft_only でなければなりません"
+    assert cfg.is_active() and not cfg.is_draft_only()
+    assert cfg.safety_policy.get("requires_human_review_before_post") is True
 
 
 def test_active_accounts_not_blocked():
@@ -103,18 +103,20 @@ def test_threads_char_limits():
         assert limits["hard"] >= 500, f"{account_id} threads hard limit が小さすぎます"
 
 
-def test_no_real_post_in_threads_safety():
-    """allow_real_post=false がすべてのアカウントで維持されている。"""
+def test_real_post_policy_is_explicit():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     for account_id in ["night_scout", "liver_manager", "beauty_account"]:
         cfg = load_account_config(account_id)
         allow = cfg.safety_policy.get("allow_real_post", False)
-        assert not allow, f"{account_id} allow_real_post が true になっています"
+        if account_id == "beauty_account":
+            assert allow
+            assert cfg.safety_policy.get("requires_human_review_before_post") is True
+        else:
+            assert not allow, f"{account_id} allow_real_post が true になっています"
 
 
-def test_threads_preflight_check_account_config_function():
-    """check_account_config 関数が draft_only で False を返す。"""
+def test_threads_preflight_beauty_active():
     import importlib.util
     path = os.path.join(_V2_ROOT, "scripts", "preflight_threads_real_post.py")
     spec = importlib.util.spec_from_file_location("preflight_threads", path)
@@ -125,7 +127,7 @@ def test_threads_preflight_check_account_config_function():
     invalidate_cache()
 
     result = mod.check_account_config("beauty_account")
-    assert result is False, "beauty_account は check_account_config が False を返すはずです"
+    assert result is True, "beauty_account activation後はaccount preflightを通過する"
 
 
 def test_threads_preflight_active_account_passes():
@@ -159,12 +161,12 @@ if __name__ == "__main__":
     _test("preflight_script_exists", test_preflight_script_exists)
     _test("preflight_importable", test_preflight_importable)
     _test("safety_flag_check", test_safety_flag_check)
-    _test("draft_only_blocked (beauty_account)", test_draft_only_blocked)
+    _test("beauty_active_review_required", test_beauty_active_review_required)
     _test("active_accounts_not_blocked", test_active_accounts_not_blocked)
     _test("threads_platform_enabled", test_threads_platform_enabled)
     _test("threads_char_limits", test_threads_char_limits)
-    _test("no_real_post_in_threads_safety", test_no_real_post_in_threads_safety)
-    _test("check_account_config draft_only→False", test_threads_preflight_check_account_config_function)
+    _test("real_post_policy_is_explicit", test_real_post_policy_is_explicit)
+    _test("check_account_config beauty active", test_threads_preflight_beauty_active)
     _test("check_account_config active→True", test_threads_preflight_active_account_passes)
     _test("threads_doc_exists (soft check)", test_threads_doc_exists)
 

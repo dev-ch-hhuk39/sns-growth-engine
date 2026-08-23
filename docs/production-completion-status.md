@@ -1141,3 +1141,19 @@ This section supersedes older statements that media scheduling is OFF.
 - This is implementation completion, not E2E completion: GitHub Actions
   billing and missing permitted individual assets still prevent proof of direct
   download/upload/post, carousel support, and generated clip posting.
+
+## 2026-08-23 Current production status
+
+| Area | Status | Evidence / boundary |
+|---|---|---|
+| Night/Liver text generation | CODE READY | Exact date/slot queue ID and one generated candidate per scheduled run |
+| Night/Liver Hybrid and publish | CODE READY | Exact candidate flows through Hybrid, AUTO_READY, publisher, posted_results, and metrics scheduling |
+| No-post diagnostics | CODE READY | `NO_POST_UNKNOWN` removed; concrete stage reason is emitted |
+| Scheduled timing | CODE READY | Dispatch target minus 15 minutes; publish only within target +/-15 minutes |
+| Beauty Threads | ACTIVATED, REVIEW REQUIRED | Exact current slot/date READY row only; AUTO_READY and medical auto-publication remain disabled |
+| Source acquisition | SCHEDULED | Bounded persistence with provenance and DEFERRED/fail-soft behavior |
+| Account isolation | TESTED | Source, Hybrid context, credentials, PDCA, and publisher are account-scoped |
+| X publishing | OFF | No workflow enables X publication |
+| Autonomous media preparation | GATED | Existing publishers can consume approved READY inventory; broad download/cut/upload activation remains off |
+
+Post-merge production proof still requires real permalinks and Sheets/metrics read-after-write evidence. A green workflow without a permalink is not posting proof.

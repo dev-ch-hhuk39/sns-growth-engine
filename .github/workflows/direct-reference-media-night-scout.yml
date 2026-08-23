@@ -2,7 +2,7 @@ name: Direct Reference Media Night Scout
 
 on:
   schedule:
-    - cron: "2 9 * * *"
+    - cron: "45 8 * * *"
   workflow_dispatch:
     inputs:
       confirm_direct_media:

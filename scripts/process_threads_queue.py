@@ -300,7 +300,15 @@ def duplicate_reason(
     return ""
 
 
-def select_candidates(client: SheetsClient, account_id: str | None, max_posts: int, queue_ids: set[str] | None = None) -> list[dict[str, Any]]:
+def select_candidates(
+    client: SheetsClient,
+    account_id: str | None,
+    max_posts: int,
+    queue_ids: set[str] | None = None,
+    *,
+    slot_id: str = "",
+    business_date_jst: str = "",
+) -> list[dict[str, Any]]:
     rows = records(client, "queue")
     candidates: list[dict[str, Any]] = []
     for row in rows:
@@ -310,6 +318,10 @@ def select_candidates(client: SheetsClient, account_id: str | None, max_posts: i
         if account_id and row_account != account_id:
             continue
         if queue_ids is not None and str(row.get("queue_id", "")) not in queue_ids:
+            continue
+        if slot_id and str(row.get("slot_id", "")) != slot_id:
+            continue
+        if business_date_jst and str(row.get("business_date_jst", "")) != business_date_jst:
             continue
         if platform != "threads":
             continue
@@ -1145,6 +1157,8 @@ def main() -> int:
     parser.add_argument("--confirm-real-post", action="store_true", help="Required for real post")
     parser.add_argument("--max-posts", type=int, default=1, help="Max posts to process. Default 1")
     parser.add_argument("--queue-id", action="append", default=[], help="Process only this approved queue ID; repeatable")
+    parser.add_argument("--slot-id", default="", help="Process only this canonical slot")
+    parser.add_argument("--business-date-jst", default="", help="Process only this JST business date")
     args = parser.parse_args()
 
     if args.account_id == BEAUTY_ACCOUNT:
@@ -1177,7 +1191,14 @@ def main() -> int:
     requested_queue_ids = {item.strip() for item in args.queue_id if item.strip()}
     if requested_queue_ids and args.max_posts != len(requested_queue_ids):
         args.max_posts = len(requested_queue_ids)
-    candidates = select_candidates(client, args.account_id, args.max_posts, requested_queue_ids or None)
+    candidates = select_candidates(
+        client,
+        args.account_id,
+        args.max_posts,
+        requested_queue_ids or None,
+        slot_id=args.slot_id,
+        business_date_jst=args.business_date_jst,
+    )
     if requested_queue_ids and {str(row.get("queue_id", "")) for row in candidates} != requested_queue_ids:
         missing = sorted(requested_queue_ids - {str(row.get("queue_id", "")) for row in candidates})
         print(json.dumps({"status": "NO_POST", "reason": "REQUESTED_QUEUE_NOT_READY", "missing_queue_ids": missing}, ensure_ascii=False))

@@ -11,8 +11,8 @@ def main() -> int:
     liver = (ROOT / ".github/workflows/autonomous-growth-loop-liver-manager.yml").read_text(encoding="utf-8")
     docs = (ROOT / "docs/autonomous-mode-runbook.md").read_text(encoding="utf-8")
     checks = [
-        ("night fixed UTC slots", all(cron in night for cron in ('cron: "2 5 * * *"', 'cron: "2 7 * * *"', 'cron: "2 16 * * *"'))),
-        ("liver fixed UTC slots", all(cron in liver for cron in ('cron: "4 1 * * *"', 'cron: "4 4 * * *"', 'cron: "4 12 * * *"'))),
+        ("night fixed UTC slots", all(cron in night for cron in ('cron: "45 4 * * *"', 'cron: "45 6 * * *"', 'cron: "45 15 * * *"'))),
+        ("liver fixed UTC slots", all(cron in liver for cron in ('cron: "45 0 * * *"', 'cron: "45 3 * * *"', 'cron: "45 11 * * *"'))),
         ("docs mention account schedules", "night_scout" in docs and "liver_manager" in docs),
         ("docs mention daily", "daily" in docs.lower() or "毎日" in docs),
     ]

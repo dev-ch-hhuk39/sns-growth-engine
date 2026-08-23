@@ -404,7 +404,13 @@ def build_generation_rows(
             break
         generation_attempts += 1
         i = generation_attempts
-        stable = _safe_id(f"{account_id}_{ref_id}")
+        # A source can inform more than one future post, but a previously
+        # POSTED queue row must never be refreshed or reused.  Scope IDs to the
+        # canonical slot/date so every scheduled attempt has its own immutable
+        # idempotency boundary.
+        stable = _safe_id(
+            f"{account_id}_{ref_id}_{schedule_date_jst or 'unscheduled'}_{slot_id or 'reference'}"
+        )
         draft_id = f"idea_{stable}"
         derivative_id = f"sd_{stable}_threads"
         queue_id = f"q_{stable}_threads"
@@ -2297,6 +2303,15 @@ def run_reference_generation(
     return {
         **summary,
         "status": "GENERATED",
+        "effective_queue_ids": (
+            [str(row.get("queue_id", "")) for row in rows["queue"] if str(row.get("queue_id", ""))]
+            if queue_writes > 0
+            else [
+                str(row.get("queue_id", ""))
+                for row in (fallback_rows.get("queue", []) if fallback_topup_used else [])
+                if str(row.get("queue_id", ""))
+            ]
+        ),
         "fallback_topup_used": fallback_topup_used,
         "applied_operations": ops,
         "fallback_topup_operations": fallback_ops,

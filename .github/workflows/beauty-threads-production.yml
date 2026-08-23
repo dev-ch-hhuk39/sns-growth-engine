@@ -91,6 +91,12 @@ jobs:
               *) echo "ACTION=dry_run" >> "$GITHUB_ENV"; echo "SLOT_INDEX=0" >> "$GITHUB_ENV" ;;
             esac
           fi
+          echo "BUSINESS_DATE_JST=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_ENV"
+          if [ "$SLOT_INDEX" = "0" ]; then
+            echo "BEAUTY_SLOT_ID=beauty_1130" >> "$GITHUB_ENV"
+          else
+            echo "BEAUTY_SLOT_ID=beauty_2030" >> "$GITHUB_ENV"
+          fi
 
       - name: Guard required secrets
         run: |
@@ -130,14 +136,14 @@ jobs:
         if: env.ACTION == 'prepare'
         env:
           DRY_RUN: "false"
-        run: python3 scripts/run_hybrid_ai_queue_gate.py --account-id beauty_account --max-candidates 1 --apply --use-sheets
+        run: python3 scripts/run_hybrid_ai_queue_gate.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --max-candidates 1 --apply --use-sheets
 
       # The worker re-reads the selected Beauty READY row and runs account,
       # persona, public-text, media and idempotency gates before publishing.
       # Repository-wide historical drift must not block this scoped preflight.
       - name: Strict Beauty queue and publisher preflight
         if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
-        run: python3 scripts/process_threads_queue.py --account-id beauty_account --max-posts 1 --dry-run
+        run: python3 scripts/process_threads_queue.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --business-date-jst "$BUSINESS_DATE_JST" --max-posts 1 --dry-run
 
       - name: Publish one approved READY row
         if: >-
@@ -148,7 +154,7 @@ jobs:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
           BEAUTY_PRODUCTION_ENABLED: "true"
-        run: python3 scripts/process_threads_queue.py --account-id beauty_account --max-posts 1 --confirm-real-post
+        run: python3 scripts/process_threads_queue.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --business-date-jst "$BUSINESS_DATE_JST" --max-posts 1 --confirm-real-post
 
       - name: Block unconfirmed manual publish
         if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_publish != 'true'

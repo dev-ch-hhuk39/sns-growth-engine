@@ -32,8 +32,8 @@ WORKFLOWS = {
 }
 
 EXPECTED_CRONS = {
-    "night_scout": {"2 5 * * *", "2 7 * * *", "2 16 * * *"},
-    "liver_manager": {"4 1 * * *", "4 4 * * *", "4 12 * * *"},
+    "night_scout": {"45 4 * * *", "45 6 * * *", "45 15 * * *"},
+    "liver_manager": {"45 0 * * *", "45 3 * * *", "45 11 * * *"},
 }
 
 # End-to-end activation keeps preparation and publication separated. Every
