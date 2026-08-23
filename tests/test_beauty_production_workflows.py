@@ -194,6 +194,19 @@ def test_beauty_media_route_skips_without_text_fallback(monkeypatch) -> None:
     assert candidate["generation_route"] == "direct_reference_media"
 
 
+def test_beauty_gemini_errors_are_sanitized_and_classified() -> None:
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    cases = {
+        "Gemini API エラー (HTTP 429)": ("gemini_rate_limited", True),
+        "Gemini API エラー (HTTP 404)": ("gemini_model_not_found", False),
+        "Gemini API エラー (HTTP 403)": ("gemini_auth_rejected", False),
+        "JSONパース失敗": ("gemini_json_parse_failed", True),
+        "Gemini API 接続エラー": ("gemini_connection_error", True),
+    }
+    for error, expected in cases.items():
+        assert prepare._gemini_failure_reason({"_error": error, "_raw": "private"}) == expected
+
+
 def test_beauty_secrets_are_referenced_by_name_only() -> None:
     _, beauty = _workflow("beauty-threads-production.yml")
     assert "${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}" in beauty

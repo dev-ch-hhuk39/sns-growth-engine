@@ -286,6 +286,28 @@ def load_route_context(route: str, topic: str = "") -> dict:
     return {"status": "BLOCKED", "reason": "beauty_route_not_supported"}
 
 
+def _gemini_failure_reason(response: dict) -> tuple[str, bool]:
+    """Classify an LLM failure without exposing response text or credentials."""
+    error = str(response.get("_error") or "").strip().casefold()
+    if not error:
+        return "empty_llm_response", True
+    if "http 429" in error:
+        return "gemini_rate_limited", True
+    if "http 404" in error:
+        return "gemini_model_not_found", False
+    if "http 401" in error or "http 403" in error:
+        return "gemini_auth_rejected", False
+    if "http 400" in error:
+        return "gemini_request_rejected", False
+    if "json" in error:
+        return "gemini_json_parse_failed", True
+    if "接続" in error or "timeout" in error:
+        return "gemini_connection_error", True
+    if "blockreason" in error:
+        return "gemini_safety_blocked", False
+    return "gemini_api_error", False
+
+
 def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
     business_date, slot_id, queue_id = _slot_identity(slot_index)
     topic_index = (datetime.now(JST).date().toordinal() * 2 + slot_index) % len(TOPICS)
@@ -324,7 +346,10 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
         )
         text = str(response.get("public_post_text", "")).strip()
         if not text:
-            blocked = ["empty_llm_response"]
+            reason, retryable = _gemini_failure_reason(response)
+            blocked = [reason]
+            if not retryable:
+                break
             continue
         candidate = build_beauty_review_candidate(
             route,
