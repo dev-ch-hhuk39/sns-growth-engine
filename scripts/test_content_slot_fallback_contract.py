@@ -3,9 +3,12 @@
 from __future__ import annotations
 import sys
 from pathlib import Path
-ROOT = Path(__file__).resolve().parents[1]; sys.path.insert(0, str(ROOT / "scripts"))
-from content_schedule import load_content_schedule, validate_schedule
-from run_slot_text_fallback import build_plan
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts"))
+from content_schedule import load_content_schedule, slot_by_id, slots_for_account, validate_schedule  # noqa: E402
+from content_slot_runs import build_slot_run  # noqa: E402
+from run_slot_text_fallback import build_plan  # noqa: E402
 
 assert not validate_schedule(), validate_schedule()
 schedule = load_content_schedule()["accounts"]
@@ -17,4 +20,8 @@ for account, slots in schedule.items():
             assert plan["status"] == "SKIPPED_NO_VALID_MEDIA", plan
             assert plan["would_post"] is False, plan
             assert "media_slot_text_fallback_forbidden" in plan["blocked_reasons"], plan
+beauty_slots = slots_for_account("beauty_account")
+assert [slot["slot_id"] for slot in beauty_slots] == ["beauty_1130", "beauty_2030"]
+assert slot_by_id("beauty_account", "beauty_2030")["target_jst"] == "20:30"
+assert build_slot_run("beauty_account", "beauty_2030")["slot_id"] == "beauty_2030"
 print("PASS test_content_slot_fallback_contract.py")

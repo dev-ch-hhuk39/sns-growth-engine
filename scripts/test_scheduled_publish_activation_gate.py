@@ -224,10 +224,40 @@ scoped = _scoped_text_decision(
 assert scoped["status"] == "ALLOW"
 assert scoped["selected_evidence_canary_id"]
 
+result_evidence_posted = [{
+    "result_id": "threads_q_live_1",
+    "account_id": "liver_manager",
+    "content_route": "original_text",
+    "status": "POSTED",
+    "post_url": "https://www.threads.com/@example/post/live",
+    "external_post_id": "live",
+    "verification_status": "READ_AFTER_WRITE_PASS",
+}]
+result_evidence_jobs = [
+    {
+        "result_id": "threads_q_live_1",
+        "window_hours": hours,
+        "status": "SCHEDULED",
+    }
+    for hours in (24, 72, 168)
+]
+result_scoped = _scoped_text_decision(
+    {**config, "kill_switch": False},
+    result_evidence_posted,
+    result_evidence_jobs,
+    evidence_source="READ_OK",
+    canary_integrity={"status": "FAIL", "checks": []},
+    account_id="liver_manager",
+    post_type="original_text",
+)
+assert result_scoped["status"] == "ALLOW", result_scoped
+assert result_scoped["selected_evidence_canary_id"] == "result:threads_q_live_1"
+assert result_scoped["selected_evidence_result_id"] == "threads_q_live_1"
+
 wrong_route = _scoped_text_decision(
     {**config, "kill_switch": False},
-    posted,
-    jobs,
+    [],
+    [],
     evidence_source="READ_OK",
     canary_integrity=scoped_integrity,
     account_id="night_scout",
