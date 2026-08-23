@@ -171,6 +171,32 @@ def main() -> int:
     checks.append(("historical quarantine: upload checks do not block fresh queue",
                    res["media_no_unapproved_upload"] is True and res["media_uploaded_only_if_approved"] is True))
 
+    scoped_tabs = _base_tabs()
+    scoped_tabs["queue"] = [{
+        "queue_id": "q_text", "account_id": "night_scout", "platform": "threads",
+        "status": "READY", "media_required": "false", "media_asset_ids_json": "[]",
+    }]
+    scoped_tabs["media_assets"] = [{
+        "media_id": "unrelated", "upload_status": "UPLOADED",
+        "storage_provider": "cloudinary", "storage_url": "https://res.cloudinary.com/x/unrelated.png",
+        "rights_status": "unknown", "permission_status": "unknown",
+    }]
+    scoped_client = _FakeClient(scoped_tabs)
+    scoped_full = mod.verify_state(scoped_client)
+    scoped = mod.scope_verification_to_exact_text_queue(
+        scoped_client, scoped_full, queue_id="q_text", account_id="night_scout"
+    )
+    checks.append(("exact text scope excludes unrelated global media inventory",
+                   "media_uploaded_only_if_approved" not in scoped["failed"]
+                   and scoped["verification_scope"]["status"] == "PASS"))
+    scoped_tabs["queue"][0]["media_asset_id"] = "unrelated"
+    media_client = _FakeClient(scoped_tabs)
+    blocked = mod.scope_verification_to_exact_text_queue(
+        media_client, mod.verify_state(media_client), queue_id="q_text", account_id="night_scout"
+    )
+    checks.append(("media queue cannot use exact text scope",
+                   "exact_text_queue_scope_invalid" in blocked["failed"]))
+
     failed = [n for n, ok in checks if not ok]
     for n, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'} {n}")

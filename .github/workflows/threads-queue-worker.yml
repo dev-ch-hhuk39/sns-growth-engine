@@ -142,11 +142,15 @@ jobs:
           fi
 
       # Dry-run may inspect a scoped candidate even when unrelated legacy
-      # evidence is incomplete. Real posting keeps this diagnostic blocking.
+      # evidence is incomplete. Real posting keeps every applicable global
+      # check blocking and excludes media inventory only for an exact text row.
       - name: Sheets verify before processing
         continue-on-error: ${{ github.event.inputs.mode == 'dry_run' }}
         run: |
-          python3 scripts/recover_production_sheets_threads_first.py --verify-only
+          python3 scripts/recover_production_sheets_threads_first.py \
+            --verify-only \
+            --exact-text-queue-id "$QUEUE_ID" \
+            --account-id "$ACCOUNT_ID"
 
       - name: Queue worker dry-run
         run: |
@@ -187,7 +191,10 @@ jobs:
       - name: Sheets verify after processing
         if: ${{ github.event.inputs.mode == 'real_post' }}
         run: |
-          python3 scripts/recover_production_sheets_threads_first.py --verify-only
+          python3 scripts/recover_production_sheets_threads_first.py \
+            --verify-only \
+            --exact-text-queue-id "$QUEUE_ID" \
+            --account-id "$ACCOUNT_ID"
 
       - name: Upload posted_results fallback (if any)
         if: always()
