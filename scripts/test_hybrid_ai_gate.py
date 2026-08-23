@@ -218,6 +218,34 @@ def main() -> None:
     ).evaluate(beauty_queue, {**context, "source_text": beauty_text})
     assert beauty_result.status == "PASS", beauty_result.audit()
     assert beauty_result.review["voice_persona"] == "PASS"
+
+    beauty_prepared = {
+        **beauty_queue,
+        "generated_by": "prepare_beauty_review_candidates.py",
+        "semantic_voice_status": "PENDING_HYBRID_AI_REVIEW",
+    }
+    rewrite_attempt = "全然違うと私自身は感じました。"
+    review_only_client = FakeClient(
+        classification=beauty_classification,
+        generated_text=rewrite_attempt,
+    )
+    beauty_review_only = HybridAiGate(review_only_client).evaluate(
+        beauty_prepared,
+        {**context, "source_text": beauty_text},
+    )
+    assert beauty_review_only.status == "PASS", beauty_review_only.audit()
+    assert beauty_review_only.route == "semantic_review"
+    assert beauty_review_only.public_post_text == beauty_text
+    assert beauty_review_only.generation == {}
+    assert review_only_client.actual_request_count == 2
+
+    stale_route_queue = dict(beauty_prepared)
+    stale_route_queue["generation_policy_json"] = merge_gate_audit("", beauty_result)
+    current, reason = hybrid_ai_gate_current(
+        stale_route_queue,
+        {**context, "source_text": beauty_text},
+    )
+    assert current is False and reason == "route_stale"
     assert beauty_result.deterministic_validation["public_validation"]["voice_persona_check"]["style_profile_version"] == "chadult_beauty_voice_v1"
 
     beauty_reference = {
