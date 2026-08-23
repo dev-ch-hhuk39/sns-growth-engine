@@ -170,6 +170,13 @@ def main() -> None:
     assert pdca["status"] == "PASS"
     assert pdca["pdca_result_id"] == "beauty_result"
     assert "night_result" not in pdca["internal_evidence"]
+    insufficient_pdca = select_beauty_pdca_context([
+        {"result_id": "beauty_result", "account_id": "beauty_account", "metrics_status": "MEASURED"},
+        {"result_id": "night_result", "account_id": "night_scout", "metrics_status": "MEASURED"},
+    ], minimum_results=15)
+    assert insufficient_pdca["status"] == "BLOCKED", insufficient_pdca
+    assert insufficient_pdca["measured_result_count"] == 1
+    assert insufficient_pdca["minimum_measured_results"] == 15
 
     selected = {select_beauty_route(number) for number in range(1, 101)}
     assert selected == set(ROUTES), selected

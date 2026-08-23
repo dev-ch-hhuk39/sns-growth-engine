@@ -211,7 +211,7 @@ def select_beauty_reference_context(
     }
 
 
-def select_beauty_pdca_context(rows: list[dict]) -> dict:
+def select_beauty_pdca_context(rows: list[dict], *, minimum_results: int = 1) -> dict:
     """Use only measured Beauty outcomes; public generation never quotes them."""
     selected = [
         dict(row)
@@ -220,8 +220,13 @@ def select_beauty_pdca_context(rows: list[dict]) -> dict:
         and str(row.get("metrics_status") or "").upper() == "MEASURED"
         and str(row.get("result_id") or "").strip()
     ]
-    if not selected:
-        return {"status": "BLOCKED", "reason": "beauty_measured_pdca_evidence_missing"}
+    if len(selected) < max(1, int(minimum_results)):
+        return {
+            "status": "BLOCKED",
+            "reason": "beauty_measured_pdca_evidence_insufficient",
+            "measured_result_count": len(selected),
+            "minimum_measured_results": max(1, int(minimum_results)),
+        }
     row = selected[-1]
     evidence = {
         key: row.get(key)
@@ -267,7 +272,13 @@ def load_route_context(route: str, topic: str = "") -> dict:
             return selected
         if route == "pdca_text_generation":
             rows = [dict(row) for row in read_records_safely(client, "posted_results")]
-            selected = select_beauty_pdca_context(rows)
+            pipeline = json.loads(
+                (ROOT / "config" / "beauty_account_pipeline.json").read_text(encoding="utf-8")
+            )
+            selected = select_beauty_pdca_context(
+                rows,
+                minimum_results=int(pipeline.get("pdca", {}).get("minimum_measured_results", 15)),
+            )
             selected["voice_corpus"] = corpus
             return selected
     except Exception as exc:  # fail closed without leaking credential details
@@ -279,8 +290,24 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
     business_date, slot_id, queue_id = _slot_identity(slot_index)
     topic_index = (datetime.now(JST).date().toordinal() * 2 + slot_index) % len(TOPICS)
     topic = TOPICS[topic_index]
-    route = select_beauty_route(sequence_number)
+    requested_route = select_beauty_route(sequence_number)
+    route = requested_route
     route_context = load_route_context(route, topic)
+    route_fallback_reason = ""
+    if route == "pdca_text_generation" and route_context.get("status") != "PASS":
+        route_fallback_reason = str(
+            route_context.get("reason") or "beauty_pdca_route_not_available"
+        )
+        route = "new_text_generation"
+        route_context = load_route_context(route, topic)
+    if requested_route in {"direct_reference_media", "approved_source_clip"}:
+        return {
+            "status": "SKIPPED",
+            "reason": "beauty_media_route_delegated_no_text_fallback",
+            "requested_generation_route": requested_route,
+            "generation_route": requested_route,
+            "delegated_workflow": "direct-media-preparation.yml",
+        }
     if route_context.get("status") != "PASS":
         return {
             "status": "BLOCKED",
@@ -316,6 +343,8 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
                 "primary_topic": str(response.get("primary_topic") or topic),
                 "generation_attempt": attempt,
                 "generation_route": route,
+                "requested_generation_route": requested_route,
+                "route_fallback_reason": route_fallback_reason,
                 "route_context": route_context,
             })
             return candidate
@@ -374,6 +403,7 @@ def queue_row(candidate: dict) -> dict:
         "generation_mode": f"beauty_{route}",
         "content_type": route,
         "content_route": route,
+        "source_content_route": candidate.get("requested_generation_route", route),
         "public_post_text": text,
         "generated_by": "prepare_beauty_review_candidates.py",
         "validator_status": validation["status"],
@@ -405,6 +435,11 @@ def queue_row(candidate: dict) -> dict:
         "source_url": route_context.get("source_url", ""),
         "pdca_result_id": route_context.get("pdca_result_id", ""),
         "media_reuse_risk": "not_applicable",
+        "human_review_note": (
+            f"requested_route_fallback:{candidate.get('route_fallback_reason')}"
+            if candidate.get("route_fallback_reason")
+            else ""
+        ),
         "content_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
         "generation_attempt": candidate["generation_attempt"],
     }
@@ -439,9 +474,9 @@ def main() -> int:
         sequence_number = args.sequence_start or (datetime.now(JST).date().toordinal() * 2 + args.slot_index + 1)
         candidate = generate_candidate(slot_index=args.slot_index, sequence_number=sequence_number)
         result = {"mode": "apply" if args.apply else "dry-run", "candidate": candidate, "would_post": False}
-        if candidate.get("status") in {"BLOCKED", "QUALITY_EXHAUSTED"}:
+        if candidate.get("status") in {"BLOCKED", "QUALITY_EXHAUSTED", "SKIPPED"}:
             print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 1
+            return 0 if candidate.get("status") == "SKIPPED" else 1
         if args.apply:
             if not args.confirm_prepare:
                 result["apply_result"] = {"status": "BLOCKED", "reason": "--apply requires --confirm-prepare"}

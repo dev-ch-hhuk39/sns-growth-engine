@@ -142,6 +142,58 @@ def test_beauty_safety_fallbacks_all_pass_public_validator() -> None:
         assert candidate["beauty_compliance"]["status"] == "PASS", topic
 
 
+def test_beauty_pdca_unavailable_falls_back_only_to_beauty_new_text(monkeypatch) -> None:
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    monkeypatch.setenv("GEMINI_API_KEY", "set-for-test")
+    monkeypatch.setattr(prepare, "select_beauty_route", lambda _sequence: "pdca_text_generation")
+    calls = []
+
+    def context(route, _topic=""):
+        calls.append(route)
+        if route == "pdca_text_generation":
+            return {"status": "BLOCKED", "reason": "beauty_measured_pdca_evidence_insufficient"}
+        return {
+            "status": "PASS",
+            "source_ids": [],
+            "voice_corpus": {"status": "READY", "source_account_count": 5, "post_count": 50},
+        }
+
+    monkeypatch.setattr(prepare, "load_route_context", context)
+    monkeypatch.setattr(
+        prepare,
+        "call_gemini_json",
+        lambda *_args, **_kwargs: {
+            "public_post_text": (
+                "スキンケアを一度に変えたくなる時って\n"
+                "ほんとに何から試すか迷うんだよね🥺\n\n"
+                "個人的には、まず一つだけ変えるのが結構大事\n"
+                "肌の変化と理由を分けて見やすい気がする💭\n\n"
+                "使い始めた日をメモして\n"
+                "その他はいつも通りで試してみてほしい🤍"
+            ),
+            "primary_topic": "スキンケア",
+        },
+    )
+    candidate = prepare.generate_candidate(slot_index=0, sequence_number=1)
+    assert candidate["status"] == "WAITING_REVIEW", candidate
+    assert candidate["requested_generation_route"] == "pdca_text_generation"
+    assert candidate["generation_route"] == "new_text_generation"
+    assert candidate["route_fallback_reason"] == "beauty_measured_pdca_evidence_insufficient"
+    row = prepare.queue_row(candidate)
+    assert row["source_content_route"] == "pdca_text_generation"
+    assert "beauty_measured_pdca_evidence_insufficient" in row["human_review_note"]
+    assert calls == ["pdca_text_generation", "new_text_generation"]
+
+
+def test_beauty_media_route_skips_without_text_fallback(monkeypatch) -> None:
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    monkeypatch.setattr(prepare, "select_beauty_route", lambda _sequence: "direct_reference_media")
+    candidate = prepare.generate_candidate(slot_index=0, sequence_number=1)
+    assert candidate["status"] == "SKIPPED", candidate
+    assert candidate["reason"] == "beauty_media_route_delegated_no_text_fallback"
+    assert candidate["generation_route"] == "direct_reference_media"
+
+
 def test_beauty_secrets_are_referenced_by_name_only() -> None:
     _, beauty = _workflow("beauty-threads-production.yml")
     assert "${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}" in beauty
