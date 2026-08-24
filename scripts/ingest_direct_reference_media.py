@@ -730,8 +730,10 @@ def select_pending_media_id(
             continue
         if platform == "tiktok" and "/video/" not in url:
             continue
-        if platform == "threads" and not safe_https_url(url, stream_url=True):
-            continue
+        if platform == "threads":
+            parent_url = str(media.get("canonical_post_url") or post.get("canonical_post_url") or "")
+            if "/post/" not in parent_url or not safe_https_url(url, stream_url=True):
+                continue
         media_id = str(media.get("source_post_media_id", ""))
         if media_id:
             # Prefer short-form individual videos for a bounded direct-media
@@ -933,7 +935,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
         platform = str(post.get("platform", "")).lower()
         download_backend = download_source_media(
             media_url=url,
-            canonical_post_url=str(media.get("canonical_post_url", "")),
+            canonical_post_url=str(media.get("canonical_post_url") or post.get("canonical_post_url") or ""),
             path=local_path,
             media_type=media_type,
             platform=platform,

@@ -250,6 +250,13 @@ def select_pending_media_id(
                 continue
 
         elif platform == "threads":
+            parent_url = str(
+                media.get("canonical_post_url")
+                or post.get("canonical_post_url")
+                or ""
+            )
+            if "/post/" not in parent_url:
+                continue
             if not core.safe_https_url(
                 url,
                 stream_url=True,
