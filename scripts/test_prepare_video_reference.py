@@ -50,7 +50,9 @@ def main() -> int:
     checks.append(("apply+confirm は WILL_RUN", p3["status"] == "WILL_RUN"))
     checks.append(("WILL_RUN は --dry-run なし", "--dry-run" not in p3["delegate_argv"]))
 
-    checks.append(("beauty は BLOCKED", mod.build_plan(_args(account_id="beauty_account"))["status"] == "BLOCKED"))
+    beauty = mod.build_plan(_args(account_id="beauty_account"))
+    checks.append(("beauty video plan is managed with download off",
+                   beauty["status"] == "PLAN_ONLY" and beauty["safety"]["media_download"] is False))
     checks.append(("x は BLOCKED", mod.build_plan(_args(platform="x"))["status"] == "BLOCKED"))
     checks.append(("url/source なしは BLOCKED",
                    mod.build_plan(_args(video_url=None, source_id=None))["status"] == "BLOCKED"))

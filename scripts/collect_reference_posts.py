@@ -21,10 +21,13 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 CLI_NAME = "collect_reference_posts"
 DELEGATE_SCRIPT = "scripts/collect_source_account_posts.py"
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = set(account_choices())
 # 参考分析として収集してよい source platform（投稿先ではなく収集元）。
 ALLOWED_SOURCE_PLATFORMS = {"x", "threads", "tiktok", "youtube_shorts"}
 DEFAULT_USE_STATUS = "REFERENCE_ONLY"
@@ -32,8 +35,8 @@ DEFAULT_USE_STATUS = "REFERENCE_ONLY"
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     """委譲プランを純粋関数で組み立てる（Sheets 不要・テスト対象）。"""
-    if args.account_id == "beauty_account":
-        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "beauty_account は対象外（draft_only）"}
+    if args.account_id not in ALLOWED_ACCOUNTS:
+        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "managed account required"}
     if args.source_platform not in ALLOWED_SOURCE_PLATFORMS:
         return {"status": "BLOCKED", "cli": CLI_NAME,
                 "reason": f"source-platform は {sorted(ALLOWED_SOURCE_PLATFORMS)} のみ"}
@@ -74,7 +77,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="collect reference posts (thin wrapper, gated)")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--source-platform", default="threads")
     parser.add_argument("--source-handle")
     parser.add_argument("--input-json")

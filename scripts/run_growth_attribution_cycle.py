@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from learning.feature_attribution import build_growth_cycle  # noqa: E402
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 
 def _read_tab(client: Any, logical: str) -> list[dict[str, Any]]:
@@ -71,7 +72,7 @@ def main() -> int:
     parser.add_argument(
         "--account-id",
         default="all",
-        choices=["all", "night_scout", "liver_manager", "beauty_account"],
+        choices=account_choices(include_all=True),
     )
     parser.add_argument("--input-json", help="Offline input containing posted_results and metric_snapshots")
     parser.add_argument("--use-sheets", action="store_true")

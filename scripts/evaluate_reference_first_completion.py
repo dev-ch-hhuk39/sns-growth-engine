@@ -126,7 +126,10 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
         issues.append("unexpected_deferred_reference_platform")
     operational = mix.get("operational_threads_slot_mix", {})
     for account_id in contract["managed_accounts"]:
-        if operational.get(account_id) != contract["content_mix"]:
+        expected_mix = contract.get("content_mix_by_account", {}).get(
+            account_id, contract["content_mix"]
+        )
+        if operational.get(account_id) != expected_mix:
             issues.append(f"content_mix_mismatch:{account_id}")
     if media.get("physical_media_provider_by_platform") != contract["physical_media_providers"]:
         issues.append("physical_provider_mismatch")
@@ -355,11 +358,18 @@ def evaluate(
     x_permission = _x_permission_state()
     physical_evidence = contract.get("physical_media_evidence", {})
     youtube_evidence = physical_evidence.get("youtube", {})
-    youtube_ready = (
+    youtube_code_ready = (
         contract["physical_media_providers"].get("youtube") == "yt_dlp"
+        and permission_code["status"] == "PASS"
+    )
+    evidence_accounts = contract.get(
+        "production_accounts", contract["managed_accounts"]
+    )
+    youtube_golden_ready = (
+        youtube_code_ready
         and all(
             youtube_evidence.get(account_id) == "PASS_AV"
-            for account_id in contract["managed_accounts"]
+            for account_id in evidence_accounts
         )
         and youtube_evidence.get("evidence_class")
         == "recorded_dual_account_physical_golden"
@@ -373,7 +383,7 @@ def evaluate(
     x_evidence = physical_evidence.get("x", {})
     x_golden_ready = all(
         x_evidence.get(account_id) == "PASS_AV"
-        for account_id in contract["managed_accounts"]
+        for account_id in evidence_accounts
     ) and x_evidence.get("evidence_class") == "recorded_dual_account_physical_golden"
     tiktok_evidence = physical_evidence.get("tiktok", {})
     tiktok_golden_ready = (
@@ -391,10 +401,10 @@ def evaluate(
     software_complete = all(
         item["status"] == "PASS"
         for item in (architecture, repository, reference, publisher, metrics_pdca, permission_code)
-    ) and x_code_ready and youtube_ready and capabilities["code_complete"] == capabilities["code_required"]
+    ) and x_code_ready and youtube_code_ready and capabilities["code_complete"] == capabilities["code_required"]
     integration_complete = integration["status"] == "PASS"
     active_scope_live_evidence_complete = bool(
-        x_golden_ready and youtube_ready and tiktok_golden_ready
+        x_golden_ready and youtube_golden_ready and tiktok_golden_ready
     )
     production_complete = (
         capabilities["status"] == "PASS"
@@ -444,8 +454,15 @@ def evaluate(
             "evidence_class": x_evidence.get("evidence_class", ""),
         },
         "youtube_physical_media_ready": {
-            "status": "PASS_AV_RECORDED" if youtube_ready else "FAIL",
-            "code_ready": youtube_ready,
+            "status": (
+                "PASS_AV_RECORDED"
+                if youtube_golden_ready
+                else "UNVERIFIED_PRODUCTION_EVIDENCE"
+                if youtube_code_ready
+                else "FAIL"
+            ),
+            "code_ready": youtube_code_ready,
+            "golden_evidence_ready": youtube_golden_ready,
         },
         "understanding_generation_review_ready": integration,
         "publisher_code_ready": publisher,

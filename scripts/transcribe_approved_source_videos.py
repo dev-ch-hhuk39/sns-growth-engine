@@ -563,7 +563,8 @@ def save_rows(client: SheetsClient, transcript_rows: list[dict[str, Any]], sourc
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Transcribe approved source_videos")
-    parser.add_argument("--account-id", default="liver_manager", choices=["all", "liver_manager", "night_scout", "beauty_account"])
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", default="liver_manager", choices=account_choices(include_all=True))
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument("--model-size", default="tiny")
     parser.add_argument("--max-audio-seconds", type=int, default=900)

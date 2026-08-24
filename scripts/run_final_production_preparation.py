@@ -107,7 +107,8 @@ def build_report(*, account_id: str, apply: bool, manual_json: list[str]) -> dic
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", choices=["all", "night_scout", "liver_manager"], default="all")
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", choices=account_choices(include_all=True), default="all")
     parser.add_argument("--manual-json", action="append", default=[], metavar="SOURCE_ID=PATH")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")

@@ -16,7 +16,10 @@ checks = [
     ("clip candidate save remains staged", media["auto_save_clip_candidates"] is False),
     ("media public posting remains disabled until verified", cfg["media_public_posting_enabled"] is False and media["media_public_post_auto_enabled"] is False),
     ("x remains off", cfg["x_posting_enabled"] is False and "x" in auto["blocked_platforms_for_post"]),
-    ("beauty remains off", cfg["beauty_posting_enabled"] is False and "beauty_account" in auto["blocked_accounts"]),
+    ("beauty text production is active while media auto-post stays staged",
+     cfg["beauty_posting_enabled"] is True
+     and "beauty_account" in auto["allowed_accounts"]
+     and auto["allow_media_posts"] is False),
     ("learning rules not auto applied", cfg["learning_rules_auto_apply_enabled"] is False),
 ]
 

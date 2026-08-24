@@ -15,9 +15,10 @@ assert (
 ) in workflow
 
 assert "target_account:" in workflow
-assert '["night_scout","liver_manager","beauty_account"]' in workflow
+assert "config/managed_accounts.json" in workflow
+assert "fromJSON(needs.resolve-accounts.outputs.account_ids)" in workflow
 assert "github.event.inputs.target_account" in workflow
-assert "beauty_direct_media_review" in workflow
+assert "route_slot_id" in workflow
 
 assert (
     "ingest_direct_reference_media_reliable.py"

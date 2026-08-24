@@ -41,7 +41,9 @@ def main() -> int:
     checks.append(("WILL_WRITE で --use-sheets 付与", "--use-sheets" in p3["delegate_argv"]))
 
     checks.append(("--cut 指定は BLOCKED", mod.build_plan(_args(cut=True))["status"] == "BLOCKED"))
-    checks.append(("beauty は BLOCKED", mod.build_plan(_args(account_id="beauty_account"))["status"] == "BLOCKED"))
+    beauty = mod.build_plan(_args(account_id="beauty_account"))
+    checks.append(("beauty is registry-managed PLAN_ONLY", beauty["status"] == "PLAN_ONLY"))
+    checks.append(("beauty dry-run never cuts", beauty["safety"]["ffmpeg_cut"] is False))
     checks.append(("委譲先は analyze_video_clips", p["delegate_script"] == "scripts/analyze_video_clips.py"))
 
     failed = [n for n, ok in checks if not ok]

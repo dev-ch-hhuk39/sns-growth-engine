@@ -2,7 +2,7 @@
 
 検証内容:
   - account_id別のenv変数が正しく解決される
-  - fallback env が account-specific 未設定時のみ使用される
+  - token/user IDはglobal fallbackを使わず、app credentialだけ共有できる
   - ファイルからの読み込みが機能する
   - 値はログに出力されない（ログキャプチャで確認）
 """
@@ -56,9 +56,9 @@ check("night_scout: app_id = account-specific env", creds_ns["app_id"] == "appid
 check("night_scout: app_secret = account-specific env", creds_ns["app_secret"] == "appsecret_ns_specific")
 
 # ============================================================
-# [2] fallback env は account-specific が未設定のときのみ使用
+# [2] token/user IDはaccount isolation、app credentialのみfallback
 # ============================================================
-print("[2] fallback env は account-specific 未設定時のみ使用")
+print("[2] account identityはfail-closed、app credentialのみfallback")
 
 _clean_threads_env()
 os.environ["THREADS_ACCESS_TOKEN"] = "token_fallback"
@@ -67,8 +67,8 @@ os.environ["THREADS_APP_ID"] = "appid_fallback"
 os.environ["THREADS_APP_SECRET"] = "appsecret_fallback"
 
 creds_fb = resolve_credentials("night_scout")
-check("fallback: access_token = fallback env", creds_fb["access_token"] == "token_fallback")
-check("fallback: user_id = fallback env", creds_fb["user_id"] == "uid_fallback")
+check("global access_tokenをaccount tokenとして使わない", creds_fb["access_token"] == "")
+check("global user_idをaccount identityとして使わない", creds_fb["user_id"] == "")
 check("fallback: app_id = fallback env", creds_fb["app_id"] == "appid_fallback")
 check("fallback: app_secret = fallback env", creds_fb["app_secret"] == "appsecret_fallback")
 
@@ -103,7 +103,7 @@ print("[4] ファイルからの読み込み")
 _clean_threads_env()
 with tempfile.TemporaryDirectory() as tmpdir:
     os.environ["THREADS_TOKEN_STORE_DIR"] = tmpdir
-    token_file = os.path.join(tmpdir, "test_account.json")
+    token_file = os.path.join(tmpdir, "tiktok_shop.json")
     with open(token_file, "w") as f:
         json.dump({
             "access_token": "token_from_file",
@@ -117,17 +117,17 @@ with tempfile.TemporaryDirectory() as tmpdir:
     importlib.reload(_mod)
     from publishers.threads_credentials import resolve_credentials as resolve_credentials_fresh
 
-    creds_file = resolve_credentials_fresh("test_account")
+    creds_file = resolve_credentials_fresh("tiktok_shop")
     check("ファイルから access_token を読む", creds_file["access_token"] == "token_from_file")
     # user_id はファイルより env 優先だが env 未設定なのでファイル値を使う
     check("ファイルから user_id を読む", creds_file["user_id"] == "uid_from_file")
 
     # env が優先: ファイルより env の access_token が上書きされないことを確認
     # (access_token の優先順位: file > env_specific > fallback)
-    os.environ["THREADS_ACCESS_TOKEN_TEST_ACCOUNT"] = "token_env_specific"
+    os.environ["THREADS_ACCESS_TOKEN_TIKTOK_SHOP"] = "token_env_specific"
     importlib.reload(_mod)
     from publishers.threads_credentials import resolve_credentials as rc2
-    creds_file_vs_env = rc2("test_account")
+    creds_file_vs_env = rc2("tiktok_shop")
     check("access_token: file > account-specific env", creds_file_vs_env["access_token"] == "token_from_file")
 
     # 後始末
@@ -136,16 +136,17 @@ with tempfile.TemporaryDirectory() as tmpdir:
     from publishers.threads_credentials import resolve_credentials
 
 # ============================================================
-# [5] 未設定時は空文字を返す
+# [5] unmanaged accountは拒否する
 # ============================================================
-print("[5] 未設定時は空文字を返す")
+print("[5] unmanaged accountは拒否する")
 
 _clean_threads_env()
-creds_empty = resolve_credentials("nonexistent_account")
-check("未設定: access_token = ''", creds_empty["access_token"] == "")
-check("未設定: user_id = ''", creds_empty["user_id"] == "")
-check("未設定: app_id = ''", creds_empty["app_id"] == "")
-check("未設定: app_secret = ''", creds_empty["app_secret"] == "")
+try:
+    resolve_credentials("nonexistent_account")
+except ValueError as exc:
+    check("unmanaged accountをfail-closed", str(exc).startswith("unmanaged_account:"))
+else:
+    check("unmanaged accountをfail-closed", False)
 
 # ============================================================
 # [6] has_required_for_publish / has_required_for_refresh

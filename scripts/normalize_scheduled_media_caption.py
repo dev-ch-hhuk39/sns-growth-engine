@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from config_loader import get_config  # noqa: E402
+from accounts.managed_accounts import account_choices  # noqa: E402
 from scheduled_caption_policy import normalize_scheduled_caption  # noqa: E402
 from scheduled_execution_guard import append_job_summary  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
@@ -28,7 +29,7 @@ PROTECTED_QUEUE_IDS = {
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--slot-id", required=True)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")

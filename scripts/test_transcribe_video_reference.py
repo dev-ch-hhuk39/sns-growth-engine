@@ -57,7 +57,10 @@ def main() -> int:
                    "--mock-sheets" in p_mock_write["delegate_argv"]
                    and "--allow-real-transcription" not in p_mock_write["delegate_argv"]))
 
-    checks.append(("beauty は BLOCKED", mod.build_plan(_args(account_id="beauty_account"), env=ENV_OFF)["status"] == "BLOCKED"))
+    beauty = mod.build_plan(_args(account_id="beauty_account"), env=ENV_OFF)
+    checks.append(("beauty transcription plan is managed with real API off",
+                   beauty["status"] == "PLAN_ONLY"
+                   and beauty["safety"]["real_transcription_api"] is False))
 
     failed = [n for n, ok in checks if not ok]
     for n, ok in checks:

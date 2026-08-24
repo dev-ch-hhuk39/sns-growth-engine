@@ -40,7 +40,9 @@ from config_loader import get_config
 from sheets_client import MockSheetsClient, SheetsClient
 from learning.weekly_report_builder import build_weekly_report, build_markdown_report
 
-SUPPORTED_ACCOUNTS = ["night_scout", "liver_manager"]
+from accounts.managed_accounts import account_choices  # noqa: E402
+
+SUPPORTED_ACCOUNTS = list(account_choices())
 
 
 def _safe_get_tab(sheets, tab_name: str, account_id: str | None) -> list[dict]:

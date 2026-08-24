@@ -1,0 +1,115 @@
+name: TikTok Shop Threads Onboarding
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "preflight, prepare WAITING_REVIEW, or publish one exact reviewed queue"
+        required: true
+        default: preflight
+        type: choice
+        options: [preflight, prepare, publish_exact_reviewed]
+      queue_id:
+        description: "Exact human-approved queue ID; required only for publish"
+        required: false
+        default: ""
+      confirm_publish:
+        description: "Must be true for exact reviewed canary"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  contents: read
+  models: read
+
+concurrency:
+  group: tiktok-shop-threads-onboarding
+  cancel-in-progress: false
+
+env:
+  ACCOUNT_ID: tiktok_shop
+  SLOT_ID: tiktok_shop_1045
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+  MOCK_LLM: "false"
+  MOCK_SHEETS: "false"
+
+jobs:
+  onboarding:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    env:
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      THREADS_HANDLE_TIKTOK_SHOP: ${{ secrets.THREADS_HANDLE_TIKTOK_SHOP }}
+      THREADS_USER_ID_TIKTOK_SHOP: ${{ secrets.THREADS_USER_ID_TIKTOK_SHOP }}
+      THREADS_ACCESS_TOKEN_TIKTOK_SHOP: ${{ secrets.THREADS_ACCESS_TOKEN_TIKTOK_SHOP }}
+      MANAGED_ACCOUNT_STATUS_TIKTOK_SHOP: ${{ vars.MANAGED_ACCOUNT_STATUS_TIKTOK_SHOP || 'CREDENTIAL_PENDING' }}
+      TIKTOK_SHOP_PRODUCTION_ENABLED: ${{ vars.TIKTOK_SHOP_PRODUCTION_ENABLED || 'false' }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Credential-safe account preflight
+        id: preflight
+        run: |
+          set +e
+          python3 scripts/preflight_managed_threads_account.py --account-id "$ACCOUNT_ID" --verify-live-identity --output /tmp/account-preflight.json
+          rc=$?
+          status=$(python3 -c "import json; print(json.load(open('/tmp/account-preflight.json'))['status'])")
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "CREDENTIAL_PENDING" ]; then exit 0; fi
+          exit "$rc"
+      - name: Guard preparation dependencies
+        if: steps.preflight.outputs.status == 'PASS' && github.event.inputs.action == 'prepare'
+        run: |
+          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 GEMINI_API_KEY; do
+            if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
+          done
+      - name: Prepare one WAITING_REVIEW candidate
+        if: steps.preflight.outputs.status == 'PASS' && github.event.inputs.action == 'prepare'
+        run: |
+          python3 scripts/prepare_managed_account_review_candidate.py \
+            --account-id "$ACCOUNT_ID" --content-type new_text_generation --slot-id "$SLOT_ID" \
+            --apply --confirm-prepare --use-sheets
+          python3 scripts/run_hybrid_ai_queue_gate.py \
+            --account-id "$ACCOUNT_ID" --slot-id "$SLOT_ID" --max-candidates 1 --apply --use-sheets
+      - name: Guard exact reviewed canary
+        if: steps.preflight.outputs.status == 'PASS' && github.event.inputs.action == 'publish_exact_reviewed'
+        env:
+          QUEUE_ID: ${{ github.event.inputs.queue_id }}
+          CONFIRM_PUBLISH: ${{ github.event.inputs.confirm_publish }}
+        run: |
+          if [ "$CONFIRM_PUBLISH" != "true" ] || [ -z "$QUEUE_ID" ]; then
+            echo "[BLOCKED] publish requires confirm_publish=true and exact queue_id"
+            exit 1
+          fi
+      - name: Publish one exact human-reviewed canary
+        if: steps.preflight.outputs.status == 'PASS' && github.event.inputs.action == 'publish_exact_reviewed' && github.event.inputs.confirm_publish == 'true'
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+          TIKTOK_SHOP_PRODUCTION_ENABLED: "true"
+          QUEUE_ID: ${{ github.event.inputs.queue_id }}
+        run: python3 scripts/process_threads_queue.py --account-id "$ACCOUNT_ID" --queue-id "$QUEUE_ID" --max-posts 1 --confirm-real-post
+      - name: Credential-pending summary
+        if: steps.preflight.outputs.status == 'CREDENTIAL_PENDING'
+        run: echo '[NO_POST] CREDENTIAL_PENDING; no candidate or publication was attempted.'

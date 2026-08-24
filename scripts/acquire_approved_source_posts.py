@@ -42,6 +42,7 @@ from source_discovery_policy import (  # noqa: E402
     plan_source_scan,
     select_unique_candidates,
 )
+from reference.source_registry import load_registry  # noqa: E402
 
 MEDIA_PLATFORMS = {"threads", "youtube", "tiktok", "x"}
 BLOCKED_ACCOUNTS: set[str] = set()
@@ -85,14 +86,11 @@ def classify_external_failure(platform: str, reason: str) -> str:
 def selected_sources(
     account_id: str, platform_filter: str, *, reference_only: bool = False
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
-    data = json.loads(
-        (ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")
-    )
     voice_source_ids, voice_policy = beauty_voice_reference_policy()
     voice_collection_enabled = truthy(voice_policy.get("enabled"))
     selected: list[dict[str, Any]] = []
     blocked: list[dict[str, str]] = []
-    for source in data.get("sources", []):
+    for source in load_registry():
         platform = source_platform(source)
         account = account_for(source)
         is_beauty_voice_source = (
@@ -169,6 +167,14 @@ def selected_sources(
             continue
         selected.append(source)
     return selected, blocked
+
+
+def post_matches_registered_author(post: NormalizedSourcePost, source: dict[str, Any]) -> bool:
+    if not truthy(source.get("original_author_match_required")):
+        return True
+    expected = str(source.get("source_handle") or source.get("author_handle") or "").strip().lower().lstrip("@")
+    actual = str(post.author_handle or "").strip().lower().lstrip("@")
+    return bool(expected and actual and expected == actual)
 
 
 def reference_only_permission(source: dict[str, Any]) -> dict[str, str]:
@@ -1101,15 +1107,31 @@ def run(
                     limit=max_scan_posts,
                     shadow=shadow,
                 )
-                valid_posts = [post for post in routed.posts if not validate_source_post(post)]
+                normalized_posts = [post for post in routed.posts if not validate_source_post(post)]
+                provenance_mismatches = [
+                    post
+                    for post in normalized_posts
+                    if not post_matches_registered_author(post, source)
+                ]
+                valid_posts = [
+                    post
+                    for post in normalized_posts
+                    if post_matches_registered_author(post, source)
+                ]
+                reason = ""
+                if provenance_mismatches and not valid_posts:
+                    reason = "registered_source_original_author_mismatch"
+                elif not valid_posts:
+                    reason = "no_valid_normalized_posts"
                 result["source_results"].append(
                     {
                         **base,
-                        "status": "PASS" if valid_posts else "UNVERIFIED_EXTERNAL",
+                        "status": "PASS" if valid_posts else "BLOCKED" if provenance_mismatches else "NO_DATA",
                         "selected_backend": routed.backend_name,
                         "fallback_used": routed.fallback_used,
                         "post_count": len(valid_posts),
-                        "reason": "" if valid_posts else "no_valid_normalized_posts",
+                        "provenance_mismatch_count": len(provenance_mismatches),
+                        "reason": reason,
                     }
                 )
                 result["discovered_post_count"] += len(valid_posts)
@@ -1275,7 +1297,17 @@ def run(
                 )
             )
 
-            valid_before_policy = [post for post in routed.posts if not validate_source_post(post)]
+            normalized_posts = [post for post in routed.posts if not validate_source_post(post)]
+            provenance_mismatches = [
+                post
+                for post in normalized_posts
+                if not post_matches_registered_author(post, source)
+            ]
+            valid_before_policy = [
+                post
+                for post in normalized_posts
+                if post_matches_registered_author(post, source)
+            ]
             adapter_post_count = len(valid_before_policy)
 
             if media_filter == "video-only":
@@ -1375,7 +1407,20 @@ def run(
 
             item = {
                 **base,
-                "status": "PASS",
+                "status": (
+                    "PASS"
+                    if valid
+                    else "BLOCKED"
+                    if provenance_mismatches
+                    else "NO_DATA"
+                ),
+                "reason": (
+                    ""
+                    if valid
+                    else "registered_source_original_author_mismatch"
+                    if provenance_mismatches
+                    else "no_eligible_new_source_post"
+                ),
                 "selected_backend": (routed.backend_name),
                 "selected_backend_version": str(
                     getattr(
@@ -1388,6 +1433,7 @@ def run(
                 "retryable": False,
                 "fallback_used": (routed.fallback_used),
                 "adapter_post_count": adapter_post_count,
+                "provenance_mismatch_count": len(provenance_mismatches),
                 "media_filtered_post_count": len(valid_before_policy),
                 "post_count": len(valid),
                 "duplicate_post_count": int(

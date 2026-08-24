@@ -9,11 +9,10 @@
   "scheduled_publish_enabled": true,
   "allowed_accounts": [
     "night_scout",
-    "liver_manager"
-  ],
-  "blocked_accounts": [
+    "liver_manager",
     "beauty_account"
   ],
+  "blocked_accounts": [],
   "allowed_platforms_for_fetch": [
     "threads",
     "youtube"

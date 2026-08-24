@@ -20,6 +20,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from accounts.beauty_policy import beauty_compliance_validation  # noqa: E402
+from accounts.managed_accounts import managed_account  # noqa: E402
 from generation.beauty_voice import beauty_style_fingerprint_validation  # noqa: E402
 
 RULES_FILE = ROOT / "config/post_generation_rules.json"
@@ -94,7 +95,16 @@ ACCOUNT_TERMS = {
     "night_scout": ("夜職", "キャバ", "店", "働く", "時給", "ノルマ", "担当", "相談", "出勤", "移籍"),
     "liver_manager": ("配信", "ライバー", "TikTok LIVE", "LIVE", "リスナー", "初見", "コメント", "事務所", "ギフト"),
     "beauty_account": ("コスメ", "スキンケア", "肌", "メイク", "ファンデ", "髪", "ヘアケア", "美容家電", "サロン"),
+    "tiktok_shop": ("TikTok Shop", "商品", "動画", "LIVE", "クリエイター", "出店", "販売", "初心者"),
 }
+
+TIKTOK_SHOP_BLOCKED_CLAIMS = (
+    "誰でも稼げる",
+    "簡単に稼げる",
+    "フォロワー0でも即稼げる",
+    "月収保証",
+    "TikTok公式パートナー",
+)
 
 
 def load_post_generation_rules(path: Path = RULES_FILE) -> dict[str, Any]:
@@ -109,6 +119,15 @@ def load_account_voice_profiles(path: Path = VOICE_PROFILES_FILE) -> dict[str, A
         return {"schema_version": "missing", "semantic_voice_score_min": 85, "accounts": {}}
     value = json.loads(path.read_text(encoding="utf-8"))
     return value if isinstance(value, dict) else {"accounts": {}}
+
+
+def account_generation_profile(account_id: str) -> dict[str, Any]:
+    """Load account-owned generation data without shared-engine allowlists."""
+    record = managed_account(account_id)
+    path = ROOT / str(record["account_config"])
+    value = json.loads(path.read_text(encoding="utf-8"))
+    profile = value.get("generation", {})
+    return dict(profile) if isinstance(profile, dict) else {}
 
 
 def canonical_voice_profile(account_id: str) -> dict[str, Any]:
@@ -212,6 +231,8 @@ def _reader_value_score(text: str, account_id: str) -> int:
     if account_id == "liver_manager" and any(k in text for k in ("初見", "コメント", "配信", "リスナー", "空気")):
         score += 8
     if account_id == "beauty_account" and any(k in text for k in ACCOUNT_TERMS["beauty_account"]):
+        score += 8
+    if account_id == "tiktok_shop" and any(k in text for k in ACCOUNT_TERMS["tiktok_shop"]):
         score += 8
     return max(0, min(100, score))
 
@@ -338,6 +359,23 @@ def voice_persona_validation(text: str, account_id: str) -> dict[str, Any]:
         if stereotype_hits:
             reasons.append("voice_stereotyped_feminine_language")
             score -= 35
+    elif account_id == "tiktok_shop":
+        hypothesis_markers = [str(item) for item in profile.get("hypothesis_markers", []) if str(item)]
+        fact_markers = [str(item) for item in profile.get("fact_caution_markers", []) if str(item)]
+        hypothesis_hits = [item for item in hypothesis_markers if item in value]
+        fact_hits = [item for item in fact_markers if item in value]
+        emoji_count = len(re.findall(r"[\U0001F300-\U0001FAFF]", value))
+        details.update({
+            "hypothesis_language_hits": hypothesis_hits,
+            "fact_caution_hits": fact_hits,
+            "emoji_count": emoji_count,
+        })
+        if not preferred_hits and not hypothesis_hits:
+            reasons.append("voice_komaken_observation_hypothesis_missing")
+            score -= 20
+        if emoji_count > 1:
+            reasons.append("voice_komaken_emoji_overuse")
+            score -= 20
     formal_penalty = min(100, len(formal_hits) * 25 + (20 if value.count("ください") >= 2 else 0))
     conversational_hits = set(preferred_hits)
     if account_id in {"liver_manager", "beauty_account"}:
@@ -554,6 +592,15 @@ def persona_validation(text: str, account_id: str) -> dict[str, Any]:
         if len(action_hits) < int(profile.get("minimum_action_markers", 1)):
             reasons.append("persona_beauty_practical_action_missing")
         score += min(10, len(action_hits) * 4)
+    elif account_id == "tiktok_shop":
+        action_hits = [term for term in profile.get("action_markers", []) if str(term) in text]
+        logic_hits = [term for term in profile.get("logic_markers", []) if str(term) in text]
+        details.update({"action_marker_count": len(action_hits), "logic_marker_count": len(logic_hits)})
+        if len(action_hits) < int(profile.get("minimum_action_markers", 1)):
+            reasons.append("persona_practical_action_missing")
+        if len(logic_hits) < int(profile.get("minimum_logic_markers", 1)):
+            reasons.append("persona_evidence_reasoning_missing")
+        score += min(10, len(action_hits) * 4) + min(8, len(logic_hits) * 3)
 
     if voice["status"] != "VOICE_PERSONA_PASS":
         reasons.append("voice_persona_not_pass")
@@ -612,6 +659,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("too_long")
     if account_id == "beauty_account" and len(public_text) > 320:
         reasons.append("beauty_text_too_long")
+    if account_id == "tiktok_shop" and any(term in public_text for term in TIKTOK_SHOP_BLOCKED_CLAIMS):
+        reasons.append("tiktok_shop_prohibited_claim")
     if natural < 80:
         reasons.append("naturalness_below_threshold")
     if reader < 80:
@@ -746,6 +795,23 @@ def apply_account_voice(text: str, account_id: str) -> str:
             closing = f"{closing}\n{action}"
         parts[-1] = closing
         return "\n\n".join(parts)
+    if account_id == "beauty_account":
+        value = value.replace("。", "\n")
+        value = re.sub(r"\n{3,}", "\n\n", value).strip()
+        if not any(term in value for term in ("個人的には", "ほんとに", "これ結構大事", "意外と")):
+            value = "個人的には、これ結構大事なんだけど、" + value
+        if not any(term in value for term in ("かも", "な気がする", "なんだけど", "してみてほしい")):
+            value = value.rstrip() + "\n\n一つだけ試してみてほしい🥺"
+        elif not re.search(r"[\U0001F300-\U0001FAFF]", value):
+            value += "🤍"
+        return value
+    if account_id == "tiktok_shop":
+        markers = canonical_voice_profile(account_id).get("hypothesis_markers", [])
+        if not any(str(marker) in value for marker in markers):
+            parts = value.rsplit("\n\n", 1)
+            parts[-1] = "たぶん、" + parts[-1].lstrip("、 ")
+            value = "\n\n".join(parts)
+        return value
     return value
 
 
@@ -1180,6 +1246,12 @@ def generate_reader_facing_post(account_id: str, index: int = 1) -> dict[str, An
 def _topic_from_signal(account_id: str, signal: str) -> str:
     """Classify private reference/transcript content without quoting it publicly."""
     text = str(signal or "")
+    configured = account_generation_profile(account_id).get("topic_keywords", {})
+    if isinstance(configured, dict) and configured:
+        for topic, words in configured.items():
+            if any(str(word) in text for word in words if str(word)):
+                return str(topic)
+        return "general"
     if account_id == "night_scout":
         # Preserve the production fallback precedence.
         # Transfer synonyms are recognized when a more specific
@@ -1481,14 +1553,23 @@ def generate_grounded_reader_facing_post(
         f"composition_v3|{account_id}|{topic}|{slot_theme}|{private_signal}|{index}".encode("utf-8")
     ).hexdigest()
     choice = int(seed[:12], 16)
-    account_components = PRODUCTION_COMPONENTS.get(account_id, {})
+    generation_profile = account_generation_profile(account_id)
+    configured_components = generation_profile.get("components", {})
+    account_components = (
+        configured_components
+        if isinstance(configured_components, dict) and configured_components
+        else PRODUCTION_COMPONENTS.get(account_id, {})
+    )
     component = account_components.get(topic, account_components.get("general", {}))
     hooks = list(component.get("hooks", []))
     bodies = list(component.get("bodies", []))
-    closings = PRODUCTION_CLOSINGS.get(account_id, {}).get(
-        topic,
-        PRODUCTION_CLOSINGS.get(account_id, {}).get("general", []),
+    configured_closings = generation_profile.get("closings", {})
+    account_closings = (
+        configured_closings
+        if isinstance(configured_closings, dict) and configured_closings
+        else PRODUCTION_CLOSINGS.get(account_id, {})
     )
+    closings = account_closings.get(topic, account_closings.get("general", []))
     if not hooks or not bodies or not closings:
         return build_generation_output(
             internal_analysis=f"missing production components account={account_id}; topic={topic}",
@@ -1525,7 +1606,7 @@ def generate_grounded_reader_facing_post(
 
     text = apply_account_voice(text, account_id)
 
-    concepts = {
+    legacy_concepts = {
         "night_scout": {
             "conditions": ["compensation", "work_conditions", "take_home_pay"],
             "pressure": ["performance_pressure", "support", "workload"],
@@ -1552,12 +1633,24 @@ def generate_grounded_reader_facing_post(
         safety_notes="Private evidence was reduced to safe concepts. Raw evidence and identifiers are excluded.",
         blocked_reasons=validation.get("blocked_reasons", []),
     )
-    quality_topic = QUALITY_TOPIC_MAP.get(account_id, {}).get(topic, "")
-    topic_concepts = concepts.get(account_id, {}).get(
-        topic,
-        concepts.get(account_id, {}).get("general", []),
+    configured_topic_map = generation_profile.get("quality_topic_map", {})
+    quality_topic_map = (
+        configured_topic_map
+        if isinstance(configured_topic_map, dict) and configured_topic_map
+        else QUALITY_TOPIC_MAP.get(account_id, {})
     )
-    cta_intent = "decision_support" if account_id == "night_scout" else "small_next_action"
+    quality_topic = str(quality_topic_map.get(topic, quality_topic_map.get("general", "general")))
+    configured_concepts = generation_profile.get("concepts", {})
+    concepts = (
+        configured_concepts
+        if isinstance(configured_concepts, dict) and configured_concepts
+        else legacy_concepts.get(account_id, {})
+    )
+    topic_concepts = concepts.get(
+        topic,
+        concepts.get("general", []),
+    )
+    cta_intent = str(generation_profile.get("cta_intent", "small_next_action"))
     post_design = {
         "design_version": "post_design_v1",
         "feature_schema_version": "post_features_v1",
@@ -1618,7 +1711,7 @@ def generate_production_post(
             safety_notes="",
             blocked_reasons=["GENERATION_PROVIDER_UNAVAILABLE"],
         )
-    signals = {
+    legacy_signals = {
         "night_scout": [
             "時給と控除を含めた条件を比べて手取りを確認する",
             "移籍前に今の店を辞めたい理由と次の店で避けたい条件を整理する",
@@ -1635,22 +1728,32 @@ def generate_production_post(
             "ギフトを増やす前にコメントを拾ってリスナーとの関係を作る",
         ],
     }
-    if account_id not in signals:
+    generation_profile = account_generation_profile(account_id)
+    configured_signals = generation_profile.get("signals", [])
+    signal_values = [str(value) for value in configured_signals if str(value)]
+    if not signal_values:
+        signal_values = legacy_signals.get(account_id, [])
+    if not signal_values:
         return build_generation_output(
-            internal_analysis=f"unsupported account={account_id}",
+            internal_analysis=f"missing account generation profile account={account_id}",
             public_post_text="",
             safety_notes="",
-            blocked_reasons=["GENERATION_ACCOUNT_UNSUPPORTED"],
+            blocked_reasons=["GENERATION_PROFILE_UNAVAILABLE"],
         )
     base_digest = hashlib.sha256(
         f"production_composition_v3|{account_id}|{batch_id}|{content_type}|{reference_signal}|{learning_rule}".encode("utf-8")
     ).hexdigest()
     base_choice = int(base_digest[:12], 16)
-    signal_values = signals[account_id]
+    configured_topic_map = generation_profile.get("quality_topic_map", {})
+    topic_map = (
+        configured_topic_map
+        if isinstance(configured_topic_map, dict) and configured_topic_map
+        else QUALITY_TOPIC_MAP.get(account_id, {})
+    )
     excluded = {str(value) for value in (excluded_topics or []) if str(value)}
     eligible_signals = [
         signal for signal in signal_values
-        if QUALITY_TOPIC_MAP.get(account_id, {}).get(_topic_from_signal(account_id, signal), "") not in excluded
+        if topic_map.get(_topic_from_signal(account_id, signal), "") not in excluded
     ]
     if not eligible_signals:
         eligible_signals = signal_values
@@ -1658,7 +1761,7 @@ def generate_production_post(
     preferred_signals = [
         signal for topic in preferred
         for signal in eligible_signals
-        if QUALITY_TOPIC_MAP.get(account_id, {}).get(_topic_from_signal(account_id, signal), "") == topic
+        if topic_map.get(_topic_from_signal(account_id, signal), "") == topic
     ]
     # Four of five deterministic choices exploit measured strategy; one remains
     # exploration so the system can detect drift and discover better topics.

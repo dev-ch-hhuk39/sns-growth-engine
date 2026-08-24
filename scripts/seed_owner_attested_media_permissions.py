@@ -20,8 +20,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
 from media.permission_ledger import evaluate_permission, latest_permission  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from reference.source_registry import load_registry  # noqa: E402
 
-MEDIA_CAPABLE_PLATFORMS = {"threads", "youtube", "tiktok"}
+MEDIA_CAPABLE_PLATFORMS = {"threads", "youtube", "tiktok", "x"}
 DECISION_PLATFORMS = {"x", "threads", "tiktok", "youtube"}
 APPROVABLE_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DECISION_REQUIRED_FLAGS = (
@@ -42,14 +43,14 @@ def truthy(value: Any) -> bool:
 
 
 def eligible_sources(source_ids: set[str] | None = None) -> list[dict[str, Any]]:
-    sources = json.loads((ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")).get("sources", [])
+    sources = load_registry()
     result = []
     for source in sources:
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
         if source_ids is not None and str(source.get("source_id", "")) not in source_ids:
             continue
-        if platform not in MEDIA_CAPABLE_PLATFORMS or "beauty_account" in targets:
+        if platform not in MEDIA_CAPABLE_PLATFORMS:
             continue
         if str(source.get("rights_status", "")).lower() not in APPROVABLE_RIGHTS:
             continue
@@ -80,9 +81,7 @@ def load_owner_decision(path: Path) -> dict[str, Any]:
 def decision_sources(
     decision: dict[str, Any], source_ids: set[str] | None = None
 ) -> list[dict[str, Any]]:
-    registry = json.loads(
-        (ROOT / "config/source_accounts/default_sources.json").read_text(encoding="utf-8")
-    ).get("sources", [])
+    registry = load_registry()
     by_id = {str(row.get("source_id") or ""): row for row in registry}
     selected: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -140,14 +139,24 @@ def permission_row(
     # but never turns a profile into a clip factory.  Video-source grants retain
     # the explicit clip fields.  Existing revoked rows are still never touched.
     is_explicit_decision = decision is not None
-    is_clip_source = is_explicit_decision or platform in {"youtube", "tiktok"}
+    is_clip_source = (
+        is_explicit_decision
+        or str(source.get("media_usage_mode") or "") == "direct_and_clip"
+        or platform in {"youtube", "tiktok"}
+    )
     evidence_reference = (
         str(decision.get("evidence_reference") or "")
         if decision
+        else str(source.get("permission_evidence_reference") or "")
+        if source.get("registered_owner_scope_id")
         else "global_owner_attestation_v1"
     )
     approved_by = (
-        str(decision.get("approved_by") or "") if decision else "Chadult株式会社"
+        str(decision.get("approved_by") or "")
+        if decision
+        else str(source.get("permission_approved_by") or "")
+        if source.get("registered_owner_scope_id")
+        else "Chadult株式会社"
     )
     allowed_platforms = ",".join(decision.get("allowed_platforms") or ["threads"]) if decision else "threads"
     account_id = str(

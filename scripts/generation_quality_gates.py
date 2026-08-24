@@ -12,7 +12,9 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any, Iterable
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from accounts.managed_accounts import managed_account
 from generation.semantic_alignment import lexical_similarity
 
 FULL_TEXT_SIMILARITY_MAX = 0.82
@@ -86,6 +88,35 @@ RELATED_TOPICS: dict[str, dict[str, set[str]]] = {
         "stream_planning": {"creator_support", "continuity", "stream_review"},
     },
 }
+
+
+def _configured_topic_policy(account_id: str) -> tuple[dict[str, tuple[str, ...]], dict[str, set[str]]]:
+    record = managed_account(account_id)
+    config = __import__("json").loads((ROOT / str(record["account_config"])).read_text(encoding="utf-8"))
+    generation = config.get("generation", {})
+    raw_taxonomy = generation.get("topic_taxonomy", {}) if isinstance(generation, dict) else {}
+    raw_related = generation.get("related_topics", {}) if isinstance(generation, dict) else {}
+    taxonomy = {
+        str(topic): tuple(str(term) for term in terms if str(term))
+        for topic, terms in raw_taxonomy.items()
+        if isinstance(terms, list)
+    }
+    related = {
+        str(topic): {str(value) for value in values if str(value)}
+        for topic, values in raw_related.items()
+        if isinstance(values, list)
+    }
+    return taxonomy, related
+
+
+def _topic_taxonomy(account_id: str) -> dict[str, tuple[str, ...]]:
+    configured, _ = _configured_topic_policy(account_id)
+    return configured or TOPIC_TAXONOMY.get(account_id, {})
+
+
+def _related_topics(account_id: str) -> dict[str, set[str]]:
+    _, configured = _configured_topic_policy(account_id)
+    return configured or RELATED_TOPICS.get(account_id, {})
 
 
 def _sentences(text: str, *, minimum: int = 1) -> list[str]:
@@ -171,7 +202,7 @@ def _structure_signature(text: str) -> str:
 
 
 def _topic_scores(account_id: str, text: str) -> Counter[str]:
-    taxonomy = TOPIC_TAXONOMY.get(account_id, {})
+    taxonomy = _topic_taxonomy(account_id)
     normalized = str(text or "")
     scores: Counter[str] = Counter()
     for topic, terms in taxonomy.items():
@@ -204,7 +235,7 @@ def _infer_topic(
 
 
 def _topic_allowed(account_id: str, primary: str, other: str) -> bool:
-    return other in {"", "general", primary} or other in RELATED_TOPICS.get(account_id, {}).get(primary, set())
+    return other in {"", "general", primary} or other in _related_topics(account_id).get(primary, set())
 
 
 def batch_diversity_validator(
@@ -327,11 +358,11 @@ def topic_coherence_validator(
     sentences = _sentences(text, minimum=8)
     inferred_primary, inferred_confidence, inferred_supporting = _infer_topic(account_id, text)
     primary = primary_topic.strip() or inferred_primary
-    taxonomy = TOPIC_TAXONOMY.get(account_id, {})
+    taxonomy = _topic_taxonomy(account_id)
     scores = _topic_scores(account_id, text)
     total_score = sum(scores.values())
     primary_score = scores.get(primary, 0)
-    related = RELATED_TOPICS.get(account_id, {}).get(primary, set())
+    related = _related_topics(account_id).get(primary, set())
     family_score = primary_score + sum(scores.get(topic, 0) for topic in related)
     confidence = round(family_score / max(1, total_score), 4)
     direct_confidence = round(primary_score / max(1, total_score), 4)
@@ -388,10 +419,7 @@ def topic_coherence_validator(
             primary,
             0,
         )
-        visual_related = RELATED_TOPICS.get(
-            account_id,
-            {},
-        ).get(
+        visual_related = _related_topics(account_id).get(
             primary,
             set(),
         )

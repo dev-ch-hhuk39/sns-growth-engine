@@ -17,6 +17,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from accounts.managed_accounts import account_choices  # noqa: E402
+
 
 WORKFLOWS = {
     "manual": ROOT / ".github/workflows/autonomous-growth-loop.yml",
@@ -388,7 +390,7 @@ def build_health(account_id: str, *, use_sheets: bool = False) -> dict[str, Any]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="read-only autonomous health check")
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--use-sheets", action="store_true", help="read operational tab counts only; never write or initialize Sheets")
     args = parser.parse_args()

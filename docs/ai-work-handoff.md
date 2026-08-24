@@ -7910,3 +7910,19 @@ dry-runとbounded canaryを通してからblockを解除する。単なるsource
 - `Approved Account Acquisition` now persists bounded reference acquisition on schedule. Threads uses anonymous CLI -> logged-out GraphQL -> public screen fallback; unavailable sources are DEFERRED. X publishing remains disabled.
 - Source, credential, persona, voice, and PDCA scopes remain account-isolated. Reference-only media never gains reuse rights.
 - Broad autonomous download/cut/Cloudinary/video-post activation was not applied. Those side effects remain permission- and runtime-gated.
+## 2026-08-24 V1 Final Production Closure (Implementation Complete, Acceptance Pending)
+
+- `config/managed_accounts.json` is the canonical account registry. Night Scout, Liver Manager and Beauty are active production accounts; TikTok Shop is implemented as `CREDENTIAL_PENDING`. Shared acquisition, generation, review, publisher credentials, metrics and PDCA resolve account namespaces from this registry and fail closed on missing or mismatched account IDs.
+- Registered-source media permission is resolved through the canonical source registry plus provenance/original-author verification. A registered account does not authorize unrelated reposted third-party media. X publishing remains disabled for every managed account.
+- Direct-media preparation now resolves active accounts and route slots from the registry, processes serially, and prepares at most one asset per account. `Approved Source Clip Preparation` is dispatch-only, uses local transcription, prepares at most one clip, and never publishes.
+- Manual Night/Liver direct and clip publication requires an exact human-approved `queue_id`; the Beauty workflow has the same exact-queue media path. Media candidates cannot fall back to text. All publisher paths remain bounded to one post and retain persona, Hybrid AI, rights, provenance, AV, idempotency and posted-results read-after-write gates.
+- Beauty remains human-review-first, including all media. TikTok Shop keeps all first 20 candidates in `WAITING_REVIEW`, has no fabricated identity, and needs only the real Threads handle/user ID/access token plus future CTA URLs.
+- Repository regression last passed before final evidence collection; production media acceptance has not yet been claimed. The authorized upper bound is one direct and one clip post for each existing account (six total). Scheduled heavy-media flags remain staged until those exact canaries pass.
+
+### Exact resume order
+
+1. Merge the closure PR after focused/full CI.
+2. Run direct and clip preparation for one account at a time; review the exact queue rows in Sheets.
+3. Publish at most the six authorized exact queues and verify permalink, `posted_results`, and 24h/72h/168h jobs.
+4. Enable scheduled media only after all eligible acceptance routes pass. Never enable X publishing.
+5. TikTok Shop onboarding remains credential-pending; do not create a fake canary.

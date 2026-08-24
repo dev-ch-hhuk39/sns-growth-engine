@@ -12,7 +12,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "src"))
 
+from accounts.managed_accounts import account_choices  # noqa: E402
 from scheduled_execution_guard import append_job_summary, scheduled_window_decision  # noqa: E402
 
 
@@ -93,7 +95,7 @@ def generation_failure_reason(payload: dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--slot-id", required=True)
     parser.add_argument("--use-sheets", action="store_true")
     args = parser.parse_args()

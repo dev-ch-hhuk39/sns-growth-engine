@@ -20,16 +20,17 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 CLI_NAME = "generate_clip_candidates"
 DELEGATE_SCRIPT = "scripts/analyze_video_clips.py"
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = set(account_choices())
 
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     """委譲プランを純粋関数で組み立てる（Sheets 不要・テスト対象）。"""
-    if args.account_id == "beauty_account":
-        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "beauty_account は対象外（draft_only）"}
     if getattr(args, "cut", False):
         return {"status": "BLOCKED", "cli": CLI_NAME,
                 "reason": "ffmpeg 実切り抜きは本 CLI では行わない（候補化のみ）"}
@@ -72,7 +73,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="generate clip candidates (thin wrapper, gated)")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument("--n-candidates", type=int, default=6)
     parser.add_argument("--transcript-status", default="done")

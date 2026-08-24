@@ -189,6 +189,24 @@
         "maximum_conversational_endings": 3,
         "forbidden_template_phrases": ["この商品で変わる", "絶対に買うべき", "今すぐチェック"]
       }
+    },
+    "tiktok_shop": {
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.tiktok_shop",
+      "first_person": "自分",
+      "forbidden_first_person": ["僕", "私", "俺"],
+      "reader_terms": ["TikTok Shop", "商品", "動画", "LIVE", "クリエイター", "出店", "販売", "初心者"],
+      "action_markers": ["まず", "見る", "比べる", "試す", "確認", "調べる", "一つ"],
+      "logic_markers": ["理由", "たぶん", "仮説", "観察", "共通", "検証", "ただ"],
+      "blocked_terms": ["誰でも稼げる", "簡単に稼げる", "フォロワー0でも即稼げる", "月収保証", "公式パートナー"],
+      "minimum_reader_terms": 2,
+      "minimum_action_markers": 1,
+      "minimum_logic_markers": 1,
+      "source_copyedit": {
+        "strategy": "extract_evidence_then_write_original",
+        "preferred_markers": ["結構", "たぶん", "自分は", "まだ検証中"],
+        "maximum_conversational_endings": 3,
+        "forbidden_template_phrases": ["誰でもできる", "今すぐLINE", "簡単に売れる"]
+      }
     }
   },
   "account_execution": {
@@ -265,6 +283,12 @@
       "purpose": ["日常で試せる美容の判断基準を渡す", "保存したくなる実用情報を増やす", "販売より先に信頼とリーチを作る"],
       "post_structure": ["美容の迷いを一つ言語化", "よくある選び方のズレ", "具体的な判断基準", "日常で試す一つの行動"],
       "forbidden": ["広告臭", "押し売り", "効果保証", "コンプレックス煽り", "毎回のCTA", "作り物の女言葉", "内部語", "AIの分析メモ"]
+    },
+    "tiktok_shop": {
+      "reader": ["TikTok Shopをこれから始める人", "SNSを収益化したいクリエイター", "LIVE Commerceや出店を検討する人"],
+      "purpose": ["複雑なTikTok Shopの話を普通の言葉で整理する", "公式事実と市場観察と仮説を分ける", "次に試す一手を示す"],
+      "post_structure": ["観察した事実", "理由の仮説", "初心者またはクリエイターが次に試す一手"],
+      "forbidden": ["収益保証", "情報商材口調", "公式との誤認誘発", "架空の体験・実績", "他者実績の自分実績化", "出典なし数値", "内部語"]
     }
   }
 }

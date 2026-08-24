@@ -22,7 +22,7 @@ assert result["status"] == "PASS", result
 assert result["completion_status"] == "SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY", result
 assert result["software_complete"] is True
 assert result["active_scope_software_complete"] is True
-assert result["active_scope_live_evidence_complete"] is True
+assert result["active_scope_live_evidence_complete"] is False
 assert result["deferred_platform_count"] == 0
 assert result["deferred_platforms"] == []
 assert result["integration_complete"] is True
@@ -30,8 +30,10 @@ assert result["production_evidence_complete"] is False
 assert result["architecture_consistent"]["status"] == "PASS"
 assert result["x_physical_media_ready"]["code_ready"] is True
 assert result["x_physical_media_ready"]["permission_blocker"] is False
-assert result["x_physical_media_ready"]["golden_evidence_ready"] is True
-assert result["x_physical_media_ready"]["status"] == "PASS_AV_RECORDED"
+assert result["x_physical_media_ready"]["golden_evidence_ready"] is False
+assert result["x_physical_media_ready"]["status"] == "BLOCKED_EXTERNAL_AUTH_OR_VIDEO_STATUS"
+assert result["youtube_physical_media_ready"]["code_ready"] is True
+assert result["youtube_physical_media_ready"]["golden_evidence_ready"] is False
 assert result["production_write_approval_external_blocker"]["blocker"] is True
 
 bad = evaluate(repository_tests_result=artifact(814))

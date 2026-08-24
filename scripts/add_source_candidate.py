@@ -26,7 +26,9 @@ import sys
 from datetime import datetime, timezone
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, _ROOT)
+sys.path[:0] = [_ROOT, os.path.join(_ROOT, "src")]
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 JST = timezone.utc  # 簡易 UTC; 実運用では zoneinfo.ZoneInfo("Asia/Tokyo")
 
@@ -35,7 +37,7 @@ _VALID_COLLECTION_METHODS = {
     "agent_reach", "yt_dlp", "tiktok_to_ytdlp",
     "youtube_transcript", "browser_export", "json_import", "last30days",
 }
-_VALID_TARGET_ACCOUNTS = {"night_scout", "liver_manager", "beauty_account"}
+_VALID_TARGET_ACCOUNTS = set(account_choices())
 
 
 def _load_sources(path: str) -> dict:

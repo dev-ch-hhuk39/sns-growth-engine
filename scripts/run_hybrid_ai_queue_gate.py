@@ -22,6 +22,7 @@ from hybrid_ai_policy import requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 JST = ZoneInfo("Asia/Tokyo")
 EXECUTION_MAX = int(os.environ.get("HYBRID_AI_EXECUTION_MAX_REQUESTS", "20"))
@@ -165,7 +166,7 @@ def candidate_rows(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--max-candidates", type=int, default=2)
     parser.add_argument("--slot-id", default="")
     parser.add_argument("--queue-id", action="append", default=[])

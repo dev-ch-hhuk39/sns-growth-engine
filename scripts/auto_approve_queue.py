@@ -24,9 +24,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from public_post_quality import extract_public_post_text, final_public_post_validator  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
+from accounts.managed_accounts import account_choices, auto_ready_account_ids  # noqa: E402
 
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = set(auto_ready_account_ids())
 ELIGIBLE_STATUS = "WAITING_REVIEW"
 READY_STATUS = "READY"
 AUTO_READY_BY = "auto_approve_queue.py"
@@ -549,7 +550,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="plan only (default)")
     parser.add_argument("--apply", action="store_true", help="write READY statuses (requires --confirm-auto-ready)")
     parser.add_argument("--confirm-auto-ready", action="store_true")
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--max-ready", type=int, default=1)
     parser.add_argument("--slot-id", default="")
     parser.add_argument("--queue-id", action="append", default=[])

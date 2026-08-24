@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "declared_at": "2026-08-17",
-  "policy": "Canonical owner reference-account list. Presence grants reference analysis only; it does not grant media reuse permission.",
+  "policy": "Canonical owner reference-account list. The V1 final owner authorization grants the scope in config/registered_source_rights_policy.json only after exact source identity and original-author provenance pass.",
   "accounts": {
     "beauty_account": {
       "x": [

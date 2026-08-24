@@ -44,14 +44,15 @@ def t_seeds_beauty_account_exists():
     assert "beauty_account" in ids, "seeds.py に beauty_account が存在しません"
 
 
-def t_seeds_beauty_account_inactive():
+def t_seeds_beauty_account_active_but_review_gated():
     from seeds import ACCOUNT_SEEDS_V2
     beauty = next((a for a in ACCOUNT_SEEDS_V2 if a["account_id"] == "beauty_account"), None)
     assert beauty is not None
-    assert beauty.get("active") == "FALSE", \
-        "seeds.py の beauty_account は active=FALSE のはず（Sheetsに入れない）"
+    assert beauty.get("active") == "TRUE", \
+        "owner activation後の beauty_account は active=TRUE のはず"
     assert beauty.get("auto_publish") == "FALSE", \
-        "beauty_account の auto_publish は FALSE のはず"
+        "Beautyはactiveでも人間review前のauto publishを禁止する"
+    assert beauty.get("default_queue_status") == "WAITING_REVIEW"
 
 
 def t_seeds_beauty_forbidden_keywords_not_empty():
@@ -178,7 +179,7 @@ def t_thread_series_beauty_remains_review_only():
 
 for fn in [
     t_seeds_beauty_account_exists,
-    t_seeds_beauty_account_inactive,
+    t_seeds_beauty_account_active_but_review_gated,
     t_seeds_beauty_forbidden_keywords_not_empty,
     t_seeds_beauty_forbidden_themes_not_empty,
     t_seeds_beauty_no_mlm_keywords,

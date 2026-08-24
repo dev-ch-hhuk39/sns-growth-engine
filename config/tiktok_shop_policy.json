@@ -1,0 +1,19 @@
+{
+  "schema_version": "tiktok_shop_policy_v1",
+  "account_id": "tiktok_shop",
+  "status": "CREDENTIAL_PENDING",
+  "first_20_posts": {"human_review_required": true, "auto_ready": false, "allowed_cta": ["follow", "comment"]},
+  "permanent_human_review_topics": ["gmv", "sales", "revenue", "ranking", "external_results", "rules", "eligibility", "latest_news", "case_study", "company_comparison", "person_comparison", "media", "image", "video", "clip", "legal", "advertising", "high_risk_claim"],
+  "content_pillars_percent": {"tiktok_shop_beginner": 20, "creator_monetization": 20, "product_research": 15, "video_research": 20, "live_commerce": 10, "case_data": 10, "market_news": 5},
+  "audience_percent": {"beginner": 40, "creator": 40, "common": 20},
+  "cta_phases": {
+    "1": {"line_enabled": false, "cta_ratio_percent": 0, "requires_human_review": true},
+    "2": {"line_enabled": true, "cta_ratio_percent_min": 20, "cta_ratio_percent_max": 30, "minimum_beginner_posts": 8, "minimum_creator_posts": 8, "minimum_repeated_pain_count": 3},
+    "3": {"line_enabled": true, "tracked_segments": ["beginner", "creator"]},
+    "4": {"consultation_enabled": true, "requires_real_customer_language": true}
+  },
+  "credentials": {"handle_env": "THREADS_HANDLE_TIKTOK_SHOP", "user_id_env": "THREADS_USER_ID_TIKTOK_SHOP", "access_token_env": "THREADS_ACCESS_TOKEN_TIKTOK_SHOP"},
+  "schedule": {"timezone": "Asia/Tokyo", "posts_per_day": 2, "prepare_slots_jst": ["08:45", "17:45"], "publish_slots_jst": ["10:45", "19:45"]},
+  "metrics": {"windows_hours": [24, 72, 168], "unavailable_value": null},
+  "pdca": {"account_scope": "tiktok_shop", "cross_account_learning": false, "minimum_sample_size": 15, "auto_apply": false}
+}

@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from publishers.threads_credentials import resolve_credentials  # noqa: E402
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 METRIC_KEYS = (
     "views",
@@ -51,11 +52,7 @@ THREADS_POST_INSIGHT_METRICS = (
     "quotes",
 )
 
-ALLOWED_ACCOUNTS = {
-    "night_scout",
-    "liver_manager",
-    "beauty_account",
-}
+ALLOWED_ACCOUNTS = set(account_choices())
 
 PUBLIC_TIMEOUT_SECONDS = 15
 THREADS_API_BASE = (
@@ -682,7 +679,7 @@ def load_rows(use_sheets: bool, result_id: str | None, account_id: str) -> tuple
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="collect Threads metrics safely")
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--result-id")
     parser.add_argument("--source", default="unavailable", choices=["api", "browser", "manual", "unavailable"])
     parser.add_argument("--browser-engine", default="public", choices=["public", "playwright"],

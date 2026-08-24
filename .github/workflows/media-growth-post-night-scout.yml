@@ -13,6 +13,10 @@ on:
         description: "Plan only; never post"
         required: false
         default: "false"
+      queue_id:
+        description: "Exact human-approved READY queue ID (required for manual publish)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -70,6 +74,7 @@ jobs:
         id: preflight
         env:
           MANUAL_CONFIRM: ${{ github.event.inputs.confirm_media_post }}
+          MANUAL_QUEUE_ID: ${{ github.event.inputs.queue_id }}
         run: |
           python3 - <<'PY'
           import json
@@ -79,6 +84,8 @@ jobs:
           sys.path.insert(0, "scripts")
           from scheduled_execution_guard import append_job_summary, missing_required_secrets, scheduled_window_decision
           should_publish = os.environ.get("GITHUB_EVENT_NAME") == "schedule" or os.environ.get("MANUAL_CONFIRM") == "true"
+          if os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" and os.environ.get("MANUAL_CONFIRM") == "true" and not os.environ.get("MANUAL_QUEUE_ID", "").strip():
+              raise SystemExit("[BLOCKED] manual publish requires exact queue_id")
           missing = missing_required_secrets(("GEMINI_API_KEY",)) if should_publish else []
           window = scheduled_window_decision(os.environ["CONTENT_SLOT_ID"])
           payload = {"missing_secret_names": missing, "window": window}
@@ -107,7 +114,7 @@ jobs:
           exit 2
       - name: Hybrid review and exact media promotion
         if: (github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true')
-        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
+        run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
       - name: Resolve scheduled activation gate
         id: activation
         if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'

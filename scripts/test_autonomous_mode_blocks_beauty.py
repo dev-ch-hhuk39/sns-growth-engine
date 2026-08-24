@@ -12,8 +12,12 @@ spec.loader.exec_module(mod)
 
 def main() -> int:
     plan = mod.build_autonomous_plan("beauty_account")
-    ok = "beauty_account" in plan["gate_summary"]["blocked_accounts"] and plan["accounts"] == []
-    print(f"  {'PASS' if ok else 'FAIL'} beauty blocked")
+    ok = (
+        "beauty_account" not in plan["gate_summary"]["blocked_accounts"]
+        and plan["accounts"] == ["beauty_account"]
+        and plan["gate_summary"]["max_posts_per_run"] == 1
+    )
+    print(f"  {'PASS' if ok else 'FAIL'} beauty is managed without bypassing per-run cap")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")
     return 0 if ok else 1
 

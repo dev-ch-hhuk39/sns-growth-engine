@@ -55,12 +55,10 @@ def build_media_mix_plan(queue_rows: list[dict[str, Any]], account_id: str = "al
 def main() -> int:
     parser = argparse.ArgumentParser(description="plan media/no-media mix")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--use-sheets", action="store_true")
     args = parser.parse_args()
-    if args.account_id == "beauty_account":
-        print(json.dumps({"status": "BLOCKED", "reason": "beauty_account is outside media mix autopilot"}, ensure_ascii=False))
-        return 1
     if args.use_sheets:
         from config_loader import get_config
         from sheets_client import SheetsClient

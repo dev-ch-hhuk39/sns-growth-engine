@@ -73,6 +73,63 @@ def _now_jst() -> str:
     return datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+09:00")
 
 
+def _canonical_url(value: Any) -> str:
+    return str(value or "").strip().split("?", 1)[0].rstrip("/").lower()
+
+
+def _apply_registered_owner_scope(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    policy_path = os.path.join(_V2_ROOT, "config", "registered_source_rights_policy.json")
+    if not os.path.isfile(policy_path):
+        return sources
+    with open(policy_path, encoding="utf-8") as policy_file:
+        policy = json.load(policy_file)
+    manifest_path = os.path.join(_V2_ROOT, str(policy["canonical_manifest"]))
+    with open(manifest_path, encoding="utf-8") as manifest_file:
+        manifest = json.load(manifest_file)
+    authorized: dict[str, str] = {}
+    for account_id in policy.get("target_accounts", []):
+        for urls in manifest.get("accounts", {}).get(account_id, {}).values():
+            for url in urls:
+                authorized[_canonical_url(url)] = str(account_id)
+    result: list[dict[str, Any]] = []
+    for source in sources:
+        account_id = authorized.get(_canonical_url(source.get("canonical_url") or source.get("source_url")))
+        if not account_id:
+            result.append(source)
+            continue
+        targets = {str(value) for value in source.get("target_account_ids") or [source.get("target_account_id")] if value}
+        if account_id not in targets:
+            result.append(source)
+            continue
+        result.append({
+            **source,
+            "target_account_id": account_id,
+            "active": True,
+            "fetch_enabled": True,
+            "allow_network_fetch": True,
+            "rights_status": policy["rights_status"],
+            "rights_policy": policy["rights_status"],
+            "permission_status": policy["permission_status"],
+            "permission_scope": policy["permission_scope"],
+            "permission_evidence_type": policy["evidence_type"],
+            "permission_evidence_reference": policy["evidence_reference"],
+            "permission_approved_by": policy["approved_by"],
+            "permission_approved_at": policy["approved_at"],
+            "reuse_policy": "approved_creator_clip",
+            "media_policy": "approved_gated",
+            "media_usage_mode": policy["media_usage_mode"],
+            "media_pipeline_eligible": True,
+            "media_autopilot_enabled": True,
+            "clip_enabled": True,
+            "transcript_enabled": True,
+            "provenance_required": True,
+            "original_author_match_required": True,
+            "third_party_repost_permission_inheritance": False,
+            "registered_owner_scope_id": policy["decision_id"],
+        })
+    return result
+
+
 def load_registry(registry_path: str | None = None) -> list[dict[str, Any]]:
     """source registryをJSONから読み込む。"""
     path = registry_path or _DEFAULT_REGISTRY_PATH
@@ -80,7 +137,28 @@ def load_registry(registry_path: str | None = None) -> list[dict[str, Any]]:
         return []
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    return data.get("sources", [])
+    sources = list(data.get("sources", []))
+    if registry_path is None:
+        managed_path = os.path.join(_V2_ROOT, "config", "managed_accounts.json")
+        if os.path.isfile(managed_path):
+            with open(managed_path, encoding="utf-8") as managed_file:
+                accounts = json.load(managed_file).get("accounts", {})
+            for record in accounts.values():
+                extra = str(record.get("source_registry") or "").strip()
+                if not extra:
+                    continue
+                extra_path = os.path.join(_V2_ROOT, extra)
+                with open(extra_path, encoding="utf-8") as extra_file:
+                    sources.extend(json.load(extra_file).get("sources", []))
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for source in sources:
+        source_id = str(source.get("source_id") or "")
+        if not source_id or source_id in seen:
+            continue
+        seen.add(source_id)
+        unique.append(source)
+    return _apply_registered_owner_scope(unique)
 
 
 def load_sources(registry_path: str | None = None) -> list[dict[str, Any]]:

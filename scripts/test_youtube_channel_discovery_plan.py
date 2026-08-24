@@ -9,8 +9,8 @@ def main() -> int:
     ok = (
         len(yt) == len(selected_yt)
         and len(yt) > 0
-        and any(row["discovery_status"] == "YOUTUBE_CHANNEL_DISCOVERY_PLAN" for row in yt)
         and all(row["discovery_status"] in allowed for row in yt)
+        and p["limits"]["max_total_new_videos_per_run"] <= 20
     )
     print(f"  {'PASS' if ok else 'FAIL'} youtube channel discovery plan")
     print(f"PASS: {1 if ok else 0} / FAIL: {0 if ok else 1}")

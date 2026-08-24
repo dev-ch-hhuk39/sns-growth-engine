@@ -21,17 +21,20 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 CLI_NAME = "prepare_video_reference"
 DELEGATE_SCRIPT = "scripts/plan_video_reference_posts.py"
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = set(account_choices())
 ALLOWED_PLATFORMS = {"threads"}  # X は将来対応のみ
 
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     """委譲プランを純粋関数で組み立てる（Sheets/ネットワーク不要・テスト対象）。"""
-    if args.account_id == "beauty_account":
-        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "beauty_account は対象外（draft_only）"}
+    if args.account_id not in ALLOWED_ACCOUNTS:
+        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "managed account required"}
     if args.platform not in ALLOWED_PLATFORMS:
         return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "platform は threads のみ（X は将来対応）"}
     if not args.video_url and not args.source_id:
@@ -77,7 +80,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="prepare a video reference (thin wrapper, gated)")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--platform", default="threads")
     parser.add_argument("--source-platform", default="youtube")
     parser.add_argument("--video-url")

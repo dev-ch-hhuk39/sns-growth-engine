@@ -11,6 +11,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -26,6 +27,13 @@ from generation.source_copyedit import (
     DeterministicSourceCopyeditProvider,
     evaluate_source_copyedit_contract,
 )
+
+try:
+    from accounts.managed_accounts import managed_account
+except ModuleNotFoundError:  # package imported as src.generation.* in legacy tests
+    from src.accounts.managed_accounts import managed_account
+
+ROOT = Path(__file__).resolve().parents[2]
 
 ACCOUNT_RULES = {
     "night_scout": {
@@ -43,6 +51,41 @@ ACCOUNT_RULES = {
         "voice": "原文の意味と面白さを維持し、標準的な話し言葉と現場視点を自然に使う",
     },
 }
+
+
+def _account_config(account_id: str) -> dict[str, Any]:
+    record = managed_account(account_id)
+    path = ROOT / str(record["account_config"])
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def account_rules(account_id: str) -> dict[str, str]:
+    """Build source-caption rules from the canonical account configuration."""
+    cfg = _account_config(account_id)
+    legacy = ACCOUNT_RULES.get(account_id, {})
+    cta_policy = cfg.get("cta_policy", {})
+    forbidden = list(cfg.get("forbidden_themes", [])) + list(cfg.get("forbidden_keywords", []))
+    return {
+        "audience": str(cfg.get("target_audience") or legacy.get("audience") or "account-specific audience"),
+        "purpose": str(cfg.get("primary_goal") or legacy.get("purpose") or "give one useful reader-facing action"),
+        "cta": str(cta_policy.get("style") or cta_policy.get("default") or legacy.get("cta") or "CTA is optional and must be light"),
+        "banned": ", ".join(str(value) for value in forbidden[:40]) or str(legacy.get("banned") or "fabricated claims and internal processing terms"),
+        "voice": str(cfg.get("tone") or legacy.get("voice") or cfg.get("persona") or "natural account-specific spoken Japanese"),
+    }
+
+
+def account_evidence_terms(account_id: str) -> tuple[str, ...]:
+    """Return bounded, account-owned evidence vocabulary for deterministic grounding."""
+    cfg = _account_config(account_id)
+    generation = cfg.get("generation", {})
+    configured = [
+        str(term)
+        for terms in generation.get("topic_keywords", {}).values()
+        for term in (terms if isinstance(terms, list) else [])
+        if str(term).strip()
+    ]
+    legacy = list(DeterministicGroundedProvider.EVIDENCE_TERMS.get(account_id, ()))
+    return tuple(dict.fromkeys(legacy + configured))
 
 
 def _json_object(text: str) -> dict[str, Any]:
@@ -79,7 +122,7 @@ class GitHubModelsGroundedProvider:
     ) -> ProviderResult[dict[str, Any]]:
         if not self.available:
             return ProviderResult(self.provider_name, self.provider_version, "UNAVAILABLE", reason="github_models_not_enabled_or_token_missing")
-        rules = ACCOUNT_RULES[account_id]
+        rules = account_rules(account_id)
         comments = [
             {"text": str(row.get("text", ""))[:300], "like_count": row.get("like_count", "")}
             for row in post.comments[:20]
@@ -273,10 +316,7 @@ class DeterministicGroundedProvider:
             )
         ).strip()
 
-        terms = self.EVIDENCE_TERMS.get(
-            account_id,
-            (),
-        )
+        terms = account_evidence_terms(account_id)
 
         evidence_candidates = [
             sentence
@@ -546,11 +586,7 @@ class DeterministicGroundedProvider:
                             ),
                             "topic": topic,
                             "audience": (
-                                ACCOUNT_RULES[
-                                    account_id
-                                ][
-                                    "audience"
-                                ]
+                                account_rules(account_id)["audience"]
                             ),
                             "fallback_candidate_count": (
                                 evaluated_count

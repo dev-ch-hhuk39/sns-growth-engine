@@ -52,13 +52,22 @@ from public_post_quality import (  # noqa: E402
     public_preview,
 )
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from reference.source_registry import load_registry  # noqa: E402
+from accounts.managed_accounts import managed_account  # noqa: E402
 
 SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 CONFIG_FILE = ROOT / "config/media_growth_engine.json"
 
 
 def load_sources() -> list[dict[str, Any]]:
-    return json.loads(SOURCES_FILE.read_text(encoding="utf-8"))["sources"]
+    return load_registry()
+
+
+def source_is_allowed(source: dict[str, Any], config: dict[str, Any]) -> bool:
+    """Canonical registered approval supersedes the legacy static ID list."""
+    return bool(source.get("registered_owner_scope_id")) or source.get("source_id") in set(
+        config.get("allowed_source_ids", [])
+    )
 
 
 def load_config() -> dict[str, Any]:
@@ -417,8 +426,15 @@ def is_channel_or_account_url(source: dict[str, Any]) -> bool:
 
 def permission_ok(source: dict[str, Any]) -> bool:
     evidence_type = str(source.get("permission_evidence_type", ""))
-    if evidence_type == "owner_attestation" and str(source.get("permission_evidence_reference", "")) != "global_owner_attestation_v1":
-        return False
+    if source.get("registered_owner_scope_id"):
+        return (
+            source.get("permission_status") == "approved"
+            and evidence_type == "owner_attestation"
+            and bool(source.get("permission_evidence_reference"))
+            and bool(source.get("permission_approved_by"))
+            and bool(source.get("provenance_required"))
+            and bool(source.get("original_author_match_required"))
+        )
     return (
         source.get("permission_status") == "approved"
         and bool(evidence_type)
@@ -642,7 +658,6 @@ def _comment_signal_count(video: dict[str, Any], excerpt: str) -> int:
 
 
 def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, Any]]:
-    allowed_ids = set(config.get("allowed_source_ids", []))
     rows = []
     for source in load_sources():
         targets = source.get("target_account_ids") or [source.get("target_account_id")]
@@ -650,7 +665,7 @@ def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, An
             continue
         if not source.get("active"):
             continue
-        if source.get("source_id") not in allowed_ids:
+        if not source_is_allowed(source, config):
             continue
         if config.get("require_source_media_autopilot_enabled") and not source.get("media_autopilot_enabled"):
             continue
@@ -673,8 +688,13 @@ def build_media_growth_plan(
     blocked: list[str] = []
     if not config.get("media_growth_engine_enabled"):
         blocked.append("media_growth_engine_disabled")
-    if account_id not in set(config.get("allowed_target_account_ids", [config.get("target_account_id")])):
-        blocked.append("account_not_allowed")
+    try:
+        account = managed_account(account_id)
+    except ValueError:
+        account = {}
+        blocked.append("account_not_managed")
+    if "approved_source_clip" not in set(account.get("scheduled_routes", [])):
+        blocked.append("approved_source_clip_route_not_enabled")
     if apply and not confirm_media_growth:
         blocked.append("--apply requires --confirm-media-growth")
     source_results = []
@@ -689,7 +709,7 @@ def build_media_growth_plan(
             source_blocked.append("rights_status_not_media_approved")
         if not permission_ok(source):
             source_blocked.append("permission_evidence_missing")
-        if source.get("source_id") not in config.get("allowed_source_ids", []):
+        if not source_is_allowed(source, config):
             source_blocked.append("source_not_allowed")
         transcript_status = "PLAN_ONLY"
         if is_channel_or_account_url(source):
@@ -1184,7 +1204,8 @@ def build_media_growth_plan(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="run media growth engine")
-    parser.add_argument("--account-id", default="liver_manager", choices=["liver_manager", "night_scout", "beauty_account"])
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", default="liver_manager", choices=account_choices())
     parser.add_argument("--dry-run", action="store_true", default=True)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-media-growth", action="store_true")

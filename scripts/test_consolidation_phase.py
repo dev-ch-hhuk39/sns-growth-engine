@@ -135,7 +135,7 @@ env_no_token.pop("THREADS_ACCESS_TOKEN", None)
 env_no_token.pop("THREADS_ACCESS_TOKEN_NIGHT_SCOUT", None)
 result = subprocess.run(
     [sys.executable, "scripts/refresh_threads_token.py",
-     "--account-id", "test_account", "--dry-run"],
+     "--account-id", "night_scout", "--dry-run"],
     capture_output=True, text=True, env=env_no_token,
     cwd=os.path.join(os.path.dirname(__file__), ".."),
 )
@@ -147,10 +147,10 @@ check(
 )
 
 # token設定時の --dry-run
-env_with_token = {**os.environ, "THREADS_ACCESS_TOKEN_TEST_ACCOUNT": "fake_token_12345"}
+env_with_token = {**os.environ, "THREADS_ACCESS_TOKEN_NIGHT_SCOUT": "fake_token_12345"}
 result2 = subprocess.run(
     [sys.executable, "scripts/refresh_threads_token.py",
-     "--account-id", "test_account", "--dry-run"],
+     "--account-id", "night_scout", "--dry-run"],
     capture_output=True, text=True, env=env_with_token,
     cwd=os.path.join(os.path.dirname(__file__), ".."),
 )

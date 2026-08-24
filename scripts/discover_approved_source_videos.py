@@ -31,6 +31,7 @@ from media_growth_schemas import (  # noqa: E402
 )
 from config_loader import get_config  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from reference.source_registry import load_registry  # noqa: E402
 from source_discovery_policy import (  # noqa: E402
     build_state_update,
     plan_source_scan,
@@ -47,7 +48,7 @@ def load_config() -> dict[str, Any]:
 
 
 def load_sources() -> list[dict[str, Any]]:
-    return json.loads(SOURCES_FILE.read_text(encoding="utf-8"))["sources"]
+    return load_registry()
 
 
 def load_existing_source_videos(path: str = "") -> list[dict[str, Any]]:
@@ -425,11 +426,15 @@ def append_discovery_state_to_sheets(
 
 def permission_ok(source: dict[str, Any]) -> bool:
     evidence_type = str(source.get("permission_evidence_type", ""))
-    if (
-        evidence_type == "owner_attestation"
-        and str(source.get("permission_evidence_reference", "")) != "global_owner_attestation_v1"
-    ):
-        return False
+    if source.get("registered_owner_scope_id"):
+        return (
+            source.get("permission_status") == "approved"
+            and evidence_type == "owner_attestation"
+            and bool(source.get("permission_evidence_reference"))
+            and bool(source.get("permission_approved_by"))
+            and bool(source.get("provenance_required"))
+            and bool(source.get("original_author_match_required"))
+        )
     return (
         source.get("permission_status") == "approved"
         and bool(evidence_type)
@@ -449,7 +454,7 @@ def select_discovery_sources(account_id: str, config: dict[str, Any]) -> list[di
             continue
         if account_id != "all" and account_id not in targets:
             continue
-        if source.get("source_id") not in allowed_ids:
+        if not source.get("registered_owner_scope_id") and source.get("source_id") not in allowed_ids:
             continue
         if source.get("source_type") not in allowed_types:
             continue

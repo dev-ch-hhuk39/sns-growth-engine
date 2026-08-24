@@ -4,10 +4,13 @@ account_id から app_id / app_secret / access_token / user_id を解決する�
 値はログに絶対に出力しない。
 
 優先順位（フィールドごと）:
-  access_token:  file → THREADS_ACCESS_TOKEN_{UPPER} → THREADS_ACCESS_TOKEN
-  user_id:       THREADS_USER_ID_{UPPER} → file → THREADS_USER_ID
+  access_token:  account file → THREADS_ACCESS_TOKEN_{UPPER}
+  user_id:       THREADS_USER_ID_{UPPER} → account file
   app_id:        THREADS_APP_ID_{UPPER} → file → THREADS_APP_ID
   app_secret:    THREADS_APP_SECRET_{UPPER} → file → THREADS_APP_SECRET
+
+Access token and user identity never use global fallback because doing so can
+publish through a different managed account. App credentials may be shared.
 """
 from __future__ import annotations
 
@@ -40,21 +43,23 @@ def resolve_credentials(account_id: str) -> dict:
         dict with keys: app_id, app_secret, access_token, user_id
         未設定の場合は "" (空文字)
     """
+    from accounts.managed_accounts import credential_env_names
+
     upper = account_id.upper()
+    env_names = credential_env_names(account_id)
     stored = _load_token_file(account_id)
 
-    # access_token: file → account-specific env → fallback env
+    # Access and user identity are account-scoped. A global fallback could
+    # silently publish through another managed account, so it is forbidden.
     access_token = (
         stored.get("access_token", "")
-        or os.environ.get(f"THREADS_ACCESS_TOKEN_{upper}", "").strip()
-        or os.environ.get("THREADS_ACCESS_TOKEN", "").strip()
+        or os.environ.get(env_names["access_token"], "").strip()
     )
 
-    # user_id: account-specific env → file → fallback env
+    # user_id: account-specific env → account-specific token file
     user_id = (
-        os.environ.get(f"THREADS_USER_ID_{upper}", "").strip()
+        os.environ.get(env_names["user_id"], "").strip()
         or stored.get("user_id", "")
-        or os.environ.get("THREADS_USER_ID", "").strip()
     )
 
     # app_id: account-specific env → file → fallback env

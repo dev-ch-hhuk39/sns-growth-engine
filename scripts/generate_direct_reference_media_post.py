@@ -6,11 +6,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 from acquisition.models import SourcePostBundle, stable_content_hash
+from accounts.managed_accounts import account_choices
 from generation.source_grounded_caption import GitHubModelsGroundedProvider, SourceGroundedCaptionService
 from public_post_quality import final_public_post_validator, public_preview
 def main() -> int:
     parser = argparse.ArgumentParser(description="generate a validator-safe direct-media caption")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"]); parser.add_argument("--source-post-id", required=True); parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--account-id", required=True, choices=account_choices()); parser.add_argument("--source-post-id", required=True); parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--source-post-text", default="", help="private analysis input; never emitted")
     args = parser.parse_args()
     bundle = SourcePostBundle(

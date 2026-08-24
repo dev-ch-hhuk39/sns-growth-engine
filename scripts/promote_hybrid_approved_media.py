@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from config_loader import get_config  # noqa: E402
+from accounts.managed_accounts import account_choices  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed  # noqa: E402
 from hybrid_ai_policy import requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
@@ -138,7 +139,7 @@ def apply(client: SheetsClient, result: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--slot-id", required=True)
     parser.add_argument("--queue-id", action="append", default=[])
     parser.add_argument("--apply", action="store_true")

@@ -97,6 +97,9 @@ output/
 !config/account_voice_profiles.json
 !config/account_templates/*.json
 !config/source_accounts/*.json
+!config/managed_accounts.json
+!config/tiktok_shop_policy.json
+!config/registered_source_rights_policy.json
 
 # --- CodeGraph（index/cache はcommit禁止） ---
 .codegraph/

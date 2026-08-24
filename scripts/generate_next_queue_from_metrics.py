@@ -33,7 +33,9 @@ ELIGIBLE_STATUSES = {"READY"}
 # 生成候補に付与する非投稿ステータス（worker が拾わない）。
 NON_POSTABLE_STATUS = "DRAFT"
 
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+from accounts.managed_accounts import account_choices, managed_account_ids  # noqa: E402
+
+ALLOWED_ACCOUNTS = set(managed_account_ids())
 
 
 def now_iso() -> str:
@@ -250,7 +252,7 @@ def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="generate next-queue candidates from metrics (gated)")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--input-json", help='{"posted_results":[...]} for offline planning/testing')
     parser.add_argument("--dry-run", action="store_true", help="explicit PLAN_ONLY mode; reads Sheets without writing")

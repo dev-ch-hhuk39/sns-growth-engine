@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -37,6 +38,27 @@ _LIVER_KEYWORDS = (
     "同接", "コメント", "フォロー", "視聴", "投げ銭", "ダイヤ", "リスナー", "ファン",
     "イベント", "配信者", "配信枠",
 )
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _account_keywords(account_id: str) -> tuple[str, ...]:
+    """Load relevance vocabulary from the account-owned generation config."""
+    try:
+        from accounts.managed_accounts import managed_account
+    except ModuleNotFoundError:
+        from src.accounts.managed_accounts import managed_account
+
+    record = managed_account(account_id)
+    cfg = json.loads((ROOT / str(record["account_config"])).read_text(encoding="utf-8"))
+    configured = [
+        _clean(term)
+        for terms in cfg.get("generation", {}).get("topic_keywords", {}).values()
+        for term in (terms if isinstance(terms, list) else [])
+        if _clean(term)
+    ]
+    legacy = _NIGHT_KEYWORDS if account_id == "night_scout" else _LIVER_KEYWORDS if account_id == "liver_manager" else ()
+    return tuple(dict.fromkeys([*legacy, *configured]))
 
 
 def _clean(value: Any) -> str:
@@ -307,7 +329,7 @@ def _engagement(row: dict[str, Any]) -> dict[str, float]:
 
 def _relevance(account_id: str, text: str) -> int:
     normalized = text.lower()
-    keywords = _NIGHT_KEYWORDS if account_id == "night_scout" else _LIVER_KEYWORDS
+    keywords = _account_keywords(account_id)
     return sum(1 for keyword in keywords if keyword.lower() in normalized)
 
 

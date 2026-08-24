@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from discover_approved_source_videos import build_discovery_plan, load_sources
+from discover_approved_source_videos import build_discovery_plan, load_config, select_discovery_sources
 from media_growth_test_fixtures import fixture_caption_service
 from run_media_growth_engine import build_media_growth_plan
 
@@ -7,11 +7,7 @@ from run_media_growth_engine import build_media_growth_plan
 def main() -> int:
     discovery = build_discovery_plan("night_scout")
     expected_active_sources = {
-        row["source_id"]
-        for row in load_sources()
-        if row.get("active") is True
-        and "night_scout" in (row.get("target_account_ids") or [row.get("target_account_id")])
-        and row.get("media_autopilot_enabled") is True
+        row["source_id"] for row in select_discovery_sources("night_scout", load_config())
     }
     # Placeholder discovery rows have no evidence about who appears in the
     # video, so they are analysis-only. A real discovered row with an explicit

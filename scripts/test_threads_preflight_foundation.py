@@ -104,12 +104,13 @@ def test_threads_char_limits():
 
 
 def test_real_post_policy_is_explicit():
+    from accounts.managed_accounts import account_production_enabled
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     for account_id in ["night_scout", "liver_manager", "beauty_account"]:
         cfg = load_account_config(account_id)
         allow = cfg.safety_policy.get("allow_real_post", False)
-        if account_id == "beauty_account":
+        if account_production_enabled(account_id):
             assert allow
             assert cfg.safety_policy.get("requires_human_review_before_post") is True
         else:

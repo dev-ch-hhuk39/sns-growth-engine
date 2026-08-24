@@ -85,18 +85,20 @@ jobs:
         run: |
           python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
           media = json.loads(Path("config/media_growth_engine.json").read_text())
           auto = json.loads(Path("config/autonomous_mode.json").read_text())
           if auto.get("kill_switch"):
               raise SystemExit("[BLOCKED] kill_switch=true")
-          required = ["download_enabled", "cut_enabled", "upload_enabled"]
-          missing = [key for key in required if not media.get(key)]
-          if missing:
-              raise SystemExit("[BLOCKED] media config disabled: " + ",".join(missing))
+          if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+              required = ["download_enabled", "cut_enabled", "upload_enabled", "media_schedule_enabled"]
+              missing = [key for key in required if not media.get(key)]
+              if missing:
+                  raise SystemExit("[ACTIVATION_BLOCKED] scheduled media config disabled: " + ",".join(missing))
           if "night_scout" not in media.get("allowed_target_account_ids", []):
               raise SystemExit("[BLOCKED] night_scout media account is disabled")
-          print("[OK] approved media production config and kill switch")
+          print("[OK] exact-account bounded media preparation; publishing remains disabled")
           PY
           for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
             if [ -z "${!name}" ]; then

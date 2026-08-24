@@ -67,8 +67,8 @@ check(
 
 attribution_source = (ROOT / "scripts/run_growth_attribution_cycle.py").read_text(encoding="utf-8")
 check(
-    '"beauty_account"' in attribution_source,
-    "attribution CLI accepts Beauty account scope",
+    "account_choices" in attribution_source and "include_all=True" in attribution_source,
+    "attribution CLI derives Beauty scope from managed-account registry",
 )
 
 workflow = (ROOT / ".github/workflows/production-autopilot-aftercare.yml").read_text(

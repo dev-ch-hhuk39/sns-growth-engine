@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts"))
+sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
+from accounts.managed_accounts import account_choices  # noqa: E402
 from scheduled_execution_guard import append_job_summary  # noqa: E402
 
 
@@ -237,7 +238,7 @@ def execute(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--slot-id", required=True)
     parser.add_argument("--queue-id", default="")
     parser.add_argument("--max-candidates", type=int, default=1)

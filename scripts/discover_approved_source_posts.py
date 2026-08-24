@@ -166,7 +166,8 @@ def source_post_media_row(post: dict[str, str]) -> dict[str, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="bounded discovery for approved direct-media source posts")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--max-posts", type=int, default=10)
     parser.add_argument("--dry-run", action="store_true"); parser.add_argument("--apply", action="store_true"); parser.add_argument("--confirm-discovery", action="store_true")
     args = parser.parse_args()

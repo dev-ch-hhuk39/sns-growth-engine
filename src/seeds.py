@@ -6,11 +6,14 @@ setup_sheets.py から呼ばれ、未存在の行のみ追加する（冪等）�
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 # ------------------------------------------------------------------ #
 # accounts
 # ------------------------------------------------------------------ #
 
-ACCOUNT_SEEDS_V2 = [
+_LEGACY_ACCOUNT_SEEDS = [
     {
         "account_id": "night_scout",
         "account_name": "夜職スカウト",
@@ -99,6 +102,46 @@ ACCOUNT_SEEDS_V2 = [
         "notes": "draft_only。候補は全件WAITING_REVIEW。認証・canary前の実投稿、AUTO_READY、scheduled publishは禁止。",
     },
 ]
+
+
+def _managed_account_seeds() -> list[dict[str, str]]:
+    """Overlay legacy display data with the canonical managed-account registry."""
+    root = Path(__file__).resolve().parents[1]
+    registry = json.loads((root / "config/managed_accounts.json").read_text(encoding="utf-8"))
+    legacy = {row["account_id"]: dict(row) for row in _LEGACY_ACCOUNT_SEEDS}
+    result: list[dict[str, str]] = []
+    for account_id, managed in registry["accounts"].items():
+        cfg = json.loads((root / managed["account_config"]).read_text(encoding="utf-8"))
+        active = str(managed.get("status", "")).upper() == "ACTIVE"
+        safety = dict(cfg.get("safety_policy") or {})
+        row = {
+            **legacy.get(account_id, {}),
+            "account_id": account_id,
+            "account_name": str(cfg.get("display_name") or account_id),
+            "platform": "threads",
+            "x_enabled": "FALSE",
+            "threads_enabled": "TRUE" if active else "FALSE",
+            "status": "active" if active else str(managed.get("status", "credential_pending")).lower(),
+            "bio_summary": str(cfg.get("persona") or "")[:240],
+            "target_persona": str(cfg.get("target_audience") or "")[:240],
+            "tone": str(cfg.get("tone") or "")[:500],
+            "main_genre": " / ".join(str(value) for value in cfg.get("content_categories", [])[:4]),
+            "auto_publish": "FALSE",
+            "min_publish_score": str(safety.get("min_publish_score", 85)),
+            "brand_risk_threshold": str(safety.get("brand_risk_threshold", 20)),
+            "timezone": "Asia/Tokyo",
+            "active": "TRUE" if active else "FALSE",
+            "default_queue_status": "WAITING_REVIEW",
+            "notes": (
+                str(legacy.get(account_id, {}).get("notes") or "")
+                or f"Managed by config/managed_accounts.json; status={managed.get('status', '')}."
+            ),
+        }
+        result.append(row)
+    return result
+
+
+ACCOUNT_SEEDS_V2 = _managed_account_seeds()
 
 # ------------------------------------------------------------------ #
 # content_categories
@@ -268,6 +311,31 @@ CATEGORY_SEEDS = [
         "active": "FALSE",
     },
 ]
+
+
+def _append_managed_categories(rows: list[dict[str, str]]) -> None:
+    root = Path(__file__).resolve().parents[1]
+    registry = json.loads((root / "config/managed_accounts.json").read_text(encoding="utf-8"))
+    represented = {str(row.get("account_id") or "") for row in rows}
+    for account_id, managed in registry["accounts"].items():
+        if account_id in represented:
+            continue
+        cfg = json.loads((root / managed["account_config"]).read_text(encoding="utf-8"))
+        categories = list(cfg.get("content_categories") or [])
+        for index, category in enumerate(categories, start=1):
+            rows.append({
+                "category_id": f"{account_id}_{index:02d}",
+                "account_id": account_id,
+                "category_name": str(category),
+                "description": f"{cfg.get('display_name', account_id)} canonical content pillar.",
+                "weight": "1.0",
+                "examples": "",
+                "tags": str(category),
+                "active": "TRUE",
+            })
+
+
+_append_managed_categories(CATEGORY_SEEDS)
 
 # ------------------------------------------------------------------ #
 # prompt_templates
@@ -643,6 +711,34 @@ PROMPT_TEMPLATE_SEEDS = [
     },
 ]
 
+
+def _append_managed_prompt_templates(rows: list[dict[str, str]]) -> None:
+    root = Path(__file__).resolve().parents[1]
+    registry = json.loads((root / "config/managed_accounts.json").read_text(encoding="utf-8"))
+    represented = {str(row.get("account_id") or "") for row in rows}
+    for account_id, managed in registry["accounts"].items():
+        if account_id in represented:
+            continue
+        cfg = json.loads((root / managed["account_config"]).read_text(encoding="utf-8"))
+        rows.append({
+            "template_id": f"pt_managed_{account_id}",
+            "account_id": account_id,
+            "template_name": f"draft_generation_{account_id}_managed_v1",
+            "version": "managed_v1",
+            "purpose": f"{account_id} canonical config-driven generation",
+            "prompt_text": (
+                f"Account: {account_id}\nPersona: {cfg.get('persona', '')}\n"
+                f"Audience: {cfg.get('target_audience', '')}\nTone: {cfg.get('tone', '')}\n"
+                "Generate one original Japanese Threads post. Keep facts attributed, "
+                "never fabricate experience, and return public text only."
+            ),
+            "active": "TRUE",
+            "notes": "Generated from canonical managed-account config.",
+        })
+
+
+_append_managed_prompt_templates(PROMPT_TEMPLATE_SEEDS)
+
 # ------------------------------------------------------------------ #
 # distribution_rules
 # ------------------------------------------------------------------ #
@@ -678,6 +774,18 @@ ACCOUNT_FORBIDDEN_THEMES: dict[str, list[str]] = {
         "MLM・マルチ商法的勧誘", "過度なダイエット・過激な痩身訴求", "誇張・虚偽の美容効果",
     ],
 }
+
+
+def _append_managed_forbidden_rules() -> None:
+    root = Path(__file__).resolve().parents[1]
+    registry = json.loads((root / "config/managed_accounts.json").read_text(encoding="utf-8"))
+    for account_id, managed in registry["accounts"].items():
+        cfg = json.loads((root / managed["account_config"]).read_text(encoding="utf-8"))
+        ACCOUNT_FORBIDDEN_KEYWORDS.setdefault(account_id, list(cfg.get("forbidden_keywords") or []))
+        ACCOUNT_FORBIDDEN_THEMES.setdefault(account_id, list(cfg.get("forbidden_themes") or []))
+
+
+_append_managed_forbidden_rules()
 
 # ------------------------------------------------------------------ #
 # アカウント別NGトーンパターン（生成後のトンマナチェック用）

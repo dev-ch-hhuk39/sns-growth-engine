@@ -53,6 +53,7 @@ from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 from sheets_record_reader import READONLY_RECORD_CACHE_ATTR, read_records_safely  # noqa: E402
 from upload_media_assets import build_upload_plan, execute_cloudinary_uploads  # noqa: E402
 from acquisition.reliability import build_quarantine_record, clear_failure, is_quarantined, register_failure  # noqa: E402
+from accounts.managed_accounts import account_choices, managed_account  # noqa: E402
 
 MEDIA_CONFIG = ROOT / "config/media_growth_engine.json"
 AUTONOMOUS_CONFIG = ROOT / "config/autonomous_mode.json"
@@ -1690,8 +1691,13 @@ def build_plan(
     )
     if posts_media_now and not media_cfg.get("media_public_post_auto_enabled"):
         blocked.append("media_public_post_auto_disabled")
-    if account_id not in set(media_cfg.get("allowed_target_account_ids", [media_cfg.get("target_account_id")])):
-        blocked.append("account_not_allowed")
+    try:
+        account = managed_account(account_id)
+    except ValueError:
+        account = {}
+        blocked.append("account_not_managed")
+    if "approved_source_clip" not in set(account.get("scheduled_routes", [])):
+        blocked.append("approved_source_clip_route_not_enabled")
     if apply and not confirm:
         blocked.append("--apply requires --confirm-production-media")
     if apply:
@@ -2681,7 +2687,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="run one approved media production post")
-    parser.add_argument("--account-id", default="liver_manager", choices=["liver_manager", "night_scout", "beauty_account"])
+    parser.add_argument("--account-id", default="liver_manager", choices=account_choices())
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-production-media", action="store_true")

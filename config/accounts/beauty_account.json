@@ -84,7 +84,7 @@
     "media_reuse_requires_explicit_permission": true
   },
   "video_policy": {
-    "enabled": false,
+    "enabled": true,
     "clip_length_seconds": 60,
     "transcription_required": true
   },
@@ -99,6 +99,46 @@
       "肌管理実践"
     ],
     "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
+  },
+  "generation": {
+    "domain_terms": ["美容", "コスメ", "スキンケア", "メイク", "ヘアケア", "美容家電", "サロン"],
+    "signals": [
+      "スキンケアは商品数より今の肌状態に合う使い方を比べる",
+      "ベースメイクは厚く重ねる前に崩れる場所を確認する",
+      "ヘアケアは毛先と頭皮で付け方を分ける",
+      "美容家電は機能数より続けられる手間で選ぶ"
+    ],
+    "topic_keywords": {
+      "skincare": ["スキンケア", "肌"],
+      "makeup": ["メイク", "ファンデ", "ベース"],
+      "haircare": ["ヘア", "毛先", "頭皮"],
+      "device": ["美容家電", "機能"]
+    },
+    "components": {
+      "skincare": {"hooks": ["スキンケアを増やしたくなる時ほど、今の肌を先に見たい。"], "bodies": ["乾燥、べたつき、赤みのどれが気になるかを一つに絞ると、足すケアと減らすケアを決めやすい。"]},
+      "makeup": {"hooks": ["ベースメイクが崩れる日、全部を厚くすると逆に目立つかも。"], "bodies": ["額、小鼻、口周りのどこから崩れるかを見て、その場所だけ下地とファンデの量を変える。"]},
+      "haircare": {"hooks": ["ヘアケアって、全部に同じ量を付けるより場所で分けた方が扱いやすい。"], "bodies": ["オイルは髪の毛先から、頭皮は専用ケアで、根元は重くしすぎない。付ける場所を変えるだけで調整しやすい。"]},
+      "device": {"hooks": ["美容家電は多機能より、使う日を想像できるかが結構大事。"], "bodies": ["充電、手入れ、一回の時間を比べて、忙しい日でも肌に無理なく使える美容ケアかを見る。"]},
+      "general": {"hooks": ["美容は新しく足す前に、今困っていることを一つに絞りたい。"], "bodies": ["肌、メイク、髪のどこを変えたいか決めると、比べるポイントも見えやすい。"]}
+    },
+    "closings": {
+      "skincare": ["個人的には、スキンケアを一度に全部変えず一つだけ見直してみてほしい。"],
+      "makeup": ["まずはメイクが崩れる場所を一つ決めて、量を少しだけ変えてみてほしい。"],
+      "haircare": ["まず髪の毛先の量だけ見直すと、意外と変わる気がする。"],
+      "device": ["美容家電が毎日使える手間かどうか、買う前に確認してみてほしい。"],
+      "general": ["今の悩みを一つに絞ってから比べてみてほしい。"]
+    },
+    "quality_topic_map": {"skincare": "skincare_routine", "makeup": "base_makeup", "haircare": "haircare_method", "device": "beauty_device_selection", "general": "beauty_choice"},
+    "topic_taxonomy": {
+      "skincare_routine": ["スキンケア", "肌", "乾燥", "べたつき", "赤み", "ケア"],
+      "base_makeup": ["ベースメイク", "メイク", "ファンデ", "下地", "崩れ"],
+      "haircare_method": ["ヘアケア", "髪", "毛先", "頭皮", "オイル"],
+      "beauty_device_selection": ["美容家電", "充電", "手入れ", "機能", "手間"],
+      "beauty_choice": ["美容", "肌", "メイク", "髪", "比べ"]
+    },
+    "related_topics": {},
+    "concepts": {"skincare": ["skin_condition", "routine"], "makeup": ["breakdown_area", "amount"], "haircare": ["application_area", "amount"], "device": ["maintenance", "continuity"], "general": ["current_concern", "comparison"]},
+    "cta_intent": "light_save_or_try"
   },
   "learning_policy": {
     "min_results_for_learning": 15,

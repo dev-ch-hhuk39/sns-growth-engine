@@ -20,16 +20,19 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 CLI_NAME = "import_reference_urls"
 DELEGATE_SCRIPT = "scripts/add_source_candidate.py"
-ALLOWED_TARGETS = {"night_scout", "liver_manager"}
+ALLOWED_TARGETS = set(account_choices())
 
 
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     """委譲プランを純粋関数で組み立てる（Sheets 不要・テスト対象）。"""
-    if args.target_account == "beauty_account":
-        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "beauty_account 向けは対象外（draft_only）"}
+    if args.target_account not in ALLOWED_TARGETS:
+        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "managed account required"}
     if not args.url:
         return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "--url は必須"}
 
@@ -76,8 +79,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--platform", required=True)
     parser.add_argument("--url", required=True)
     parser.add_argument("--handle")
-    parser.add_argument("--target-account", required=True,
-                        choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--target-account", required=True, choices=account_choices())
     parser.add_argument("--collection-method", default="manual_url")
     parser.add_argument("--name")
     parser.add_argument("--category")

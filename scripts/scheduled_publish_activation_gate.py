@@ -10,6 +10,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "src"))
+from accounts.managed_accounts import account_choices  # noqa: E402
 from final_production_contracts import activation_evidence  # noqa: E402
 
 from activation_integrity import (  # noqa: E402
@@ -252,7 +254,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--activation-readiness", action="store_true")
-    parser.add_argument("--account-id", choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", choices=account_choices())
     parser.add_argument("--post-type", choices=["original_text", "reference_text", "pdca_text"])
     args = parser.parse_args()
     if bool(args.account_id) != bool(args.post_type):

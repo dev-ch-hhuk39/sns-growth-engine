@@ -70,6 +70,20 @@
       "voice_profile_ref": "config/account_voice_profiles.json#accounts.beauty_account",
       "style_fingerprint_ref": "config/beauty_voice_profile.json#style_fingerprint",
       "voice_corpus_ref": "config/beauty_voice_profile.json#voice_reference_source_ids"
+    },
+    "tiktok_shop": {
+      "target_audience": "tiktok_shop_beginner_creator",
+      "commercial_context": "B2C_EDUCATIONAL_MEDIA",
+      "purpose": "TikTok Shop初心者とクリエイターが、公式事実・市場観察・仮説を区別しながら次に試す行動を選べる投稿",
+      "allowed_topics": ["tiktok_shop_beginner", "creator_monetization", "product_research", "video_research", "live_commerce", "case_data", "market_news"],
+      "blocked_source_audiences": ["night_work_job_seeker", "beginner_liver", "beauty_cosmetics_women_20s_30s"],
+      "blocked_contexts": ["NIGHT_WORK", "LIVER_RECRUITMENT", "BEAUTY_ADVICE", "GET_RICH_QUICK"],
+      "strict_account_isolation": true,
+      "cross_account_learning": false,
+      "time_sensitive_facts_require_human_review": true,
+      "tone": "config/account_voice_profiles.json#accounts.tiktok_shop を必須参照",
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.tiktok_shop",
+      "voice_corpus_ref": "config/source_accounts/tiktok_shop_sources.json#voice_references"
     }
   }
 }

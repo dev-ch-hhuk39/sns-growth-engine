@@ -12,10 +12,17 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 approved = {item["source_id"] for item in module.eligible_sources({"src_lm_tt_user_001", "src_ns_yt_cand_001"})}
-reference_only = module.eligible_sources({"src_ns_threads_user_chiishunin_s"})
+registered_threads = module.eligible_sources({"src_ns_threads_user_chiishunin_s"})
+threads_permission = module.permission_row(registered_threads[0], "2026-08-24T00:00:00+00:00")
 checks = {
     "explicit approved sources selected": approved == {"src_lm_tt_user_001", "src_ns_yt_cand_001"},
-    "reference-only Threads source excluded": reference_only == [],
+    "registered owner-approved Threads source selected": len(registered_threads) == 1,
+    "registered Threads clip grant preserves canonical provenance": (
+        threads_permission["allow_original_repost"] == "true"
+        and threads_permission["allow_cut"] == "true"
+        and threads_permission["evidence_reference"] == registered_threads[0]["permission_evidence_reference"]
+        and registered_threads[0]["original_author_match_required"] is True
+    ),
     "apply demands explicit source IDs": "--apply requires at least one explicit --source-id" in (ROOT / "scripts" / "seed_owner_attested_media_permissions.py").read_text(encoding="utf-8"),
     "approved rights are required": "APPROVABLE_RIGHTS" in (ROOT / "scripts" / "seed_owner_attested_media_permissions.py").read_text(encoding="utf-8"),
 }
