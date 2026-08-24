@@ -20,7 +20,7 @@ from public_post_quality import canonical_voice_profile, canonical_voice_prompt,
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/hybrid_ai_account_policies.json"
 GATE_SCHEMA_VERSION = "hybrid_ai_gate_v3"
-PROMPT_VERSION = "hybrid_ai_prompts_v4"
+PROMPT_VERSION = "hybrid_ai_prompts_v5"
 
 GENERIC_TEMPLATE_PHRASES = (
     "確認することは一つ。",

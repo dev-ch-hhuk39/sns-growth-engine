@@ -203,6 +203,24 @@ transferred_claim = evaluate_source_copyedit_contract(
 assert "source_author_personal_claim_transferred" in transferred_claim["blocked_reasons"]
 assert transferred_claim["source_author_claim_transfer_sentences"]
 
+implicit_transferred_claim = evaluate_source_copyedit_contract(
+    source_text=(
+        "ベッカン担当数が多いです。"
+        "新店へのアプローチも任せてください。"
+    ),
+    public_post_text=(
+        "ベッカン担当数多いです！"
+        "僕なら、新店もお任せあれぇと思うんだよね。"
+    ),
+    account_id="night_scout",
+    recent_posts=[],
+)
+
+assert "source_author_personal_claim_transferred" in implicit_transferred_claim["blocked_reasons"]
+assert "ベッカン担当数多いです" in implicit_transferred_claim[
+    "source_author_claim_transfer_sentences"
+]
+
 attributed_commentary = evaluate_source_copyedit_contract(
     source_text=(
         "ベッカン担当数が多いです。"

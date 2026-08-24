@@ -67,6 +67,22 @@ PERSONAL_CLAIM_MARKERS = (
     "買った",
 )
 
+SOURCE_ATTRIBUTION_MARKERS = (
+    "この動画では",
+    "この投稿では",
+    "動画の中で",
+    "投稿の中で",
+    "投稿者",
+    "発信者",
+    "話している",
+    "話していた",
+    "紹介されている",
+    "紹介している",
+    "という内容",
+    "とのこと",
+    "だそう",
+)
+
 
 def _profile(account_id: str) -> dict[str, Any]:
     try:
@@ -302,16 +318,35 @@ def _numeric_tokens(
     )
 
 
-def _source_author_claim_transfer_sentences(text: str) -> list[str]:
+def _source_author_claim_transfer_sentences(
+    source_text: str,
+    public_text: str,
+) -> list[str]:
     """Find external-source personal claims rewritten as the target operator's."""
 
     transferred: list[str] = []
-    for sentence in _sentences(text):
-        if not re.search(r"(?:実は)?(?:僕|私)(?:は|が|の|も|、|って)?", sentence):
+    source_sentences = _sentences(source_text)
+    for sentence in _sentences(public_text):
+        if any(marker in sentence for marker in SOURCE_ATTRIBUTION_MARKERS):
             continue
         if re.search(r"(?:僕|私)なら", sentence):
             continue
-        if any(marker in sentence for marker in PERSONAL_CLAIM_MARKERS):
+
+        explicit_first_person = bool(
+            re.search(r"(?:実は)?(?:僕|私)(?:は|が|の|も|、|って)?", sentence)
+        )
+        shared_personal_claim = any(
+            marker in sentence
+            and marker in source_sentence
+            and lexical_similarity(sentence, source_sentence) >= 0.2
+            for marker in PERSONAL_CLAIM_MARKERS
+            for source_sentence in source_sentences
+        )
+        if explicit_first_person and any(
+            marker in sentence for marker in PERSONAL_CLAIM_MARKERS
+        ):
+            transferred.append(sentence)
+        elif shared_personal_claim:
             transferred.append(sentence)
     return transferred
 
@@ -404,7 +439,7 @@ def evaluate_source_copyedit_contract(
             "unsupported_numeric_claim_added"
         )
 
-    identity_transfer_sentences = _source_author_claim_transfer_sentences(public)
+    identity_transfer_sentences = _source_author_claim_transfer_sentences(source, public)
     if identity_transfer_sentences:
         reasons.append("source_author_personal_claim_transferred")
 
@@ -805,7 +840,7 @@ class DeterministicSourceCopyeditProvider:
         "deterministic_source_copyedit"
     )
 
-    provider_version = "1"
+    provider_version = "2"
 
     def generate(
         self,
