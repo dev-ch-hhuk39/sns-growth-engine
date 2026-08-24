@@ -218,6 +218,8 @@ def _naturalness_score(
         score -= 25
     if _contains_terms(text, INTERNAL_LEAK_TERMS):
         score -= 50
+    if re.search(r"(?:よ|ね|ます|です)んだよね", text):
+        score -= 40
     return max(0, min(100, score))
 
 
@@ -661,6 +663,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("beauty_text_too_long")
     if account_id == "tiktok_shop" and any(term in public_text for term in TIKTOK_SHOP_BLOCKED_CLAIMS):
         reasons.append("tiktok_shop_prohibited_claim")
+    if re.search(r"(?:よ|ね|ます|です)んだよね", public_text):
+        reasons.append("malformed_spoken_cadence")
     if natural < 80:
         reasons.append("naturalness_below_threshold")
     if reader < 80:
@@ -749,7 +753,7 @@ def apply_account_voice(text: str, account_id: str) -> str:
             ("決めます。", "決める。"),
             ("できます。", "できるよ。"),
             ("思います。", "思うよ。"),
-            ("なります。", "なるよ。"),
+            ("なります。", "なるんだよね。"),
         )
         for old, new in replacements:
             value = value.replace(old, new)
@@ -759,6 +763,8 @@ def apply_account_voice(text: str, account_id: str) -> str:
             closing_source = closing_source[len("まずは"):].lstrip("、 ")
         elif closing_source.startswith("まず、"):
             closing_source = closing_source[len("まず、"):].lstrip()
+        elif closing_source.startswith("まず"):
+            closing_source = closing_source[len("まず"):].lstrip("、 ")
         closing = "私ならまず、" + closing_source
         warm_markers = canonical_voice_profile(account_id).get("warm_markers", [])
         if not any(term in closing for term in warm_markers):
@@ -777,7 +783,10 @@ def apply_account_voice(text: str, account_id: str) -> str:
                     closing = closing[: -len(old)] + new
                     break
             else:
-                closing = closing.rstrip("。") + "んだよね。"
+                if closing.endswith(("ます。", "です。")):
+                    closing = closing[:-1] + "よね。"
+                elif not closing.endswith(("よ。", "ね。", "よね。", "だよね。")):
+                    closing = closing.rstrip("。") + "んだよね。"
 
         action_markers = canonical_voice_profile(account_id).get("action_markers", [])
         if not any(term in value for term in action_markers):
@@ -800,7 +809,7 @@ def apply_account_voice(text: str, account_id: str) -> str:
         value = re.sub(r"\n{3,}", "\n\n", value).strip()
         if not any(term in value for term in ("個人的には", "ほんとに", "これ結構大事", "意外と")):
             value = "個人的には、これ結構大事なんだけど、" + value
-        if not any(term in value for term in ("かも", "な気がする", "なんだけど", "してみてほしい")):
+        if not any(term in value for term in ("かも", "な気がする", "なんだけど", "てみてほしい")):
             value = value.rstrip() + "\n\n一つだけ試してみてほしい🥺"
         elif not re.search(r"[\U0001F300-\U0001FAFF]", value):
             value += "🤍"
