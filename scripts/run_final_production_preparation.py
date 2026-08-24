@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 from audit_media_permissions import build_report as permission_report
 from build_live_canary_inventory import _rows, build_inventory
