@@ -47,7 +47,7 @@ def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
     values = {
         "platform": "threads", "status": "READY", "public_post_text": str(candidate.get("public_post_text", "")),
         "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
-        "canary_id": candidate["canary_id"], "updated_at": _now(),
+        "canary_id": str(candidate.get("canary_id", "")), "updated_at": _now(),
     }
     if media:
         values.update({
@@ -174,7 +174,7 @@ def build_plan(
                 reasons.append("PUBLIC_POST_TEXT_MISSING")
             if final_public_post_validator(text, account_id)["status"] != "PASS":
                 reasons.append("PUBLIC_POST_VALIDATOR_BLOCKED")
-            if existing and kind not in {"original_text", "reference_text"}:
+            if existing and candidate and canary and kind not in {"original_text", "reference_text"}:
                 prospective = {**existing, **_field_update(candidate, kind)}
                 media = _resolve_queue_media(prospective)
                 if not media["media_usable"]:

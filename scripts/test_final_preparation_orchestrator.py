@@ -21,4 +21,6 @@ completed = subprocess.run(
 assert completed.returncode == 0, completed.stderr
 missing_text_update = _field_update({"canary_id": "missing-text"}, "direct_image")
 assert missing_text_update["public_post_text"] == ""
+missing_identity_update = _field_update({}, "direct_image")
+assert missing_identity_update["canary_id"] == ""
 print("PASS test_final_preparation_orchestrator.py")
