@@ -187,6 +187,38 @@ generic_night_contract = (
     )
 )
 
+transferred_claim = evaluate_source_copyedit_contract(
+    source_text=(
+        "ベッカン担当数が多いです。"
+        "新店へのアプローチも任せてください。"
+    ),
+    public_post_text=(
+        "実は僕、ベッカンの担当数が多いんだよね。"
+        "新店へのアプローチも任せて。"
+    ),
+    account_id="night_scout",
+    recent_posts=[],
+)
+
+assert "source_author_personal_claim_transferred" in transferred_claim["blocked_reasons"]
+assert transferred_claim["source_author_claim_transfer_sentences"]
+
+attributed_commentary = evaluate_source_copyedit_contract(
+    source_text=(
+        "ベッカン担当数が多いです。"
+        "新店へのアプローチも任せてください。"
+    ),
+    public_post_text=(
+        "この動画では、ベッカンの担当数が多く、"
+        "新店へのアプローチも任せてほしいと話している。"
+        "僕なら、現場の情報をどこまで持っているかも判断材料にする。"
+    ),
+    account_id="night_scout",
+    recent_posts=[],
+)
+
+assert "source_author_personal_claim_transferred" not in attributed_commentary["blocked_reasons"]
+
 assert (
     generic_night_contract["status"]
     == "BLOCKED"
