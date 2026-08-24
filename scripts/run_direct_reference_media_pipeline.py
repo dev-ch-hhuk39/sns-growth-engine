@@ -48,6 +48,7 @@ from acquisition.reliability import (  # noqa: E402
 )
 from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
+from accounts.managed_accounts import account_choices, managed_account, route_slot_id  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
 MEDIA_CONFIG = ROOT / "config/media_growth_engine.json"
@@ -58,17 +59,21 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
-SCHEDULED_DIRECT_SLOT_IDS = {
-    "night_scout": "ns_1800_direct_media",
-    "liver_manager": "lm_1600_direct_media",
-    "beauty_account": "beauty_direct_media_review",
-}
 SCHEDULED_DIRECT_MIN_CHARS = 65
-SCHEDULED_DIRECT_DOMAIN_TERMS = {
-    "night_scout": ("夜職", "キャバ", "店", "時給", "ノルマ", "担当", "出勤", "移籍", "指名", "売上"),
-    "liver_manager": ("配信", "ライバー", "リスナー", "初見", "コメント", "ギフト", "事務所", "LIVE"),
-    "beauty_account": ("美容", "コスメ", "スキンケア", "メイク", "ヘアケア", "美容家電", "サロン"),
-}
+
+
+def scheduled_direct_domain_terms(account_id: str) -> tuple[str, ...]:
+    account = managed_account(account_id)
+    config = json.loads((ROOT / str(account["account_config"])).read_text(encoding="utf-8"))
+    generation = config.get("generation", {})
+    explicit = tuple(str(term) for term in generation.get("domain_terms", []) if str(term))
+    if explicit:
+        return explicit
+    taxonomy = generation.get("topic_taxonomy", {})
+    terms = [str(term) for values in taxonomy.values() for term in values if str(term)]
+    if terms:
+        return tuple(dict.fromkeys(terms))
+    return tuple(str(value) for value in config.get("content_categories", []) if str(value))
 
 
 def scheduled_direct_caption_blockers(
@@ -78,14 +83,14 @@ def scheduled_direct_caption_blockers(
 ) -> list[str]:
     """Reject weak captions only for the two autonomous scheduled Direct slots."""
 
-    if SCHEDULED_DIRECT_SLOT_IDS.get(account_id) != str(slot_id or ""):
+    if route_slot_id(account_id, "direct_reference_media") != str(slot_id or ""):
         return []
     value = str(text or "").strip()
     compact = "".join(value.split())
     reasons: list[str] = []
     if len(compact) < SCHEDULED_DIRECT_MIN_CHARS:
         reasons.append("scheduled_direct_caption_too_short")
-    if not any(term in value for term in SCHEDULED_DIRECT_DOMAIN_TERMS.get(account_id, ())):
+    if not any(term in value for term in scheduled_direct_domain_terms(account_id)):
         reasons.append("scheduled_direct_account_domain_signal_missing")
     return sorted(set(reasons))
 
@@ -1281,7 +1286,7 @@ def dispatch_ready(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="post an explicitly permitted direct-reference media slot")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--slot-id", default="")
     parser.add_argument(
         "--queue-id",

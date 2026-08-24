@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 
 from run_media_growth_engine import build_media_growth_plan  # noqa: E402
-from generation.media_platform_policy import PHYSICAL_MEDIA_PLATFORMS, normalize_platform  # noqa: E402
+from generation.media_platform_policy import REFERENCE_PLATFORMS, normalize_platform  # noqa: E402
 from media.rights_policy import rights_allows_media_use  # noqa: E402
 
 
@@ -28,10 +28,18 @@ def main() -> int:
     selected = list(plan.get("selected_sources") or [])
     bad = [
         row for row in selected
-        if platform_of(row) not in PHYSICAL_MEDIA_PLATFORMS
+        if platform_of(row) not in REFERENCE_PLATFORMS
         or not rights_allows_media_use(rights_of(row))
     ]
-    ok = bool(selected) and not bad
+    source_results = list(plan.get("source_results") or [])
+    ok = (
+        bool(selected)
+        and not bad
+        and plan.get("rights_check") == "PASS"
+        and plan.get("permission_evidence") == "PASS"
+        and all(row.get("rights_check") == "PASS" for row in source_results)
+        and all(row.get("permission_evidence") == "PASS" for row in source_results)
+    )
     if not ok:
         print("selected=", [(r.get("source_id"), platform_of(r), rights_of(r)) for r in selected])
     print(f"  {'PASS' if ok else 'FAIL'} media growth selects only approved physical-media sources")

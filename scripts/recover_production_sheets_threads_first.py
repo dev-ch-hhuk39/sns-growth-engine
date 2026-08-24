@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_cloudinary_config, get_config  # noqa: E402
+from accounts.managed_accounts import account_choices, auto_ready_account_ids  # noqa: E402
 from publishers.threads_credentials import has_required_for_publish, resolve_credentials  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import SheetsClient, TAB_DEFINITIONS, TAB_DISPLAY_NAMES  # noqa: E402
@@ -1276,7 +1277,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         return bool(
             generation_mode.startswith("slot_fallback_")
             and str(r.get("platform", "")).strip().lower() == "threads"
-            and str(r.get("account_id", "")) in {"night_scout", "liver_manager"}
+            and str(r.get("account_id", "")) in set(auto_ready_account_ids())
             and str(r.get("public_post_text", "")).strip()
             and str(r.get("validator_status", "")).strip().upper() == "PASS"
             and str(r.get("internal_leak_status", "")).strip().upper() == "PASS"
@@ -1722,7 +1723,7 @@ def main() -> int:
         action="store_true",
         help="Read only exact queue/result/metric evidence after a successful text post",
     )
-    parser.add_argument("--account-id", choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", choices=account_choices())
     parser.add_argument("--json", action="store_true", help="Print compact JSON summary")
     args = parser.parse_args()
 

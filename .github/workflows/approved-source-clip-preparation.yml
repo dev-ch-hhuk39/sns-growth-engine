@@ -1,0 +1,114 @@
+name: Approved Source Clip Preparation
+
+on:
+  workflow_dispatch:
+    inputs:
+      account_id:
+        description: "Active managed account_id"
+        required: true
+        default: beauty_account
+      confirm_preparation:
+        description: "Type true to prepare at most one approved clip asset"
+        required: true
+        default: "false"
+      dry_run_only:
+        description: "Plan only; never download, cut, upload, or post"
+        required: false
+        default: "true"
+
+permissions:
+  contents: read
+  models: read
+
+concurrency:
+  group: approved-source-clip-preparation-${{ github.event.inputs.account_id }}
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  prepare-one-approved-clip:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      ACCOUNT_ID: ${{ github.event.inputs.account_id }}
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_MODELS_ENABLED: "true"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Install bounded media runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+          python3 -m pip install --requirement requirements-media-runtime.txt
+      - name: Resolve managed account and clip slot
+        run: |
+          slot_id=$(PYTHONPATH=src python3 -c 'import os; from accounts.managed_accounts import account_production_enabled, route_slot_id; account=os.environ["ACCOUNT_ID"]; assert account_production_enabled(account), "inactive_managed_account"; print(route_slot_id(account, "approved_source_clip"))')
+          echo "CONTENT_SLOT_ID=$slot_id" >> "$GITHUB_ENV"
+      - name: Guard bounded preparation and required secrets
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          if json.loads(Path("config/autonomous_mode.json").read_text()).get("kill_switch"):
+              raise SystemExit("[BLOCKED] kill_switch=true")
+          print("[OK] one approved clip may be prepared; publishing remains disabled")
+          PY
+          for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
+            if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
+          done
+      - name: Dry-run approved clip plan
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --dry-run --use-sheets
+      - name: Check bounded preparation budget
+        id: media_budget
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
+        run: python3 scripts/check_media_resource_budget.py --use-sheets --check-cloudinary --apply --confirm-resource-usage --enforce --purpose prepare
+      - name: Discover bounded approved source videos
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        run: python3 scripts/discover_approved_source_videos.py --account-id "$ACCOUNT_ID" --use-sheets --fetch-real --apply --confirm-discovery
+      - name: Transcribe one approved source locally
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        env:
+          ALLOW_VIDEO_DOWNLOAD: "true"
+          ALLOW_LOCAL_TRANSCRIPTION: "true"
+        run: python3 scripts/transcribe_approved_source_videos.py --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-transcribe --allow-local-whisper --limit 1 --model-size tiny --max-audio-seconds 900 --cpu-threads 1
+      - name: Generate transcript-grounded candidates
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        run: python3 scripts/run_media_growth_engine.py --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-media-growth
+      - name: Prepare one approved clip asset
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        env:
+          ALLOW_VIDEO_DOWNLOAD: "true"
+          ALLOW_VIDEO_CUT: "true"
+          ALLOW_CLOUDINARY_UPLOAD: "true"
+        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-production-media --use-sheets
+      - name: Clean expired transient media
+        if: always()
+        run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
+      - name: Health summary
+        if: always()
+        continue-on-error: true
+        run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

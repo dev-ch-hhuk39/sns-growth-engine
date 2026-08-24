@@ -14,8 +14,9 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from sheets_record_reader import read_records_safely
+from accounts.managed_accounts import managed_account_ids
 
-TARGET_ACCOUNTS = {"night_scout", "liver_manager"}
+TARGET_ACCOUNTS = set(managed_account_ids())
 SOURCE_HASH_FIELDS = (
     "source_post_id", "source_video_id", "clip_candidate_id", "source_id",
     "source_result_id", "original_post_text", "transcript_excerpt",

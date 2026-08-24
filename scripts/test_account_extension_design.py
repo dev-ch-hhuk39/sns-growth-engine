@@ -158,6 +158,9 @@ def t_all_configs_have_thread_series_policy():
 # --------------------------------------------------------
 
 def t_account_real_post_policy_is_explicit():
+    registry_path = os.path.join(_V2_ROOT, "config", "managed_accounts.json")
+    with open(registry_path, encoding="utf-8") as f:
+        managed = json.load(f)["accounts"]
     accounts_dir = os.path.join(_V2_ROOT, "config", "accounts")
     for filename in os.listdir(accounts_dir):
         if not filename.endswith(".json"):
@@ -166,7 +169,8 @@ def t_account_real_post_policy_is_explicit():
         with open(p, encoding="utf-8") as f:
             d = json.load(f)
         safety = d.get("safety_policy", {})
-        if filename == "beauty_account.json":
+        account_id = str(d.get("account_id", ""))
+        if managed.get(account_id, {}).get("production_enabled") is True:
             assert safety.get("allow_real_post") is True
             assert safety.get("requires_human_review_before_post") is True
         else:

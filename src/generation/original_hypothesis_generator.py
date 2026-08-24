@@ -10,9 +10,18 @@ beauty_account は WAITING_REVIEW 固定。
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
+
+try:
+    from accounts.managed_accounts import managed_account
+    from accounts.account_config import load_account_config
+except ModuleNotFoundError:  # package imported as src.generation.* in legacy tests
+    from src.accounts.managed_accounts import managed_account
+    from src.accounts.account_config import load_account_config
 
 JST = timezone(timedelta(hours=9))
 
@@ -63,6 +72,29 @@ ACCOUNT_TONES = {
 }
 
 
+def _account_tone(account_id: str) -> dict[str, Any]:
+    """Resolve tone from the account namespace; never borrow another account."""
+    if account_id in ACCOUNT_TONES:
+        return dict(ACCOUNT_TONES[account_id])
+    managed = managed_account(account_id)
+    cfg = load_account_config(account_id)
+    raw = json.loads(
+        (Path(__file__).resolve().parents[2] / str(managed["account_config"])).read_text(encoding="utf-8")
+    )
+    generation = raw.get("generation", {})
+    components = generation.get("components", {})
+    hooks = [str(hook) for value in components.values() for hook in value.get("hooks", [])]
+    closings = [str(closing) for value in generation.get("closings", {}).values() for closing in value]
+    if not hooks:
+        raise RuntimeError(f"account_generation_hooks_missing:{account_id}")
+    return {
+        "persona": cfg.persona,
+        "style": cfg.tone,
+        "hook_patterns": hooks,
+        "cta_patterns": closings or [""],
+    }
+
+
 def _now_jst() -> str:
     return datetime.now(JST).strftime("%Y-%m-%dT%H:%M:%S+09:00")
 
@@ -87,9 +119,11 @@ class OriginalHypothesisGenerator:
         dry_run: bool = True,
         target_platforms: list[str] | None = None,
     ) -> dict[str, Any]:
+        account = managed_account(account_id)
+        requires_review = str(account.get("review_policy", "")) != "autonomous_low_risk"
         is_beauty = account_id == "beauty_account"
-        status = "WAITING_REVIEW" if is_beauty else "PLANNED"
-        tone = ACCOUNT_TONES.get(account_id, ACCOUNT_TONES["night_scout"])
+        status = "WAITING_REVIEW" if requires_review else "PLANNED"
+        tone = _account_tone(account_id)
 
         if mock:
             drafts = self._mock_drafts(account_id, platform, tone, topic, count, post_type)
@@ -104,7 +138,7 @@ class OriginalHypothesisGenerator:
                 "is_beauty": is_beauty,
                 "draft_count": len(drafts),
                 "drafts": drafts,
-                "safety_check": _safety_check(drafts, is_beauty),
+                "safety_check": _safety_check(drafts, requires_review, account_id),
                 "created_at": _now_jst(),
                 "mock": True,
                 "note": "MOCKデータ。実生成には dry_run=False + LLMが必要です。",
@@ -145,10 +179,10 @@ class OriginalHypothesisGenerator:
             "is_beauty": is_beauty,
             "draft_count": len(drafts),
             "drafts": drafts,
-            "safety_check": _safety_check(drafts, is_beauty),
+            "safety_check": _safety_check(drafts, requires_review, account_id),
             "created_at": _now_jst(),
             "mock": False,
-            "note": "beauty_account は常に WAITING_REVIEW です。" if is_beauty else "",
+            "note": "account policy requires WAITING_REVIEW." if requires_review else "",
         }
 
     def _generate_drafts(
@@ -180,7 +214,7 @@ class OriginalHypothesisGenerator:
                 "platform": platform,
                 "account_id": account_id,
                 **draft,
-                "status": "WAITING_REVIEW" if account_id == "beauty_account" else "DRAFT",
+                "status": "WAITING_REVIEW" if str(managed_account(account_id).get("review_policy", "")) != "autonomous_low_risk" else "DRAFT",
                 "generation_mode": "original_hypothesis",
                 "safety_checked": True,
             })
@@ -266,7 +300,7 @@ class OriginalHypothesisGenerator:
                 "platform": platform,
                 "account_id": account_id,
                 **draft_content,
-                "status": "WAITING_REVIEW" if account_id == "beauty_account" else "DRAFT",
+                "status": "WAITING_REVIEW" if str(managed_account(account_id).get("review_policy", "")) != "autonomous_low_risk" else "DRAFT",
                 "generation_mode": "original_hypothesis",
                 "safety_checked": True,
                 "mock": True,
@@ -275,13 +309,12 @@ class OriginalHypothesisGenerator:
         return drafts
 
 
-def _safety_check(drafts: list[dict], is_beauty: bool) -> dict[str, Any]:
+def _safety_check(drafts: list[dict], requires_review: bool, account_id: str) -> dict[str, Any]:
     passed = True
     notes = []
 
-    if is_beauty:
-        notes.append("beauty_account: 常にWAITING_REVIEW。自動投稿不可。")
-        passed = True  # beauty は WAITING_REVIEW だが safety check は pass
+    if requires_review:
+        notes.append(f"{account_id}: account policy requires WAITING_REVIEW.")
 
     for d in drafts:
         text = d.get("text", "")
@@ -291,6 +324,7 @@ def _safety_check(drafts: list[dict], is_beauty: bool) -> dict[str, Any]:
 
     return {
         "passed": passed,
-        "is_beauty_account": is_beauty,
+        "requires_human_review": requires_review,
+        "is_beauty_account": account_id == "beauty_account",
         "notes": notes,
     }

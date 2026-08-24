@@ -1,0 +1,18 @@
+{
+  "schema_version": "registered_source_rights_v1",
+  "decision_id": "v1_final_owner_authorization_20260824",
+  "evidence_type": "owner_attestation",
+  "evidence_reference": "SNS Growth Engine V1 FINAL PRODUCTION CLOSURE",
+  "approved_by": "owner",
+  "approved_at": "2026-08-24T00:00:00+09:00",
+  "target_accounts": ["night_scout", "liver_manager", "beauty_account"],
+  "canonical_manifest": "config/source_accounts/owner_reference_sources_20260817.json",
+  "rights_status": "approved_creator_clip",
+  "permission_status": "approved",
+  "media_usage_mode": "direct_and_clip",
+  "permission_scope": ["download", "store_in_cloudinary", "repost_original_media", "transcribe", "analyse", "cut", "repost_clip", "generate_new_caption", "edit"],
+  "allowed_platforms": ["threads"],
+  "required_provenance": ["registered_source_id", "canonical_post_url", "external_post_id", "original_author_match", "media_hash"],
+  "third_party_repost_permission_inheritance": false,
+  "x_publish_enabled": false
+}

@@ -38,6 +38,7 @@ from publisher_delivery_contract import delivery_idempotency_key, retry_disposit
 from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
+from accounts.managed_accounts import account_choices, account_status, require_account_match  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
 # WAITING_REVIEW はレビュー待ち（人間が approve_queue.py で READY に昇格させるまで投稿不可）、
@@ -686,6 +687,13 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     account_id = str(queue_row.get("account_id", ""))
     queue_id = str(queue_row.get("queue_id", ""))
 
+    try:
+        require_account_match(account_id, queue_row)
+    except ValueError as exc:
+        return {"status": "BLOCKED", "reason": str(exc), "queue_id": queue_id}
+    if account_status(account_id) == "CREDENTIAL_PENDING" and not dry_run:
+        return {"status": "BLOCKED", "reason": "CREDENTIAL_PENDING", "queue_id": queue_id}
+
     social_rows = records(client, "social_derivatives")
     draft_rows = records(client, "drafts")
     posted_rows = records(client, "posted_results")
@@ -1152,7 +1160,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Process Threads queue rows safely")
-    parser.add_argument("--account-id", choices=["night_scout", "liver_manager", "beauty_account"], help="Target account")
+    parser.add_argument("--account-id", choices=account_choices(), help="Target account")
     parser.add_argument("--dry-run", action="store_true", help="Validate only; no post or Sheets mutation")
     parser.add_argument("--confirm-real-post", action="store_true", help="Required for real post")
     parser.add_argument("--max-posts", type=int, default=1, help="Max posts to process. Default 1")

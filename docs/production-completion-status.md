@@ -1157,3 +1157,16 @@ This section supersedes older statements that media scheduling is OFF.
 | Autonomous media preparation | GATED | Existing publishers can consume approved READY inventory; broad download/cut/upload activation remains off |
 
 Post-merge production proof still requires real permalinks and Sheets/metrics read-after-write evidence. A green workflow without a permalink is not posting proof.
+## 2026-08-24 V1 closure status
+
+| Area | Code status | Production evidence |
+|---|---|---|
+| Managed accounts | PASS: registry-driven Night/Liver/Beauty + credential-pending TikTok Shop | Existing three text canaries are recorded; TikTok Shop identity is pending |
+| Account isolation | PASS: fail-closed namespace, credential and adversarial mixed-record tests | Recheck per acceptance run |
+| Direct reference media | PASS: registered-source provenance, bounded acquisition, AV, Cloudinary, exact review queue and publisher path | One fresh route canary per existing account still required |
+| Approved source clip | PASS: full-content/transcript evidence, non-overlap segment, ffmpeg, geometry preservation, Cloudinary and exact queue path | One fresh route canary per existing account still required |
+| Metrics / PDCA | PASS: 24h/72h/168h scheduling and account-scoped MEASURED-only learning | New media result windows are naturally pending |
+| TikTok Shop | PASS substrate: persona, voice/fact/CTA/review/KPI/onboarding | `CREDENTIAL_PENDING`; no fake account or post |
+| X publish | Intentionally disabled | Out of scope |
+
+`V1_PRODUCTION_COMPLETE` must not be asserted until the bounded six-post media acceptance has real permalink/read-after-write/metrics evidence and scheduled media is activated afterward. Until then the accurate state is code-ready with production acceptance pending.

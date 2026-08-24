@@ -45,8 +45,11 @@ def main() -> int:
     checks.append(("apply+confirm は WILL_WRITE", p3["status"] == "WILL_WRITE"))
     checks.append(("WILL_WRITE で --no-dry-run 付与", "--no-dry-run" in p3["delegate_argv"]))
 
-    checks.append(("beauty 向けは BLOCKED",
-                   mod.build_plan(_args(target_account="beauty_account"))["status"] == "BLOCKED"))
+    beauty = mod.build_plan(_args(target_account="beauty_account"))
+    checks.append(("beauty source import is managed and review-gated",
+                   beauty["status"] == "PLAN_ONLY"
+                   and beauty["safety"]["requires_human_review"] is True
+                   and beauty["safety"]["media_download"] is False))
     checks.append(("url 空は BLOCKED", mod.build_plan(_args(url=""))["status"] == "BLOCKED"))
     checks.append(("委譲先は add_source_candidate", p["delegate_script"] == "scripts/add_source_candidate.py"))
 

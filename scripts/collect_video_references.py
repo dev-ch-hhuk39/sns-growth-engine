@@ -166,7 +166,8 @@ def main() -> int:
     parser.add_argument("--metadata-adapter", default="auto", choices=["auto", "public", "yt-dlp"])
     parser.add_argument("--fetch-transcript", action="store_true")
     parser.add_argument("--rights-status", default=THIRD_PARTY_REFERENCE_ONLY)
-    parser.add_argument("--account-id", default="night_scout", choices=["night_scout", "liver_manager", "beauty_account"])
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", default="night_scout", choices=account_choices())
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-collect", action="store_true")

@@ -15,7 +15,10 @@ def main() -> int:
     ok = (
         "tiktok" in REFERENCE_PLATFORMS
         and "tiktok" in PHYSICAL_MEDIA_PLATFORMS
-        and not tiktok_media_rows
+        and bool(tiktok_media_rows)
+        and all(row.get("discovery_status") == "TIKTOK_ACCOUNT_LIMITED_MANUAL_SAFE_PLAN" for row in tiktok_media_rows)
+        and plan["limits"]["initial_source_scan_limit"] <= 50
+        and plan["limits"]["max_total_new_videos_per_run"] <= 20
         and route["primary"] == "tiktok_public_embed"
         and route.get("fallbacks") == ["tiktok_gallery_dl"]
     )

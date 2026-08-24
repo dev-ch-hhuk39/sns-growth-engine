@@ -1,5 +1,13 @@
 # Media Approved Pilot — 操作手順
 
+> Legacy compatibility note (2026-08-24): this document describes the older
+> `media-approved-pilot.yml`. New acceptance preparation uses
+> `.github/workflows/approved-source-clip-preparation.yml`. The canonical path
+> is dispatch-only, resolves an active account from `managed_accounts.json`,
+> processes at most one approved source clip, uses local transcription, and
+> stops before publication. Publication is performed only from an exact,
+> human-approved queue through the account's publisher workflow.
+
 - 作成日: 2026-06-24
 - 担当: Claude Code (Sonnet 4.6)
 

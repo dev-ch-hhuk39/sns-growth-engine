@@ -21,6 +21,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 
 
@@ -59,7 +62,7 @@ def auto_post_gate(args: argparse.Namespace, rules: dict[str, Any]) -> dict[str,
 
 
 def build_plan(args: argparse.Namespace, rules: dict[str, Any]) -> dict[str, Any]:
-    accounts = ["night_scout", "liver_manager"] if args.account_id == "all" else [args.account_id]
+    accounts = list(account_choices()) if args.account_id == "all" else [args.account_id]
     gate = auto_post_gate(args, rules)
     return {
         "status": "PLAN_ONLY" if not (args.apply and args.confirm_run) else "WILL_RUN",
@@ -79,7 +82,7 @@ def build_plan(args: argparse.Namespace, rules: dict[str, Any]) -> dict[str, Any
         "safety": {
             "x_fetch": False,
             "x_post": False,
-            "beauty_account": False,
+            "account_isolation": True,
             "video_download": False,
             "cloudinary_upload": False,
             "auto_post_separate_gate": True,
@@ -92,7 +95,7 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="plan only (default)")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-run", action="store_true")
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--auto-ready", action="store_true")
     parser.add_argument("--auto-post", action="store_true")
     parser.add_argument("--max-ready", type=int, default=1)
@@ -101,10 +104,6 @@ def main() -> int:
     parser.add_argument("--skip-real-post", action="store_true")
     parser.add_argument("--confirm-real-post", action="store_true")
     args = parser.parse_args()
-
-    if args.account_id == "beauty_account":
-        print(json.dumps({"status": "BLOCKED", "reason": "beauty_account is outside autopilot"}, ensure_ascii=False))
-        return 1
 
     rules = load_rules()
     plan = build_plan(args, rules)

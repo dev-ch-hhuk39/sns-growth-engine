@@ -1,0 +1,117 @@
+{
+  "account_id": "tiktok_shop",
+  "display_name": "売れるコマース研究所｜コマ研",
+  "status": "credential_pending",
+  "posting_schedule": {
+    "timezone": "Asia/Tokyo",
+    "daily_target_min": 2,
+    "daily_target_max": 2,
+    "scheduled_publish_enabled": false,
+    "activation_requires_credentials": true,
+    "slots": [
+      {
+        "slot_id": "tiktok_shop_1045",
+        "target_jst": "10:45",
+        "cron_utc": "45 1 * * *",
+        "post_type": "new_text_generation",
+        "fallback_chain": [],
+        "theme": "beginner_or_creator_research"
+      },
+      {
+        "slot_id": "tiktok_shop_1945",
+        "target_jst": "19:45",
+        "cron_utc": "45 10 * * *",
+        "post_type": "reference_text_generation",
+        "fallback_chain": [],
+        "theme": "video_or_live_research"
+      }
+    ]
+  },
+  "platforms": ["threads"],
+  "persona": "TikTok Shopで売れる人・商品・動画・LIVEを調べ、試し、分かったことを共有する実務メディアの一貫した運営者。",
+  "target_audience": "TikTok Shop初心者、収益化したいクリエイター、出店・LIVE Commerceを検討する人",
+  "primary_goal": "フォローと顧客言語の蓄積",
+  "secondary_goals": ["実務ノウハウの提供", "初心者とクリエイターの課題把握", "将来のリードマグネット検証"],
+  "tone": "友達・少し詳しい先輩とデータオタクの距離感。casualで実務的、仮説と事実を分ける。",
+  "first_person": "自分",
+  "content_categories": ["tiktok_shop_beginner", "creator_monetization", "product_research", "video_research", "live_commerce", "case_data", "market_news"],
+  "forbidden_themes": ["情報商材型副業訴求", "無根拠な収益保証", "TikTok公式との誤認誘発", "他者実績の自社実績化", "古い仕様の断定"],
+  "forbidden_keywords": ["誰でも稼げる", "簡単に稼げる", "月収保証", "今やらないと損", "フォロワー0でも即稼げる", "公式パートナー"],
+  "platform_policy": {"threads": {"char_limit_soft": 500, "char_limit_hard": 800, "cta_required": false, "hashtag_count_max": 3}},
+  "threads_credentials": {
+    "handle": "",
+    "user_id": "",
+    "handle_secret_name": "THREADS_HANDLE_TIKTOK_SHOP",
+    "access_token_secret_name": "THREADS_ACCESS_TOKEN_TIKTOK_SHOP",
+    "user_id_secret_name": "THREADS_USER_ID_TIKTOK_SHOP",
+    "oauth_status": "CREDENTIAL_PENDING"
+  },
+  "cta_policy": {"phase": 1, "phase_config": "config/tiktok_shop_policy.json", "line_url": "", "line_cta_allowed": false},
+  "reference_source_policy": {"manifest": "config/source_accounts/tiktok_shop_sources.json", "global_fact_allowed": true, "cross_account_learning": false},
+  "video_policy": {"enabled": true, "clip_length_seconds": 45, "transcription_required": true, "preserve_aspect_ratio": true},
+  "thread_series_policy": {"enabled": true, "max_posts_per_series": 6, "default_post_count": 4, "roles": ["observation", "hypothesis", "evidence", "action"]},
+  "generation": {
+    "domain_terms": ["TikTok Shop", "商品", "動画", "LIVE", "クリエイター", "初心者", "販売", "ショップ"],
+    "signals": [
+      "TikTok Shop初心者が商品を選ぶ前に需要と競合動画を比べる",
+      "クリエイターが商品紹介動画の冒頭で使用場面を先に見せる",
+      "LIVE販売で質問が集まる箇所を次の商品説明へ反映する",
+      "販売動画を複数見て共通するフックと離脱しやすい説明を分ける",
+      "市場データは公式情報と第三者推定を区別して検証する"
+    ],
+    "topic_keywords": {
+      "beginner": ["初心者", "出店"],
+      "creator": ["クリエイター", "商品紹介"],
+      "live": ["LIVE", "質問"],
+      "video": ["動画", "フック", "冒頭"],
+      "evidence": ["公式", "推定", "市場データ"]
+    },
+    "components": {
+      "beginner": {
+        "hooks": ["TikTok Shopを始める時、最初の商品選びで結構差が出る。", "TikTok Shop初心者ほど、売りたい商品より比較しやすい商品から見る方がいい。"],
+        "bodies": ["需要があるか、似た商品の動画が何本あるか、説明しやすい使用場面があるか。この三つを先に見ると判断しやすい。", "商品名だけで決めず、誰のどんな困りごとを解決するかまで言葉にすると、動画の方向も決めやすい。"]
+      },
+      "creator": {
+        "hooks": ["商品紹介動画を何本か見ると、冒頭で使う場面を見せる動画がかなり共通してた。", "TikTok Shopの動画は、説明を始める前に見る理由を作れるかが大事。"],
+        "bodies": ["商品の特徴を並べるより、使う前の困りごとと使った直後の変化を短く見せる。たぶん最初に自分ごと化できるかが理由。", "最初の数秒で対象者と使用場面が伝わるかを見て、説明は一つに絞る。まだ検証中だけど、この順番は比較しやすい。"]
+      },
+      "live": {
+        "hooks": ["TikTok ShopのLIVEは、質問が止まった場所に次の説明のヒントがある。", "LIVE販売を見ていると、商品説明より質問への返し方で滞在が変わる場面がある。"],
+        "bodies": ["サイズ、使い方、違いの質問を記録し、次回は聞かれる前に短く答える。たぶん迷いを減らせる順番が重要。", "同じ質問が続くなら説明不足の仮説を置き、次のLIVEで一つだけ順番を変えて反応を見る。"]
+      },
+      "video": {
+        "hooks": ["売れている商品動画を比べる時、再生数だけを見ると理由を外しやすい。", "TikTok Shopの動画研究は、伸びた一本より複数動画の共通点を見る方が面白い。"],
+        "bodies": ["冒頭、商品が出る秒数、説明の数、コメントで聞かれていることを並べる。共通する要素と例外を分けると次に試しやすい。", "同じ商品でも切り口が違う動画を見て、離脱しにくい順番を仮説にする。一本の結果だけでは決めない。"]
+      },
+      "evidence": {
+        "hooks": ["TikTok Shopの数字を見る時、公式データと市場推定は分けて読みたい。", "市場の伸びを説明する数字ほど、誰がいつ出したかまで確認したい。"],
+        "bodies": ["公式発表は確認できた事実として扱い、調査会社の販売数字は推定として出典と時点を残す。この区別がないと判断を誤りやすい。", "一つの販売数字で結論を出さず、出典、対象期間、集計範囲を確認する。足りない部分は仮説のまま置く。"]
+      },
+      "general": {
+        "hooks": ["TikTok Shopを調べる時、売れた結果より再現できる行動を探したい。"],
+        "bodies": ["商品、動画、LIVEのどこで反応が変わったかを分け、次に試せる一つへ落とす。たぶん比較できる形で残すのが大事。"]
+      }
+    },
+    "closings": {
+      "beginner": ["初心者なら自分は、候補を三つ並べてこの基準から確認する。"],
+      "creator": ["次の動画では、自分は冒頭だけ変えて反応を比べる。"],
+      "live": ["次のLIVEでは、繰り返された質問を一つ先回りして試す。"],
+      "video": ["自分は共通点を一つだけ選び、次の動画で検証する。"],
+      "evidence": ["断定せず、確認できた事実と仮説を分けてもう少し見る。"],
+      "general": ["自分は一つずつ試して、結果がそろってから判断する。"]
+    },
+    "quality_topic_map": {"beginner": "beginner_entry", "creator": "creator_video", "live": "live_commerce", "video": "video_research", "evidence": "evidence_literacy", "general": "shop_research"},
+    "topic_taxonomy": {
+      "beginner_entry": ["初心者", "商品選び", "需要", "候補", "比較しやすい"],
+      "creator_video": ["商品紹介", "冒頭", "使用場面", "自分ごと化"],
+      "live_commerce": ["LIVE", "質問", "説明", "次回", "先回り"],
+      "video_research": ["売れている商品動画", "複数動画", "再生数", "共通点", "離脱", "検証"],
+      "evidence_literacy": ["公式", "推定", "出典", "時点", "事実", "仮説", "数字"]
+    },
+    "related_topics": {},
+    "concepts": {"beginner": ["product_selection", "demand"], "creator": ["hook", "use_case"], "live": ["questions", "explanation"], "video": ["comparison", "retention"], "evidence": ["attribution", "freshness"], "general": ["hypothesis", "experiment"]},
+    "cta_intent": "research_follow_up"
+  },
+  "learning_policy": {"min_results_for_learning": 15, "auto_activate_rules": false, "account_scope": "tiktok_shop", "strict_account_isolation": true, "cross_account_learning": false},
+  "safety_policy": {"requires_human_review_before_post": true, "allow_real_post": false, "min_publish_score": 85, "brand_risk_threshold": 15}
+}

@@ -119,14 +119,10 @@ def load_account_config(account_id: str) -> AccountConfig:
 
 
 def get_all_account_ids() -> list[str]:
-    """config/accounts/ 以下の全アカウントIDを返す。"""
-    if not os.path.isdir(_ACCOUNTS_DIR):
-        return []
-    return [
-        f[:-5]
-        for f in sorted(os.listdir(_ACCOUNTS_DIR))
-        if f.endswith(".json") and not f.startswith("_")
-    ]
+    """Return account IDs in canonical registry order."""
+    from accounts.managed_accounts import managed_account_ids
+
+    return list(managed_account_ids())
 
 
 def is_draft_only(account_id: str) -> bool:

@@ -1,0 +1,37 @@
+{
+  "schema_version": "tiktok_shop_sources_v1",
+  "account_id": "tiktok_shop",
+  "sources": [
+    {"source_id": "src_ts_voice_threads_hanakin_saize", "source_name": "華金サイゼ Voice Reference", "source_platform": "threads", "source_handle": "@hanakin_saize", "source_url": "https://www.threads.com/@hanakin_saize", "target_account_id": "tiktok_shop", "target_account_ids": ["tiktok_shop"], "source_type": "account", "source_role": "voice_reference", "active": true, "fetch_enabled": true, "collection_method": "threads_cli_public", "max_items_per_run": 20, "rights_policy": "reference_only", "rights_status": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "usage_scope": "voice_reference", "x_read_only": false},
+    {"source_id": "src_ts_voice_x_kensuu", "source_name": "けんすう Voice Reference", "source_platform": "x", "source_handle": "@kensuu", "source_url": "https://x.com/kensuu", "target_account_id": "tiktok_shop", "target_account_ids": ["tiktok_shop"], "source_type": "account", "source_role": "voice_reference", "active": true, "fetch_enabled": true, "collection_method": "x_api_read_only", "max_items_per_run": 20, "rights_policy": "reference_only", "rights_status": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "usage_scope": "voice_reference", "x_read_only": true},
+    {"source_id": "src_ts_voice_x_kurosawa", "source_name": "黒澤友貴 Voice Reference", "source_platform": "x", "source_handle": "@KurosawaTomoki", "source_url": "https://x.com/KurosawaTomoki", "target_account_id": "tiktok_shop", "target_account_ids": ["tiktok_shop"], "source_type": "account", "source_role": "voice_reference", "active": true, "fetch_enabled": true, "collection_method": "x_api_read_only", "max_items_per_run": 20, "rights_policy": "reference_only", "rights_status": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "usage_scope": "voice_reference", "x_read_only": true},
+    {"source_id": "src_ts_voice_x_fladdict", "source_name": "深津貴之 Voice Reference", "source_platform": "x", "source_handle": "@fladdict", "source_url": "https://x.com/fladdict", "target_account_id": "tiktok_shop", "target_account_ids": ["tiktok_shop"], "source_type": "account", "source_role": "voice_reference", "active": true, "fetch_enabled": true, "collection_method": "x_api_read_only", "max_items_per_run": 20, "rights_policy": "reference_only", "rights_status": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "usage_scope": "voice_reference", "x_read_only": true},
+    {"source_id": "src_ts_voice_threads_unoki", "source_name": "うのき Voice Reference", "source_platform": "threads", "source_handle": "@u_n_o_k_i", "source_url": "https://www.threads.com/@u_n_o_k_i", "target_account_id": "tiktok_shop", "target_account_ids": ["tiktok_shop"], "source_type": "account", "source_role": "voice_reference", "active": true, "fetch_enabled": true, "collection_method": "threads_cli_public", "max_items_per_run": 20, "rights_policy": "reference_only", "rights_status": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "usage_scope": "voice_reference", "x_read_only": false},
+    {"source_id": "src_ts_voice_x_sogitani", "source_name": "枌谷力 Voice Reference", "source_platform": "x", "source_handle": "@sogitani_baigie", "source_url": "https://x.com/sogitani_baigie", "target_account_id": "tiktok_shop", "target_account_ids": ["tiktok_shop"], "source_type": "account", "source_role": "voice_reference", "active": true, "fetch_enabled": true, "collection_method": "x_api_read_only", "max_items_per_run": 20, "rights_policy": "reference_only", "rights_status": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "usage_scope": "voice_reference", "x_read_only": true},
+    {"source_id": "src_ts_voice_x_tsuji", "source_name": "辻正浩 Voice Reference", "source_platform": "x", "source_handle": "@tsuj", "source_url": "https://x.com/tsuj", "target_account_id": "tiktok_shop", "target_account_ids": ["tiktok_shop"], "source_type": "account", "source_role": "voice_reference", "active": true, "fetch_enabled": true, "collection_method": "x_api_read_only", "max_items_per_run": 20, "rights_policy": "reference_only", "rights_status": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "usage_scope": "voice_reference", "x_read_only": true}
+  ],
+  "voice_references": [
+    {"name": "華金サイゼ", "platform": "threads", "url": "https://www.threads.com/@hanakin_saize", "status": "REGISTERED", "scope": "voice_reference"},
+    {"name": "けんすう", "platform": "x", "url": "https://x.com/kensuu", "status": "REGISTERED", "scope": "voice_reference"},
+    {"name": "黒澤友貴", "platform": "x", "url": "https://x.com/KurosawaTomoki", "status": "REGISTERED", "scope": "voice_reference"},
+    {"name": "深津貴之", "platform": "x", "url": "https://x.com/fladdict", "status": "REGISTERED", "scope": "voice_reference"},
+    {"name": "うのき", "platform": "threads", "url": "https://www.threads.com/@u_n_o_k_i", "status": "REGISTERED", "scope": "voice_reference"},
+    {"name": "枌谷力", "platform": "x", "url": "https://x.com/sogitani_baigie", "status": "REGISTERED", "scope": "voice_reference"},
+    {"name": "辻正浩", "platform": "x", "url": "https://x.com/tsuj", "status": "REGISTERED", "scope": "voice_reference"}
+  ],
+  "fact_sources": [
+    {"name": "TikTok Shop Japan / TikTok Newsroom", "status": "PENDING_CANONICAL_ID", "scope": "global_fact", "evidence_class": "official_fact"},
+    {"name": "TikTok Shop Seller Academy / University", "status": "PENDING_CANONICAL_ID", "scope": "global_fact", "evidence_class": "official_fact"},
+    {"name": "TikTok Shop Japan Creator official", "status": "PENDING_CANONICAL_ID", "scope": "global_fact", "evidence_class": "official_fact"},
+    {"name": "TikTok for Business", "status": "PENDING_CANONICAL_ID", "scope": "global_fact", "evidence_class": "official_fact"},
+    {"name": "Kalodata Japan", "status": "PENDING_CANONICAL_ID", "scope": "tiktok_shop", "evidence_class": "market_estimate"},
+    {"name": "Nint EC Social", "status": "PENDING_CANONICAL_ID", "scope": "tiktok_shop", "evidence_class": "market_estimate"}
+  ],
+  "watch_sets": {
+    "japanese_creators": ["世奈", "燕チャンネル", "595ちゃんねる", "mew.+ライブチャンネル", "luana.beauty.05", "ヒゲちゃんねる。"],
+    "seller_brand": ["Gap Japan", "Anker Japan", "Magcubicjp × ガンギマリニキ"],
+    "operators": ["studio15", "TORIHADA / CREATORS POST", "PLAN-B", "いつも", "Offbeat"],
+    "global_hypothesis": ["@chavonsade", "@dcfitness1", "@stylesbyfaithhoward", "@rightguysreview"]
+  },
+  "provenance_policy": {"overseas_means_hypothesis": true, "japan_data_required_for_validation": true, "never_upgrade_estimate_to_official": true}
+}

@@ -15,10 +15,11 @@ from typing import Any
 
 from text_policy import check_text_policy
 from generation.source_provenance import normalize_source_context, reference_bridge_signal, validate_source_claims
+from accounts.managed_accounts import managed_account_ids
 
 ROOT = Path(__file__).resolve().parents[2]
 RULES_PATH = ROOT / "config" / "post_generation_rules.json"
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = set(managed_account_ids())
 TARGET_PLATFORM = "threads"
 
 
@@ -53,12 +54,12 @@ def _load_generation_contract(account_id: str) -> dict[str, Any]:
 def _build_system_prompt(account_id: str, source_context: dict[str, Any] | None = None) -> str:
     contract = _load_generation_contract(account_id)
     source = normalize_source_context(source_context)
-    canonical_voice_rule = (
-        "For liver_manager: if first person is needed, use 私 only; never 僕/俺. Use a gentle manager/coaching voice with concrete LIVE action plus a reason, prefer line breaks over repeated masculine full-stop assertions, and stay consistent with the canonical persona. "
-        if account_id == "liver_manager"
-        else
-        "For night_scout: use 僕 naturally, speak from practical scout field experience, help night-work women make decisions, and avoid recruiter-ad copy or preachy language. "
-    )
+    canonical_voice_rule = {
+        "liver_manager": "For liver_manager: if first person is needed, use 私 only; never 僕/俺. Use a gentle manager/coaching voice with concrete LIVE action plus a reason, prefer line breaks over repeated masculine full-stop assertions, and stay consistent with the canonical persona. ",
+        "night_scout": "For night_scout: use 僕 naturally, speak from practical scout field experience, help night-work women make decisions, and avoid recruiter-ad copy or preachy language. ",
+        "beauty_account": "For beauty_account: use 私 only when natural, write like one knowledgeable female friend, keep the topic concrete, and never invent product-use experience or medical results. ",
+        "tiktok_shop": "For tiktok_shop: normally use 自分 or omit first person, write as a practical commerce researcher, distinguish observation from hypothesis, and never fabricate sales, GMV, or personal results. ",
+    }[account_id]
     provenance_rule = (
         "The source is third-party reference media. Treat the post as commentary, agreement, or a lesson from the attached video. "
         "Never imply that the source agency, people, program, numbers, achievements, or exact process belong to the target account. "

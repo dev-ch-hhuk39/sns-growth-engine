@@ -175,6 +175,16 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "window_hours", "scheduled_for", "status", "attempt_count",
         "last_attempt_at", "last_error", "created_at", "updated_at",
     ],
+    # Account-scoped raw customer language. Cross-account reuse is forbidden;
+    # only aggregate global facts use the separate source evidence layer.
+    "customer_language": [
+        "language_id", "account_id", "audience_segment",
+        "tiktok_follower_status", "shop_experience", "pain_category",
+        "raw_customer_language", "source_post_id", "comment_source",
+        "engagement_signal", "frequency", "first_seen_at", "last_seen_at",
+        "converted_to_content", "converted_to_lead_magnet",
+        "converted_to_offer", "research_question", "created_at", "updated_at",
+    ],
     # カテゴリ別パフォーマンス集計。AIが投稿比率を調整するために参照。
     "category_scores": [
         "category_id", "account_id", "category_name",
@@ -795,6 +805,7 @@ TAB_DISPLAY_NAMES: dict[str, str] = {
     "source_videos":                  "参照元動画",
     "metric_snapshots":                "計測スナップショット",
     "metrics_collection_jobs":         "計測回収予約",
+    "customer_language":               "顧客言語DB",
     "video_transcripts":              "動画文字起こし",
     "video_clip_candidates":          "動画クリップ候補",
     "transcription_runs":             "文字起こし実行履歴",

@@ -79,14 +79,19 @@
     "default_post_count": 4,
     "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
   },
+  "generation": {
+    "domain_terms": ["配信", "ライバー", "リスナー", "初見", "コメント", "ギフト", "事務所", "LIVE"]
+  },
   "learning_policy": {
     "min_results_for_learning": 10,
     "auto_activate_rules": false
   },
   "safety_policy": {
     "requires_human_review_before_post": true,
-    "allow_real_post": false,
-    "min_publish_score": 65,
-    "brand_risk_threshold": 25
+    "allow_real_post": true,
+    "min_publish_score": 85,
+    "brand_risk_threshold": 10,
+    "activation_source": "managed_accounts_registry",
+    "media_requires_exact_human_approved_queue": true
   }
 }

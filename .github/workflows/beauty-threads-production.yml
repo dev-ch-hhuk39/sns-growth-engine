@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "prepare creates WAITING_REVIEW; publish processes one human-approved READY row"
+        description: "prepare creates WAITING_REVIEW; publish/publish_media processes one human-approved READY row"
         required: true
         default: dry_run
         type: choice
-        options: [dry_run, prepare, publish]
+        options: [dry_run, prepare, publish, publish_media]
       slot_index:
         description: "0 = 11:30 JST, 1 = 20:30 JST"
         required: true
@@ -21,6 +21,16 @@ on:
         default: "false"
         type: choice
         options: ["false", "true"]
+      media_route:
+        description: "Exact media lane used only by publish_media"
+        required: false
+        default: direct_reference_media
+        type: choice
+        options: [direct_reference_media, approved_source_clip]
+      queue_id:
+        description: "Exact human-approved READY queue ID required by publish_media"
+        required: false
+        default: ""
   schedule:
     # Candidate preparation: 09:30 / 18:30 JST
     - cron: "30 0 * * *"
@@ -97,6 +107,13 @@ jobs:
           else
             echo "BEAUTY_SLOT_ID=beauty_2030" >> "$GITHUB_ENV"
           fi
+          if [ "$ACTION" = "publish_media" ]; then
+            if [ "${{ github.event.inputs.media_route }}" = "approved_source_clip" ]; then
+              echo "BEAUTY_SLOT_ID=beauty_clip_review" >> "$GITHUB_ENV"
+            else
+              echo "BEAUTY_SLOT_ID=beauty_direct_media_review" >> "$GITHUB_ENV"
+            fi
+          fi
 
       - name: Guard required secrets
         run: |
@@ -106,13 +123,17 @@ jobs:
               exit 1
             fi
           done
-          if [ "$ACTION" = "publish" ] && [ "$BEAUTY_ACTIVATION_APPROVED" = "true" ]; then
+          if { [ "$ACTION" = "publish" ] || [ "$ACTION" = "publish_media" ]; } && [ "$BEAUTY_ACTIVATION_APPROVED" = "true" ]; then
             for name in THREADS_HANDLE_BEAUTY_ACCOUNT THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT THREADS_USER_ID_BEAUTY_ACCOUNT; do
               if [ -z "${!name}" ]; then
                 echo "[BLOCKED] Beauty Threads credential is missing: $name"
                 exit 1
               fi
             done
+          fi
+          if [ "$ACTION" = "publish_media" ] && [ -z "${{ github.event.inputs.queue_id }}" ]; then
+            echo "[BLOCKED] publish_media requires exact queue_id"
+            exit 1
           fi
 
       - name: Repository-wide Sheets diagnostic
@@ -156,14 +177,34 @@ jobs:
           BEAUTY_PRODUCTION_ENABLED: "true"
         run: python3 scripts/process_threads_queue.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --business-date-jst "$BUSINESS_DATE_JST" --max-posts 1 --confirm-real-post
 
+      - name: Strict Beauty media queue and publisher preflight
+        if: env.ACTION == 'publish_media' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
+        run: python3 scripts/process_threads_queue.py --account-id beauty_account --queue-id "${{ github.event.inputs.queue_id }}" --max-posts 1 --dry-run
+
+      - name: Publish one exact human-approved Beauty media row
+        if: >-
+          env.ACTION == 'publish_media' &&
+          env.BEAUTY_ACTIVATION_APPROVED == 'true' &&
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.confirm_publish == 'true'
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+          ALLOW_REAL_THREADS_VIDEO_POST: "true"
+          ALLOW_MEDIA_POSTS: "true"
+          ALLOW_THREADS_CAROUSEL: "true"
+          ALLOW_THREADS_MIXED_CAROUSEL: "false"
+          ALLOW_REAL_X_POST: "false"
+        run: python3 scripts/process_threads_queue.py --account-id beauty_account --queue-id "${{ github.event.inputs.queue_id }}" --max-posts 1 --confirm-real-post
+
       - name: Block unconfirmed manual publish
-        if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_publish != 'true'
+        if: (env.ACTION == 'publish' || env.ACTION == 'publish_media') && env.BEAUTY_ACTIVATION_APPROVED == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_publish != 'true'
         run: |
           echo "[BLOCKED] manual publish requires confirm_publish=true"
           exit 1
 
       - name: Report inactive publish gate
-        if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED != 'true'
+        if: (env.ACTION == 'publish' || env.ACTION == 'publish_media') && env.BEAUTY_ACTIVATION_APPROVED != 'true'
         run: echo "[NO_POST] Beauty activation is not approved; candidate preparation remains available."
 
       # Candidate preparation performs queue-level read-after-write. The

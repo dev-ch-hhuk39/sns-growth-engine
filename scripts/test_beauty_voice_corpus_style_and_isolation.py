@@ -237,8 +237,9 @@ def main() -> None:
     assert "beauty_account" in media_config["allowed_target_account_ids"]
     assert "beauty_account" in media_config["asset_inventory_targets"]
     direct_media_source = (ROOT / "scripts/run_direct_reference_media_pipeline.py").read_text(encoding="utf-8")
-    assert '"beauty_account": "beauty_direct_media_review"' in direct_media_source
-    assert 'choices=["night_scout", "liver_manager", "beauty_account"]' in direct_media_source
+    assert 'route_slot_id(account_id, "direct_reference_media")' in direct_media_source
+    assert "account_choices" in direct_media_source
+    assert "choices=account_choices()" in direct_media_source
 
     required_voice_columns = {
         "voice_style_profile_version", "style_fingerprint_status", "style_fingerprint_score",
@@ -275,9 +276,12 @@ def main() -> None:
     assert len(legacy) == 3 and all(not row.get("target_account_ids") for row in legacy)
 
     selected_sources_rows, blocked = selected_sources("beauty_account", "all", reference_only=True)
-    assert {row["source_id"] for row in selected_sources_rows} == voice_ids
-    assert blocked == []
-    assert all(row.get("rights_policy") == "reference_only" for row in selected_sources_rows)
+    selected_reference_ids = {row["source_id"] for row in selected_sources_rows}
+    assert voice_ids <= selected_reference_ids
+    assert all(row.get("reason") == "x_read_only_not_approved" for row in blocked)
+    assert not ({row["source_id"] for row in blocked} & selected_reference_ids)
+    assert all(row.get("target_account_ids") == ["beauty_account"] for row in selected_sources_rows)
+    assert all(row.get("rights_policy") in {"reference_only", "approved_creator_clip"} for row in selected_sources_rows)
     assert all(row.get("can_reuse_media") is False for row in selected_sources_rows)
     assert all(row.get("active") is True for row in selected_sources_rows)
     assert all(row.get("fetch_enabled") is True for row in selected_sources_rows)
@@ -288,11 +292,17 @@ def main() -> None:
         if row.get("source_platform") == "x"
     )
     selected_media_rows, _ = selected_sources("beauty_account", "all", reference_only=False)
-    assert selected_media_rows == []
+    assert selected_media_rows
+    assert all(row.get("target_account_ids") == ["beauty_account"] for row in selected_media_rows)
+    assert all(row.get("rights_status") == "approved_creator_clip" for row in selected_media_rows)
+    assert all(row.get("permission_status") == "approved" for row in selected_media_rows)
+    assert all(row.get("permission_evidence_reference") for row in selected_media_rows)
+    assert all(row.get("provenance_required") is True for row in selected_media_rows)
+    assert all(row.get("original_author_match_required") is True for row in selected_media_rows)
     account_rows, _video_rows = source_rows()
     beauty_registry = [row for row in account_rows if row.get("target_account_id") == "beauty_account"]
     assert {row["source_id"] for row in beauty_registry if row["fetch_enabled"] == "true"} == voice_ids
-    assert all(row["can_reuse_media"] == "false" for row in beauty_registry)
+    assert all(row["target_account_id"] == "beauty_account" for row in beauty_registry)
 
     gate_source = (ROOT / "scripts/hybrid_ai_gate.py").read_text(encoding="utf-8")
     assert "pdca_internal_learning_exposed_in_public_text" in gate_source

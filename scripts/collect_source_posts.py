@@ -403,7 +403,8 @@ def _append_source_post_bundles(client: Any, rows: list[dict[str, Any]]) -> dict
 def main() -> int:
     parser = argparse.ArgumentParser(description="collect reference source posts safely")
     parser.add_argument("--platform", default="all", choices=["threads", "x", "youtube", "tiktok", "all"])
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--include-x", action="store_true")
     parser.add_argument("--source-id", action="append", default=[])
     parser.add_argument("--source-url", action="append", default=[], help="Ephemeral Threads source URL for small dry-run/approved tests")

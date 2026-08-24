@@ -11,7 +11,7 @@ WORKER = ROOT / "scripts/process_threads_queue.py"
 def main() -> int:
     src = WORKER.read_text(encoding="utf-8")
     checks = [
-        ("night_scout allowed account", '"night_scout"' in src),
+        ("night_scout allowed through managed registry", "account_choices" in src),
         ("beauty separately gated", "beauty_publish_gate" in src and "BEAUTY_PRODUCTION_ENABLED" in src),
         ("threads only", 'platform != "threads"' in src),
         ("confirm required", "--confirm-real-post required" in src),

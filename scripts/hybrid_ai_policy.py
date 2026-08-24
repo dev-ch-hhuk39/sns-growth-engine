@@ -2,10 +2,18 @@
 """Pure routing policy for deterministic and Gemini-assisted post paths."""
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
 from dataclasses import asdict, dataclass
 from typing import Any, Iterable, Mapping
 
-TARGET_ACCOUNTS = {"night_scout", "liver_manager", "beauty_account"}
+from accounts.managed_accounts import managed_account_ids
+
+TARGET_ACCOUNTS = set(managed_account_ids())
 GATED_GENERATION_MODES = {
     "original_text",
     "reference_text",
@@ -22,6 +30,11 @@ GATED_GENERATION_MODES = {
     "beauty_pdca_text_generation",
     "beauty_direct_reference_media",
     "beauty_approved_source_clip",
+    "tiktok_shop_new_text_generation",
+    "tiktok_shop_reference_text_generation",
+    "tiktok_shop_pdca_text_generation",
+    "tiktok_shop_direct_reference_media",
+    "tiktok_shop_approved_source_clip",
 }
 
 
@@ -117,6 +130,7 @@ def decide_route(candidate: Mapping[str, Any]) -> AiRoute:
     if generation_mode in {
         "original_text", "reference_text", "metrics_driven_pdca_text", "reference_score_to_threads",
         "beauty_new_text_generation", "beauty_reference_text_generation", "beauty_pdca_text_generation",
+        "tiktok_shop_new_text_generation", "tiktok_shop_reference_text_generation", "tiktok_shop_pdca_text_generation",
     }:
         return AiRoute("new_text_generation", True, True, True, 3, "text_candidate_requires_fit_generation_and_review")
     return AiRoute("semantic_review", True, False, True, 2, "unknown_candidate_requires_classification_and_review")

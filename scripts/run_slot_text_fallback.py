@@ -20,10 +20,11 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
+from accounts.managed_accounts import account_choices  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from process_threads_queue import append_row, process_one, records  # noqa: E402
-from public_post_quality import final_public_post_validator, generate_reader_facing_post, public_preview, reader_facing_template_count  # noqa: E402
+from public_post_quality import final_public_post_validator, generate_production_post, public_preview, reader_facing_template_count  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
@@ -53,7 +54,13 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
     schedule_date = business_date(datetime.now(jst))
     template_count = max(1, reader_facing_template_count(account_id))
     index = ((sum(ord(char) for char in f"{account_id}|{slot_id}|{schedule_date}|{reason}") + attempt * 7) % template_count) + 1
-    text = generate_reader_facing_post(account_id, index=index)
+    generated = generate_production_post(
+        account_id,
+        batch_id=f"slot_fallback_{schedule_date}_{slot_id}",
+        content_type=str(slot["post_type"]),
+        attempt=index,
+    )
+    text = str(generated.get("public_post_text", ""))
     validation = final_public_post_validator(text, account_id)
     return {
         "status": "WILL_APPLY" if apply and validation["status"] == "PASS" else "PLAN_ONLY" if validation["status"] == "PASS" else "BLOCKED",
@@ -175,7 +182,7 @@ def execute(plan: dict[str, Any], client: SheetsClient, *, started: dict[str, An
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="post a named slot's safe text fallback")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--slot-id", required=True)
     parser.add_argument("--reason", default="media_asset_unavailable")
     parser.add_argument("--dry-run", action="store_true")

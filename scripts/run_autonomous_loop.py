@@ -18,6 +18,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "src"))
 
 from generate_threads_ideas_from_references import original_text_similarity_guard  # noqa: E402
 from content_slot_runs import build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
@@ -26,6 +27,7 @@ from generate_video_reference_posts import build_video_posts  # noqa: E402
 from prepare_pilot_sources import load_sources, select_pilot_sources  # noqa: E402
 from public_post_quality import generate_production_post, independent_account_order, final_public_post_validator, public_preview  # noqa: E402
 from content_schedule import TEXT_POST_TYPES, slot_by_id  # noqa: E402
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 CONFIG_FILE = ROOT / "config/autonomous_mode.json"
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
@@ -927,7 +929,7 @@ def build_results(args: argparse.Namespace, plan: dict[str, Any]) -> list[dict[s
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="run autonomous SNS growth loop")
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--dry-run", action="store_true", help="plan only (default)")
     parser.add_argument("--preflight", action="store_true", help="read-only production readiness check; never posts")
     parser.add_argument("--stop-before-post", action="store_true", help="apply score/generate only; exact-candidate Hybrid review and posting run separately")

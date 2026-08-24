@@ -16,6 +16,8 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "src"))
+from accounts.managed_accounts import account_choices  # noqa: E402
 from metrics_collection_schedule import build_metric_collection_jobs
 
 
@@ -29,7 +31,7 @@ def _load_input(path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="plan Threads metric collection jobs")
     parser.add_argument("--input-json", default="", help="offline posted_results/job fixture")
-    parser.add_argument("--account-id", choices=["all", "night_scout", "liver_manager"], default="all")
+    parser.add_argument("--account-id", choices=account_choices(include_all=True), default="all")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-metrics-schedule", action="store_true")

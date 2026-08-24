@@ -23,10 +23,13 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 CLI_NAME = "transcribe_video_reference"
 DELEGATE_SCRIPT = "scripts/transcribe_videos.py"
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = set(account_choices())
 
 
 def youtube_transcript_status() -> str:
@@ -62,8 +65,8 @@ def build_plan(args: argparse.Namespace, env: dict[str, str] | None = None) -> d
     env を引数で渡せるようにして、ALLOW_TRANSCRIPTION_API ゲートをテスト可能にする。
     """
     env = env if env is not None else dict(os.environ)
-    if args.account_id == "beauty_account":
-        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "beauty_account は対象外（draft_only）"}
+    if args.account_id not in ALLOWED_ACCOUNTS:
+        return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "managed account required"}
 
     env_allows_api = str(env.get("ALLOW_TRANSCRIPTION_API", "false")).strip().lower() == "true"
     # 実 API は env と CLI フラグの二重ゲート。
@@ -106,7 +109,7 @@ def build_plan(args: argparse.Namespace, env: dict[str, str] | None = None) -> d
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="transcribe video references (thin wrapper, gated)")
-    parser.add_argument("--account-id", default="night_scout", choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="night_scout", choices=account_choices())
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--apply", action="store_true", help="run delegate (needs --confirm-transcribe)")
     parser.add_argument("--confirm-transcribe", action="store_true")

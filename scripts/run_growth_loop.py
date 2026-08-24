@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from accounts.managed_accounts import account_choices  # noqa: E402
 
 
 def _run(cmd: list[str]) -> dict:
@@ -35,7 +38,7 @@ def _plan_from_real_collection(account_id: str, source_result: dict[str, Any]) -
     from score_reference_posts import build_scores
     from generate_threads_ideas_from_references import build_generation_rows
 
-    accounts = ["night_scout", "liver_manager"] if account_id == "all" else [account_id]
+    accounts = list(account_choices()) if account_id == "all" else [account_id]
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     plans: list[dict[str, Any]] = []
     total_scores = 0
@@ -93,15 +96,12 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-run", action="store_true")
-    parser.add_argument("--account-id", default="all", choices=["all", "night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--metric-post-url", action="append", default=[])
     parser.add_argument("--source-url", action="append", default=[])
     parser.add_argument("--fetch-real", action="store_true")
     args = parser.parse_args()
-    if args.account_id == "beauty_account":
-        print(json.dumps({"status": "BLOCKED", "reason": "beauty_account outside growth loop"}, ensure_ascii=False))
-        return 1
     if args.apply and not args.confirm_run:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-run"}, ensure_ascii=False))
         return 1
@@ -109,12 +109,18 @@ def main() -> int:
     tmp.write_text(json.dumps({"posted_results": []}), encoding="utf-8")
     source_cmd = [sys.executable, "scripts/collect_source_posts.py", "--account-id", args.account_id, "--platform", "threads", "--dry-run"]
     metrics_cmd = [sys.executable, "scripts/collect_threads_metrics.py", "--account-id", args.account_id, "--source", "browser", "--dry-run"]
-    next_queue_cmd = [sys.executable, "scripts/generate_next_queue_from_metrics.py", "--account-id", "liver_manager" if args.account_id == "all" else args.account_id, "--dry-run"]
+    scoped_accounts = list(account_choices()) if args.account_id == "all" else [args.account_id]
+    next_queue_cmds = [
+        [sys.executable, "scripts/generate_next_queue_from_metrics.py", "--account-id", account, "--dry-run"]
+        for account in scoped_accounts
+    ]
     if args.use_sheets:
         metrics_cmd += ["--use-sheets"]
-        next_queue_cmd += ["--use-sheets"]
+        for command in next_queue_cmds:
+            command += ["--use-sheets"]
     else:
-        next_queue_cmd += ["--input-json", str(tmp)]
+        for command in next_queue_cmds:
+            command += ["--input-json", str(tmp)]
     for url in args.metric_post_url:
         metrics_cmd += ["--post-url", url]
     for url in args.source_url:
@@ -123,13 +129,13 @@ def main() -> int:
         source_cmd += ["--fetch-real"]
     steps = [
         metrics_cmd,
-        next_queue_cmd,
         source_cmd,
         [sys.executable, "scripts/generate_media_post_queue.py", "--account-id", args.account_id, "--dry-run"],
         [sys.executable, "scripts/run_autopilot_loop.py", "--dry-run", "--account-id", args.account_id, "--auto-ready", "--skip-real-post"],
+        *next_queue_cmds,
     ]
     results = [_run(cmd) for cmd in steps]
-    source_result = _json_or_empty(results[2].get("stdout", ""))
+    source_result = _json_or_empty(results[1].get("stdout", ""))
     real_collection_pipeline = _plan_from_real_collection(args.account_id, source_result)
     for result in results:
         result.pop("stdout", None)

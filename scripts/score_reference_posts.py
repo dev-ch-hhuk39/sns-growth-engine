@@ -34,7 +34,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+from accounts.managed_accounts import account_choices, managed_account_ids  # noqa: E402
+
+ALLOWED_ACCOUNTS = set(managed_account_ids())
 
 # 投稿生成に使ってよいかの推奨。REFERENCE_ONLY は「参考のみ・流用不可」。
 RECOMMEND_REFERENCE_ONLY = "REFERENCE_ONLY"
@@ -278,7 +280,7 @@ def _append_many(client, logical: str, rows: list[dict[str, Any]]) -> dict[str, 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="score reference posts with a qualitative rubric (gated)")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--input-json", help='{"posts":[...]} for offline scoring/testing')
     parser.add_argument("--limit", type=int, default=50)
     parser.add_argument("--dry-run", action="store_true", help="explicit PLAN_ONLY mode (default unless --apply)")

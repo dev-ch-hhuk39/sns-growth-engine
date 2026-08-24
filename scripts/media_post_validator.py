@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from public_post_quality import final_public_post_validator
+from accounts.managed_accounts import managed_account
 from generation.semantic_alignment import ALIGNMENT_THRESHOLDS
 from generation.source_copyedit import validate_source_preserving_public_post
 from media.media_probe import asset_has_video_evidence
@@ -109,10 +110,20 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         reasons.append("media_asset_id_missing")
     if platform != "threads":
         reasons.append("platform_not_threads")
-    if account_id not in {"liver_manager", "night_scout"}:
-        reasons.append("account_not_media_enabled")
-    if account_id == "beauty_account" or platform == "x":
-        reasons.append("x_or_beauty_blocked")
+    try:
+        account = managed_account(account_id)
+    except ValueError:
+        account = {}
+        reasons.append("account_not_managed")
+    scheduled_route = (
+        "direct_reference_media"
+        if content_type in {"direct_image", "direct_video", "direct_carousel"}
+        else content_type
+    )
+    if scheduled_route and scheduled_route not in set(account.get("scheduled_routes", [])):
+        reasons.append("media_route_not_enabled_for_account")
+    if platform == "x":
+        reasons.append("x_publish_blocked")
     media_type = str(plan.get("media_type", "video")).lower()
     enforce_stream_evidence = str(
         plan.get(

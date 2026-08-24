@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config_partial
+from accounts.managed_accounts import account_choices
 from generation.video_clip_materializer import materialize_clip, parse_timecode, validate_bounds
 from generation.video_source_acquirer import acquire_authorized_public_source, find_cached_source
 from sheets_client import make_client
@@ -18,7 +19,7 @@ from sheets_record_reader import read_records_safely
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--clip-id", required=True)
     parser.add_argument("--output-dir", default="/tmp/sns-growth-engine-clips")
     parser.add_argument("--source-cache-dir", default=str(Path.home() / "Downloads" / "SNS_GROWTH_ENGINE_SOURCE_CACHE"))

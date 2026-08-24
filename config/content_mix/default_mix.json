@@ -48,6 +48,15 @@
         "video_clip_reference": 0,
         "original_hypothesis": 0
       }
+    },
+    "tiktok_shop": {
+      "threads": {
+        "single_post": 45,
+        "thread_series": 25,
+        "reference_based": 25,
+        "video_clip_reference": 5,
+        "original_hypothesis": 0
+      }
     }
   },
   "default": {
@@ -89,6 +98,13 @@
       "reference_text_generation": 35,
       "pdca_text_generation": 20,
       "direct_reference_media": 15,
+      "approved_source_clip": 5
+    },
+    "tiktok_shop": {
+      "new_text_generation": 30,
+      "reference_text_generation": 45,
+      "pdca_text_generation": 15,
+      "direct_reference_media": 5,
       "approved_source_clip": 5
     }
   }

@@ -2,13 +2,27 @@
 from __future__ import annotations
 
 from collections import Counter
+import json
+from pathlib import Path
 from typing import Any
 
+from accounts.account_config import load_account_config
 
-DEFAULT_THEMES = {
-    "night_scout": ("shop_selection", "work_conditions", "transfer_and_fit", "future_options", "customer_fit"),
-    "liver_manager": ("beginner_anxiety", "first_viewer_experience", "consistent_streaming", "viewer_participation", "sustainable_growth"),
-}
+
+def account_themes(account_id: str) -> tuple[str, ...]:
+    root = Path(__file__).resolve().parents[2]
+    schedule_path = root / "config" / "content_schedule.json"
+    if schedule_path.exists():
+        schedule = json.loads(schedule_path.read_text(encoding="utf-8"))
+        scheduled = tuple(
+            str(row.get("theme") or "")
+            for row in schedule.get("accounts", {}).get(account_id, [])
+            if str(row.get("theme") or "").strip()
+        )
+        if scheduled:
+            return scheduled
+    config = load_account_config(account_id)
+    return tuple(str(value) for value in config.content_categories if str(value).strip())
 
 
 def _metric_score(row: dict[str, Any]) -> float:
@@ -33,7 +47,7 @@ def select_generation_context(
     recent = [row for row in posted_results if str(row.get("account_id", "")) == account_id][-20:]
     used_themes = [str(row.get("theme") or row.get("category") or "").strip() for row in recent]
     use_counts = Counter(theme for theme in used_themes if theme)
-    themes = DEFAULT_THEMES.get(account_id, ())
+    themes = account_themes(account_id)
     candidates = [requested_theme] if requested_theme else list(themes)
     selected_theme = min(candidates, key=lambda theme: (use_counts.get(theme, 0), list(themes).index(theme) if theme in themes else 999)) if candidates else "reader_guidance"
     scores = [row for row in category_scores if str(row.get("account_id", "")) == account_id]

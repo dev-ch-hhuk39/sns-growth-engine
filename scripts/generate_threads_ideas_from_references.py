@@ -47,9 +47,10 @@ from public_post_quality import (  # noqa: E402
     generate_production_post,
     reader_facing_template_count,
 )
+from accounts.managed_accounts import account_choices, managed_account_ids  # noqa: E402
 
 CLI_NAME = "generate_threads_ideas_from_references"
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager"}
+ALLOWED_ACCOUNTS = set(managed_account_ids())
 ALLOWED_PLATFORMS = {"threads"}
 # worker が拾うステータス（process_threads_queue.py の ELIGIBLE_STATUSES と一致させる）。
 # READY のみが worker 対象。生成候補(WAITING_REVIEW)は worker 非対象であることを明示する。
@@ -2378,7 +2379,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="generate Threads ideas from references (thin wrapper, gated)")
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--platform", default="threads")
     parser.add_argument("--source", default="references", choices=["references", "clips"])
     parser.add_argument("--top-n", type=int, default=3)

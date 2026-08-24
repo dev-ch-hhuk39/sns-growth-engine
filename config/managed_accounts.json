@@ -1,0 +1,55 @@
+{
+  "schema_version": "managed_accounts_v1",
+  "default_platform": "threads",
+  "accounts": {
+    "night_scout": {
+      "status": "ACTIVE",
+      "production_enabled": true,
+      "account_config": "config/accounts/night_scout.json",
+      "voice_profile_key": "night_scout",
+      "hybrid_policy_key": "night_scout",
+      "review_policy": "autonomous_low_risk",
+      "credential_prefix": "NIGHT_SCOUT",
+      "scheduled_routes": ["original_text", "reference_text", "pdca_text", "direct_reference_media", "approved_source_clip"],
+      "route_slots": {"direct_reference_media": "ns_1800_direct_media", "approved_source_clip": "ns_2100_clip_media"},
+      "x_publish_enabled": false
+    },
+    "liver_manager": {
+      "status": "ACTIVE",
+      "production_enabled": true,
+      "account_config": "config/accounts/liver_manager.json",
+      "voice_profile_key": "liver_manager",
+      "hybrid_policy_key": "liver_manager",
+      "review_policy": "autonomous_low_risk",
+      "credential_prefix": "LIVER_MANAGER",
+      "scheduled_routes": ["original_text", "reference_text", "pdca_text", "direct_reference_media", "approved_source_clip"],
+      "route_slots": {"direct_reference_media": "lm_1600_direct_media", "approved_source_clip": "lm_1800_clip_media"},
+      "x_publish_enabled": false
+    },
+    "beauty_account": {
+      "status": "ACTIVE",
+      "production_enabled": true,
+      "account_config": "config/accounts/beauty_account.json",
+      "voice_profile_key": "beauty_account",
+      "hybrid_policy_key": "beauty_account",
+      "review_policy": "human_review_all_medical_strict",
+      "credential_prefix": "BEAUTY_ACCOUNT",
+      "scheduled_routes": ["new_text_generation", "reference_text_generation", "pdca_text_generation", "direct_reference_media", "approved_source_clip"],
+      "route_slots": {"direct_reference_media": "beauty_direct_media_review", "approved_source_clip": "beauty_clip_review"},
+      "x_publish_enabled": false
+    },
+    "tiktok_shop": {
+      "status": "CREDENTIAL_PENDING",
+      "production_enabled": false,
+      "account_config": "config/accounts/tiktok_shop.json",
+      "source_registry": "config/source_accounts/tiktok_shop_sources.json",
+      "voice_profile_key": "tiktok_shop",
+      "hybrid_policy_key": "tiktok_shop",
+      "review_policy": "first_20_human_review",
+      "credential_prefix": "TIKTOK_SHOP",
+      "scheduled_routes": ["new_text_generation", "reference_text_generation", "pdca_text_generation", "direct_reference_media", "approved_source_clip"],
+      "route_slots": {"direct_reference_media": "tiktok_shop_direct_media_review", "approved_source_clip": "tiktok_shop_clip_review"},
+      "x_publish_enabled": false
+    }
+  }
+}

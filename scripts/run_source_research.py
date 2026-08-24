@@ -20,7 +20,9 @@ from reference.fetchers.last30days_fetcher import Last30DaysFetcher
 from sheets_client import TAB_DEFINITIONS, SheetsClient
 
 TOPICS_PATH = ROOT / "config" / "research_topics.json"
-ALLOWED_ACCOUNTS = ("night_scout", "liver_manager")
+from accounts.managed_accounts import account_choices  # noqa: E402
+
+ALLOWED_ACCOUNTS = account_choices()
 
 
 def stable_id(prefix: str, *parts: str) -> str:

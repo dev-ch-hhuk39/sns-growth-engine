@@ -44,7 +44,9 @@ def main() -> int:
     checks.append(("apply+confirm は WILL_WRITE", p3["status"] == "WILL_WRITE"))
     checks.append(("WILL_WRITE で --use-sheets 付与", "--use-sheets" in p3["delegate_argv"]))
 
-    checks.append(("beauty は BLOCKED", mod.build_plan(_args(account_id="beauty_account"))["status"] == "BLOCKED"))
+    beauty = mod.build_plan(_args(account_id="beauty_account"))
+    checks.append(("beauty is managed and remains plan-only by default",
+                   beauty["status"] == "PLAN_ONLY" and beauty["safety"]["media_download"] is False))
     checks.append(("未対応 source-platform は BLOCKED",
                    mod.build_plan(_args(source_platform="instagram"))["status"] == "BLOCKED"))
     checks.append(("委譲先は collect_source_account_posts",

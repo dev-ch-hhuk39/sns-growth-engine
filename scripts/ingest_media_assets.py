@@ -149,7 +149,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--local-file", default="")
     parser.add_argument("--platform", required=True, choices=["youtube", "tiktok", "x", "threads", "local"])
     parser.add_argument("--rights-status", required=True)
-    parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager", "beauty_account"])
+    from accounts.managed_accounts import account_choices
+    parser.add_argument("--account-id", required=True, choices=account_choices())
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-ingest", action="store_true")

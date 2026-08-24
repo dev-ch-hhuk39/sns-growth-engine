@@ -31,12 +31,9 @@ from metrics_collection_schedule import (  # noqa: E402
 from publishers.threads_credentials import (  # noqa: E402
     resolve_credentials,
 )
+from accounts.managed_accounts import account_choices  # noqa: E402
 
-ALLOWED_ACCOUNTS = {
-    "night_scout",
-    "liver_manager",
-    "beauty_account",
-}
+ALLOWED_ACCOUNTS = set(account_choices())
 
 VERIFIED_RESULT_STATUSES = {
     "READ_AFTER_WRITE_PASS",
@@ -1223,12 +1220,7 @@ def main() -> int:
     parser.add_argument(
         "--account-id",
         default="all",
-        choices=[
-            "all",
-            "night_scout",
-            "liver_manager",
-            "beauty_account",
-        ],
+        choices=account_choices(include_all=True),
     )
 
     parser.add_argument(

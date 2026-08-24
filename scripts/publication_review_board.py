@@ -4,8 +4,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from accounts.managed_accounts import managed_account_ids
+
 ACTIVE_QUEUE_STATUSES = {"WAITING_REVIEW", "READY"}
-ALLOWED_ACCOUNTS = {"night_scout", "liver_manager", "beauty_account"}
+ALLOWED_ACCOUNTS = set(managed_account_ids())
 MEDIA_TYPES = {"IMAGE", "VIDEO", "CAROUSEL"}
 
 

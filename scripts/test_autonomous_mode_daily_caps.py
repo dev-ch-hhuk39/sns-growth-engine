@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from accounts.managed_accounts import production_account_ids  # noqa: E402
 spec = importlib.util.spec_from_file_location("run_autonomous_loop", ROOT / "scripts/run_autonomous_loop.py")
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
@@ -17,7 +20,7 @@ def main() -> int:
         plan["gate_summary"]["daily_post_cap_per_account"] == 5
         and plan["gate_summary"]["daily_ready_cap_per_account"] == 8
         and plan["gate_summary"]["max_posts_per_run"] == 1
-        and set(plan["daily_cap_state"]) == {"night_scout", "liver_manager"}
+        and set(plan["daily_cap_state"]) == set(production_account_ids())
         and "max_posts_per_run_reached_before_account_apply" in source
     )
     print(f"  {'PASS' if ok else 'FAIL'} daily caps allow five scheduled posts")

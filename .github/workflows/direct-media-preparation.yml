@@ -8,14 +8,8 @@ on:
         required: true
         default: "false"
       target_account:
-        description: "Choose one account or run both serially"
+        description: "Managed account_id or all"
         required: true
-        type: choice
-        options:
-          - all
-          - night_scout
-          - liver_manager
-          - beauty_account
         default: all
 
 permissions:
@@ -35,7 +29,38 @@ env:
   ALLOW_LOCAL_TRANSCRIPTION: "false"
 
 jobs:
+  resolve-accounts:
+    runs-on: ubuntu-latest
+    outputs:
+      account_ids: ${{ steps.registry.outputs.account_ids }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - id: registry
+        env:
+          REQUESTED_ACCOUNT: ${{ github.event.inputs.target_account }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          registry = json.loads(Path("config/managed_accounts.json").read_text())
+          production = [
+              account_id for account_id, row in registry["accounts"].items()
+              if row.get("production_enabled") and row.get("status") == "ACTIVE"
+          ]
+          requested = os.environ["REQUESTED_ACCOUNT"].strip()
+          selected = production if requested == "all" else [requested]
+          if not selected or any(account_id not in production for account_id in selected):
+              raise SystemExit(f"[BLOCKED] unmanaged_or_inactive_account:{requested}")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              handle.write("account_ids=" + json.dumps(selected, separators=(",", ":")) + "\n")
+          PY
+
   prepare-direct-media:
+    needs: resolve-accounts
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 55
@@ -43,13 +68,12 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        account_id: ${{ fromJSON((github.event.inputs.target_account == 'all') && '["night_scout","liver_manager","beauty_account"]' || format('["{0}"]', github.event.inputs.target_account)) }}
+        account_id: ${{ fromJSON(needs.resolve-accounts.outputs.account_ids) }}
     concurrency:
       group: sns-growth-direct-preparation-${{ matrix.account_id }}
       cancel-in-progress: false
     env:
       ACCOUNT_ID: ${{ matrix.account_id }}
-      CONTENT_SLOT_ID: ${{ matrix.account_id == 'night_scout' && 'ns_1800_direct_media' || (matrix.account_id == 'liver_manager' && 'lm_1600_direct_media' || 'beauty_direct_media_review') }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
@@ -72,6 +96,10 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements-media-runtime.txt
+      - name: Resolve account route slot
+        run: |
+          slot_id=$(PYTHONPATH=src python3 -c 'import os; from accounts.managed_accounts import route_slot_id; print(route_slot_id(os.environ["ACCOUNT_ID"], "direct_reference_media"))')
+          echo "CONTENT_SLOT_ID=$slot_id" >> "$GITHUB_ENV"
       - name: Install preparation dependencies
         run: python3 -m pip install --requirement requirements-media-runtime.txt
       - name: Install bounded OCR runtime
@@ -121,7 +149,7 @@ jobs:
           ALLOW_CLOUDINARY_UPLOAD: "true"
           ALLOW_LOCAL_TRANSCRIPTION: "true"
           ALLOW_TRANSCRIPTION_API: "false"
-        run: python3 scripts/ingest_direct_reference_media_reliable.py --account-id "$ACCOUNT_ID" --max-assets 10 --apply --confirm-ingest
+        run: python3 scripts/ingest_direct_reference_media_reliable.py --account-id "$ACCOUNT_ID" --max-assets 1 --apply --confirm-ingest
       - name: Persist validator-approved review inventory
         if: (github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
         env:
