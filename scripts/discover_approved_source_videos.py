@@ -28,6 +28,7 @@ from media_growth_schemas import (  # noqa: E402
     canonicalize_video_url,
     extract_video_id,
     is_duplicate_source_video,
+    redacted_preview,
 )
 from config_loader import get_config  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -192,6 +193,10 @@ def is_persistable_source_video(
             "",
         )
     ):
+        return False
+
+    title = str(row.get("title", "")).strip()
+    if not title or "video candidate" in title.lower():
         return False
 
     original_url = str(
@@ -571,6 +576,76 @@ def _entry_video_url(source: dict[str, Any], entry: dict[str, Any]) -> str:
         if handle:
             return f"https://www.tiktok.com/@{handle}/video/{video_id}"
     return raw
+
+
+def merge_video_detail_metadata(
+    row: dict[str, Any],
+    entry: dict[str, Any],
+) -> dict[str, Any]:
+    """Merge verified per-video metadata without changing source identity."""
+    updated = dict(row)
+    title = str(entry.get("title") or "").strip()
+    if title:
+        updated["title"] = title
+    description = str(entry.get("description") or "").strip()
+    if description:
+        updated["description_preview"] = redacted_preview(description)
+    duration = entry.get("duration")
+    if duration not in (None, ""):
+        updated["duration_seconds"] = duration
+    updated["author_handle"] = str(
+        entry.get("uploader_id")
+        or entry.get("channel_id")
+        or updated.get("author_handle")
+        or ""
+    )
+    updated["published_at"] = str(
+        entry.get("upload_date")
+        or entry.get("timestamp")
+        or updated.get("published_at")
+        or ""
+    )
+    for field in ("view_count", "like_count", "comment_count"):
+        if entry.get(field) not in (None, ""):
+            updated[field] = entry[field]
+    updated["collection_backend"] = "yt_dlp_flat_then_bounded_video_detail"
+    return updated
+
+
+def enrich_selected_video_metadata(
+    rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Fetch detail only for the already bounded, deduplicated candidates."""
+    if not rows or importlib.util.find_spec("yt_dlp") is None:
+        return [dict(row) for row in rows]
+    import yt_dlp  # type: ignore[import]
+
+    enriched: list[dict[str, Any]] = []
+    for row in rows:
+        platform = str(row.get("platform", "")).lower()
+        video_url = str(row.get("canonical_video_url") or "")
+        if platform not in {"youtube", "tiktok"} or not video_url:
+            enriched.append(dict(row))
+            continue
+        try:
+            with yt_dlp.YoutubeDL(metadata_options(platform, {
+                "skip_download": True,
+                "noplaylist": True,
+                "quiet": True,
+                "no_warnings": True,
+                "ignoreerrors": True,
+                "socket_timeout": 20,
+                "retries": 1,
+            })) as ydl:
+                entry = ydl.extract_info(video_url, download=False) or {}
+        except Exception:
+            entry = {}
+        enriched.append(
+            merge_video_detail_metadata(row, entry)
+            if isinstance(entry, dict) and str(entry.get("title") or "").strip()
+            else dict(row)
+        )
+    return enriched
 
 
 def _bounded_public_comments(
@@ -1129,6 +1204,18 @@ def build_discovery_plan(
             )
         )
 
+        detail_candidates = selected_rows
+        if fetch_real and selected_rows:
+            selected_rows = [
+                row
+                for row in enrich_selected_video_metadata(selected_rows)
+                if is_persistable_source_video(row)
+            ]
+            selection["selected"] = selected_rows
+            selection["new_count"] = len(selected_rows)
+            if detail_candidates and not selected_rows:
+                selection["stop_reason"] = "video_detail_metadata_unavailable"
+
         new_videos.extend(selected_rows)
 
         source_duplicates = int(
@@ -1154,7 +1241,9 @@ def build_discovery_plan(
             len(candidates) - source_scanned,
         )
 
-        scan_completed = not source_blocked and (
+        scan_completed = not source_blocked and not (
+            detail_candidates and not selected_rows
+        ) and (
             not fetch_real
             or discovery_status
             in {
