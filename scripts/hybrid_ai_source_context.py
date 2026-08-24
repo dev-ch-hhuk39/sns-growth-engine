@@ -39,6 +39,26 @@ def _first(*values: Any) -> str:
     return ""
 
 
+def _claim_support_evidence(value: Any) -> str:
+    """Extract public source evidence without leaking the private JSON packet."""
+    raw = _text(value)
+    if not raw:
+        return ""
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return ""
+    rows = parsed if isinstance(parsed, list) else [parsed]
+    evidence: list[str] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        text = _text(row.get("source_evidence"))
+        if text and text not in evidence:
+            evidence.append(text)
+    return "\n\n".join(evidence)
+
+
 def _true(value: Any) -> bool:
     return _text(value).lower() in {"1", "true", "yes", "y", "approved", "granted"}
 
@@ -188,10 +208,14 @@ def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any
 
     base_use_policy = _first(source.get("use_policy"), source_post.get("use_policy"), reference_post.get("use_policy"))
     effective_policy = "APPROVED_MEDIA_REUSE" if permission_status == "APPROVED" else base_use_policy
+    # Canonical source-post text is the comparison source. Claim-support JSON is
+    # private structured evidence and is only a fallback after safe extraction.
     source_text = _first(
-        queue.get("claim_support_json"),
-        queue.get("key_claims_json"),
         original_post_text,
+        transcript_excerpt,
+        transcript,
+        description,
+        _claim_support_evidence(queue.get("claim_support_json")),
     )
 
     return {
