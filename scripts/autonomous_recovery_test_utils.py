@@ -422,6 +422,7 @@ def _mock_hybrid_ai_pass_fields(client: object, queue: dict, public_post_text: s
     import json
 
     from hybrid_ai_gate import GATE_SCHEMA_VERSION, hybrid_ai_input_hash
+    from hybrid_ai_policy import decide_route
     from hybrid_ai_source_context import build_source_context, hybrid_ai_source_context_hash
 
     row = dict(queue)
@@ -431,7 +432,7 @@ def _mock_hybrid_ai_pass_fields(client: object, queue: dict, public_post_text: s
         "status": "PASS",
         "input_hash": hybrid_ai_input_hash(row),
         "source_context_hash": hybrid_ai_source_context_hash(build_source_context(client, row)),
-        "route": "new_text_generation",
+        "route": decide_route(row).route,
         "public_post_text": public_post_text,
         "blocked_reasons": [],
         "actual_requests": 0,
