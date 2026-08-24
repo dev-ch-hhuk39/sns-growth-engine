@@ -51,9 +51,8 @@ assert routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_galler
 
 workflow = (ROOT / ".github/workflows/direct-media-preparation.yml").read_text(encoding="utf-8")
 assert "playwright install" not in workflow
-assert "--platform threads" in workflow
-assert "--platform x" in workflow
-assert "--platform youtube" in workflow
+assert "--platform all" in workflow
+assert workflow.count("acquire_approved_source_posts_failsoft.py") == 1
 
 for workflow_name in ("account-acquisition.yml", "threads-video-reference-preparation.yml"):
     active_workflow = (ROOT / ".github/workflows" / workflow_name).read_text(encoding="utf-8")
