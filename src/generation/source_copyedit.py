@@ -48,6 +48,25 @@ DEFAULT_MARKERS = {
     ),
 }
 
+PERSONAL_CLAIM_MARKERS = (
+    "担当数",
+    "担当して",
+    "実績",
+    "売上",
+    "月収",
+    "年収",
+    "経験",
+    "所属",
+    "運営",
+    "愛用",
+    "成功した",
+    "達成した",
+    "聞いた",
+    "使った",
+    "試した",
+    "買った",
+)
+
 
 def _profile(account_id: str) -> dict[str, Any]:
     try:
@@ -283,6 +302,20 @@ def _numeric_tokens(
     )
 
 
+def _source_author_claim_transfer_sentences(text: str) -> list[str]:
+    """Find external-source personal claims rewritten as the target operator's."""
+
+    transferred: list[str] = []
+    for sentence in _sentences(text):
+        if not re.search(r"(?:実は)?(?:僕|私)(?:は|が|の|も|、|って)?", sentence):
+            continue
+        if re.search(r"(?:僕|私)なら", sentence):
+            continue
+        if any(marker in sentence for marker in PERSONAL_CLAIM_MARKERS):
+            transferred.append(sentence)
+    return transferred
+
+
 def evaluate_source_copyedit_contract(
     *,
     source_text: str,
@@ -370,6 +403,10 @@ def evaluate_source_copyedit_contract(
         reasons.append(
             "unsupported_numeric_claim_added"
         )
+
+    identity_transfer_sentences = _source_author_claim_transfer_sentences(public)
+    if identity_transfer_sentences:
+        reasons.append("source_author_personal_claim_transferred")
 
     source_sentences = _sentences(
         source
@@ -574,6 +611,7 @@ def evaluate_source_copyedit_contract(
         "unsupported_sentences": (
             unsupported_sentences
         ),
+        "source_author_claim_transfer_sentences": identity_transfer_sentences,
         "source_voice_markers": (
             source_marker_hits
         ),

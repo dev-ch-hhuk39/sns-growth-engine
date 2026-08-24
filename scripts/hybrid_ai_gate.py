@@ -20,7 +20,7 @@ from public_post_quality import canonical_voice_profile, canonical_voice_prompt,
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/hybrid_ai_account_policies.json"
 GATE_SCHEMA_VERSION = "hybrid_ai_gate_v3"
-PROMPT_VERSION = "hybrid_ai_prompts_v3"
+PROMPT_VERSION = "hybrid_ai_prompts_v4"
 
 GENERIC_TEMPLATE_PHRASES = (
     "確認することは一つ。",
@@ -478,6 +478,9 @@ def _generation_prompt(
         instruction = (
             "元投稿の主張、固有情報、話者の温度感を維持し、誤字、重複助詞、メンション、ハッシュタグ、"
             "文字起こしノイズだけを必要最小限で修正してください。新しい助言や事実は追加しないでください。"
+            "元投稿者の経験、担当数、実績、商品使用などの一人称の事実を、対象アカウントの"
+            "『僕』や『私』の事実に絶対に変換しないでください。その事実は『この動画では』『投稿者は』などと"
+            "帰属を保ち、対象アカウントの一人称は助言や判断にだけ使ってください。"
         )
     else:
         instruction = (
@@ -518,6 +521,8 @@ def _review_prompt(
         "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"
         "対象読者・アカウント適合、公開安全性を確認してください。誤字、重複助詞、[音楽]等、"
         "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。"
+        "参照元投稿者の経験・担当数・実績・商品使用を、対象アカウント自身の一人称の事実として"
+        "語る候補はREJECTしてください。"
         f"{(' ' + pdca_instruction) if pdca_instruction else ''}\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
         f"CANONICAL_VOICE_PROFILE={json.dumps(canonical_voice_profile(_text(queue.get('account_id'))), ensure_ascii=False, sort_keys=True)}\n"
