@@ -69,6 +69,24 @@ def slot_by_id(account_id: str, slot_id: str) -> dict[str, Any] | None:
     for slot in slots_for_account(account_id):
         if slot.get("slot_id") == slot_id:
             return dict(slot)
+
+    # Review-only media lanes are canonical managed-account routes, but they
+    # do not have to add another timed post to an account's daily schedule.
+    # Resolve those exact IDs from the same registry used by preparation and
+    # publishing so Beauty (and credential-pending future accounts) can use
+    # the shared media pipelines without weakening unknown-slot rejection.
+    account = managed_account(account_id)
+    for route, registered_slot_id in account.get("route_slots", {}).items():
+        if route in MEDIA_POST_TYPES and str(registered_slot_id) == str(slot_id):
+            return {
+                "slot_id": str(registered_slot_id),
+                "target_jst": "",
+                "cron_utc": "",
+                "post_type": route,
+                "fallback_chain": [],
+                "theme": f"{account_id}_{route}_review",
+                "review_only": True,
+            }
     return None
 
 

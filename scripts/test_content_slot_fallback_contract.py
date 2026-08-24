@@ -23,5 +23,12 @@ for account, slots in schedule.items():
 beauty_slots = slots_for_account("beauty_account")
 assert [slot["slot_id"] for slot in beauty_slots] == ["beauty_1130", "beauty_2030"]
 assert slot_by_id("beauty_account", "beauty_2030")["target_jst"] == "20:30"
+beauty_direct = slot_by_id("beauty_account", "beauty_direct_media_review")
+beauty_clip = slot_by_id("beauty_account", "beauty_clip_review")
+assert beauty_direct["post_type"] == "direct_reference_media", beauty_direct
+assert beauty_direct["review_only"] is True, beauty_direct
+assert beauty_clip["post_type"] == "approved_source_clip", beauty_clip
+assert beauty_clip["review_only"] is True, beauty_clip
+assert slot_by_id("beauty_account", "unknown_media_slot") is None
 assert build_slot_run("beauty_account", "beauty_2030")["slot_id"] == "beauty_2030"
 print("PASS test_content_slot_fallback_contract.py")
