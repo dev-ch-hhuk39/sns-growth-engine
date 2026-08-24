@@ -90,6 +90,22 @@ def tiktok_registered_author_matches(url: str, registered_source: dict[str, Any]
     return bool(actual and expected and actual == expected)
 
 
+def _threads_handle(url: str, *, require_post: bool = False) -> str:
+    pattern = r"^https?://(?:www\.)?threads\.(?:com|net)/@([A-Za-z0-9._-]+)"
+    if require_post:
+        pattern += r"/post/[A-Za-z0-9_-]+(?:[/?#].*)?$"
+    match = re.match(pattern, _text(url), flags=re.I)
+    return match.group(1).lower() if match else ""
+
+
+def threads_registered_author_matches(url: str, registered_source: dict[str, Any]) -> bool:
+    actual = _threads_handle(url, require_post=True)
+    expected = _text(registered_source.get("source_handle")).lstrip("@").lower()
+    if not expected:
+        expected = _threads_handle(_text(registered_source.get("source_url")))
+    return bool(actual and expected and actual == expected)
+
+
 def _tiktok_post_identity_url(candidate: dict[str, Any], source: dict[str, Any]) -> str:
     for row in (candidate, source):
         for key in (
@@ -121,11 +137,42 @@ def _tiktok_direct_media_url(candidate: dict[str, Any], source: dict[str, Any]) 
     return ""
 
 
+def _threads_post_identity_url(candidate: dict[str, Any], source: dict[str, Any]) -> str:
+    for row in (candidate, source):
+        for key in (
+            "canonical_post_url",
+            "post_url",
+            "canonical_video_url",
+            "source_video_url",
+            "original_video_url",
+            "video_url",
+            "url",
+        ):
+            value = _text(row.get(key))
+            if _threads_handle(value, require_post=True):
+                return value
+    return ""
+
+
+def _threads_direct_media_url(candidate: dict[str, Any], source: dict[str, Any]) -> str:
+    for row in (candidate, source):
+        for key in ("original_media_url", "direct_media_url", "media_url"):
+            value = _text(row.get(key))
+            host = (urlparse(value).hostname or "").lower()
+            if value.startswith("https://") and (
+                host.endswith(".cdninstagram.com")
+                or host.endswith(".fbcdn.net")
+            ):
+                return value
+    return ""
+
+
 def resolve_source_url(candidate: dict[str, Any], source: dict[str, Any]) -> str:
     keys = (
         "source_video_url",
         "video_url",
         "source_url",
+        "canonical_post_url",
         "canonical_video_url",
         "original_video_url",
         "canonical_url",
@@ -241,6 +288,41 @@ def _download_tiktok_direct(url: str, output: Path) -> None:
     finally:
         temporary.unlink(missing_ok=True)
 
+
+def _download_threads_direct(url: str, output: Path) -> None:
+    """Download one resolved Threads CDN asset with bounded redirects and size."""
+    _validate_public_http_url(url)
+    request = Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.threads.com/"},
+    )
+    temporary = output.with_suffix(output.suffix + ".part")
+    total = 0
+    try:
+        with urlopen(request, timeout=60) as response, temporary.open("wb") as destination:
+            final_host = (urlparse(response.geturl()).hostname or "").lower()
+            if not (
+                final_host.endswith(".cdninstagram.com")
+                or final_host.endswith(".fbcdn.net")
+            ):
+                raise RuntimeError("threads_media_redirect_host_rejected")
+            length = response.headers.get("Content-Length")
+            if length and int(length) > MAX_DOWNLOAD_BYTES:
+                raise RuntimeError("downloaded source exceeded bounded maximum size")
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > MAX_DOWNLOAD_BYTES:
+                    raise RuntimeError("downloaded source exceeded bounded maximum size")
+                destination.write(chunk)
+        if total <= 0:
+            raise RuntimeError("threads_direct_media_empty")
+        temporary.replace(output)
+    finally:
+        temporary.unlink(missing_ok=True)
+
 def acquire_authorized_public_source(
     candidate: dict[str, Any],
     source: dict[str, Any],
@@ -268,6 +350,15 @@ def acquire_authorized_public_source(
         raise RuntimeError(f"physical_media_platform_deferred:{platform or 'unknown'}")
     if platform == "x" and not x_registered_author_matches(url, registered_source or {}):
         raise PermissionError("x_status_author_does_not_match_registered_source")
+    threads_post_url = ""
+    threads_direct_url = ""
+    if platform == "threads":
+        threads_post_url = _threads_post_identity_url(candidate, source)
+        if not threads_registered_author_matches(threads_post_url, registered_source or {}):
+            raise PermissionError("threads_post_author_does_not_match_registered_source")
+        threads_direct_url = _threads_direct_media_url(candidate, source)
+        if not threads_direct_url:
+            raise RuntimeError("threads_direct_media_url_required")
     tiktok_post_url = ""
     tiktok_direct_url = ""
     if platform == "tiktok":
@@ -280,7 +371,9 @@ def acquire_authorized_public_source(
     directory = Path(cache_root).expanduser() / _safe_id(account_id)
     directory.mkdir(parents=True, exist_ok=True)
     prefix = _safe_id(source_video_id)
-    if platform == "tiktok" and tiktok_direct_url:
+    if platform == "threads":
+        _download_threads_direct(threads_direct_url, directory / f"{prefix}-video.mp4")
+    elif platform == "tiktok" and tiktok_direct_url:
         _download_tiktok_direct(tiktok_direct_url, directory / f"{prefix}-video.mp4")
     else:
         from yt_dlp import YoutubeDL

@@ -6,7 +6,7 @@
   "active_acquisition_platforms": ["threads", "x", "youtube", "tiktok"],
   "reference_priority": ["threads", "tiktok", "x", "youtube"],
   "deferred_reference_acquisition": {},
-  "physical_media_providers": {"x": "yt_dlp", "youtube": "yt_dlp", "tiktok": "public_embed_direct_http"},
+  "physical_media_providers": {"threads": "public_og_direct_http", "x": "yt_dlp", "youtube": "yt_dlp", "tiktok": "public_embed_direct_http"},
   "physical_media_evidence": {
     "youtube": {
       "night_scout": "PASS_AV",
@@ -23,7 +23,7 @@
       "evidence_class": "recorded_owner_approved_physical_golden"
     }
   },
-  "deferred_physical_media_platforms": ["threads"],
+  "deferred_physical_media_platforms": [],
   "content_mix": {
     "direct_reference_media": 50,
     "reference_text_generation": 30,

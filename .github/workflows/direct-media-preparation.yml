@@ -109,9 +109,13 @@ jobs:
           command -v ffmpeg
           command -v ffprobe
           command -v tesseract
-      - name: Acquire bounded X and YouTube reference posts before media preparation
+      - name: Acquire bounded Threads, X, and YouTube reference posts before media preparation
         if: github.event.inputs.confirm_preparation == 'true'
         run: |
+          python3 scripts/acquire_approved_source_posts_failsoft.py \
+            --account-id "$ACCOUNT_ID" --platform threads --max-posts 30 \
+            --media-filter video-only --force-backfill \
+            --apply --confirm-acquisition
           python3 scripts/acquire_approved_source_posts_failsoft.py \
             --account-id "$ACCOUNT_ID" --platform x --max-posts 30 \
             --media-filter video-only --force-backfill \

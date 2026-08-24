@@ -131,6 +131,7 @@ media = [
             "https://scontent.example.cdninstagram.com/"
             "v/t51.82787-15/post.jpg"
         ),
+        "canonical_post_url": "https://www.threads.com/@approved/post/ABC123",
         "download_status": "PENDING",
         "created_at": (
             "2026-08-01T02:00:00+00:00"
@@ -144,6 +145,7 @@ media = [
             "https://scontent.example.cdninstagram.com/"
             "v/t51.82787-19/profile.jpg"
         ),
+        "canonical_post_url": "https://www.threads.com/@approved",
         "download_status": "PENDING",
         "created_at": (
             "2026-08-01T05:00:00+00:00"
@@ -230,7 +232,7 @@ try:
         permissions=permissions,
     )
 
-    assert selected == ""
+    assert selected == "media-threads"
 
 finally:
     module.core.safe_https_url = (

@@ -4,10 +4,11 @@ from pathlib import Path
 import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from generation.video_source_acquirer import (
+from generation.video_source_acquirer import (  # noqa: E402
     find_cached_source,
     is_download_authorized,
     resolve_source_url,
+    threads_registered_author_matches,
     x_registered_author_matches,
     _validate_public_http_url,
 )
@@ -30,6 +31,13 @@ def test_x_status_must_match_registered_source() -> None:
     assert x_registered_author_matches("https://x.com/approved_owner/status/123", source)
     assert not x_registered_author_matches("https://x.com/third_party/status/123", source)
     assert not x_registered_author_matches("https://x.com/approved_owner", source)
+
+
+def test_threads_post_must_match_registered_source() -> None:
+    source = {"source_handle": "@approved.owner", "source_url": "https://www.threads.com/@approved.owner"}
+    assert threads_registered_author_matches("https://www.threads.com/@approved.owner/post/ABC_123", source)
+    assert not threads_registered_author_matches("https://www.threads.com/@third.party/post/ABC_123", source)
+    assert not threads_registered_author_matches("https://www.threads.com/@approved.owner", source)
 
 
 def test_resolve_source_url_prefers_candidate_then_source() -> None:

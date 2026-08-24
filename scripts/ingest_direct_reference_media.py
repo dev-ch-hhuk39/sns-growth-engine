@@ -44,6 +44,7 @@ _SAFE_INGEST_ERROR_CODES = {
     "cloudinary_secure_url_missing",
     "source_post_media_read_after_write_failed",
     "physical_media_platform_deferred",
+    "threads_individual_post_url_required",
 }
 
 
@@ -317,6 +318,11 @@ def download_source_media(
             raise RuntimeError("tiktok_individual_post_url_required")
         download_direct_https_media(media_url, path, media_type=media_type)
         return "tiktok_public_embed_direct_http"
+    if resolved_platform == "threads":
+        if "/post/" not in canonical_post_url:
+            raise RuntimeError("threads_individual_post_url_required")
+        download_direct_https_media(media_url, path, media_type=media_type)
+        return "threads_public_og_direct_http"
     target_url = canonical_post_url or media_url
     if not safe_https_url(target_url):
         raise RuntimeError("direct_media_url_blocked")
@@ -724,8 +730,10 @@ def select_pending_media_id(
             continue
         if platform == "tiktok" and "/video/" not in url:
             continue
-        if platform == "threads" and not safe_https_url(url, stream_url=True):
-            continue
+        if platform == "threads":
+            parent_url = str(media.get("canonical_post_url") or post.get("canonical_post_url") or "")
+            if "/post/" not in parent_url or not safe_https_url(url, stream_url=True):
+                continue
         media_id = str(media.get("source_post_media_id", ""))
         if media_id:
             # Prefer short-form individual videos for a bounded direct-media
@@ -927,7 +935,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
         platform = str(post.get("platform", "")).lower()
         download_backend = download_source_media(
             media_url=url,
-            canonical_post_url=str(media.get("canonical_post_url", "")),
+            canonical_post_url=str(media.get("canonical_post_url") or post.get("canonical_post_url") or ""),
             path=local_path,
             media_type=media_type,
             platform=platform,

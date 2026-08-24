@@ -12,9 +12,10 @@ DEFERRED_REFERENCE_STATUS = "DEFERRED_OSS_CANDIDATE"
 DEFERRED_REFERENCE_REASON = (
     "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN"
 )
-PHYSICAL_MEDIA_PLATFORMS = ("x", "youtube", "tiktok")
-DEFERRED_PHYSICAL_MEDIA_PLATFORMS = ("threads",)
+PHYSICAL_MEDIA_PLATFORMS = ("threads", "x", "youtube", "tiktok")
+DEFERRED_PHYSICAL_MEDIA_PLATFORMS: tuple[str, ...] = ()
 PHYSICAL_MEDIA_PROVIDER = {
+    "threads": "public_og_direct_http",
     "x": "yt_dlp",
     "youtube": "yt_dlp",
     "tiktok": "public_embed_direct_http",
