@@ -40,7 +40,7 @@ from generation.source_copyedit import (  # noqa: E402
     validate_source_preserving_public_post,
 )
 from direct_caption_policy import direct_caption_mode  # noqa: E402
-from evidence_context_caption import generate_evidence_context_caption  # noqa: E402
+from evidence_context_caption import DirectCaptionProviderFailover, generate_evidence_context_caption  # noqa: E402
 from acquisition.reliability import (  # noqa: E402
     build_quarantine_record,
     is_quarantined,
@@ -687,7 +687,9 @@ def build_plan(
     ][-30:]
     uses_default_caption_service = caption_service is None
     caption_service = caption_service or SourceGroundedCaptionService(
-        GitHubModelsGroundedProvider(),
+        DirectCaptionProviderFailover(
+            primary=GitHubModelsGroundedProvider(),
+        ),
         allow_deterministic_fallback=True,
     )
     attempted: list[dict[str, Any]] = []

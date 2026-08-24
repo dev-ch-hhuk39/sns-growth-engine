@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
 from typing import Any
 
+from acquisition.contracts import ProviderResult
+from acquisition.models import SourcePostBundle
 from generation.semantic_alignment import LocalSemanticAlignmentProvider
+from generation.source_grounded_caption import GitHubModelsGroundedProvider, account_rules
 from generation_quality_gates import evaluate_generation_quality
+from gemini_hybrid_client import GeminiHybridClient
 from media_activation_source_suitability import clip_source_suitability
 from public_post_quality import apply_account_voice, final_public_post_validator
 
@@ -137,6 +143,149 @@ AUDIENCES = {
     "liver_manager": "配信初心者、伸び悩むライバー、事務所選びで迷う人",
     "beauty_account": "20〜30代の美容・コスメ好きの女性",
 }
+
+
+class PrivacyBoundedGeminiGroundedProvider:
+    """Generate direct-media captions without sending transcripts or history."""
+
+    provider_name = "gemini_direct_caption"
+    provider_version = "privacy_bounded_v1"
+
+    def __init__(self, client: GeminiHybridClient | None = None) -> None:
+        self.client = client or GeminiHybridClient()
+
+    @property
+    def available(self) -> bool:
+        return bool(self.client.api_key)
+
+    def generate(
+        self,
+        post: SourcePostBundle,
+        *,
+        account_id: str,
+        recent_posts: list[str],
+        transcript_excerpt: str = "",
+        source_mode: str = "transform",
+    ) -> ProviderResult[dict[str, Any]]:
+        del recent_posts, transcript_excerpt
+        if not self.available:
+            return ProviderResult(
+                self.provider_name,
+                self.provider_version,
+                "UNAVAILABLE",
+                reason="gemini_api_key_missing",
+            )
+        schema = {
+            "type": "object",
+            "properties": {
+                "internal_analysis": {"type": "object"},
+                "public_post_text": {"type": "string", "minLength": 1},
+                "claim_support": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "caption_claim": {"type": "string"},
+                            "source_evidence": {"type": "string"},
+                        },
+                        "required": ["caption_claim", "source_evidence"],
+                    },
+                },
+                "safety_notes": {"type": "string"},
+                "blocked_reasons": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": [
+                "internal_analysis",
+                "public_post_text",
+                "claim_support",
+                "safety_notes",
+                "blocked_reasons",
+            ],
+        }
+        safe_input = {
+            "target_account_id": account_id,
+            "account_rules": account_rules(account_id),
+            "caption_mode": source_mode,
+            "source_url": post.canonical_post_url,
+            "source_post_text": post.original_post_text[:6000],
+            "media_metadata": [
+                {
+                    "media_type": item.media_type,
+                    "duration_seconds": item.duration_seconds,
+                    "width": item.width,
+                    "height": item.height,
+                }
+                for item in post.media_items
+            ],
+        }
+        prompt = (
+            "日本語Threadsの公開本文をJSONで作成する。"
+            "source、reference、metadata、transcript、AIなどの内部語を公開文に出さない。"
+            "参照投稿だけを根拠に、80〜500文字、1投稿1テーマの新しい読者向け本文にする。"
+            "数値・事実・経験を捏造せず、元投稿者の所属や実績を対象アカウント自身の実績に見せない。"
+            "public_post_textの実質的主張ごとにclaim_supportを作り、source_evidenceは入力文の短い正確な根拠にする。"
+            "internal_analysisにmain_claims、core_topic、intended_audience、factual_constraints、prohibited_inferencesを入れる。\n"
+            + json.dumps(safe_input, ensure_ascii=False)
+        )
+        try:
+            result = self.client.generate_json(
+                model=os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
+                prompt=prompt,
+                schema=schema,
+                operation="direct_reference_caption_generation",
+                account_id=account_id,
+                cache_context={
+                    "source_post_id": post.source_post_id,
+                    "content_hash": post.content_hash,
+                    "caption_mode": source_mode,
+                },
+            )
+        except RuntimeError as exc:
+            return ProviderResult(
+                self.provider_name,
+                self.provider_version,
+                "FAILED",
+                reason=f"{type(exc).__name__}:gemini_direct_caption_failed",
+                retryable=True,
+            )
+        return ProviderResult(
+            self.provider_name,
+            self.provider_version,
+            "PASS",
+            data=dict(result["data"]),
+            metadata={"model": str(result.get("model", "")), "privacy_scope": "source_text_only"},
+        )
+
+
+class DirectCaptionProviderFailover:
+    """GitHub Models first, then privacy-bounded Gemini for direct media."""
+
+    provider_name = "direct_caption_provider_failover"
+    provider_version = "1"
+
+    def __init__(
+        self,
+        primary: Any | None = None,
+        fallback: Any | None = None,
+    ) -> None:
+        self.primary = primary or GitHubModelsGroundedProvider()
+        self.fallback = fallback or PrivacyBoundedGeminiGroundedProvider()
+
+    def generate(self, post: SourcePostBundle, **kwargs: Any) -> ProviderResult[dict[str, Any]]:
+        primary = self.primary.generate(post, **kwargs)
+        if primary.ok or not getattr(self.fallback, "available", False):
+            return primary
+        fallback = self.fallback.generate(post, **kwargs)
+        if fallback.ok:
+            return fallback
+        return ProviderResult(
+            self.provider_name,
+            self.provider_version,
+            "FAILED",
+            reason="|".join(filter(None, (primary.reason, fallback.reason))),
+            retryable=primary.retryable or fallback.retryable,
+            metadata={"primary_provider": self.primary.provider_name, "fallback_provider": self.fallback.provider_name},
+        )
 
 
 def _text(value: Any) -> str:
