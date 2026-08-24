@@ -47,8 +47,6 @@ from media_activation_source_suitability import (  # noqa: E402
 )
 from public_post_quality import (  # noqa: E402
     final_public_post_validator,
-    generate_grounded_reader_facing_post,
-    generate_reader_facing_post,
     public_preview,
 )
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
@@ -468,36 +466,19 @@ def _transcript_done(row: dict[str, Any]) -> bool:
 
 
 def night_subject_policy_check(source: dict[str, Any], video: dict[str, Any]) -> dict[str, str]:
-    """Conservative, explainable eligibility check for night_scout clip use.
-
-    We do not claim visual recognition. A video must either be explicitly
-    reviewed or its public metadata must contain a female-subject cue, and
-    clear scout-talking-head/store-recruiting metadata is blocked. Unknown is
-    analysis-only, which is safer than turning a source-level permission into a
-    blanket claim about every video on that channel.
-    """
+    """Conservative Night-domain eligibility check before transcript analysis."""
     if "night_scout" not in (source.get("target_account_ids") or [source.get("target_account_id")]):
         return {"status": "PASS", "reason": "not_night_scout"}
-    if str(video.get("subject_review_status", "")).upper() == "APPROVED_FEMALE_SUBJECT":
+    if str(video.get("subject_review_status", "")).upper() in {"APPROVED_FEMALE_SUBJECT", "APPROVED_NIGHT_DOMAIN"}:
         return {"status": "PASS", "reason": "explicit_subject_review"}
     text = " ".join(str(video.get(key, "")) for key in ("title", "description_preview", "description")).lower()
-    blocked = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
+    blocked = ("男性スカウト", "ホスト密着", "店舗pr", "店pr", "recruitment only")
     if any(token.lower() in text for token in blocked):
         return {"status": "BLOCKED", "reason": "night_subject_policy_analysis_only"}
-    female_cues = (
-        "キャバ嬢",
-        "女の子",
-        "女性",
-        "嬢",
-        "キャスト",
-        "美女",
-        "女優",
-        "girl",
-        "ladies",
-    )
-    if any(token.lower() in text for token in female_cues):
-        return {"status": "PASS", "reason": "metadata_female_subject_cue"}
-    return {"status": "BLOCKED", "reason": "night_subject_evidence_required"}
+    domain_cues = ("夜職", "キャバ", "ラウンジ", "店選び", "時給", "ノルマ", "客層", "出勤", "移籍")
+    if any(token.lower() in text for token in domain_cues):
+        return {"status": "PASS", "reason": "metadata_night_domain_cue"}
+    return {"status": "BLOCKED", "reason": "night_domain_evidence_required"}
 
 
 def _segments(row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -801,7 +782,6 @@ def build_media_growth_plan(
             config,
             account_id=account_id,
         )
-        count = len(clip_specs)
         video_candidates = []
         for i, spec in enumerate(clip_specs, start=1):
             source_video_id = str(source_video.get("source_video_id", ""))

@@ -58,9 +58,10 @@ bad_youtube_id, bad_youtube_id_skipped = eligible_videos(
     limit=3,
 )
 night_good = {**video, "source_video_id": "sv_ns_good", "account_id": "night_scout", "title": "キャバ嬢の店選び"}
+night_domain = {**video, "source_video_id": "sv_ns_domain", "account_id": "night_scout", "title": "夜職の時給と店選びを考える"}
 night_bad = {**video, "source_video_id": "sv_ns_bad", "account_id": "night_scout", "title": "男性スカウトが語る求人"}
 night_unknown = {**video, "source_video_id": "sv_ns_unknown", "account_id": "night_scout", "title": "HOSTCALL episode"}
-night_selected, _ = eligible_videos([night_bad, night_unknown, night_good], [], account_id="night_scout", limit=3)
+night_selected, _ = eligible_videos([night_bad, night_unknown, night_good, night_domain], [], account_id="night_scout", limit=3)
 partial = build_transcript_row(
     {**video, "duration_seconds": 4004},
     {"text": "safe transcript", "segments": [{"start": 0, "end": 899, "text": "safe transcript"}], "processed_duration_seconds": 899},
@@ -83,10 +84,11 @@ checks = [
     ("third party blocked", not bad and "rights_not_approved" in bad_skipped[0]["reason"]),
     ("inactive source blocked", not inactive and "source_not_active_for_media_autopilot" in inactive_skipped[0]["reason"]),
     ("youtube channel id blocked as video", not bad_youtube_id and "youtube_individual_video_id_required" in bad_youtube_id_skipped[0]["reason"]),
-    ("night female subject metadata accepted", night_metadata_clip_eligible(night_good)[0]),
+    ("night subject metadata accepted for domain relevance", night_metadata_clip_eligible(night_good)[0]),
+    ("night gender-neutral domain metadata accepted", night_metadata_clip_eligible(night_domain)[0]),
     ("night male scout metadata blocked", not night_metadata_clip_eligible(night_bad)[0]),
     ("night unknown subject metadata blocked", not night_metadata_clip_eligible(night_unknown)[0]),
-    ("night transcription skips unsuitable videos", [row["source_video_id"] for row in night_selected] == ["sv_ns_good"]),
+    ("night transcription skips unsuitable videos", [row["source_video_id"] for row in night_selected] == ["sv_ns_domain", "sv_ns_good"]),
     ("bounded long transcription recorded as partial", partial["transcription_scope"] == "PARTIAL" and partial["processed_minutes"] < 15.1),
     ("runner persistence bounds long transcript cells", save_result["transcripts_saved"] == 1 and len(persisted["transcript_text"]) < MAX_SHEETS_CELL_CHARS and len(persisted["segments_json"]) < MAX_SHEETS_CELL_CHARS),
     ("runner persistence keeps transcript evidence", persisted["transcript_hash"] == "full-transcript-sha" and "SHEETS_BOUNDED" in persisted["transcription_scope"]),

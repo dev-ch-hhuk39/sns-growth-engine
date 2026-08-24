@@ -14,12 +14,14 @@ sys.path.insert(0, str(ROOT / "src"))
 
 os.environ["GITHUB_MODELS_ENABLED"] = "false"
 
-from acquisition.contracts import ProviderResult
-from generation.source_grounded_caption import (
+from acquisition.contracts import ProviderResult  # noqa: E402
+from generation.source_grounded_caption import (  # noqa: E402
     DeterministicGroundedProvider,
     SourceGroundedCaptionService,
+    account_evidence_terms,
 )
-from run_media_production_pipeline import (
+from media_activation_source_suitability import account_evidence_hits  # noqa: E402
+from run_media_production_pipeline import (  # noqa: E402
     _build_final_caption_bundle,
     _generate_final_media_caption,
 )
@@ -155,6 +157,18 @@ def main() -> int:
         "ライバー"
         in provider.EVIDENCE_TERMS["liver_manager"],
         "liver_manager includes actual creator terms",
+    )
+
+    check(
+        {"美容", "コスメ", "スキンケア"}.issubset(
+            set(account_evidence_terms("beauty_account"))
+        ),
+        "beauty_account loads evidence terms from its account config",
+    )
+
+    check(
+        len(account_evidence_hits("beauty_account", "スキンケアとコスメを比べる美容動画")) >= 2,
+        "beauty_account clip suitability uses account-config evidence terms",
     )
 
     night_caption = build_caption(
