@@ -145,25 +145,24 @@
   "max_new_source_posts_per_source_per_run": 3,
   "max_total_new_source_posts_per_run": 12,
   "reference_source_platforms": [
+    "threads",
     "tiktok",
     "x",
     "youtube"
   ],
-  "deferred_reference_acquisition_platforms": [
-    "threads"
-  ],
+  "deferred_reference_acquisition_platforms": [],
   "physical_media_source_platforms": [
+    "threads",
     "x",
     "youtube",
     "tiktok"
   ],
-  "deferred_physical_media_source_platforms": [
-    "threads"
-  ],
+  "deferred_physical_media_source_platforms": [],
   "physical_media_provider_by_platform": {
+    "threads": "public_og_direct_http",
     "x": "yt_dlp",
     "youtube": "yt_dlp",
     "tiktok": "public_embed_direct_http"
   },
-  "physical_media_policy": "x_youtube_and_owner_authorized_tiktok_only"
+  "physical_media_policy": "registered_source_provenance_and_permission_only"
 }

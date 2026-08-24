@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Threads remains a reference source, but new physical-media download is deferred."""
+"""Threads direct media uses the bounded CDN path, never a profile extractor."""
 from __future__ import annotations
 
 import sys
@@ -15,19 +15,28 @@ original_ytdlp = ingest.download_with_ytdlp
 try:
     ingest.download_direct_https_media = lambda *_a, **_k: events.append("direct")
     ingest.download_with_ytdlp = lambda *_a, **_k: events.append("yt_dlp")
+    provider = ingest.download_source_media(
+        media_url="https://scontent.example/video.mp4",
+        canonical_post_url="https://www.threads.com/@approved/post/ABC123",
+        path=Path("unused.mp4"),
+        media_type="video",
+        platform="threads",
+    )
+    assert provider == "threads_public_og_direct_http", provider
+    assert events == ["direct"], events
+
     try:
         ingest.download_source_media(
             media_url="https://scontent.example/video.mp4",
-            canonical_post_url="https://www.threads.com/@approved/post/ABC123",
+            canonical_post_url="https://www.threads.com/@approved",
             path=Path("unused.mp4"),
             media_type="video",
             platform="threads",
         )
     except RuntimeError as exc:
-        assert str(exc) == "physical_media_platform_deferred:threads", str(exc)
+        assert str(exc) == "threads_individual_post_url_required", str(exc)
     else:
-        raise AssertionError("Threads physical-media acquisition must be deferred")
-    assert events == [], events
+        raise AssertionError("Threads profile URLs must never be downloaded")
 finally:
     ingest.download_direct_https_media = original_direct
     ingest.download_with_ytdlp = original_ytdlp

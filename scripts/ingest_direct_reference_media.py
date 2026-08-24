@@ -44,6 +44,7 @@ _SAFE_INGEST_ERROR_CODES = {
     "cloudinary_secure_url_missing",
     "source_post_media_read_after_write_failed",
     "physical_media_platform_deferred",
+    "threads_individual_post_url_required",
 }
 
 
@@ -317,6 +318,11 @@ def download_source_media(
             raise RuntimeError("tiktok_individual_post_url_required")
         download_direct_https_media(media_url, path, media_type=media_type)
         return "tiktok_public_embed_direct_http"
+    if resolved_platform == "threads":
+        if "/post/" not in canonical_post_url:
+            raise RuntimeError("threads_individual_post_url_required")
+        download_direct_https_media(media_url, path, media_type=media_type)
+        return "threads_public_og_direct_http"
     target_url = canonical_post_url or media_url
     if not safe_https_url(target_url):
         raise RuntimeError("direct_media_url_blocked")

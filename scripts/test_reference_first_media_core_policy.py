@@ -22,15 +22,16 @@ from generation.reference_first_router import load_operational_mix  # noqa: E402
 assert REFERENCE_PLATFORMS == ("threads", "tiktok", "x", "youtube")
 assert DEFERRED_REFERENCE_PLATFORMS == ()
 assert REFERENCE_PLATFORM_PRIORITY == {"threads": 0, "tiktok": 1, "x": 2, "youtube": 3}
-assert set(PHYSICAL_MEDIA_PLATFORMS) == {"x", "youtube", "tiktok"}
-assert set(DEFERRED_PHYSICAL_MEDIA_PLATFORMS) == {"threads"}
+assert set(PHYSICAL_MEDIA_PLATFORMS) == {"threads", "x", "youtube", "tiktok"}
+assert set(DEFERRED_PHYSICAL_MEDIA_PLATFORMS) == set()
 assert can_attempt_physical_media("x")
 assert can_attempt_physical_media("youtube")
-assert not can_attempt_physical_media("threads")
+assert can_attempt_physical_media("threads")
 assert can_attempt_physical_media("tiktok")
 assert physical_media_provider("x") == "yt_dlp"
 assert physical_media_provider("youtube") == "yt_dlp"
 assert physical_media_provider("tiktok") == "public_embed_direct_http"
+assert physical_media_provider("threads") == "public_og_direct_http"
 assert reference_priority_score("threads") > reference_priority_score("tiktok") > reference_priority_score("x") > reference_priority_score("youtube")
 
 for account_id in ("night_scout", "liver_manager"):
@@ -39,7 +40,7 @@ for account_id in ("night_scout", "liver_manager"):
     assert mix["reference_text_generation"] + mix["direct_reference_media"] == 80
 
 media_cfg = json.loads((ROOT / "config/media_growth_engine.json").read_text(encoding="utf-8"))
-assert media_cfg["physical_media_source_platforms"] == ["x", "youtube", "tiktok"]
+assert media_cfg["physical_media_source_platforms"] == ["threads", "x", "youtube", "tiktok"]
 assert media_cfg["aspect_ratio_policy"] == "preserve_source"
 assert media_cfg["target_aspect_ratio"] == "preserve_source"
 
@@ -50,7 +51,7 @@ assert routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_galler
 
 workflow = (ROOT / ".github/workflows/direct-media-preparation.yml").read_text(encoding="utf-8")
 assert "playwright install" not in workflow
-assert "--platform threads" not in workflow
+assert "--platform threads" in workflow
 assert "--platform x" in workflow
 assert "--platform youtube" in workflow
 
