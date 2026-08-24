@@ -45,7 +45,7 @@ def _resolve_queue_media(queue_row: dict[str, Any]) -> dict[str, Any]:
 def _field_update(candidate: dict[str, Any], kind: str) -> dict[str, Any]:
     media = kind not in {"original_text", "reference_text"}
     values = {
-        "platform": "threads", "status": "READY", "public_post_text": candidate["public_post_text"],
+        "platform": "threads", "status": "READY", "public_post_text": str(candidate.get("public_post_text", "")),
         "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
         "canary_id": candidate["canary_id"], "updated_at": _now(),
     }
@@ -170,6 +170,8 @@ def build_plan(
             if not existing and not create_text_queue:
                 reasons.append("CANARY_QUEUE_MISSING")
             text = str(candidate.get("public_post_text", ""))
+            if not text.strip():
+                reasons.append("PUBLIC_POST_TEXT_MISSING")
             if final_public_post_validator(text, account_id)["status"] != "PASS":
                 reasons.append("PUBLIC_POST_VALIDATOR_BLOCKED")
             if existing and kind not in {"original_text", "reference_text"}:

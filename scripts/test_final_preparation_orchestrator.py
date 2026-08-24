@@ -3,6 +3,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from prepare_bounded_canary_publish import _field_update
+
 root=Path(__file__).resolve().parents[1]
 text=(root/"scripts/run_final_production_preparation.py").read_text()
 assert '"--platform", "x"' in text
@@ -17,4 +19,6 @@ completed = subprocess.run(
     check=False,
 )
 assert completed.returncode == 0, completed.stderr
+missing_text_update = _field_update({"canary_id": "missing-text"}, "direct_image")
+assert missing_text_update["public_post_text"] == ""
 print("PASS test_final_preparation_orchestrator.py")
