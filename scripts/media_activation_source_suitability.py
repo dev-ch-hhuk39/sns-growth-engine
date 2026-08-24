@@ -3,23 +3,29 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-ACCOUNT_EVIDENCE_TERMS: dict[str, tuple[str, ...]] = {
-    "night_scout": (
-        "夜職", "キャバ", "キャバ嬢", "ラウンジ", "風俗", "風俗嬢",
-        "店", "店舗", "時給", "控除", "ノルマ", "罰金", "バック",
-        "客層", "体験入店", "出勤", "移籍", "指名", "売上", "担当",
-        "相談", "副業", "睡眠", "働く", "手取り",
-    ),
-    "liver_manager": (
-        "配信", "配信者", "ライバー", "TikTok LIVE", "tiktoklive",
-        "初見", "入室", "コメント", "リスナー", "ギフト", "投げ銭",
-        "バトル", "事務所", "所属", "継続", "配信時間", "話題",
-        "振り返り", "ダイヤ", "常連", "応援", "企画",
-    ),
-}
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _configured_account_evidence_terms() -> dict[str, tuple[str, ...]]:
+    registry = json.loads((ROOT / "config/managed_accounts.json").read_text(encoding="utf-8"))
+    result: dict[str, tuple[str, ...]] = {}
+    for account_id, record in registry.get("accounts", {}).items():
+        config = json.loads((ROOT / str(record["account_config"])).read_text(encoding="utf-8"))
+        generation = config.get("generation", {})
+        terms = [str(term) for term in generation.get("domain_terms", []) if str(term).strip()]
+        for values in generation.get("topic_keywords", {}).values():
+            if isinstance(values, list):
+                terms.extend(str(term) for term in values if str(term).strip())
+        result[str(account_id)] = tuple(dict.fromkeys(terms))
+    return result
+
+
+ACCOUNT_EVIDENCE_TERMS = _configured_account_evidence_terms()
 MIN_SOURCE_EVIDENCE_TERM_COUNT = 2
 MIN_CLIP_TRANSCRIPT_CHARS = 30
 

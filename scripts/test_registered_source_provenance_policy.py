@@ -20,6 +20,7 @@ assert all(source["rights_status"] == "approved_creator_clip" for source in appr
 assert all(source["permission_status"] == "approved" for source in approved)
 assert all(source["media_usage_mode"] == "direct_and_clip" for source in approved)
 assert all(source["original_author_match_required"] is True for source in approved)
+assert all(source["allow_new_caption"] is True for source in approved)
 
 source = next(source for source in approved if source.get("source_handle"))
 handle = str(source["source_handle"]).lstrip("@")

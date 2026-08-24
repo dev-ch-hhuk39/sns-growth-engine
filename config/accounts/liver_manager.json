@@ -80,7 +80,7 @@
     "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
   },
   "generation": {
-    "domain_terms": ["配信", "ライバー", "リスナー", "初見", "コメント", "ギフト", "事務所", "LIVE"]
+    "domain_terms": ["配信", "配信者", "ライバー", "TikTok LIVE", "tiktoklive", "LIVE", "初見", "入室", "コメント", "リスナー", "ギフト", "投げ銭", "バトル", "事務所", "所属", "継続", "配信時間", "話題", "振り返り", "ダイヤ", "常連", "応援", "企画"]
   },
   "learning_policy": {
     "min_results_for_learning": 10,

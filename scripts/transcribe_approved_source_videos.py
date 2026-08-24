@@ -39,8 +39,8 @@ APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DONE_STATUSES = {"DONE", "FETCHED", "LOCAL_WHISPER_DONE", "YOUTUBE_CAPTIONS_DONE"}
 TERMINAL_TRANSCRIPT_STATUSES = {"NO_RELIABLE_SPEECH", "MEDIA_ACQUISITION_BLOCKED"}
 TIKTOK_REHYDRATION_ERROR = "unable to extract universal data for rehydration"
-NIGHT_FEMALE_SUBJECT_CUES = ("キャバ嬢", "女の子", "女性", "嬢", "キャスト", "girl", "ladies")
-NIGHT_ANALYSIS_ONLY_CUES = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
+NIGHT_DOMAIN_CUES = ("夜職", "キャバ", "ラウンジ", "店選び", "時給", "ノルマ", "客層", "出勤", "移籍")
+NIGHT_ANALYSIS_ONLY_CUES = ("男性スカウト", "ホスト密着", "店舗pr", "店pr", "recruitment only")
 
 
 def now_iso() -> str:
@@ -56,17 +56,17 @@ def _true(value: Any) -> bool:
 
 
 def night_metadata_clip_eligible(video: dict[str, Any]) -> tuple[bool, str]:
-    """Pre-filter expensive transcription using the conservative clip policy."""
+    """Pre-filter on Night topic relevance, not the presenter's gender."""
     if str(video.get("account_id", "")) != "night_scout":
         return True, "not_night_scout"
-    if str(video.get("subject_review_status", "")).upper() == "APPROVED_FEMALE_SUBJECT":
+    if str(video.get("subject_review_status", "")).upper() in {"APPROVED_FEMALE_SUBJECT", "APPROVED_NIGHT_DOMAIN"}:
         return True, "explicit_subject_review"
     text = " ".join(str(video.get(key, "")) for key in ("title", "description_preview", "description")).lower()
     if any(token.lower() in text for token in NIGHT_ANALYSIS_ONLY_CUES):
         return False, "night_subject_policy_analysis_only"
-    if any(token.lower() in text for token in NIGHT_FEMALE_SUBJECT_CUES):
-        return True, "metadata_female_subject_cue"
-    return False, "night_subject_evidence_required"
+    if any(token.lower() in text for token in NIGHT_DOMAIN_CUES):
+        return True, "metadata_night_domain_cue"
+    return False, "night_domain_evidence_required"
 
 
 def transcript_id_for(video: dict[str, Any]) -> str:

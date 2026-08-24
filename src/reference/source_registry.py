@@ -118,6 +118,7 @@ def _apply_registered_owner_scope(sources: list[dict[str, Any]]) -> list[dict[st
             "reuse_policy": "approved_creator_clip",
             "media_policy": "approved_gated",
             "media_usage_mode": policy["media_usage_mode"],
+            "allow_new_caption": "generate_new_caption" in policy.get("permission_scope", []),
             "media_pipeline_eligible": True,
             "media_autopilot_enabled": True,
             "clip_enabled": True,

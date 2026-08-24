@@ -81,7 +81,7 @@
     "roles": ["hook", "context", "reason", "example", "checklist", "objection_handling", "proof", "cta"]
   },
   "generation": {
-    "domain_terms": ["夜職", "キャバ", "店", "時給", "ノルマ", "担当", "出勤", "移籍", "指名", "売上"]
+    "domain_terms": ["夜職", "キャバ", "キャバ嬢", "ラウンジ", "風俗", "風俗嬢", "店", "店舗", "時給", "控除", "ノルマ", "罰金", "バック", "客層", "体験入店", "出勤", "移籍", "指名", "売上", "担当", "相談", "副業", "睡眠", "働く", "手取り"]
   },
   "learning_policy": {
     "min_results_for_learning": 10,

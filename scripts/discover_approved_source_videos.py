@@ -687,6 +687,102 @@ def _bounded_public_comments(
 YOUTUBE_PUBLIC_VIDEO_ID_RE = re.compile(r'"videoId":"([A-Za-z0-9_-]{11})"')
 
 
+def _assigned_json_object(html: str, marker: str) -> dict[str, Any] | None:
+    """Parse one bounded JSON assignment without evaluating page JavaScript."""
+    marker_index = html.find(marker)
+    if marker_index < 0:
+        return None
+    start = html.find("{", marker_index + len(marker))
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(html)):
+        char = html[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    value = json.loads(html[start:index + 1])
+                except json.JSONDecodeError:
+                    return None
+                return value if isinstance(value, dict) else None
+    return None
+
+
+def _youtube_text(value: Any) -> str:
+    if not isinstance(value, dict):
+        return ""
+    if str(value.get("simpleText") or "").strip():
+        return str(value["simpleText"]).strip()
+    runs = value.get("runs")
+    if isinstance(runs, list):
+        return "".join(
+            str(item.get("text") or "")
+            for item in runs
+            if isinstance(item, dict)
+        ).strip()
+    return ""
+
+
+def _youtube_duration_seconds(value: Any) -> int:
+    text = _youtube_text(value)
+    if not re.fullmatch(r"\d{1,3}(?::\d{1,2}){1,2}", text):
+        return 0
+    total = 0
+    for part in text.split(":"):
+        total = total * 60 + int(part)
+    return total
+
+
+def youtube_public_video_entries(html: str) -> list[dict[str, Any]]:
+    """Read real video metadata embedded in a public channel's ytInitialData."""
+    initial_data = None
+    for marker in ("var ytInitialData =", "window[\"ytInitialData\"] =", "ytInitialData ="):
+        initial_data = _assigned_json_object(html, marker)
+        if initial_data is not None:
+            break
+    if initial_data is None:
+        return []
+
+    entries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    stack: list[Any] = [initial_data]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, list):
+            stack.extend(reversed(value))
+            continue
+        if not isinstance(value, dict):
+            continue
+        video_id = str(value.get("videoId") or "")
+        title = _youtube_text(value.get("title"))
+        if re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id) and title and video_id not in seen:
+            seen.add(video_id)
+            entries.append({
+                "id": video_id,
+                "title": title,
+                "duration": _youtube_duration_seconds(value.get("lengthText")),
+                "description": _youtube_text(value.get("descriptionSnippet")),
+                "published_at": _youtube_text(value.get("publishedTimeText")),
+            })
+        stack.extend(reversed(list(value.values())))
+    return entries
+
+
 def youtube_public_video_ids(
     html: str,
     *,
@@ -732,32 +828,48 @@ def discover_youtube_public_html(
         limit,
         max(1, int(scan_plan.get("per_source_new_limit", config.get("max_new_videos_per_source_per_run", 3)))),
     )
-    video_ids = youtube_public_video_ids(
-        html,
-        limit=detail_limit,
-        start_position=int(scan_plan.get("start_position", 1)),
-    )
+    start_position = int(scan_plan.get("start_position", 1))
+    structured_entries = youtube_public_video_entries(html)
+    selected_entries = structured_entries[
+        max(0, start_position - 1):max(0, start_position - 1) + detail_limit
+    ]
+    video_ids = [str(entry["id"]) for entry in selected_entries]
+    if not video_ids:
+        video_ids = youtube_public_video_ids(
+            html,
+            limit=detail_limit,
+            start_position=start_position,
+        )
+        selected_entries = [{"id": video_id} for video_id in video_ids]
     if not video_ids:
         return [], "youtube_public_html_no_individual_videos"
-    if importlib.util.find_spec("yt_dlp") is None:
-        return [], "yt_dlp_not_installed"
-    import yt_dlp  # type: ignore[import]
+    yt_dlp_available = importlib.util.find_spec("yt_dlp") is not None
+    if yt_dlp_available:
+        import yt_dlp  # type: ignore[import]
 
     rows: list[dict[str, Any]] = []
-    for position, video_id in enumerate(video_ids, start=1):
+    for position, public_entry in enumerate(selected_entries, start=start_position):
+        video_id = str(public_entry["id"])
         video_url = f"https://www.youtube.com/watch?v={video_id}"
-        try:
-            with yt_dlp.YoutubeDL(metadata_options("youtube", {
-                "skip_download": True,
-                "noplaylist": True,
-                "quiet": True,
-                "no_warnings": True,
-                "ignoreerrors": True,
-                "socket_timeout": 20,
-            })) as ydl:
-                entry = ydl.extract_info(video_url, download=False) or {}
-        except Exception:
-            entry = {}
+        entry = dict(public_entry)
+        detail_used = False
+        if yt_dlp_available:
+            try:
+                with yt_dlp.YoutubeDL(metadata_options("youtube", {
+                    "skip_download": True,
+                    "noplaylist": True,
+                    "quiet": True,
+                    "no_warnings": True,
+                    "ignoreerrors": True,
+                    "socket_timeout": 20,
+                })) as ydl:
+                    detail = ydl.extract_info(video_url, download=False) or {}
+            except Exception:
+                detail = {}
+            if isinstance(detail, dict):
+                verified_detail = {key: value for key, value in detail.items() if value not in (None, "")}
+                detail_used = bool(str(verified_detail.get("title") or "").strip())
+                entry = {**entry, **verified_detail}
         row = build_source_video(
             source,
             index=position,
@@ -769,9 +881,15 @@ def discover_youtube_public_html(
         )
         row["source_position"] = position
         row["discovery_mode"] = str(scan_plan.get("mode", "initial"))
-        row["collection_backend"] = "youtube_public_html_then_ytdlp_metadata"
+        row["collection_backend"] = (
+            "youtube_public_html_structured_then_ytdlp_metadata"
+            if detail_used
+            else "youtube_public_html_structured"
+            if str(public_entry.get("title") or "").strip()
+            else "youtube_public_html_video_id_only"
+        )
         row["author_handle"] = str(entry.get("uploader_id") or entry.get("channel_id") or source.get("source_handle") or "")
-        row["published_at"] = str(entry.get("upload_date") or entry.get("timestamp") or "")
+        row["published_at"] = str(entry.get("upload_date") or entry.get("timestamp") or entry.get("published_at") or "")
         row["view_count"] = entry.get("view_count") or ""
         row["like_count"] = entry.get("like_count") or ""
         row["comment_count"] = entry.get("comment_count") or ""

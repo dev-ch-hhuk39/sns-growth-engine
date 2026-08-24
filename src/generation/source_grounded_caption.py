@@ -78,12 +78,13 @@ def account_evidence_terms(account_id: str) -> tuple[str, ...]:
     """Return bounded, account-owned evidence vocabulary for deterministic grounding."""
     cfg = _account_config(account_id)
     generation = cfg.get("generation", {})
-    configured = [
+    configured = [str(term) for term in generation.get("domain_terms", []) if str(term).strip()]
+    configured.extend(
         str(term)
         for terms in generation.get("topic_keywords", {}).values()
         for term in (terms if isinstance(terms, list) else [])
         if str(term).strip()
-    ]
+    )
     legacy = list(DeterministicGroundedProvider.EVIDENCE_TERMS.get(account_id, ()))
     return tuple(dict.fromkeys(legacy + configured))
 
@@ -340,17 +341,6 @@ class DeterministicGroundedProvider:
                     "account_relevant_source_evidence_missing"
                 ),
             )
-
-        evidence = max(
-            evidence_candidates,
-            key=lambda sentence: (
-                sum(
-                    term.casefold() in sentence.casefold()
-                    for term in terms
-                ),
-                len(sentence),
-            ),
-        )[:300]
 
         try:
             from public_post_quality import (
