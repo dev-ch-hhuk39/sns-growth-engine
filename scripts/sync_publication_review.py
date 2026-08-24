@@ -24,15 +24,34 @@ def build_rows(queue_rows: list[dict], existing_rows: list[dict]) -> list[dict[s
     return [review_row(queue, existing.get(text(queue.get("queue_id")))) for queue in queue_rows if is_reviewable(queue)]
 
 
+def sheets_call(client, label: str, operation):
+    retry = getattr(client, "_call_with_rate_limit_retry", None)
+    return retry(label, operation) if callable(retry) else operation()
+
+
 def sync(client, *, apply: bool) -> dict:
     if not hasattr(client, "_ensure_tab") or not hasattr(client, "_ws"):
         return {"status": "MOCK_PLAN", "would_write": 0, "review_rows": []}
     client._ensure_tab("queue", TAB_DEFINITIONS["queue"])
     if apply:
         client._ensure_tab("publication_review", TAB_DEFINITIONS["publication_review"])
-    queue_rows = [dict(row) for row in client._ws("queue").get_all_records()]
+    queue_rows = [
+        dict(row)
+        for row in sheets_call(
+            client,
+            "get_all_records:queue:publication_review_sync",
+            lambda: client._ws("queue").get_all_records(),
+        )
+    ]
     try:
-        existing_rows = [dict(row) for row in client._ws("publication_review").get_all_records()]
+        existing_rows = [
+            dict(row)
+            for row in sheets_call(
+                client,
+                "get_all_records:publication_review:sync_existing",
+                lambda: client._ws("publication_review").get_all_records(),
+            )
+        ]
     except Exception:
         existing_rows = []
     rows = build_rows(queue_rows, existing_rows)
@@ -40,7 +59,11 @@ def sync(client, *, apply: bool) -> dict:
     if not apply:
         return plan
     ws = client._ws("publication_review")
-    headers = ws.row_values(1)
+    headers = sheets_call(
+        client,
+        "row_values:publication_review:sync",
+        lambda: ws.row_values(1),
+    )
     by_queue = {text(row.get("queue_id")): index for index, row in enumerate(existing_rows, start=2) if text(row.get("queue_id"))}
     updates, appends = [], []
     for row in rows:
@@ -53,10 +76,25 @@ def sync(client, *, apply: bool) -> dict:
                 continue
             updates.append({"range": f"{_col_letter(headers.index(field) + 1)}{target_row}", "values": [[value]]})
     if appends:
-        ws.append_rows(appends, value_input_option="USER_ENTERED")
+        sheets_call(
+            client,
+            "append_rows:publication_review:sync",
+            lambda: ws.append_rows(appends, value_input_option="USER_ENTERED"),
+        )
     if updates:
-        ws.batch_update(updates, value_input_option="USER_ENTERED")
-    saved = {text(row.get("queue_id")) for row in client._ws("publication_review").get_all_records()}
+        sheets_call(
+            client,
+            "batch_update:publication_review:sync",
+            lambda: ws.batch_update(updates, value_input_option="USER_ENTERED"),
+        )
+    saved = {
+        text(row.get("queue_id"))
+        for row in sheets_call(
+            client,
+            "get_all_records:publication_review:sync_verify",
+            lambda: client._ws("publication_review").get_all_records(),
+        )
+    }
     plan["read_after_write"] = all(row["queue_id"] in saved for row in rows)
     plan["appended_count"] = len(appends)
     plan["updated_count"] = len(updates)

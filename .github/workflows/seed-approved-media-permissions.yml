@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       confirm_owner_attestation:
-        description: "Type true to seed only the five configured approved creator sources"
+        description: "Type true to seed canonical registered-owner sources only"
         required: true
         default: "false"
 
@@ -49,9 +49,10 @@ jobs:
           test -n "$SA_JSON_BASE64" || test -n "$GCP_SA_JSON_BASE64" || { echo "[BLOCKED] Sheets service account secret is missing"; exit 1; }
       - name: Seed explicit approved media permissions
         run: |
+          args=()
+          while IFS= read -r source_id; do
+            [ -n "$source_id" ] && args+=(--source-id "$source_id")
+          done < <(PYTHONPATH=src python3 -c 'from reference.source_registry import load_registry; print("\n".join(sorted(str(row["source_id"]) for row in load_registry() if row.get("registered_owner_scope_id"))))')
+          [ "${#args[@]}" -gt 0 ] || { echo "[BLOCKED] no canonical registered-owner sources"; exit 1; }
           python3 scripts/seed_owner_attested_media_permissions.py --apply --confirm-owner-attestation \
-            --source-id src_ns_yt_cand_001 \
-            --source-id src_lm_yt_user_001 \
-            --source-id src_lm_tt_user_001 \
-            --source-id src_lm_tt_user_002 \
-            --source-id src_lm_tt_user_003
+            "${args[@]}"
