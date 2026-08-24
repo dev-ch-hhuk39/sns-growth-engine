@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+# ruff: noqa: E402 - standalone regression configures repository import paths.
+
 import os
 import sys
 from pathlib import Path
@@ -99,6 +101,28 @@ owned_mode = direct_caption_mode(
     source=source,
     permission=permission,
 )
+registered_mode = direct_caption_mode(
+    post={**post, "source_id": "src_registered_creator"},
+    source={
+        "source_id": "src_registered_creator",
+        "registered_owner_scope_id": "owner-scope-1",
+        "permission_status": "approved",
+        "provenance_required": True,
+        "original_author_match_required": True,
+        "allow_new_caption": True,
+    },
+    permission={},
+)
+registered_without_provenance_mode = direct_caption_mode(
+    post={**post, "source_id": "src_registered_incomplete"},
+    source={
+        "source_id": "src_registered_incomplete",
+        "registered_owner_scope_id": "owner-scope-1",
+        "permission_status": "approved",
+        "allow_new_caption": True,
+    },
+    permission={},
+)
 
 captured_plan: dict[str, object] = {}
 
@@ -186,6 +210,14 @@ checks = [
     (
         "system-owned new-caption direct uses transform",
         owned_mode == "transform",
+    ),
+    (
+        "registered approved source uses new commentary",
+        registered_mode == "transform",
+    ),
+    (
+        "registered source without provenance remains source preserving",
+        registered_without_provenance_mode == "source_copyedit",
     ),
     (
         "runtime uses exact-evidence deterministic provider",

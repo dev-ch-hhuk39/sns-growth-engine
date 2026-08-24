@@ -21,11 +21,11 @@ def direct_caption_mode(
     source: Mapping[str, Any] | None = None,
     permission: Mapping[str, Any] | None = None,
 ) -> str:
-    """Return transform only for explicitly owned Direct media with new-caption rights.
+    """Return transform only for approved owned or registered-source commentary.
 
-    External creator media remains source-preserving by default.  The
-    ``system_owned_`` source ID is an existing inventory identity contract,
-    not a heuristic inferred from public text.
+    Unregistered external creator media remains source-preserving by default.
+    Registered source commentary requires the canonical owner scope and its
+    provenance controls; the function never infers permission from public text.
     """
 
     source = source or {}
@@ -66,8 +66,15 @@ def direct_caption_mode(
         _true(row.get("allow_new_caption"))
         for row in (permission, post, source)
     )
+    registered_commentary = (
+        bool(_text(source.get("registered_owner_scope_id")))
+        and _text(source.get("permission_status")).lower() == "approved"
+        and _true(source.get("provenance_required"))
+        and _true(source.get("original_author_match_required"))
+        and allow_new_caption
+    )
 
-    return "transform" if owned and allow_new_caption else "source_copyedit"
+    return "transform" if (owned and allow_new_caption) or registered_commentary else "source_copyedit"
 
 
 def queue_caption_mode(
