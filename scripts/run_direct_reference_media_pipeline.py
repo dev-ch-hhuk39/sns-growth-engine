@@ -49,6 +49,7 @@ from acquisition.reliability import (  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 from accounts.managed_accounts import account_choices, managed_account, route_slot_id  # noqa: E402
+from reference.source_registry import load_registry  # noqa: E402
 
 POSTED_SLOT_STATUSES = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
 MEDIA_CONFIG = ROOT / "config/media_growth_engine.json"
@@ -239,7 +240,51 @@ def _today_posts(rows: list[dict[str, Any]], account_id: str) -> list[dict[str, 
 def _source_map(client: SheetsClient) -> dict[str, dict[str, Any]]:
     rows = _records(client, "source_accounts")
     rows.extend(_records(client, "reference_sources"))
-    return {str(row.get("source_id", "")): row for row in rows if row.get("source_id")}
+    production = {
+        str(row.get("source_id", "")): dict(row)
+        for row in rows
+        if row.get("source_id")
+    }
+    canonical = {
+        str(row.get("source_id", "")): dict(row)
+        for row in load_registry()
+        if row.get("source_id")
+    }
+    policy_fields = {
+        "active",
+        "fetch_enabled",
+        "allow_network_fetch",
+        "rights_status",
+        "rights_policy",
+        "permission_status",
+        "permission_scope",
+        "permission_evidence_type",
+        "permission_evidence_reference",
+        "permission_approved_by",
+        "permission_approved_at",
+        "reuse_policy",
+        "media_policy",
+        "media_usage_mode",
+        "allow_new_caption",
+        "media_pipeline_eligible",
+        "media_autopilot_enabled",
+        "clip_enabled",
+        "transcript_enabled",
+        "provenance_required",
+        "original_author_match_required",
+        "third_party_repost_permission_inheritance",
+        "registered_owner_scope_id",
+    }
+    for source_id, source in canonical.items():
+        if source_id not in production:
+            production[source_id] = source
+            continue
+        merged = {**source, **production[source_id]}
+        for field in policy_fields:
+            if field in source:
+                merged[field] = source[field]
+        production[source_id] = merged
+    return production
 
 
 def _permission_map(client: SheetsClient, account_id: str) -> tuple[dict[str, dict[str, Any]], dict[str, list[str]]]:

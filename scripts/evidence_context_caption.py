@@ -34,6 +34,13 @@ TOPIC_TERMS: dict[str, dict[str, tuple[str, ...]]] = {
         "stream_review": ("振り返り", "数字", "改善", "見直"),
         "stream_planning": ("企画", "構成", "終わり方", "配信設計"),
     },
+    "beauty_account": {
+        "skincare_routine": ("スキンケア", "化粧水", "乳液", "保湿", "乾燥", "毛穴", "肌"),
+        "base_makeup": ("ファンデ", "下地", "ベースメイク", "コンシーラー", "色ムラ"),
+        "haircare_method": ("ヘアケア", "髪", "トリートメント", "オイル", "ドライヤー"),
+        "beauty_device_selection": ("美容家電", "アイロン", "ブラシ", "パフ", "スポンジ"),
+        "beauty_choice": ("美容", "メイク", "リップ", "チーク", "アイシャドウ", "サロン", "ネイル", "まつげ"),
+    },
 }
 
 TOPIC_COPY: dict[str, dict[str, tuple[str, str]]] = {
@@ -101,6 +108,34 @@ TOPIC_COPY: dict[str, dict[str, tuple[str, str]]] = {
             "まず配信構成を見直すと、次の企画で試す行動を決めやすくなります。",
         ),
     },
+    "beauty_account": {
+        "skincare_routine": (
+            "スキンケアって、一度に全部変えるより一つずつ見直す方が肌の反応を見やすいんだけど、これ結構大事。",
+            "個人的には、まず一つだけ試して肌の変化を見てみてほしい。",
+        ),
+        "base_makeup": (
+            "ベースメイクって、重ねる量よりどこを整えるかで仕上がりが変わる気がする。",
+            "気になる部分を一つ決めて、薄く重ねながら見てみてほしい。",
+        ),
+        "haircare_method": (
+            "ヘアケアって、アイテムを増やす前に使う量と順番を見直すのが意外と大事。",
+            "今のケアを一つだけ変えて、髪のまとまりを比べてみてほしい。",
+        ),
+        "beauty_device_selection": (
+            "美容家電やツールは、機能の多さより自分が続けて使えるかで選ぶのがいい気がする。",
+            "毎日使う場面を一つ想像して、操作やお手入れまで見てみてほしい。",
+        ),
+        "beauty_choice": (
+            "メイクやサロン選びって、流行を全部足すより今の自分に合うポイントを一つ拾う方がほんとに使いやすい。",
+            "気になるポイントを一つ決めて、普段のケアと比べてみてほしい。",
+        ),
+    },
+}
+
+AUDIENCES = {
+    "night_scout": "夜職を始めたい、店選びや移籍で悩む女性",
+    "liver_manager": "配信初心者、伸び悩むライバー、事務所選びで迷う人",
+    "beauty_account": "20〜30代の美容・コスメ好きの女性",
 }
 
 
@@ -253,16 +288,8 @@ def generate_evidence_context_caption(
                     "supporting_points": [claim],
                     "concrete_example": claim,
                     "conclusion": closing,
-                    "audience": (
-                        "夜職を始めたい、店選びや移籍で悩む女性"
-                        if account_id == "night_scout"
-                        else "配信初心者、伸び悩むライバー、事務所選びで迷う人"
-                    ),
-                    "intended_audience": (
-                        "夜職を始めたい、店選びや移籍で悩む女性"
-                        if account_id == "night_scout"
-                        else "配信初心者、伸び悩むライバー、事務所選びで迷う人"
-                    ),
+                    "audience": AUDIENCES[account_id],
+                    "intended_audience": AUDIENCES[account_id],
                     "media_role": "exact_transcript_evidence",
                     "factual_constraints": [evidence],
                     "prohibited_inferences": ["字幕にない数値・経験・結果を追加しない"],
