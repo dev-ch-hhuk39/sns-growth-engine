@@ -8,10 +8,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from dataclasses import asdict, dataclass
-from typing import Any, Iterable, Mapping
+from dataclasses import asdict, dataclass  # noqa: E402
+from typing import Any, Iterable, Mapping  # noqa: E402
 
-from accounts.managed_accounts import managed_account_ids
+from accounts.managed_accounts import managed_account_ids  # noqa: E402
 
 TARGET_ACCOUNTS = set(managed_account_ids())
 GATED_GENERATION_MODES = {
@@ -112,9 +112,7 @@ def decide_route(candidate: Mapping[str, Any]) -> AiRoute:
             "validated_beauty_candidate_requires_review_without_rewrite",
         )
 
-    if caption_mode == "source_copyedit" or (
-        media_origin == "direct_reference" and not (ownership in {"owned", "system_owned"} or source_id.startswith("system_owned_"))
-    ):
+    if caption_mode == "source_copyedit":
         return AiRoute(
             "external_direct_source_copyedit",
             True,
@@ -122,6 +120,18 @@ def decide_route(candidate: Mapping[str, Any]) -> AiRoute:
             True,
             3,
             "classify_then_constrained_copyedit_then_review",
+        )
+    if (
+        media_origin == "direct_reference"
+        and not (ownership in {"owned", "system_owned"} or source_id.startswith("system_owned_"))
+    ):
+        return AiRoute(
+            "external_direct_transform",
+            True,
+            True,
+            True,
+            3,
+            "registered_source_allows_grounded_commentary_transform",
         )
     if media_origin == "approved_source_clip" or content_type == "approved_source_clip" or generation_mode == "saved_approved_source_clip":
         return AiRoute("approved_clip_transform", True, True, True, 3, "clip_requires_fit_generation_and_review")

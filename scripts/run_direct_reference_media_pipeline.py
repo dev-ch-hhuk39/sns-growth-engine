@@ -810,11 +810,25 @@ def build_plan(
             else []
         )
         if scheduled_caption_reasons:
+            generation_reasons = [
+                str(reason)
+                for reason in grounded.get(
+                    "blocked_reasons",
+                    [],
+                )
+                if str(reason)
+            ]
             attempted.append({
                 "source_post_id": post.get("source_post_id", ""),
                 "media_asset_id": asset_id,
                 "quarantined": False,
-                "blocked_reasons": scheduled_caption_reasons,
+                "caption_provider": grounded.get("provider_name", ""),
+                "caption_status": grounded.get("status", ""),
+                "source_mode": grounded.get("source_mode", caption_mode),
+                "blocked_reasons": list(dict.fromkeys(
+                    generation_reasons
+                    + scheduled_caption_reasons
+                )),
             })
             # This is slot suitability, not evidence that the media asset is
             # invalid globally. Do not increment failure/quarantine state.

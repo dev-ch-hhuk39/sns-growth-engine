@@ -14,6 +14,7 @@ from hybrid_ai_gate import (  # noqa: E402
     hybrid_ai_gate_passed,
     merge_gate_audit,
 )
+from public_post_quality import generate_reader_facing_post  # noqa: E402
 
 
 class FakeClient:
@@ -104,6 +105,22 @@ def main() -> None:
     assert "でで" not in result.public_post_text
     assert result.actual_requests == 3
 
+    transform_queue = {
+        **base_queue(),
+        "caption_mode": "transform",
+        "transformation_type": "transform",
+    }
+    transform_text = generate_reader_facing_post(
+        "liver_manager",
+        3,
+    )["public_post_text"]
+    transform_result = HybridAiGate(
+        FakeClient(generated_text=transform_text)
+    ).evaluate(transform_queue, context)
+    assert transform_result.status == "PASS", transform_result.audit()
+    assert transform_result.route == "external_direct_transform"
+    assert transform_result.deterministic_validation["source_copyedit_contract"] == {}
+
     inconsistent = {
         "decision": "PASS",
         "target_account_match": "PASS",
@@ -176,6 +193,13 @@ def main() -> None:
     assert ok is True and reason == "pass"
     current, status = hybrid_ai_gate_current(passed_queue, context)
     assert current is True and status == "pass"
+
+    changed_route = dict(passed_queue)
+    changed_route["transformation_type"] = "transform"
+    changed_route["caption_mode"] = "transform"
+    changed_route["generation_policy_json"] = passed_queue["generation_policy_json"]
+    current, reason = hybrid_ai_gate_current(changed_route, context)
+    assert current is False and reason == "route_stale"
 
     changed_queue = dict(passed_queue)
     changed_queue["public_post_text"] += "変更"

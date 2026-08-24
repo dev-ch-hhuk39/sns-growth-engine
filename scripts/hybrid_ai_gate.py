@@ -275,12 +275,7 @@ def hybrid_ai_gate_current(
     if gate.get("schema_version") != GATE_SCHEMA_VERSION:
         return False, "schema_stale"
     expected_route = decide_route(queue).route
-    if (
-        expected_route == "semantic_review"
-        and _text(queue.get("account_id")) == "beauty_account"
-        and _text(queue.get("generated_by")) == "prepare_beauty_review_candidates.py"
-        and gate.get("route") != expected_route
-    ):
+    if gate.get("route") != expected_route:
         return False, "route_stale"
     if gate.get("input_hash") != hybrid_ai_input_hash(queue):
         return False, "input_hash_stale"
@@ -378,6 +373,7 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
     route = decide_route(queue).route
     media_route = route in {
         "external_direct_source_copyedit",
+        "external_direct_transform",
         "owned_media_transform",
         "approved_clip_transform",
     }
@@ -400,6 +396,7 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
     permission_evidence = _text(source_context.get("permission_evidence_status")).upper()
     external_permission_route = route in {
         "external_direct_source_copyedit",
+        "external_direct_transform",
         "approved_clip_transform",
     }
     if media_route and "REFERENCE_ONLY" in policies and permission_evidence != "APPROVED":
@@ -408,7 +405,7 @@ def _preflight(queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> l
         reasons.append("media_permission_evidence_missing_or_denied")
     if not _text(queue.get("public_post_text")) and route == "external_direct_source_copyedit":
         reasons.append("source_copyedit_text_missing")
-    if route == "external_direct_source_copyedit" and not _text(source_context.get("original_post_text")):
+    if route in {"external_direct_source_copyedit", "external_direct_transform"} and not _text(source_context.get("original_post_text")):
         reasons.append("direct_source_post_text_missing")
     if route == "approved_clip_transform":
         excerpt = _text(source_context.get("transcript_excerpt"))
@@ -674,7 +671,7 @@ class HybridAiGate:
             generation = dict(generate_response["data"])
             candidate_text = _text(generation.get("public_post_text"))
 
-        if route.route in {"new_text_generation", "owned_media_transform"}:
+        if route.route in {"new_text_generation", "owned_media_transform", "external_direct_transform"}:
             generated_contract_reasons = _scheduled_text_contract_reasons(
                 queue,
                 candidate_text,

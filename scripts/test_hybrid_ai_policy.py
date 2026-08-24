@@ -14,6 +14,14 @@ def main() -> None:
     assert requires_hybrid_ai_gate(source_copy)
     assert decide_route(source_copy).route == "external_direct_source_copyedit"
     assert decide_route(source_copy).estimated_requests == 3
+    external_transform = {
+        **source_copy,
+        "caption_mode": "transform",
+        "transformation_type": "transform",
+        "media_origin": "direct_reference",
+    }
+    assert decide_route(external_transform).route == "external_direct_transform"
+    assert decide_route(external_transform).estimated_requests == 3
     owned = {
         "account_id": "night_scout",
         "platform": "threads",
@@ -37,7 +45,7 @@ def main() -> None:
     assert len(batches) == 2
     assert batches[0]["estimated_requests"] == 6
     assert batches[1]["estimated_requests"] == 3
-    print("PASS 11 tests")
+    print("PASS 13 tests")
 
 
 if __name__ == "__main__":
