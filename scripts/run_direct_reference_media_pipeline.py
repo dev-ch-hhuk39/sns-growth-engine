@@ -41,6 +41,7 @@ from generation.source_copyedit import (  # noqa: E402
 )
 from direct_caption_policy import direct_caption_mode  # noqa: E402
 from evidence_context_caption import DirectCaptionProviderFailover, generate_evidence_context_caption  # noqa: E402
+from media_activation_source_suitability import direct_source_suitability  # noqa: E402
 from acquisition.reliability import (  # noqa: E402
     build_quarantine_record,
     is_quarantined,
@@ -755,6 +756,22 @@ def build_plan(
                 "quarantined": False,
             })
             continue
+        source_suitability, source_suitability_blockers = direct_source_suitability(
+            account_id=account_id,
+            post=post,
+            media_evidence_text=media_evidence,
+        )
+        if source_suitability_blockers:
+            attempted.append({
+                "source_post_id": post.get("source_post_id", ""),
+                "media_asset_id": str(media.get("media_asset_id") or media.get("source_post_media_id") or ""),
+                "quarantined": False,
+                "source_suitability": source_suitability,
+                "blocked_reasons": source_suitability_blockers,
+            })
+            # Account fit is a slot decision. The source asset may still be
+            # valid for its owning account or another explicitly scoped route.
+            continue
         if uses_default_caption_service and caption_mode == "transform":
             exact_evidence = "\n".join(
                 value
@@ -873,6 +890,7 @@ def build_plan(
                 "source_mode": grounded.get("source_mode", caption_mode),
                 "caption_mode": caption_mode,
                 "transformation_type": caption_mode,
+                "source_suitability": source_suitability,
                 "semantic_alignment": alignment,
                 "media_validator": validator["status"], "would_post": bool(apply and not prepare_only),
                 "prepare_only": prepare_only,
