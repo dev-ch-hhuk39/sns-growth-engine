@@ -32,13 +32,13 @@ from media.rights_policy import rights_allows_media_use  # noqa: E402
 from transcription.sheets_limits import normalize_transcript_row  # noqa: E402
 from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
 from media_growth_schemas import extract_video_id, redacted_preview  # noqa: E402
+from reference.source_registry import load_registry  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DONE_STATUSES = {"DONE", "FETCHED", "LOCAL_WHISPER_DONE", "YOUTUBE_CAPTIONS_DONE"}
 TERMINAL_TRANSCRIPT_STATUSES = {"NO_RELIABLE_SPEECH", "MEDIA_ACQUISITION_BLOCKED"}
 TIKTOK_REHYDRATION_ERROR = "unable to extract universal data for rehydration"
-SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 NIGHT_FEMALE_SUBJECT_CUES = ("キャバ嬢", "女の子", "女性", "嬢", "キャスト", "girl", "ladies")
 NIGHT_ANALYSIS_ONLY_CUES = ("男性スカウト", "スカウトが", "求人", "募集", "店舗pr", "店pr", "recruit")
 
@@ -75,8 +75,11 @@ def transcript_id_for(video: dict[str, Any]) -> str:
 
 
 def load_active_media_source_ids(account_id: str) -> set[str]:
-    payload = json.loads(SOURCES_FILE.read_text(encoding="utf-8"))
-    rows = payload.get("sources", []) if isinstance(payload, dict) else []
+    # Discovery and transcription must evaluate the same canonical registry.
+    # load_registry applies the registered-owner scope without mutating the
+    # source file, so approved sources cannot be discovered and then rejected
+    # here merely because the raw JSON still contains a stale inactive flag.
+    rows = load_registry()
     return {
         str(row.get("source_id", ""))
         for row in rows

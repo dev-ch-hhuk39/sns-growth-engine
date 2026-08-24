@@ -8,6 +8,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from transcribe_approved_source_videos import (  # noqa: E402
     build_transcript_row,
     eligible_videos,
+    load_active_media_source_ids,
     night_metadata_clip_eligible,
     save_rows,
     transcript_id_for,
@@ -74,6 +75,7 @@ large_row = {
 recorder = RecordingSheets()
 save_result = save_rows(recorder, [large_row], [])
 persisted = recorder.transcripts[0]
+night_active_source_ids = load_active_media_source_ids("night_scout")
 checks = [
     ("eligible approved individual video", len(selected) == 1 and not skipped),
     ("transcript id stable", transcript_id_for(video) == "tr_sv_lm_1"),
@@ -88,6 +90,11 @@ checks = [
     ("bounded long transcription recorded as partial", partial["transcription_scope"] == "PARTIAL" and partial["processed_minutes"] < 15.1),
     ("runner persistence bounds long transcript cells", save_result["transcripts_saved"] == 1 and len(persisted["transcript_text"]) < MAX_SHEETS_CELL_CHARS and len(persisted["segments_json"]) < MAX_SHEETS_CELL_CHARS),
     ("runner persistence keeps transcript evidence", persisted["transcript_hash"] == "full-transcript-sha" and "SHEETS_BOUNDED" in persisted["transcription_scope"]),
+    (
+        "transcriber uses canonical registered-owner activation",
+        "src_ns_yt_owner_amiru" in night_active_source_ids
+        and "youtube_night_scout_reference_todo" not in night_active_source_ids,
+    ),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
