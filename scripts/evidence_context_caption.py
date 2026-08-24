@@ -310,9 +310,24 @@ def _clean_claim(value: str, account_id: str) -> str:
     text = re.sub(patterns[0], patterns[1], text)
     text = re.sub(r"^(?:えー|えっと|あの|まあ|その)+", "", text)
     text = text.strip(" 　、,。")
-    if len(text) > 62:
-        text = text[:62].rstrip(" 　、,")
     return text
+
+
+def transcript_claim_quality_blockers(value: str) -> list[str]:
+    """Reject visibly corrupted or arbitrarily incomplete transcript claims."""
+
+    text = _text(value)
+    reasons: list[str] = []
+    if len(text) > 72:
+        reasons.append("transcript_claim_too_long_for_standalone_quote")
+    if re.search(r"[A-Z]{6,}|[=<>|{}]|ですねね|だぁだ|てで=", text):
+        reasons.append("transcript_claim_corrupted")
+    latin_count = len(re.findall(r"[A-Za-z]", text))
+    if text and latin_count / len(text) > 0.12:
+        reasons.append("transcript_claim_latin_noise")
+    if text.endswith(("ってい", "とい", "でし", "まし")):
+        reasons.append("transcript_claim_truncated")
+    return sorted(set(reasons))
 
 
 def _topic_scores(account_id: str, text: str) -> list[tuple[str, int]]:
@@ -338,7 +353,11 @@ def _claim_candidates(account_id: str, source: str, topic: str) -> list[tuple[st
             evidence = evidence[start:start + 105].strip(" 　、,")
         topic_score = sum(evidence.count(term) for term in terms)
         claim = _clean_claim(evidence, account_id)
-        if len(claim) < 18 or not any(term in claim for term in terms):
+        if (
+            len(claim) < 18
+            or transcript_claim_quality_blockers(claim)
+            or not any(term in claim for term in terms)
+        ):
             continue
         candidates.append((claim, evidence, topic_score))
     candidates.sort(key=lambda item: (-item[2], abs(len(item[0]) - 42), item[0]))

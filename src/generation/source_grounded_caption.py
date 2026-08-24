@@ -35,6 +35,34 @@ except ModuleNotFoundError:  # package imported as src.generation.* in legacy te
 
 ROOT = Path(__file__).resolve().parents[2]
 
+SOURCE_ATTRIBUTION_MARKERS = (
+    "この動画",
+    "この投稿",
+    "投稿者",
+    "発信者",
+    "と話して",
+    "と紹介して",
+    "と書かれて",
+)
+
+SOURCE_TOKEN_ALLOWLIST = {
+    "Threads",
+    "TikTok",
+    "YouTube",
+    "Instagram",
+    "LINE",
+    "LIVE",
+    "SNS",
+    "ライバー",
+    "リスナー",
+    "コメント",
+    "ギフト",
+    "スキンケア",
+    "ベースメイク",
+    "ヘアケア",
+    "キャバ嬢",
+}
+
 ACCOUNT_RULES = {
     "night_scout": {
         "audience": "夜職を始めたい、店選びや移籍で悩む女性",
@@ -96,6 +124,25 @@ def _json_object(text: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("model_response_must_be_object")
     return value
+
+
+def source_fact_attribution_blockers(
+    source_text: str,
+    public_text: str,
+) -> list[str]:
+    """Block unqualified reuse of source-owned names in transform captions."""
+
+    source_tokens = set(
+        re.findall(
+            r"[\u30a1-\u30f6ー]{4,}|[A-Za-z][A-Za-z0-9_.-]{3,}",
+            str(source_text or ""),
+        )
+    )
+    source_tokens.difference_update(SOURCE_TOKEN_ALLOWLIST)
+    copied = sorted(token for token in source_tokens if token in str(public_text or ""))
+    if copied and not any(marker in public_text for marker in SOURCE_ATTRIBUTION_MARKERS):
+        return ["source_owned_fact_attribution_missing"]
+    return []
 
 
 class GitHubModelsGroundedProvider:
@@ -828,6 +875,14 @@ class SourceGroundedCaptionService:
                 )
             ).strip()
 
+            # Keep model egress privacy-bounded. Beauty voice normalization is
+            # performed locally, then the normalized text must pass the same
+            # semantic, persona and quality gates as every other candidate.
+            if source_mode == "transform" and account_id == "beauty_account":
+                from public_post_quality import apply_account_voice
+
+                public_text = apply_account_voice(public_text, account_id)
+
             contract: dict[str, Any] = {}
 
             if source_mode == "source_copyedit":
@@ -973,6 +1028,14 @@ class SourceGroundedCaptionService:
                     [],
                 )
             )
+
+            if source_mode == "transform":
+                blocked.extend(
+                    source_fact_attribution_blockers(
+                        source_text,
+                        public_text,
+                    )
+                )
 
             blocked.extend(
                 contract.get(

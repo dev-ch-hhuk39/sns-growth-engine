@@ -805,14 +805,39 @@ def apply_account_voice(text: str, account_id: str) -> str:
         parts[-1] = closing
         return "\n\n".join(parts)
     if account_id == "beauty_account":
+        replacements = (
+            ("確認してください", "確認してみてほしい"),
+            ("比べてください", "比べてみてほしい"),
+            ("見直してください", "見直してみてほしい"),
+            ("試してみてください", "試してみてほしい"),
+            ("見てみてください", "見てみてほしい"),
+            ("してみてください", "してみてほしい"),
+        )
+        for old, new in replacements:
+            value = value.replace(old, new)
         value = value.replace("。", "\n")
         value = re.sub(r"\n{3,}", "\n\n", value).strip()
         if not any(term in value for term in ("個人的には", "ほんとに", "これ結構大事", "意外と")):
-            value = "個人的には、これ結構大事なんだけど、" + value
+            value = "個人的には、これ結構大事なんだけど\n\n" + value
         if not any(term in value for term in ("かも", "な気がする", "なんだけど", "てみてほしい")):
             value = value.rstrip() + "\n\n一つだけ試してみてほしい🥺"
         elif not re.search(r"[\U0001F300-\U0001FAFF]", value):
             value += "🤍"
+        paragraphs = [item.strip() for item in re.split(r"\n\s*\n", value) if item.strip()]
+        if len(paragraphs) < 3:
+            split_index = next(
+                (
+                    index
+                    for index, item in enumerate(paragraphs)
+                    if "、" in item and len(item) >= 18
+                ),
+                -1,
+            )
+            if split_index >= 0:
+                left, right = paragraphs[split_index].split("、", 1)
+                if len(left.strip()) >= 4 and len(right.strip()) >= 4:
+                    paragraphs[split_index:split_index + 1] = [left.strip(), right.strip()]
+                    value = "\n\n".join(paragraphs)
         return value
     if account_id == "tiktok_shop":
         markers = canonical_voice_profile(account_id).get("hypothesis_markers", [])
