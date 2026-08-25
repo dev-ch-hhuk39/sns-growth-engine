@@ -92,30 +92,38 @@ jobs:
       - name: Resolve scheduled action
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "ACTION=${{ github.event.inputs.action }}" >> "$GITHUB_ENV"
-            echo "SLOT_INDEX=${{ github.event.inputs.slot_index }}" >> "$GITHUB_ENV"
+            action="${{ github.event.inputs.action }}"
+            slot_index="${{ github.event.inputs.slot_index }}"
           else
             case "${{ github.event.schedule }}" in
-              "30 0 * * *") echo "ACTION=prepare" >> "$GITHUB_ENV"; echo "SLOT_INDEX=0" >> "$GITHUB_ENV" ;;
-              "30 9 * * *") echo "ACTION=prepare" >> "$GITHUB_ENV"; echo "SLOT_INDEX=1" >> "$GITHUB_ENV" ;;
-              "30 2 * * *") echo "ACTION=publish" >> "$GITHUB_ENV"; echo "SLOT_INDEX=0" >> "$GITHUB_ENV" ;;
-              "30 11 * * *") echo "ACTION=publish" >> "$GITHUB_ENV"; echo "SLOT_INDEX=1" >> "$GITHUB_ENV" ;;
-              *) echo "ACTION=dry_run" >> "$GITHUB_ENV"; echo "SLOT_INDEX=0" >> "$GITHUB_ENV" ;;
+              "30 0 * * *") action="prepare"; slot_index="0" ;;
+              "30 9 * * *") action="prepare"; slot_index="1" ;;
+              "30 2 * * *") action="publish"; slot_index="0" ;;
+              "30 11 * * *") action="publish"; slot_index="1" ;;
+              *) action="dry_run"; slot_index="0" ;;
             esac
           fi
+
+          echo "ACTION=$action" >> "$GITHUB_ENV"
+          echo "SLOT_INDEX=$slot_index" >> "$GITHUB_ENV"
           echo "BUSINESS_DATE_JST=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_ENV"
-          if [ "$SLOT_INDEX" = "0" ]; then
-            echo "BEAUTY_SLOT_ID=beauty_1130" >> "$GITHUB_ENV"
+
+          if [ "$slot_index" = "0" ]; then
+            beauty_slot_id="beauty_1130"
           else
-            echo "BEAUTY_SLOT_ID=beauty_2030" >> "$GITHUB_ENV"
+            beauty_slot_id="beauty_2030"
           fi
-          if [ "$ACTION" = "publish_media" ]; then
+
+          if [ "$action" = "publish_media" ]; then
             if [ "${{ github.event.inputs.media_route }}" = "approved_source_clip" ]; then
-              echo "BEAUTY_SLOT_ID=beauty_clip_review" >> "$GITHUB_ENV"
+              beauty_slot_id="beauty_clip_review"
             else
-              echo "BEAUTY_SLOT_ID=beauty_direct_media_review" >> "$GITHUB_ENV"
+              beauty_slot_id="beauty_direct_media_review"
             fi
           fi
+
+          echo "BEAUTY_SLOT_ID=$beauty_slot_id" >> "$GITHUB_ENV"
+          echo "[RESOLVED] action=$action slot_index=$slot_index beauty_slot_id=$beauty_slot_id"
 
       - name: Guard required secrets
         run: |
