@@ -119,7 +119,7 @@ jobs:
       - name: Dry-run direct preparation plan
         run: |
           python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --dry-run
-          python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --dry-run --use-sheets
+          python3 scripts/run_direct_reference_media_pipeline_batched.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --dry-run --use-sheets
       - name: Check free-tier preparation budget
         id: preparation_budget
         continue-on-error: true

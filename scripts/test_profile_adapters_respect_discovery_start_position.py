@@ -12,13 +12,13 @@ sys.path.insert(
     str(ROOT / "src"),
 )
 
-from acquisition.threads_public import (
+from acquisition.threads_public import (  # noqa: E402
     ThreadsPublicProfileAdapter,
 )
-from acquisition.tiktok_public import (
+from acquisition.tiktok_public import (  # noqa: E402
     TikTokPublicProfileAdapter,
 )
-from acquisition.ytdlp import (
+from acquisition.ytdlp import (  # noqa: E402
     YtDlpProfilePostAdapter,
 )
 
@@ -118,7 +118,8 @@ class FakeYoutubeDL:
             "entries": [
                 {
                     "id": "abcdefghijk",
-                    "webpage_url": ("https://www.youtube.com/" "watch?v=abcdefghijk"),
+                    "url": "abcdefghijk",
+                    "channel_id": "UC0000000000000000000000",
                     "title": "one",
                 },
                 {
@@ -146,6 +147,7 @@ try:
         {
             "source_id": "src_youtube",
             "source_platform": "youtube",
+            "source_handle": "@test_channel",
             "source_url": ("https://www.youtube.com/" "channel/" "UC0000000000000000000000"),
             "target_account_ids": ["night_scout"],
             "_discovery_start_position": 7,
@@ -167,6 +169,12 @@ assert captured_options["playliststart"] == 7
 assert captured_options["playlistend"] == 9
 
 assert len(youtube_posts) == 3
+
+assert youtube_posts[0].canonical_post_url == (
+    "https://www.youtube.com/watch?v=abcdefghijk"
+)
+
+assert youtube_posts[0].author_handle == "@test_channel"
 
 
 print("PASS " "test_profile_adapters_respect_" "discovery_start_position.py")

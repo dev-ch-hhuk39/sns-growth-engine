@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .contracts import ProviderResult
@@ -15,6 +16,24 @@ from .models import (
 )
 from .router import BackendFailure
 from .ytdlp_runtime import metadata_options
+
+
+YOUTUBE_VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _individual_entry_url(platform: str, entry: dict[str, Any]) -> str:
+    raw_url = str(entry.get("webpage_url") or entry.get("url") or "").strip()
+    if platform == "youtube" and YOUTUBE_VIDEO_ID.fullmatch(raw_url):
+        return f"https://www.youtube.com/watch?v={raw_url}"
+    return raw_url
+
+
+def _source_author_handle(source: dict[str, Any], entry: dict[str, Any]) -> str:
+    """Keep the bounded profile identity instead of comparing handle to channel ID."""
+    entry_handle = str(entry.get("uploader_id") or "").strip()
+    if entry_handle.startswith("@"):
+        return entry_handle
+    return str(source.get("source_handle") or source.get("author_handle") or entry_handle).strip()
 
 
 class YtDlpProfilePostAdapter:
@@ -120,7 +139,7 @@ class YtDlpProfilePostAdapter:
             ):
                 continue
 
-            raw_url = str(entry.get("webpage_url") or entry.get("url") or "")
+            raw_url = _individual_entry_url(platform, entry)
 
             if not raw_url.startswith("https://"):
                 continue
@@ -165,7 +184,7 @@ class YtDlpProfilePostAdapter:
                     original_post_text=text,
                     published_at=str(entry.get("upload_date") or entry.get("timestamp") or ""),
                     author_name=str(entry.get("uploader") or ""),
-                    author_handle=str(entry.get("channel_id") or entry.get("uploader_id") or ""),
+                    author_handle=_source_author_handle(source, entry),
                     media_items=(media,),
                     engagement={
                         key: entry.get(key)
