@@ -126,6 +126,10 @@ def main() -> int:
         or (selected or {}).get("generation_mode")
         or (selected or {}).get("content_type")
     )
+    human_approved = bool(
+        queue_id
+        and _text((selected or {}).get("human_review_decision")).upper() == "OK"
+    )
 
     payload = {
         "status": "SELECTED" if queue_id else "NO_READY_QUEUE",
@@ -135,6 +139,7 @@ def main() -> int:
         "selected_queue_id": queue_id,
         "selected_slot_id": selected_slot_id,
         "selected_route": route,
+        "human_approved": human_approved,
     }
     print(json.dumps(payload, ensure_ascii=False))
 
@@ -143,6 +148,7 @@ def main() -> int:
             handle.write(f"queue_id={queue_id}\n")
             handle.write(f"selected_slot_id={selected_slot_id}\n")
             handle.write(f"selected_route={route}\n")
+            handle.write(f"human_approved={'true' if human_approved else 'false'}\n")
 
     return 0
 
