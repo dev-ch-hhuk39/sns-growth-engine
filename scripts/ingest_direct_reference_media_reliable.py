@@ -8,6 +8,7 @@ import io
 import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +25,57 @@ _CORE_PERMISSION_OK_FROM_ROWS = core.permission_ok_from_rows
 
 
 _PLATFORM_PRIORITY = {
+    # Keep the historically reliable X route first, but prefer registered
+    # Threads/TikTok assets over YouTube on hosted runners.  Anonymous YouTube
+    # downloads can be provider-blocked even when the PO Token provider itself
+    # is healthy, so one provider must never consume the whole candidate budget.
     "x": 0,
-    "youtube": 1,
+    "threads": 1,
+    "tiktok": 2,
+    "youtube": 3,
 }
+
+EXTERNAL_UNAVAILABLE_RETRY_COOLDOWN_SECONDS = 6 * 60 * 60
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    text = str(value or "").strip().replace("Z", "+00:00")
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def external_unavailable_cooldown_active(
+    media: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Do not immediately retry the same provider-blocked physical asset."""
+
+    if str(media.get("download_status", "")).upper() != "SKIPPED_EXTERNAL_UNAVAILABLE":
+        return False
+
+    attempted_at = _parse_timestamp(
+        media.get("last_attempt_at")
+        or media.get("updated_at")
+    )
+
+    # Old rows without timing evidence remain skipped rather than burning the
+    # current bounded run repeatedly. A later acquisition refresh can replace
+    # the volatile media row.
+    if attempted_at is None:
+        return True
+
+    current = now or datetime.now(timezone.utc)
+    age = (current - attempted_at).total_seconds()
+
+    return age < EXTERNAL_UNAVAILABLE_RETRY_COOLDOWN_SECONDS
 
 
 def permission_ok_from_rows(
@@ -163,6 +212,20 @@ def select_pending_media_id(
             continue
 
         media_id = str(media.get("source_post_media_id", ""))
+
+        download_status = str(
+            media.get(
+                "download_status",
+                "",
+            )
+        ).upper()
+
+        # Provider/network unavailability is candidate-level fail-soft.  Do not
+        # immediately select the same physical asset again merely because its
+        # content-understanding row is still missing.
+        if external_unavailable_cooldown_active(media):
+            continue
+
         refresh_understanding = core.media_understanding_needs_refresh(
             media,
             understandings.get(media_id),
@@ -185,13 +248,6 @@ def select_pending_media_id(
             and not refresh_understanding
         ):
             continue
-
-        download_status = str(
-            media.get(
-                "download_status",
-                "",
-            )
-        ).upper()
 
         recoverable_identical_failure = (
             download_status == "FAILED"
