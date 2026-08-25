@@ -15,7 +15,8 @@
   "blocked_accounts": [],
   "allowed_platforms_for_fetch": [
     "threads",
-    "youtube"
+    "youtube",
+    "tiktok"
   ],
   "blocked_platforms_for_fetch": [
     "x"
@@ -26,12 +27,12 @@
   "blocked_platforms_for_post": [
     "x"
   ],
-  "allow_media_posts": false,
+  "allow_media_posts": true,
   "allow_third_party_media": false,
   "allow_unknown_rights": false,
-  "allow_cloudinary_upload": false,
-  "allow_video_download": false,
-  "allow_video_cut": false,
+  "allow_cloudinary_upload": true,
+  "allow_video_download": true,
+  "allow_video_cut": true,
   "allow_transcription_api": false,
   "daily_post_cap_per_account": 5,
   "daily_ready_cap_per_account": 8,
