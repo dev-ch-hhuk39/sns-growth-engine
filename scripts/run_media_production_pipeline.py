@@ -143,6 +143,18 @@ def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def _fresh_records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
+    """Bypass the per-run read cache for read-after-write verification."""
+    client._ensure_tab(logical, TAB_DEFINITIONS[logical])
+
+    def operation() -> list[dict[str, Any]]:
+        return client._ws(logical).get_all_records()
+
+    retry = getattr(client, "_call_with_rate_limit_retry", None)
+    rows = retry(f"get_all_records:{logical}:read_after_write", operation) if retry else operation()
+    return [dict(row) for row in rows]
+
+
 def _append(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     ws = client._ws(logical)
@@ -1686,9 +1698,10 @@ def build_plan(
         }
     if autonomous_cfg.get("kill_switch"):
         blocked.append("kill_switch=true")
-    posts_media_now = post_saved_media or (
-        not prepare_only and not prepare_saved_media_queue
-    )
+    posts_media_now = (
+        post_saved_media
+        and not prepare_saved_media_queue
+    ) or (not prepare_only and not prepare_saved_media_queue)
     if posts_media_now and not media_cfg.get("media_public_post_auto_enabled"):
         blocked.append("media_public_post_auto_disabled")
     try:
@@ -1733,6 +1746,22 @@ def build_plan(
     clips = _records(client, "video_clip_candidates")
     media_assets = _records(client, "media_assets")
     posted = _records(client, "posted_results")
+    effective_excluded_clip_ids = set(excluded_clip_ids or set())
+    if prepare_saved_media_queue:
+        for row in _records(client, "queue"):
+            if str(row.get("account_id") or row.get("target_account_id") or "") != account_id:
+                continue
+            if slot_id and str(row.get("slot_id", "")) != slot_id:
+                continue
+            status = str(row.get("status", "")).upper()
+            if not (
+                status.startswith("BLOCKED")
+                or status in {"REJECTED", "SUPERSEDED", "FAILED", "QUALITY_EXHAUSTED"}
+            ):
+                continue
+            clip_id = str(row.get("clip_candidate_id") or row.get("video_clip_id") or "")
+            if clip_id:
+                effective_excluded_clip_ids.add(clip_id)
     today_posts = _today_posts(posted, account_id)
     daily_cap = int(autonomous_cfg.get("daily_post_cap_per_account", 5))
     media_cap = int(media_cfg.get("media_daily_post_cap", 1))
@@ -1747,7 +1776,12 @@ def build_plan(
             blocked.append("media_daily_post_cap_reached")
     if post_saved_media:
         clip, source_video, selected_asset, skipped = select_saved_media_candidate(
-            clips, source_videos, media_assets, posted, account_id, excluded_clip_ids,
+            clips,
+            source_videos,
+            media_assets,
+            posted,
+            account_id,
+            effective_excluded_clip_ids,
         )
     else:
         clip, source_video, skipped = select_candidate(
@@ -1756,7 +1790,7 @@ def build_plan(
             posted,
             account_id,
             media_assets,
-            excluded_clip_ids,
+            effective_excluded_clip_ids,
             allow_waiting_review=prepare_only,
         )
         selected_asset = None
@@ -1982,11 +2016,41 @@ def prepare_saved_media_queue(plan: dict[str, Any], client: SheetsClient) -> dic
         reviewer_status="WAITING_REVIEW",
         clip_status="MEDIA_READY",
     )
+    persisted = next(
+        (
+            row
+            for row in _fresh_records(client, "queue")
+            if str(row.get("queue_id", "")) == queue_id
+        ),
+        {},
+    )
+    read_after_write = all(
+        str(persisted.get(field, "")) == str(queue_row.get(field, ""))
+        for field in (
+            "queue_id",
+            "account_id",
+            "slot_id",
+            "status",
+            "media_asset_id",
+            "clip_candidate_id",
+            "source_video_id",
+            "public_post_text",
+        )
+    )
+    if not read_after_write:
+        return {
+            **plan,
+            "status": "FAILED_READ_AFTER_WRITE",
+            "queue_id": queue_id,
+            "read_after_write": False,
+            "would_post_video": False,
+        }
     return {
         **plan,
         "status": "QUEUED_WAITING_REVIEW",
         "queue_id": queue_id,
         "updated_queue_ids": [queue_id],
+        "read_after_write": True,
         "public_post_preview": public_preview(text_value),
         "would_post_video": False,
     }
@@ -2696,6 +2760,7 @@ def main() -> int:
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
     parser.add_argument("--prepare-saved-media-queue", action="store_true", help="create one WAITING_REVIEW queue row for Hybrid AI; never post")
     parser.add_argument("--slot-id", default="", help="canonical approved_source_clip slot for idempotency and reporting")
+    parser.add_argument("--json-output", default="")
     args = parser.parse_args()
     if sum(bool(value) for value in (args.prepare_only, args.post_saved_media, args.prepare_saved_media_queue)) > 1:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["media_modes_are_mutually_exclusive"]}, ensure_ascii=False))
@@ -2730,7 +2795,52 @@ def main() -> int:
         and plan.get("status") == "PLAN_ONLY"
         and args.prepare_saved_media_queue
     ):
-        plan = prepare_saved_media_queue(plan, client)
+        candidate_attempts: list[dict[str, Any]] = []
+        max_attempts = min(
+            10,
+            max(1, int(_load(MEDIA_CONFIG).get("max_cuts", 3) or 3)),
+        )
+        for _ in range(max_attempts):
+            result = prepare_saved_media_queue(plan, client)
+            candidate_attempts.append({
+                "clip_candidate_id": plan.get("selected_clip_candidate_id", ""),
+                "status": result.get("status", ""),
+                "queue_id": result.get("queue_id", ""),
+            })
+            if result.get("status") not in {
+                "REVIEW_REQUIRED",
+                "BLOCKED_TONE_FAILED",
+            }:
+                plan = {**result, "candidate_attempts": candidate_attempts}
+                break
+            excluded_clip_ids.add(str(plan.get("selected_clip_candidate_id", "")))
+            next_plan = build_plan(
+                account_id=args.account_id,
+                apply=True,
+                confirm=True,
+                client=client,
+                prepare_only=False,
+                post_saved_media=True,
+                prepare_saved_media_queue=True,
+                slot_id=args.slot_id,
+                excluded_clip_ids=excluded_clip_ids,
+            )
+            if next_plan.get("status") != "PLAN_ONLY":
+                plan = {
+                    **result,
+                    "status": "NO_ELIGIBLE_CLIP",
+                    "candidate_attempts": candidate_attempts,
+                    "next_candidate_reasons": next_plan.get("blocked_reasons", []),
+                }
+                break
+            plan = next_plan
+        else:
+            plan = {
+                **plan,
+                "status": "NO_ELIGIBLE_CLIP",
+                "candidate_attempts": candidate_attempts,
+                "blocked_reasons": ["candidate_attempt_limit_reached"],
+            }
     elif (
         args.apply
         and args.confirm_production_media
@@ -2797,7 +2907,10 @@ def main() -> int:
             "would_post": False,
         }
     safe = {k: v for k, v in plan.items() if k not in {"selected_clip", "selected_source_video"}}
-    print(json.dumps(safe, ensure_ascii=False, indent=2))
+    rendered = json.dumps(safe, ensure_ascii=False, indent=2)
+    print(rendered)
+    if args.json_output:
+        Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
     final_status = str(plan.get("status", ""))
 
     return 1 if (

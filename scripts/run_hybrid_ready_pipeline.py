@@ -40,6 +40,7 @@ def gate_command(
     *,
     approval_mode: str = "text",
     queue_id: str = "",
+    autonomous_low_risk: bool = False,
 ) -> list[str]:
     command = [
         sys.executable,
@@ -53,14 +54,22 @@ def gate_command(
         "--apply" if apply else "--dry-run",
         "--use-sheets",
     ]
-    if approval_mode == "media":
+    if approval_mode == "media" and not autonomous_low_risk:
         command.append("--require-human-review")
     if queue_id:
         command.extend(["--queue-id", queue_id])
     return command
 
 
-def approval_command(account_id: str, slot_id: str, queue_id: str, *, apply: bool, approval_mode: str) -> list[str]:
+def approval_command(
+    account_id: str,
+    slot_id: str,
+    queue_id: str,
+    *,
+    apply: bool,
+    approval_mode: str,
+    autonomous_low_risk: bool = False,
+) -> list[str]:
     if approval_mode == "text":
         return [
             sys.executable,
@@ -77,7 +86,7 @@ def approval_command(account_id: str, slot_id: str, queue_id: str, *, apply: boo
             "--skip-setup",
             *(["--apply", "--confirm-auto-ready"] if apply else ["--dry-run"]),
         ]
-    return [
+    command = [
         sys.executable,
         "scripts/promote_hybrid_approved_media.py",
         "--account-id",
@@ -89,6 +98,9 @@ def approval_command(account_id: str, slot_id: str, queue_id: str, *, apply: boo
         "--use-sheets",
         *(["--apply", "--confirm-promote"] if apply else ["--dry-run"]),
     ]
+    if autonomous_low_risk:
+        command.append("--autonomous-low-risk")
+    return command
 
 
 def command_plan(
@@ -99,6 +111,7 @@ def command_plan(
     apply: bool,
     approval_mode: str = "text",
     queue_id: str = "",
+    autonomous_low_risk: bool = False,
 ) -> list[list[str]]:
     commands = [gate_command(
         account_id,
@@ -107,9 +120,17 @@ def command_plan(
         apply,
         approval_mode=approval_mode,
         queue_id=queue_id,
+        autonomous_low_risk=autonomous_low_risk,
     )]
     if queue_id:
-        commands.append(approval_command(account_id, slot_id, queue_id, apply=apply, approval_mode=approval_mode))
+        commands.append(approval_command(
+            account_id,
+            slot_id,
+            queue_id,
+            apply=apply,
+            approval_mode=approval_mode,
+            autonomous_low_risk=autonomous_low_risk,
+        ))
     return commands
 
 
@@ -147,6 +168,7 @@ def execute(
     apply: bool,
     approval_mode: str = "text",
     queue_id: str = "",
+    autonomous_low_risk: bool = False,
     runner: Callable[[list[str]], subprocess.CompletedProcess[str]] = run_command,
 ) -> dict[str, Any]:
     stages: list[dict[str, Any]] = []
@@ -159,6 +181,7 @@ def execute(
             apply,
             approval_mode=approval_mode,
             queue_id=queue_id,
+            autonomous_low_risk=autonomous_low_risk,
         ),
         runner,
     )
@@ -206,7 +229,14 @@ def execute(
     stage_name = "auto_ready" if approval_mode == "text" else "media_promote"
     approval_stage, approval_ok = run_stage(
         stage_name,
-        approval_command(account_id, slot_id, selected_queue_id, apply=apply, approval_mode=approval_mode),
+        approval_command(
+            account_id,
+            slot_id,
+            selected_queue_id,
+            apply=apply,
+            approval_mode=approval_mode,
+            autonomous_low_risk=autonomous_low_risk,
+        ),
         runner,
     )
     stages.append(approval_stage)
@@ -243,6 +273,7 @@ def main() -> int:
     parser.add_argument("--queue-id", default="")
     parser.add_argument("--max-candidates", type=int, default=1)
     parser.add_argument("--approval-mode", choices=["text", "media"], default="text")
+    parser.add_argument("--autonomous-low-risk", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
@@ -261,6 +292,7 @@ def main() -> int:
         apply=args.apply,
         approval_mode=args.approval_mode,
         queue_id=args.queue_id,
+        autonomous_low_risk=args.autonomous_low_risk,
     )
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     print(rendered)

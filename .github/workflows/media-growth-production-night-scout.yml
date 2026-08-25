@@ -3,7 +3,6 @@ name: Media Growth Asset Preparation Night Scout
 on:
   schedule:
     - cron: "30 9 * * *"
-  # Canary gate: real discovery/transcription/cut/upload is dispatch-only.
   workflow_dispatch:
     inputs:
       confirm_production_media:
@@ -123,7 +122,7 @@ jobs:
             --account-id "$ACCOUNT_ID" --use-sheets --fetch-real --apply --confirm-discovery
 
       - name: Transcribe approved source videos
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_production_media == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_LOCAL_TRANSCRIPTION: "true"
@@ -134,14 +133,14 @@ jobs:
             --max-audio-seconds 900 --cpu-threads 1
 
       - name: Generate transcript-grounded clip candidates
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_production_media == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         timeout-minutes: 5
         run: |
           python3 scripts/run_media_growth_engine.py \
             --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-media-growth
 
       - name: Prepare one approved media asset
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_production_media == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           PUBLISH_ENABLED: "false"
           ALLOW_REAL_THREADS_POST: "false"
