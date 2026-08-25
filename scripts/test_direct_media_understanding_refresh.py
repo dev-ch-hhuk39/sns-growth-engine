@@ -151,6 +151,7 @@ originals = {
         "ROOT",
         "record",
         "safe_https_url",
+        "download_direct_https_media",
         "download_source_media",
         "magic_mime",
         "probe_video",
@@ -172,18 +173,20 @@ try:
                 return dict(media_row)
             raise AssertionError(logical)
 
-        def fake_download(*, path, media_url, **_kwargs):
+        def fake_stored_download(media_url, path, **_kwargs):
             downloaded_urls.append(media_url)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(media_bytes)
-            return "fixture"
 
         def fake_update(_client, _media_id, fields):
             media_row.update(fields)
 
         core.record = fake_record
         core.safe_https_url = lambda _url, stream_url=False: True
-        core.download_source_media = fake_download
+        core.download_direct_https_media = fake_stored_download
+        core.download_source_media = lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("source downloader must not run for stored-asset refresh")
+        )
         core.magic_mime = lambda _path: "video/mp4"
         core.probe_video = lambda _path: {"duration_seconds": "20"}
         core.analyze_local_media = lambda *_args, **_kwargs: {

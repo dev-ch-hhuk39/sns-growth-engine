@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 from create_missing_text_canaries import build_rows
 
-result = build_rows([])
+result = build_rows([], batch_id="fresh_contract_test_full_set")
 assert result["status"] == "PLAN_ONLY", result
 assert len(result["rows"]) == 4
 assert {(row["account_id"], row["generation_mode"]) for row in result["rows"]} == {("night_scout", "original_text"), ("night_scout", "reference_text"), ("liver_manager", "original_text"), ("liver_manager", "reference_text")}
 assert all(row["canary_id"].startswith("canary_fresh_") for row in result["rows"])
 assert all(row["status"] == "WAITING_REVIEW" and row["validator_status"] == "PASS" for row in result["rows"])
 
-first_wave = build_rows([], targets=(("night_scout", "original_text"), ("liver_manager", "original_text")))
+first_wave = build_rows(
+    [],
+    targets=(("night_scout", "original_text"), ("liver_manager", "original_text")),
+    batch_id="fresh_contract_test_first_wave",
+)
 assert first_wave["status"] == "PLAN_ONLY", first_wave
 assert {(row["account_id"], row["generation_mode"]) for row in first_wave["rows"]} == {
     ("night_scout", "original_text"),
