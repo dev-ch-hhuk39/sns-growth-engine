@@ -895,7 +895,15 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             "media_asset_id": str(media.get("media_asset_id", "")),
             "media_index": str(media.get("media_index", "")),
         }
-    url = str(media.get("original_media_url") or media.get("canonical_post_url", ""))
+    source_url = str(media.get("original_media_url") or media.get("canonical_post_url", ""))
+    # An understanding refresh must inspect the immutable asset that will be
+    # published. Source CDN URLs can expire or return a different transcode,
+    # which makes their byte hash unsuitable for verifying an uploaded asset.
+    url = (
+        str(media.get("storage_url", ""))
+        if already_uploaded and refresh_understanding
+        else source_url
+    )
     media_type = str(media.get("media_type", "")).lower()
     if media_type not in {"image", "video"} or not safe_https_url(url, stream_url=True):
         return {"status": "BLOCKED", "source_post_media_id": source_post_media_id, "reason": "unsupported_or_non_https_media"}

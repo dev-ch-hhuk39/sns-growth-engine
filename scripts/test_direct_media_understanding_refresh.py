@@ -159,6 +159,7 @@ originals = {
         "update_media_row",
     )
 }
+downloaded_urls: list[str] = []
 try:
     os.environ["ALLOW_LOCAL_TRANSCRIPTION"] = "true"
     with tempfile.TemporaryDirectory() as temporary:
@@ -171,7 +172,8 @@ try:
                 return dict(media_row)
             raise AssertionError(logical)
 
-        def fake_download(*, path, **_kwargs):
+        def fake_download(*, path, media_url, **_kwargs):
+            downloaded_urls.append(media_url)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(media_bytes)
             return "fixture"
@@ -198,6 +200,7 @@ try:
         assert result["status"] == "UNDERSTANDING_REFRESHED", result
         assert result["media_asset_id"] == "asset-1", result
         assert result["content_hash"] == digest, result
+        assert downloaded_urls == [media_row["storage_url"]], downloaded_urls
         assert media_row["cloudinary_status"] == "UPLOADED", media_row
         assert media_row["understanding_id"] == "understanding-1", media_row
 finally:
