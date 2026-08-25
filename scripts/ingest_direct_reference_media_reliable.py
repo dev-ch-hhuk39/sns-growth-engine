@@ -71,6 +71,19 @@ def select_pending_media_id(
         for row in client._ws("source_posts").get_all_records()
     }
 
+    understandings = (
+        {
+            str(row.get("source_post_media_id", "")): row
+            for row in client._ws("source_media_understanding").get_all_records()
+        }
+        if core.truthy(
+            os.environ.get(
+                "ALLOW_LOCAL_TRANSCRIPTION"
+            )
+        )
+        else {}
+    )
+
     media_rows = client._ws(
         "source_post_media"
     ).get_all_records()
@@ -149,6 +162,12 @@ def select_pending_media_id(
         ):
             continue
 
+        media_id = str(media.get("source_post_media_id", ""))
+        refresh_understanding = core.media_understanding_needs_refresh(
+            media,
+            understandings.get(media_id),
+        )
+
         if (
             str(
                 media.get(
@@ -163,6 +182,7 @@ def select_pending_media_id(
                     "",
                 )
             )
+            and not refresh_understanding
         ):
             continue
 
@@ -211,6 +231,7 @@ def select_pending_media_id(
                 "SKIPPED_EXTERNAL_UNAVAILABLE",
             }
             and not recoverable_identical_failure
+            and not refresh_understanding
         ):
             continue
 
@@ -271,13 +292,6 @@ def select_pending_media_id(
 
         else:
             continue
-
-        media_id = str(
-            media.get(
-                "source_post_media_id",
-                "",
-            )
-        )
 
         if not media_id:
             continue

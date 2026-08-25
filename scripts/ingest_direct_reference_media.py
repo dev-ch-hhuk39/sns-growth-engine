@@ -52,6 +52,7 @@ _SAFE_INGEST_ERROR_CODES = {
     "threads_refreshed_account_mismatch",
     "threads_refreshed_media_index_invalid",
     "threads_refreshed_media_child_mismatch",
+    "direct_media_refresh_content_hash_mismatch",
 }
 
 
@@ -114,6 +115,30 @@ def _content_hash_from_asset(
             "/",
             1,
         )[-1]
+    )
+
+
+def media_understanding_needs_refresh(
+    media: dict[str, Any],
+    understanding: dict[str, Any] | None,
+) -> bool:
+    """Revisit legacy uploaded videos that never attempted transcription.
+
+    A completed PASS/UNAVAILABLE/DISABLED result is terminal for this refresh
+    path. This keeps scheduled preparation bounded while allowing old visual-
+    only evidence to be upgraded under the current local-transcription path.
+    """
+
+    understanding = dict(understanding or {})
+    return (
+        truthy(os.environ.get("ALLOW_LOCAL_TRANSCRIPTION"))
+        and str(media.get("media_type", "")).strip().lower() == "video"
+        and str(media.get("cloudinary_status", "")).strip().upper() == "UPLOADED"
+        and bool(str(media.get("storage_url", "")).strip())
+        and str(understanding.get("status", "")).strip().upper() == "PASS"
+        and not str(understanding.get("transcript_status", "")).strip()
+        and not str(understanding.get("transcript_hash", "")).strip()
+        and not str(understanding.get("transcript_text", "")).strip()
     )
 
 
@@ -782,6 +807,14 @@ def select_pending_media_id(
         str(row.get("source_post_id", "")): row
         for row in client._ws("source_posts").get_all_records()
     }
+    understandings = (
+        {
+            str(row.get("source_post_media_id", "")): row
+            for row in client._ws("source_media_understanding").get_all_records()
+        }
+        if truthy(os.environ.get("ALLOW_LOCAL_TRANSCRIPTION"))
+        else {}
+    )
     pending: list[tuple[int, str, str]] = []
     for media in client._ws("source_post_media").get_all_records():
         post = posts.get(str(media.get("source_post_id", "")))
@@ -789,9 +822,21 @@ def select_pending_media_id(
             continue
         if not permission_ok_from_rows(permissions, str(post.get("source_id", "")), account_id):
             continue
-        if str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and str(media.get("storage_url", "")):
+        media_id = str(media.get("source_post_media_id", ""))
+        refresh_understanding = media_understanding_needs_refresh(
+            media,
+            understandings.get(media_id),
+        )
+        if (
+            str(media.get("cloudinary_status", "")).upper() == "UPLOADED"
+            and str(media.get("storage_url", ""))
+            and not refresh_understanding
+        ):
             continue
-        if str(media.get("download_status", "")).upper() in {"FAILED", "BLOCKED"}:
+        if (
+            str(media.get("download_status", "")).upper() in {"FAILED", "BLOCKED"}
+            and not refresh_understanding
+        ):
             continue
         url = str(media.get("original_media_url") or media.get("canonical_post_url") or "")
         platform = str(post.get("platform", "")).lower()
@@ -805,7 +850,6 @@ def select_pending_media_id(
             parent_url = str(media.get("canonical_post_url") or post.get("canonical_post_url") or "")
             if "/post/" not in parent_url or not safe_https_url(url, stream_url=True):
                 continue
-        media_id = str(media.get("source_post_media_id", ""))
         if media_id:
             # Prefer short-form individual videos for a bounded direct-media
             # slot. They are normally much smaller than a channel long-form
@@ -835,9 +879,14 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
     source_post_media_id = str(media.get("source_post_media_id", ""))
     existing_understanding = record(client, "source_media_understanding", "source_post_media_id", source_post_media_id)
     already_uploaded = str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and bool(str(media.get("storage_url", "")))
+    refresh_understanding = media_understanding_needs_refresh(
+        media,
+        existing_understanding,
+    )
     if (
         already_uploaded
         and str((existing_understanding or {}).get("status", "")).upper() == "PASS"
+        and not refresh_understanding
     ):
         return {
             "status": "ALREADY_INGESTED",
@@ -862,6 +911,8 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
                 media,
                 existing_understanding,
             )
+            if not refresh_understanding
+            else None
         )
 
         if reusable_asset:
@@ -1079,6 +1130,56 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
         })
         if analysis.get("status") != "PASS":
             raise RuntimeError("media_content_understanding_blocked")
+
+        if already_uploaded:
+            expected_digest = (
+                _normalized_content_hash(media.get("content_hash"))
+                or _normalized_content_hash((existing_understanding or {}).get("content_hash"))
+            )
+            if expected_digest and expected_digest != digest_text:
+                raise RuntimeError("direct_media_refresh_content_hash_mismatch")
+            asset_id = str(media.get("media_asset_id", "")).strip()
+            storage_url = str(media.get("storage_url", "")).strip()
+            if not asset_id or not storage_url.startswith("https://res.cloudinary.com/"):
+                raise RuntimeError("media_asset_read_after_write_failed")
+            update_media_row(
+                client,
+                source_post_media_id,
+                {
+                    "download_status": "DOWNLOADED",
+                    "content_hash": digest_text,
+                    "mime_type": mime,
+                    "understanding_status": "PASS",
+                    "understanding_id": understanding_id,
+                    "last_error": "",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    **details,
+                },
+            )
+            verified = record(
+                client,
+                "source_post_media",
+                "source_post_media_id",
+                source_post_media_id,
+            )
+            if (
+                not verified
+                or str(verified.get("media_asset_id", "")) != asset_id
+                or str(verified.get("cloudinary_status", "")).upper() != "UPLOADED"
+                or str(verified.get("understanding_id", "")) != understanding_id
+            ):
+                raise RuntimeError("source_post_media_read_after_write_failed")
+            return {
+                "status": "UNDERSTANDING_REFRESHED",
+                "source_post_media_id": source_post_media_id,
+                "media_asset_id": asset_id,
+                "media_index": str(media.get("media_index", "")),
+                "content_hash": digest_text,
+                "understanding_status": "PASS",
+                "understanding_provider": analysis.get("provider", ""),
+                "transcript_status": analysis.get("transcript_status", ""),
+            }
+
         import cloudinary
         import cloudinary.uploader
 
