@@ -29,7 +29,7 @@ BASE = {
 }
 
 
-def plan_for(row: dict[str, str]) -> dict:
+def plan_for(row: dict[str, str], *, autonomous_low_risk: bool = False) -> dict:
     original_reader = promotion.read_records_safely
     original_required = promotion.requires_hybrid_ai_gate
     original_gate = promotion.hybrid_ai_gate_passed
@@ -44,6 +44,7 @@ def plan_for(row: dict[str, str]) -> dict:
             "night_scout",
             "ns_1800_direct_media",
             {str(row["queue_id"])},
+            autonomous_low_risk=autonomous_low_risk,
         )
     finally:
         promotion.read_records_safely = original_reader
@@ -68,5 +69,11 @@ approved = plan_for({
     "human_review_decision": "OK",
 })
 assert approved["selected_queue_ids"] == ["q_approved"]
+
+autonomous = plan_for(
+    {**BASE, "queue_id": "q_autonomous", "status": "WAITING_REVIEW"},
+    autonomous_low_risk=True,
+)
+assert autonomous["selected_queue_ids"] == ["q_autonomous"]
 
 print("PASS test_media_hybrid_promotion_requires_human_review.py")

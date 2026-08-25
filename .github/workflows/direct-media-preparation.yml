@@ -138,25 +138,18 @@ jobs:
           for name in SNS_MASTER_SHEET_ID SA_JSON_BASE64 CLOUDINARY_CLOUD_NAME CLOUDINARY_API_KEY CLOUDINARY_API_SECRET; do
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
-      - name: Ingest one approved source-post media bundle
+      - name: Prepare one eligible Direct candidate with bounded failover
         if: (github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_CLOUDINARY_UPLOAD: "true"
           ALLOW_LOCAL_TRANSCRIPTION: "true"
           ALLOW_TRANSCRIPTION_API: "false"
-        run: python3 scripts/ingest_direct_reference_media_reliable.py --account-id "$ACCOUNT_ID" --max-assets 1 --apply --confirm-ingest
-      - name: Persist validator-approved review inventory
-        if: (github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
-        env:
-          REQUIRE_PREPARED: "true"
-        run: python3 scripts/run_direct_reference_media_pipeline_batched.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-direct-media --use-sheets
-      - name: Normalize prepared inventory for Hybrid review
-        if: (github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
-        run: python3 scripts/normalize_unreviewed_slot_candidates.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --apply --confirm-normalize --use-sheets
-      - name: Finalize prepared public text before human review
-        if: (github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
-        run: python3 scripts/run_hybrid_ai_queue_gate.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --max-candidates 2 --apply --use-sheets
+        run: |
+          max_attempts=$(python3 -c 'import json; print(json.load(open("config/media_growth_engine.json"))["direct_media_candidate_attempts"])')
+          python3 scripts/run_direct_media_preparation_loop.py \
+            --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
+            --max-attempts "$max_attempts" --apply --confirm-preparation-loop
       - name: Sync prepared media to publication review
         if: (github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success'
         run: |

@@ -365,6 +365,19 @@ def select_direct_candidates(
         for row in queued
         if str(row.get("status", "")).upper() in {"READY", "MEDIA_READY", "PROCESSING"}
     )
+    # A Hybrid/persona rejection is terminal for this exact caption/media
+    # attempt. Leaving the asset eligible makes every scheduled run select the
+    # same failed candidate and prevents bounded failover to candidate B.
+    used_assets.update(
+        str(row.get("media_asset_id", ""))
+        for row in queued
+        if str(row.get("generation_mode", "")) == "direct_reference_media"
+        and (
+            str(row.get("validator_status", "")).upper() == "BLOCKED"
+            or str(row.get("account_fit_status", "")).upper() == "BLOCKED"
+            or str(row.get("text_policy_status", "")).upper() == "BLOCKED"
+        )
+    )
     reasons: list[str] = []
     candidates: list[tuple[dict[str, Any], dict[str, Any], dict[str, Any]]] = []
     for post_id, media_rows in sorted(media_by_post.items()):
@@ -745,7 +758,7 @@ def build_plan(
         for item in carousel_media:
             understanding = item.get("media_understanding") if isinstance(item.get("media_understanding"), dict) else {}
             media_evidence_parts.extend(str(understanding.get(key, "")) for key in (
-                "visual_summary", "visible_text", "ocr_text", "transcript_text",
+                "visual_summary", "visible_text", "main_claims_json", "ocr_text", "transcript_text",
             ))
         media_evidence = "\n".join(part for part in media_evidence_parts if part.strip())[:12000]
         if not media_evidence:
@@ -1261,12 +1274,19 @@ def dispatch_ready(
     requested_queue_id = str(
         queue_id or ""
     ).strip()
+    autonomous_low_risk = (
+        str(managed_account(account_id).get("review_policy", ""))
+        == "autonomous_low_risk"
+    )
     candidates = [
         row for row in _records(client, "queue")
         if str(row.get("account_id") or row.get("target_account_id") or "") == account_id
         and str(row.get("platform", "")).lower() == "threads"
         and str(row.get("status", "")).upper() == "READY"
-        and str(row.get("human_review_decision", "")).upper() == "OK"
+        and (
+            autonomous_low_risk
+            or str(row.get("human_review_decision", "")).upper() == "OK"
+        )
         and str(row.get("generation_mode", "")) == "direct_reference_media"
         and str(row.get("slot_id", "")) == slot_id
         and str(row.get("business_date_jst", "")) == target_date
@@ -1380,6 +1400,7 @@ def main() -> int:
     mode.add_argument("--prepare-only", action="store_true", help="create READY inventory; never call Threads")
     mode.add_argument("--post-ready", action="store_true", help="dispatch precomputed READY inventory only")
     parser.add_argument("--use-sheets", action="store_true")
+    parser.add_argument("--json-output", default="")
     args = parser.parse_args()
     client = None
     if args.use_sheets:
@@ -1447,7 +1468,10 @@ def main() -> int:
             return [safe_output(item) for item in value]
         return value
     safe = safe_output(plan)
-    print(json.dumps(safe, ensure_ascii=False, indent=2))
+    rendered = json.dumps(safe, ensure_ascii=False, indent=2)
+    print(rendered)
+    if args.json_output:
+        Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
     return 1 if str(plan.get("status", "")).startswith(("FAILED", "BLOCKED")) else 0
 
 

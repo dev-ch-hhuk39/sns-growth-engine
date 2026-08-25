@@ -20,15 +20,9 @@ assert "fromJSON(needs.resolve-accounts.outputs.account_ids)" in workflow
 assert "github.event.inputs.target_account" in workflow
 assert "route_slot_id" in workflow
 
-assert (
-    "ingest_direct_reference_media_reliable.py"
-) in workflow
-
-assert (
-    "run_direct_reference_media_pipeline_batched.py"
-) in workflow
-
-assert 'REQUIRE_PREPARED: "true"' in workflow
+assert "run_direct_media_preparation_loop.py" in workflow
+assert "direct_media_candidate_attempts" in workflow
+assert "--confirm-preparation-loop" in workflow
 
 assert 'PUBLISH_ENABLED: "false"' in workflow
 assert 'ALLOW_REAL_THREADS_POST: "false"' in workflow

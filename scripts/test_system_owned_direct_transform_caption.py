@@ -212,8 +212,8 @@ checks = [
         owned_mode == "transform",
     ),
     (
-        "registered approved source uses new commentary",
-        registered_mode == "transform",
+        "registered approved source remains source preserving by default",
+        registered_mode == "source_copyedit",
     ),
     (
         "registered source without provenance remains source preserving",

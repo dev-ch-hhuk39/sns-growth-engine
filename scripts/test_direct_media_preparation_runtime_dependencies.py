@@ -13,7 +13,7 @@ checks = {
     "ffprobe verified": "command -v ffprobe" in workflow,
     "tesseract verified": "command -v tesseract" in workflow,
     "default posting remains disabled": 'PUBLISH_ENABLED: "false"' in workflow and 'ALLOW_REAL_THREADS_POST: "false"' in workflow,
-    "apply remains explicitly confirmed": "confirm_preparation" in workflow and "--confirm-direct-media" in workflow,
+    "apply remains explicitly confirmed": "confirm_preparation" in workflow and "--confirm-preparation-loop" in workflow,
 }
 for name, ok in checks.items():
     print(f"{'PASS' if ok else 'FAIL'} {name}")

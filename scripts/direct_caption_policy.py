@@ -66,15 +66,11 @@ def direct_caption_mode(
         _true(row.get("allow_new_caption"))
         for row in (permission, post, source)
     )
-    registered_commentary = (
-        bool(_text(source.get("registered_owner_scope_id")))
-        and _text(source.get("permission_status")).lower() == "approved"
-        and _true(source.get("provenance_required"))
-        and _true(source.get("original_author_match_required"))
-        and allow_new_caption
-    )
-
-    return "transform" if (owned and allow_new_caption) or registered_commentary else "source_copyedit"
+    # Direct reference media is source preserving by default. Registry
+    # approval authorizes the media use; it does not silently authorize a
+    # large-angle editorial transform. An explicit caption mode remains the
+    # only way to request transform for a registered external source.
+    return "transform" if owned and allow_new_caption else "source_copyedit"
 
 
 def queue_caption_mode(
