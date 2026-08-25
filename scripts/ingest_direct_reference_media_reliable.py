@@ -279,12 +279,16 @@ def select_pending_media_id(
             }
         )
 
+        # SKIPPED_EXTERNAL_UNAVAILABLE is governed exclusively by the
+        # bounded cooldown check above. Once that cooldown expires the same
+        # exact parent/child asset may be retried, allowing Threads to refresh
+        # an expired CDN URL from its canonical post instead of being excluded
+        # forever. FAILED/BLOCKED remain terminal unless explicitly recoverable.
         if (
             download_status
             in {
                 "FAILED",
                 "BLOCKED",
-                "SKIPPED_EXTERNAL_UNAVAILABLE",
             }
             and not recoverable_identical_failure
             and not refresh_understanding

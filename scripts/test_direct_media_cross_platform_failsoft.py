@@ -136,6 +136,73 @@ try:
         now=now,
     )
 
+    # Regression: the cooldown must actually expire.  Before this fix the
+    # selector passed the cooldown check and then permanently rejected
+    # SKIPPED_EXTERNAL_UNAVAILABLE in a later status gate.
+    module.core.media_understanding_needs_refresh = (
+        lambda _media, _understanding: False
+    )
+
+    pending_youtube = {
+        **media[0],
+        "download_status": "PENDING",
+        "updated_at": now.isoformat(),
+    }
+
+    cooling_threads = {
+        **media[1],
+        "download_status": "SKIPPED_EXTERNAL_UNAVAILABLE",
+        "updated_at": (now - timedelta(minutes=2)).isoformat(),
+    }
+
+    selected_during_cooldown = module.select_pending_media_id(
+        FakeClient(
+            posts,
+            [
+                pending_youtube,
+                cooling_threads,
+            ],
+        ),
+        "night_scout",
+        permissions=permissions,
+    )
+
+    assert selected_during_cooldown == "media-youtube", (
+        selected_during_cooldown
+    )
+
+    expired_threads = {
+        **media[1],
+        "download_status": "SKIPPED_EXTERNAL_UNAVAILABLE",
+        "updated_at": (
+            now
+            - timedelta(
+                seconds=(
+                    module.EXTERNAL_UNAVAILABLE_RETRY_COOLDOWN_SECONDS
+                    + 60
+                )
+            )
+        ).isoformat(),
+    }
+
+    selected_after_cooldown = module.select_pending_media_id(
+        FakeClient(
+            posts,
+            [
+                pending_youtube,
+                expired_threads,
+            ],
+        ),
+        "night_scout",
+        permissions=permissions,
+    )
+
+    # Threads has higher physical-candidate priority than YouTube, so after
+    # the cooldown expires it must return to the bounded candidate pool.
+    assert selected_after_cooldown == "media-threads", (
+        selected_after_cooldown
+    )
+
 finally:
     module.core.safe_https_url = original_safe_url
     module.core.media_understanding_needs_refresh = original_understanding
