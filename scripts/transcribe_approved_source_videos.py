@@ -165,6 +165,11 @@ def eligible_videos(
     limit: int,
     allowed_source_ids: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    attempted_source_ids = {
+        str(row.get("source_video_id", ""))
+        for row in transcripts
+        if str(row.get("transcription_status", "")).strip()
+    }
     existing_done = {
         str(row.get("source_video_id", ""))
         for row in transcripts
@@ -216,6 +221,7 @@ def eligible_videos(
         candidates.append(row)
     candidates.sort(key=lambda row: (
         0 if row.get("approved_storage_url") else 1,
+        1 if str(row.get("source_video_id", "")) in attempted_source_ids else 0,
         0 if str(row.get("discovery_status", "")).upper() == "REAL_DISCOVERY" else 1,
         0 if str(row.get("published_at", "")).strip() else 1,
         0 if str(row.get("platform", "")).lower() == "tiktok" else 1,
@@ -624,7 +630,9 @@ def main() -> int:
     transcript_rows = []
     source_updates = []
     summaries = []
+    attempted_videos: list[dict[str, Any]] = []
     for video in selected:
+        attempted_videos.append(video)
         if args.dry_run or not args.apply:
             summaries.append({
                 "source_video_id": video.get("source_video_id", ""),
@@ -657,15 +665,17 @@ def main() -> int:
             "approved_storage_media_asset_id": video.get("approved_storage_media_asset_id", ""),
         })
         summaries.append(summary)
+        if row["transcription_status"] in DONE_STATUSES:
+            break
     save_result = {"transcripts_saved": 0, "source_videos_updated": 0, "failed": 0}
     if args.apply and client:
         save_result = save_rows(client, transcript_rows, source_updates)
     out = {
         "status": "DONE" if args.apply else "PLAN_ONLY",
         "account_id": args.account_id,
-        "selected_count": len(selected),
+        "selected_count": len(attempted_videos),
         "skipped_count": len(skipped),
-        "selected_source_video_ids": [v.get("source_video_id", "") for v in selected],
+        "selected_source_video_ids": [v.get("source_video_id", "") for v in attempted_videos],
         "transcription_results": summaries,
         "whisper_processing_seconds": round(sum(float(row.get("processing_seconds") or 0) for row in summaries), 3),
         "max_audio_seconds_per_video": args.max_audio_seconds,

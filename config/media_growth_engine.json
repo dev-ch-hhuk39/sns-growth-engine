@@ -92,7 +92,7 @@
   "max_videos_per_source_scan": 12,
   "max_new_videos_per_source_per_run": 3,
   "max_total_new_videos_per_run": 12,
-  "max_transcriptions_per_run": 1,
+  "max_transcriptions_per_run": 2,
   "max_local_transcription_seconds_per_video": 900,
   "local_whisper_cpu_threads": 1,
   "skip_already_seen_videos": true,

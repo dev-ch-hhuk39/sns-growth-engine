@@ -153,7 +153,7 @@ jobs:
             --apply \
             --confirm-transcribe \
             --allow-local-whisper \
-            --limit 1 \
+            --limit 2 \
             --model-size tiny \
             --max-audio-seconds 900 \
             --cpu-threads 1

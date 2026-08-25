@@ -25,9 +25,9 @@ checks = [
     ("Whisper one worker", "num_workers=1" in source),
     ("Whisper CPU threads bounded", "cpu_threads=cpu_threads" in source),
     ("greedy beam reduces memory", "beam_size=1" in source),
-    ("one transcription per run", config.get("max_transcriptions_per_run") == 1),
+    ("two-candidate sequential failover", config.get("max_transcriptions_per_run") == 2),
     ("15 minute source window", config.get("max_local_transcription_seconds_per_video") == 900),
-    ("production workflows use one thread and one video", all("--limit 1" in wf and "--cpu-threads 1" in wf for wf in workflows)),
+    ("production workflows use one thread and bounded failover", all("--limit 2" in wf and "--cpu-threads 1" in wf for wf in workflows)),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:
