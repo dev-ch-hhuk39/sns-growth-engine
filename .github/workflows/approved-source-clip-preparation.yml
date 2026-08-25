@@ -51,6 +51,7 @@ jobs:
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
       GITHUB_TOKEN: ${{ github.token }}
       GITHUB_MODELS_ENABLED: "true"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -105,6 +106,57 @@ jobs:
           ALLOW_VIDEO_CUT: "true"
           ALLOW_CLOUDINARY_UPLOAD: "true"
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-production-media --use-sheets
+      - name: Create one exact canonical clip queue
+        id: clip_queue
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        run: |
+          python3 scripts/run_media_production_pipeline.py \
+            --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
+            --prepare-saved-media-queue --apply --confirm-production-media --use-sheets \
+            --json-output /tmp/approved-clip-queue.json
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = json.loads(Path("/tmp/approved-clip-queue.json").read_text())
+          queue_id = str(payload.get("queue_id", ""))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"queue_id={queue_id}\n")
+              handle.write(f"status={payload.get('status', '')}\n")
+          PY
+      - name: Hybrid review and autonomous READY for low-risk accounts
+        if: steps.clip_queue.outputs.queue_id != '' && github.event.inputs.account_id != 'beauty_account'
+        run: |
+          python3 scripts/run_hybrid_ready_pipeline.py \
+            --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
+            --queue-id "${{ steps.clip_queue.outputs.queue_id }}" \
+            --max-candidates 1 --approval-mode media --autonomous-low-risk \
+            --apply --use-sheets --json-output /tmp/approved-clip-hybrid.json
+      - name: Hybrid review for Beauty human approval
+        if: steps.clip_queue.outputs.queue_id != '' && github.event.inputs.account_id == 'beauty_account'
+        run: |
+          python3 scripts/run_hybrid_ai_queue_gate.py \
+            --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
+            --queue-id "${{ steps.clip_queue.outputs.queue_id }}" \
+            --max-candidates 1 --require-human-review --apply --use-sheets
+      - name: Sync exact clip candidate to publication review
+        if: steps.clip_queue.outputs.queue_id != ''
+        run: |
+          python3 scripts/sync_publication_review.py \
+            --apply --confirm-review-sync --use-sheets \
+            --output /tmp/approved-clip-review.json
+      - name: Upload bounded preparation evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: approved-clip-preparation-${{ github.event.inputs.account_id }}-${{ github.run_id }}
+          path: |
+            /tmp/approved-clip-queue.json
+            /tmp/approved-clip-hybrid.json
+            /tmp/approved-clip-review.json
+          if-no-files-found: ignore
+          retention-days: 30
       - name: Clean expired transient media
         if: always()
         run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
