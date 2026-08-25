@@ -1400,6 +1400,7 @@ def main() -> int:
     mode.add_argument("--prepare-only", action="store_true", help="create READY inventory; never call Threads")
     mode.add_argument("--post-ready", action="store_true", help="dispatch precomputed READY inventory only")
     parser.add_argument("--use-sheets", action="store_true")
+    parser.add_argument("--json-output", default="")
     args = parser.parse_args()
     client = None
     if args.use_sheets:
@@ -1467,7 +1468,10 @@ def main() -> int:
             return [safe_output(item) for item in value]
         return value
     safe = safe_output(plan)
-    print(json.dumps(safe, ensure_ascii=False, indent=2))
+    rendered = json.dumps(safe, ensure_ascii=False, indent=2)
+    print(rendered)
+    if args.json_output:
+        Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
     return 1 if str(plan.get("status", "")).startswith(("FAILED", "BLOCKED")) else 0
 
 

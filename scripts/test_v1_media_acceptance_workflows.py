@@ -18,7 +18,8 @@ beauty = source("beauty-threads-production.yml")
 assert "config/managed_accounts.json" in direct_prepare
 assert "route_slot_id" in direct_prepare
 assert 'max-parallel: 1' in direct_prepare
-assert "--max-assets 1" in direct_prepare
+assert "run_direct_media_preparation_loop.py" in direct_prepare
+assert "direct_media_candidate_attempts" in direct_prepare
 assert 'ALLOW_REAL_THREADS_POST: "false"' in direct_prepare
 
 assert "schedule:" not in clip_prepare

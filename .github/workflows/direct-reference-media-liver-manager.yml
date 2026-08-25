@@ -98,19 +98,35 @@ jobs:
 
       - name: Install dispatcher dependencies
         run: python3 -m pip install --requirement requirements.txt
-      - name: Dry-run prepared inventory
-        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --post-ready --dry-run --use-sheets
       - name: Normalize exact direct-media caption
         if: (github.event_name == 'schedule') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true')
         run: python3 scripts/normalize_scheduled_media_caption.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --apply --use-sheets
+      - name: Dry-run prepared inventory
+        run: python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --post-ready --dry-run --use-sheets --json-output /tmp/direct-preflight.json
       - name: Stop delayed scheduled execution with prepared inventory preserved
         if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed != 'true'
         run: |
           echo '{"status":"NO_POST","reason":"scheduled_run_out_of_window","prepared_inventory_preserved":true}' | tee -a "$GITHUB_STEP_SUMMARY"
           exit 2
       - name: Hybrid review and exact media promotion
-        if: (github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true') || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true')
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true'
         run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
+      - name: Select exact autonomous READY candidate
+        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          source = json.loads(Path('/tmp/direct-preflight.json').read_text())
+          queue_id = str(source.get('selected_queue_id', ''))
+          if source.get('status') != 'DRY_RUN' or not queue_id:
+              raise SystemExit('[NO_POST] no exact autonomous READY direct-media candidate')
+          Path('/tmp/hybrid-ready.json').write_text(json.dumps({
+              'status': 'READY',
+              'selected_queue_id': queue_id,
+              'selection_source': 'publisher_preflight_read_after_write',
+          }) + '\n')
+          PY
       - name: Resolve scheduled activation gate
         id: activation
         if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'

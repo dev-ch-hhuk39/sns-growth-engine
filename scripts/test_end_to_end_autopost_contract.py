@@ -88,7 +88,17 @@ def main() -> int:
         assert "--prepare-only" in text
 
     direct_prepare = (ROOT / ".github/workflows/direct-media-preparation.yml").read_text()
-    assert "normalize_unreviewed_slot_candidates.py" in direct_prepare
+    assert "run_direct_media_preparation_loop.py" in direct_prepare
+    assert "--max-attempts" in direct_prepare
+
+    for path in (
+        ".github/workflows/direct-reference-media-night-scout.yml",
+        ".github/workflows/direct-reference-media-liver-manager.yml",
+    ):
+        direct_publisher = (ROOT / path).read_text()
+        assert "Select exact autonomous READY candidate" in direct_publisher
+        assert "publisher_preflight_read_after_write" in direct_publisher
+        assert "--json-output /tmp/direct-preflight.json" in direct_publisher
 
     gate_runner = (ROOT / "scripts/run_hybrid_ai_queue_gate.py").read_text()
     assert "eligible = eligible[:max_candidates]" in gate_runner
