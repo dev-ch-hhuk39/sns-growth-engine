@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from acquisition.ytdlp_runtime import YOUTUBE_EJS_COMPONENT, metadata_options
+from acquisition.ytdlp_runtime import YOUTUBE_EJS_COMPONENT, metadata_options  # noqa: E402
 paths = [
     "src/acquisition/ytdlp.py",
     "src/acquisition/enrichment.py",
@@ -21,7 +21,13 @@ paths = [
 missing = []
 for relative in paths:
     text = (ROOT / relative).read_text(encoding="utf-8")
-    if "metadata_options" not in text:
+    if not any(
+        helper in text
+        for helper in (
+            "metadata_options",
+            "physical_download_option_attempts",
+        )
+    ):
         missing.append(relative)
 assert not missing, missing
 os.environ["SNS_YTDLP_NODE_PATH"] = "/opt/sns-approved-node"

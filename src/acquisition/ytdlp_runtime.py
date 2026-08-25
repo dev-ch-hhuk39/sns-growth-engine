@@ -12,6 +12,14 @@ from typing import Any
 
 NODE_RUNTIME_ENV = "SNS_YTDLP_NODE_PATH"
 YOUTUBE_EJS_COMPONENT = "ejs:github"
+YOUTUBE_PUBLIC_PLAYER_FALLBACK = "web_embedded"
+YOUTUBE_BOUNDED_AV_FORMAT = (
+    "bestvideo[height<=720][filesize<230M][ext=mp4]+"
+    "bestaudio[filesize<70M][ext=m4a]/"
+    "best[height<=720][filesize<290M][ext=mp4]/"
+    "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/"
+    "best[height<=480][ext=mp4]"
+)
 
 
 def configured_node_runtime() -> str:
@@ -31,3 +39,33 @@ def metadata_options(platform: str, options: dict[str, Any] | None = None, **ove
     if str(platform).lower() == "youtube":
         configured["remote_components"] = [YOUTUBE_EJS_COMPONENT]
     return configured
+
+
+def physical_download_option_attempts(
+    platform: str,
+    options: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Return bounded physical-download attempts without credentials.
+
+    The default YouTube client is tried first. Public videos that hit a runner
+    IP bot challenge get one fallback through yt-dlp's public embedded client.
+    The fallback keeps source geometry and prefers 720p while bounding the
+    selected streams; long-form media can step down to 480p to stay inside the
+    engine's 300 MiB download budget.
+    """
+
+    primary = metadata_options(platform, options)
+    if str(platform).lower() != "youtube":
+        return [primary]
+
+    fallback_options = dict(options or {})
+    extractor_args = {
+        key: dict(value)
+        for key, value in dict(fallback_options.get("extractor_args") or {}).items()
+    }
+    youtube_args = dict(extractor_args.get("youtube") or {})
+    youtube_args["player_client"] = [YOUTUBE_PUBLIC_PLAYER_FALLBACK]
+    extractor_args["youtube"] = youtube_args
+    fallback_options["extractor_args"] = extractor_args
+    fallback_options["format"] = YOUTUBE_BOUNDED_AV_FORMAT
+    return [primary, metadata_options(platform, fallback_options)]

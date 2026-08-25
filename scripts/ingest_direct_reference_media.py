@@ -17,7 +17,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
-from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
+from acquisition.ytdlp_runtime import physical_download_option_attempts  # noqa: E402
 from acquisition.models import canonical_url  # noqa: E402
 from acquisition.threads_public import ThreadsPublicHttpAdapter  # noqa: E402
 from generation.media_platform_policy import can_attempt_physical_media, normalize_platform  # noqa: E402
@@ -304,7 +304,7 @@ def download_with_ytdlp(url: str, path: Path, *, platform: str) -> None:
             guard_resolved_stream(info)
 
     platform = normalize_platform(platform, url)
-    opts = metadata_options(platform, {
+    base_options = {
         "quiet": True,
         "noplaylist": True,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
@@ -314,24 +314,36 @@ def download_with_ytdlp(url: str, path: Path, *, platform: str) -> None:
         "socket_timeout": 45,
         "max_filesize": 300 * 1024 * 1024,
         "progress_hooks": [progress_guard],
-    })
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        planned = ydl.extract_info(url, download=False)
-        if not isinstance(planned, dict):
-            raise RuntimeError("yt_dlp_metadata_missing")
-        requested = planned.get("requested_formats") or planned.get("requested_downloads") or [planned]
-        for item in requested:
-            if isinstance(item, dict):
-                guard_resolved_stream(item)
-        info = ydl.extract_info(url, download=True)
-        actual = Path(ydl.prepare_filename(info))
-        if not actual.exists():
-            candidates = sorted(path.parent.glob(f"{path.stem}.*"), key=lambda item: item.stat().st_mtime, reverse=True)
-            if not candidates:
-                raise RuntimeError("yt_dlp_output_missing")
-            actual = candidates[0]
-        if actual != path:
-            actual.replace(path)
+    }
+    last_error: Exception | None = None
+    for opts in physical_download_option_attempts(platform, base_options):
+        for stale in path.parent.glob(f"{path.stem}.*"):
+            if stale.is_file():
+                stale.unlink()
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                planned = ydl.extract_info(url, download=False)
+                if not isinstance(planned, dict):
+                    raise RuntimeError("yt_dlp_metadata_missing")
+                requested = planned.get("requested_formats") or planned.get("requested_downloads") or [planned]
+                for item in requested:
+                    if isinstance(item, dict):
+                        guard_resolved_stream(item)
+                info = ydl.extract_info(url, download=True)
+                actual = Path(ydl.prepare_filename(info))
+                if not actual.exists():
+                    candidates = sorted(path.parent.glob(f"{path.stem}.*"), key=lambda item: item.stat().st_mtime, reverse=True)
+                    if not candidates:
+                        raise RuntimeError("yt_dlp_output_missing")
+                    actual = candidates[0]
+                if actual != path:
+                    actual.replace(path)
+                return
+        except Exception as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("yt_dlp_output_missing")
 
 
 def download_source_media(
