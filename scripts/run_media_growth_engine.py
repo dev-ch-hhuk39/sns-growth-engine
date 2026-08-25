@@ -37,6 +37,7 @@ from media_growth_schemas import (  # noqa: E402
     build_media_pdca_records,
     build_media_post_queue_item,
     build_transcript_row,
+    clean_clip_transcript_excerpt,
     clip_count_for_video,
     clips_overlap,
     extract_video_id,
@@ -784,6 +785,17 @@ def build_media_growth_plan(
         )
         video_candidates = []
         for i, spec in enumerate(clip_specs, start=1):
+            excerpt = clean_clip_transcript_excerpt(
+                spec.get("excerpt", "")
+            )
+            if not excerpt:
+                rejected_clip_candidates.append({
+                    "clip_candidate_id": "",
+                    "source_video_id": str(source_video.get("source_video_id", "")),
+                    "blockers": ["clip_transcript_noise_only"],
+                    "account_terms": [],
+                })
+                continue
             source_video_id = str(source_video.get("source_video_id", ""))
             video_url = str(source_video.get("canonical_video_url", ""))
             media = SourceMediaItem(
@@ -810,7 +822,7 @@ def build_media_growth_plan(
                 ])),
                 published_at=str(source_video.get("published_at", "")),
                 media_items=(media,),
-                content_hash=str(source_video.get("content_hash", "")) or stable_content_hash(str(spec.get("excerpt", "")), [video_url]),
+                content_hash=str(source_video.get("content_hash", "")) or stable_content_hash(excerpt, [video_url]),
             )
             use_remote_caption = (
                 uses_default_caption_service
@@ -823,9 +835,7 @@ def build_media_growth_plan(
             clip_output = active_caption_service.generate(
                 bundle,
                 account_id=account_id,
-                transcript_excerpt=str(
-                    spec.get("excerpt", "")
-                ),
+                transcript_excerpt=excerpt,
             )
             clip_public_text = str(
                 clip_output.get(
@@ -851,9 +861,6 @@ def build_media_growth_plan(
                     != "PASS"
                 )
             ):
-                excerpt = str(
-                    spec.get("excerpt", "")
-                ).strip()
                 copyedit_bundle = SourcePostBundle(
                     source_post_id=source_video_id,
                     source_id=str(
@@ -952,9 +959,7 @@ def build_media_growth_plan(
                 evidence_context_output = (
                     generate_evidence_context_caption(
                         account_id=account_id,
-                        transcript_excerpt=str(
-                            spec.get("excerpt", "")
-                        ),
+                        transcript_excerpt=excerpt,
                         recent_posts=[],
                     )
                 )
@@ -1001,11 +1006,11 @@ def build_media_growth_plan(
                 transcript_signal_count=len(_segments(transcript)),
                 transcript_grounded=True,
                 transcript_id=str(transcript.get("transcript_id", "")),
-                transcript_excerpt=str(spec.get("excerpt", "")),
+                transcript_excerpt=excerpt,
                 start_seconds=float(spec.get("start", 0)),
                 end_seconds=float(spec.get("end", 0)),
                 semantic_score=float(spec.get("semantic_score", 0) or 0),
-                comment_signal_count=_comment_signal_count(source_video, str(spec.get("excerpt", ""))),
+                comment_signal_count=_comment_signal_count(source_video, excerpt),
             )
             alignment = clip_output.get("semantic_alignment", {})
             internal_analysis = clip_output.get("internal_analysis") if isinstance(clip_output.get("internal_analysis"), dict) else {}
@@ -1040,7 +1045,7 @@ def build_media_growth_plan(
             })
             source_suitability, source_blockers = clip_source_suitability(
                 account_id=account_id,
-                transcript=str(spec.get("excerpt", "")),
+                transcript=excerpt,
             )
             cand.update({
                 "source_evidence_status": "PASS" if not source_blockers else "SOURCE_EVIDENCE_UNSUITABLE",
