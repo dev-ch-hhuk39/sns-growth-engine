@@ -134,6 +134,12 @@
     "max_failed_retries_per_run": 5
   },
   "dry_run_default": true,
+  "direct_media_candidate_attempts": 5,
+  "max_download_attempts": 3,
+  "max_url_refresh_attempts": 2,
+  "max_transcription_attempts": 2,
+  "max_cuts": 3,
+  "max_upload_attempts": 2,
   "source_discovery_state_enabled": true,
   "initial_source_scan_limit": 30,
   "incremental_source_scan_limit": 12,

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from config_loader import get_config  # noqa: E402
-from accounts.managed_accounts import account_choices  # noqa: E402
+from accounts.managed_accounts import account_choices, managed_account  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed  # noqa: E402
 from hybrid_ai_policy import requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
@@ -43,6 +43,8 @@ def build_plan(
     account_id: str,
     slot_id: str,
     queue_ids: set[str] | None = None,
+    *,
+    autonomous_low_risk: bool = False,
 ) -> dict[str, Any]:
     requested = set(queue_ids or set())
     rows = [dict(row) for row in read_records_safely(client, "queue")]
@@ -56,12 +58,14 @@ def build_plan(
             continue
         if str(row.get("slot_id", "")) != slot_id:
             continue
-        # Media may be promoted only after the exact prepared row has been
-        # approved on the human review board. The Hybrid gate verifies that
-        # approved text; it must never turn an unreviewed row into READY.
-        if str(row.get("status", "")).upper() != "READY":
+        expected_status = "WAITING_REVIEW" if autonomous_low_risk else "READY"
+        if str(row.get("status", "")).upper() != expected_status:
             continue
-        if str(row.get("human_review_decision", "")).upper() != "OK":
+        if autonomous_low_risk:
+            if str(managed_account(account_id).get("review_policy", "")) != "autonomous_low_risk":
+                rejected.append({"queue_id": queue_id, "reasons": "account_requires_human_review"})
+                continue
+        elif str(row.get("human_review_decision", "")).upper() != "OK":
             rejected.append({"queue_id": queue_id, "reasons": "human_review_not_approved"})
             continue
         if truthy(row.get("excluded_from_activation")) or truthy(row.get("repost_prohibited")):
@@ -116,24 +120,41 @@ def build_plan(
     }
 
 
-def apply(client: SheetsClient, result: dict[str, Any]) -> dict[str, Any]:
+def apply(client: SheetsClient, result: dict[str, Any], *, autonomous_low_risk: bool = False) -> dict[str, Any]:
     updated: list[str] = []
     for queue_id in result["selected_queue_ids"]:
         client.update_queue_item(
             queue_id,
             status="READY",
-            auto_publish="false",
+            auto_publish="true" if autonomous_low_risk else "false",
             blocked_reason="",
             error="",
             auto_ready_by="promote_hybrid_approved_media.py",
-            auto_ready_reason="human_review_hybrid_ai_and_persisted_media_validators_passed",
+            auto_ready_reason=(
+                "autonomous_low_risk_hybrid_ai_and_persisted_media_validators_passed"
+                if autonomous_low_risk
+                else "human_review_hybrid_ai_and_persisted_media_validators_passed"
+            ),
         )
         updated.append(queue_id)
+    rows_after = {
+        str(row.get("queue_id", "")): dict(row)
+        for row in read_records_safely(client, "queue")
+    }
+    read_after_write = all(
+        str(rows_after.get(queue_id, {}).get("status", "")).upper() == "READY"
+        and str(rows_after.get(queue_id, {}).get("auto_ready_by", ""))
+        == "promote_hybrid_approved_media.py"
+        for queue_id in updated
+    )
+    if updated and not read_after_write:
+        raise RuntimeError("media_ready_read_after_write_failed")
     return {
         **result,
         "status": "APPLIED",
         "updated_queue_ids": updated,
         "updated_count": len(updated),
+        "read_after_write": read_after_write,
     }
 
 
@@ -145,21 +166,30 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--confirm-promote", action="store_true")
+    parser.add_argument("--autonomous-low-risk", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
     args = parser.parse_args()
     if args.apply == args.dry_run:
         raise RuntimeError("specify exactly one of --apply or --dry-run")
     if args.apply and not args.confirm_promote:
         raise RuntimeError("--apply requires --confirm-promote")
+    if args.autonomous_low_risk and str(managed_account(args.account_id).get("review_policy", "")) != "autonomous_low_risk":
+        raise RuntimeError("autonomous_low_risk_not_allowed_for_account")
     if not args.use_sheets:
         raise RuntimeError("--use-sheets is required")
     if not args.queue_id:
         raise RuntimeError("at least one --queue-id is required")
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    result = build_plan(client, args.account_id, args.slot_id, set(args.queue_id))
+    result = build_plan(
+        client,
+        args.account_id,
+        args.slot_id,
+        set(args.queue_id),
+        autonomous_low_risk=args.autonomous_low_risk,
+    )
     if args.apply:
-        result = apply(client, result)
+        result = apply(client, result, autonomous_low_risk=args.autonomous_low_risk)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
