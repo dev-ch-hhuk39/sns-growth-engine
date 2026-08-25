@@ -1065,16 +1065,24 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
 
         platform = str(post.get("platform", "")).lower()
         resolution: dict[str, str] = {}
-        download_backend = download_source_media(
-            media_url=url,
-            canonical_post_url=str(media.get("canonical_post_url") or post.get("canonical_post_url") or ""),
-            path=local_path,
-            media_type=media_type,
-            platform=platform,
-            post=post,
-            media=media,
-            resolution=resolution,
-        )
+        if already_uploaded and refresh_understanding:
+            download_direct_https_media(
+                url,
+                local_path,
+                media_type=media_type,
+            )
+            download_backend = "cloudinary_stored_asset_refresh"
+        else:
+            download_backend = download_source_media(
+                media_url=url,
+                canonical_post_url=str(media.get("canonical_post_url") or post.get("canonical_post_url") or ""),
+                path=local_path,
+                media_type=media_type,
+                platform=platform,
+                post=post,
+                media=media,
+                resolution=resolution,
+            )
         if resolution:
             update_media_row(
                 client,
