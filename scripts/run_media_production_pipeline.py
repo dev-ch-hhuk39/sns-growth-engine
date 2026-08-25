@@ -86,6 +86,20 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
+def persisted_hybrid_gate_status(row: dict[str, Any]) -> str:
+    """Return the exact persisted Hybrid status without changing queue state."""
+
+    raw = str(row.get("generation_policy_json", "")).strip()
+    if not raw:
+        return ""
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return ""
+    gate = payload.get("hybrid_ai_gate") if isinstance(payload, dict) else None
+    return str((gate or {}).get("status", "")).strip().upper()
+
+
 APPROVED_CLIP_REVIEW_MIN_SECONDS = 12.0
 APPROVED_CLIP_REVIEW_MAX_SECONDS = 45.0
 
@@ -1757,6 +1771,7 @@ def build_plan(
             if not (
                 status.startswith("BLOCKED")
                 or status in {"REJECTED", "SUPERSEDED", "FAILED", "QUALITY_EXHAUSTED"}
+                or persisted_hybrid_gate_status(row) == "BLOCKED"
             ):
                 continue
             clip_id = str(row.get("clip_candidate_id") or row.get("video_clip_id") or "")
