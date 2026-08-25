@@ -62,7 +62,6 @@ jobs:
   prepare-direct-media:
     needs: resolve-accounts
     runs-on: ubuntu-latest
-    environment: production
     timeout-minutes: 55
     strategy:
       fail-fast: false
