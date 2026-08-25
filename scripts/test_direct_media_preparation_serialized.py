@@ -24,6 +24,9 @@ assert "run_direct_media_preparation_loop.py" in workflow
 assert "run_direct_reference_media_pipeline_batched.py" in workflow
 assert "direct_media_candidate_attempts" in workflow
 assert "--confirm-preparation-loop" in workflow
+assert "bash scripts/install_threads_cli.sh" in workflow
+assert 'echo "${THREADS_CLI_INSTALL_DIR}" >> "$GITHUB_PATH"' in workflow
+assert "python3 -m playwright install --with-deps chromium" in workflow
 
 assert 'PUBLISH_ENABLED: "false"' in workflow
 assert 'ALLOW_REAL_THREADS_POST: "false"' in workflow

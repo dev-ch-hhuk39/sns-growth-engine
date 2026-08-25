@@ -102,6 +102,16 @@ jobs:
           echo "CONTENT_SLOT_ID=$slot_id" >> "$GITHUB_ENV"
       - name: Install preparation dependencies
         run: python3 -m pip install --requirement requirements-media-runtime.txt
+      - name: Install pinned anonymous Threads CLI
+        if: github.event.inputs.confirm_preparation == 'true'
+        env:
+          THREADS_CLI_INSTALL_DIR: ${{ runner.temp }}/threads-cli
+        run: |
+          bash scripts/install_threads_cli.sh
+          echo "${THREADS_CLI_INSTALL_DIR}" >> "$GITHUB_PATH"
+      - name: Install public browser fallback
+        if: github.event.inputs.confirm_preparation == 'true'
+        run: python3 -m playwright install --with-deps chromium
       - name: Install bounded OCR runtime
         run: |
           sudo apt-get update
