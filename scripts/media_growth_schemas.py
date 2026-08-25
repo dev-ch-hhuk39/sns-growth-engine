@@ -63,6 +63,21 @@ def redacted_preview(text: str, limit: int = 120) -> str:
     return normalized[:limit]
 
 
+def clean_clip_transcript_excerpt(value: Any) -> str:
+    """Remove non-spoken stage directions before clip grounding or storage."""
+
+    text = str(value or "")
+    text = re.sub(
+        r"[\[【（(]\s*(?:音楽|拍手|笑い|無音|BGM|music|applause)\s*[\]】）)]",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"[ \t　]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def transcript_hash(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest()
 
@@ -223,7 +238,7 @@ def score_clip_candidate(
     comment_signal_count: int = 0,
 ) -> dict[str, int]:
     rights_score = 20 if source.get("rights_status") in {"owned", "licensed", "approved_creator_clip"} else 0
-    excerpt = str(transcript_excerpt or "")
+    excerpt = clean_clip_transcript_excerpt(transcript_excerpt)
     account_id = str(source.get("target_account_id") or (source.get("target_account_ids") or [""])[0])
     hook_markers = ("なぜ", "実は", "大事", "ポイント", "理由", "注意", "失敗", "違い", "？", "?")
     learning_markers = ("まず", "確認", "選", "変え", "比べ", "コツ", "方法", "ので", "ため")
@@ -321,6 +336,7 @@ def build_clip_candidate_for_video(
     comment_signal_count: int = 0,
 ) -> dict[str, Any]:
     config = config or {}
+    transcript_excerpt = clean_clip_transcript_excerpt(transcript_excerpt)
     duration = float(source_video.get("duration_seconds") or 60)
     clip_duration_max = float(config.get("clip_duration_max_seconds", 45))
     clip_duration_min = float(config.get("clip_duration_min_seconds", 8))
