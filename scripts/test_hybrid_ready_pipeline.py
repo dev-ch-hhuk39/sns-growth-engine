@@ -37,6 +37,18 @@ def main() -> int:
     )
     assert "--require-human-review" in media_exact[0]
 
+    autonomous_media = command_plan(
+        "night_scout",
+        "ns_2100_clip_media",
+        1,
+        apply=True,
+        approval_mode="media",
+        queue_id="q_clip",
+        autonomous_low_risk=True,
+    )
+    assert "--require-human-review" not in autonomous_media[0]
+    assert "--autonomous-low-risk" in autonomous_media[1]
+
     parsed = extract_json_objects(
         'noise\n{"status":"A"}\nmore\n{"updated_queue_ids":["q1"]}\n'
     )
