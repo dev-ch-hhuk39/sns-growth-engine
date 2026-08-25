@@ -86,7 +86,7 @@ jobs:
           fi
 
       - name: Dry-run transcription plan
-        run: python3 scripts/transcribe_approved_source_videos.py --account-id liver_manager --use-sheets --dry-run --limit 1
+        run: python3 scripts/transcribe_approved_source_videos.py --account-id liver_manager --use-sheets --dry-run --limit 2
 
       - name: Transcribe approved source videos
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_transcription == 'true') && github.event.inputs.dry_run_only != 'true'
@@ -108,7 +108,7 @@ jobs:
             --apply \
             --confirm-transcribe \
             --allow-local-whisper \
-            --limit 1 \
+            --limit 2 \
             --model-size tiny \
             --max-audio-seconds 900 \
             --cpu-threads 1

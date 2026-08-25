@@ -129,7 +129,7 @@ jobs:
         run: |
           python3 scripts/transcribe_approved_source_videos.py \
             --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-transcribe \
-            --allow-local-whisper --limit 1 --model-size tiny \
+            --allow-local-whisper --limit 2 --model-size tiny \
             --max-audio-seconds 900 --cpu-threads 1
 
       - name: Generate transcript-grounded clip candidates
