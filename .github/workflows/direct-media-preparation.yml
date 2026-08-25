@@ -122,6 +122,83 @@ jobs:
       - name: Start bounded YouTube PO Token Provider
         if: github.event.inputs.confirm_preparation == 'true'
         run: scripts/start_youtube_pot_provider.sh
+      - name: Diagnose YouTube PO Token runtime
+        if: github.event.inputs.confirm_preparation == 'true'
+        run: |
+          set +e
+
+          echo "===== POT PROVIDER HEALTH ====="
+          curl --fail --silent --show-error http://127.0.0.1:4416/ping || true
+
+          echo
+          echo "===== POT PLUGIN PACKAGE ====="
+          python3 - <<'PYDIAG'
+          from importlib.metadata import version, PackageNotFoundError
+
+          try:
+              print("POT_PLUGIN_VERSION=" + version("bgutil-ytdlp-pot-provider"))
+          except PackageNotFoundError:
+              print("POT_PLUGIN_VERSION=NOT_INSTALLED")
+          PYDIAG
+
+          echo
+          echo "===== EXACT PROJECT MWEB ATTEMPT ====="
+
+          PYTHONPATH=src python3 - <<'PYDIAG' 2>&1 | tee /tmp/youtube-pot-runtime-diagnostic.log
+          import json
+          import traceback
+          import yt_dlp
+
+          from acquisition.ytdlp_runtime import physical_download_option_attempts
+
+          url = "https://www.youtube.com/watch?v=Gh5oZfAtzjU"
+
+          base = {
+              "quiet": False,
+              "verbose": True,
+              "noplaylist": True,
+              "skip_download": True,
+              "simulate": True,
+              "retries": 0,
+              "socket_timeout": 30,
+          }
+
+          attempts = physical_download_option_attempts("youtube", base)
+
+          print("ATTEMPT_COUNT=" + str(len(attempts)))
+          print(
+              "MWEB_EXTRACTOR_ARGS="
+              + json.dumps(
+                  attempts[1].get("extractor_args", {}),
+                  ensure_ascii=False,
+                  sort_keys=True,
+              )
+          )
+
+          try:
+              with yt_dlp.YoutubeDL(attempts[1]) as ydl:
+                  info = ydl.extract_info(url, download=False)
+
+              print("POT_DIAGNOSTIC_STATUS=PASS")
+              print("VIDEO_ID=" + str((info or {}).get("id", "")))
+              print("FORMAT_COUNT=" + str(len((info or {}).get("formats") or [])))
+
+          except Exception as exc:
+              print("POT_DIAGNOSTIC_STATUS=FAILED")
+              print("EXCEPTION_TYPE=" + type(exc).__name__)
+              print("EXCEPTION_MESSAGE=" + str(exc)[:1000])
+              traceback.print_exc()
+          PYDIAG
+
+          echo
+          echo "===== POT SIGNALS ====="
+
+          grep -E -i             'pot:|bgutil|po token|token provider|gvs|mweb|player.client|sign in to confirm|not a bot|POT_DIAGNOSTIC|EXCEPTION'             /tmp/youtube-pot-runtime-diagnostic.log             || true
+
+          echo
+          echo "[DIAGNOSTIC_ONLY] stopping before acquisition or media writes"
+
+          exit 1
       - name: Acquire bounded approved reference posts before media preparation
         if: github.event.inputs.confirm_preparation == 'true'
         run: |
