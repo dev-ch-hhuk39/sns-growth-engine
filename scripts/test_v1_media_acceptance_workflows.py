@@ -25,7 +25,7 @@ assert 'ALLOW_REAL_THREADS_POST: "false"' in direct_prepare
 assert "schedule:" not in clip_prepare
 assert "account_production_enabled" in clip_prepare
 assert "route_slot_id" in clip_prepare
-assert "--limit 1" in clip_prepare
+assert "--limit 2" in clip_prepare
 assert "--prepare-only" in clip_prepare
 assert "--prepare-saved-media-queue" in clip_prepare
 assert "run_hybrid_ready_pipeline.py" in clip_prepare
