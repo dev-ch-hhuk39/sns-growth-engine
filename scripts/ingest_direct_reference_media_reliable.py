@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import json
 import os
 import sys
 from pathlib import Path
@@ -329,16 +332,32 @@ def main() -> int:
     )
     configured = int(os.environ.get("DIRECT_MEDIA_CANDIDATE_ATTEMPTS", "3") or "3")
     max_attempts = 1 if explicit_target else max(1, min(configured, 3))
+    final_status = ""
     for attempt in range(1, max_attempts + 1):
-        result = core.main()
-        if result == 0:
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            result = core.main()
+        rendered = output.getvalue()
+        print(rendered, end="")
+        try:
+            payload = json.loads(rendered)
+        except (json.JSONDecodeError, TypeError):
+            payload = {}
+        final_status = str(payload.get("status") or "")
+        retryable_skip = (
+            not explicit_target
+            and final_status == "SKIPPED_EXTERNAL_UNAVAILABLE"
+        )
+        if result == 0 and not retryable_skip:
             return 0
         if attempt < max_attempts:
             print(
-                f"[DIRECT_MEDIA_RETRY] candidate {attempt} failed; trying next approved parent",
+                f"[DIRECT_MEDIA_RETRY] candidate {attempt} unavailable; trying next approved parent",
                 file=sys.stderr,
             )
-    return 1
+    # External access can be transient. Exhausting the bounded candidate set
+    # remains an observable fail-soft preparation result, never a publish pass.
+    return 0 if final_status == "SKIPPED_EXTERNAL_UNAVAILABLE" else 1
 
 
 if __name__ == "__main__":

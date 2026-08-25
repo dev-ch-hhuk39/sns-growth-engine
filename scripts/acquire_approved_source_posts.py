@@ -243,6 +243,52 @@ def _append(
     )
 
 
+def _column_letter(index: int) -> str:
+    value = ""
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        value = chr(65 + remainder) + value
+    return value
+
+
+def _volatile_threads_media_refresh(
+    existing: dict[str, Any],
+    item: Any,
+) -> dict[str, str]:
+    """Return a fail-closed refresh for the same Threads parent and child."""
+    old_url = str(existing.get("original_media_url") or "")
+    new_url = str(item.original_media_url or "")
+    same_identity = (
+        str(existing.get("source_post_id") or "") == item.source_post_id
+        and str(existing.get("canonical_post_url") or "")
+        == item.canonical_post_url
+        and str(existing.get("media_index") or "0") == str(item.media_index)
+        and str(existing.get("media_type") or "").lower() == item.media_type
+    )
+    retryable = (
+        str(existing.get("download_status") or "").upper()
+        == "SKIPPED_EXTERNAL_UNAVAILABLE"
+        or str(existing.get("last_error") or "").startswith("ingest_skipped:")
+    )
+    if (
+        not same_identity
+        or not retryable
+        or old_url == new_url
+        or not new_url.startswith("https://")
+    ):
+        return {}
+    return {
+        "original_media_url": new_url,
+        "resolver_backend": str(item.resolver_backend or ""),
+        "acquisition_method": str(item.resolver_backend or ""),
+        "thumbnail_url": str(item.thumbnail_url or ""),
+        "download_status": "PENDING",
+        "cloudinary_status": "PENDING",
+        "last_error": "",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def load_discovery_config() -> dict[str, Any]:
     """Load shared scan policy with post-specific new-item limits."""
 
@@ -641,7 +687,13 @@ def persist(
     canonical_seen = {str(row.get("canonical_post_url", "")) for row in existing_posts}
     post_seen = {str(row.get("source_post_id", "")) for row in existing_posts}
     media_seen = {str(row.get("source_post_media_id", "")) for row in existing_media}
-    saved_posts = saved_media = duplicates = invalid = 0
+    media_by_id = {
+        str(row.get("source_post_media_id", "")): (row_number, row)
+        for row_number, row in enumerate(existing_media, start=2)
+    }
+    media_refreshes: dict[str, str] = {}
+    media_updates: list[dict[str, Any]] = []
+    saved_posts = saved_media = duplicates = invalid = refreshed_media = 0
     for post in posts:
         if validate_source_post(post):
             invalid += 1
@@ -666,6 +718,25 @@ def persist(
             canonical_seen.add(post.canonical_post_url)
         for item in post.media_items:
             if item.source_post_media_id in media_seen:
+                row_number, existing = media_by_id[item.source_post_media_id]
+                refresh = _volatile_threads_media_refresh(existing, item)
+                for key, value in refresh.items():
+                    if key not in media_headers:
+                        continue
+                    media_updates.append(
+                        {
+                            "range": (
+                                f"{_column_letter(media_headers.index(key) + 1)}"
+                                f"{row_number}"
+                            ),
+                            "values": [[bounded_cell(value)]],
+                        }
+                    )
+                if refresh:
+                    media_refreshes[item.source_post_media_id] = refresh[
+                        "original_media_url"
+                    ]
+                    refreshed_media += 1
                 continue
             policy = (policy_by_source or {}).get(post.source_id, {})
             _append(
@@ -680,11 +751,35 @@ def persist(
             )
             saved_media += 1
             media_seen.add(item.source_post_media_id)
+    if media_updates:
+        client._call_with_rate_limit_retry(
+            "batch_update:source_post_media:volatile_url_refresh",
+            lambda: media_ws.batch_update(
+                media_updates,
+                value_input_option="USER_ENTERED",
+            ),
+        )
+        verified = client._call_with_rate_limit_retry(
+            "rows:source_post_media:volatile_url_refresh_verify",
+            lambda: media_ws.get_all_records(),
+        )
+        verified_by_id = {
+            str(row.get("source_post_media_id") or ""): row for row in verified
+        }
+        if any(
+            str(
+                verified_by_id.get(media_id, {}).get("original_media_url") or ""
+            )
+            != expected_url
+            for media_id, expected_url in media_refreshes.items()
+        ):
+            raise RuntimeError("source_post_media_refresh_read_after_write_failed")
     return {
         "saved_source_posts": saved_posts,
         "saved_source_post_media": saved_media,
         "duplicate_source_posts": duplicates,
         "invalid_source_posts": invalid,
+        "refreshed_source_post_media": refreshed_media,
     }
 
 

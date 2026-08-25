@@ -18,6 +18,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from acquisition.ytdlp_runtime import metadata_options  # noqa: E402
+from acquisition.models import canonical_url  # noqa: E402
+from acquisition.threads_public import ThreadsPublicHttpAdapter  # noqa: E402
 from generation.media_platform_policy import can_attempt_physical_media, normalize_platform  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from media.permission_ledger import evaluate_permission  # noqa: E402
@@ -45,6 +47,11 @@ _SAFE_INGEST_ERROR_CODES = {
     "source_post_media_read_after_write_failed",
     "physical_media_platform_deferred",
     "threads_individual_post_url_required",
+    "threads_refreshed_parent_mismatch",
+    "threads_refreshed_source_mismatch",
+    "threads_refreshed_account_mismatch",
+    "threads_refreshed_media_index_invalid",
+    "threads_refreshed_media_child_mismatch",
 }
 
 
@@ -308,6 +315,9 @@ def download_source_media(
     path: Path,
     media_type: str,
     platform: str,
+    post: dict[str, Any] | None = None,
+    media: dict[str, Any] | None = None,
+    resolution: dict[str, str] | None = None,
 ) -> str:
     """Acquire one proven physical-media object without changing geometry."""
     resolved_platform = normalize_platform(platform, canonical_post_url or media_url)
@@ -321,14 +331,75 @@ def download_source_media(
     if resolved_platform == "threads":
         if "/post/" not in canonical_post_url:
             raise RuntimeError("threads_individual_post_url_required")
-        download_direct_https_media(media_url, path, media_type=media_type)
-        return "threads_public_og_direct_http"
+        try:
+            download_direct_https_media(media_url, path, media_type=media_type)
+            return "threads_public_og_direct_http"
+        except Exception:
+            if not post or not media:
+                raise
+        refreshed_url, resolver_backend = refresh_threads_media_url(post, media)
+        download_direct_https_media(refreshed_url, path, media_type=media_type)
+        if resolution is not None:
+            resolution.update(
+                {
+                    "original_media_url": refreshed_url,
+                    "resolver_backend": resolver_backend,
+                }
+            )
+        return f"{resolver_backend}_refreshed_direct_http"
     target_url = canonical_post_url or media_url
     if not safe_https_url(target_url):
         raise RuntimeError("direct_media_url_blocked")
     path.unlink(missing_ok=True)
     download_with_ytdlp(target_url, path, platform=resolved_platform)
     return f"yt_dlp_{resolved_platform}_individual_post"
+
+
+def refresh_threads_media_url(
+    post: dict[str, Any],
+    media: dict[str, Any],
+    *,
+    adapter: ThreadsPublicHttpAdapter | None = None,
+) -> tuple[str, str]:
+    """Refresh a volatile CDN URL from the same canonical Threads post only."""
+    parent_url = canonical_url(
+        str(media.get("canonical_post_url") or post.get("canonical_post_url") or "")
+    )
+    if "/post/" not in parent_url:
+        raise RuntimeError("threads_individual_post_url_required")
+    profile_url = canonical_url(str(post.get("profile_url") or ""))
+    if not profile_url:
+        profile_url = parent_url.split("/post/", 1)[0]
+    source = {
+        "source_id": str(post.get("source_id") or ""),
+        "source_url": profile_url,
+        "target_account_id": str(post.get("target_account_id") or ""),
+        "target_account_ids": [str(post.get("target_account_id") or "")],
+    }
+    resolved = (adapter or ThreadsPublicHttpAdapter()).acquire_post(source, parent_url)
+    if canonical_url(resolved.canonical_post_url) != parent_url:
+        raise RuntimeError("threads_refreshed_parent_mismatch")
+    if resolved.source_id != source["source_id"]:
+        raise RuntimeError("threads_refreshed_source_mismatch")
+    if resolved.target_account_id != source["target_account_id"]:
+        raise RuntimeError("threads_refreshed_account_mismatch")
+    try:
+        expected_index = int(str(media.get("media_index") or "0"))
+    except ValueError as exc:
+        raise RuntimeError("threads_refreshed_media_index_invalid") from exc
+    expected_type = str(media.get("media_type") or "").lower()
+    child = next(
+        (item for item in resolved.media_items if item.media_index == expected_index),
+        None,
+    )
+    if child is None or child.media_type != expected_type:
+        raise RuntimeError("threads_refreshed_media_child_mismatch")
+    if child.source_post_id != resolved.source_post_id:
+        raise RuntimeError("threads_refreshed_parent_mismatch")
+    refreshed_url = canonical_url(child.original_media_url)
+    if not safe_https_url(refreshed_url, stream_url=True):
+        raise RuntimeError("direct_media_url_blocked")
+    return refreshed_url, child.resolver_backend
 
 def update_media_row(client: SheetsClient, source_post_media_id: str, fields: dict[str, Any]) -> None:
     ws = client._ws("source_post_media")
@@ -933,13 +1004,43 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             }
 
         platform = str(post.get("platform", "")).lower()
+        resolution: dict[str, str] = {}
         download_backend = download_source_media(
             media_url=url,
             canonical_post_url=str(media.get("canonical_post_url") or post.get("canonical_post_url") or ""),
             path=local_path,
             media_type=media_type,
             platform=platform,
+            post=post,
+            media=media,
+            resolution=resolution,
         )
+        if resolution:
+            update_media_row(
+                client,
+                source_post_media_id,
+                {
+                    **resolution,
+                    "acquisition_method": download_backend,
+                    "download_status": "PENDING",
+                    "last_error": "",
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            refreshed = record(
+                client,
+                "source_post_media",
+                "source_post_media_id",
+                source_post_media_id,
+            )
+            if (
+                not refreshed
+                or str(refreshed.get("original_media_url") or "")
+                != resolution["original_media_url"]
+                or str(refreshed.get("source_post_id") or "")
+                != str(post.get("source_post_id") or "")
+            ):
+                raise RuntimeError("source_post_media_read_after_write_failed")
         size_limit = 300 * 1024 * 1024 if media_type == "video" else 20 * 1024 * 1024
         if not local_path.exists() or local_path.stat().st_size > size_limit:
             raise RuntimeError("media_size_limit_exceeded")
@@ -1049,6 +1150,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             "not a bot",
             "http error 403",
             "http error 429",
+            "threads_public_http_failed",
         ))
         status = "SKIPPED_EXTERNAL_UNAVAILABLE" if external_unavailable else "FAILED"
         error_code = _safe_ingest_error_code(
