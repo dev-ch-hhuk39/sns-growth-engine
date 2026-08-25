@@ -48,16 +48,34 @@ def schedules(path: Path) -> set[str]:
 
 
 def assert_activation_config() -> None:
+    """V1 media may run only while the fail-closed rights boundaries remain."""
+
     cfg = load_json(CONFIG)
     assert cfg["scheduled_prepare_enabled"] is True
     assert cfg["scheduled_publish_enabled"] is True
     assert cfg["production_publish_activation_approved"] is True
     assert cfg["pre_activation_queue_archive_required"] is True
     assert cfg["pre_activation_queue_archive_completed"] is True
-    assert cfg["allow_media_posts"] is False
-    assert cfg["allow_video_download"] is False
-    assert cfg["allow_video_cut"] is False
-    assert cfg["allow_cloudinary_upload"] is False
+
+    # Approved media production is intentionally active for V1.
+    assert cfg["allow_media_posts"] is True
+    assert cfg["allow_video_download"] is True
+    assert cfg["allow_video_cut"] is True
+    assert cfg["allow_cloudinary_upload"] is True
+
+    # Activation must not weaken the existing safety/account boundaries.
+    assert cfg["allow_third_party_media"] is False
+    assert cfg["allow_unknown_rights"] is False
+    assert cfg["allow_transcription_api"] is False
+    assert cfg["kill_switch"] is False
+    assert "threads" in cfg["allowed_platforms_for_post"]
+    assert "x" in cfg["blocked_platforms_for_post"]
+    assert "x" in cfg["blocked_platforms_for_fetch"]
+    assert set(cfg["allowed_accounts"]) == {
+        "night_scout",
+        "liver_manager",
+        "beauty_account",
+    }
 
 
 def assert_all_slot_schedules() -> None:
