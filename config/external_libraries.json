@@ -35,6 +35,15 @@
       "required_for_core_posting": true
     },
     {
+      "id": "bgutil_ytdlp_pot_provider",
+      "repository": "https://github.com/Brainicism/bgutil-ytdlp-pot-provider",
+      "revision": "7511309af023b09788dc8f2efc96cc3671291e6c",
+      "license": "GPL-3.0-or-later",
+      "role": "production_youtube_po_token_provider_for_bounded_approved_media",
+      "install": "requirements-acquisition.txt plus pinned Docker digest",
+      "required_for_core_posting": true
+    },
+    {
       "id": "tiktok_to_ytdlp",
       "repository": "https://github.com/dinoosauro/tiktok-to-ytdlp",
       "revision": "1f3e7389b6c1a50cd223d5dadae5fdd89506d7b1",

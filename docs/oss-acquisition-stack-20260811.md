@@ -25,7 +25,7 @@ reported as `DEFERRED`; it is never fabricated as acquisition success.
 |---|---|---|---|
 | X exact-status physical media | yt-dlp 2026.7.4 | none | 4/4 prior live A/V goldens; unchanged |
 | X bounded profile metadata | gallery-dl 1.32.9 | manual JSON/browser export only after explicit failure | public-or-explicit-auth per source |
-| YouTube channel/video/physical | yt-dlp 2026.7.4 | none | 2/2 live A/V goldens and exact owner permission PASS |
+| YouTube channel/video/physical | yt-dlp 2026.7.4 | bgutil PO Token Provider 1.3.2, then public embedded client | Local provider proof produced an A/V MP4 after the default client hit a bot challenge; production routes use the same bounded fallback |
 | YouTube comments | youtube-comment-downloader 0.1.78 | none | installed and dependency-pinned |
 | YouTube transcript | youtube-transcript-api 1.2.4 | yt-dlp subtitles, gated local faster-whisper | source-caption dependent |
 | Research | local aggregation | Agent Reach 1.5.0 shadow | Agent Reach measured 4/15 channels |
@@ -48,6 +48,7 @@ not README text alone.
 | Candidate / tested revision | License | Runtime and dependency boundary | Useful capability | Live/structural result | Decision |
 |---|---|---|---|---|---|
 | yt-dlp/yt-dlp `5d6b8c8cd19785c3086ae3a9ec618c45e25eb3bc` | Unlicense | Python/CLI; no browser; site-dependent anonymous access | profile/post/detail, formats, subtitles, physical media; its public TikTok embed model informed an independent bounded parser | X and YouTube physical goldens pass; TikTok profile traversal itself stops at secondary user identity, while the public embed payload succeeds | PRIMARY X/YouTube/detail; protocol source for TikTok embed parser |
+| Brainicism/bgutil-ytdlp-pot-provider `7511309af023b09788dc8f2efc96cc3671291e6c` | GPL-3.0-or-later | Pinned Python plugin plus pinned local-only Docker sidecar; no account cookie or API key | yt-dlp PO Token Provider Framework fallback for bounded approved YouTube media | Default client hit a bot challenge and the `mweb` provider fallback produced a 58.7-second A/V MP4 while preserving 9:16 geometry | FALLBACK for physical approved YouTube media only |
 | mikf/gallery-dl `86047cf67a12bdb6ff1085774f8ad9fc347e8da9` | GPL-2.0-only | Python/CLI; no browser; some extractors conditionally require cookies | X/TikTok metadata and ordered media | X bounded adapter proven by contract; registered TikTok profiles returned no individual posts | PRIMARY X / FALLBACK TikTok |
 | egbertbouman/youtube-comment-downloader `9771beeb5be3c9648af011fe10cd813187550db0` | MIT | Python requests; no login/browser | bounded public comments/replies | 0.1.78 installed and pinned | PRIMARY comments |
 | Panniantong/Agent-Reach `1221ecd0c3e0502ee37406f03543bedf7503f2c7` | MIT | isolated Python; channel-specific dependencies | YouTube/Web/RSS/GitHub/reference research | 4/15 channels measured; no native Threads/TikTok physical route | SHADOW / ANALYSIS_ONLY |

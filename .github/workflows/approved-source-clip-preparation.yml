@@ -64,6 +64,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends ffmpeg
           python3 -m pip install --requirement requirements-media-runtime.txt
+      - name: Start bounded YouTube PO Token Provider
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
+        run: scripts/start_youtube_pot_provider.sh
       - name: Resolve managed account and clip slot
         run: |
           slot_id=$(PYTHONPATH=src python3 -c 'import os; from accounts.managed_accounts import account_production_enabled, route_slot_id; account=os.environ["ACCOUNT_ID"]; assert account_production_enabled(account), "inactive_managed_account"; print(route_slot_id(account, "approved_source_clip"))')
@@ -160,6 +163,9 @@ jobs:
       - name: Clean expired transient media
         if: always()
         run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
+      - name: Stop bounded YouTube PO Token Provider
+        if: always()
+        run: scripts/stop_youtube_pot_provider.sh
       - name: Health summary
         if: always()
         continue-on-error: true

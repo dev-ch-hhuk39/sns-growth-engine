@@ -79,6 +79,10 @@ jobs:
           command -v ffprobe
           ffmpeg -version | head -n 1
 
+      - name: Start bounded YouTube PO Token Provider
+        if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
+        run: scripts/start_youtube_pot_provider.sh
+
       - name: Guard rights, kill switch, config, and secrets
         if: (github.event_name == 'schedule' || github.event.inputs.confirm_production_media == 'true') && github.event.inputs.dry_run_only != 'true'
         run: |
@@ -202,6 +206,10 @@ jobs:
       - name: Clean expired transient media
         if: always()
         run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
+
+      - name: Stop bounded YouTube PO Token Provider
+        if: always()
+        run: scripts/stop_youtube_pot_provider.sh
 
       - name: Health summary
         if: always()
