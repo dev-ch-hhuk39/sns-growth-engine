@@ -50,7 +50,8 @@ assert routing["routes"]["threads.profile_posts"]["fallbacks"] == ["threads_logg
 assert routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_gallery_dl"]
 
 workflow = (ROOT / ".github/workflows/direct-media-preparation.yml").read_text(encoding="utf-8")
-assert "playwright install" not in workflow
+assert "bash scripts/install_threads_cli.sh" in workflow
+assert "python3 -m playwright install --with-deps chromium" in workflow
 assert "--platform all" in workflow
 assert workflow.count("acquire_approved_source_posts_failsoft.py") == 1
 
