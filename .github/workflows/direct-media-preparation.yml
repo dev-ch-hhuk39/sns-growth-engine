@@ -109,6 +109,9 @@ jobs:
           command -v ffmpeg
           command -v ffprobe
           command -v tesseract
+      - name: Start bounded YouTube PO Token Provider
+        if: github.event.inputs.confirm_preparation == 'true'
+        run: scripts/start_youtube_pot_provider.sh
       - name: Acquire bounded approved reference posts before media preparation
         if: github.event.inputs.confirm_preparation == 'true'
         run: |
@@ -159,3 +162,6 @@ jobs:
       - name: Clean expired transient media
         if: always()
         run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
+      - name: Stop bounded YouTube PO Token Provider
+        if: always()
+        run: scripts/stop_youtube_pot_provider.sh

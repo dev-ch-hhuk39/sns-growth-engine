@@ -12,6 +12,7 @@ from typing import Any
 
 NODE_RUNTIME_ENV = "SNS_YTDLP_NODE_PATH"
 YOUTUBE_EJS_COMPONENT = "ejs:github"
+YOUTUBE_POT_PLAYER_FALLBACK = "mweb"
 YOUTUBE_PUBLIC_PLAYER_FALLBACK = "web_embedded"
 YOUTUBE_BOUNDED_AV_FORMAT = (
     "bestvideo[height<=720][filesize<230M][ext=mp4]+"
@@ -48,8 +49,9 @@ def physical_download_option_attempts(
     """Return bounded physical-download attempts without credentials.
 
     The default YouTube client is tried first. Public videos that hit a runner
-    IP bot challenge get one fallback through yt-dlp's public embedded client.
-    The fallback keeps source geometry and prefers 720p while bounding the
+    IP bot challenge get bounded fallbacks through the mweb client backed by
+    yt-dlp's PO Token Provider framework and then the public embedded client.
+    Both fallbacks keep source geometry and prefer 720p while bounding the
     selected streams; long-form media can step down to 480p to stay inside the
     engine's 300 MiB download budget.
     """
@@ -58,14 +60,21 @@ def physical_download_option_attempts(
     if str(platform).lower() != "youtube":
         return [primary]
 
-    fallback_options = dict(options or {})
-    extractor_args = {
-        key: dict(value)
-        for key, value in dict(fallback_options.get("extractor_args") or {}).items()
-    }
-    youtube_args = dict(extractor_args.get("youtube") or {})
-    youtube_args["player_client"] = [YOUTUBE_PUBLIC_PLAYER_FALLBACK]
-    extractor_args["youtube"] = youtube_args
-    fallback_options["extractor_args"] = extractor_args
-    fallback_options["format"] = YOUTUBE_BOUNDED_AV_FORMAT
-    return [primary, metadata_options(platform, fallback_options)]
+    def player_attempt(player_client: str) -> dict[str, Any]:
+        fallback_options = dict(options or {})
+        extractor_args = {
+            key: dict(value)
+            for key, value in dict(fallback_options.get("extractor_args") or {}).items()
+        }
+        youtube_args = dict(extractor_args.get("youtube") or {})
+        youtube_args["player_client"] = [player_client]
+        extractor_args["youtube"] = youtube_args
+        fallback_options["extractor_args"] = extractor_args
+        fallback_options["format"] = YOUTUBE_BOUNDED_AV_FORMAT
+        return metadata_options(platform, fallback_options)
+
+    return [
+        primary,
+        player_attempt(YOUTUBE_POT_PLAYER_FALLBACK),
+        player_attempt(YOUTUBE_PUBLIC_PLAYER_FALLBACK),
+    ]
