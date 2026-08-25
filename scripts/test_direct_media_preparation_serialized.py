@@ -21,6 +21,7 @@ assert "github.event.inputs.target_account" in workflow
 assert "route_slot_id" in workflow
 
 assert "run_direct_media_preparation_loop.py" in workflow
+assert "run_direct_reference_media_pipeline_batched.py" in workflow
 assert "direct_media_candidate_attempts" in workflow
 assert "--confirm-preparation-loop" in workflow
 
