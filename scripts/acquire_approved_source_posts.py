@@ -243,6 +243,25 @@ def _append(
     )
 
 
+def _append_rows(
+    client: SheetsClient,
+    ws: Any,
+    headers: list[str],
+    rows: list[dict[str, Any]],
+    label: str,
+) -> None:
+    if not rows:
+        return
+    values = [
+        [bounded_cell(row.get(header, "")) for header in headers]
+        for row in rows
+    ]
+    client._call_with_rate_limit_retry(
+        label,
+        lambda: ws.append_rows(values, value_input_option="USER_ENTERED"),
+    )
+
+
 def _column_letter(index: int) -> str:
     value = ""
     while index:
@@ -694,6 +713,8 @@ def persist(
     media_refreshes: dict[str, str] = {}
     media_updates: list[dict[str, Any]] = []
     saved_posts = saved_media = duplicates = invalid = refreshed_media = 0
+    post_rows: list[dict[str, Any]] = []
+    media_rows: list[dict[str, Any]] = []
     for post in posts:
         if validate_source_post(post):
             invalid += 1
@@ -703,21 +724,19 @@ def persist(
             duplicates += 1
         else:
             policy = (policy_by_source or {}).get(post.source_id, {})
-            _append(
-                client,
-                posts_ws,
-                post_headers,
+            post_rows.append(
                 post.to_sheet_row(
                     rights_status=policy.get("rights_status", "unknown"),
                     permission_status=policy.get("permission_status", "unknown"),
-                ),
-                "append:source_posts:acquisition",
+                )
             )
             saved_posts += 1
             post_seen.add(post.source_post_id)
             canonical_seen.add(post.canonical_post_url)
         for item in post.media_items:
             if item.source_post_media_id in media_seen:
+                if item.source_post_media_id not in media_by_id:
+                    continue
                 row_number, existing = media_by_id[item.source_post_media_id]
                 refresh = _volatile_threads_media_refresh(existing, item)
                 for key, value in refresh.items():
@@ -739,18 +758,28 @@ def persist(
                     refreshed_media += 1
                 continue
             policy = (policy_by_source or {}).get(post.source_id, {})
-            _append(
-                client,
-                media_ws,
-                media_headers,
+            media_rows.append(
                 item.to_sheet_row(
                     rights_status=policy.get("rights_status", "unknown"),
                     permission_status=policy.get("permission_status", "unknown"),
-                ),
-                "append:source_post_media:acquisition",
+                )
             )
             saved_media += 1
             media_seen.add(item.source_post_media_id)
+    _append_rows(
+        client,
+        posts_ws,
+        post_headers,
+        post_rows,
+        "append_rows:source_posts:acquisition",
+    )
+    _append_rows(
+        client,
+        media_ws,
+        media_headers,
+        media_rows,
+        "append_rows:source_post_media:acquisition",
+    )
     if media_updates:
         client._call_with_rate_limit_retry(
             "batch_update:source_post_media:volatile_url_refresh",
@@ -967,28 +996,33 @@ def persist_auxiliary(
         return 0
     ws, headers, existing = _headers(client, logical)
     seen = {tuple(str(row.get(field, "")) for field in identity_fields) for row in existing}
-    saved = 0
+    pending: list[dict[str, Any]] = []
     for row in rows:
         identity = tuple(str(row.get(field, "")) for field in identity_fields)
         if identity in seen:
             continue
-        _append(client, ws, headers, row, f"append:{logical}:acquisition")
+        pending.append(row)
         seen.add(identity)
-        saved += 1
-    return saved
+    _append_rows(
+        client,
+        ws,
+        headers,
+        pending,
+        f"append_rows:{logical}:acquisition",
+    )
+    return len(pending)
 
 
 def persist_observability(client: SheetsClient, results: list[dict[str, Any]]) -> None:
     health_ws, health_headers, _ = _headers(client, "backend_health")
     history_ws, history_headers, _ = _headers(client, "backend_routing_history")
     now = datetime.now(timezone.utc).isoformat()
+    health_rows: list[dict[str, Any]] = []
+    history_rows: list[dict[str, Any]] = []
     for result in results:
         name = str(result.get("selected_backend") or result.get("primary_backend") or "")
         if name:
-            _append(
-                client,
-                health_ws,
-                health_headers,
+            health_rows.append(
                 {
                     "backend_health_id": f"bh_{name}_{int(datetime.now().timestamp() * 1000000)}",
                     "backend_name": name,
@@ -1003,13 +1037,9 @@ def persist_observability(client: SheetsClient, results: list[dict[str, Any]]) -
                     "failure_reason": result.get("reason", "")[:240],
                     "selected_as_primary": str(not result.get("fallback_used", False)).lower(),
                     "updated_at": now,
-                },
-                "append:backend_health:acquisition",
+                }
             )
-        _append(
-            client,
-            history_ws,
-            history_headers,
+        history_rows.append(
             {
                 "routing_event_id": f"brh_{result.get('source_id', '')}_{int(datetime.now().timestamp() * 1000000)}",
                 "source_id": result.get("source_id", ""),
@@ -1029,9 +1059,22 @@ def persist_observability(client: SheetsClient, results: list[dict[str, Any]]) -
                     bool(result.get("retryable", result.get("status") != "PASS"))
                 ).lower(),
                 "created_at": now,
-            },
-            "append:backend_routing_history:acquisition",
+            }
         )
+    _append_rows(
+        client,
+        health_ws,
+        health_headers,
+        health_rows,
+        "append_rows:backend_health:acquisition",
+    )
+    _append_rows(
+        client,
+        history_ws,
+        history_headers,
+        history_rows,
+        "append_rows:backend_routing_history:acquisition",
+    )
 
 
 def post_matches_media_filter(
