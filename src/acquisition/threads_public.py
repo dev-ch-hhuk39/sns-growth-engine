@@ -404,6 +404,32 @@ class ThreadsPublicProfileAdapter:
         except Exception as exc:
             raise BackendFailure(f"threads_public_page_failed:{type(exc).__name__}") from exc
 
+    def acquire_post(
+        self,
+        source: dict[str, Any],
+        post_url: str,
+    ) -> NormalizedSourcePost:
+        """Resolve one exact public post without traversing another profile."""
+        canonical_post = canonical_url(post_url)
+        expected_handle = _profile_handle(str(source.get("source_url") or ""))
+        if "/post/" not in canonical_post:
+            raise BackendFailure("threads_individual_post_url_required")
+        if expected_handle and _post_handle(canonical_post) != expected_handle:
+            raise BackendFailure("threads_post_author_mismatch")
+        page_html = self._load(canonical_post)
+        if "Barcelona404ErrorRoot" in page_html:
+            raise BackendFailure("threads_post_application_404")
+        post = parse_public_post_html(
+            source,
+            canonical_post,
+            page_html,
+            backend_name=self.backend_name,
+            backend_version=self.backend_version,
+        )
+        if post.canonical_post_url != canonical_post:
+            raise BackendFailure("threads_post_parent_mismatch")
+        return post
+
     def acquire(
         self,
         source: dict[str, Any],
@@ -456,15 +482,7 @@ class ThreadsPublicProfileAdapter:
 
         for post_url in post_urls:
             try:
-                posts.append(
-                    parse_public_post_html(
-                        source,
-                        post_url,
-                        self._load(post_url),
-                        backend_name=(self.backend_name),
-                        backend_version=(self.backend_version),
-                    )
-                )
+                posts.append(self.acquire_post(source, post_url))
             except BackendFailure:
                 continue
 
