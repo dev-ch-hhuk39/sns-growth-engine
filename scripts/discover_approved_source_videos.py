@@ -748,6 +748,19 @@ def _youtube_duration_seconds(value: Any) -> int:
     return total
 
 
+def _youtube_lockup_title(value: dict[str, Any]) -> str:
+    metadata = value.get("metadata")
+    if not isinstance(metadata, dict):
+        return ""
+    lockup = metadata.get("lockupMetadataViewModel")
+    if not isinstance(lockup, dict):
+        return ""
+    title = lockup.get("title")
+    if not isinstance(title, dict):
+        return ""
+    return str(title.get("content") or "").strip()
+
+
 def youtube_public_video_entries(html: str) -> list[dict[str, Any]]:
     """Read real video metadata embedded in a public channel's ytInitialData."""
     initial_data = None
@@ -768,8 +781,8 @@ def youtube_public_video_entries(html: str) -> list[dict[str, Any]]:
             continue
         if not isinstance(value, dict):
             continue
-        video_id = str(value.get("videoId") or "")
-        title = _youtube_text(value.get("title"))
+        video_id = str(value.get("videoId") or value.get("contentId") or "")
+        title = _youtube_text(value.get("title")) or _youtube_lockup_title(value)
         if re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id) and title and video_id not in seen:
             seen.add(video_id)
             entries.append({
@@ -822,12 +835,9 @@ def discover_youtube_public_html(
             html = response.read(2_000_000).decode("utf-8", errors="replace")
     except Exception as exc:
         return [], f"youtube_public_html_failed:{type(exc).__name__}"
-    # The page scan may inspect a bounded range, but detail enrichment is
-    # capped to the number this run can actually admit.
-    detail_limit = min(
-        limit,
-        max(1, int(scan_plan.get("per_source_new_limit", config.get("max_new_videos_per_source_per_run", 3)))),
-    )
+    # Scan the whole bounded window. The shared selection policy applies the
+    # per-run new limit only after existing video IDs/URLs are removed.
+    detail_limit = limit
     start_position = int(scan_plan.get("start_position", 1))
     structured_entries = youtube_public_video_entries(html)
     selected_entries = structured_entries[
