@@ -95,6 +95,23 @@ try:
         permissions=PERMISSIONS,
     ) == "media-1"
 
+    missing = Client("")
+    missing.rows["source_media_understanding"] = []
+    assert core.media_understanding_needs_refresh(
+        missing.rows["source_post_media"][0],
+        None,
+    )
+    assert core.select_pending_media_id(
+        missing,
+        "night_scout",
+        permissions=PERMISSIONS,
+    ) == "media-1"
+    assert reliable.select_pending_media_id(
+        missing,
+        "night_scout",
+        permissions=PERMISSIONS,
+    ) == "media-1"
+
     completed = Client("UNAVAILABLE")
     assert not core.media_understanding_needs_refresh(
         completed.rows["source_post_media"][0],

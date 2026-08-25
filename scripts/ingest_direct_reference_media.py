@@ -130,12 +130,13 @@ def media_understanding_needs_refresh(
     """
 
     understanding = dict(understanding or {})
+    understanding_status = str(understanding.get("status", "")).strip().upper()
     return (
         truthy(os.environ.get("ALLOW_LOCAL_TRANSCRIPTION"))
         and str(media.get("media_type", "")).strip().lower() == "video"
         and str(media.get("cloudinary_status", "")).strip().upper() == "UPLOADED"
         and bool(str(media.get("storage_url", "")).strip())
-        and str(understanding.get("status", "")).strip().upper() == "PASS"
+        and understanding_status in {"", "PASS"}
         and not str(understanding.get("transcript_status", "")).strip()
         and not str(understanding.get("transcript_hash", "")).strip()
         and not str(understanding.get("transcript_text", "")).strip()
