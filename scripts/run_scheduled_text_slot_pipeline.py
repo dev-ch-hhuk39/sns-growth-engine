@@ -18,6 +18,18 @@ from accounts.managed_accounts import account_choices  # noqa: E402
 from scheduled_execution_guard import append_job_summary, scheduled_window_decision  # noqa: E402
 
 
+SAFE_NO_POST_REASONS = {
+    # Candidate/provider outcomes are not workflow failures. The next scheduled
+    # slot must continue even when this slot cannot produce a publishable row.
+    "GEMINI_RATE_LIMITED",
+    "NO_AI_APPROVED_CANDIDATE",
+    "QUALITY_BLOCKED",
+    "NO_READY_CANDIDATE",
+    "NO_AI_APPROVED_SLOT_CANDIDATE",
+    "SCHEDULED_RUN_OUT_OF_WINDOW",
+}
+
+
 def extract_json_objects(text: str) -> list[dict[str, Any]]:
     decoder = json.JSONDecoder()
     values: list[tuple[int, dict[str, Any]]] = []
@@ -53,19 +65,31 @@ def run_stage(name: str, command: list[str], env: dict[str, str]) -> tuple[int, 
     return completed.returncode, payload
 
 
+def no_post_exit_code(reason: str) -> int:
+    """Return success only for explicit candidate-level safe no-post states."""
+
+    return 0 if str(reason or "").strip().upper() in SAFE_NO_POST_REASONS else 2
+
+
 def no_post(reason: str, *, account_id: str, slot_id: str, queue_id: str = "", details: Any = None) -> int:
+    normalized_reason = str(reason or "").strip().upper()
     payload = {
         "status": "NO_POST",
-        "reason": reason,
+        "reason": normalized_reason,
         "account_id": account_id,
         "slot_id": slot_id,
         "queue_id": queue_id,
         "details": details or {},
         "would_post": False,
+        "workflow_outcome": (
+            "SAFE_NO_POST"
+            if no_post_exit_code(normalized_reason) == 0
+            else "OPERATIONAL_FAILURE"
+        ),
     }
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     append_job_summary("Scheduled text result: NO_POST", payload)
-    return 2
+    return no_post_exit_code(normalized_reason)
 
 
 def generated_queue_ids(payload: dict[str, Any]) -> list[str]:
@@ -132,21 +156,38 @@ def main() -> int:
     ]
     rc, generation_payload = run_stage("generate_waiting_review", generation, safe_env)
     if rc != 0:
+        generation_reason = generation_failure_reason(generation_payload)
+        if generation_reason == "GEMINI_RATE_LIMITED":
+            return no_post(
+                generation_reason,
+                account_id=args.account_id,
+                slot_id=args.slot_id,
+                details=generation_payload,
+            )
         return no_post(
             "CANDIDATE_GENERATION_FAILED",
             account_id=args.account_id,
             slot_id=args.slot_id,
-            details=generation_payload,
+            details={
+                "generation_reason": generation_reason,
+                "payload": generation_payload,
+            },
         )
 
     queue_ids = generated_queue_ids(generation_payload)
     if len(queue_ids) != 1:
+        generation_reason = generation_failure_reason(generation_payload)
+        reason = (
+            "GEMINI_RATE_LIMITED"
+            if generation_reason == "GEMINI_RATE_LIMITED"
+            else "NO_AI_APPROVED_CANDIDATE"
+        )
         return no_post(
-            "NO_AI_APPROVED_CANDIDATE",
+            reason,
             account_id=args.account_id,
             slot_id=args.slot_id,
             details={
-                "generation_reason": generation_failure_reason(generation_payload),
+                "generation_reason": generation_reason,
                 "generated_queue_ids": queue_ids,
             },
         )
