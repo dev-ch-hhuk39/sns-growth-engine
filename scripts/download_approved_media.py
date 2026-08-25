@@ -14,10 +14,10 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from media.rights_policy import build_rights_decision
-from media.media_probe import probe_video_file
-from acquisition.ytdlp_runtime import metadata_options
-from discover_approved_source_videos import load_existing_source_videos
+from media.rights_policy import build_rights_decision  # noqa: E402
+from media.media_probe import probe_video_file  # noqa: E402
+from acquisition.ytdlp_runtime import physical_download_option_attempts  # noqa: E402
+from discover_approved_source_videos import load_existing_source_videos  # noqa: E402
 
 
 
@@ -151,7 +151,7 @@ def execute_download(plan: dict) -> dict:
             stale.unlink()
 
     platform = "youtube" if "youtu" in str(plan["source_url"]).lower() else "tiktok"
-    opts = metadata_options(platform, {
+    base_options = {
         "outtmpl": template,
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "merge_output_format": "mp4",
@@ -159,10 +159,23 @@ def execute_download(plan: dict) -> dict:
         "no_warnings": True,
         "noplaylist": True,
         "socket_timeout": 30,
-    })
+        "max_filesize": 300 * 1024 * 1024,
+    }
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([str(plan["source_url"])])
+        last_error: Exception | None = None
+        for opts in physical_download_option_attempts(platform, base_options):
+            for stale in output_dir.glob(f"{safe_id}.*"):
+                if stale.is_file():
+                    stale.unlink()
+            try:
+                with yt_dlp.YoutubeDL(opts) as ydl:
+                    ydl.download([str(plan["source_url"])])
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
         matches = sorted(
             path
             for path in output_dir.glob(

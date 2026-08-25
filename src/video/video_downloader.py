@@ -19,9 +19,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from acquisition.ytdlp_runtime import metadata_options
+from acquisition.ytdlp_runtime import physical_download_option_attempts
 
 
 @dataclass
@@ -138,16 +139,29 @@ def download_video(
         return DownloadResult(ref_id, success=False, error=msg)
 
     platform = "youtube" if "youtu" in video_url.lower() else "tiktok"
-    ydl_opts = metadata_options(platform, {
+    base_options = {
         "outtmpl": output_path.replace(".mp4", ".%(ext)s"),
         "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "merge_output_format": "mp4",
         "quiet": True,
         "no_warnings": False,
-    })
+        "max_filesize": 300 * 1024 * 1024,
+    }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([video_url])
+        last_error: Exception | None = None
+        for ydl_opts in physical_download_option_attempts(platform, base_options):
+            for stale in Path(output_path).parent.glob(f"{Path(output_path).stem}.*"):
+                if stale.is_file():
+                    stale.unlink()
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([video_url])
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
         if os.path.isfile(output_path):
             size = os.path.getsize(output_path)
             print(f"[video-downloader] 完了: {output_path} ({size:,} bytes)")
