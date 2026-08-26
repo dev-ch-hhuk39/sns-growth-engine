@@ -52,6 +52,13 @@ _SAFE_INGEST_ERROR_CODES = {
     "threads_refreshed_account_mismatch",
     "threads_refreshed_media_index_invalid",
     "threads_refreshed_media_child_mismatch",
+    "threads_post_author_mismatch",
+    "threads_post_application_404",
+    "threads_post_parent_mismatch",
+    "threads_public_page_failed",
+    "threads_http_status",
+    "threads_public_http_failed",
+    "playwright_not_installed",
     "direct_media_refresh_content_hash_mismatch",
 }
 
