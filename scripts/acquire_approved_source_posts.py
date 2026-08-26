@@ -288,6 +288,7 @@ def _volatile_threads_media_refresh(
         str(existing.get("download_status") or "").upper()
         == "SKIPPED_EXTERNAL_UNAVAILABLE"
         or str(existing.get("last_error") or "").startswith("ingest_skipped:")
+        or str(existing.get("last_error") or "") == "ingest_failed:BackendFailure"
     )
     if (
         not same_identity
