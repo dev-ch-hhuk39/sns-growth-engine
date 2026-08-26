@@ -37,6 +37,10 @@ _PLATFORM_PRIORITY = {
 
 EXTERNAL_UNAVAILABLE_RETRY_COOLDOWN_SECONDS = 6 * 60 * 60
 
+LEGACY_THREADS_BACKEND_FAILURE_RECOVERY_CUTOFF = datetime(
+    2026, 8, 26, 8, 42, 2, tzinfo=timezone.utc
+)
+
 
 def _parse_timestamp(value: Any) -> datetime | None:
     text = str(value or "").strip().replace("Z", "+00:00")
@@ -76,6 +80,29 @@ def external_unavailable_cooldown_active(
     age = (current - attempted_at).total_seconds()
 
     return age < EXTERNAL_UNAVAILABLE_RETRY_COOLDOWN_SECONDS
+
+
+def legacy_threads_backend_failure_recoverable(
+    media: dict[str, Any],
+    platform: str,
+) -> bool:
+    """Allow one migration retry for pre-fix generic Threads failures."""
+
+    if str(platform or "").strip().lower() != "threads":
+        return False
+
+    if str(media.get("download_status", "")).strip().upper() != "FAILED":
+        return False
+
+    if str(media.get("last_error", "")).strip() != "ingest_failed:BackendFailure":
+        return False
+
+    updated_at = _parse_timestamp(media.get("updated_at"))
+
+    return bool(
+        updated_at
+        and updated_at < LEGACY_THREADS_BACKEND_FAILURE_RECOVERY_CUTOFF
+    )
 
 
 def permission_ok_from_rows(
@@ -231,6 +258,13 @@ def select_pending_media_id(
             understandings.get(media_id),
         )
 
+        platform = str(
+            post.get(
+                "platform",
+                "",
+            )
+        ).lower()
+
         if (
             str(
                 media.get(
@@ -279,6 +313,13 @@ def select_pending_media_id(
             }
         )
 
+        recoverable_legacy_threads_failure = (
+            legacy_threads_backend_failure_recoverable(
+                media,
+                platform,
+            )
+        )
+
         # SKIPPED_EXTERNAL_UNAVAILABLE is governed exclusively by the
         # bounded cooldown check above. Once that cooldown expires the same
         # exact parent/child asset may be retried, allowing Threads to refresh
@@ -291,6 +332,7 @@ def select_pending_media_id(
                 "BLOCKED",
             }
             and not recoverable_identical_failure
+            and not recoverable_legacy_threads_failure
             and not refresh_understanding
         ):
             continue
@@ -304,13 +346,6 @@ def select_pending_media_id(
             )
             or ""
         )
-
-        platform = str(
-            post.get(
-                "platform",
-                "",
-            )
-        ).lower()
 
         if not core.can_attempt_physical_media(
             platform,
