@@ -48,6 +48,7 @@
       "hybrid-ai-gate-liver-manager.yml",
       "hybrid-ai-gate-night-scout.yml",
       "library-health.yml",
+      "media-preparation-scheduler.yml",
       "publication-review-sync.yml",
       "source-research.yml",
       "threads-video-reference-preparation.yml"
