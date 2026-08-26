@@ -28,16 +28,15 @@ def main() -> int:
     plan = build_plan(apply=True, confirm=True, client=EmptyClient())
     checks = [
         (
-            "status is blocked before media activation",
-            plan["status"] == "BLOCKED",
+            "status is fail-closed no-source after activation",
+            plan["status"] == "BLOCKED_NO_SOURCE_MEDIA",
         ),
         (
             "reason is visible",
-            "no_eligible_media_candidate"
-            in plan["blocked_reasons"],
+            "no_eligible_media_candidate" in plan["blocked_reasons"],
         ),
         (
-            "no external actions",
+            "no external actions without candidate",
             not plan["would_download"]
             and not plan["would_cut"]
             and not plan["would_upload"]
