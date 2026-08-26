@@ -35,7 +35,9 @@ on:
     # Candidate preparation: 09:30 / 18:30 JST
     - cron: "30 0 * * *"
     - cron: "30 9 * * *"
-    # Approved READY publication: 11:30 / 20:30 JST
+    # One approved READY publication opportunity: 11:30 / 20:30 JST.
+    # Human-approved media may occupy the slot; otherwise today's approved
+    # text candidate is used. This preserves the two-post/day Beauty ceiling.
     - cron: "30 2 * * *"
     - cron: "30 11 * * *"
 
@@ -90,30 +92,38 @@ jobs:
       - name: Resolve scheduled action
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "ACTION=${{ github.event.inputs.action }}" >> "$GITHUB_ENV"
-            echo "SLOT_INDEX=${{ github.event.inputs.slot_index }}" >> "$GITHUB_ENV"
+            action="${{ github.event.inputs.action }}"
+            slot_index="${{ github.event.inputs.slot_index }}"
           else
             case "${{ github.event.schedule }}" in
-              "30 0 * * *") echo "ACTION=prepare" >> "$GITHUB_ENV"; echo "SLOT_INDEX=0" >> "$GITHUB_ENV" ;;
-              "30 9 * * *") echo "ACTION=prepare" >> "$GITHUB_ENV"; echo "SLOT_INDEX=1" >> "$GITHUB_ENV" ;;
-              "30 2 * * *") echo "ACTION=publish" >> "$GITHUB_ENV"; echo "SLOT_INDEX=0" >> "$GITHUB_ENV" ;;
-              "30 11 * * *") echo "ACTION=publish" >> "$GITHUB_ENV"; echo "SLOT_INDEX=1" >> "$GITHUB_ENV" ;;
-              *) echo "ACTION=dry_run" >> "$GITHUB_ENV"; echo "SLOT_INDEX=0" >> "$GITHUB_ENV" ;;
+              "30 0 * * *") action="prepare"; slot_index="0" ;;
+              "30 9 * * *") action="prepare"; slot_index="1" ;;
+              "30 2 * * *") action="publish"; slot_index="0" ;;
+              "30 11 * * *") action="publish"; slot_index="1" ;;
+              *) action="dry_run"; slot_index="0" ;;
             esac
           fi
+
+          echo "ACTION=$action" >> "$GITHUB_ENV"
+          echo "SLOT_INDEX=$slot_index" >> "$GITHUB_ENV"
           echo "BUSINESS_DATE_JST=$(TZ=Asia/Tokyo date +%F)" >> "$GITHUB_ENV"
-          if [ "$SLOT_INDEX" = "0" ]; then
-            echo "BEAUTY_SLOT_ID=beauty_1130" >> "$GITHUB_ENV"
+
+          if [ "$slot_index" = "0" ]; then
+            beauty_slot_id="beauty_1130"
           else
-            echo "BEAUTY_SLOT_ID=beauty_2030" >> "$GITHUB_ENV"
+            beauty_slot_id="beauty_2030"
           fi
-          if [ "$ACTION" = "publish_media" ]; then
+
+          if [ "$action" = "publish_media" ]; then
             if [ "${{ github.event.inputs.media_route }}" = "approved_source_clip" ]; then
-              echo "BEAUTY_SLOT_ID=beauty_clip_review" >> "$GITHUB_ENV"
+              beauty_slot_id="beauty_clip_review"
             else
-              echo "BEAUTY_SLOT_ID=beauty_direct_media_review" >> "$GITHUB_ENV"
+              beauty_slot_id="beauty_direct_media_review"
             fi
           fi
+
+          echo "BEAUTY_SLOT_ID=$beauty_slot_id" >> "$GITHUB_ENV"
+          echo "[RESOLVED] action=$action slot_index=$slot_index beauty_slot_id=$beauty_slot_id"
 
       - name: Guard required secrets
         run: |
@@ -159,18 +169,61 @@ jobs:
           DRY_RUN: "false"
         run: python3 scripts/run_hybrid_ai_queue_gate.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --max-candidates 1 --apply --use-sheets
 
-      # The worker re-reads the selected Beauty READY row and runs account,
-      # persona, public-text, media and idempotency gates before publishing.
-      # Repository-wide historical drift must not block this scoped preflight.
-      - name: Strict Beauty queue and publisher preflight
-        if: env.ACTION == 'publish' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
+      # Scheduled publication keeps the existing two daily windows. It may use
+      # a human-approved media READY row; otherwise it uses today's explicitly
+      # human-approved text READY row for this slot.
+      - name: Select scheduled human-approved Beauty route
+        id: scheduled_queue
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
+        run: |
+          python3 scripts/select_beauty_scheduled_ready.py \
+            --slot-id "$BEAUTY_SLOT_ID" \
+            --business-date-jst "$BUSINESS_DATE_JST" \
+            --use-sheets \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Strict scheduled Beauty queue and publisher preflight
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.scheduled_queue.outputs.human_approved == 'true' && steps.scheduled_queue.outputs.queue_id != ''
+        run: |
+          python3 scripts/process_threads_queue.py \
+            --account-id beauty_account \
+            --queue-id "${{ steps.scheduled_queue.outputs.queue_id }}" \
+            --max-posts 1 \
+            --dry-run
+
+      - name: Publish one scheduled human-approved Beauty row
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.scheduled_queue.outputs.human_approved == 'true' && steps.scheduled_queue.outputs.queue_id != ''
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+          ALLOW_REAL_THREADS_VIDEO_POST: "true"
+          ALLOW_MEDIA_POSTS: "true"
+          ALLOW_THREADS_CAROUSEL: "true"
+          ALLOW_THREADS_MIXED_CAROUSEL: "false"
+          ALLOW_REAL_X_POST: "false"
+          BEAUTY_PRODUCTION_ENABLED: "true"
+        run: |
+          python3 scripts/process_threads_queue.py \
+            --account-id beauty_account \
+            --queue-id "${{ steps.scheduled_queue.outputs.queue_id }}" \
+            --max-posts 1 \
+            --confirm-real-post
+
+      - name: Report no scheduled approved Beauty row
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && (steps.scheduled_queue.outputs.queue_id == '' || steps.scheduled_queue.outputs.human_approved != 'true')
+        run: echo "[NO_POST] no explicit human-approved Beauty READY row for this publication window"
+
+      # Manual text publish preserves the old slot-specific behavior.
+      - name: Strict manual Beauty text queue and publisher preflight
+        if: env.ACTION == 'publish' && github.event_name == 'workflow_dispatch' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
         run: python3 scripts/process_threads_queue.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --business-date-jst "$BUSINESS_DATE_JST" --max-posts 1 --dry-run
 
-      - name: Publish one approved READY row
+      - name: Publish one manually confirmed approved READY text row
         if: >-
           env.ACTION == 'publish' &&
+          github.event_name == 'workflow_dispatch' &&
           env.BEAUTY_ACTIVATION_APPROVED == 'true' &&
-          (github.event_name == 'schedule' || github.event.inputs.confirm_publish == 'true')
+          github.event.inputs.confirm_publish == 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -195,6 +248,7 @@ jobs:
           ALLOW_THREADS_CAROUSEL: "true"
           ALLOW_THREADS_MIXED_CAROUSEL: "false"
           ALLOW_REAL_X_POST: "false"
+          BEAUTY_PRODUCTION_ENABLED: "true"
         run: python3 scripts/process_threads_queue.py --account-id beauty_account --queue-id "${{ github.event.inputs.queue_id }}" --max-posts 1 --confirm-real-post
 
       - name: Block unconfirmed manual publish

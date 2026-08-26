@@ -44,12 +44,14 @@ checks = [
     ("source videos preferred", plan["source_videos_source"] == "existing_source_videos"),
     ("clip candidates generated", plan["clip_candidate_count"] > 0),
     ("public text valid", plan["final_public_post_validator"] == "PASS"),
-    ("no real download", plan["would_download"] is False),
-    ("no real cut", plan["would_cut"] is False),
-    ("no real upload", plan["would_upload"] is False),
-    ("no real video post", plan["would_post_video"] is False),
-    ("media schedule remains manually gated", plan["media_plan"]["schedule_enabled"] is False),
-    ("public video capability remains disabled until verified", plan["media_plan"]["media_public_post_auto_enabled"] is False),
+    # Plan construction never performs physical actions; dedicated production
+    # workflows require their own explicit confirmation/env gates.
+    ("no real download in plan", plan["would_download"] is False),
+    ("no real cut in plan", plan["would_cut"] is False),
+    ("no real upload in plan", plan["would_upload"] is False),
+    ("no real video post in plan", plan["would_post_video"] is False),
+    ("media schedule activated", plan["media_plan"]["schedule_enabled"] is True),
+    ("approved media public capability activated", plan["media_plan"]["media_public_post_auto_enabled"] is True),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

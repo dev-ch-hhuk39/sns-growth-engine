@@ -8,6 +8,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = ROOT / "config/autonomous_mode.json"
+MEDIA_CONFIG = ROOT / "config/media_growth_engine.json"
 CONTENT_MIX = ROOT / "config/content_mix/default_mix.json"
 WORKFLOWS = ROOT / ".github/workflows"
 
@@ -28,7 +29,6 @@ MEDIA_PREPARATION_WORKFLOWS = {
     "night_scout_clip_prepare": WORKFLOWS / "media-growth-production-night-scout.yml",
     "liver_manager_clip_prepare": WORKFLOWS / "media-growth-production.yml",
 }
-# Backward-compatible name used by the existing media preparation tests.
 MEDIA_PREP_WORKFLOWS = MEDIA_PREPARATION_WORKFLOWS
 
 
@@ -48,16 +48,45 @@ def schedules(path: Path) -> set[str]:
 
 
 def assert_activation_config() -> None:
+    """Dedicated media automation may run without granting media to text runner."""
+
     cfg = load_json(CONFIG)
+    media = load_json(MEDIA_CONFIG)
     assert cfg["scheduled_prepare_enabled"] is True
     assert cfg["scheduled_publish_enabled"] is True
     assert cfg["production_publish_activation_approved"] is True
     assert cfg["pre_activation_queue_archive_required"] is True
     assert cfg["pre_activation_queue_archive_completed"] is True
+
+    # Generic autonomous loop is deliberately text-only.
     assert cfg["allow_media_posts"] is False
     assert cfg["allow_video_download"] is False
     assert cfg["allow_video_cut"] is False
     assert cfg["allow_cloudinary_upload"] is False
+
+    # Dedicated registered-source media pipeline is active.
+    assert media["production_autopilot_enabled"] is True
+    assert media["download_enabled"] is True
+    assert media["cut_enabled"] is True
+    assert media["upload_enabled"] is True
+    assert media["video_post_enabled"] is True
+    assert media["media_schedule_enabled"] is True
+    assert media["media_public_post_auto_enabled"] is True
+    assert media["require_permission_evidence"] is True
+
+    # Activation must not weaken the existing safety/account boundaries.
+    assert cfg["allow_third_party_media"] is False
+    assert cfg["allow_unknown_rights"] is False
+    assert cfg["allow_transcription_api"] is False
+    assert cfg["kill_switch"] is False
+    assert "threads" in cfg["allowed_platforms_for_post"]
+    assert "x" in cfg["blocked_platforms_for_post"]
+    assert "x" in cfg["blocked_platforms_for_fetch"]
+    assert set(cfg["allowed_accounts"]) == {
+        "night_scout",
+        "liver_manager",
+        "beauty_account",
+    }
 
 
 def assert_all_slot_schedules() -> None:

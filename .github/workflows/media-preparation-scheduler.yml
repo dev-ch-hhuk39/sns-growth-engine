@@ -1,0 +1,97 @@
+name: Media Preparation Scheduler
+
+on:
+  schedule:
+    # Direct inventory for all active production accounts: 12:15 JST.
+    - cron: "15 3 * * *"
+    # Night/Liver approved clips already have account-specific scheduled
+    # preparation workflows. Beauty has no legacy clip preparer, so schedule
+    # only its approved-source clip lane here: 14:15 JST.
+    - cron: "15 5 * * *"
+  # Temporary acceptance trigger. It performs preparation only and never posts.
+  # Remove after the post-#257 Night Direct production acceptance run.
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/media-preparation-scheduler.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: media-preparation-scheduler-${{ github.event_name }}-${{ github.event.schedule || 'acceptance' }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.guard.outputs.enabled }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - id: guard
+        name: Verify scheduled preparation activation
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          config = json.loads(Path("config/autonomous_mode.json").read_text(encoding="utf-8"))
+          enabled = bool(config.get("scheduled_prepare_enabled")) and not bool(config.get("kill_switch"))
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
+              handle.write(f"enabled={'true' if enabled else 'false'}\n")
+          if not enabled:
+              print("[NO_OP] scheduled preparation is disabled or kill switch is active")
+          else:
+              print("[OK] scheduled preparation is enabled")
+          PY
+
+  dispatch-direct:
+    needs: guard
+    if: >-
+      needs.guard.outputs.enabled == 'true' &&
+      (github.event_name == 'push' || github.event.schedule == '15 3 * * *')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch bounded Direct preparation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_ACCOUNT: ${{ github.event_name == 'push' && 'night_scout' || 'all' }}
+        run: |
+          set -euo pipefail
+          payload=$(printf '{"ref":"main","inputs":{"confirm_preparation":"true","target_account":"%s"}}' "$TARGET_ACCOUNT")
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/direct-media-preparation.yml/dispatches" \
+            --data "$payload"
+          echo "[DISPATCHED] Direct preparation target=$TARGET_ACCOUNT"
+
+  dispatch-beauty-clip:
+    needs: guard
+    if: >-
+      needs.guard.outputs.enabled == 'true' &&
+      github.event_name == 'schedule' &&
+      github.event.schedule == '15 5 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch bounded Beauty approved-source clip preparation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          payload='{"ref":"main","inputs":{"account_id":"beauty_account","confirm_preparation":"true","dry_run_only":"false"}}'
+          curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/approved-source-clip-preparation.yml/dispatches" \
+            --data "$payload"
+          echo "[DISPATCHED] Approved-source clip preparation account=beauty_account"

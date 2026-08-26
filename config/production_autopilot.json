@@ -5,14 +5,14 @@
   "metrics_aftercare_enabled": true,
   "pdca_candidate_generation_enabled": true,
   "media_growth_aftercare_enabled": true,
-  "media_discovery_apply_enabled": false,
-  "media_clip_candidate_apply_enabled": false,
-  "media_public_posting_enabled": false,
+  "media_discovery_apply_enabled": true,
+  "media_clip_candidate_apply_enabled": true,
+  "media_public_posting_enabled": true,
   "x_posting_enabled": false,
   "beauty_posting_enabled": true,
   "learning_rules_auto_apply_enabled": false,
   "max_text_posts_per_run": 1,
   "daily_post_cap_per_account": 5,
   "aftercare_schedule_jst": "23:40",
-  "notes": "Threads text production is enabled for Night Scout, Liver Manager, and Beauty. Media discovery, clip candidates, and media posts remain staged behind exact-account canary, rights, provenance, review, AV, env, and confirmation gates until bounded acceptance succeeds. X publishing and external transcription API remain disabled."
+  "notes": "Threads text and approved-media production are enabled for Night Scout, Liver Manager, and Beauty. Media actions remain fail-closed behind exact account scope, registered-source rights, canonical provenance, media validation, Hybrid AI gates, and Beauty explicit human review. X publishing, unknown/third-party rights inheritance, and external transcription API remain disabled."
 }

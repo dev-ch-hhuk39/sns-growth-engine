@@ -15,7 +15,8 @@
   "blocked_accounts": [],
   "allowed_platforms_for_fetch": [
     "threads",
-    "youtube"
+    "youtube",
+    "tiktok"
   ],
   "blocked_platforms_for_fetch": [
     "x"
