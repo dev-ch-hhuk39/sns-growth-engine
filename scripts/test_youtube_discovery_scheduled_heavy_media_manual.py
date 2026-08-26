@@ -15,7 +15,7 @@ assert config["cut_enabled"] is True
 assert config["upload_enabled"] is True
 assert config["media_public_post_auto_enabled"] is True
 assert config["max_total_new_videos_per_run"] <= 20
-assert config["max_failed_retries_per_run"] <= 5
+assert config["resource_limits"]["max_failed_retries_per_run"] <= 5
 
 # Legacy per-account preparation workflows may still exist, but preparation
 # never publishes. Real posting remains in separately activation-gated workers.
