@@ -155,6 +155,25 @@ def _looks_like_threads_placeholder(url: str) -> bool:
     )
 
 
+def _with_sheet_retry(client: Any, label: str, fn: Any) -> Any:
+    retry = getattr(client, "_call_with_rate_limit_retry", None)
+    if callable(retry):
+        return retry(label, fn)
+    return fn()
+
+
+def _records_with_sheet_retry(
+    client: Any,
+    logical_name: str,
+) -> list[dict[str, Any]]:
+    rows = _with_sheet_retry(
+        client,
+        f"read_all_records:{logical_name}",
+        lambda: client._ws(logical_name).get_all_records(),
+    )
+    return [dict(row) for row in rows]
+
+
 def select_pending_media_id(
     client: Any,
     account_id: str,
@@ -164,20 +183,30 @@ def select_pending_media_id(
     """Select a permitted real post asset without retrying known bad media."""
 
     permissions = (
-        core.permission_rows(client)
+        _with_sheet_retry(
+            client,
+            "read_permission_rows",
+            lambda: core.permission_rows(client),
+        )
         if permissions is None
         else permissions
     )
 
     posts = {
         str(row.get("source_post_id", "")): row
-        for row in client._ws("source_posts").get_all_records()
+        for row in _records_with_sheet_retry(
+            client,
+            "source_posts",
+        )
     }
 
     understandings = (
         {
             str(row.get("source_post_media_id", "")): row
-            for row in client._ws("source_media_understanding").get_all_records()
+            for row in _records_with_sheet_retry(
+                client,
+                "source_media_understanding",
+            )
         }
         if core.truthy(
             os.environ.get(
@@ -187,9 +216,10 @@ def select_pending_media_id(
         else {}
     )
 
-    media_rows = client._ws(
-        "source_post_media"
-    ).get_all_records()
+    media_rows = _records_with_sheet_retry(
+        client,
+        "source_post_media",
+    )
     media_by_post: dict[str, list[dict[str, Any]]] = {}
 
     for media in media_rows:
