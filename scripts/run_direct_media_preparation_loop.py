@@ -62,7 +62,7 @@ def execute(
             sys.executable,
             "scripts/ingest_direct_reference_media_reliable.py",
             "--account-id", account_id,
-            "--max-assets", "1",
+            "--max-assets", "10",
             "--apply", "--confirm-ingest",
         ])
         ingest_payload = extract_last_object(ingest.stdout)

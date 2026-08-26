@@ -881,9 +881,18 @@ def select_pending_media_id(
 
 def source_post_media_bundle(client: SheetsClient, source_post_id: str) -> list[dict[str, Any]]:
     """Return the complete source-post media bundle in its original order."""
+    def _read_bundle_rows():
+        return client._ws("source_post_media").get_all_records()
+
+    retry = getattr(client, "_call_with_rate_limit_retry", None)
+    all_rows = (
+        retry("read_source_post_media_bundle", _read_bundle_rows)
+        if callable(retry)
+        else _read_bundle_rows()
+    )
     rows = [
         dict(row)
-        for row in client._ws("source_post_media").get_all_records()
+        for row in all_rows
         if str(row.get("source_post_id", "")) == source_post_id
     ]
     return sorted(
