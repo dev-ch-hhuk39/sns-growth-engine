@@ -41,6 +41,10 @@ LEGACY_THREADS_BACKEND_FAILURE_RECOVERY_CUTOFF = datetime(
     2026, 8, 26, 8, 42, 2, tzinfo=timezone.utc
 )
 
+LEGACY_THREADS_INDEX_ERROR_RECOVERY_CUTOFF = datetime(
+    2026, 8, 25, 0, 22, 1, tzinfo=timezone.utc
+)
+
 
 def _parse_timestamp(value: Any) -> datetime | None:
     text = str(value or "").strip().replace("Z", "+00:00")
@@ -102,6 +106,29 @@ def legacy_threads_backend_failure_recoverable(
     return bool(
         updated_at
         and updated_at < LEGACY_THREADS_BACKEND_FAILURE_RECOVERY_CUTOFF
+    )
+
+
+def legacy_threads_index_error_recoverable(
+    media: dict[str, Any],
+    platform: str,
+) -> bool:
+    """Retry only Threads IndexError rows from before exact URL refresh existed."""
+
+    if str(platform or "").strip().lower() != "threads":
+        return False
+
+    if str(media.get("download_status", "")).strip().upper() != "FAILED":
+        return False
+
+    if str(media.get("last_error", "")).strip() != "ingest_failed:IndexError":
+        return False
+
+    updated_at = _parse_timestamp(media.get("updated_at"))
+
+    return bool(
+        updated_at
+        and updated_at < LEGACY_THREADS_INDEX_ERROR_RECOVERY_CUTOFF
     )
 
 
@@ -315,6 +342,10 @@ def select_pending_media_id(
 
         recoverable_legacy_threads_failure = (
             legacy_threads_backend_failure_recoverable(
+                media,
+                platform,
+            )
+            or legacy_threads_index_error_recoverable(
                 media,
                 platform,
             )
