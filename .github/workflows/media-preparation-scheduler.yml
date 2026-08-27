@@ -8,13 +8,6 @@ on:
     # preparation workflows. Beauty has no legacy clip preparer, so schedule
     # only its approved-source clip lane here: 14:15 JST.
     - cron: "15 5 * * *"
-  # Temporary acceptance trigger. It performs preparation only and never posts.
-  # Remove after the post-#257 Night Direct production acceptance run.
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/media-preparation-scheduler.yml"
-
 permissions:
   contents: read
   actions: write
@@ -54,13 +47,13 @@ jobs:
     needs: guard
     if: >-
       needs.guard.outputs.enabled == 'true' &&
-      (github.event_name == 'push' || github.event.schedule == '15 3 * * *')
+      github.event.schedule == '15 3 * * *'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch bounded Direct preparation
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_ACCOUNT: ${{ github.event_name == 'push' && 'night_scout' || 'all' }}
+          TARGET_ACCOUNT: all
         run: |
           set -euo pipefail
           payload=$(printf '{"ref":"main","inputs":{"confirm_preparation":"true","target_account":"%s"}}' "$TARGET_ACCOUNT")
