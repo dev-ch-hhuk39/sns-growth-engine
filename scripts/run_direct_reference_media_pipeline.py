@@ -63,6 +63,8 @@ def _true(value: Any) -> bool:
 
 SCHEDULED_DIRECT_MIN_CHARS = 65
 
+LEGACY_DOWNSTREAM_QUEUE_RETRY_CUTOFF_DATE = "2026-08-27"
+
 
 def scheduled_direct_domain_terms(account_id: str) -> tuple[str, ...]:
     account = managed_account(account_id)
@@ -320,6 +322,80 @@ def _materialized_direct_media_quarantine_recoverable(
     )
 
 
+
+def _legacy_downstream_blocked_queue_recoverable(
+    row: dict[str, Any],
+    recoverable_asset_ids: set[str],
+) -> bool:
+    """Allow exactly one post-fix retry of a pre-fix downstream-blocked asset.
+
+    A legacy queue may have marked a valid physical media asset terminal because
+    Hybrid/persona/text validation failed. The physical media bug is fixed now,
+    so one queue from before this fix date may be ignored only when its exact
+    asset is independently proven to be a recoverable downstream-only legacy
+    quarantine.
+
+    A newly generated queue on or after the cutoff remains terminal if its
+    validator/account/text policy blocks it again. This prevents endless retry.
+    """
+    asset_id = str(
+        row.get(
+            "media_asset_id",
+            "",
+        )
+        or ""
+    ).strip()
+
+    if (
+        not asset_id
+        or asset_id
+        not in recoverable_asset_ids
+    ):
+        return False
+
+    if (
+        str(
+            row.get(
+                "generation_mode",
+                "",
+            )
+        )
+        != "direct_reference_media"
+    ):
+        return False
+
+    blocked = any(
+        str(
+            row.get(
+                field,
+                "",
+            )
+        ).upper()
+        == "BLOCKED"
+        for field in (
+            "validator_status",
+            "account_fit_status",
+            "text_policy_status",
+        )
+    )
+
+    if not blocked:
+        return False
+
+    business_date_jst = str(
+        row.get(
+            "business_date_jst",
+            "",
+        )
+        or ""
+    ).strip()
+
+    return bool(
+        business_date_jst
+        and business_date_jst
+        < LEGACY_DOWNSTREAM_QUEUE_RETRY_CUTOFF_DATE
+    )
+
 def _today_posts(rows: list[dict[str, Any]], account_id: str) -> list[dict[str, Any]]:
     target = business_date()
     result: list[dict[str, Any]] = []
@@ -453,23 +529,157 @@ def select_direct_candidates(
         str(row.get("source_post_media_id", "")): row
         for row in _records(client, "source_media_understanding")
     }
-    used_assets = {str(row.get("media_asset_id", "")) for row in posted}
+    recoverable_legacy_asset_ids: set[str] = set()
+
+    for post_id, media_rows in media_by_post.items():
+        post_assets = assets_by_post.get(
+            post_id,
+            [],
+        )
+
+        for media in media_rows:
+            asset = next(
+                (
+                    row
+                    for row in post_assets
+                    if str(
+                        row.get(
+                            "original_media_url",
+                            "",
+                        )
+                    )
+                    == str(
+                        media.get(
+                            "original_media_url",
+                            "",
+                        )
+                    )
+                ),
+                {},
+            )
+
+            understanding = understanding_by_media.get(
+                str(
+                    media.get(
+                        "source_post_media_id",
+                        "",
+                    )
+                ),
+                {},
+            )
+
+            if not _materialized_direct_media_quarantine_recoverable(
+                media,
+                asset,
+                understanding,
+            ):
+                continue
+
+            merged = {
+                **media,
+                **{
+                    key: value
+                    for key, value in asset.items()
+                    if str(
+                        value or ""
+                    ).strip()
+                },
+            }
+
+            asset_id = str(
+                merged.get(
+                    "media_asset_id"
+                )
+                or merged.get(
+                    "media_id"
+                )
+                or merged.get(
+                    "source_post_media_id"
+                )
+                or ""
+            ).strip()
+
+            if asset_id:
+                recoverable_legacy_asset_ids.add(
+                    asset_id
+                )
+
+    used_assets = {
+        str(
+            row.get(
+                "media_asset_id",
+                "",
+            )
+        )
+        for row in posted
+    }
+
     used_assets.update(
-        str(row.get("media_asset_id", ""))
+        str(
+            row.get(
+                "media_asset_id",
+                "",
+            )
+        )
         for row in queued
-        if str(row.get("status", "")).upper() in {"READY", "MEDIA_READY", "PROCESSING"}
+        if str(
+            row.get(
+                "status",
+                "",
+            )
+        ).upper()
+        in {
+            "READY",
+            "MEDIA_READY",
+            "PROCESSING",
+        }
     )
-    # A Hybrid/persona rejection is terminal for this exact caption/media
-    # attempt. Leaving the asset eligible makes every scheduled run select the
-    # same failed candidate and prevents bounded failover to candidate B.
+
+    # A post-fix Hybrid/persona/text rejection is terminal for the exact
+    # caption/media attempt. Pre-fix rows are ignored only once when the exact
+    # physical asset is independently proven to have been falsely quarantined
+    # by the old downstream-failure bug.
     used_assets.update(
-        str(row.get("media_asset_id", ""))
+        str(
+            row.get(
+                "media_asset_id",
+                "",
+            )
+        )
         for row in queued
-        if str(row.get("generation_mode", "")) == "direct_reference_media"
+        if str(
+            row.get(
+                "generation_mode",
+                "",
+            )
+        )
+        == "direct_reference_media"
         and (
-            str(row.get("validator_status", "")).upper() == "BLOCKED"
-            or str(row.get("account_fit_status", "")).upper() == "BLOCKED"
-            or str(row.get("text_policy_status", "")).upper() == "BLOCKED"
+            str(
+                row.get(
+                    "validator_status",
+                    "",
+                )
+            ).upper()
+            == "BLOCKED"
+            or str(
+                row.get(
+                    "account_fit_status",
+                    "",
+                )
+            ).upper()
+            == "BLOCKED"
+            or str(
+                row.get(
+                    "text_policy_status",
+                    "",
+                )
+            ).upper()
+            == "BLOCKED"
+        )
+        and not _legacy_downstream_blocked_queue_recoverable(
+            row,
+            recoverable_legacy_asset_ids,
         )
     )
     reasons: list[str] = []
