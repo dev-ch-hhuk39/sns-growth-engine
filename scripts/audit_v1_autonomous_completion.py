@@ -53,6 +53,40 @@ require(cfg.get("allow_third_party_media") is False, "third-party media is globa
 require(cfg.get("allow_unknown_rights") is False, "unknown-rights media is globally blocked")
 require(cfg.get("allow_media_posts") is False, "global media posting stays fail-closed")
 
+managed = json.loads(
+    (ROOT / "config/managed_accounts.json").read_text(
+        encoding="utf-8"
+    )
+)
+
+accounts = managed["accounts"]
+
+expected_review = {
+    "night_scout": "autonomous_low_risk",
+    "liver_manager": "autonomous_low_risk",
+    "beauty_account":
+        "human_review_all_medical_strict",
+}
+
+for account_id, review_policy in expected_review.items():
+    row = accounts.get(account_id, {})
+
+    require(
+        row.get("status") == "ACTIVE",
+        f"managed account active: {account_id}",
+    )
+
+    require(
+        row.get("production_enabled") is True,
+        f"managed account production enabled: {account_id}",
+    )
+
+    require(
+        row.get("review_policy")
+        == review_policy,
+        f"managed account review policy: {account_id}",
+    )
+
 night = content(".github/workflows/autonomous-growth-loop-night-scout.yml")
 for cron in ('45 4 * * *', '45 6 * * *', '45 15 * * *'):
     require(f'cron: "{cron}"' in night, f"Night Scout text cron: {cron}")
@@ -119,6 +153,21 @@ require("run_direct_media_preparation_loop.py" in direct_prepare, "Direct prepar
 require("--max-assets\", \"10\"" in content("scripts/run_direct_media_preparation_loop.py"), "whole-parent media bundle cap is 10")
 
 require((ROOT / ".github/workflows/approved-source-clip-preparation.yml").exists(), "Beauty approved-source clip workflow exists")
+
+content_pilot = content(
+    ".github/workflows/content-pilot-publish.yml"
+)
+
+require(
+    "workflow_dispatch:" in content_pilot,
+    "Content Pilot manual dispatch exists",
+)
+
+require(
+    "\n  schedule:\n"
+    not in content_pilot,
+    "Content Pilot remains manual-only",
+)
 
 scheduled_workflows = "\n".join([
     night,

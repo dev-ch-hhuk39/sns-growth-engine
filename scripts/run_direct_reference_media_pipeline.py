@@ -256,8 +256,63 @@ def _materialized_direct_media_quarantine_recoverable(
         },
     }
 
+    legacy_reason = "|".join(
+        str(media.get(key, ""))
+        for key in (
+            "quarantine_reason",
+            "last_error",
+        )
+        if str(media.get(key, "")).strip()
+    ).lower()
+
+    downstream_markers = (
+        "caption_or_alignment_blocked",
+        "semantic_alignment",
+        "voice_persona",
+        "public_post_validator",
+        "risk_score_above_max",
+        "reader_value",
+        "naturalness",
+        "account_fit",
+        "text_policy",
+        "scheduled_direct_caption",
+        "source_copy_similarity",
+        "recent_post_similarity",
+        "unsupported_claim",
+        "cta_pressure",
+        "internal_leak",
+    )
+
+    physical_failure_markers = (
+        "ingest_failed",
+        "downloaderror",
+        "download_failed",
+        "cloudinary_error",
+        "hash_mismatch",
+        "contract_conflict",
+        "permission_denied",
+        "rights_missing",
+        "provenance_missing",
+        "author_mismatch",
+        "parent_mismatch",
+        "bundle_exceeds",
+        "storage_error",
+        "transcription_failed",
+        "ocr_failed",
+        "external_unavailable",
+    )
+
+    downstream_only = bool(legacy_reason) and any(
+        marker in legacy_reason
+        for marker in downstream_markers
+    ) and not any(
+        marker in legacy_reason
+        for marker in physical_failure_markers
+    )
+
     return bool(
-        is_quarantined(media)
+        downstream_only
+        and is_quarantined(media)
         and str(understanding.get("status", "")).upper() == "PASS"
         and str(merged.get("cloudinary_status", "")).upper() == "UPLOADED"
         and str(merged.get("storage_url", "")).strip()
