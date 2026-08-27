@@ -226,6 +226,45 @@ def _is_video_only_bundle(row: dict[str, Any]) -> bool:
     return bool(media_types) and all(media_type == "video" for media_type in media_types)
 
 
+def _materialized_direct_media_quarantine_recoverable(
+    media: dict[str, Any],
+    asset: dict[str, Any],
+    understanding: dict[str, Any],
+) -> bool:
+    """Allow legacy downstream mis-quarantine only when the media is proven usable.
+
+    Direct caption/persona/text validation happens after physical ingestion.
+    A source media row must therefore not remain unusable merely because an old
+    downstream caption attempt incorrectly wrote QUARANTINED onto it.
+
+    Recovery is intentionally strict:
+    - the row is currently quarantined,
+    - media is already materialized in Cloudinary,
+    - a non-empty storage URL exists,
+    - media understanding passed,
+    - the asset is video.
+
+    Rights, account ownership, source provenance, parent-bundle integrity and
+    final publication validators are still evaluated by the normal pipeline.
+    """
+    merged = {
+        **media,
+        **{
+            key: value
+            for key, value in asset.items()
+            if str(value or "").strip()
+        },
+    }
+
+    return bool(
+        is_quarantined(media)
+        and str(understanding.get("status", "")).upper() == "PASS"
+        and str(merged.get("cloudinary_status", "")).upper() == "UPLOADED"
+        and str(merged.get("storage_url", "")).strip()
+        and str(merged.get("media_type", "")).strip().lower() == "video"
+    )
+
+
 def _today_posts(rows: list[dict[str, Any]], account_id: str) -> list[dict[str, Any]]:
     target = business_date()
     result: list[dict[str, Any]] = []
@@ -420,13 +459,20 @@ def select_direct_candidates(
         resolved: list[dict[str, Any]] = []
         incomplete = False
         for media in sorted(media_rows, key=lambda row: int(str(row.get("media_index", "0") or "0"))):
-            if is_quarantined(media):
-                incomplete = True
-                reasons.append(f"{post_id}:media_quarantined")
-                break
             asset = next((row for row in assets_by_post.get(post_id, []) if str(row.get("original_media_url", "")) == str(media.get("original_media_url", ""))), {})
             merged = {**media, **{key: value for key, value in asset.items() if str(value or "").strip()}}
             understanding = understanding_by_media.get(str(media.get("source_post_media_id", "")), {})
+            if (
+                is_quarantined(media)
+                and not _materialized_direct_media_quarantine_recoverable(
+                    media,
+                    asset,
+                    understanding,
+                )
+            ):
+                incomplete = True
+                reasons.append(f"{post_id}:media_quarantined")
+                break
             if str(understanding.get("status", "")).upper() != "PASS":
                 incomplete = True
                 reasons.append(f"{post_id}:media_content_understanding_missing")
@@ -912,15 +958,14 @@ def build_plan(
                 "blocked_reasons": [],
             }
         failure_reason = "|".join(sorted(set(str(reason) for reason in blocked_reasons if reason))) or "caption_or_alignment_blocked"
-        state = _record_candidate_failure(
-            client, post=post, media=media, account_id=account_id, reason=failure_reason,
-        ) if apply else register_failure(media, failure_reason)
         attempted.append({
             "source_post_id": post.get("source_post_id", ""),
             "media_asset_id": asset_id,
-            "failure_signature": state.get("failure_signature", ""),
-            "same_failure_count": state.get("same_failure_count", "0"),
-            "quarantined": is_quarantined(state),
+            "failure_scope": "downstream_caption_or_alignment",
+            "failure_reason": failure_reason[:240],
+            "failure_signature": "",
+            "same_failure_count": "0",
+            "quarantined": False,
             "blocked_reasons": blocked_reasons[:10],
         })
     return {

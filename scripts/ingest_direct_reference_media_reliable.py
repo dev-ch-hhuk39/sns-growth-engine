@@ -174,6 +174,14 @@ def _records_with_sheet_retry(
     return [dict(row) for row in rows]
 
 
+def _materialized_media_available(media: dict[str, Any]) -> bool:
+    """Return true only when the physical asset already exists in storage."""
+    return bool(
+        str(media.get("cloudinary_status", "")).upper() == "UPLOADED"
+        and str(media.get("storage_url", "")).strip()
+    )
+
+
 def select_pending_media_id(
     client: Any,
     account_id: str,
@@ -322,22 +330,9 @@ def select_pending_media_id(
             )
         ).lower()
 
-        if (
-            str(
-                media.get(
-                    "cloudinary_status",
-                    "",
-                )
-            ).upper()
-            == "UPLOADED"
-            and str(
-                media.get(
-                    "storage_url",
-                    "",
-                )
-            )
-            and not refresh_understanding
-        ):
+        materialized = _materialized_media_available(media)
+
+        if materialized and not refresh_understanding:
             continue
 
         recoverable_identical_failure = (
@@ -394,7 +389,7 @@ def select_pending_media_id(
             }
             and not recoverable_identical_failure
             and not recoverable_legacy_threads_failure
-            and not refresh_understanding
+            and not (materialized and refresh_understanding)
         ):
             continue
 
