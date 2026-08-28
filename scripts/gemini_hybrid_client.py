@@ -23,6 +23,9 @@ class GeminiHttpError(RuntimeError):
     def __init__(self, status_code: int, detail: str):
         super().__init__(f"gemini_http_error:{status_code}:{detail[:400]}")
         self.status_code = status_code
+        self.operation = ""
+        self.model = ""
+        self.retryable = status_code in {429, 500, 502, 503, 504}
 
 
 def _schema_hash(schema: Mapping[str, Any]) -> str:
@@ -191,8 +194,10 @@ class GeminiHybridClient:
                 os.replace(temp, cache_path)
                 return result
             except GeminiHttpError as exc:
+                exc.operation = operation
+                exc.model = model
                 last_error = exc
-                if exc.status_code not in {429, 500, 502, 503, 504} or attempt >= self.max_attempts:
+                if not exc.retryable or attempt >= self.max_attempts:
                     raise
             except RuntimeError as exc:
                 last_error = exc

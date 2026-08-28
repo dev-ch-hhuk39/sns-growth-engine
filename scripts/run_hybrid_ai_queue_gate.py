@@ -210,7 +210,7 @@ def main() -> int:
         for queue, _source_context in selected
     }
     results: list[dict[str, Any]] = []
-    runtime_errors: list[dict[str, str]] = []
+    runtime_errors: list[dict[str, Any]] = []
 
     for queue, source_context in selected:
         queue_id = str(queue.get("queue_id", ""))
@@ -218,7 +218,14 @@ def main() -> int:
             result = gate.evaluate(queue, source_context)
         except Exception as exc:
             error_code = type(exc).__name__
-            runtime_errors.append({"queue_id": queue_id, "error": error_code})
+            error_evidence = {
+                "queue_id": queue_id,
+                "error": error_code,
+                "http_status": getattr(exc, "status_code", ""),
+                "operation": getattr(exc, "operation", ""),
+                "retryable": getattr(exc, "retryable", ""),
+            }
+            runtime_errors.append(error_evidence)
             if args.apply:
                 client.update_queue_item(
                     queue_id,
@@ -231,7 +238,7 @@ def main() -> int:
                     status="FAILED",
                     message=f"Hybrid AI gate runtime error: {queue_id}",
                     account_id=args.account_id,
-                    details=json.dumps({"queue_id": queue_id, "error_type": error_code}, ensure_ascii=False, sort_keys=True),
+                    details=json.dumps(error_evidence, ensure_ascii=False, sort_keys=True),
                     level="ERROR",
                 )
             continue
