@@ -274,6 +274,8 @@ def hybrid_ai_gate_current(
         return False, "missing"
     if gate.get("schema_version") != GATE_SCHEMA_VERSION:
         return False, "schema_stale"
+    if gate.get("prompt_version") != PROMPT_VERSION:
+        return False, "prompt_stale"
     expected_route = decide_route(queue).route
     if gate.get("route") != expected_route:
         return False, "route_stale"

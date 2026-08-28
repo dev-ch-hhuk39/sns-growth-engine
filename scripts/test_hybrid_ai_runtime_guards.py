@@ -12,6 +12,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 import run_hybrid_ai_queue_gate as runner  # noqa: E402
 from hybrid_ai_gate import (  # noqa: E402
     GATE_SCHEMA_VERSION,
+    PROMPT_VERSION,
     hybrid_ai_input_hash,
 )
 from hybrid_ai_source_context import (  # noqa: E402
@@ -48,6 +49,7 @@ def main() -> None:
     context = build_source_context(fake, queue)
     gate = {
         "schema_version": GATE_SCHEMA_VERSION,
+        "prompt_version": PROMPT_VERSION,
         "status": "PASS",
         "input_hash": hybrid_ai_input_hash(queue),
         "source_context_hash": hybrid_ai_source_context_hash(context),
