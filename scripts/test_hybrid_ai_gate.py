@@ -10,6 +10,7 @@ sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from hybrid_ai_gate import (  # noqa: E402
     HybridAiGate,
+    _classification_prompt,
     hybrid_ai_gate_current,
     hybrid_ai_gate_passed,
     merge_gate_audit,
@@ -98,6 +99,38 @@ def source_context() -> dict[str, Any]:
 
 
 def main() -> None:
+    stale_direct_draft = "STALE_MUTABLE_DRAFT_MUST_NOT_CLASSIFY_SOURCE"
+    direct_prompt = _classification_prompt(
+        {
+            "queue_id": "q_direct_stale_draft",
+            "account_id": "liver_manager",
+            "target_account_id": "liver_manager",
+            "generation_mode": "direct_reference_media",
+            "media_origin": "direct_reference",
+            "public_post_text": stale_direct_draft,
+        },
+        {
+            "original_post_text": "配信でリスナーへ挨拶する話",
+            "transcript_excerpt": "初見が入室した時の声かけ",
+        },
+        {},
+    )
+    assert stale_direct_draft not in direct_prompt
+
+    current_text = "CURRENT_TEXT_REMAINS_FOR_TEXT_CLASSIFICATION"
+    text_prompt = _classification_prompt(
+        {
+            "queue_id": "q_new_text",
+            "account_id": "liver_manager",
+            "target_account_id": "liver_manager",
+            "generation_mode": "new_text_generation",
+            "public_post_text": current_text,
+        },
+        {},
+        {},
+    )
+    assert current_text in text_prompt
+
     corrected = "配信が崩れそうって不安になるよね。そんな時は、リスナーみんなで支えられる一言を次の配信で試してみてね。"
     context = source_context()
     result = HybridAiGate(FakeClient(generated_text=corrected)).evaluate(base_queue(), context)
