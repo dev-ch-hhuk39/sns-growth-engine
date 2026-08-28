@@ -58,6 +58,10 @@ posts = [
         "source_id": "source-youtube",
         "target_account_id": "night_scout",
         "platform": "youtube",
+        "original_post_text": (
+            "夜職の店選びでは時給だけでなく、ノルマや客層、"
+            "担当へ相談できる環境も確認することが大切です。"
+        ),
     },
     {
         "source_post_id": "post-threads",
@@ -65,6 +69,10 @@ posts = [
         "target_account_id": "night_scout",
         "platform": "threads",
         "canonical_post_url": "https://www.threads.com/@approved/post/ABC123",
+        "original_post_text": (
+            "夜職で無理なく続けるには、出勤ペースと店の雰囲気が"
+            "自分に合うかを入店前に見ておくことが大切です。"
+        ),
     },
 ]
 

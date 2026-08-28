@@ -18,7 +18,7 @@ from media_activation_source_suitability import clip_source_suitability
 from public_post_quality import apply_account_voice, final_public_post_validator
 
 PROVIDER_NAME = "deterministic_evidence_context"
-PROVIDER_VERSION = "2"
+PROVIDER_VERSION = "3"
 
 TOPIC_TERMS: dict[str, dict[str, tuple[str, ...]]] = {
     "night_scout": {
@@ -78,40 +78,40 @@ TOPIC_COPY: dict[str, dict[str, tuple[str, str]]] = {
     },
     "liver_manager": {
         "first_viewer_retention": (
-            "配信で初見が入りやすい状態を作るには、入室直後の動きを具体的に確認する方がいいと思います。",
-            "まず初見が入室した場面を見直すだけでも、配信の入りやすさを整えられます。",
+            "初見が入った瞬間って、どう返すか迷うよね。配信の入り口はここが意外と大事なんだよね。",
+            "次の配信では、入室した人への反応を一つだけ見直して試してみてね。",
         ),
         "comment_activation": (
-            "配信でコメントを増やすには、質問や話題の置き方を具体的に確認する方がいいと思います。",
-            "まずコメントが生まれる場面を見直すと、次の配信で試す行動を決めやすくなります。",
+            "コメントって、何を聞くかより答えやすい空気があるかで変わることあるよね。配信ではここが大事なんだよね。",
+            "次の配信では、質問を一つだけ用意して試してみてね。",
         ),
         "agency_selection": (
-            "ライバーが事務所を選ぶときは、所属条件の話を具体的に確認する方がいいと思います。",
-            "まず事務所選びの条件を見直すと、所属先を決める理由を整理できます。",
+            "ライバーが事務所を選ぶときって、条件だけ見てると迷うことあるよね。所属後に続けやすいかも大事なんだよね。",
+            "事務所を見るときは、気になる条件を一つだけ確認してみてね。",
         ),
         "creator_support": (
-            "配信の相談やサポートを考えるときは、実際の支え方を具体的に確認する方がいいと思います。",
-            "まず相談できる場面を見直すと、ライバーに必要なサポートを整えやすくなります。",
+            "ライバーの配信って、一人で全部抱えるとしんどいことあるよね。相談できる環境があるかは意外と大事なんだよね。",
+            "次の配信では、困っていることを一つだけ整理して相談してみてね。",
         ),
         "continuity": (
-            "配信を継続するには、配信時間や生活リズムの話を具体的に確認する方がいいと思います。",
-            "まず続けられる配信時間を見直すと、無理のない継続方法を決めやすくなります。",
+            "ライバーが配信を続けるなら、無理な時間に合わせ続ける方がしんどいことあるよね。",
+            "次の配信では、続けやすい配信時間を一つだけ見直してみてね。",
         ),
         "monetization": (
-            "配信のギフトや収益を考えるときは、ダイヤにつながる場面を具体的に確認する方がいいと思います。",
-            "まずギフトが生まれた場面を見直すと、次の配信で試す行動を決めやすくなります。",
+            "配信でギフトを増やしたいときって、いきなり全部変えようとすると迷うよね。",
+            "次の配信では、ギフトが生まれた場面を一つだけ見直して試してみてね。",
         ),
         "community_building": (
-            "配信でリスナーとの関係を作るには、応援が生まれる場面を具体的に確認する方がいいと思います。",
-            "まずリスナーが応援しやすい場面を見直すと、配信の関係づくりを整えられます。",
+            "リスナーとのやり取りって、小さい反応でも配信の空気が変わることあるよね。",
+            "次の配信では、リスナーへの声かけを一つだけ試してみてね。",
         ),
         "stream_review": (
-            "配信を改善するには、振り返りや数字の見方を具体的に確認する方がいいと思います。",
-            "まず配信の振り返りを見直すと、次に改善する行動を決めやすくなります。",
+            "ライバーが配信を振り返るとき、全部直そうとすると逆に迷うことあるよね。",
+            "次の配信では、変えるところを一つだけ決めて試してみてね。",
         ),
         "stream_planning": (
-            "配信の企画や構成を整えるには、実際の進め方を具体的に確認する方がいいと思います。",
-            "まず配信構成を見直すと、次の企画で試す行動を決めやすくなります。",
+            "ライバーの配信企画って、やることを増やしすぎると逆に伝わりにくくなることあるよね。",
+            "次の配信では、企画で試すことを一つだけ決めてみてね。",
         ),
     },
     "beauty_account": {
@@ -364,12 +364,18 @@ def _claim_candidates(account_id: str, source: str, topic: str) -> list[tuple[st
     return [(claim, evidence) for claim, evidence, _score in candidates[:8]]
 
 
-def _variants(hook: str, claim: str, closing: str) -> list[str]:
+def _variants(
+    hook: str,
+    claim: str,
+    closing: str,
+) -> list[str]:
+    """Try conversational evidence-first variants before formal fallbacks."""
     return [
+        f"{hook}\n\n「{claim}」と話しています。\n\n{closing}",
+        f"{hook}\n\n{claim}。\n\n{closing}",
         f"{hook}\n\nこの場面では「{claim}」と話されています。\n\n{closing}",
         f"{hook}\n\n「{claim}」という話があります。\n\n{closing}",
         f"{hook}\n\n判断するときに確認したいのは「{claim}」という部分です。\n\n{closing}",
-        f"{hook}\n\n実際の言葉は「{claim}」。\n\n{closing}",
     ]
 
 

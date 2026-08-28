@@ -29,6 +29,10 @@ class Client:
                     "source_id": f"source_{post_id}",
                     "target_account_id": "night_scout",
                     "platform": "x",
+                    "original_post_text": (
+                        "夜職の店選びでは、時給と同じくらい客層や"
+                        "担当の相談しやすさも確認することが大切です。"
+                    ),
                 }
                 for post_id in ("image", "mixed", "video")
             ],

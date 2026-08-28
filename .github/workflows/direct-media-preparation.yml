@@ -169,6 +169,26 @@ jobs:
           python3 scripts/sync_publication_review.py \
             --apply --confirm-review-sync --use-sheets \
             --output /tmp/direct-media-review.json
+      - name: Promote autonomous low-risk Direct Media to READY
+        if: (github.event.inputs.confirm_preparation == 'true') && steps.preparation_budget.outcome == 'success' && (matrix.account_id == 'night_scout' || matrix.account_id == 'liver_manager')
+        run: |
+          python3 scripts/promote_autonomous_direct_media_ready.py \
+            --account-id "$ACCOUNT_ID" \
+            --slot-id "$CONTENT_SLOT_ID" \
+            --apply \
+            --confirm-autonomous-ready \
+            --use-sheets \
+            --output /tmp/direct-media-autoready.json
+
+          cat /tmp/direct-media-autoready.json
+
+          {
+            echo "### Autonomous Direct Media READY"
+            echo '```json'
+            cat /tmp/direct-media-autoready.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Clean expired transient media
         if: always()
         run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
