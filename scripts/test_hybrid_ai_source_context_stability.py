@@ -56,6 +56,8 @@ def main() -> None:
     direct_queue = {
         **queue,
         "queue_id": "q_direct_source_context",
+        "generation_mode": "direct_reference_media",
+        "media_origin": "direct_reference",
         "source_post_id": "sp_direct_1",
         "source_id": "src_direct_1",
         "claim_support_json": (
@@ -80,7 +82,34 @@ def main() -> None:
     )
     assert direct["original_post_text"] == source_text
     assert direct["source_text"] == source_text
+    assert direct["transcript_excerpt"] == "キャストからコスメ情報を聞いた"
     assert "caption_claim" not in direct["source_text"]
+    assert "caption_claim" not in direct["transcript_excerpt"]
+
+    changed_evidence = build_source_context(
+        FixtureClient(
+            {
+                "source_posts": [
+                    {
+                        "source_post_id": "sp_direct_1",
+                        "source_id": "src_direct_1",
+                        "original_post_text": source_text,
+                        "target_account_id": "night_scout",
+                    }
+                ]
+            }
+        ),
+        {
+            **direct_queue,
+            "claim_support_json": (
+                '[{"caption_claim":"整形した主張",'
+                '"source_evidence":"別の検証済み根拠文"}]'
+            ),
+        },
+    )
+    assert hybrid_ai_source_context_hash(direct) != hybrid_ai_source_context_hash(
+        changed_evidence
+    )
 
     fallback = build_source_context(
         object(),
