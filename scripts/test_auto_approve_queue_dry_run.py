@@ -15,7 +15,11 @@ if spec is None or spec.loader is None:
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 
-from hybrid_ai_gate import GATE_SCHEMA_VERSION, hybrid_ai_input_hash  # noqa: E402
+from hybrid_ai_gate import (  # noqa: E402
+    GATE_SCHEMA_VERSION,
+    PROMPT_VERSION,
+    hybrid_ai_input_hash,
+)
 from hybrid_ai_source_context import hybrid_ai_source_context_hash  # noqa: E402
 
 
@@ -25,6 +29,7 @@ def add_mock_gate(queue: dict[str, str], public_post_text: str) -> None:
         {
             "hybrid_ai_gate": {
                 "schema_version": GATE_SCHEMA_VERSION,
+                "prompt_version": PROMPT_VERSION,
                 "status": "PASS",
                 "input_hash": hybrid_ai_input_hash(queue),
                 "source_context_hash": hybrid_ai_source_context_hash({}),

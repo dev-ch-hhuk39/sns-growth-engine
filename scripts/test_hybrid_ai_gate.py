@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -226,6 +227,21 @@ def main() -> None:
     assert ok is True and reason == "pass"
     current, status = hybrid_ai_gate_current(passed_queue, context)
     assert current is True and status == "pass"
+
+    stale_prompt_policy = json.loads(passed_queue["generation_policy_json"])
+    stale_prompt_policy["hybrid_ai_gate"]["prompt_version"] = (
+        "hybrid_ai_prompts_previous"
+    )
+    stale_prompt_queue = {
+        **passed_queue,
+        "generation_policy_json": json.dumps(
+            stale_prompt_policy,
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+    }
+    current, reason = hybrid_ai_gate_current(stale_prompt_queue, context)
+    assert current is False and reason == "prompt_stale"
 
     changed_route = dict(passed_queue)
     changed_route["transformation_type"] = "transform"
