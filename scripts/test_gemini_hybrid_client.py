@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from gemini_hybrid_client import GeminiHybridClient
+from gemini_hybrid_client import GeminiHttpError, GeminiHybridClient
 
 SCHEMA = {
     "type": "object",
@@ -78,7 +78,33 @@ def main() -> None:
         assert "missing_GEMINI_API_KEY" in str(exc)
     else:
         raise AssertionError("missing key must fail closed")
-    print("PASS 8 tests")
+
+    def unavailable(_url: str, _body: dict[str, Any], _timeout: int) -> dict[str, Any]:
+        raise GeminiHttpError(503, "fixture unavailable")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            GeminiHybridClient(
+                api_key="fixture",
+                reserve_request=reserve,
+                transport=unavailable,
+                cache_dir=Path(tmp),
+                max_attempts=1,
+            ).generate_json(
+                model="fixture-model",
+                prompt="p",
+                schema=SCHEMA,
+                operation="generate",
+                account_id="liver_manager",
+            )
+        except GeminiHttpError as exc:
+            assert exc.status_code == 503
+            assert exc.operation == "generate"
+            assert exc.model == "fixture-model"
+            assert exc.retryable is True
+        else:
+            raise AssertionError("HTTP failure must remain fail closed")
+    print("PASS 12 tests")
 
 
 if __name__ == "__main__":
