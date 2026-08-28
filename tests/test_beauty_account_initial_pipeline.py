@@ -25,7 +25,8 @@ def _normalized(url: str) -> str:
 
 def test_beauty_account_contract_matches_owner_brief() -> None:
     cfg = _json("config/accounts/beauty_account.json")
-    assert cfg["status"] == "draft_only"
+    pipeline = _json("config/beauty_account_pipeline.json")
+    assert cfg["status"] == "active"
     assert cfg["platforms"] == ["threads"]
     assert cfg["target_audience"] == "美容・コスメが好きな20〜30代女性"
     assert cfg["first_person"] == "私"
@@ -34,9 +35,13 @@ def test_beauty_account_contract_matches_owner_brief() -> None:
     assert cfg["cta_policy"]["allowed_cta_types"] == ["save", "like", "follow"]
     assert cfg["posting_schedule"]["daily_target_min"] == 1
     assert cfg["posting_schedule"]["daily_target_max"] == 2
-    assert cfg["posting_schedule"]["scheduled_publish_enabled"] is False
+    assert cfg["posting_schedule"]["scheduled_publish_enabled"] is True
     assert cfg["safety_policy"]["requires_human_review_before_post"] is True
-    assert cfg["safety_policy"]["allow_real_post"] is False
+    assert cfg["safety_policy"]["allow_real_post"] is True
+    assert pipeline["status"] == "review_required_production"
+    assert pipeline["auto_ready_enabled"] is False
+    assert pipeline["scheduled_publish_enabled"] is True
+    assert pipeline["real_post_enabled"] is True
 
 
 def test_all_22_owner_declared_beauty_sources_are_mapped_and_disabled() -> None:
@@ -122,11 +127,11 @@ def test_beauty_pdca_is_strictly_account_scoped() -> None:
     assert all(job["status"] == "WAITING_REVIEW" for job in result["next_generation_jobs"])
 
 
-def test_beauty_credentials_are_names_only_until_owner_input() -> None:
+def test_beauty_credentials_are_names_only_in_repository() -> None:
     credentials = _json("config/accounts/beauty_account.json")["threads_credentials"]
     assert credentials["handle"] == ""
     assert credentials["user_id"] == ""
-    assert credentials["oauth_status"] == "WAITING_OWNER_INPUT"
+    assert credentials["oauth_status"] == "GITHUB_ENVIRONMENT_SECRETS"
     assert credentials["handle_secret_name"] == "THREADS_HANDLE_BEAUTY_ACCOUNT"
     assert credentials["access_token_secret_name"] == "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT"
     assert credentials["user_id_secret_name"] == "THREADS_USER_ID_BEAUTY_ACCOUNT"

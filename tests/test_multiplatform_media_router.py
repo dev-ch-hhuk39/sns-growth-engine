@@ -19,7 +19,7 @@ def test_platform_detection_and_provider_chains() -> None:
     assert provider_chain("youtube") == ("yt_dlp",)
     assert provider_chain("x") == ("yt_dlp",)
     assert provider_chain("tiktok") == ("public_embed_direct_http",)
-    assert provider_chain("threads") == ()
+    assert provider_chain("threads") == ("public_og_direct_http",)
     assert provider_chain("unknown") == ()
 
 

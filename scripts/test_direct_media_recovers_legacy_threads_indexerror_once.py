@@ -13,7 +13,7 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-import ingest_direct_reference_media_reliable as reliable
+import ingest_direct_reference_media_reliable as reliable  # noqa: E402
 
 
 class FakeWorksheet:
@@ -60,6 +60,7 @@ post = {
     "source_id": "source-threads",
     "target_account_id": "night_scout",
     "platform": "threads",
+    "original_post_text": "夜職の店選びでは時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
 }
 
 base_media = {

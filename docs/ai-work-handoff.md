@@ -7926,3 +7926,16 @@ dry-runとbounded canaryを通してからblockを解除する。単なるsource
 3. Publish at most the six authorized exact queues and verify permalink, `posted_results`, and 24h/72h/168h jobs.
 4. Enable scheduled media only after all eligible acceptance routes pass. Never enable X publishing.
 5. TikTok Shop onboarding remains credential-pending; do not create a fake canary.
+
+## 2026-08-28 V1 Direct Media final reliability and autonomous READY
+
+- Continued from main `2f1749d4167d91d8c4d6d45ef0abdb3333bb00df` without discarding the existing dirty worktree.
+- Liver Manager deterministic evidence captions now use provider version 3 and reach strict semantic alignment, canonical voice/persona, and public-validator PASS without lowering any threshold.
+- Reliable Direct selection now skips source posts lacking usable original text before external cost and prioritizes already-uploaded media that only needs understanding refresh. Existing platform priority remains unchanged inside each tier.
+- Caption, semantic, persona, and public-validator failures are downstream generation failures and no longer create physical retry/quarantine state. Legacy recovery remains limited to uploaded, understood media with a recognized downstream-only legacy reason.
+- Added `promote_autonomous_direct_media_ready.py`. It only accepts managed accounts whose review policy is `autonomous_low_risk`, requires `--apply --confirm-autonomous-ready --use-sheets`, runs the existing exact-slot Hybrid media gate, and promotes at most one candidate. It never publishes.
+- `direct-media-preparation.yml` invokes this step only for `night_scout` and `liver_manager`. Beauty is structurally excluded and remains human-review-only.
+- Updated old selector fixtures to include usable source text. Production selection was not weakened. Updated stale pytest contracts to the already-active Beauty production state and Threads public OG provider while retaining Beauty human review and secret-only credentials.
+- Validation: Direct Media 46/46 PASS; repository scripts 876/876 PASS; pytest 146/146 PASS; autonomous completion audit 100/100 PASS; workflow safety 504/504 PASS; source registry, Ruff fatal rules, compileall, and diff check PASS. Local Mypy was unavailable and must be verified by exact-head GitHub CI.
+- No production Sheets mutation, Cloudinary upload, media download, Threads publish, X publish, or Beauty approval was performed by these local changes.
+- Next: normal PR and exact-head CI, then bounded Liver Direct preparation requiring a real READY queue/read-after-write, Liver publisher dry-run, Night fail-closed preparation, Beauty WAITING_REVIEW preparation, and final schedule/config evidence.

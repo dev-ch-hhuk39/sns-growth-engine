@@ -20,6 +20,7 @@ sys.path[:0] = [
 ]
 
 import ingest_direct_reference_media as core  # noqa: E402
+from generation.source_copyedit import source_text_is_usable  # noqa: E402
 
 _CORE_PERMISSION_OK_FROM_ROWS = core.permission_ok_from_rows
 
@@ -182,6 +183,30 @@ def _materialized_media_available(media: dict[str, Any]) -> bool:
     )
 
 
+
+
+def _candidate_priority(
+    *,
+    materialized: bool,
+    refresh_understanding: bool,
+    platform: str,
+) -> tuple[int, int]:
+    """Prefer already-stored analysis refresh before any new network download."""
+    refresh_tier = (
+        0
+        if materialized
+        and refresh_understanding
+        else 1
+    )
+
+    return (
+        refresh_tier,
+        _PLATFORM_PRIORITY.get(
+            str(platform or "").lower(),
+            99,
+        ),
+    )
+
 def select_pending_media_id(
     client: Any,
     account_id: str,
@@ -257,7 +282,7 @@ def select_pending_media_id(
         )
     }
 
-    pending: list[tuple[int, str, str]] = []
+    pending: list[tuple[int, int, str, str]] = []
 
     for media in media_rows:
         source_post_id = str(
@@ -288,6 +313,20 @@ def select_pending_media_id(
                 )
             )
             != account_id
+        ):
+            continue
+
+        # Direct Media requires usable source text later in the strict
+        # source-suitability gate. Skip guaranteed failures before spending
+        # external provider/download budget.
+        if not source_text_is_usable(
+            str(
+                post.get(
+                    "original_post_text",
+                    "",
+                )
+                or ""
+            )
         ):
             continue
 
@@ -447,12 +486,16 @@ def select_pending_media_id(
         if not media_id:
             continue
 
+        refresh_tier, platform_priority = _candidate_priority(
+            materialized=materialized,
+            refresh_understanding=refresh_understanding,
+            platform=platform,
+        )
+
         pending.append(
             (
-                _PLATFORM_PRIORITY.get(
-                    platform,
-                    99,
-                ),
+                refresh_tier,
+                platform_priority,
                 str(
                     media.get(
                         "created_at",
@@ -463,21 +506,25 @@ def select_pending_media_id(
             )
         )
 
-    # First sort by newest item inside each platform.
+    # First preserve recency inside each refresh/platform tier.
     pending.sort(
         key=lambda item: (
-            item[1],
             item[2],
+            item[3],
         ),
         reverse=True,
     )
 
-    # Stable sort then gives platform priority while preserving recency.
+    # Stored-understanding refresh wins before any new external download.
+    # Platform preference remains unchanged inside the same tier.
     pending.sort(
-        key=lambda item: item[0]
+        key=lambda item: (
+            item[0],
+            item[1],
+        )
     )
 
-    return pending[0][2] if pending else ""
+    return pending[0][3] if pending else ""
 
 
 core.permission_ok_from_rows = permission_ok_from_rows

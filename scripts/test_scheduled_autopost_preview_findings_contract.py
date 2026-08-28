@@ -82,7 +82,7 @@ assert 'post_type == "reference_text"' in source
 assert "ns_1400_reference" in source and "lm_1300_reference" in source
 assert "reference_source_required_for_reference_slot" in source
 evidence_caption = (ROOT / "scripts/evidence_context_caption.py").read_text(encoding="utf-8")
-assert 'PROVIDER_VERSION = "2"' in evidence_caption
+assert 'PROVIDER_VERSION = "3"' in evidence_caption
 assert evidence_caption.count("僕が夜職") >= 6
 preview = (ROOT / "scripts/run_scheduled_autopost_preview_v2.py").read_text(encoding="utf-8")
 assert "PREVIEW_COMPLETE_WITH_BLOCKS" in preview

@@ -150,6 +150,34 @@ require('ALLOW_REAL_THREADS_POST: "false"' in direct_prepare, "Direct preparatio
 require('ALLOW_REAL_X_POST: "false"' in direct_prepare, "Direct preparation X posting stays closed")
 require("acquire_approved_source_posts_failsoft.py" in direct_prepare, "Direct preparation refreshes approved inventory")
 require("run_direct_media_preparation_loop.py" in direct_prepare, "Direct preparation bounded failover connected")
+require(
+    "promote_autonomous_direct_media_ready.py"
+    in direct_prepare,
+    "Direct preparation autonomous READY connected",
+)
+require(
+    "--confirm-autonomous-ready"
+    in direct_prepare
+    and
+    "args.confirm_autonomous_ready"
+    in content(
+        "scripts/promote_autonomous_direct_media_ready.py"
+    ),
+    "Direct autonomous READY requires explicit confirmation",
+)
+require(
+    "matrix.account_id == 'night_scout'"
+    in direct_prepare
+    and
+    "matrix.account_id == 'liver_manager'"
+    in direct_prepare,
+    "Night/Liver Direct Media autonomous READY accounts",
+)
+require(
+    "matrix.account_id == 'beauty_account'"
+    not in direct_prepare,
+    "Beauty excluded from Direct Media autonomous READY",
+)
 require("--max-assets\", \"10\"" in content("scripts/run_direct_media_preparation_loop.py"), "whole-parent media bundle cap is 10")
 
 require((ROOT / ".github/workflows/approved-source-clip-preparation.yml").exists(), "Beauty approved-source clip workflow exists")

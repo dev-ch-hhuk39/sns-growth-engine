@@ -61,30 +61,35 @@ posts = [
         "source_id": "source-x",
         "target_account_id": "night_scout",
         "platform": "x",
+        "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
     {
         "source_post_id": "post-youtube",
         "source_id": "source-youtube",
         "target_account_id": "night_scout",
         "platform": "youtube",
+        "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
     {
         "source_post_id": "post-tiktok",
         "source_id": "source-tiktok",
         "target_account_id": "night_scout",
         "platform": "tiktok",
+        "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
     {
         "source_post_id": "post-threads",
         "source_id": "source-threads",
         "target_account_id": "night_scout",
         "platform": "threads",
+        "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
     {
         "source_post_id": "post-profile",
         "source_id": "source-threads",
         "target_account_id": "night_scout",
         "platform": "threads",
+        "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
 ]
 

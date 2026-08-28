@@ -32,6 +32,10 @@ class Client:
                 "source_id": "source-1",
                 "target_account_id": "night_scout",
                 "platform": "youtube",
+                "original_post_text": (
+                    "夜職の店選びでは時給だけでなく、ノルマや客層、"
+                    "出勤ペースが自分に合うかも確認することが大切です。"
+                ),
             }],
             "source_post_media": [{
                 "source_post_media_id": "media-1",
