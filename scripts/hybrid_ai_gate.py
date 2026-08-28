@@ -20,7 +20,7 @@ from public_post_quality import canonical_voice_profile, canonical_voice_prompt,
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/hybrid_ai_account_policies.json"
 GATE_SCHEMA_VERSION = "hybrid_ai_gate_v3"
-PROMPT_VERSION = "hybrid_ai_prompts_v5"
+PROMPT_VERSION = "hybrid_ai_prompts_v6"
 
 GENERIC_TEMPLATE_PHRASES = (
     "確認することは一つ。",
@@ -435,6 +435,14 @@ def _classification_prompt(
     source_context: Mapping[str, Any],
     policy: Mapping[str, Any],
 ) -> str:
+    queue_view = _queue_prompt_view(queue)
+    if decide_route(queue).route in {
+        "external_direct_source_copyedit",
+        "external_direct_transform",
+    }:
+        # Direct-media classification evaluates immutable source evidence. The
+        # mutable draft is regenerated and reviewed by the later quality gates.
+        queue_view.pop("public_post_text", None)
     source_view = {
         key: source_context.get(key)
         for key in (
@@ -460,7 +468,7 @@ def _classification_prompt(
         "店舗経営者・事業者向け素材を求職者向けへ無理に変換する場合、他社宣伝、"
         "根拠不明の収益実績、対象アカウント違いはREJECTしてください。\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
-        f"QUEUE={json.dumps(_queue_prompt_view(queue), ensure_ascii=False, sort_keys=True)}\n"
+        f"QUEUE={json.dumps(queue_view, ensure_ascii=False, sort_keys=True)}\n"
         f"SOURCE_CONTEXT={json.dumps(source_view, ensure_ascii=False, sort_keys=True)}"
     )
 
