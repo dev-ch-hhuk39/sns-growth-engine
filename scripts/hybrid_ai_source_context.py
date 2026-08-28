@@ -128,6 +128,19 @@ def _media_permission_status(queue: Mapping[str, Any], permission: Mapping[str, 
     return "APPROVED" if common and clip_allowed else "DENIED"
 
 
+def _is_direct_media_route(queue: Mapping[str, Any]) -> bool:
+    return (
+        _text(queue.get("media_origin")).lower() == "direct_reference"
+        or _text(queue.get("content_type")).lower()
+        == "direct_reference_media"
+        or _text(queue.get("generation_mode")).lower()
+        in {
+            "direct_reference_media",
+            "saved_direct_reference_media",
+        }
+    )
+
+
 def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     source_post_id = _text(queue.get("source_post_id"))
@@ -203,6 +216,22 @@ def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any
         posted_result.get("posted_text"), posted_result.get("public_post_text"),
     )
     transcript_excerpt = _first(clip.get("transcript_excerpt"), clip.get("transcript_text"), clip.get("transcript"))
+    direct_media_evidence = (
+        _claim_support_evidence(queue.get("claim_support_json"))
+        if _is_direct_media_route(queue)
+        else ""
+    )
+    if direct_media_evidence:
+        transcript_excerpt = "\n\n".join(
+            dict.fromkeys(
+                value
+                for value in (
+                    transcript_excerpt,
+                    direct_media_evidence,
+                )
+                if value
+            )
+        )
     transcript = _first(source_video.get("transcript"), source_video.get("transcript_text"), source_video.get("full_transcript"))
     description = _first(source_video.get("description"), source_post.get("description"), reference_post.get("description"), source.get("description"))
 
