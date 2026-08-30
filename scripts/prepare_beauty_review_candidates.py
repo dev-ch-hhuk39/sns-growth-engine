@@ -112,6 +112,12 @@ def _prompt(
         else "絵文字は0個にし、感嘆符は投稿全体で1個だけ使う。"
     )
     context_terms = TOPIC_CONTEXT_TERMS[topic]
+    topic_safety = (
+        "サロンの話では「施術」「治療」「効果」「改善」「仕上がりが変わる」を使わず、"
+        "カウンセリング、普段の手入れ、家で再現しやすい説明だけを扱う。"
+        if topic == TOPICS[5]
+        else ""
+    )
     correction = ""
     if blocked:
         blocked_summary = ", ".join(sorted(set(str(reason) for reason in blocked))[:12])
@@ -122,6 +128,7 @@ def _prompt(
             "「きっと」「〜はず」の結果予測を削除し、320文字以内にする。"
             f"本文に「{context_terms[0]}」と「{context_terms[1]}」を、羅列ではなく自然な文脈で必ず入れ、"
             "読者が今日試せる行動を1つ示して作り直す。"
+            f"{topic_safety}"
         )
     internal_evidence = str((route_context or {}).get("internal_evidence", "")).strip()
     corpus = dict((route_context or {}).get("voice_corpus") or {})
@@ -168,6 +175,7 @@ Threadsの美容アカウント用に、読者向けの新規投稿を1件作っ
 禁止: 美容医療、疾病・治療、薬機的効果、before/after保証、内部用語、参照元名、AIへの言及。「浸透する」「キューティクルが閉じる」「効果が半減」などの科学的な因果を言い切らない。美容家電は機種ごとに使用条件が異なるため、シートマスクや化粧水との併用方法を推測で教えない。
 化粧品の使用量や待ち時間は、製品表示や説明書の根拠がないのに「たっぷり」「○分」と断定しない。「たった数分で」「全然変わる」「格段に良くなる」などの結果保証も書かない。
 主題にない美容効果、肌状態、成分、使用順序の因果を追加しない。コスメを並べる話では、探す時間と迷いの整理だけを扱い、仕上がりや効果が変わると書かない。
+{topic_safety}
 {cta}
 {evidence_instruction}
 {corpus_instruction}

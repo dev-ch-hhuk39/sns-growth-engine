@@ -214,6 +214,9 @@ def test_beauty_prompt_encodes_account_fit_contract() -> None:
         prepare.TOPICS[2], 1, "new_text_generation", {}, ["persona_reader_context_insufficient"]
     )
     assert "自然な文脈で必ず入れ" in retry_prompt
+    salon_prompt = prepare._prompt(prepare.TOPICS[5], 1, "new_text_generation")
+    assert "サロンの話では「施術」「治療」「効果」「改善」「仕上がりが変わる」を使わず" in salon_prompt
+    assert "カウンセリング、普段の手入れ、家で再現しやすい説明だけ" in salon_prompt
 
 
 def test_beauty_generated_line_layout_is_normalized_without_rewriting() -> None:
