@@ -28,7 +28,7 @@ on:
         type: choice
         options: [direct_reference_media, approved_source_clip]
       queue_id:
-        description: "Exact human-approved READY queue ID required by publish_media"
+        description: "Exact queue ID for publish_media or a prepare re-review"
         required: false
         default: ""
   schedule:
@@ -159,7 +159,7 @@ jobs:
 
       - name: Save WAITING_REVIEW candidate
         id: beauty_candidate
-        if: env.ACTION == 'prepare'
+        if: env.ACTION == 'prepare' && github.event.inputs.queue_id == ''
         env:
           DRY_RUN: "false"
         run: |
@@ -188,14 +188,34 @@ jobs:
           PY
           exit "$exit_code"
 
+      - name: Resolve exact Beauty review queue
+        id: beauty_review_queue
+        if: env.ACTION == 'prepare'
+        env:
+          REQUESTED_QUEUE_ID: ${{ github.event.inputs.queue_id }}
+          CREATED_QUEUE_ID: ${{ steps.beauty_candidate.outputs.queue_id }}
+          CREATED_HAS_CANDIDATE: ${{ steps.beauty_candidate.outputs.has_candidate }}
+        run: |
+          queue_id="$REQUESTED_QUEUE_ID"
+          if [ -z "$queue_id" ] && [ "$CREATED_HAS_CANDIDATE" = "true" ]; then
+            queue_id="$CREATED_QUEUE_ID"
+          fi
+          if [ -n "$queue_id" ]; then
+            echo "has_candidate=true" >> "$GITHUB_OUTPUT"
+            echo "queue_id=$queue_id" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_candidate=false" >> "$GITHUB_OUTPUT"
+            echo "queue_id=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Strict automated Beauty review and READY
-        if: env.ACTION == 'prepare' && steps.beauty_candidate.outputs.has_candidate == 'true'
+        if: env.ACTION == 'prepare' && steps.beauty_review_queue.outputs.has_candidate == 'true'
         env:
           DRY_RUN: "false"
         run: |
           python3 scripts/run_hybrid_ready_pipeline.py \
             --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" \
-            --queue-id "${{ steps.beauty_candidate.outputs.queue_id }}" \
+            --queue-id "${{ steps.beauty_review_queue.outputs.queue_id }}" \
             --max-candidates 1 --approval-mode text --autonomous-low-risk \
             --apply --use-sheets
 
