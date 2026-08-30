@@ -92,6 +92,20 @@ def test_beauty_public_post_is_bounded_to_320_characters() -> None:
     assert "beauty_text_too_long" in result["blocked_reasons"]
 
 
+def test_beauty_public_post_blocks_malformed_te_form() -> None:
+    malformed = (
+        "スキンケアを見直したい時、全部を一度に変えると何が合ったのか分かりにくい🥺\n\n"
+        "まずは使う順番か量のどちらか一つに絞って、過去の記録と比べるてみてほしいな✨🤍"
+    )
+    result = final_public_post_validator(malformed, "beauty_account")
+    assert result["status"] == "BLOCKED"
+    assert "malformed_te_form" in result["blocked_reasons"]
+
+    corrected = malformed.replace("比べるてみて", "比べてみて")
+    corrected_result = final_public_post_validator(corrected, "beauty_account")
+    assert "malformed_te_form" not in corrected_result["blocked_reasons"]
+
+
 def test_beauty_cta_policy_is_ten_percent_and_lightweight() -> None:
     selected = [n for n in range(1, 101) if beauty_cta_allowed_for_sequence(n)]
     assert selected == list(range(10, 101, 10))

@@ -665,6 +665,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("tiktok_shop_prohibited_claim")
     if re.search(r"(?:よ|ね|ます|です)んだよね", public_text):
         reasons.append("malformed_spoken_cadence")
+    if re.search(r"[\u3040-\u30ff\u3400-\u9fff]{1,12}るて(?:みて|みよう|ほしい|ください)", public_text):
+        reasons.append("malformed_te_form")
     if natural < 80:
         reasons.append("naturalness_below_threshold")
     if reader < 80:
