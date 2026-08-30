@@ -251,7 +251,7 @@ def main() -> int:
         fields = {
             "public_post_text": result.public_post_text,
             "generation_policy_json": audit_json,
-            "generated_by": "hybrid_ai_gate_v4",
+            "generated_by": str(queue.get("generated_by") or "hybrid_ai_gate_v4"),
             "validator_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "text_policy_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "account_fit_status": "PASS" if result.status == "PASS" else "BLOCKED",

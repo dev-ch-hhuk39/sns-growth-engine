@@ -312,6 +312,18 @@ def main() -> None:
     assert beauty_review_only.generation == {}
     assert review_only_client.actual_request_count == 2
 
+    reviewed_beauty_queue = {
+        **beauty_prepared,
+        "generated_by": "hybrid_ai_gate_v4",
+        "semantic_voice_status": "PASS",
+        "generation_policy_json": merge_gate_audit("", beauty_review_only),
+    }
+    current, reason = hybrid_ai_gate_current(
+        reviewed_beauty_queue,
+        {**context, "source_text": beauty_text},
+    )
+    assert current is True and reason == "pass"
+
     stale_route_queue = dict(beauty_prepared)
     stale_route_queue["generation_policy_json"] = merge_gate_audit("", beauty_result)
     current, reason = hybrid_ai_gate_current(

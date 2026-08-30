@@ -100,8 +100,8 @@ def decide_route(candidate: Mapping[str, Any]) -> AiRoute:
     if (
         account_id == "beauty_account"
         and generation_mode in beauty_text_modes
-        and _value(candidate, "generated_by") == "prepare_beauty_review_candidates.py"
-        and _value(candidate, "semantic_voice_status").upper() == "PENDING_HYBRID_AI_REVIEW"
+        and _value(candidate, "semantic_voice_status").upper()
+        in {"PENDING_HYBRID_AI_REVIEW", "PASS"}
     ):
         return AiRoute(
             "semantic_review",
