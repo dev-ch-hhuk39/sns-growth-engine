@@ -187,7 +187,8 @@ def main() -> int:
         scoped_client, scoped_full, queue_id="q_text", account_id="night_scout"
     )
     checks.append(("exact text scope excludes unrelated global media inventory",
-                   "media_uploaded_only_if_approved" not in scoped["failed"]
+                   "media_approved_rows_rights_clear" not in scoped["failed"]
+                   and "media_uploaded_only_if_approved" not in scoped["failed"]
                    and scoped["verification_scope"]["status"] == "PASS"))
     scoped_tabs["queue"][0]["media_asset_id"] = "unrelated"
     media_client = _FakeClient(scoped_tabs)

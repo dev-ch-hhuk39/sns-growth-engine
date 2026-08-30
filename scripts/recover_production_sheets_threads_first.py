@@ -1611,7 +1611,11 @@ def scope_verification_to_exact_text_queue(
     failed = list(result.get("failed", []))
     non_applicable: list[str] = []
     if not scope_reasons:
-        non_applicable = ["media_no_unapproved_upload", "media_uploaded_only_if_approved"]
+        non_applicable = [
+            "media_approved_rows_rights_clear",
+            "media_no_unapproved_upload",
+            "media_uploaded_only_if_approved",
+        ]
         failed = [name for name in failed if name not in non_applicable]
     else:
         failed.append("exact_text_queue_scope_invalid")
