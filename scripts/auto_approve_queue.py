@@ -334,14 +334,23 @@ def account_limits_ok(account_id: str, selected_times: dict[str, list[datetime]]
     cooldown = int(rules.get("cooldown_minutes", 180))
     todays = 0
     times: list[datetime] = list(selected_times.get(account_id, []))
+    canonical_queue_ids: set[str] = set()
     for row in queue_rows:
         if str(row.get("account_id", "")) != account_id:
             continue
+        queue_id = str(row.get("queue_id", "")).strip()
+        if queue_id:
+            canonical_queue_ids.add(queue_id)
         at = _parse_dt(row.get("auto_ready_at"))
-        if at:
-            times.append(at)
-            if at.date() == today:
-                todays += 1
+        if not at:
+            continue
+        status = str(row.get("status", "")).strip().upper()
+        if status and status not in {"READY", "AUTO_READY", "PROCESSING", "POSTED", "PUBLISHED"}:
+            continue
+        times.append(at)
+        if at.date() == today:
+            todays += 1
+    counted_log_queue_ids: set[str] = set()
     for log in logs:
         if str(log.get("account_id", "")) != account_id:
             continue
@@ -349,6 +358,12 @@ def account_limits_ok(account_id: str, selected_times: dict[str, list[datetime]]
             continue
         if "auto_ready=true" not in str(log.get("details", "")):
             continue
+        match = re.search(r"(?:^|\s)queue_id=([^\s,]+)", str(log.get("details", "")))
+        queue_id = match.group(1) if match else ""
+        if queue_id and (queue_id in canonical_queue_ids or queue_id in counted_log_queue_ids):
+            continue
+        if queue_id:
+            counted_log_queue_ids.add(queue_id)
         at = _parse_dt(log.get("timestamp"))
         if at:
             times.append(at)
