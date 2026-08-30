@@ -61,6 +61,30 @@ SAFE_TOPIC_FALLBACKS = {
 }
 
 
+def _normalize_beauty_line_layout(text: str, *, max_line_length: int = 36) -> str:
+    """Wrap long generated lines without changing their public wording."""
+    paragraphs = [item.strip() for item in re.split(r"\n\s*\n", str(text or "")) if item.strip()]
+    normalized: list[str] = []
+    for paragraph in paragraphs:
+        lines: list[str] = []
+        for raw_line in paragraph.splitlines():
+            remaining = raw_line.strip()
+            while len(remaining) > max_line_length:
+                break_at = max_line_length
+                for marker in ("、", "，", " "):
+                    candidate = remaining.rfind(marker, max_line_length // 2, max_line_length + 1)
+                    if candidate >= 0:
+                        break_at = candidate + 1
+                        break
+                lines.append(remaining[:break_at].rstrip())
+                remaining = remaining[break_at:].lstrip()
+            if remaining:
+                lines.append(remaining)
+        if lines:
+            normalized.append("\n".join(lines))
+    return "\n\n".join(normalized)
+
+
 def _slot_identity(slot_index: int, now: datetime | None = None) -> tuple[str, str, str]:
     current = (now or datetime.now(JST)).astimezone(JST)
     business_date = current.date().isoformat()
@@ -360,7 +384,9 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
             _prompt(topic, sequence_number, route, route_context, blocked),
             temperature=0.65,
         )
-        text = str(response.get("public_post_text", "")).strip()
+        text = _normalize_beauty_line_layout(
+            str(response.get("public_post_text", "")).strip()
+        )
         if not text:
             reason, retryable = _gemini_failure_reason(response)
             blocked = [reason]
