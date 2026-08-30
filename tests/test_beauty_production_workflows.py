@@ -59,6 +59,19 @@ def test_beauty_workflow_prepares_then_publishes_only_reviewed_ready_rows() -> N
     )
     assert preview_step["if"] == "env.ACTION == 'dry_run'"
     assert text.count("prepare_beauty_review_candidates.py") == 2
+    save_step = next(
+        step for step in data["jobs"]["beauty-production"]["steps"]
+        if step.get("name") == "Save WAITING_REVIEW candidate"
+    )
+    assert save_step["id"] == "beauty_candidate"
+    review_step = next(
+        step for step in data["jobs"]["beauty-production"]["steps"]
+        if step.get("name") == "Strict automated Beauty review and READY"
+    )
+    assert review_step["if"] == (
+        "env.ACTION == 'prepare' && steps.beauty_candidate.outputs.has_candidate == 'true'"
+    )
+    assert '--queue-id "${{ steps.beauty_candidate.outputs.queue_id }}"' in review_step["run"]
 
 
 def test_token_refresh_workflow_includes_beauty_without_logging_token() -> None:

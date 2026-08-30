@@ -158,18 +158,44 @@ jobs:
         run: python3 scripts/prepare_beauty_review_candidates.py --slot-index "$SLOT_INDEX" --dry-run
 
       - name: Save WAITING_REVIEW candidate
+        id: beauty_candidate
         if: env.ACTION == 'prepare'
         env:
           DRY_RUN: "false"
-        run: python3 scripts/prepare_beauty_review_candidates.py --slot-index "$SLOT_INDEX" --apply --confirm-prepare
+        run: |
+          output_file="/tmp/beauty-candidate.json"
+          set +e
+          python3 scripts/prepare_beauty_review_candidates.py \
+            --slot-index "$SLOT_INDEX" --apply --confirm-prepare > "$output_file"
+          exit_code=$?
+          set -e
+          cat "$output_file"
+          python3 - "$output_file" "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              result = json.load(handle)
+          candidate = result.get("candidate") or {}
+          apply_result = result.get("apply_result") or {}
+          status = str(candidate.get("status", "")).upper()
+          queue_id = str(apply_result.get("queue_id") or candidate.get("queue_id") or "")
+          blocked = status in {"BLOCKED", "QUALITY_EXHAUSTED", "SKIPPED"}
+          has_candidate = bool(queue_id and apply_result.get("read_after_write") is True and not blocked)
+          with open(sys.argv[2], "a", encoding="utf-8") as output:
+              output.write(f"has_candidate={'true' if has_candidate else 'false'}\n")
+              output.write(f"queue_id={queue_id if has_candidate else ''}\n")
+          PY
+          exit "$exit_code"
 
       - name: Strict automated Beauty review and READY
-        if: env.ACTION == 'prepare'
+        if: env.ACTION == 'prepare' && steps.beauty_candidate.outputs.has_candidate == 'true'
         env:
           DRY_RUN: "false"
         run: |
           python3 scripts/run_hybrid_ready_pipeline.py \
             --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" \
+            --queue-id "${{ steps.beauty_candidate.outputs.queue_id }}" \
             --max-candidates 1 --approval-mode text --autonomous-low-risk \
             --apply --use-sheets
 
