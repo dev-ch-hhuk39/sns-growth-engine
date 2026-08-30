@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 import importlib.util
+import inspect
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location("auto_approve_queue", ROOT/"scripts/auto_approve_queue.py")
@@ -19,6 +20,7 @@ def main()->int:
     checks={
         "canonical READY counts once": blocked_reason == (False,"daily_ready_cap_reached"),
         "SUPERSEDED approval does not count": allowed_reason == (True,"ok"),
+        "build plan uses canonical queue rows": "account_limits_ok(acct, selected_times, logs, all_queue_rows" in inspect.getsource(mod.build_plan),
     }
     for name,passed in checks.items():
         print(f"  {'PASS' if passed else 'FAIL'} {name}")

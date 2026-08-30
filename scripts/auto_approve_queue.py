@@ -391,7 +391,11 @@ def records(client: Any, logical: str) -> list[dict[str, Any]]:
 
 
 def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, Any], slot_id: str = "", queue_ids: set[str] | None = None) -> dict[str, Any]:
-    queue_rows = client.get_queue_items(status=ELIGIBLE_STATUS)
+    all_queue_rows = records(client, "queue")
+    queue_rows = [
+        row for row in all_queue_rows
+        if str(row.get("status", "")).upper() == ELIGIBLE_STATUS
+    ]
     if account_id != "all":
         queue_rows = [r for r in queue_rows if r.get("account_id") == account_id]
     if slot_id:
@@ -434,7 +438,7 @@ def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, An
             rules=acct_rules,
             source_context=build_source_context(client, q),
         )
-        limit_ok, limit_reason = account_limits_ok(acct, selected_times, logs, queue_rows, acct_rules)
+        limit_ok, limit_reason = account_limits_ok(acct, selected_times, logs, all_queue_rows, acct_rules)
         per_run = len(selected_times.get(acct, [])) < int(acct_rules.get("max_posts_per_run", 1))
         if ev["status"] == "APPROVABLE" and not limit_ok:
             ev["status"] = "REJECTED"; ev["reasons"].append(limit_reason)
