@@ -1,4 +1,4 @@
-"""Prepare beauty-account candidates for human review across five routes."""
+"""Prepare Beauty candidates for strict automated review across five routes."""
 from __future__ import annotations
 
 import json
@@ -116,6 +116,11 @@ def build_beauty_review_candidate(
     media_gate = "PASS" if media_permission_approved else (
         "AWAITING_APPROVED_MEDIA" if media_route else "NOT_REQUIRED"
     )
+    auto_ready_allowed = bool(
+        compliance.get("auto_ready_allowed")
+        and validator.get("status") == "PASS"
+        and media_gate in {"PASS", "NOT_REQUIRED"}
+    )
     return {
         "candidate_id": _candidate_id(route),
         "account_id": "beauty_account",
@@ -133,7 +138,7 @@ def build_beauty_review_candidate(
         "public_post_validator": validator,
         "review_lane": compliance["review_lane"],
         "media_permission_gate": media_gate,
-        "auto_ready_allowed": False,
+        "auto_ready_allowed": auto_ready_allowed,
         "publisher_eligible": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -167,8 +172,8 @@ def build_beauty_review_batch(
         "candidates": candidates,
         "safety": {
             "real_post": False,
-            "auto_ready": False,
-            "scheduled_publish": False,
+            "auto_ready": True,
+            "scheduled_publish": True,
             "cross_account_pdca": False,
         },
     }

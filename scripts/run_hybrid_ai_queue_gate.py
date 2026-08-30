@@ -251,7 +251,7 @@ def main() -> int:
         fields = {
             "public_post_text": result.public_post_text,
             "generation_policy_json": audit_json,
-            "generated_by": "hybrid_ai_gate_v3",
+            "generated_by": "hybrid_ai_gate_v4",
             "validator_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "text_policy_status": "PASS" if result.status == "PASS" else "BLOCKED",
             "account_fit_status": "PASS" if result.status == "PASS" else "BLOCKED",
@@ -271,19 +271,27 @@ def main() -> int:
             "voice_blocked_reasons": json.dumps(voice_evidence.get("reasons", []), ensure_ascii=False),
             "blocked_reason": "" if result.status == "PASS" else blocked_reason,
             "error": "" if result.status == "PASS" else blocked_reason,
+            "provider_status": result.provider_status,
+            "provider_error_type": result.provider_error_type,
+            "provider_http_status": result.provider_http_status,
+            "provider_mode": result.provider_mode,
+            "fallback_mode": result.fallback_mode,
+            "fallback_reason": result.fallback_reason,
             "internal_analysis": json.dumps(
                 {
                     "hybrid_ai_gate": result.status,
                     "route": result.route,
                     "blocked_reasons": result.blocked_reasons,
                     "actual_requests": result.actual_requests,
+                    "provider_mode": result.provider_mode,
+                    "fallback_reason": result.fallback_reason,
                 },
                 ensure_ascii=False,
                 sort_keys=True,
                 separators=(",", ":"),
             ),
-            "caption_provider": os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
-            "caption_provider_version": "hybrid_ai_gate_v3",
+            "caption_provider": str(queue.get("caption_provider") or result.provider_mode),
+            "caption_provider_version": str(queue.get("caption_provider_version") or "hybrid_ai_gate_v4"),
             "updated_at": now_iso(),
         }
         if args.apply:

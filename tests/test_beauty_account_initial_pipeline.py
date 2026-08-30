@@ -36,10 +36,10 @@ def test_beauty_account_contract_matches_owner_brief() -> None:
     assert cfg["posting_schedule"]["daily_target_min"] == 1
     assert cfg["posting_schedule"]["daily_target_max"] == 2
     assert cfg["posting_schedule"]["scheduled_publish_enabled"] is True
-    assert cfg["safety_policy"]["requires_human_review_before_post"] is True
+    assert cfg["safety_policy"]["requires_human_review_before_post"] is False
     assert cfg["safety_policy"]["allow_real_post"] is True
-    assert pipeline["status"] == "review_required_production"
-    assert pipeline["auto_ready_enabled"] is False
+    assert pipeline["status"] == "autonomous_strict_production"
+    assert pipeline["auto_ready_enabled"] is True
     assert pipeline["scheduled_publish_enabled"] is True
     assert pipeline["real_post_enabled"] is True
 
@@ -64,14 +64,15 @@ def test_beauty_voice_and_public_validator_allow_good_copy() -> None:
         assert result["status"] == "PASS", result
         assert result["voice_persona_check"]["status"] == "VOICE_PERSONA_PASS"
         assert result["account_fit_score"] >= 80
-        assert result["requires_human_review"] is True
+        assert result["requires_human_review"] is False
 
 
 def test_beauty_compliance_blocks_claims_and_separates_medical_review() -> None:
     medical = beauty_compliance_validation("美容医療の施術を検討する時は、クリニックで医師に確認する項目を整理してみて。")
-    assert medical["status"] == "REVIEW_REQUIRED"
+    assert medical["status"] == "BLOCKED"
     assert medical["review_lane"] == "BEAUTY_MEDICAL"
     assert medical["medical_review_required"] is True
+    assert medical["requires_human_review"] is False
     blocked = beauty_compliance_validation("この施術なら絶対に治る。今すぐ購入して。")
     assert blocked["status"] == "BLOCKED"
     assert blocked["blocked_reasons"]
@@ -103,9 +104,11 @@ def test_all_five_routes_are_waiting_review_and_never_publishable() -> None:
     assert result["all_public_validators_pass"] is True
     assert result["all_candidates_waiting_review"] is True
     assert all(row["status"] == "WAITING_REVIEW" for row in result["candidates"])
-    assert all(row["auto_ready_allowed"] is False for row in result["candidates"])
+    text_rows = [row for row in result["candidates"] if row["generation_route"] not in {"direct_reference_media", "approved_source_clip"}]
+    assert all(row["auto_ready_allowed"] is True for row in text_rows)
     assert all(row["publisher_eligible"] is False for row in result["candidates"])
     media = [row for row in result["candidates"] if row["generation_route"] in {"direct_reference_media", "approved_source_clip"}]
+    assert all(row["auto_ready_allowed"] is False for row in media)
     assert all(row["media_permission_gate"] == "AWAITING_APPROVED_MEDIA" for row in media)
 
 

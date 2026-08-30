@@ -13,7 +13,7 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
-from accounts.managed_accounts import account_choices, managed_account  # noqa: E402
+from accounts.managed_accounts import account_allows_autonomous_ready, account_choices  # noqa: E402
 
 
 def extract_last_object(text: str) -> dict[str, Any]:
@@ -56,7 +56,7 @@ def execute(
     runner: Callable[..., subprocess.CompletedProcess[str]] = run,
 ) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
-    autonomous = str(managed_account(account_id).get("review_policy", "")) == "autonomous_low_risk"
+    autonomous = account_allows_autonomous_ready(account_id)
     for number in range(1, max_attempts + 1):
         ingest = runner([
             sys.executable,

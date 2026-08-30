@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -26,6 +27,45 @@ class GeminiHttpError(RuntimeError):
         self.operation = ""
         self.model = ""
         self.retryable = status_code in {429, 500, 502, 503, 504}
+
+
+class GeminiProviderUnavailableError(RuntimeError):
+    """Retryable transport failure with redacted, machine-readable evidence."""
+
+    def __init__(self, error_type: str, detail: str = "") -> None:
+        safe_detail = str(detail or "").replace("\n", " ")[:200]
+        super().__init__(f"gemini_provider_unavailable:{error_type}:{safe_detail}")
+        self.status_code = 0
+        self.operation = ""
+        self.model = ""
+        self.retryable = True
+        self.error_type = error_type
+
+
+def retryable_provider_error(exc: BaseException) -> bool:
+    """Return true only for provider availability failures, never content rejects."""
+
+    return bool(
+        isinstance(exc, GeminiProviderUnavailableError)
+        or (isinstance(exc, GeminiHttpError) and exc.retryable)
+    )
+
+
+def provider_error_evidence(exc: BaseException) -> dict[str, Any]:
+    """Build a secret-free provider audit packet for queue persistence."""
+
+    if isinstance(exc, GeminiHttpError):
+        error_type = "RETRYABLE_HTTP" if exc.retryable else "HTTP"
+    else:
+        error_type = str(getattr(exc, "error_type", type(exc).__name__)).upper()
+    return {
+        "provider_status": "UNAVAILABLE" if retryable_provider_error(exc) else "ERROR",
+        "provider_error_type": error_type,
+        "provider_http_status": getattr(exc, "status_code", "") or "",
+        "provider_operation": getattr(exc, "operation", "") or "",
+        "provider_model": getattr(exc, "model", "") or "",
+        "provider_retryable": retryable_provider_error(exc),
+    }
 
 
 def _schema_hash(schema: Mapping[str, Any]) -> str:
@@ -89,7 +129,9 @@ def _default_transport(url: str, body: dict[str, Any], timeout: int) -> dict[str
         detail = exc.read().decode("utf-8", errors="replace")
         raise GeminiHttpError(exc.code, detail) from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError(f"gemini_network_error:{exc.reason}") from exc
+        raise GeminiProviderUnavailableError("TRANSPORT", type(exc.reason).__name__) from exc
+    except (TimeoutError, socket.timeout) as exc:
+        raise GeminiProviderUnavailableError("TIMEOUT", type(exc).__name__) from exc
 
 
 def _extract_json(response: Mapping[str, Any]) -> dict[str, Any]:
@@ -199,9 +241,22 @@ class GeminiHybridClient:
                 last_error = exc
                 if not exc.retryable or attempt >= self.max_attempts:
                     raise
-            except RuntimeError as exc:
+            except GeminiProviderUnavailableError as exc:
+                exc.operation = operation
+                exc.model = model
                 last_error = exc
                 if attempt >= self.max_attempts:
                     raise
+            except (TimeoutError, socket.timeout, ConnectionError) as exc:
+                wrapped = GeminiProviderUnavailableError("TIMEOUT", type(exc).__name__)
+                wrapped.operation = operation
+                wrapped.model = model
+                last_error = wrapped
+                if attempt >= self.max_attempts:
+                    raise wrapped from exc
+            except RuntimeError:
+                # Schema/response failures are not availability failures and
+                # must not be converted into a deterministic PASS.
+                raise
             time.sleep(2)
         raise RuntimeError(f"gemini_request_failed:{last_error}")

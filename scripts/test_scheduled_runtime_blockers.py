@@ -111,7 +111,7 @@ def main() -> int:
     for path in workflow_paths[2:]:
         text = (ROOT / path).read_text(encoding="utf-8")
         assert "Normalize exact" in text
-        assert "exit 2" in text
+        assert "exit 2; fi" not in text
         assert "Runtime activation gate" in text
 
     hybrid = (ROOT / "scripts/run_hybrid_ai_queue_gate.py").read_text(encoding="utf-8")
@@ -119,7 +119,7 @@ def main() -> int:
     assert "SKIPPED_NO_GEMINI_API_KEY" not in hybrid
 
     ready = (ROOT / "scripts/run_hybrid_ready_pipeline.py").read_text(encoding="utf-8")
-    assert 'return 0 if result["status"] == "READY" else 2' in ready
+    assert 'result["status"] in {"READY", "NO_READY_CANDIDATE"}' in ready
 
     print("PASS test_scheduled_runtime_blockers.py")
     return 0

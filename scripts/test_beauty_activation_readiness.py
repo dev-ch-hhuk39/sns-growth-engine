@@ -71,10 +71,10 @@ try:
     from accounts.account_config import load_account_config
     cfg = load_account_config("beauty_account")
     _check("beauty_is_active", cfg.is_active() and not cfg.is_draft_only())
-    _check("beauty_human_review_required", cfg.safety_policy.get("requires_human_review_before_post") is True)
+    _check("beauty_strict_automation", cfg.safety_policy.get("requires_human_review_before_post") is False)
 except FileNotFoundError:
     _check("beauty_is_active", False, "account_config not found")
-    _check("beauty_human_review_required", False)
+    _check("beauty_strict_automation", False)
 
 # 7. 実投稿なし
 _check("no_real_post", True)

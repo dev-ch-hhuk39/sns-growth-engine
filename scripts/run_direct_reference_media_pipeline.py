@@ -1584,10 +1584,8 @@ def dispatch_ready(
     requested_queue_id = str(
         queue_id or ""
     ).strip()
-    autonomous_low_risk = (
-        str(managed_account(account_id).get("review_policy", ""))
-        == "autonomous_low_risk"
-    )
+    from accounts.managed_accounts import account_allows_autonomous_ready
+    autonomous_low_risk = account_allows_autonomous_ready(account_id)
     candidates = [
         row for row in _records(client, "queue")
         if str(row.get("account_id") or row.get("target_account_id") or "") == account_id

@@ -65,7 +65,7 @@ expected_review = {
     "night_scout": "autonomous_low_risk",
     "liver_manager": "autonomous_low_risk",
     "beauty_account":
-        "human_review_all_medical_strict",
+        "autonomous_strict_beauty",
 }
 
 for account_id, review_policy in expected_review.items():
@@ -110,9 +110,11 @@ require('ALLOW_MEDIA_POSTS: "true"' not in liver, "Liver Manager text workflow c
 beauty = content(".github/workflows/beauty-threads-production.yml")
 for cron in ('30 0 * * *', '30 9 * * *', '30 2 * * *', '30 11 * * *'):
     require(f'cron: "{cron}"' in beauty, f"Beauty cron: {cron}")
-require("Save WAITING_REVIEW candidate" in beauty, "Beauty preparation remains human-review gated")
+require("Save WAITING_REVIEW candidate" in beauty, "Beauty preparation staging remains explicit")
 require("select_beauty_scheduled_ready.py" in beauty, "Beauty schedule selects explicit approved READY")
-require("human_approved" in beauty, "Beauty scheduled publication requires human approval")
+require("Strict automated Beauty review and READY" in beauty, "Beauty strict automated READY is connected")
+require("steps.scheduled_queue.outputs.approved == 'true'" in beauty, "Beauty scheduled publication accepts strict approval provenance")
+require("steps.scheduled_queue.outputs.human_approved" not in beauty, "Beauty scheduled path has no human approval dependency")
 require('PUBLISH_ENABLED: "true"' in beauty, "Beauty approved publication can activate")
 require('ALLOW_REAL_THREADS_POST: "true"' in beauty, "Beauty real Threads publisher exists")
 require('ALLOW_REAL_X_POST: "true"' not in beauty, "Beauty X posting stays off")
@@ -165,22 +167,24 @@ require(
     ),
     "Direct autonomous READY requires explicit confirmation",
 )
-require(
-    "matrix.account_id == 'night_scout'"
-    in direct_prepare
-    and
-    "matrix.account_id == 'liver_manager'"
-    in direct_prepare,
-    "Night/Liver Direct Media autonomous READY accounts",
-)
-require(
-    "matrix.account_id == 'beauty_account'"
-    not in direct_prepare,
-    "Beauty excluded from Direct Media autonomous READY",
-)
+require("matrix.account_id == 'night_scout'" not in direct_prepare, "Direct autonomous READY is registry driven")
+require("matrix.account_id == 'beauty_account'" not in direct_prepare, "Beauty uses the common Direct autonomous READY path")
 require("--max-assets\", \"10\"" in content("scripts/run_direct_media_preparation_loop.py"), "whole-parent media bundle cap is 10")
 
-require((ROOT / ".github/workflows/approved-source-clip-preparation.yml").exists(), "Beauty approved-source clip workflow exists")
+clip_prepare = content(".github/workflows/approved-source-clip-preparation.yml")
+require("Hybrid review and strict autonomous READY" in clip_prepare, "approved clips use strict autonomous READY")
+require("--require-human-review" not in clip_prepare, "scheduled approved clips have no human approval dependency")
+
+hybrid_gate = content("scripts/hybrid_ai_gate.py")
+gemini_client = content("scripts/gemini_hybrid_client.py")
+require("deterministic_local_strict" in hybrid_gate, "retryable provider outage has deterministic strict fallback")
+require("retryable_provider_error" in hybrid_gate, "provider failure is separated from content failure")
+require("GeminiProviderUnavailableError" in gemini_client, "timeout and transport outage are typed")
+require("provider_mode" in content("src/sheets_client.py"), "provider and fallback audit columns are persisted")
+
+beauty_policy = content("src/accounts/beauty_policy.py")
+require("beauty_medical_or_high_risk_topic" in beauty_policy, "unsafe Beauty medical content is automatically blocked")
+require("autonomous_strict_beauty" in content("scripts/select_beauty_scheduled_ready.py"), "Beauty selector recognizes formal autonomous policy")
 
 content_pilot = content(
     ".github/workflows/content-pilot-publish.yml"

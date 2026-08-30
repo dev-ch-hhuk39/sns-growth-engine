@@ -62,6 +62,8 @@ def has_guard(value: Any) -> bool:
         "run_autonomous_apply",
         "steps.activation.outputs.allowed",
         "steps.preflight.outputs.window_allowed",
+        "outputs.approved",
+        "activation_approved",
         "human_approved",
     ))
 

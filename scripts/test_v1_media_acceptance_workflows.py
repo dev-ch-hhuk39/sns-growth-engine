@@ -30,9 +30,7 @@ assert "--prepare-only" in clip_prepare
 assert "--prepare-saved-media-queue" in clip_prepare
 assert "run_hybrid_ready_pipeline.py" in clip_prepare
 assert "--autonomous-low-risk" in clip_prepare
-assert "github.event.inputs.account_id != 'beauty_account'" in clip_prepare
-assert "github.event.inputs.account_id == 'beauty_account'" in clip_prepare
-assert "--require-human-review" in clip_prepare
+assert "--require-human-review" not in clip_prepare
 assert "sync_publication_review.py" in clip_prepare
 assert 'ALLOW_TRANSCRIPTION_API: "false"' in clip_prepare
 assert 'ALLOW_REAL_THREADS_POST: "false"' in clip_prepare

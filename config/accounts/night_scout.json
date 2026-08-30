@@ -88,11 +88,11 @@
     "auto_activate_rules": false
   },
   "safety_policy": {
-    "requires_human_review_before_post": true,
+    "requires_human_review_before_post": false,
     "allow_real_post": true,
     "min_publish_score": 85,
     "brand_risk_threshold": 10,
     "activation_source": "managed_accounts_registry",
-    "media_requires_exact_human_approved_queue": true
+    "media_requires_exact_human_approved_queue": false
   }
 }

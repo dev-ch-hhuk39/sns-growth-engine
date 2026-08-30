@@ -65,7 +65,7 @@
       "blocked_contexts": ["B2B_SALES", "NIGHT_WORK", "LIVER_RECRUITMENT"],
       "strict_account_isolation": true,
       "cross_account_learning": false,
-      "medical_topics_require_human_review": true,
+      "medical_topics_auto_blocked": true,
       "tone": "config/beauty_voice_profile.json と config/account_voice_profiles.json#accounts.beauty_account を必須参照",
       "voice_profile_ref": "config/account_voice_profiles.json#accounts.beauty_account",
       "style_fingerprint_ref": "config/beauty_voice_profile.json#style_fingerprint",

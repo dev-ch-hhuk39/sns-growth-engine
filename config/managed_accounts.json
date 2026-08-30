@@ -32,7 +32,7 @@
       "account_config": "config/accounts/beauty_account.json",
       "voice_profile_key": "beauty_account",
       "hybrid_policy_key": "beauty_account",
-      "review_policy": "human_review_all_medical_strict",
+      "review_policy": "autonomous_strict_beauty",
       "credential_prefix": "BEAUTY_ACCOUNT",
       "scheduled_routes": ["new_text_generation", "reference_text_generation", "pdca_text_generation", "direct_reference_media", "approved_source_clip"],
       "route_slots": {"direct_reference_media": "beauty_direct_media_review", "approved_source_clip": "beauty_clip_review"},

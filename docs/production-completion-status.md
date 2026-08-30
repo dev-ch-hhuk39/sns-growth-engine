@@ -1170,3 +1170,22 @@ Post-merge production proof still requires real permalinks and Sheets/metrics re
 | X publish | Intentionally disabled | Out of scope |
 
 `V1_PRODUCTION_COMPLETE` must not be asserted until the bounded six-post media acceptance has real permalink/read-after-write/metrics evidence and scheduled media is activated afterward. Until then the accurate state is code-ready with production acceptance pending.
+
+## 2026-08-30 Strict autonomous V1 code closure
+
+| Area | Current code status | Production boundary |
+|---|---|---|
+| Gemini availability | PASS | Retryable provider outage uses audited deterministic strict fallback; semantic REJECT stays BLOCKED |
+| Night/Liver text | PASS | No per-post approval dependency; exact slot/account/cap/idempotency gates remain |
+| Night/Liver direct and clip | PASS | Common strict READY promotion; rights, permission, provenance, AV and exact queue remain mandatory |
+| Beauty standard content | PASS | `autonomous_strict_beauty`; deterministic and semantic voice evidence required |
+| Beauty medical/high risk | PASS, fail-closed | Always BLOCKED from autonomous publication |
+| Scheduled no-candidate handling | PASS | Green `NO_READY_CANDIDATE`/`NO_POST`; operational failures remain red |
+| Provider/fallback evidence | PASS | Queue and publication review schemas retain redacted audit fields and hashes |
+| X publishing | OFF | Intentionally outside V1 Threads publication scope |
+
+Code verification is `877/877` repository tests, `115/115` V1 audit and
+`504/504` workflow safety checks. This is code closure, not fabricated live
+proof: exact-head GitHub CI, merge, bounded production preparation, publisher
+dry-run and authorized canary permalink/read-after-write/metrics evidence are
+still required before the final completion phrase may be used.

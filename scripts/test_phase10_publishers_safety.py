@@ -70,7 +70,7 @@ def main():
         from src.accounts.account_config import load_account_config
         beauty = load_account_config("beauty_account")
         check("beauty_account is_active", beauty.is_active() is True)
-        check("beauty_account human review", beauty.safety_policy.get("requires_human_review_before_post") is True)
+        check("beauty_account strict automation", beauty.safety_policy.get("requires_human_review_before_post") is False)
     except Exception as e:
         check("beauty_account config load", False, str(e))
 

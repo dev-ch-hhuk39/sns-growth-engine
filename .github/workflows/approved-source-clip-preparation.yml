@@ -128,21 +128,14 @@ jobs:
               handle.write(f"queue_id={queue_id}\n")
               handle.write(f"status={payload.get('status', '')}\n")
           PY
-      - name: Hybrid review and autonomous READY for low-risk accounts
-        if: steps.clip_queue.outputs.queue_id != '' && github.event.inputs.account_id != 'beauty_account'
+      - name: Hybrid review and strict autonomous READY
+        if: steps.clip_queue.outputs.queue_id != ''
         run: |
           python3 scripts/run_hybrid_ready_pipeline.py \
             --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
             --queue-id "${{ steps.clip_queue.outputs.queue_id }}" \
             --max-candidates 1 --approval-mode media --autonomous-low-risk \
             --apply --use-sheets --json-output /tmp/approved-clip-hybrid.json
-      - name: Hybrid review for Beauty human approval
-        if: steps.clip_queue.outputs.queue_id != '' && github.event.inputs.account_id == 'beauty_account'
-        run: |
-          python3 scripts/run_hybrid_ai_queue_gate.py \
-            --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
-            --queue-id "${{ steps.clip_queue.outputs.queue_id }}" \
-            --max-candidates 1 --require-human-review --apply --use-sheets
       - name: Sync exact clip candidate to publication review
         if: steps.clip_queue.outputs.queue_id != ''
         run: |

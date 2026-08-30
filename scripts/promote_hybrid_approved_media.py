@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT), str(ROOT / "src"), str(ROOT / "scripts")]
 
 from config_loader import get_config  # noqa: E402
-from accounts.managed_accounts import account_choices, managed_account  # noqa: E402
+from accounts.managed_accounts import (  # noqa: E402
+    account_allows_autonomous_ready,
+    account_choices,
+    managed_account,
+)
 from hybrid_ai_gate import hybrid_ai_gate_passed  # noqa: E402
 from hybrid_ai_policy import requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
@@ -62,7 +66,7 @@ def build_plan(
         if str(row.get("status", "")).upper() != expected_status:
             continue
         if autonomous_low_risk:
-            if str(managed_account(account_id).get("review_policy", "")) != "autonomous_low_risk":
+            if not account_allows_autonomous_ready(account_id):
                 rejected.append({"queue_id": queue_id, "reasons": "account_requires_human_review"})
                 continue
         elif str(row.get("human_review_decision", "")).upper() != "OK":
@@ -122,16 +126,20 @@ def build_plan(
 
 def apply(client: SheetsClient, result: dict[str, Any], *, autonomous_low_risk: bool = False) -> dict[str, Any]:
     updated: list[str] = []
+    policy = str(managed_account(result["account_id"]).get("review_policy", ""))
+    approval_source = policy if autonomous_low_risk else "human_review"
     for queue_id in result["selected_queue_ids"]:
         client.update_queue_item(
             queue_id,
             status="READY",
             auto_publish="true" if autonomous_low_risk else "false",
+            approval_source=approval_source,
+            approval_policy=policy,
             blocked_reason="",
             error="",
             auto_ready_by="promote_hybrid_approved_media.py",
             auto_ready_reason=(
-                "autonomous_low_risk_hybrid_ai_and_persisted_media_validators_passed"
+                f"{policy}_hybrid_ai_and_persisted_media_validators_passed"
                 if autonomous_low_risk
                 else "human_review_hybrid_ai_and_persisted_media_validators_passed"
             ),
@@ -173,7 +181,7 @@ def main() -> int:
         raise RuntimeError("specify exactly one of --apply or --dry-run")
     if args.apply and not args.confirm_promote:
         raise RuntimeError("--apply requires --confirm-promote")
-    if args.autonomous_low_risk and str(managed_account(args.account_id).get("review_policy", "")) != "autonomous_low_risk":
+    if args.autonomous_low_risk and not account_allows_autonomous_ready(args.account_id):
         raise RuntimeError("autonomous_low_risk_not_allowed_for_account")
     if not args.use_sheets:
         raise RuntimeError("--use-sheets is required")

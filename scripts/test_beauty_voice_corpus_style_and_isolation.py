@@ -197,10 +197,10 @@ def main() -> None:
     assert beauty_policy["cross_account_learning"] is False
 
     pipeline = json.loads((ROOT / "config/beauty_account_pipeline.json").read_text(encoding="utf-8"))
-    assert pipeline["status"] == "review_required_production"
+    assert pipeline["status"] == "autonomous_strict_production"
     assert pipeline["candidate_status"] == "WAITING_REVIEW"
     assert pipeline["emergency_static_fallback_enabled"] is False
-    assert pipeline["auto_ready_enabled"] is False
+    assert pipeline["auto_ready_enabled"] is True
     assert set(pipeline["generation_routes"]) == set(ROUTES)
     assert beauty_production_configured() is True
 
@@ -308,8 +308,9 @@ def main() -> None:
     assert "pdca_internal_learning_exposed_in_public_text" in gate_source
     assert "実測結果、反応理由の仮説、次回に比較する一つの検証を必ず明記" not in gate_source
     workflow = (ROOT / ".github/workflows/beauty-threads-production.yml").read_text(encoding="utf-8")
-    assert "run_hybrid_ai_queue_gate.py --account-id beauty_account" in workflow
-    assert workflow.index("Save WAITING_REVIEW candidate") < workflow.index("Beauty semantic voice review")
+    assert "run_hybrid_ready_pipeline.py" in workflow
+    assert "--account-id beauty_account" in workflow
+    assert workflow.index("Save WAITING_REVIEW candidate") < workflow.index("Strict automated Beauty review and READY")
     assert "ALLOW_REAL_X_POST: \"false\"" in workflow
     print("PASS beauty voice corpus, style fingerprint, routes, isolation, Sheets evidence")
 

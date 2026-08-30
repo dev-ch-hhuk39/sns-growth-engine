@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Select one human-approved Beauty READY row for a scheduled publish slot.
+"""Select one strictly approved Beauty READY row for a scheduled publish slot.
 
 The two existing Beauty publish windows remain the only autonomous Beauty
 publication opportunities.  A human-approved media row may occupy a window;
@@ -27,6 +27,7 @@ MEDIA_SLOTS = {
     "beauty_clip_review",
 }
 MEDIA_OK_STATUSES = {"ATTACHED", "UPLOADED"}
+AUTONOMOUS_APPROVAL_SOURCE = "autonomous_strict_beauty"
 
 
 def _text(value: Any) -> str:
@@ -42,6 +43,24 @@ def _sort_key(row: dict[str, Any]) -> tuple[str, str]:
         _text(row.get("human_reviewed_at") or row.get("created_at") or row.get("updated_at")),
         _text(row.get("queue_id")),
     )
+
+
+def _approval_source(row: dict[str, Any]) -> str:
+    if _text(row.get("human_review_decision")).upper() == "OK":
+        return "human_review"
+    if (
+        _text(row.get("approval_source")) == AUTONOMOUS_APPROVAL_SOURCE
+        and _text(row.get("approval_policy")) == AUTONOMOUS_APPROVAL_SOURCE
+        and _truthy(row.get("auto_publish"))
+        and _text(row.get("auto_ready_by"))
+        and _text(row.get("validator_status")).upper() == "PASS"
+        and _text(row.get("internal_leak_status")).upper() == "PASS"
+        and _text(row.get("account_fit_status")).upper() == "PASS"
+        and _text(row.get("semantic_voice_status")).upper() == "PASS"
+        and _text(row.get("style_fingerprint_status")).upper() in {"PASS", "VOICE_PERSONA_PASS"}
+    ):
+        return AUTONOMOUS_APPROVAL_SOURCE
+    return ""
 
 
 def select_beauty_scheduled_ready(
@@ -66,9 +85,10 @@ def select_beauty_scheduled_ready(
         if _truthy(row.get("excluded_from_activation")):
             continue
 
-        # Beauty is review-required. READY alone is not enough: scheduled
-        # publishing requires the explicit human OK persisted by Review Board.
-        if _text(row.get("human_review_decision")).upper() != "OK":
+        # READY alone is not enough.  The row needs either a real human OK or
+        # the formal strict-automation provenance; the latter never writes a
+        # fake human_review_decision.
+        if not _approval_source(row):
             continue
 
         slot_id = _text(row.get("slot_id"))
@@ -88,9 +108,8 @@ def select_beauty_scheduled_ready(
             continue
         text_rows.append(row)
 
-    # Media cannot auto-ready in Beauty. Giving the oldest explicit human OK
-    # media row first prevents approved inventory from being stranded while
-    # preserving the same two-post-per-day publication windows.
+    # Giving the oldest strictly approved media row first prevents inventory
+    # from being stranded while preserving the same two daily windows.
     if media:
         return sorted(media, key=_sort_key)[0]
     if text_rows:
@@ -126,10 +145,9 @@ def main() -> int:
         or (selected or {}).get("generation_mode")
         or (selected or {}).get("content_type")
     )
-    human_approved = bool(
-        queue_id
-        and _text((selected or {}).get("human_review_decision")).upper() == "OK"
-    )
+    approval_source = _approval_source(selected or {})
+    approved = bool(queue_id and approval_source)
+    human_approved = approval_source == "human_review"
 
     payload = {
         "status": "SELECTED" if queue_id else "NO_READY_QUEUE",
@@ -139,6 +157,8 @@ def main() -> int:
         "selected_queue_id": queue_id,
         "selected_slot_id": selected_slot_id,
         "selected_route": route,
+        "approved": approved,
+        "approval_source": approval_source,
         "human_approved": human_approved,
     }
     print(json.dumps(payload, ensure_ascii=False))
@@ -148,6 +168,8 @@ def main() -> int:
             handle.write(f"queue_id={queue_id}\n")
             handle.write(f"selected_slot_id={selected_slot_id}\n")
             handle.write(f"selected_route={route}\n")
+            handle.write(f"approved={'true' if approved else 'false'}\n")
+            handle.write(f"approval_source={approval_source}\n")
             handle.write(f"human_approved={'true' if human_approved else 'false'}\n")
 
     return 0
