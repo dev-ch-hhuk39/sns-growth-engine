@@ -15,12 +15,13 @@ from generation.source_copyedit import (
 )
 from hybrid_ai_policy import decide_route, requires_hybrid_ai_gate
 from hybrid_ai_source_context import hybrid_ai_source_context_hash
+from gemini_hybrid_client import provider_error_evidence, retryable_provider_error
 from public_post_quality import canonical_voice_profile, canonical_voice_prompt, final_public_post_validator
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_PATH = ROOT / "config/hybrid_ai_account_policies.json"
-GATE_SCHEMA_VERSION = "hybrid_ai_gate_v3"
-PROMPT_VERSION = "hybrid_ai_prompts_v6"
+GATE_SCHEMA_VERSION = "hybrid_ai_gate_v4"
+PROMPT_VERSION = "hybrid_ai_prompts_v7"
 
 GENERIC_TEMPLATE_PHRASES = (
     "確認することは一つ。",
@@ -177,6 +178,12 @@ class GateResult:
     review: dict[str, Any]
     deterministic_validation: dict[str, Any]
     actual_requests: int
+    provider_status: str
+    provider_mode: str
+    provider_error_type: str
+    provider_http_status: str
+    fallback_mode: str
+    fallback_reason: str
 
     def audit(self) -> dict[str, Any]:
         data = asdict(self)
@@ -288,6 +295,19 @@ def hybrid_ai_gate_current(
     status = _text(gate.get("status")).upper()
     if status not in {"PASS", "BLOCKED"}:
         return False, "status_invalid"
+    provider_mode = _text(gate.get("provider_mode"))
+    if provider_mode == "deterministic_local_strict":
+        deterministic = gate.get("deterministic_validation")
+        if not isinstance(deterministic, dict):
+            return False, "deterministic_evidence_missing"
+        if _text(deterministic.get("status")).upper() != status:
+            return False, "deterministic_status_mismatch"
+        if _text(gate.get("provider_status")).upper() != "UNAVAILABLE":
+            return False, "fallback_provider_status_invalid"
+        if not _text(gate.get("fallback_reason")):
+            return False, "fallback_reason_missing"
+    elif provider_mode != "gemini":
+        return False, "provider_mode_invalid"
     return True, status.lower()
 
 
@@ -582,6 +602,12 @@ class HybridAiGate:
         review: dict[str, Any] | None = None,
         deterministic_validation: dict[str, Any] | None = None,
         actual_requests: int = 0,
+        provider_status: str = "AVAILABLE",
+        provider_mode: str = "gemini",
+        provider_error_type: str = "",
+        provider_http_status: str = "",
+        fallback_mode: str = "",
+        fallback_reason: str = "",
     ) -> GateResult:
         return GateResult(
             status=status,
@@ -595,9 +621,179 @@ class HybridAiGate:
             review=review or {},
             deterministic_validation=deterministic_validation or {},
             actual_requests=actual_requests,
+            provider_status=provider_status,
+            provider_mode=provider_mode,
+            provider_error_type=provider_error_type,
+            provider_http_status=str(provider_http_status or ""),
+            fallback_mode=fallback_mode,
+            fallback_reason=fallback_reason,
         )
 
     def evaluate(self, queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> GateResult:
+        """Use Gemini when available and strict local evidence on transient outage."""
+
+        before_requests = int(getattr(self.client, "actual_request_count", 0))
+        try:
+            return self._evaluate_with_provider(queue, source_context)
+        except Exception as exc:
+            if not retryable_provider_error(exc):
+                raise
+            evidence = provider_error_evidence(exc)
+            return self._deterministic_fallback(
+                queue,
+                source_context,
+                evidence=evidence,
+                actual_requests=(
+                    int(getattr(self.client, "actual_request_count", 0))
+                    - before_requests
+                ),
+            )
+
+    def _deterministic_fallback(
+        self,
+        queue: Mapping[str, Any],
+        source_context: Mapping[str, Any],
+        *,
+        evidence: Mapping[str, Any],
+        actual_requests: int,
+    ) -> GateResult:
+        route = decide_route(queue)
+        account_id = _text(queue.get("account_id"))
+        current_text = _text(queue.get("public_post_text"))
+        source_text = _source_text(queue, source_context)
+        initial_hash = hybrid_ai_input_hash(queue)
+        source_hash = hybrid_ai_source_context_hash(source_context)
+        reasons = _preflight(queue, source_context)
+        reasons.extend(_scheduled_text_contract_reasons(queue, current_text))
+        reasons.extend(_hygiene_reasons(current_text))
+
+        public_validation = (
+            validate_source_preserving_public_post(current_text, account_id)
+            if route.route == "external_direct_source_copyedit"
+            else final_public_post_validator(current_text, account_id)
+        )
+        if public_validation.get("status") != "PASS":
+            reasons.extend(str(item) for item in public_validation.get("blocked_reasons", []))
+
+        source_contract: dict[str, Any] = {}
+        if route.route == "external_direct_source_copyedit":
+            source_contract = evaluate_source_copyedit_contract(
+                source_text=source_text,
+                public_post_text=current_text,
+                account_id=account_id,
+                recent_posts=[],
+            )
+            if source_contract.get("status") != "PASS":
+                reasons.extend(str(item) for item in source_contract.get("blocked_reasons", []))
+
+        persisted_statuses = {
+            field: _text(queue.get(field)).upper()
+            for field in ("validator_status", "internal_leak_status", "account_fit_status")
+        }
+        for field, status in persisted_statuses.items():
+            if status and status != "PASS":
+                reasons.append(f"persisted_{field}_not_pass")
+
+        media_validation: dict[str, Any] = {}
+        media_route = route.route in {
+            "external_direct_source_copyedit",
+            "external_direct_transform",
+            "owned_media_transform",
+            "approved_clip_transform",
+        }
+        identity_evidence = {
+            field: _text(source_context.get(field)).upper()
+            for field in (
+                "source_author_identity_status",
+                "source_parent_identity_status",
+                "source_media_parent_status",
+                "source_media_order_status",
+                "provenance_status",
+            )
+        }
+        if media_route:
+            for field in (
+                "source_author_identity_status",
+                "source_parent_identity_status",
+                "provenance_status",
+            ):
+                if identity_evidence.get(field) != "PASS":
+                    reasons.append(f"{field}_not_pass")
+            if route.route in {"external_direct_source_copyedit", "external_direct_transform"}:
+                for field in ("source_media_parent_status", "source_media_order_status"):
+                    if identity_evidence.get(field) != "PASS":
+                        reasons.append(f"{field}_not_pass")
+            media_plan = dict(queue)
+            media_plan["public_post_text"] = current_text
+            media_plan.setdefault("caption_mode", queue.get("transformation_type", "transform"))
+            raw_urls = queue.get("media_urls_json")
+            if raw_urls and not media_plan.get("media_urls"):
+                try:
+                    parsed_urls = json.loads(_text(raw_urls))
+                except json.JSONDecodeError:
+                    parsed_urls = []
+                media_plan["media_urls"] = parsed_urls if isinstance(parsed_urls, list) else []
+            from media_post_validator import validate_media_post
+
+            media_validation = validate_media_post(media_plan)
+            if media_validation.get("status") != "PASS":
+                reasons.extend(str(item) for item in media_validation.get("blocked_reasons", []))
+
+        reasons = sorted(set(reasons))
+        status = "PASS" if not reasons else "BLOCKED"
+        voice = dict(public_validation.get("voice_persona_check", {}))
+        review = {
+            "decision": status,
+            "natural_japanese": "PASS" if status == "PASS" else "FAIL",
+            "source_grounding": "PASS" if not reasons else "FAIL",
+            "account_fit": "PASS" if public_validation.get("account_fit_check", {}).get("status") == "PASS" else "FAIL",
+            "public_safety": "PASS" if public_validation.get("status") == "PASS" else "FAIL",
+            "voice_persona": "PASS" if voice.get("status") == "VOICE_PERSONA_PASS" else "FAIL",
+            "voice_persona_score": int(voice.get("score", 0) or 0),
+            "identity_fit": "PASS" if identity_evidence.get("source_author_identity_status", "PASS") == "PASS" else "FAIL",
+            "interpersonal_distance": "PASS" if status == "PASS" else "FAIL",
+            "register_fit": "PASS" if status == "PASS" else "FAIL",
+            "conversational_naturalness": "PASS" if status == "PASS" else "FAIL",
+            "risk_flags": reasons,
+            "reasons": reasons,
+            "review_provider": "deterministic_local_strict",
+        }
+        deterministic = {
+            "status": status,
+            "preflight": _preflight(queue, source_context),
+            "blocked_reasons": reasons,
+            "public_validation": public_validation,
+            "source_copyedit_contract": source_contract,
+            "persisted_statuses": persisted_statuses,
+            "source_identity": identity_evidence,
+            "media_validation": media_validation,
+        }
+        error_type = _text(evidence.get("provider_error_type"))
+        http_status = _text(evidence.get("provider_http_status"))
+        fallback_reason = (
+            "gemini_retryable_http_unavailable"
+            if error_type == "RETRYABLE_HTTP"
+            else "gemini_transient_transport_unavailable"
+        )
+        return self._result(
+            status=status,
+            route=route.route,
+            public_post_text=current_text,
+            blocked_reasons=reasons,
+            input_hash=initial_hash,
+            source_context_hash=source_hash,
+            review=review,
+            deterministic_validation=deterministic,
+            actual_requests=actual_requests,
+            provider_status="UNAVAILABLE",
+            provider_mode="deterministic_local_strict",
+            provider_error_type=error_type,
+            provider_http_status=http_status,
+            fallback_mode="deterministic_strict",
+            fallback_reason=fallback_reason,
+        )
+
+    def _evaluate_with_provider(self, queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> GateResult:
         route = decide_route(queue)
         account_id = _text(queue.get("account_id"))
         policy = self.policies.get(account_id)

@@ -27,22 +27,12 @@ beauty = Path(
 )
 
 assert (
-    "Promote autonomous low-risk Direct Media to READY"
+    "Promote strict autonomous Direct Media to READY"
     in workflow
 )
 
 assert (
     "promote_autonomous_direct_media_ready.py"
-    in workflow
-)
-
-assert (
-    "matrix.account_id == 'night_scout'"
-    in workflow
-)
-
-assert (
-    "matrix.account_id == 'liver_manager'"
     in workflow
 )
 
@@ -71,15 +61,7 @@ assert (
     in wrapper
 )
 
-assert (
-    '"review_policy"'
-    in wrapper
-)
-
-assert (
-    '"autonomous_low_risk"'
-    in wrapper
-)
+assert "account_allows_autonomous_ready" in wrapper
 
 for token in (
     "rights_not_allowed",
@@ -101,11 +83,12 @@ assert (
     in promoter
 )
 
-assert "human_approved" in beauty
+assert "steps.scheduled_queue.outputs.approved == 'true'" in beauty
+assert "steps.scheduled_queue.outputs.human_approved" not in beauty
 assert "WAITING_REVIEW" in beauty
 
 print(
-    "[PASS] Night/Liver strict Direct Media can auto-promote to READY"
+    "[PASS] all active managed accounts can strictly auto-promote Direct Media"
 )
 
 print(
@@ -113,5 +96,5 @@ print(
 )
 
 print(
-    "[PASS] Beauty remains human-review-only"
+    "[PASS] Beauty uses autonomous_strict_beauty without fake human approval"
 )

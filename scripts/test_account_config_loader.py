@@ -95,14 +95,14 @@ def t_liver_manager_json_valid():
     assert "thread_series_policy" in d
 
 
-def t_beauty_account_json_active_review_required():
+def t_beauty_account_json_active_strict_automation():
     p = os.path.join(_V2_ROOT, "config", "accounts", "beauty_account.json")
     with open(p, encoding="utf-8") as f:
         d = json.load(f)
     assert d["account_id"] == "beauty_account"
     assert d["status"] == "active", f"beauty_account activation後は active。実際: {d['status']}"
     assert d["safety_policy"].get("allow_real_post") is True
-    assert d["safety_policy"].get("requires_human_review_before_post") is True
+    assert d["safety_policy"].get("requires_human_review_before_post") is False
 
 
 def t_beauty_account_forbidden_keywords():
@@ -148,12 +148,12 @@ def t_load_beauty_account_config():
     assert cfg.is_active()
 
 
-def t_beauty_account_allow_real_post_with_review():
+def t_beauty_account_allow_real_post_with_strict_automation():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     cfg = load_account_config("beauty_account")
     assert cfg.safety_policy.get("allow_real_post") is True
-    assert cfg.safety_policy.get("requires_human_review_before_post") is True
+    assert cfg.safety_policy.get("requires_human_review_before_post") is False
 
 
 def t_seeds_forbidden_merge():
@@ -242,12 +242,12 @@ for fn in [
     t_base_template_json_exists,
     t_night_scout_json_valid,
     t_liver_manager_json_valid,
-    t_beauty_account_json_active_review_required,
+    t_beauty_account_json_active_strict_automation,
     t_beauty_account_forbidden_keywords,
     t_load_night_scout_config,
     t_load_liver_manager_config,
     t_load_beauty_account_config,
-    t_beauty_account_allow_real_post_with_review,
+    t_beauty_account_allow_real_post_with_strict_automation,
     t_seeds_forbidden_merge,
     t_get_all_account_ids,
     t_is_draft_only_function,

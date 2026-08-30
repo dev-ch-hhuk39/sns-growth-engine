@@ -93,8 +93,15 @@ def auto_ready_account_ids() -> tuple[str, ...]:
     return tuple(
         account_id
         for account_id in managed_account_ids()
-        if str(managed_account(account_id).get("review_policy", "")) == "autonomous_low_risk"
+        if account_allows_autonomous_ready(account_id)
     )
+
+
+def account_allows_autonomous_ready(account_id: str) -> bool:
+    return str(managed_account(account_id).get("review_policy", "")) in {
+        "autonomous_low_risk",
+        "autonomous_strict_beauty",
+    }
 
 
 def credential_env_names(account_id: str) -> dict[str, str]:

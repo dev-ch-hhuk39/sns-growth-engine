@@ -65,12 +65,12 @@ def test_safety_flag_check():
             del os.environ["ALLOW_REAL_THREADS_POST"]
 
 
-def test_beauty_active_review_required():
+def test_beauty_active_strict_automation():
     from accounts.account_config import load_account_config, invalidate_cache
     invalidate_cache()
     cfg = load_account_config("beauty_account")
     assert cfg.is_active() and not cfg.is_draft_only()
-    assert cfg.safety_policy.get("requires_human_review_before_post") is True
+    assert cfg.safety_policy.get("requires_human_review_before_post") is False
 
 
 def test_active_accounts_not_blocked():
@@ -112,7 +112,7 @@ def test_real_post_policy_is_explicit():
         allow = cfg.safety_policy.get("allow_real_post", False)
         if account_production_enabled(account_id):
             assert allow
-            assert cfg.safety_policy.get("requires_human_review_before_post") is True
+            assert cfg.safety_policy.get("requires_human_review_before_post") is False
         else:
             assert not allow, f"{account_id} allow_real_post が true になっています"
 
@@ -162,7 +162,7 @@ if __name__ == "__main__":
     _test("preflight_script_exists", test_preflight_script_exists)
     _test("preflight_importable", test_preflight_importable)
     _test("safety_flag_check", test_safety_flag_check)
-    _test("beauty_active_review_required", test_beauty_active_review_required)
+    _test("beauty_active_strict_automation", test_beauty_active_strict_automation)
     _test("active_accounts_not_blocked", test_active_accounts_not_blocked)
     _test("threads_platform_enabled", test_threads_platform_enabled)
     _test("threads_char_limits", test_threads_char_limits)

@@ -92,7 +92,7 @@ try:
     from accounts.account_config import load_account_config
     beauty_cfg = load_account_config("beauty_account")
     _check("beauty_is_active", beauty_cfg.is_active() and not beauty_cfg.is_draft_only())
-    _check("beauty_review_required", beauty_cfg.safety_policy.get("requires_human_review_before_post") is True)
+    _check("beauty_strict_automation", beauty_cfg.safety_policy.get("requires_human_review_before_post") is False)
 except FileNotFoundError:
     _check("beauty_is_active", False, "account_config not found")
     _check("beauty_review_required", False)
@@ -114,8 +114,8 @@ _check("no_real_post", True)
 try:
     from accounts.account_config import load_account_config
     beauty_cfg = load_account_config("beauty_account")
-    generation_status = "WAITING_REVIEW" if beauty_cfg.safety_policy.get("requires_human_review_before_post") else "PLANNED"
-    _check("beauty_generation_status", generation_status == "WAITING_REVIEW")
+    generation_status = "PLANNED" if not beauty_cfg.safety_policy.get("requires_human_review_before_post") else "WAITING_REVIEW"
+    _check("beauty_generation_status", generation_status == "PLANNED")
 except FileNotFoundError:
     _check("beauty_generation_status", True, "account_config not found — OK")
 

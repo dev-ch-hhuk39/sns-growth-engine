@@ -81,10 +81,10 @@ def beauty_production_configured() -> bool:
     except (OSError, json.JSONDecodeError):
         return False
     return bool(
-        config.get("status") == "review_required_production"
+        config.get("status") == "autonomous_strict_production"
         and config.get("scheduled_publish_enabled") is True
         and config.get("real_post_enabled") is True
-        and config.get("auto_ready_enabled") is False
+        and config.get("auto_ready_enabled") is True
     )
 
 

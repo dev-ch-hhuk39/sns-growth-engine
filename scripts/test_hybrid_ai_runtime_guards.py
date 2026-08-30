@@ -51,6 +51,8 @@ def main() -> None:
         "schema_version": GATE_SCHEMA_VERSION,
         "prompt_version": PROMPT_VERSION,
         "status": "PASS",
+        "provider_status": "AVAILABLE",
+        "provider_mode": "gemini",
         "input_hash": hybrid_ai_input_hash(queue),
         "source_context_hash": hybrid_ai_source_context_hash(context),
         "route": "new_text_generation",

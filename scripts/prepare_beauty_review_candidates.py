@@ -305,6 +305,8 @@ def _gemini_failure_reason(response: dict) -> tuple[str, bool]:
         return "empty_llm_response", True
     if "http 429" in error:
         return "gemini_rate_limited", True
+    if any(f"http {status}" in error for status in (500, 502, 503, 504)):
+        return "gemini_retryable_server_error", True
     if "http 404" in error:
         return "gemini_model_not_found", False
     if "http 401" in error or "http 403" in error:
@@ -313,7 +315,7 @@ def _gemini_failure_reason(response: dict) -> tuple[str, bool]:
         return "gemini_request_rejected", False
     if "json" in error:
         return "gemini_json_parse_failed", True
-    if "接続" in error or "timeout" in error:
+    if "接続" in error or "timeout" in error or "transport" in error:
         return "gemini_connection_error", True
     if "blockreason" in error:
         return "gemini_safety_blocked", False
@@ -351,6 +353,8 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
     if not os.environ.get("GEMINI_API_KEY", "").strip():
         return {"status": "BLOCKED", "reason": "GEMINI_API_KEY_MISSING"}
     blocked: list[str] = []
+    provider_unavailable_only = True
+    provider_failure_reason = ""
     for attempt in range(1, 6):
         response = call_gemini_json(
             _prompt(topic, sequence_number, route, route_context, blocked),
@@ -360,9 +364,12 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
         if not text:
             reason, retryable = _gemini_failure_reason(response)
             blocked = [reason]
+            provider_failure_reason = reason
             if not retryable:
+                provider_unavailable_only = False
                 break
             continue
+        provider_unavailable_only = False
         candidate = build_beauty_review_candidate(
             route,
             public_post_text=text,
@@ -386,7 +393,8 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
             })
             return candidate
     pipeline = json.loads((ROOT / "config" / "beauty_account_pipeline.json").read_text(encoding="utf-8"))
-    if not bool(pipeline.get("emergency_static_fallback_enabled", False)):
+    transient_provider_fallback = bool(provider_unavailable_only and provider_failure_reason)
+    if not transient_provider_fallback and not bool(pipeline.get("emergency_static_fallback_enabled", False)):
         return {
             "status": "QUALITY_EXHAUSTED",
             "generation_route": route,
@@ -412,6 +420,12 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
             "generation_attempt": "safety_fallback",
             "generation_route": route,
             "route_context": route_context,
+            "provider_status": "UNAVAILABLE" if transient_provider_fallback else "AVAILABLE",
+            "provider_error_type": "RETRYABLE_PROVIDER" if transient_provider_fallback else "",
+            "provider_mode": "deterministic_local_strict" if transient_provider_fallback else "static_emergency",
+            "fallback_mode": "deterministic_strict",
+            "fallback_reason": provider_failure_reason or "configured_emergency_static_fallback",
+            "static_fallback_used": True,
         })
         return fallback
     return {
@@ -457,6 +471,12 @@ def queue_row(candidate: dict) -> dict:
         "style_fingerprint_score": validation["voice_persona_check"]["score"],
         "semantic_voice_status": "PENDING_HYBRID_AI_REVIEW",
         "semantic_voice_score": "",
+        "provider_status": candidate.get("provider_status", "AVAILABLE"),
+        "provider_error_type": candidate.get("provider_error_type", ""),
+        "provider_http_status": candidate.get("provider_http_status", ""),
+        "provider_mode": candidate.get("provider_mode", "gemini"),
+        "fallback_mode": candidate.get("fallback_mode", ""),
+        "fallback_reason": candidate.get("fallback_reason", ""),
         "voice_corpus_status": voice_corpus.get("status", "INSUFFICIENT_CORPUS"),
         "voice_corpus_source_count": voice_corpus.get("source_account_count", 0),
         "voice_corpus_post_count": voice_corpus.get("post_count", 0),

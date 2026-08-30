@@ -79,8 +79,8 @@ def test_beauty_publisher_requires_config_and_dedicated_runtime_gate(monkeypatch
     assert reason == "beauty_production_config_not_enabled"
     config = tmp_path / "beauty.json"
     config.write_text(
-        '{"status":"review_required_production","scheduled_publish_enabled":true,'
-        '"real_post_enabled":true,"auto_ready_enabled":false}',
+        '{"status":"autonomous_strict_production","scheduled_publish_enabled":true,'
+        '"real_post_enabled":true,"auto_ready_enabled":true}',
         encoding="utf-8",
     )
     monkeypatch.setattr(worker, "BEAUTY_PIPELINE_CONFIG", config)

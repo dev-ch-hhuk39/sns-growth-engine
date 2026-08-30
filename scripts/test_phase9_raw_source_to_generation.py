@@ -89,7 +89,7 @@ def main():
     check("ohg status=PLANNED", hyp_result["status"] == "PLANNED")
 
     hyp_beauty = ohg.generate("beauty_account", platform="threads", count=2, mock=True)
-    check("beauty ohg WAITING_REVIEW", hyp_beauty["status"] == "WAITING_REVIEW")
+    check("beauty ohg PLANNED for common strict review", hyp_beauty["status"] == "PLANNED")
 
     # 7. DRY_RUN
     print("\n[7] dry_run=True → DRY_RUN")

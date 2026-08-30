@@ -7939,3 +7939,38 @@ dry-runとbounded canaryを通してからblockを解除する。単なるsource
 - Validation: Direct Media 46/46 PASS; repository scripts 876/876 PASS; pytest 146/146 PASS; autonomous completion audit 100/100 PASS; workflow safety 504/504 PASS; source registry, Ruff fatal rules, compileall, and diff check PASS. Local Mypy was unavailable and must be verified by exact-head GitHub CI.
 - No production Sheets mutation, Cloudinary upload, media download, Threads publish, X publish, or Beauty approval was performed by these local changes.
 - Next: normal PR and exact-head CI, then bounded Liver Direct preparation requiring a real READY queue/read-after-write, Liver publisher dry-run, Night fail-closed preparation, Beauty WAITING_REVIEW preparation, and final schedule/config evidence.
+
+## 2026-08-30 V1 provider-independent strict autonomy
+
+This section supersedes older statements that Beauty or managed-account media
+always requires a per-post human approval.
+
+- Night Scout, Liver Manager and Beauty use the same candidate lifecycle:
+  `WAITING_REVIEW -> Hybrid/deterministic strict review -> READY -> exact queue publish`.
+  The policy provenance is persisted as `approval_source` / `approval_policy`;
+  autonomous approval never writes a fake `human_review_decision`.
+- Gemini remains preferred. HTTP 429/500/502/503/504 and timeout/temporary
+  transport failures are retried within a bound and then use
+  `deterministic_local_strict`. A valid Gemini semantic/persona/safety REJECT
+  is terminal and is never overridden by fallback.
+- The local fallback reruns public text, voice/persona, internal-leak,
+  account-fit, source identity, parent/media order, permission, provenance,
+  claim alignment and media validation. A candidate without sufficient
+  evidence is BLOCKED; the scheduled run may try another candidate.
+- Standard Beauty content can become READY only with
+  `autonomous_strict_beauty` evidence and deterministic plus semantic voice
+  PASS. Beauty medical/high-risk content is BLOCKED and skipped; it does not
+  wait indefinitely for approval.
+- Provider status, redacted provider error type/status, fallback mode/reason,
+  schema/prompt/input/source-context hashes and deterministic evidence are
+  persisted to queue and mirrored to `publication_review`.
+- Empty safe inventory is a normal green `NO_READY_CANDIDATE`/`NO_POST`.
+  Credential, kill-switch, schema, security and ambiguous publish failures
+  remain red. X publishing remains OFF.
+- Local verification: repository regression `877/877 PASS`, autonomous V1
+  completion audit `115/115 PASS`, workflow safety `504/504 PASS`, Ruff fatal
+  rules PASS, compileall PASS and `git diff --check` PASS. Local Mypy was not
+  available and must be verified by exact-head GitHub CI.
+- No production Sheets write, Cloudinary upload or Threads post was performed
+  while implementing this change. Production proof follows only after normal
+  PR merge and bounded account-specific runs.

@@ -25,6 +25,7 @@ from public_post_quality import extract_public_post_text, final_public_post_vali
 from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from accounts.managed_accounts import account_choices, auto_ready_account_ids  # noqa: E402
+from accounts.managed_accounts import managed_account  # noqa: E402
 
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 ALLOWED_ACCOUNTS = set(auto_ready_account_ids())
@@ -476,6 +477,7 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
     bulk_updates: list[tuple[str, dict[str, Any]]] = []
     for r in ready:
         qid = str(r["queue_id"])
+        approval_policy = str(managed_account(str(r["account_id"])).get("review_policy", ""))
         reason = f"AUTO_READY quality={r['quality_score']} safety={r['safety_score']} risk={r['risk_score']}"
         fields = {
             "status": READY_STATUS,
@@ -483,6 +485,9 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
             "auto_ready_reason": reason,
             "auto_ready_score": str(r["score_total"]),
             "auto_ready_at": at,
+            "auto_publish": "true",
+            "approval_source": approval_policy,
+            "approval_policy": approval_policy,
             "quality_score": str(r["quality_score"]),
             "safety_score": str(r["safety_score"]),
             "risk_score": str(r["risk_score"]),
@@ -558,10 +563,6 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--skip-setup", action="store_true", help="Assume Sheets tabs already exist and skip setup_all() to reduce read quota")
     args = parser.parse_args()
-
-    if args.account_id == "beauty_account":
-        print(json.dumps({"status": "BLOCKED", "reason": "beauty_account is never AUTO_READY"}, ensure_ascii=False))
-        return 1
 
     rules = load_rules(args.rules_file)
     if args.use_sheets:

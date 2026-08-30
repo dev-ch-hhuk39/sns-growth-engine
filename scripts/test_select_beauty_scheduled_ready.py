@@ -32,6 +32,22 @@ def row(queue_id: str, *, slot_id: str, status: str = "READY", review: str = "OK
     return value
 
 
+def autonomous(row_value: dict) -> dict:
+    row_value.update({
+        "human_review_decision": "",
+        "approval_source": "autonomous_strict_beauty",
+        "approval_policy": "autonomous_strict_beauty",
+        "auto_publish": "true",
+        "auto_ready_by": "auto_approve_queue.py",
+        "validator_status": "PASS",
+        "internal_leak_status": "PASS",
+        "account_fit_status": "PASS",
+        "semantic_voice_status": "PASS",
+        "style_fingerprint_status": "VOICE_PERSONA_PASS",
+    })
+    return row_value
+
+
 # Explicit human-approved media has priority over the text row in the same
 # scheduled publication opportunity.
 selected = select_beauty_scheduled_ready(
@@ -43,6 +59,15 @@ selected = select_beauty_scheduled_ready(
     business_date_jst="2026-08-26",
 )
 assert selected and selected["queue_id"] == "direct", selected
+
+# Strict autonomous provenance is equally valid and never impersonates a human.
+selected = select_beauty_scheduled_ready(
+    [autonomous(row("auto", slot_id="beauty_1130", review=""))],
+    text_slot_id="beauty_1130",
+    business_date_jst="2026-08-26",
+)
+assert selected and selected["queue_id"] == "auto", selected
+assert selected["human_review_decision"] == ""
 
 # WAITING_REVIEW or a READY row without explicit human OK is never scheduled.
 selected = select_beauty_scheduled_ready(

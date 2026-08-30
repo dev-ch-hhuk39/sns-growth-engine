@@ -37,7 +37,7 @@ def main():
         check(f"{account_id} mock flag", result_mock.get("mock") is True)
 
         is_beauty = account_id == "beauty_account"
-        expected_status = "WAITING_REVIEW" if is_beauty else "PLANNED"
+        expected_status = "PLANNED"
         check(f"{account_id} status={expected_status}", result_mock["status"] == expected_status)
         check(f"{account_id} is_beauty={is_beauty}", result_mock["is_beauty"] == is_beauty)
 

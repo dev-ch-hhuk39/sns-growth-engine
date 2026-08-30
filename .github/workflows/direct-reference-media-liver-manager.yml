@@ -112,15 +112,22 @@ jobs:
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true'
         run: python3 scripts/run_hybrid_ready_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "${{ github.event.inputs.queue_id }}" --max-candidates 1 --approval-mode media --apply --use-sheets --json-output /tmp/hybrid-ready.json
       - name: Select exact autonomous READY candidate
+        id: ready_selection
         if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'
         run: |
           python3 - <<'PY'
           import json
+          import os
           from pathlib import Path
           source = json.loads(Path('/tmp/direct-preflight.json').read_text())
           queue_id = str(source.get('selected_queue_id', ''))
           if source.get('status') != 'DRY_RUN' or not queue_id:
-              raise SystemExit('[NO_POST] no exact autonomous READY direct-media candidate')
+              with Path(os.environ['GITHUB_OUTPUT']).open('a') as handle:
+                  handle.write('has_ready=false\n')
+              print('[NO_POST] no exact autonomous READY direct-media candidate')
+              raise SystemExit(0)
+          with Path(os.environ['GITHUB_OUTPUT']).open('a') as handle:
+              handle.write('has_ready=true\n')
           Path('/tmp/hybrid-ready.json').write_text(json.dumps({
               'status': 'READY',
               'selected_queue_id': queue_id,
@@ -129,7 +136,7 @@ jobs:
           PY
       - name: Resolve scheduled activation gate
         id: activation
-        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'
+        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true' && steps.ready_selection.outputs.has_ready == 'true'
         run: |
           set +e
           python3 scripts/scheduled_publish_activation_gate.py --use-sheets | tee /tmp/activation-gate.json
@@ -147,10 +154,10 @@ jobs:
           echo "allowed=true" >> "$GITHUB_OUTPUT"
       - name: Check free-tier post budget
         id: media_budget
-        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')
+        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.ready_selection.outputs.has_ready == 'true' && steps.activation.outputs.allowed == 'true')
         run: python3 scripts/check_media_resource_budget.py --use-sheets --apply --confirm-resource-usage --enforce --purpose post
       - name: Guard publisher, credentials, and kill switch
-        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')
+        if: (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.ready_selection.outputs.has_ready == 'true' && steps.activation.outputs.allowed == 'true')
         run: |
           python3 - <<'PY'
           import json
@@ -162,7 +169,7 @@ jobs:
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Dispatch one READY direct-media item
-        if: ((github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.activation.outputs.allowed == 'true')) && steps.media_budget.outcome == 'success'
+        if: ((github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_direct_media == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.ready_selection.outputs.has_ready == 'true' && steps.activation.outputs.allowed == 'true')) && steps.media_budget.outcome == 'success'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -176,7 +183,7 @@ jobs:
           ALLOW_CLOUDINARY_UPLOAD: "false"
         run: |
           qid=$(python3 -c "import json; print(json.load(open('/tmp/hybrid-ready.json')).get('selected_queue_id',''))")
-          if [ -z "$qid" ]; then echo "[NO_POST] no AI-approved direct-media candidate"; exit 2; fi
+          if [ -z "$qid" ]; then echo "[NO_POST] no AI-approved direct-media candidate"; exit 0; fi
           python3 scripts/run_direct_reference_media_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --queue-id "$qid" --post-ready --apply --confirm-direct-media --use-sheets
       - name: Health summary
         if: always()

@@ -299,7 +299,9 @@ def main() -> int:
     append_job_summary("Hybrid exact-slot result", result)
     if args.json_output:
         Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
-    return 0 if result["status"] == "READY" else 2
+    # A slot with no safe candidate is a normal fail-closed NO_POST outcome.
+    # Operational errors still return FAILED and make the workflow red.
+    return 0 if result["status"] in {"READY", "NO_READY_CANDIDATE"} else 2
 
 
 if __name__ == "__main__":

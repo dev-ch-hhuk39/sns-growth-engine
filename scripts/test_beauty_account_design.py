@@ -93,7 +93,7 @@ def t_account_config_beauty_strict_safety():
     cfg = load_account_config("beauty_account")
     safety = cfg.safety_policy
     assert safety.get("allow_real_post") is True
-    assert safety.get("requires_human_review_before_post") is True
+    assert safety.get("requires_human_review_before_post") is False
     assert safety.get("draft_only_enforcement") == "DISABLED_AFTER_OWNER_ACTIVATION"
 
 
@@ -126,7 +126,7 @@ def t_beauty_account_real_post_requires_review():
     invalidate_cache()
     cfg = load_account_config("beauty_account")
     assert cfg.safety_policy.get("allow_real_post") is True
-    assert cfg.safety_policy.get("requires_human_review_before_post") is True
+    assert cfg.safety_policy.get("requires_human_review_before_post") is False
 
 
 # --------------------------------------------------------

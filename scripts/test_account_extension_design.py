@@ -172,7 +172,7 @@ def t_account_real_post_policy_is_explicit():
         account_id = str(d.get("account_id", ""))
         if managed.get(account_id, {}).get("production_enabled") is True:
             assert safety.get("allow_real_post") is True
-            assert safety.get("requires_human_review_before_post") is True
+            assert safety.get("requires_human_review_before_post") is False
         else:
             assert safety.get("allow_real_post") is False, \
                 f"{filename}: safety_policy.allow_real_post は false のはず"

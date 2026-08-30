@@ -5,7 +5,7 @@ original_hypothesis_generator.py - Original Hypothesis Post Generator（Phase 10
 新規投稿案を生成する。
 
 LLM呼び出しは dry_run=False + confirm_llm=True の場合のみ。
-beauty_account は WAITING_REVIEW 固定。
+管理アカウントは候補保存後の共通Hybrid審査でREADY判定する。
 実投稿しない。
 """
 from __future__ import annotations
@@ -17,10 +17,10 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from accounts.managed_accounts import managed_account
+    from accounts.managed_accounts import account_allows_autonomous_ready, managed_account
     from accounts.account_config import load_account_config
 except ModuleNotFoundError:  # package imported as src.generation.* in legacy tests
-    from src.accounts.managed_accounts import managed_account
+    from src.accounts.managed_accounts import account_allows_autonomous_ready, managed_account
     from src.accounts.account_config import load_account_config
 
 JST = timezone(timedelta(hours=9))
@@ -120,7 +120,7 @@ class OriginalHypothesisGenerator:
         target_platforms: list[str] | None = None,
     ) -> dict[str, Any]:
         account = managed_account(account_id)
-        requires_review = str(account.get("review_policy", "")) != "autonomous_low_risk"
+        requires_review = not account_allows_autonomous_ready(account_id)
         is_beauty = account_id == "beauty_account"
         status = "WAITING_REVIEW" if requires_review else "PLANNED"
         tone = _account_tone(account_id)
@@ -214,7 +214,7 @@ class OriginalHypothesisGenerator:
                 "platform": platform,
                 "account_id": account_id,
                 **draft,
-                "status": "WAITING_REVIEW" if str(managed_account(account_id).get("review_policy", "")) != "autonomous_low_risk" else "DRAFT",
+                "status": "WAITING_REVIEW" if not account_allows_autonomous_ready(account_id) else "DRAFT",
                 "generation_mode": "original_hypothesis",
                 "safety_checked": True,
             })
@@ -300,7 +300,7 @@ class OriginalHypothesisGenerator:
                 "platform": platform,
                 "account_id": account_id,
                 **draft_content,
-                "status": "WAITING_REVIEW" if str(managed_account(account_id).get("review_policy", "")) != "autonomous_low_risk" else "DRAFT",
+                "status": "WAITING_REVIEW" if not account_allows_autonomous_ready(account_id) else "DRAFT",
                 "generation_mode": "original_hypothesis",
                 "safety_checked": True,
                 "mock": True,

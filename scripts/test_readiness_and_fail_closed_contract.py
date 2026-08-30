@@ -30,7 +30,7 @@ pipeline = (ROOT / "scripts/run_hybrid_ready_pipeline.py").read_text(encoding="u
 assert "scripts/run_hybrid_ai_queue_gate.py" in pipeline
 assert "scripts/promote_hybrid_approved_media.py" in pipeline
 assert "selected_queue_id" in pipeline
-assert 'return 0 if result["status"] == "READY" else 2' in pipeline
+assert 'result["status"] in {"READY", "NO_READY_CANDIDATE"}' in pipeline
 
 for name in (
     "direct-reference-media-night-scout.yml",
@@ -43,7 +43,7 @@ for name in (
     assert "selected_queue_id" in workflow
     assert '--queue-id "$qid"' in workflow
     assert "[NO_POST]" in workflow
-    assert "exit 2" in workflow
+    assert "exit 2; fi" not in workflow
     assert "[SAFE_NO_POST]" not in workflow
 
 print("PASS test_readiness_and_fail_closed_contract.py")

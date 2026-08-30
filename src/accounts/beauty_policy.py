@@ -1,9 +1,4 @@
-"""Beauty-account compliance and review-lane policy.
-
-The beauty account may generate review candidates, but never bypasses human
-review. Medical topics are separated from ordinary beauty content and all
-policy evidence is account scoped.
-"""
+"""Beauty-account compliance for strict autonomous Threads operation."""
 from __future__ import annotations
 
 import re
@@ -138,14 +133,15 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
         blocked_reasons.append("beauty_unverified_product_usage")
 
     requires_medical_review = bool(medical_hits)
-    status = "BLOCKED" if blocked_reasons else (
-        "REVIEW_REQUIRED" if requires_medical_review else "PASS"
-    )
+    if requires_medical_review:
+        blocked_reasons.append("beauty_medical_or_high_risk_topic")
+    blocked_reasons = sorted(set(blocked_reasons))
+    status = "BLOCKED" if blocked_reasons else "PASS"
     return {
         "status": status,
         "account_id": "beauty_account",
         "review_lane": "BEAUTY_MEDICAL" if requires_medical_review else "BEAUTY_STANDARD",
-        "requires_human_review": True,
+        "requires_human_review": False,
         "medical_review_required": requires_medical_review,
         "medical_term_hits": medical_hits,
         "prohibited_claim_hits": prohibited_hits,
@@ -157,5 +153,5 @@ def beauty_compliance_validation(text: str) -> dict[str, Any]:
         "emoji_count": emoji_count,
         "exclamation_count": exclamation_count,
         "blocked_reasons": blocked_reasons,
-        "auto_ready_allowed": False,
+        "auto_ready_allowed": status == "PASS",
     }

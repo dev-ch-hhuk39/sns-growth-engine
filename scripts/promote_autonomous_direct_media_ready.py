@@ -14,8 +14,8 @@ sys.path[:0] = [
 ]
 
 from accounts.managed_accounts import (  # noqa: E402
+    account_allows_autonomous_ready,
     account_choices,
-    managed_account,
 )
 from run_hybrid_ready_pipeline import execute  # noqa: E402
 
@@ -84,19 +84,7 @@ def main() -> int:
             "--use-sheets is required"
         )
 
-    account = managed_account(
-        args.account_id
-    )
-
-    if (
-        str(
-            account.get(
-                "review_policy",
-                "",
-            )
-        )
-        != "autonomous_low_risk"
-    ):
+    if not account_allows_autonomous_ready(args.account_id):
         raise RuntimeError(
             "autonomous_low_risk_not_allowed_for_account"
         )

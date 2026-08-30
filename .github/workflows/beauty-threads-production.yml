@@ -163,16 +163,19 @@ jobs:
           DRY_RUN: "false"
         run: python3 scripts/prepare_beauty_review_candidates.py --slot-index "$SLOT_INDEX" --apply --confirm-prepare
 
-      - name: Beauty semantic voice review
+      - name: Strict automated Beauty review and READY
         if: env.ACTION == 'prepare'
         env:
           DRY_RUN: "false"
-        run: python3 scripts/run_hybrid_ai_queue_gate.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --max-candidates 1 --apply --use-sheets
+        run: |
+          python3 scripts/run_hybrid_ready_pipeline.py \
+            --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" \
+            --max-candidates 1 --approval-mode text --autonomous-low-risk \
+            --apply --use-sheets
 
-      # Scheduled publication keeps the existing two daily windows. It may use
-      # a human-approved media READY row; otherwise it uses today's explicitly
-      # human-approved text READY row for this slot.
-      - name: Select scheduled human-approved Beauty route
+      # Scheduled publication keeps the existing two daily windows and selects
+      # only rows carrying strict automated or explicit human approval evidence.
+      - name: Select scheduled strictly approved Beauty route
         id: scheduled_queue
         if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
         run: |
@@ -183,7 +186,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Strict scheduled Beauty queue and publisher preflight
-        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.scheduled_queue.outputs.human_approved == 'true' && steps.scheduled_queue.outputs.queue_id != ''
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.scheduled_queue.outputs.approved == 'true' && steps.scheduled_queue.outputs.queue_id != ''
         run: |
           python3 scripts/process_threads_queue.py \
             --account-id beauty_account \
@@ -191,8 +194,8 @@ jobs:
             --max-posts 1 \
             --dry-run
 
-      - name: Publish one scheduled human-approved Beauty row
-        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.scheduled_queue.outputs.human_approved == 'true' && steps.scheduled_queue.outputs.queue_id != ''
+      - name: Publish one scheduled strictly approved Beauty row
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.scheduled_queue.outputs.approved == 'true' && steps.scheduled_queue.outputs.queue_id != ''
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -210,8 +213,8 @@ jobs:
             --confirm-real-post
 
       - name: Report no scheduled approved Beauty row
-        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && (steps.scheduled_queue.outputs.queue_id == '' || steps.scheduled_queue.outputs.human_approved != 'true')
-        run: echo "[NO_POST] no explicit human-approved Beauty READY row for this publication window"
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && (steps.scheduled_queue.outputs.queue_id == '' || steps.scheduled_queue.outputs.approved != 'true')
+        run: echo "[NO_POST] no strictly approved Beauty READY row for this publication window"
 
       # Manual text publish preserves the old slot-specific behavior.
       - name: Strict manual Beauty text queue and publisher preflight

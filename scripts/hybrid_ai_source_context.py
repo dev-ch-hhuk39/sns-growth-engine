@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
@@ -23,7 +24,10 @@ SOURCE_HASH_FIELDS = (
     "transcript", "description", "source_text", "use_policy",
     "usage_scope", "reuse_policy", "source_target_account_id",
     "permission_evidence_status", "clip_duration_seconds",
-    "clip_start_seconds", "clip_end_seconds", "read_errors",
+    "clip_start_seconds", "clip_end_seconds", "canonical_source_url",
+    "source_author_identity_status", "source_parent_identity_status",
+    "source_media_parent_status", "source_media_order_status",
+    "provenance_status", "read_errors",
 )
 
 
@@ -141,6 +145,35 @@ def _is_direct_media_route(queue: Mapping[str, Any]) -> bool:
     )
 
 
+def _is_individual_source_url(platform: str, url: str) -> bool:
+    value = _text(url).lower()
+    platform = _text(platform).lower()
+    if platform == "youtube":
+        return bool(re.search(r"(?:watch\?v=|youtu\.be/|/shorts/)[a-z0-9_-]{6,}", value))
+    if platform == "tiktok":
+        return bool(re.search(r"/@[^/]+/video/\d+", value))
+    if platform == "threads":
+        return "/post/" in value
+    if platform == "x":
+        return bool(re.search(r"/status/\d+", value))
+    if platform in {"owned_local", "system_owned"}:
+        return True
+    return False
+
+
+def _ordered_parent_media(rows: list[dict[str, Any]], source_post_id: str) -> tuple[str, str]:
+    if not source_post_id:
+        return "NOT_REQUIRED", "NOT_REQUIRED"
+    children = [row for row in rows if _text(row.get("source_post_id")) == source_post_id]
+    if not children:
+        return "BLOCKED", "BLOCKED"
+    try:
+        indexes = [int(str(row.get("media_index", "")).strip()) for row in children]
+    except ValueError:
+        return "PASS", "BLOCKED"
+    return "PASS", "PASS" if sorted(indexes) == list(range(len(indexes))) else "BLOCKED"
+
+
 def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any]:
     errors: list[str] = []
     source_post_id = _text(queue.get("source_post_id"))
@@ -156,6 +189,13 @@ def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any
     ) if source_post_id else {}
     if source_post_id and not source_post and not errors:
         errors.append("source_posts:record_not_found")
+
+    source_post_media = _read(
+        client,
+        "source_post_media",
+        errors,
+        required=bool(source_post_id),
+    ) if source_post_id else []
 
     clip = _lookup(
         _read(client, "video_clip_candidates", errors, required=bool(clip_candidate_id)),
@@ -207,6 +247,36 @@ def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any
         source_id,
     ) if source_id else {}
     permission_status = _media_permission_status(queue, permission)
+
+    canonical_source_url = _first(
+        source_post.get("canonical_post_url"),
+        source_post.get("individual_post_url"),
+        source_video.get("canonical_video_url"),
+        source_video.get("source_url"),
+        clip.get("canonical_video_url"),
+        queue.get("source_url"),
+    )
+    source_platform = _first(
+        source_post.get("platform"), source_video.get("platform"),
+        source.get("platform"), source.get("source_platform"), queue.get("source_platform"),
+    ).lower()
+    ownership = _first(queue.get("ownership"), queue.get("source_ownership")).lower()
+    owned = ownership in {"owned", "system_owned"} or _text(queue.get("rights_status")).lower() == "owned"
+    parent_identity_status = (
+        "PASS" if owned or _is_individual_source_url(source_platform, canonical_source_url) else "BLOCKED"
+    )
+    author_identity_status = "PASS" if owned or bool(source_id and source) else "BLOCKED"
+    media_parent_status, media_order_status = _ordered_parent_media(source_post_media, source_post_id)
+    if not _is_direct_media_route(queue):
+        media_parent_status = "NOT_REQUIRED"
+        media_order_status = "NOT_REQUIRED"
+    provenance_status = (
+        "PASS"
+        if permission_status in {"APPROVED", "NOT_REQUIRED"}
+        and author_identity_status == "PASS"
+        and parent_identity_status == "PASS"
+        else "BLOCKED"
+    )
 
     original_post_text = _first(
         source_post.get("original_post_text"), source_post.get("original_text"),
@@ -263,6 +333,12 @@ def build_source_context(client: Any, queue: Mapping[str, Any]) -> dict[str, Any
         "reuse_policy": "APPROVED" if permission_status == "APPROVED" else _first(source.get("reuse_policy"), source_post.get("reuse_policy"), reference_post.get("reuse_policy")),
         "source_target_account_id": _target_account(source, source_post, reference_post, source_video, clip, posted_result),
         "permission_evidence_status": permission_status,
+        "canonical_source_url": canonical_source_url,
+        "source_author_identity_status": author_identity_status,
+        "source_parent_identity_status": parent_identity_status,
+        "source_media_parent_status": media_parent_status,
+        "source_media_order_status": media_order_status,
+        "provenance_status": provenance_status,
         "clip_duration_seconds": _first(clip.get("duration_seconds"), clip.get("duration")),
         "clip_start_seconds": _first(clip.get("start_seconds"), clip.get("start_time")),
         "clip_end_seconds": _first(clip.get("end_seconds"), clip.get("end_time")),

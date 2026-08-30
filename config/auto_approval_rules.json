@@ -74,6 +74,12 @@
   },
   "accounts": {
     "night_scout": {},
-    "liver_manager": {}
+    "liver_manager": {},
+    "beauty_account": {
+      "daily_ready_cap": 2,
+      "daily_post_cap": 2,
+      "cooldown_minutes": 360,
+      "required_cta_policy": "optional_light_save_like_follow"
+    }
   }
 }

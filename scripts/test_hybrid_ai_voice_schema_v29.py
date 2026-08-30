@@ -22,7 +22,7 @@ def main() -> int:
     )
     assert "CANONICAL_VOICE_PROFILE" in prompt
     assert "女性TikTok LIVEマネージャー" in prompt
-    assert hybrid_ai_gate.GATE_SCHEMA_VERSION == "hybrid_ai_gate_v3"
+    assert hybrid_ai_gate.GATE_SCHEMA_VERSION == "hybrid_ai_gate_v4"
     print("PASS: Gemini review schema enforces semantic account voice")
     return 0
 

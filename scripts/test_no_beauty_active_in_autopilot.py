@@ -18,7 +18,7 @@ p = subprocess.run(
 )
 checks = {
     "beauty managed dry-run executes": p.returncode == 0,
-    "beauty remains excluded from automatic READY promotion": "beauty_account" not in ALLOWED_ACCOUNTS,
+    "beauty uses strict automatic READY promotion": "beauty_account" in ALLOWED_ACCOUNTS,
 }
 for name, ok in checks.items():
     print(f"  {'PASS' if ok else 'FAIL'} {name}")

@@ -2,7 +2,7 @@
   "account_id": "beauty_account",
   "display_name": "美容アカウント",
   "status": "active",
-  "_status_note": "Beauty Threads production activation approved. Every candidate remains WAITING_REVIEW until explicit human approval; medical content uses its separate mandatory review lane.",
+  "_status_note": "Beauty Threads production activation approved. Standard candidates use strict automated review; medical or high-risk content is blocked and skipped.",
   "platforms": ["threads"],
   "persona": "美容に詳しい、少しお姉さん寄りの女友達。コスメやケアを日常で試しやすい判断基準にして届ける。",
   "target_audience": "美容・コスメが好きな20〜30代女性",
@@ -151,7 +151,7 @@
   "medical_content_policy": {
     "enabled": true,
     "separate_review_lane": true,
-    "requires_human_review": true,
+    "requires_human_review": false,
     "auto_ready_allowed": false,
     "publish_without_human_review": false
   },
@@ -164,7 +164,7 @@
       "approved_source_clip"
     ],
     "default_candidate_status": "WAITING_REVIEW",
-    "auto_ready_allowed": false
+    "auto_ready_allowed": true
   },
   "posting_schedule": {
     "timezone": "Asia/Tokyo",
@@ -184,7 +184,7 @@
     "oauth_status": "GITHUB_ENVIRONMENT_SECRETS"
   },
   "safety_policy": {
-    "requires_human_review_before_post": true,
+    "requires_human_review_before_post": false,
     "allow_real_post": true,
     "min_publish_score": 85,
     "brand_risk_threshold": 20,
