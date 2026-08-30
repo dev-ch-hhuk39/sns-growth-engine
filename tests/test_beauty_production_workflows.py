@@ -196,6 +196,67 @@ def test_beauty_rejected_slot_uses_content_revision_id(monkeypatch) -> None:
     assert rows[candidate["queue_id"]]["status"] == "WAITING_REVIEW"
 
 
+def test_beauty_ready_candidate_with_midword_break_is_superseded(monkeypatch) -> None:
+    import config_loader
+    import sheets_client
+
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    monkeypatch.setenv("GEMINI_API_KEY", "set-for-test")
+    monkeypatch.setattr(prepare, "select_beauty_route", lambda _sequence: "new_text_generation")
+    monkeypatch.setattr(
+        prepare,
+        "load_route_context",
+        lambda _route, _topic="": {
+            "status": "PASS",
+            "source_ids": [],
+            "voice_corpus": {"status": "READY", "source_account_count": 5, "post_count": 50},
+        },
+    )
+    monkeypatch.setattr(
+        prepare,
+        "call_gemini_json",
+        lambda *_args, **_kwargs: {
+            "public_post_text": prepare.SAFE_TOPIC_FALLBACKS[prepare.TOPICS[5]],
+            "primary_topic": prepare.TOPICS[5],
+        },
+    )
+    candidate = prepare.generate_candidate(slot_index=1, sequence_number=1)
+    base_id = candidate["queue_id"]
+    rows = {
+        base_id: {
+            "queue_id": base_id,
+            "account_id": "beauty_account",
+            "status": "READY",
+            "content_hash": "old",
+            "public_post_text": (
+                "サロン選びって写真だけでは迷うよね🥺\n\n"
+                "個人的には普段の髪の手入れが大事だと思\nうんだ💭\n\n"
+                "家での説明があるか確認してみてほしいな🤍"
+            ),
+        }
+    }
+
+    class FakeSheets:
+        def get_queue_item(self, queue_id):
+            return rows.get(queue_id)
+
+        def update_queue_item(self, queue_id, **fields):
+            rows[queue_id].update(fields)
+
+        def append_queue_item(self, row):
+            rows[row["queue_id"]] = dict(row)
+
+    monkeypatch.setattr(config_loader, "get_config", lambda: {"sheet_id": "id", "sa_dict": {}})
+    monkeypatch.setattr(sheets_client, "SheetsClient", lambda *_args, **_kwargs: FakeSheets())
+
+    result = prepare.apply_candidate(candidate)
+    assert result["status"] == "APPLIED"
+    assert result["read_after_write"] is True
+    assert rows[base_id]["status"] == "SUPERSEDED"
+    assert candidate["queue_id"].startswith(f"{base_id}_r_")
+    assert rows[candidate["queue_id"]]["status"] == "WAITING_REVIEW"
+
+
 def test_beauty_prompt_encodes_account_fit_contract() -> None:
     prepare = _load_script("prepare_beauty_review_candidates.py")
     assert all("肌がゆらぐ" not in topic for topic in prepare.TOPICS)
@@ -234,8 +295,12 @@ def test_beauty_generated_line_layout_is_normalized_without_rewriting() -> None:
         "そのほかはいつも通りにして、一週間後に比べてみてほしい🤍"
     )
     normalized = prepare._normalize_beauty_line_layout(text)
-    assert max(len(line) for line in normalized.splitlines()) <= 36
     assert re.sub(r"\s+", "", normalized) == re.sub(r"\s+", "", text)
+    assert "思\nう" not in normalized
+    assert all(
+        len(line) <= 36 or not any(marker in line[:36] for marker in ("、", "，", " "))
+        for line in normalized.splitlines()
+    )
 
 
 def test_beauty_safety_fallbacks_all_pass_public_validator() -> None:

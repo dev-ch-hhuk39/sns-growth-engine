@@ -25,6 +25,7 @@ from generation.beauty_review_pipeline import build_beauty_review_candidate  # n
 from generation.beauty_review_pipeline import select_beauty_route  # noqa: E402
 from generation.beauty_voice import beauty_voice_prompt, build_voice_corpus_summary  # noqa: E402
 from llm_client import call_gemini_json  # noqa: E402
+from public_post_quality import final_public_post_validator  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
 TOPICS = (
@@ -70,12 +71,16 @@ def _normalize_beauty_line_layout(text: str, *, max_line_length: int = 36) -> st
         for raw_line in paragraph.splitlines():
             remaining = raw_line.strip()
             while len(remaining) > max_line_length:
-                break_at = max_line_length
+                break_at = 0
                 for marker in ("、", "，", " "):
-                    candidate = remaining.rfind(marker, max_line_length // 2, max_line_length + 1)
+                    candidate = remaining.rfind(marker, 0, max_line_length + 1)
                     if candidate >= 0:
                         break_at = candidate + 1
                         break
+                if not break_at:
+                    lines.append(remaining)
+                    remaining = ""
+                    break
                 lines.append(remaining[:break_at].rstrip())
                 remaining = remaining[break_at:].lstrip()
             if remaining:
@@ -549,6 +554,27 @@ def apply_candidate(candidate: dict) -> dict:
         if same:
             return {"status": "ALREADY_EXISTS", "queue_id": candidate["queue_id"], "read_after_write": True}
         existing_status = str(existing.get("status", "")).upper()
+        existing_validation = final_public_post_validator(
+            existing.get("public_post_text", ""), "beauty_account"
+        )
+        if (
+            existing_status == "READY"
+            and "unnatural_midword_line_break" in existing_validation.get("blocked_reasons", [])
+        ):
+            client.update_queue_item(
+                candidate["queue_id"],
+                status="SUPERSEDED",
+                blocked_reason="unnatural_midword_line_break",
+                updated_at=datetime.now(JST).isoformat(timespec="seconds"),
+            )
+            superseded = client.get_queue_item(candidate["queue_id"]) or {}
+            if str(superseded.get("status", "")).upper() != "SUPERSEDED":
+                return {
+                    "status": "SUPERSEDE_READ_AFTER_WRITE_FAILED",
+                    "queue_id": candidate["queue_id"],
+                    "read_after_write": False,
+                }
+            existing_status = "SUPERSEDED"
         if not existing_status.startswith(("REJECTED", "SUPERSEDED", "BLOCKED")):
             return {"status": "CONFLICT", "queue_id": candidate["queue_id"], "read_after_write": False}
         candidate["queue_id"] = f"{candidate['queue_id']}_r_{content_hash[:8]}"

@@ -106,6 +106,17 @@ def test_beauty_public_post_blocks_malformed_te_form() -> None:
     assert "malformed_te_form" not in corrected_result["blocked_reasons"]
 
 
+def test_beauty_public_post_blocks_midword_line_break() -> None:
+    text = (
+        "サロン選びって、写真だけでは迷うこともあるよね🥺\n\n"
+        "個人的には、普段の髪の手入れまで聞いてくれるかが大事だと思\nうんだ💭\n\n"
+        "家で再現しやすい説明があるか確認してみてほしいな🤍"
+    )
+    result = final_public_post_validator(text, "beauty_account")
+    assert result["status"] == "BLOCKED"
+    assert "unnatural_midword_line_break" in result["blocked_reasons"]
+
+
 def test_beauty_cta_policy_is_ten_percent_and_lightweight() -> None:
     selected = [n for n in range(1, 101) if beauty_cta_allowed_for_sequence(n)]
     assert selected == list(range(10, 101, 10))
