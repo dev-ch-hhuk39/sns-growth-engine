@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -213,6 +214,18 @@ def test_beauty_prompt_encodes_account_fit_contract() -> None:
         prepare.TOPICS[2], 1, "new_text_generation", {}, ["persona_reader_context_insufficient"]
     )
     assert "自然な文脈で必ず入れ" in retry_prompt
+
+
+def test_beauty_generated_line_layout_is_normalized_without_rewriting() -> None:
+    prepare = _load_script("prepare_beauty_review_candidates.py")
+    text = (
+        "スキンケアって気になるものを一度に試したくなるんだけど、何が合ったのか分からなくなることもあるよね🥺\n\n"
+        "個人的には、まず一つだけ変えて肌の感じをメモするのが結構大事だと思う💭\n\n"
+        "そのほかはいつも通りにして、一週間後に比べてみてほしい🤍"
+    )
+    normalized = prepare._normalize_beauty_line_layout(text)
+    assert max(len(line) for line in normalized.splitlines()) <= 36
+    assert re.sub(r"\s+", "", normalized) == re.sub(r"\s+", "", text)
 
 
 def test_beauty_safety_fallbacks_all_pass_public_validator() -> None:
