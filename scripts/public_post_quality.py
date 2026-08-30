@@ -667,6 +667,8 @@ def final_public_post_validator(text: Any, account_id: str = "") -> dict[str, An
         reasons.append("malformed_spoken_cadence")
     if re.search(r"[\u3040-\u30ff\u3400-\u9fff]{1,12}るて(?:みて|みよう|ほしい|ください)", public_text):
         reasons.append("malformed_te_form")
+    if re.search(r"[\u3400-\u9fff]\n[\u3040-\u309f]", public_text):
+        reasons.append("unnatural_midword_line_break")
     if natural < 80:
         reasons.append("naturalness_below_threshold")
     if reader < 80:
