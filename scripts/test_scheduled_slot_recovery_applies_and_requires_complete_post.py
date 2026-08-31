@@ -14,7 +14,9 @@ assert 'PUBLISH_ENABLED: "true"' in workflow
 assert 'ALLOW_REAL_THREADS_POST: "true"' in workflow
 assert 'ALLOW_REAL_X_POST: "false"' in workflow
 assert "at most one slot per account" in workflow
-assert "allow_media_slot_safe_text_fallback=True" in runner
+assert "allow_media_slot_safe_text_fallback=True" not in runner
+assert "POLICY_SKIPPED_NO_ELIGIBLE_MEDIA" in runner
+assert "SKIPPED_POLICY" in recovery.TERMINAL
 assert '"OPERATIONAL_FAILURE"' in runner
 
 complete = {

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -462,11 +461,14 @@ def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, An
         )
         per_run = len(selected_times.get(acct, [])) < int(acct_rules.get("max_posts_per_run", 1))
         if ev["status"] == "APPROVABLE" and not limit_ok:
-            ev["status"] = "REJECTED"; ev["reasons"].append(limit_reason)
+            ev["status"] = "REJECTED"
+            ev["reasons"].append(limit_reason)
         if ev["status"] == "APPROVABLE" and not per_run:
-            ev["status"] = "REJECTED"; ev["reasons"].append("max_posts_per_run_reached")
+            ev["status"] = "REJECTED"
+            ev["reasons"].append("max_posts_per_run_reached")
         if ev["status"] == "APPROVABLE" and len(approvable) >= global_limit:
-            ev["status"] = "REJECTED"; ev["reasons"].append("max_ready_reached")
+            ev["status"] = "REJECTED"
+            ev["reasons"].append("max_ready_reached")
         evaluated.append(ev)
         if ev["status"] == "APPROVABLE":
             approvable.append(ev)
@@ -528,6 +530,9 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
             "auto_publish": "true",
             "approval_source": approval_policy,
             "approval_policy": approval_policy,
+            "approval_mode": "autonomous_safe",
+            "automated_approved": "true",
+            "human_approved": "false",
             "quality_score": str(r["quality_score"]),
             "safety_score": str(r["safety_score"]),
             "risk_score": str(r["risk_score"]),

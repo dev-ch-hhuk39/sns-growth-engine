@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Maintain one strict READY candidate for each account's next text slot."""
+"""Maintain strict READY candidates for every text slot in the next 24 hours."""
 from __future__ import annotations
 
 import argparse
@@ -39,6 +39,15 @@ def _extract_objects(text: str) -> list[dict[str, Any]]:
 
 
 def next_text_slot(account_id: str, *, now: datetime | None = None) -> dict[str, str]:
+    return future_text_slots(account_id, now=now, horizon_hours=24)[0]
+
+
+def future_text_slots(
+    account_id: str,
+    *,
+    now: datetime | None = None,
+    horizon_hours: int = 24,
+) -> list[dict[str, str]]:
     local = (now or datetime.now(JST)).astimezone(JST)
     choices: list[tuple[datetime, dict[str, str]]] = []
     for offset in (-1, 0, 1, 2):
@@ -51,10 +60,11 @@ def next_text_slot(account_id: str, *, now: datetime | None = None) -> dict[str,
                 hour -= 24
             target = datetime.combine(target_day, time(hour, minute), JST)
             if target >= local + timedelta(minutes=30):
-                choices.append((target, {**slot, "business_date_jst": business_day.isoformat()}))
+                if target <= local + timedelta(hours=horizon_hours):
+                    choices.append((target, {**slot, "business_date_jst": business_day.isoformat()}))
     if not choices:
         raise RuntimeError(f"no_future_text_slot:{account_id}")
-    return min(choices, key=lambda item: item[0])[1]
+    return [slot for _target, slot in sorted(choices, key=lambda item: item[0])]
 
 
 def _ready_exists(rows: list[dict[str, Any]], account_id: str, slot: dict[str, str]) -> bool:
@@ -76,17 +86,8 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     return completed.returncode, payloads[-1] if payloads else {}
 
 
-def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str, Any]:
-    result: dict[str, Any] = {
-        "account_id": account_id,
-        "slot_id": slot["slot_id"],
-        "business_date_jst": slot["business_date_jst"],
-        "post_type": slot["post_type"],
-        "would_post": False,
-    }
-    if not apply:
-        return {**result, "status": "PLAN_ONLY"}
-    generation = [
+def _generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[str, list[str]]]:
+    base = [
         sys.executable,
         "scripts/generate_threads_ideas_from_references.py",
         "--account-id",
@@ -104,16 +105,47 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str
         "--schedule-date-jst",
         str(slot["business_date_jst"]),
     ]
-    if slot["post_type"] == "pdca_text":
-        generation.append("--require-measured-pdca")
-    rc, payload = _run(generation)
-    queue_ids = [
-        str(value)
-        for value in payload.get("effective_queue_ids", payload.get("queue_ids", []))
-        if str(value)
+    if slot["post_type"] != "pdca_text":
+        return [("primary", base)]
+    return [
+        ("measured_pdca", [*base, "--require-measured-pdca"]),
+        (
+            "safe_original_fallback",
+            [
+                *base[: base.index("--post-type") + 1],
+                "original_text",
+                *base[base.index("--post-type") + 2 :],
+            ],
+        ),
     ]
+
+
+def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "account_id": account_id,
+        "slot_id": slot["slot_id"],
+        "business_date_jst": slot["business_date_jst"],
+        "post_type": slot["post_type"],
+        "would_post": False,
+    }
+    if not apply:
+        return {**result, "status": "PLAN_ONLY"}
     attempts: list[dict[str, str]] = []
-    if rc == 0:
+    last_payload: dict[str, Any] = {}
+    for generation_route, generation in _generation_commands(account_id, slot):
+        rc, payload = _run(generation)
+        last_payload = payload
+        queue_ids = [
+            str(value)
+            for value in payload.get("effective_queue_ids", payload.get("queue_ids", []))
+            if str(value)
+        ]
+        attempts.append({
+            "route": generation_route,
+            "status": str(payload.get("status", "")),
+        })
+        if rc != 0:
+            continue
         for queue_id in queue_ids[:3]:
             ready_output = Path(f"/tmp/ready-inventory-{account_id}-{slot['slot_id']}.json")
             command = [
@@ -138,13 +170,23 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str
             review_rc, review = _run(command)
             if ready_output.exists():
                 review = json.loads(ready_output.read_text(encoding="utf-8"))
-            attempts.append({"queue_id": queue_id, "status": str(review.get("status", ""))})
+            attempts.append({
+                "route": generation_route,
+                "queue_id": queue_id,
+                "status": str(review.get("status", "")),
+            })
             if review_rc == 0 and review.get("status") == "READY":
-                return {**result, "status": "READY_REPLENISHED", "queue_id": queue_id, "attempts": attempts}
+                return {
+                    **result,
+                    "status": "READY_REPLENISHED",
+                    "queue_id": queue_id,
+                    "generation_route": generation_route,
+                    "attempts": attempts,
+                }
     return {
         **result,
         "status": "QUALITY_EXHAUSTED",
-        "generation_status": str(payload.get("status", "")),
+        "generation_status": str(last_payload.get("status", "")),
         "attempts": attempts,
     }
 
@@ -172,11 +214,16 @@ def main() -> int:
         queue_rows = [dict(row) for row in read_records_safely(client, "queue")]
     results: list[dict[str, Any]] = []
     for account_id in accounts:
-        slot = next_text_slot(account_id)
-        if _ready_exists(queue_rows, account_id, slot):
-            results.append({"account_id": account_id, "slot_id": slot["slot_id"], "status": "READY_INVENTORY_OK"})
-            continue
-        results.append(replenish(account_id, slot, apply=args.apply))
+        for slot in future_text_slots(account_id):
+            if _ready_exists(queue_rows, account_id, slot):
+                results.append({
+                    "account_id": account_id,
+                    "slot_id": slot["slot_id"],
+                    "business_date_jst": slot["business_date_jst"],
+                    "status": "READY_INVENTORY_OK",
+                })
+                continue
+            results.append(replenish(account_id, slot, apply=args.apply))
     if args.account_id in {"all", "beauty_account"}:
         results.append({
             "account_id": "beauty_account",

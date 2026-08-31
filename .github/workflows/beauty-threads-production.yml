@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "prepare creates WAITING_REVIEW; publish/publish_media processes one human-approved READY row"
+        description: "prepare applies strict review; publish processes one strictly approved READY row"
         required: true
         default: dry_run
         type: choice
@@ -36,7 +36,7 @@ on:
     - cron: "30 0 * * *"
     - cron: "30 9 * * *"
     # One approved READY publication opportunity: 11:30 / 20:30 JST.
-    # Human-approved media may occupy the slot; otherwise today's approved
+    # Rights-valid media may occupy the slot; otherwise today's strictly approved
     # text candidate is used. This preserves the two-post/day Beauty ceiling.
     - cron: "30 2 * * *"
     - cron: "30 11 * * *"

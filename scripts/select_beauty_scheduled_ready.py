@@ -148,6 +148,7 @@ def main() -> int:
     approval_source = _approval_source(selected or {})
     approved = bool(queue_id and approval_source)
     human_approved = approval_source == "human_review"
+    automated_approved = approval_source == AUTONOMOUS_APPROVAL_SOURCE
 
     payload = {
         "status": "SELECTED" if queue_id else "NO_READY_QUEUE",
@@ -159,6 +160,8 @@ def main() -> int:
         "selected_route": route,
         "approved": approved,
         "approval_source": approval_source,
+        "approval_mode": "human_review" if human_approved else "autonomous_safe" if automated_approved else "",
+        "automated_approved": automated_approved,
         "human_approved": human_approved,
     }
     print(json.dumps(payload, ensure_ascii=False))
@@ -170,6 +173,8 @@ def main() -> int:
             handle.write(f"selected_route={route}\n")
             handle.write(f"approved={'true' if approved else 'false'}\n")
             handle.write(f"approval_source={approval_source}\n")
+            handle.write(f"approval_mode={'human_review' if human_approved else 'autonomous_safe' if automated_approved else ''}\n")
+            handle.write(f"automated_approved={'true' if automated_approved else 'false'}\n")
             handle.write(f"human_approved={'true' if human_approved else 'false'}\n")
 
     return 0
