@@ -1203,3 +1203,5 @@ still required before the final completion phrase may be used.
 | Configuration | `autonomous_mode.json` is publication SSOT and contradictions fail closed | Exact merged config used by schedule runs |
 
 The capability matrix now contains 48 production capabilities and is deliberately `UNVERIFIED` until the required live evidence exists. CI, workflow dispatch, dry-run, or historical canary evidence cannot promote these fields. Therefore this release must not be described as fully production-complete until the real-time streak and 168-hour metrics window finish successfully.
+
+GitHub-hosted schedule events were observed starting hours after their nominal cron. Night/Liver correctly skipped outside the +/-15 minute window, but the existing recovery workflow was schedule-dry-run-only. Recovery now applies automatically every 30 minutes for slots overdue by 20 minutes, posts at most one slot per account, and fails visibly unless a complete POSTED result, read-after-write identifiers, permalink, and all three metrics jobs exist.

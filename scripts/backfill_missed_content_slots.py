@@ -19,7 +19,6 @@ from sheets_client import SheetsClient  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
 POSTED = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
-PUBLISH_SUCCEEDED = {"POSTED", "POSTED_SAVE_FAILED"}
 MEDIA_POST_ENV = (
     "PUBLISH_ENABLED",
     "ALLOW_REAL_THREADS_POST",
@@ -67,10 +66,17 @@ def _text_fallback(
     *,
     apply: bool,
     reason: str,
+    allow_media_slot_safe_text_fallback: bool = False,
 ) -> dict[str, Any]:
     from run_slot_text_fallback import build_plan, execute
 
-    plan = build_plan(account_id, str(slot["slot_id"]), reason, apply=apply)
+    plan = build_plan(
+        account_id,
+        str(slot["slot_id"]),
+        reason,
+        apply=apply,
+        allow_media_slot_safe_text_fallback=allow_media_slot_safe_text_fallback,
+    )
     if not apply:
         return {
             "status": "PLAN_ONLY",
@@ -84,7 +90,21 @@ def _text_fallback(
         "path": "text_fallback",
         "reason": reason,
         "actual_post_type": plan.get("actual_post_type", ""),
+        "queue_id": result.get("queue_id", ""),
+        "post_result": result.get("post_result", {}),
     }
+
+
+def _complete_post(row: dict[str, Any]) -> bool:
+    post_result = dict(row.get("post_result") or {})
+    return (
+        str(row.get("status", "")).upper() == "POSTED"
+        and bool(str(post_result.get("result_id", "")).strip())
+        and bool(str(post_result.get("external_post_id", "")).strip())
+        and bool(str(post_result.get("post_url", "")).strip())
+        and int(post_result.get("metrics_collection_job_count", 0) or 0) == 3
+        and not str(post_result.get("warning", "")).strip()
+    )
 
 
 def recover_slot(
@@ -94,7 +114,7 @@ def recover_slot(
     *,
     apply: bool,
 ) -> dict[str, Any]:
-    """Recover READY media first; never replace a media slot with text."""
+    """Recover READY media first, then use an explicit safe text fallback."""
     slot_id = str(slot["slot_id"])
     expected = str(slot.get("expected_post_type", ""))
 
@@ -121,12 +141,17 @@ def recover_slot(
                 "path": "saved_direct_reference_media",
                 "selected_queue_id": posted.get("selected_queue_id", ""),
                 "post_url": (posted.get("post_result") or {}).get("post_url", ""),
+                "post_result": posted.get("post_result", {}),
             }
-        return {
-            "status": "SKIPPED_NO_VALID_MEDIA",
-            "path": "saved_direct_reference_media",
-            "reason": f"direct_media_recovery_{str(preflight.get('reason') or preflight.get('status') or 'unavailable').lower()}",
-        }
+        reason = f"direct_media_recovery_{str(preflight.get('reason') or preflight.get('status') or 'unavailable').lower()}"
+        return _text_fallback(
+            client,
+            account_id,
+            slot,
+            apply=apply,
+            reason=reason,
+            allow_media_slot_safe_text_fallback=True,
+        )
 
     if expected == "approved_source_clip":
         from run_media_production_pipeline import build_plan as build_media_plan, execute as execute_media
@@ -166,15 +191,19 @@ def recover_slot(
                 "path": "saved_approved_source_clip",
                 "selected_clip_candidate_id": posted.get("selected_clip_candidate_id", ""),
                 "post_url": (posted.get("post_result") or {}).get("post_url", ""),
+                "post_result": posted.get("post_result", {}),
             }
         reason = "approved_source_clip_recovery_" + str(
             (media_plan.get("blocked_reasons") or [media_plan.get("status", "unavailable")])[0]
         ).lower()
-        return {
-            "status": "SKIPPED_NO_VALID_MEDIA",
-            "path": "saved_approved_source_clip",
-            "reason": reason,
-        }
+        return _text_fallback(
+            client,
+            account_id,
+            slot,
+            apply=apply,
+            reason=reason,
+            allow_media_slot_safe_text_fallback=True,
+        )
 
     return _text_fallback(client, account_id, slot, apply=apply, reason="missed_text_slot_aftercare")
 
@@ -206,9 +235,17 @@ def main() -> int:
         slot = slots[0]
         recovery = recover_slot(client, account, slot, apply=True)
         result["backfills"].append({"account_id": account, "slot_id": slot["slot_id"], **recovery})
-    result["status"] = "BACKFILLED" if any(row.get("status") in PUBLISH_SUCCEEDED for row in result["backfills"]) else "NO_POST"
+    missing_count = sum(len(slots) for slots in plans.values())
+    completed = [row for row in result["backfills"] if _complete_post(row)]
+    result["status"] = (
+        "NO_ACTION"
+        if missing_count == 0
+        else "BACKFILLED"
+        if len(completed) == len(result["backfills"])
+        else "OPERATIONAL_FAILURE"
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if result["status"] in {"NO_ACTION", "BACKFILLED"} else 1
 
 
 if __name__ == "__main__":
