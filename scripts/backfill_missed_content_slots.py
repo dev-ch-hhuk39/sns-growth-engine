@@ -13,6 +13,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts")); sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
+from autonomous_runtime_config import load_runtime_policy  # noqa: E402
 from content_schedule import load_content_schedule  # noqa: E402
 from content_slot_runs import business_date, existing_slot_row  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
@@ -33,6 +34,23 @@ def _true(value: Any) -> bool:
 
 def _media_post_gates_enabled() -> bool:
     return all(_true(os.environ.get(name)) for name in MEDIA_POST_ENV)
+
+
+def _runtime_activation_gate() -> tuple[bool, list[str]]:
+    autonomous, _ = load_runtime_policy()
+    missing = [
+        key
+        for key in (
+            "autonomous_mode_enabled",
+            "auto_post_enabled",
+            "scheduled_publish_enabled",
+            "production_publish_activation_approved",
+        )
+        if not _true(autonomous.get(key))
+    ]
+    if _true(autonomous.get("kill_switch")):
+        missing.append("kill_switch_must_be_false")
+    return not missing, missing
 
 
 def missing_slots(client: SheetsClient, account_id: str, now: datetime | None = None) -> list[dict[str, Any]]:
@@ -228,6 +246,15 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
     if str(os.environ.get("PUBLISH_ENABLED", "")).lower() not in {"1", "true", "yes"} or str(os.environ.get("ALLOW_REAL_THREADS_POST", "")).lower() not in {"1", "true", "yes"}:
         print(json.dumps({**result, "status": "BLOCKED", "reason": "Threads publishing gates are required"}, ensure_ascii=False, indent=2)); return 1
+    runtime_allowed, runtime_blockers = _runtime_activation_gate()
+    if not runtime_allowed:
+        print(json.dumps({
+            **result,
+            "status": "BLOCKED",
+            "reason": "runtime publication authority is not active",
+            "blocked_reasons": runtime_blockers,
+        }, ensure_ascii=False, indent=2))
+        return 1
     # One late post per account/run; every posting path re-checks slot claims.
     for account, slots in plans.items():
         if not slots:

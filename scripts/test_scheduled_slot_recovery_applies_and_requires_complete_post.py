@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-from backfill_missed_content_slots import _complete_post
+import backfill_missed_content_slots as recovery
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,8 +27,23 @@ complete = {
         "warning": "",
     },
 }
-assert _complete_post(complete)
-assert not _complete_post({**complete, "status": "POSTED_SAVE_FAILED"})
-assert not _complete_post({**complete, "post_result": {**complete["post_result"], "metrics_collection_job_count": 2}})
+assert recovery._complete_post(complete)
+assert not recovery._complete_post({**complete, "status": "POSTED_SAVE_FAILED"})
+assert not recovery._complete_post({**complete, "post_result": {**complete["post_result"], "metrics_collection_job_count": 2}})
+
+original_loader = recovery.load_runtime_policy
+try:
+    recovery.load_runtime_policy = lambda: ({
+        "autonomous_mode_enabled": True,
+        "auto_post_enabled": True,
+        "scheduled_publish_enabled": False,
+        "production_publish_activation_approved": True,
+        "kill_switch": False,
+    }, {})
+    allowed, blockers = recovery._runtime_activation_gate()
+finally:
+    recovery.load_runtime_policy = original_loader
+assert not allowed
+assert blockers == ["scheduled_publish_enabled"]
 
 print("PASS test_scheduled_slot_recovery_applies_and_requires_complete_post.py")
