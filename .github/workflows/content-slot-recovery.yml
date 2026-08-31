@@ -53,7 +53,7 @@ jobs:
       - name: Dry-run missed-slot scan
         run: python3 scripts/backfill_missed_content_slots.py --account-id all --dry-run
       - name: Guard and backfill at most one slot per account
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_recovery == 'true' && github.event.inputs.dry_run_only != 'true'
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_recovery == 'true' && github.event.inputs.dry_run_only != 'true')
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
