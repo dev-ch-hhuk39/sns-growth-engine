@@ -34,6 +34,8 @@
   "allow_video_download": false,
   "allow_video_cut": false,
   "allow_transcription_api": false,
+  "media_operations_delegated": true,
+  "media_execution_authority": "config/media_growth_engine.json",
   "daily_post_cap_per_account": 5,
   "daily_ready_cap_per_account": 8,
   "max_posts_per_run": 1,

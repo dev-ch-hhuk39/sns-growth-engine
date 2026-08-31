@@ -1,10 +1,11 @@
 {
-  "schema_version": 1,
-  "accounts": ["night_scout", "liver_manager"],
+  "schema_version": 2,
+  "accounts": ["night_scout", "liver_manager", "beauty_account"],
   "allowed_states": ["PASS", "FAIL", "BLOCKED", "UNVERIFIED"],
   "production_evidence_required": true,
-  "capabilities": ["original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip", "scheduled_publish", "result_persistence", "metrics", "pdca", "persona"],
+  "capabilities": ["original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip", "scheduled_publish", "result_persistence", "metrics", "pdca", "persona", "ready_inventory_recovery", "scheduled_publish_streak", "metrics_24_72_168", "pdca_measured_feedback", "failure_recovery"],
   "required_evidence": ["verified_at", "evidence_type", "evidence_ref"],
+  "production_evidence_types": ["live_schedule", "live_threads_api", "live_sheets", "live_metrics"],
   "code_evidence": {
     "original_text": ["scripts/generate_threads_ideas_from_references.py", "scripts/public_post_quality.py"],
     "reference_text": ["scripts/generate_threads_ideas_from_references.py", "scripts/public_post_quality.py"],
@@ -12,17 +13,27 @@
     "direct_video": ["scripts/run_direct_reference_media_pipeline.py", "scripts/media_post_validator.py"],
     "direct_carousel": ["scripts/run_direct_reference_media_pipeline.py", "src/publishers/threads_publisher.py"],
     "approved_source_clip": ["scripts/run_media_production_pipeline.py", "scripts/cut_approved_clips.py"],
-    "scheduled_publish": [".github/workflows/autonomous-growth-loop-night-scout.yml", ".github/workflows/autonomous-growth-loop-liver-manager.yml"],
+    "scheduled_publish": [".github/workflows/autonomous-growth-loop-night-scout.yml", ".github/workflows/autonomous-growth-loop-liver-manager.yml", ".github/workflows/beauty-threads-production.yml"],
     "result_persistence": ["scripts/process_threads_queue.py", "scripts/publisher_delivery_contract.py"],
     "metrics": ["scripts/collect_threads_metrics.py", "scripts/metrics_collection_schedule.py"],
     "pdca": ["scripts/run_pdca_cycle.py", "scripts/metrics_pdca_contract.py"],
-    "persona": ["config/post_generation_rules.json", "scripts/public_post_quality.py"]
+    "persona": ["config/post_generation_rules.json", "scripts/public_post_quality.py"],
+    "ready_inventory_recovery": ["scripts/run_scheduled_text_slot_pipeline.py", "scripts/run_slot_text_fallback.py"],
+    "scheduled_publish_streak": [".github/workflows/autonomous-growth-loop-night-scout.yml", ".github/workflows/autonomous-growth-loop-liver-manager.yml", ".github/workflows/beauty-threads-production.yml"],
+    "metrics_24_72_168": ["scripts/process_threads_metric_jobs.py", "scripts/metrics_collection_schedule.py"],
+    "pdca_measured_feedback": ["scripts/generate_threads_ideas_from_references.py", "scripts/metrics_pdca_contract.py"],
+    "failure_recovery": ["scripts/publisher_delivery_contract.py", "scripts/run_scheduled_text_slot_pipeline.py"]
   },
   "constraints": {
     "x_operations": false,
-    "beauty_account_operations": false,
+    "beauty_account_operations": true,
+    "beauty_cross_account_learning": false,
     "media_slot_text_fallback": false,
     "subtitle_burn_in": false,
-    "production_evidence_cannot_be_dry_run": true
+    "production_evidence_cannot_be_dry_run": true,
+    "minimum_consecutive_schedule_runs_per_account": 3,
+    "required_metric_windows_hours": [24, 72, 168],
+    "workflow_dispatch_is_not_schedule_evidence": true,
+    "ci_is_not_production_evidence": true
   }
 }

@@ -582,3 +582,13 @@ then commit and push. It blocks both text and approved-media scheduled posting.
 - `NO_POST_UNKNOWN` is forbidden. Inspect `generation_reason`, `no_post_reason`, and the exact queue row. `GEMINI_RATE_LIMITED` is an external retryable quota state; do not weaken quality gates.
 - Beauty production is active but review-required. Prepare runs at 09:30/18:30 JST; a human-approved READY row for the exact date/slot may publish at 11:30/20:30 JST. AUTO_READY is disabled.
 - Bounded source acquisition saves daily. It never posts or grants media reuse permission; failed providers are DEFERRED while other sources continue.
+
+## 2026-08-31 Three-account autonomous acceptance
+
+- `config/autonomous_mode.json` is the single publication authority. `config/auto_approval_rules.json` may define approval thresholds, but cannot independently enable or disable publication.
+- Night Scout and Liver Manager maintain upcoming text-slot READY inventory every six hours. Beauty uses its account-specific preparation schedule. A slot also runs bounded just-in-time recovery before declaring an operational miss.
+- Low-risk standard content may become READY automatically. Medical/high-risk Beauty content, unknown rights, and policy-risk candidates remain review-only. A held candidate does not block generation of another safe candidate for the slot.
+- A scheduled publisher is successful only when it returns `POSTED`, an external post ID, permalink/result ID, a warning-free Sheets save, and three metrics jobs. A zero process exit code or `NO_POST` is not posting evidence.
+- Approved media slots first exhaust bounded rights-valid inventory. If none exists, an explicitly recorded `original_text` `POSTED_FALLBACK` may fill the content slot; it never counts as direct-media or clip capability proof. Ambiguous publish results never trigger fallback or retry.
+- Operational misses such as `NO_READY_QUEUE`, generation exhaustion, schema errors, and unverified publisher results fail the workflow. Policy skips outside the publish window remain safe skips.
+- Production acceptance requires three consecutive real `schedule` events per account plus 24h/72h/168h measured metrics and proof that those result IDs were inputs to same-account PDCA. Manual dispatch and CI are excluded from that evidence.

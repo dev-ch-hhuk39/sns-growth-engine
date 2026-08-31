@@ -10,9 +10,11 @@ RULES = ROOT / "config/auto_approval_rules.json"
 
 
 def main() -> int:
-    defaults = json.loads(RULES.read_text(encoding="utf-8")).get("defaults", {})
+    rules = json.loads(RULES.read_text(encoding="utf-8"))
+    defaults = rules.get("defaults", {})
     checks = [
-        ("auto post disabled", defaults.get("auto_post_enabled") is False),
+        ("approval rules do not own auto post", "auto_post_enabled" not in defaults),
+        ("autonomous mode is authority", rules.get("publication_control", {}).get("authority") == "config/autonomous_mode.json"),
         ("daily post cap five", int(defaults.get("daily_post_cap", 0)) == 5),
         ("cooldown 90", int(defaults.get("cooldown_minutes", 0)) == 90),
         ("max posts one", int(defaults.get("max_posts_per_run", 0)) == 1),

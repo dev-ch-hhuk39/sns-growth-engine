@@ -16,6 +16,32 @@ def _load(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _production_evidence_errors(config: dict[str, Any], capability: str, evidence: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if evidence.get("evidence_type") not in set(config.get("production_evidence_types", [])):
+        errors.append("production_evidence_type")
+    if capability == "scheduled_publish_streak":
+        runs = evidence.get("schedule_runs", [])
+        required = int(config.get("constraints", {}).get("minimum_consecutive_schedule_runs_per_account", 3))
+        if not isinstance(runs, list) or len(runs) < required:
+            errors.append("consecutive_schedule_runs")
+        elif any(not isinstance(row, dict) or row.get("event_name") != "schedule" for row in runs[-required:]):
+            errors.append("schedule_event_only")
+    elif capability == "metrics_24_72_168":
+        windows = evidence.get("metric_windows", {})
+        measured = {
+            int(key)
+            for key, value in windows.items()
+            if str(value.get("status") if isinstance(value, dict) else value).upper() == "MEASURED"
+        }
+        required = {int(value) for value in config.get("constraints", {}).get("required_metric_windows_hours", [])}
+        if not required.issubset(measured):
+            errors.append("measured_metric_windows")
+    elif capability == "pdca_measured_feedback" and not evidence.get("metric_input_refs"):
+        errors.append("metric_input_refs")
+    return errors
+
+
 def evaluate(*, config_path: Path = CONFIG, status_path: Path = STATUS) -> dict[str, Any]:
     config = _load(config_path)
     status = _load(status_path)
@@ -36,6 +62,7 @@ def evaluate(*, config_path: Path = CONFIG, status_path: Path = STATUS) -> dict[
             state = str(row.get("state", "UNVERIFIED"))
             evidence = row.get("evidence", {}) if isinstance(row.get("evidence"), dict) else {}
             missing = [key for key in config["required_evidence"] if not evidence.get(key)]
+            missing.extend(_production_evidence_errors(config, capability, evidence))
             if state != "PASS" or missing:
                 failures.append({"account_id": account_id, "capability": capability, "state": state, "missing_evidence": ",".join(missing)})
             else:

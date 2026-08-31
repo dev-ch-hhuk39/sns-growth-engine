@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import os
 from typing import Any
 
 from content_schedule import slot_by_id
@@ -104,6 +105,9 @@ def build_slot_run(
         "publish_attempt_id": "",
         "actual_generation_mode": "",
         "metrics_result_id": "",
+        "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
+        "workflow_run_id": os.environ.get("GITHUB_RUN_ID", ""),
+        "workflow_name": os.environ.get("GITHUB_WORKFLOW", "local"),
         "created_at": created,
         "updated_at": created,
     }

@@ -35,11 +35,20 @@ def _true(value: Any) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes"}
 
 
-def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attempt: int = 1) -> dict[str, Any]:
+def build_plan(
+    account_id: str,
+    slot_id: str,
+    reason: str,
+    *,
+    apply: bool,
+    attempt: int = 1,
+    allow_media_slot_safe_text_fallback: bool = False,
+) -> dict[str, Any]:
     slot = slot_by_id(account_id, slot_id)
     if not slot:
         return {"status": "BLOCKED", "blocked_reasons": ["unknown_content_slot"]}
-    if slot["post_type"] in {"direct_reference_media", "approved_source_clip"}:
+    is_media_slot = slot["post_type"] in {"direct_reference_media", "approved_source_clip"}
+    if is_media_slot and not allow_media_slot_safe_text_fallback:
         return {
             "status": "SKIPPED_NO_VALID_MEDIA",
             "account_id": account_id,
@@ -57,18 +66,27 @@ def build_plan(account_id: str, slot_id: str, reason: str, *, apply: bool, attem
     generated = generate_production_post(
         account_id,
         batch_id=f"slot_fallback_{schedule_date}_{slot_id}",
-        content_type=str(slot["post_type"]),
+        content_type="original_text" if is_media_slot else str(slot["post_type"]),
         attempt=index,
     )
     text = str(generated.get("public_post_text", ""))
     validation = final_public_post_validator(text, account_id)
+    if validation["status"] != "PASS" and attempt < MAX_FALLBACK_VARIANTS:
+        return build_plan(
+            account_id,
+            slot_id,
+            reason,
+            apply=apply,
+            attempt=attempt + 1,
+            allow_media_slot_safe_text_fallback=allow_media_slot_safe_text_fallback,
+        )
     return {
         "status": "WILL_APPLY" if apply and validation["status"] == "PASS" else "PLAN_ONLY" if validation["status"] == "PASS" else "BLOCKED",
         "account_id": account_id,
         "slot_id": slot_id,
         "expected_post_type": slot["post_type"],
-        "actual_post_type": slot["post_type"],
-        "fallback_level": 1,
+        "actual_post_type": "original_text" if is_media_slot else slot["post_type"],
+        "fallback_level": 2 if is_media_slot else 1,
         "fallback_reason": reason,
         "schedule_date_jst": schedule_date,
         "variant_attempt": attempt,
@@ -146,6 +164,7 @@ def execute(plan: dict[str, Any], client: SheetsClient, *, started: dict[str, An
                     plan["fallback_reason"],
                     apply=True,
                     attempt=int(plan["variant_attempt"]) + 1,
+                    allow_media_slot_safe_text_fallback=plan["expected_post_type"] in {"direct_reference_media", "approved_source_clip"},
                 ),
                 client,
                 started=started,
@@ -159,7 +178,14 @@ def execute(plan: dict[str, Any], client: SheetsClient, *, started: dict[str, An
     # variants instead of leaving a scheduled slot empty.
     if str(result.get("status", "")) == "DUPLICATE_BLOCKED" and int(plan["variant_attempt"]) < MAX_FALLBACK_VARIANTS:
         return execute(
-            build_plan(account_id, slot_id, plan["fallback_reason"], apply=True, attempt=int(plan["variant_attempt"]) + 1),
+            build_plan(
+                account_id,
+                slot_id,
+                plan["fallback_reason"],
+                apply=True,
+                attempt=int(plan["variant_attempt"]) + 1,
+                allow_media_slot_safe_text_fallback=plan["expected_post_type"] in {"direct_reference_media", "approved_source_clip"},
+            ),
             client,
             started=started,
         )
@@ -188,12 +214,19 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-slot-fallback", action="store_true")
+    parser.add_argument("--allow-media-slot-safe-text-fallback", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
     args = parser.parse_args()
     if args.apply and not args.confirm_slot_fallback:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["--apply requires --confirm-slot-fallback"]}, ensure_ascii=False))
         return 1
-    plan = build_plan(args.account_id, args.slot_id, args.reason, apply=args.apply)
+    plan = build_plan(
+        args.account_id,
+        args.slot_id,
+        args.reason,
+        apply=args.apply,
+        allow_media_slot_safe_text_fallback=args.allow_media_slot_safe_text_fallback,
+    )
     if args.apply:
         if not args.use_sheets:
             plan = {**plan, "status": "BLOCKED", "blocked_reasons": ["--use-sheets required"]}
@@ -203,6 +236,17 @@ def main() -> int:
             cfg = get_config()
             plan = execute(plan, SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False))
     print(json.dumps(plan, ensure_ascii=False, indent=2))
+    if args.apply:
+        post_result = dict(plan.get("post_result") or {})
+        complete = (
+            str(plan.get("status", "")).upper() == "POSTED"
+            and bool(str(post_result.get("result_id", "")).strip())
+            and bool(str(post_result.get("external_post_id", "")).strip())
+            and bool(str(post_result.get("post_url", "")).strip())
+            and int(post_result.get("metrics_collection_job_count", 0) or 0) == 3
+            and not str(post_result.get("warning", "")).strip()
+        )
+        return 0 if complete else 1
     return 1 if plan.get("status") in {"BLOCKED", "FAILED"} else 0
 
 

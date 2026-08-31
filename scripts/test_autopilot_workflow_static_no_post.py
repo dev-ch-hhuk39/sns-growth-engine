@@ -20,7 +20,7 @@ def main() -> int:
         ("x false", 'ALLOW_REAL_X_POST: "false"' in src),
         ("cloudinary false", 'ALLOW_CLOUDINARY_UPLOAD: "false"' in src),
         ("transcription false", 'ALLOW_TRANSCRIPTION_API: "false"' in src),
-        ("no beauty option", "beauty_account" not in src),
+        ("three-account inventory", "beauty_account" in src),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

@@ -263,8 +263,9 @@ wrong_route = _scoped_text_decision(
     account_id="night_scout",
     post_type="pdca_text",
 )
-assert wrong_route["status"] == "BLOCKED"
-assert "scoped_canary_source_integrity_incomplete" in wrong_route["blocked_reasons"]
+assert wrong_route["status"] == "ALLOW"
+assert wrong_route["historic_route_evidence_status"] == "NOT_YET_VERIFIED"
+assert wrong_route["blocked_reasons"] == []
 
 print(
     "PASS "

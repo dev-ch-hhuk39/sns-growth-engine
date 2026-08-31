@@ -179,10 +179,24 @@ def main() -> None:
                     cfg = get_config_partial()
                 sheets = make_client(cfg, dry_run=False)
                 sheets.append_row("pdca_runs", {
-                    "pdca_run_id": result["pdca_run_id"],
+                    "run_id": result["pdca_run_id"],
                     "account_id": account_id,
                     "platform": platform,
+                    "days": args.days,
+                    "total_results": result["analysis"]["total_results"],
                     "suggestion_count": result["suggestion_count"],
+                    "next_jobs_count": result["next_jobs_count"],
+                    "metrics_status": input_summary["metrics_status"],
+                    "measured_result_count": input_summary["measured_result_count"],
+                    "known_metric_value_count": input_summary["known_metric_value_count"],
+                    "metric_input_refs_json": json.dumps(
+                        [
+                            str(row.get("result_id", ""))
+                            for row in results_to_analyze
+                            if str(row.get("result_id", ""))
+                        ],
+                        ensure_ascii=False,
+                    ),
                     "created_at": result["created_at"],
                 })
                 print("  [OK] pdca_runs 書き込み完了")

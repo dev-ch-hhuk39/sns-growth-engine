@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "passing_status": "PASS",
   "failing_statuses": [
     "FAIL",
@@ -66,6 +66,17 @@
     {"id": "metrics_lifecycle", "category": "completion", "requires": ["initial_collection", "plus_24h_collection", "plus_72h_collection", "unavailable_not_zero"]},
     {"id": "pdca_uses_actual_metrics", "category": "completion", "requires": ["actual_metric_input", "suggestion_evidence", "no_fabricated_metric_test"]},
     {"id": "production_repair_completion", "category": "completion", "requires": ["repair_plan", "before_after_verifier", "audit_trail"]},
-    {"id": "dual_account_canary_eight_posts", "category": "completion", "requires": ["night_canary_set", "liver_canary_set", "canary_stop_policy"]}
+    {"id": "dual_account_canary_eight_posts", "category": "completion", "requires": ["night_canary_set", "liver_canary_set", "canary_stop_policy"]},
+
+    {"id": "beauty_account_production_paths", "category": "beauty_account", "requires": ["source_isolation", "persona_validation", "scheduled_publish_evidence", "result_persistence_evidence"]},
+    {"id": "three_account_capability_matrix", "category": "production_completion", "requires": ["matrix_path", "matrix_verifier", "night_scout_pass", "liver_manager_pass", "beauty_account_pass", "account_evidence"], "evidence_class": "production_live", "accounts_required": ["night_scout", "liver_manager", "beauty_account"]},
+    {"id": "autonomous_config_single_authority", "category": "production_completion", "requires": ["authority_path", "precedence_validation", "contradiction_test"]},
+    {"id": "autonomous_ready_inventory_recovery", "category": "production_completion", "requires": ["replenishment_evidence", "bounded_recovery_test", "quality_exhaustion_failure_test", "three_accounts"]},
+    {"id": "operational_no_post_classification", "category": "production_completion", "requires": ["policy_skip_codes", "operational_failure_codes", "workflow_failure_test"]},
+    {"id": "three_account_scheduled_publish_streak", "category": "production_completion", "requires": ["schedule_run_ids", "queue_ids", "result_ids", "external_post_ids", "permalinks", "read_after_write", "duplicate_checks", "metrics_job_ids", "account_evidence"], "evidence_class": "production_live", "schedule_event_required": true, "accounts_required": ["night_scout", "liver_manager", "beauty_account"], "minimum_consecutive_runs_per_account": 3},
+    {"id": "three_account_metrics_24_72_168", "category": "production_completion", "requires": ["metric_collection_refs", "measured_values", "window_results", "account_isolation", "account_evidence"], "evidence_class": "production_live", "accounts_required": ["night_scout", "liver_manager", "beauty_account"], "metric_windows_required": [24, 72, 168]},
+    {"id": "three_account_pdca_measured_feedback", "category": "production_completion", "requires": ["metric_input_refs", "generation_refs", "next_queue_ids", "account_isolation", "account_evidence"], "evidence_class": "production_live", "accounts_required": ["night_scout", "liver_manager", "beauty_account"]},
+    {"id": "approved_media_scheduled_automation", "category": "production_completion", "requires": ["permission_authority", "provenance_check", "media_prepare_runs", "media_publish_runs", "no_unapproved_media_test"], "evidence_class": "production_live"},
+    {"id": "publish_failure_recovery", "category": "production_completion", "requires": ["bounded_retry_test", "backoff_test", "ambiguous_publish_no_retry_test", "recovery_run_evidence", "alert_evidence"]}
   ]
 }

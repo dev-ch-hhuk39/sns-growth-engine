@@ -20,6 +20,16 @@ for account, slots in schedule.items():
             assert plan["status"] == "SKIPPED_NO_VALID_MEDIA", plan
             assert plan["would_post"] is False, plan
             assert "media_slot_text_fallback_forbidden" in plan["blocked_reasons"], plan
+            safe_text = build_plan(
+                account,
+                slot["slot_id"],
+                "approved_media_inventory_exhausted",
+                apply=False,
+                allow_media_slot_safe_text_fallback=True,
+            )
+            assert safe_text["status"] == "PLAN_ONLY", safe_text
+            assert safe_text["actual_post_type"] == "original_text", safe_text
+            assert safe_text["expected_post_type"] == slot["post_type"], safe_text
 beauty_slots = slots_for_account("beauty_account")
 assert [slot["slot_id"] for slot in beauty_slots] == ["beauty_1130", "beauty_2030"]
 assert slot_by_id("beauty_account", "beauty_2030")["target_jst"] == "20:30"

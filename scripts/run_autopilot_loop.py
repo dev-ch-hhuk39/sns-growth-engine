@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from accounts.managed_accounts import account_choices  # noqa: E402
+from autonomous_runtime_config import load_runtime_policy  # noqa: E402
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 
 
@@ -38,12 +39,16 @@ def _run(cmd: list[str]) -> dict[str, Any]:
 
 
 def load_rules(path: Path = RULES_FILE) -> dict[str, Any]:
+    if path == RULES_FILE:
+        return load_runtime_policy()[1]
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def auto_post_gate(args: argparse.Namespace, rules: dict[str, Any]) -> dict[str, Any]:
-    defaults = rules.get("defaults", {})
-    enabled_by_rules = bool(defaults.get("auto_post_enabled", False))
+    autonomous, canonical_rules = load_runtime_policy()
+    if rules.get("publication_control") != canonical_rules.get("publication_control"):
+        raise RuntimeError("auto approval rules cannot override publication authority")
+    enabled_by_rules = bool(autonomous.get("auto_post_enabled", False))
     requested = bool(args.auto_post)
     env_ok = (
         os.environ.get("PUBLISH_ENABLED", "").lower() == "true"

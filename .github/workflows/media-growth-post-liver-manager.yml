@@ -111,6 +111,7 @@ jobs:
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --post-saved-media --dry-run --use-sheets
       - name: Create exact WAITING_REVIEW clip queue
         if: github.event_name == 'schedule'
+        continue-on-error: true
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-saved-media-queue --apply --confirm-production-media --use-sheets --json-output /tmp/clip-queue.json
       - name: Normalize exact scheduled media caption
         if: github.event_name == 'schedule'
@@ -126,6 +127,7 @@ jobs:
       - name: Hybrid review and autonomous exact media promotion
         id: clip_ready
         if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true'
+        continue-on-error: true
         run: |
           qid=$(python3 -c "import json; print(json.load(open('/tmp/clip-queue.json')).get('queue_id',''))")
           if [ -z "$qid" ]; then echo "has_ready=false" >> "$GITHUB_OUTPUT"; echo "[NO_POST] no eligible exact clip queue"; exit 0; fi
@@ -136,12 +138,25 @@ jobs:
             --json-output /tmp/hybrid-ready.json
           status=$(python3 -c "import json; print(json.load(open('/tmp/hybrid-ready.json')).get('status',''))")
           echo "has_ready=$([ "$status" = READY ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - name: Recover exhausted clip slot with explicit safe text
+        if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true' && steps.clip_ready.outputs.has_ready != 'true'
+        env:
+          PUBLISH_ENABLED: "true"
+          ALLOW_REAL_THREADS_POST: "true"
+          ALLOW_REAL_X_POST: "false"
+        run: |
+          python3 scripts/scheduled_publish_activation_gate.py --use-sheets --account-id "$ACCOUNT_ID" --post-type original_text
+          python3 scripts/run_slot_text_fallback.py \
+            --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
+            --reason approved_clip_inventory_exhausted \
+            --allow-media-slot-safe-text-fallback \
+            --apply --confirm-slot-fallback --use-sheets
       - name: Resolve scheduled activation gate
         id: activation
         if: github.event_name == 'schedule' && steps.preflight.outputs.window_allowed == 'true' && steps.clip_ready.outputs.has_ready == 'true'
         run: |
           set +e
-          python3 scripts/scheduled_publish_activation_gate.py --use-sheets | tee /tmp/activation-gate.json
+          python3 scripts/scheduled_publish_activation_gate.py --use-sheets --account-id "$ACCOUNT_ID" --post-type approved_source_clip | tee /tmp/activation-gate.json
           rc=${PIPESTATUS[0]}
           {
             echo "### Runtime activation gate"
@@ -186,7 +201,7 @@ jobs:
           ALLOW_TRANSCRIPTION_API: "false"
         run: |
           qid=$(python3 -c "import json; print(json.load(open('/tmp/hybrid-ready.json')).get('selected_queue_id',''))")
-          if [ -z "$qid" ]; then echo "[NO_POST] no AI-approved clip candidate"; exit 0; fi
+          if [ -z "$qid" ]; then echo "[OPERATIONAL_FAILURE] no AI-approved clip candidate"; exit 1; fi
           python3 scripts/process_threads_queue.py --account-id "$ACCOUNT_ID" --queue-id "$qid" --max-posts 1 --confirm-real-post
       - name: Post one manual E2E saved media proof
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.manual_e2e_proof == 'true' && github.event.inputs.dry_run_only != 'true'

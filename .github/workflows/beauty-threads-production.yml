@@ -166,7 +166,9 @@ jobs:
           output_file="/tmp/beauty-candidate.json"
           set +e
           python3 scripts/prepare_beauty_review_candidates.py \
-            --slot-index "$SLOT_INDEX" --apply --confirm-prepare > "$output_file"
+            --slot-index "$SLOT_INDEX" \
+            --sequence-start "$(( $(date +%s) % 100000 + 1000 ))" \
+            --apply --confirm-prepare > "$output_file"
           exit_code=$?
           set -e
           cat "$output_file"
@@ -221,7 +223,47 @@ jobs:
 
       # Scheduled publication keeps the existing two daily windows and selects
       # only rows carrying strict automated or explicit human approval evidence.
-      - name: Select scheduled strictly approved Beauty route
+      - name: Check scheduled strictly approved Beauty inventory
+        id: initial_scheduled_queue
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
+        run: |
+          python3 scripts/select_beauty_scheduled_ready.py \
+            --slot-id "$BEAUTY_SLOT_ID" \
+            --business-date-jst "$BUSINESS_DATE_JST" \
+            --use-sheets \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Bounded Beauty READY recovery
+        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.initial_scheduled_queue.outputs.queue_id == ''
+        env:
+          DRY_RUN: "false"
+        run: |
+          output_file="/tmp/beauty-recovery-candidate.json"
+          python3 scripts/prepare_beauty_review_candidates.py \
+            --slot-index "$SLOT_INDEX" --apply --confirm-prepare > "$output_file"
+          cat "$output_file"
+          queue_id=$(python3 - "$output_file" <<'PY'
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              result = json.load(handle)
+          applied = result.get("apply_result") or {}
+          candidate = result.get("candidate") or {}
+          if not applied.get("read_after_write"):
+              raise SystemExit(2)
+          print(applied.get("queue_id") or candidate.get("queue_id") or "")
+          PY
+          )
+          if [ -z "$queue_id" ]; then
+            echo "[OPERATIONAL_FAILURE] BEAUTY_READY_RECOVERY_GENERATION_EMPTY"
+            exit 1
+          fi
+          python3 scripts/run_hybrid_ready_pipeline.py \
+            --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" \
+            --queue-id "$queue_id" --max-candidates 1 \
+            --approval-mode text --autonomous-low-risk \
+            --apply --use-sheets
+
+      - name: Select scheduled Beauty route after recovery
         id: scheduled_queue
         if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true'
         run: |
@@ -260,7 +302,9 @@ jobs:
 
       - name: Report no scheduled approved Beauty row
         if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && (steps.scheduled_queue.outputs.queue_id == '' || steps.scheduled_queue.outputs.approved != 'true')
-        run: echo "[NO_POST] no strictly approved Beauty READY row for this publication window"
+        run: |
+          echo "[OPERATIONAL_FAILURE] NO_READY_CANDIDATE after bounded Beauty recovery"
+          exit 1
 
       # Manual text publish preserves the old slot-specific behavior.
       - name: Strict manual Beauty text queue and publisher preflight

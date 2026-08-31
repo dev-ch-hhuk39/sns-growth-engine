@@ -62,6 +62,19 @@ ADDITIVE_CRITERIA_IDS = {
     "dual_account_canary_eight_posts",
 }
 
+THREE_ACCOUNT_CRITERIA_IDS = {
+    "beauty_account_production_paths",
+    "three_account_capability_matrix",
+    "autonomous_config_single_authority",
+    "autonomous_ready_inventory_recovery",
+    "operational_no_post_classification",
+    "three_account_scheduled_publish_streak",
+    "three_account_metrics_24_72_168",
+    "three_account_pdca_measured_feedback",
+    "approved_media_scheduled_automation",
+    "publish_failure_recovery",
+}
+
 
 def main() -> None:
     acceptance = json.loads(ACCEPTANCE_PATH.read_text(encoding="utf-8"))
@@ -69,7 +82,8 @@ def main() -> None:
     assert len(ids) == len(set(ids)), "criterion IDs must be unique"
     assert ORIGINAL_CRITERIA_IDS.issubset(ids), "the original 35 criteria changed"
     assert ADDITIVE_CRITERIA_IDS.issubset(ids), "required additive criteria missing"
-    assert len(ids) == 48, "criteria must be 35 original + 13 additive"
+    assert THREE_ACCOUNT_CRITERIA_IDS.issubset(ids), "three-account production criteria missing"
+    assert len(ids) == 58, "criteria must preserve 48 existing and add 10 production criteria"
     print("PASS test_goal_acceptance_preserves_existing_criteria.py")
 
 

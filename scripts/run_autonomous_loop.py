@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Run the rules-based autonomous production loop.
 
-This runner removes per-post human review for the initial text-only Threads
-pilot, while keeping hard gates for X, beauty, media, rights, caps, cooldowns,
-and explicit run confirmation.
+This runner removes per-post human review for low-risk text on all managed
+Threads accounts, while keeping hard gates for X, media rights, caps,
+cooldowns, account isolation and explicit command confirmation.
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from prepare_pilot_sources import load_sources, select_pilot_sources  # noqa: E4
 from public_post_quality import generate_production_post, independent_account_order, final_public_post_validator, public_preview  # noqa: E402
 from content_schedule import TEXT_POST_TYPES, slot_by_id  # noqa: E402
 from accounts.managed_accounts import account_choices  # noqa: E402
+from autonomous_runtime_config import load_runtime_policy  # noqa: E402
 
 CONFIG_FILE = ROOT / "config/autonomous_mode.json"
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
@@ -40,12 +41,16 @@ def is_true(value: Any) -> bool:
 
 
 def load_autonomous_config(path: Path = CONFIG_FILE) -> dict[str, Any]:
+    if path == CONFIG_FILE:
+        return load_runtime_policy()[0]
     return json.loads(path.read_text(encoding="utf-8"))
 
 
 def load_auto_approval_rules(path: Path = RULES_FILE) -> dict[str, Any]:
     if not path.exists():
         return {"defaults": {}, "accounts": {}}
+    if path == RULES_FILE:
+        return load_runtime_policy()[1]
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -89,7 +94,7 @@ def build_gate_summary(config: dict[str, Any], rules: dict[str, Any]) -> dict[st
         "auto_idea_generation_enabled": bool(config.get("auto_idea_generation_enabled")),
         "auto_ready_enabled": bool(config.get("auto_ready_enabled")),
         "auto_post_enabled": bool(config.get("auto_post_enabled")),
-        "legacy_auto_post_enabled": bool(rule_defaults.get("auto_post_enabled", False)),
+        "publication_authority": "config/autonomous_mode.json",
         "human_review_required": bool(config.get("human_review_required")),
         "report_only": bool(config.get("report_only")),
         "allowed_accounts": config.get("allowed_accounts", []),
@@ -117,6 +122,8 @@ def build_gate_summary(config: dict[str, Any], rules: dict[str, Any]) -> dict[st
             "allow_video_download": bool(config.get("allow_video_download")),
             "allow_video_cut": bool(config.get("allow_video_cut")),
             "allow_transcription_api": bool(config.get("allow_transcription_api")),
+            "delegated": bool(config.get("media_operations_delegated")),
+            "authority": str(config.get("media_execution_authority", "")),
         },
     }
 
@@ -447,13 +454,13 @@ def build_autonomous_plan(
             "requires_worker_confirm_real_post": True,
             "requires_env": ["PUBLISH_ENABLED=true", "ALLOW_REAL_THREADS_POST=true"],
             "x_post": False,
-            "beauty_post": False,
+            "beauty_post": "beauty_account" in gate.get("allowed_accounts", []),
             "media_post": False,
         },
         "safety": {
             "x_fetch": False,
             "x_post": False,
-            "beauty_account": False,
+            "beauty_cross_account_learning": False,
             "media_download": False,
             "video_cut": False,
             "cloudinary_upload": False,

@@ -14,7 +14,8 @@ def main() -> int:
     defaults = rules.get("defaults", {})
     checks = [
         ("auto_ready may be enabled", defaults.get("auto_ready_enabled") is True),
-        ("auto_post disabled", defaults.get("auto_post_enabled") is False),
+        ("approval rules do not own auto_post", "auto_post_enabled" not in defaults),
+        ("publication authority declared", rules.get("publication_control", {}).get("authority") == "config/autonomous_mode.json"),
         ("daily post cap five", int(defaults.get("daily_post_cap", 0)) == 5),
         ("max posts per run one", int(defaults.get("max_posts_per_run", 0)) == 1),
         ("media posts disabled", defaults.get("allow_media_posts") is False),
