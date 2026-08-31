@@ -618,13 +618,15 @@
 
 ---
 
-## Phase 8（今後の計画）: AI自動化・学習ループ高度化
+## Phase 8（実装済み・本番証拠収集中）: AI自動化・学習ループ高度化
 
 **目的**: 人間レビューを最小化し、投稿結果から継続改善する
 
-- [ ] AI自動承認スコアリング高度化
-- [ ] 投稿結果の自動収集・フィードバックループ
-- [ ] パフォーマンス予測モデルの構築
-- [ ] 自動投稿スケジューリング（GitHub Actions CI/CD）
-- [ ] ダッシュボード・パフォーマンス可視化
-- [ ] Hermes HERMES-2: Headroom経由 LLM分析統合
+- [x] Night Scout / Liver Manager / Beautyの低リスク投稿自動承認
+- [x] READY在庫維持と投稿直前のbounded recovery
+- [x] GitHub Actionsによるアカウント別scheduled publish
+- [x] 24h / 72h / 168hの実測metrics収集とMEASURED-only PDCA
+- [x] 権利証跡付きdirect media / clipのscheduled経路
+- [x] 投稿・Sheets保存・metrics予約を完全成功として扱う厳格なpublisher結果判定
+
+本Phaseのコード完了とproduction acceptanceは別です。各アカウントで3回連続の実`schedule`投稿、実permalink、Sheets read-after-write、24h/72h/168h metrics、PDCA入力証拠が揃うまで本番完成とは判定しません。

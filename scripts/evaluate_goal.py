@@ -23,6 +23,49 @@ def _git(*args: str) -> str:
     ).stdout.strip()
 
 
+def _live_evidence_errors(criterion: dict[str, Any], evidence: dict[str, Any]) -> list[str]:
+    if criterion.get("evidence_class") != "production_live":
+        return []
+    errors: list[str] = []
+    if evidence.get("evidence_type") != "production_live":
+        errors.append("production_live_evidence_type")
+    account_evidence = evidence.get("account_evidence")
+    required_accounts = [str(value) for value in criterion.get("accounts_required", [])]
+    if required_accounts:
+        if not isinstance(account_evidence, dict):
+            errors.append("account_evidence")
+            account_evidence = {}
+        for account_id in required_accounts:
+            if not account_evidence.get(account_id):
+                errors.append(f"account_evidence:{account_id}")
+
+    minimum_runs = int(criterion.get("minimum_consecutive_runs_per_account", 0) or 0)
+    if minimum_runs and isinstance(account_evidence, dict):
+        for account_id in required_accounts:
+            rows = account_evidence.get(account_id, [])
+            if not isinstance(rows, list) or len(rows) < minimum_runs:
+                errors.append(f"schedule_run_streak:{account_id}")
+                continue
+            if criterion.get("schedule_event_required") and any(
+                not isinstance(row, dict) or row.get("event_name") != "schedule" for row in rows[-minimum_runs:]
+            ):
+                errors.append(f"schedule_event:{account_id}")
+
+    required_windows = {int(value) for value in criterion.get("metric_windows_required", [])}
+    if required_windows and isinstance(account_evidence, dict):
+        for account_id in required_accounts:
+            row = account_evidence.get(account_id, {})
+            windows = row.get("windows", {}) if isinstance(row, dict) else {}
+            measured = {
+                int(key)
+                for key, value in windows.items()
+                if str(value.get("status") if isinstance(value, dict) else value).upper() == "MEASURED"
+            }
+            if not required_windows.issubset(measured):
+                errors.append(f"metric_windows:{account_id}")
+    return errors
+
+
 def evaluate(
     *,
     acceptance_path: Path = ACCEPTANCE,
@@ -42,6 +85,7 @@ def evaluate(
         status = str(row.get("status", "EVIDENCE_MISSING"))
         evidence = row.get("evidence") if isinstance(row.get("evidence"), dict) else {}
         missing = [name for name in criterion.get("requires", []) if evidence.get(name) in (None, "", [], {})]
+        missing.extend(_live_evidence_errors(criterion, evidence))
         if status != acceptance.get("passing_status", "PASS") or missing:
             failures.append({"id": criterion_id, "status": status, "missing_evidence": missing})
         else:

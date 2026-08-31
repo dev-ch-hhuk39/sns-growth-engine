@@ -1231,7 +1231,22 @@ def main() -> int:
 
     bad = [r for r in results if r["status"] in {"FAILED", "POSTED_SAVE_FAILED"}]
     blocked = [r for r in results if r["status"] in {"BLOCKED"}]
-    return 1 if bad or blocked else 0
+    # In a real publish invocation, only a fully persisted POSTED result is a
+    # successful process outcome.  DUPLICATE_BLOCKED, ambiguous delivery and
+    # every partial persistence state must fail the workflow instead of being
+    # mistaken for a scheduled production post.
+    incomplete_real = [
+        row for row in results
+        if not args.dry_run and not (
+            str(row.get("status", "")).upper() == "POSTED"
+            and bool(str(row.get("result_id", "")).strip())
+            and bool(str(row.get("external_post_id", "")).strip())
+            and bool(str(row.get("post_url", "")).strip())
+            and int(row.get("metrics_collection_job_count", 0) or 0) == 3
+            and not str(row.get("warning", "")).strip()
+        )
+    ]
+    return 1 if bad or blocked or incomplete_real else 0
 
 
 if __name__ == "__main__":

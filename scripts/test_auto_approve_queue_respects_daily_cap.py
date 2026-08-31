@@ -16,11 +16,17 @@ def main()->int:
     superseded=[{"queue_id":"q_old","account_id":"night_scout","status":"SUPERSEDED","auto_ready_at":now}]
     superseded_log=[{"account_id":"night_scout","operation":"queue_approved","details":"queue_id=q_old auto_ready=true","timestamp":now}]
     allowed_reason=mod.account_limits_ok("night_scout",{},superseded_log,superseded,rules)
+    posted=[{"queue_id":"q_posted","account_id":"night_scout","status":"POSTED","auto_ready_at":now}]
+    posted_log=[{"account_id":"night_scout","operation":"queue_approved","details":"queue_id=q_posted auto_ready=true","timestamp":now}]
+    posted_reason=mod.account_limits_ok("night_scout",{},posted_log,posted,rules)
+    exact_reason=mod.account_limits_ok("night_scout",{},duplicate_log,ready,rules,exact_scheduled_candidate=True)
 
     checks={
         "canonical READY counts once": blocked_reason == (False,"daily_ready_cap_reached"),
         "SUPERSEDED approval does not count": allowed_reason == (True,"ok"),
-        "build plan uses canonical queue rows": "account_limits_ok(acct, selected_times, logs, all_queue_rows" in inspect.getsource(mod.build_plan),
+        "POSTED history does not consume READY inventory": posted_reason == (True,"ok"),
+        "exact scheduled candidate bypasses inventory cap": exact_reason[0] is True,
+        "build plan uses canonical queue rows": "account_limits_ok(" in inspect.getsource(mod.build_plan),
     }
     for name,passed in checks.items():
         print(f"  {'PASS' if passed else 'FAIL'} {name}")

@@ -1,99 +1,61 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "implementation_head": "",
   "completion_claim": false,
   "accounts": {
     "night_scout": {
-      "original_text": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "reference_text": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "direct_image": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "direct_video": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "direct_carousel": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "scheduled_publish": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "result_persistence": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "metrics": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "pdca": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "persona": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "approved_source_clip": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      }
+      "original_text": {"state": "UNVERIFIED", "evidence": {}},
+      "reference_text": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_image": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_video": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_carousel": {"state": "UNVERIFIED", "evidence": {}},
+      "approved_source_clip": {"state": "UNVERIFIED", "evidence": {}},
+      "scheduled_publish": {"state": "UNVERIFIED", "evidence": {}},
+      "result_persistence": {"state": "UNVERIFIED", "evidence": {}},
+      "metrics": {"state": "UNVERIFIED", "evidence": {}},
+      "pdca": {"state": "UNVERIFIED", "evidence": {}},
+      "persona": {"state": "UNVERIFIED", "evidence": {}},
+      "ready_inventory_recovery": {"state": "UNVERIFIED", "evidence": {}},
+      "scheduled_publish_streak": {"state": "UNVERIFIED", "evidence": {}},
+      "metrics_24_72_168": {"state": "UNVERIFIED", "evidence": {}},
+      "pdca_measured_feedback": {"state": "UNVERIFIED", "evidence": {}},
+      "failure_recovery": {"state": "UNVERIFIED", "evidence": {}}
     },
     "liver_manager": {
-      "original_text": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "reference_text": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "direct_image": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "direct_video": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "direct_carousel": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "scheduled_publish": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "result_persistence": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "metrics": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "pdca": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "persona": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      },
-      "approved_source_clip": {
-        "state": "UNVERIFIED",
-        "evidence": {}
-      }
+      "original_text": {"state": "UNVERIFIED", "evidence": {}},
+      "reference_text": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_image": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_video": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_carousel": {"state": "UNVERIFIED", "evidence": {}},
+      "approved_source_clip": {"state": "UNVERIFIED", "evidence": {}},
+      "scheduled_publish": {"state": "UNVERIFIED", "evidence": {}},
+      "result_persistence": {"state": "UNVERIFIED", "evidence": {}},
+      "metrics": {"state": "UNVERIFIED", "evidence": {}},
+      "pdca": {"state": "UNVERIFIED", "evidence": {}},
+      "persona": {"state": "UNVERIFIED", "evidence": {}},
+      "ready_inventory_recovery": {"state": "UNVERIFIED", "evidence": {}},
+      "scheduled_publish_streak": {"state": "UNVERIFIED", "evidence": {}},
+      "metrics_24_72_168": {"state": "UNVERIFIED", "evidence": {}},
+      "pdca_measured_feedback": {"state": "UNVERIFIED", "evidence": {}},
+      "failure_recovery": {"state": "UNVERIFIED", "evidence": {}}
+    },
+    "beauty_account": {
+      "original_text": {"state": "UNVERIFIED", "evidence": {}},
+      "reference_text": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_image": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_video": {"state": "UNVERIFIED", "evidence": {}},
+      "direct_carousel": {"state": "UNVERIFIED", "evidence": {}},
+      "approved_source_clip": {"state": "UNVERIFIED", "evidence": {}},
+      "scheduled_publish": {"state": "UNVERIFIED", "evidence": {}},
+      "result_persistence": {"state": "UNVERIFIED", "evidence": {}},
+      "metrics": {"state": "UNVERIFIED", "evidence": {}},
+      "pdca": {"state": "UNVERIFIED", "evidence": {}},
+      "persona": {"state": "UNVERIFIED", "evidence": {}},
+      "ready_inventory_recovery": {"state": "UNVERIFIED", "evidence": {}},
+      "scheduled_publish_streak": {"state": "UNVERIFIED", "evidence": {}},
+      "metrics_24_72_168": {"state": "UNVERIFIED", "evidence": {}},
+      "pdca_measured_feedback": {"state": "UNVERIFIED", "evidence": {}},
+      "failure_recovery": {"state": "UNVERIFIED", "evidence": {}}
     }
   }
 }

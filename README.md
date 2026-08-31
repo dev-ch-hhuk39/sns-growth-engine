@@ -4,12 +4,14 @@ SNS growth automation engine for collection, analysis, generation, approval, pub
 
 ## 目的
 
-X (Twitter) / Threads を対象に、SNS投稿の**収集・分析・生成・承認・投稿・結果学習**を自動化するエンジン。
+Threads向け投稿の**収集・分析・生成・自動品質判定・投稿・実測学習**を、アカウント境界と権利証跡を保ったまま継続運転するエンジンです。Xは参照取得のみで、投稿は無効です。
 
-- 収集したバズ投稿を分析・スコアリングし、AIでリライト提案
-- Geminiで独自仮説コンテンツを生成
-- 人間の承認フロー → 投稿キュー → 安全ガード付き本番投稿
-- 投稿結果を収集しフィードバックループへ
+- 参照元と過去実績をアカウント別に収集・分析
+- Geminiと安全な決定論fallbackで投稿候補を生成
+- 低リスク候補は品質・persona・重複検査後に自動READY化
+- 高リスク、権利不明、美容医療候補だけを人間レビューへ分離
+- GitHub Actionsの予定slotからThreadsへ投稿し、結果をSheetsへread-after-write
+- 24h / 72h / 168hの実測metricsだけを次回PDCAへ反映
 
 ## 対象アカウント
 
@@ -17,46 +19,35 @@ X (Twitter) / Threads を対象に、SNS投稿の**収集・分析・生成・�
 |---|---|
 | `night_scout` | 夜職ジャンル |
 | `liver_manager` | ライバージャンル |
+| `beauty_account` | 20〜30代女性向け美容・コスメ。美容医療は常時レビュー |
 
-## 現在の実装状況（Phase 1〜3-D 完了）
+## 現在の実装状況
 
-| Phase | 内容 | 状態 |
+| 領域 | コード状態 | 本番受入条件 |
 |---|---|---|
-| Phase 1 | Gemini下書き生成 | ✅ 完了 |
-| Phase 2 | Google Sheets接続・12タブスキーマ・queue/review | ✅ 完了 |
-| Phase 3-A | Publisher Interface (BasePublisher / DryRunPublisher) | ✅ 完了 |
-| Phase 3-B | 承認フロー (approve_queue) | ✅ 完了 |
-| Phase 3-C | キュー投稿基盤 (publish_queue dry-run / review_queue) | ✅ 完了 |
-| Phase 3-D | XPublisher 実装 (tweepy OAuth1a / 4層安全ガード) | ✅ 完了 |
-| Phase 3-E | X メディア付き投稿 | 🔜 次フェーズ |
-| Phase 3-F | Threads 本番投稿 | 🔜 次フェーズ |
+| 3アカウントのテキスト生成・自動READY | 実装済み | 各アカウント3回連続の実schedule投稿 |
+| READY在庫維持・投稿直前recovery | 実装済み | 在庫不足slotが運用障害として検出・復旧されること |
+| Threads投稿・idempotency・read-after-write | 実装済み | permalink、result、metrics予約の実証 |
+| 許諾済みdirect media / clip | 権利ゲート付きで実装済み | 許諾済みassetごとの実投稿証拠 |
+| Metrics / PDCA | 24h/72h/168h実測限定で実装済み | 実時間経過後の3窓取得と次回生成への入力証拠 |
+| X投稿 / Beauty以外の未登録アカウント | 無効 | V1対象外 |
 
-**テスト**: Phase 2〜3-D 合計 **150 PASS / 0 FAIL**
-
-## 既存 X_autopost_yoru から統合予定の資産
-
-| ファイル | 内容 |
-|---|---|
-| `x_collect_posts.py` | X API収集（監視アカウント・キーワード） |
-| `x_analyze_posts.py` | パフォーマンス分析・スコアリング・Geminiリライト |
-| `x_prepare_media_assets.py` | メディア資産管理（Cloudinary連携） |
-| `x_sync_post_queue.py` | 承認レビュー → 投稿キュー同期 |
-| `auto_post.py` | テキスト時刻スロット投稿 |
+コードの存在やCI成功だけでは本番完成とは判定しません。`config/production_capability_matrix.json`の48能力は、実schedule・Threads・Sheets・metricsの本番証拠が揃った時だけPASSになります。
 
 ## 投稿戦略方針
 
-- **80% reference_based**: 収集したバズ投稿を分析・リライトして参考投稿
-- **20% original_hypothesis**: Geminiが独自仮説・インサイトを生成して投稿
+- アカウント別の参照・実測PDCA・新規仮説を混ぜ、同一テーマや締め文の連発を防止
+- PDCAの数値や過去投稿への言及は内部分析に限定し、公開本文は通常の新規投稿にする
 - Cloudinary でメディア資産を一元管理
-- AI承認スコアリングで人間レビューを支援
+- 低リスク通常投稿は自動承認し、本当に人間判断が必要な候補だけを保留
 
 ## 安全ガード
 
-本番投稿には以下の4層ガードが必要です（デフォルトはすべてfalse）。
+本番投稿はworkflowのapply step内だけで投稿権限を持ちます。通常コードやdry-runに権限はありません。
 
 ```
 PUBLISH_ENABLED=false          # Layer 1: 全投稿の大元スイッチ
-ALLOW_REAL_X_POST=false        # Layer 2: X投稿専用スイッチ
+ALLOW_REAL_X_POST=false        # X投稿は常時無効
 ALLOW_REAL_THREADS_POST=false  # Layer 2: Threads投稿専用スイッチ
 --confirm-real-post            # Layer 3: publish_queue.py 実行時フラグ
 --max-real-posts 1             # Layer 4: 最大投稿件数上限
@@ -79,16 +70,12 @@ python scripts/preflight_check.py
 PYTHONPATH=src python3 scripts/phase3_safety_check.py
 ```
 
-## テストコマンド
+## 検証
 
 ```bash
-PYTHONPATH=src python3 scripts/test_phase2.py
-PYTHONPATH=src python3 scripts/test_phase3a.py
-PYTHONPATH=src python3 scripts/test_phase3b.py
-PYTHONPATH=src python3 scripts/test_phase3c.py
-PYTHONPATH=src python3 scripts/test_phase3d.py
-PYTHONPATH=src python3 scripts/phase3_safety_check.py
-PYTHONPATH=src python3 scripts/preflight_check.py
+python3 scripts/evaluate_goal.py
+python3 scripts/evaluate_capability_matrix.py
+python3 scripts/check_autonomous_health.py --account-id all --dry-run
 ```
 
 ## 絶対にコミットしてはいけないもの

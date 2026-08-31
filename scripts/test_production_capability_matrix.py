@@ -13,10 +13,11 @@ from evaluate_capability_matrix import evaluate  # noqa: E402
 
 config = json.loads((ROOT / "config" / "production_capability_matrix.json").read_text(encoding="utf-8"))
 status = json.loads((ROOT / "docs" / "capability-matrix-status.json").read_text(encoding="utf-8"))
-assert config["accounts"] == ["night_scout", "liver_manager"]
+assert config["accounts"] == ["night_scout", "liver_manager", "beauty_account"]
 assert config["constraints"]["media_slot_text_fallback"] is False
 assert config["constraints"]["x_operations"] is False
-assert config["constraints"]["beauty_account_operations"] is False
+assert config["constraints"]["beauty_account_operations"] is True
+assert config["constraints"]["beauty_cross_account_learning"] is False
 for account_id in config["accounts"]:
     assert set(status["accounts"][account_id]) == set(config["capabilities"])
 
@@ -26,8 +27,22 @@ with tempfile.TemporaryDirectory() as temp:
     complete = json.loads(json.dumps(status))
     for account_id in config["accounts"]:
         for capability in config["capabilities"]:
-            complete["accounts"][account_id][capability] = {"state": "PASS", "evidence": {key: "fixture" for key in config["required_evidence"]}}
+            evidence = {"verified_at": "fixture", "evidence_type": "live_sheets", "evidence_ref": "fixture"}
+            if capability == "scheduled_publish_streak":
+                evidence["evidence_type"] = "live_schedule"
+                evidence["schedule_runs"] = [{"event_name": "schedule", "run_id": str(index)} for index in range(3)]
+            elif capability == "metrics_24_72_168":
+                evidence["evidence_type"] = "live_metrics"
+                evidence["metric_windows"] = {str(window): {"status": "MEASURED"} for window in (24, 72, 168)}
+            elif capability == "pdca_measured_feedback":
+                evidence["evidence_type"] = "live_metrics"
+                evidence["metric_input_refs"] = ["metric-1"]
+            complete["accounts"][account_id][capability] = {"state": "PASS", "evidence": evidence}
     path.write_text(json.dumps(complete), encoding="utf-8")
     assert evaluate(status_path=path)["status"] == "PASS"
+
+    complete["accounts"]["beauty_account"]["scheduled_publish_streak"]["evidence"]["schedule_runs"][0]["event_name"] = "workflow_dispatch"
+    path.write_text(json.dumps(complete), encoding="utf-8")
+    assert evaluate(status_path=path)["status"] == "FAIL"
 
 print("PASS test_production_capability_matrix.py")

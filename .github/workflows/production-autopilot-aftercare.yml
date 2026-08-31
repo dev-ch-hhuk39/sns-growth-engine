@@ -116,19 +116,13 @@ jobs:
       - name: Apply metrics snapshots
         if: env.AFTERCARE_APPLY == 'true'
         run: |
-          # Metrics may legitimately be PARTIAL/UNAVAILABLE before a platform
-          # exposes public numbers. Record the result, then continue to the
-          # PDCA and registry steps instead of making the whole aftercare fail.
-          set +e
           python3 scripts/process_threads_metric_jobs.py \
             --account-id all \
             --max-jobs 20 \
             --apply \
             --confirm-metrics \
             --use-sheets
-          metrics_exit=$?
-          echo "metrics_snapshot_exit=$metrics_exit" >> "$GITHUB_STEP_SUMMARY"
-          exit 0
+          echo "metrics_snapshot_exit=0" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Sync source registry and Sheets schema
         if: env.AFTERCARE_APPLY == 'true'
@@ -153,8 +147,8 @@ jobs:
       - name: Apply PDCA candidate generation (activation route)
         if: env.AFTERCARE_APPLY == 'true'
         run: |
-          set +e
-          for account in night_scout liver_manager; do
+          failed=0
+          for account in night_scout liver_manager beauty_account; do
             python3 scripts/generate_threads_ideas_from_references.py \
               --account-id "$account" \
               --platform threads \
@@ -167,8 +161,14 @@ jobs:
               --confirm-generate
             pdca_exit=$?
             echo "${account}_pdca_exit=$pdca_exit" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$pdca_exit" -ne 0 ]; then
+              failed=1
+            fi
           done
-          exit 0
+          if [ "$failed" -ne 0 ]; then
+            echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed"
+            exit 1
+          fi
 
       - name: Health summary
         if: always()

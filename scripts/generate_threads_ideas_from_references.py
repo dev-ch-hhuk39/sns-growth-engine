@@ -357,6 +357,21 @@ def reference_structure_fidelity(
     }
 
 
+def scheduled_candidate_stable_id(
+    *,
+    account_id: str,
+    reference_id: str,
+    schedule_date_jst: str,
+    slot_id: str,
+) -> str:
+    """Build a bounded ID without truncating the date/slot idempotency scope."""
+
+    return _safe_id(
+        f"{account_id}_{schedule_date_jst or 'unscheduled'}_"
+        f"{slot_id or 'reference'}_{reference_id}"
+    )
+
+
 def build_generation_rows(
     *,
     account_id: str,
@@ -384,7 +399,7 @@ def build_generation_rows(
     accepted: list[dict[str, Any]] = []
     batch_id = f"scheduled_{account_id}_{schedule_date_jst or datetime.now(timezone.utc).strftime('%Y%m%d')}_{slot_id or 'reference'}"
     generation_attempts = 0
-    max_generation_attempts = max(top_n * 2, top_n + 2)
+    max_generation_attempts = max(top_n * 5, top_n + 4)
     for score in usable_scores:
         if len(queues) >= top_n:
             break
@@ -409,8 +424,14 @@ def build_generation_rows(
         # POSTED queue row must never be refreshed or reused.  Scope IDs to the
         # canonical slot/date so every scheduled attempt has its own immutable
         # idempotency boundary.
-        stable = _safe_id(
-            f"{account_id}_{ref_id}_{schedule_date_jst or 'unscheduled'}_{slot_id or 'reference'}"
+        # Date and slot must precede the potentially long source ID. _safe_id
+        # is length-bounded, so the old order truncated the idempotency scope
+        # and refreshed historical queue rows from earlier production days.
+        stable = scheduled_candidate_stable_id(
+            account_id=account_id,
+            reference_id=ref_id,
+            schedule_date_jst=schedule_date_jst,
+            slot_id=slot_id,
         )
         draft_id = f"idea_{stable}"
         derivative_id = f"sd_{stable}_threads"
@@ -1699,6 +1720,7 @@ def build_measured_pdca_generation_rows(
     theme: str,
     schedule_date_jst: str,
     history: list[str],
+    preferred_topics: list[str] | None = None,
 ) -> dict[
     str,
     list[dict[str, Any]],
@@ -1726,7 +1748,7 @@ def build_measured_pdca_generation_rows(
         scores=scores,
         top_n=len(scores),
         slot_id=slot_id,
-        post_type="pdca_text",
+        post_type="original_text",
         theme=theme,
         schedule_date_jst=(
             schedule_date_jst
@@ -1734,8 +1756,40 @@ def build_measured_pdca_generation_rows(
         history=history,
     )
 
+    if generated["queue"]:
+        return apply_measured_pdca_lineage(
+            generated,
+            account_id=account_id,
+            source_meta=source_meta,
+            top_n=top_n,
+        )
+
+    # Keep the measured result as internal lineage while switching to the
+    # deterministic production composer. This is a prompt/model fallback, not
+    # a fabricated metric: no public metric claim is produced and the exact
+    # source result remains auditable on every row.
+    fallback = build_fallback_generation_rows(
+        account_id=account_id,
+        top_n=top_n,
+        slot_id=slot_id,
+        post_type="pdca_text",
+        content_route="pdca_text",
+        theme=theme,
+        schedule_date_jst=schedule_date_jst,
+        history=history,
+        fallback_reason="measured_pdca_ai_quality_fallback",
+        preferred_topics=preferred_topics or [],
+    )
+    # Synthetic IDs are safe-normalized and cannot reliably recover the
+    # original result ID. Select the first source_meta item, whose insertion
+    # order follows measured performance rank.
+    source_result_id = next(iter(source_meta), "")
+    if not source_result_id:
+        return {"drafts": [], "social_derivatives": [], "queue": []}
+    for queue in fallback["queue"]:
+        queue["source_id"] = source_result_id
     return apply_measured_pdca_lineage(
-        generated,
+        fallback,
         account_id=account_id,
         source_meta=source_meta,
         top_n=top_n,
@@ -2048,6 +2102,7 @@ def run_reference_generation(
                     schedule_date_jst
                 ),
                 history=history,
+                preferred_topics=preferred_topics,
             )
         )
 

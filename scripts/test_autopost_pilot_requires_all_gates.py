@@ -19,7 +19,7 @@ def _load():
     return mod
 
 
-def gate(mod, *, auto_post=False, enabled=False, env=False, confirm=False, skip=True):
+def gate(mod, *, auto_post=False, enabled=True, env=False, confirm=False, skip=True):
     prev = {k: os.environ.get(k) for k in ("PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST")}
     try:
         if env:
@@ -29,7 +29,13 @@ def gate(mod, *, auto_post=False, enabled=False, env=False, confirm=False, skip=
             os.environ.pop("PUBLISH_ENABLED", None)
             os.environ.pop("ALLOW_REAL_THREADS_POST", None)
         args = argparse.Namespace(auto_post=auto_post, confirm_real_post=confirm, skip_real_post=skip)
-        return mod.auto_post_gate(args, {"defaults": {"auto_post_enabled": enabled}})
+        rules = mod.load_rules()
+        original_loader = mod.load_runtime_policy
+        mod.load_runtime_policy = lambda: ({"auto_post_enabled": enabled}, rules)
+        try:
+            return mod.auto_post_gate(args, rules)
+        finally:
+            mod.load_runtime_policy = original_loader
     finally:
         for key, value in prev.items():
             if value is None:
@@ -42,7 +48,7 @@ def main() -> int:
     mod = _load()
     checks = [
         ("not requested blocked", gate(mod, enabled=True, env=True, confirm=True, skip=False)["allowed"] is False),
-        ("config disabled blocked", gate(mod, auto_post=True, env=True, confirm=True, skip=False)["allowed"] is False),
+        ("config disabled blocked", gate(mod, auto_post=True, enabled=False, env=True, confirm=True, skip=False)["allowed"] is False),
         ("env missing blocked", gate(mod, auto_post=True, enabled=True, confirm=True, skip=False)["allowed"] is False),
         ("confirm missing blocked", gate(mod, auto_post=True, enabled=True, env=True, skip=False)["allowed"] is False),
         ("skip real post blocks", gate(mod, auto_post=True, enabled=True, env=True, confirm=True, skip=True)["allowed"] is False),

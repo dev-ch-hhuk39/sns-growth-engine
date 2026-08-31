@@ -238,7 +238,7 @@ def _record_media_slot_result(plan: dict[str, Any], client: SheetsClient, result
     slot_id = str(plan.get("slot_id", ""))
     if not slot_id:
         return {"status": "SKIPPED", "reason": "slot_id_not_provided"}
-    posted = str(result.get("status", "")) in {"POSTED", "POSTED_SAVE_FAILED"}
+    posted = str(result.get("status", "")) == "POSTED"
     row = build_slot_run(
         str(plan["account_id"]),
         slot_id,
@@ -2238,7 +2238,12 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
     result = process_one(client, queue_row, dry_run=False, confirm_real_post=True)
     final_status = str(result.get("status", ""))
     failure_state: dict[str, Any] | None = None
-    externally_posted = final_status in {"POSTED", "POSTED_SAVE_FAILED"}
+    publisher_complete = final_status == "POSTED"
+    externally_posted = final_status in {
+        "POSTED",
+        "POSTED_SAVE_FAILED",
+        "POSTED_SAVE_UNVERIFIED",
+    }
     if externally_posted:
         _clear_clip_failure(client, clip)
     else:
@@ -2252,11 +2257,18 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
     client.update_video_clip_candidate(
         clip_id,
         post_status="POSTED" if externally_posted else final_status,
-        reviewer_status="AUTO_APPROVED" if externally_posted else retry_status,
+        reviewer_status=(
+            "AUTO_APPROVED"
+            if publisher_complete
+            else "VERIFY_REQUIRED"
+            if externally_posted
+            else retry_status
+        ),
         clip_status="POSTED" if externally_posted else retry_status,
     )
     if externally_posted:
         client.save_source_video({**source_video, "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
+    if publisher_complete:
         try:
             media_pdca = _save_media_pdca_records(
                 client,
@@ -2709,7 +2721,13 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     result = process_one(client, queue_row, dry_run=False, confirm_real_post=True)
     final_status = str(result.get("status", ""))
     failure_state: dict[str, Any] | None = None
-    if final_status == "POSTED":
+    publisher_complete = final_status == "POSTED"
+    externally_posted = final_status in {
+        "POSTED",
+        "POSTED_SAVE_FAILED",
+        "POSTED_SAVE_UNVERIFIED",
+    }
+    if externally_posted:
         _clear_clip_failure(client, clip)
     else:
         failure_state = _record_clip_failure(
@@ -2727,12 +2745,19 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         media_asset_id=media_id,
         storage_url=media_url,
         upload_status="UPLOADED",
-        post_status="POSTED" if final_status == "POSTED" else final_status,
-        reviewer_status="AUTO_APPROVED" if final_status == "POSTED" else retry_status,
-        clip_status="POSTED" if final_status == "POSTED" else retry_status,
+        post_status="POSTED" if externally_posted else final_status,
+        reviewer_status=(
+            "AUTO_APPROVED"
+            if publisher_complete
+            else "VERIFY_REQUIRED"
+            if externally_posted
+            else retry_status
+        ),
+        clip_status="POSTED" if externally_posted else retry_status,
     )
-    if final_status == "POSTED":
+    if externally_posted:
         client.save_source_video({**source_video, "download_status": "DOWNLOADED", "cut_status": "CUT", "upload_status": "UPLOADED", "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
+    if publisher_complete:
         try:
             media_pdca = _save_media_pdca_records(
                 client,
@@ -2928,6 +2953,17 @@ def main() -> int:
         Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
     final_status = str(plan.get("status", ""))
 
+    if args.apply and not args.prepare_only:
+        post_result = dict(plan.get("post_result") or {})
+        complete = (
+            final_status == "POSTED"
+            and bool(str(post_result.get("result_id", "")).strip())
+            and bool(str(post_result.get("external_post_id", "")).strip())
+            and bool(str(post_result.get("post_url", "")).strip())
+            and int(post_result.get("metrics_collection_job_count", 0) or 0) == 3
+            and not str(post_result.get("warning", "")).strip()
+        )
+        return 0 if complete else 1
     return 1 if (
         final_status.startswith(("FAILED", "BLOCKED"))
         or final_status == "REVIEW_REQUIRED"

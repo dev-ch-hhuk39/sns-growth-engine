@@ -1,7 +1,10 @@
 {
+  "publication_control": {
+    "authority": "config/autonomous_mode.json",
+    "approval_rules_may_enable_publishing": false
+  },
   "defaults": {
     "auto_ready_enabled": true,
-    "auto_post_enabled": false,
     "min_quality_score": 85,
     "min_safety_score": 90,
     "max_risk_score": 10,

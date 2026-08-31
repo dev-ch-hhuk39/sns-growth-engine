@@ -725,6 +725,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "run_id", "account_id", "platform", "days",
         "total_results", "suggestion_count", "next_jobs_count",
         "best_content_type", "best_er",
+        "metrics_status", "measured_result_count", "known_metric_value_count",
+        "metric_input_refs_json",
         "created_at", "notes",
     ],
     # Measured-result attribution. Explanations are association-based and keep
@@ -789,7 +791,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "fallback_level", "status", "queue_id", "result_id", "post_url", "media_asset_id",
         "source_post_id", "source_video_id", "no_post_reason", "last_error_redacted",
         "idempotency_key", "claim_status", "lease_expires_at", "publish_attempt_id",
-        "actual_generation_mode", "metrics_result_id", "created_at", "updated_at",
+        "actual_generation_mode", "metrics_result_id", "event_name", "workflow_run_id",
+        "workflow_name", "created_at", "updated_at",
     ],
 }
 

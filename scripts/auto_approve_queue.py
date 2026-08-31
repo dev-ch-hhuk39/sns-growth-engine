@@ -328,7 +328,21 @@ def _parse_dt(value: Any) -> datetime | None:
         return None
 
 
-def account_limits_ok(account_id: str, selected_times: dict[str, list[datetime]], logs: list[dict[str, Any]], queue_rows: list[dict[str, Any]], rules: dict[str, Any]) -> tuple[bool, str]:
+def account_limits_ok(
+    account_id: str,
+    selected_times: dict[str, list[datetime]],
+    logs: list[dict[str, Any]],
+    queue_rows: list[dict[str, Any]],
+    rules: dict[str, Any],
+    *,
+    exact_scheduled_candidate: bool = False,
+) -> tuple[bool, str]:
+    # The READY cap protects background inventory growth. An exact candidate
+    # selected by a scheduled slot is already bounded to one row and remains
+    # subject to the publisher's daily cap, cooldown and idempotency gates.
+    # Existing READY inventory must not starve that scheduled slot.
+    if exact_scheduled_candidate:
+        return True, "exact_scheduled_candidate_uses_publish_limits"
     today = now_utc().date()
     daily_cap = int(rules.get("daily_ready_cap", 2))
     cooldown = int(rules.get("cooldown_minutes", 180))
@@ -345,7 +359,7 @@ def account_limits_ok(account_id: str, selected_times: dict[str, list[datetime]]
         if not at:
             continue
         status = str(row.get("status", "")).strip().upper()
-        if status and status not in {"READY", "AUTO_READY", "PROCESSING", "POSTED", "PUBLISHED"}:
+        if status and status not in {"READY", "AUTO_READY", "PROCESSING"}:
             continue
         times.append(at)
         if at.date() == today:
@@ -438,7 +452,14 @@ def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, An
             rules=acct_rules,
             source_context=build_source_context(client, q),
         )
-        limit_ok, limit_reason = account_limits_ok(acct, selected_times, logs, all_queue_rows, acct_rules)
+        limit_ok, limit_reason = account_limits_ok(
+            acct,
+            selected_times,
+            logs,
+            all_queue_rows,
+            acct_rules,
+            exact_scheduled_candidate=bool(queue_ids and slot_id),
+        )
         per_run = len(selected_times.get(acct, [])) < int(acct_rules.get("max_posts_per_run", 1))
         if ev["status"] == "APPROVABLE" and not limit_ok:
             ev["status"] = "REJECTED"; ev["reasons"].append(limit_reason)

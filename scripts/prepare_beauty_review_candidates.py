@@ -359,9 +359,9 @@ def _gemini_failure_reason(response: dict) -> tuple[str, bool]:
     return "gemini_api_error", False
 
 
-def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
+def generate_candidate(*, slot_index: int, sequence_number: int, _topic_offset: int = 0) -> dict:
     business_date, slot_id, queue_id = _slot_identity(slot_index)
-    topic_index = (datetime.now(JST).date().toordinal() * 2 + slot_index) % len(TOPICS)
+    topic_index = (datetime.now(JST).date().toordinal() * 2 + slot_index + _topic_offset) % len(TOPICS)
     topic = TOPICS[topic_index]
     requested_route = select_beauty_route(sequence_number)
     route = requested_route
@@ -374,13 +374,13 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
         route = "new_text_generation"
         route_context = load_route_context(route, topic)
     if requested_route in {"direct_reference_media", "approved_source_clip"}:
-        return {
-            "status": "SKIPPED",
-            "reason": "beauty_media_route_delegated_no_text_fallback",
-            "requested_generation_route": requested_route,
-            "generation_route": requested_route,
-            "delegated_workflow": "direct-media-preparation.yml",
-        }
+        # This command prepares a named text slot only. Media inventory is
+        # prepared by its dedicated workflow and a media slot still never
+        # falls back to text. Keep the independent text slot supplied instead
+        # of returning SKIPPED and starving the later publish window.
+        route_fallback_reason = f"{requested_route}_delegated_to_media_preparation"
+        route = "new_text_generation"
+        route_context = load_route_context(route, topic)
     if route_context.get("status") != "PASS":
         return {
             "status": "BLOCKED",
@@ -418,9 +418,10 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
         blocked = list(candidate["public_post_validator"].get("blocked_reasons", []))
         blocked.extend(candidate["beauty_compliance"].get("blocked_reasons", []))
         if text and not blocked and str(candidate["review_lane"]).upper() == "BEAUTY_STANDARD":
+            content_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
             candidate.update({
                 "status": "WAITING_REVIEW",
-                "queue_id": queue_id,
+                "queue_id": f"{queue_id}_{content_hash[:8]}",
                 "slot_id": slot_id,
                 "business_date_jst": business_date,
                 "primary_topic": str(response.get("primary_topic") or topic),
@@ -429,8 +430,18 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
                 "requested_generation_route": requested_route,
                 "route_fallback_reason": route_fallback_reason,
                 "route_context": route_context,
+                "quality_recovery_topic_offset": _topic_offset,
             })
             return candidate
+    if not provider_unavailable_only and _topic_offset < 2:
+        recovered = generate_candidate(
+            slot_index=slot_index,
+            sequence_number=sequence_number + 1,
+            _topic_offset=_topic_offset + 1,
+        )
+        if recovered.get("status") == "WAITING_REVIEW":
+            recovered["route_fallback_reason"] = "quality_gate_topic_regeneration"
+        return recovered
     pipeline = json.loads((ROOT / "config" / "beauty_account_pipeline.json").read_text(encoding="utf-8"))
     transient_provider_fallback = bool(provider_unavailable_only and provider_failure_reason)
     if not transient_provider_fallback and not bool(pipeline.get("emergency_static_fallback_enabled", False)):
@@ -450,9 +461,11 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
     fallback_blocked = list(fallback["public_post_validator"].get("blocked_reasons", []))
     fallback_blocked.extend(fallback["beauty_compliance"].get("blocked_reasons", []))
     if not fallback_blocked and str(fallback["review_lane"]).upper() == "BEAUTY_STANDARD":
+        fallback_text = str(fallback.get("public_post_text", ""))
+        content_hash = hashlib.sha256(fallback_text.encode("utf-8")).hexdigest()
         fallback.update({
             "status": "WAITING_REVIEW",
-            "queue_id": queue_id,
+            "queue_id": f"{queue_id}_{content_hash[:8]}",
             "slot_id": slot_id,
             "business_date_jst": business_date,
             "primary_topic": topic,
@@ -465,6 +478,7 @@ def generate_candidate(*, slot_index: int, sequence_number: int) -> dict:
             "fallback_mode": "deterministic_strict",
             "fallback_reason": provider_failure_reason or "configured_emergency_static_fallback",
             "static_fallback_used": True,
+            "quality_recovery_topic_offset": _topic_offset,
         })
         return fallback
     return {

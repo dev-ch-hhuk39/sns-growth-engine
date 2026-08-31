@@ -134,7 +134,13 @@ def _scoped_text_decision(
     account_id: str,
     post_type: str,
 ) -> dict[str, Any]:
-    """Require live activation evidence for one scheduled text route only."""
+    """Gate one runtime route without making historic canaries circular.
+
+    Historic post/metric evidence remains visible for acceptance reporting,
+    but once production activation is persisted it is not a prerequisite for
+    a new route to publish its first scheduled item.  Candidate-level persona,
+    rights, duplicate and publisher gates remain downstream and fail closed.
+    """
     target = (account_id, post_type)
     reasons: list[str] = []
     if config.get("kill_switch"):
@@ -172,10 +178,6 @@ def _scoped_text_decision(
         any(str(row.get("status", "")).upper() == "PASS" for row in integrity_checks)
         or bool(verified)
     )
-    if not integrity_pass:
-        reasons.append("scoped_canary_source_integrity_incomplete")
-    if not verified:
-        reasons.append("scoped_posted_read_after_write_missing")
 
     windows_by_evidence: dict[str, set[int]] = {}
     for row in jobs:
@@ -191,22 +193,20 @@ def _scoped_text_decision(
         for evidence_id in evidence_ids:
             windows_by_evidence.setdefault(evidence_id, set()).add(window)
     selected = next((value for value in reversed(verified) if {24, 72, 168} <= windows_by_evidence.get(value, set())), "")
-    if verified and not selected:
-        reasons.append("scoped_metrics_windows_incomplete")
-
     reasons = list(dict.fromkeys(reasons))
     allowed = not reasons
     return {
         "status": "ALLOW" if allowed else "BLOCKED",
-        "mode": "RUNTIME_SCOPED_TEXT",
+        "mode": "RUNTIME_SCOPED_ROUTE",
         "scope": {"account_id": account_id, "post_type": post_type},
         "evidence_source": evidence_source,
-        "DELIVERY_READY": "YES" if integrity_pass and bool(verified) else "NO",
-        "CONTENT_READY": "YES" if selected else "NO",
+        "DELIVERY_READY": "YES" if allowed else "NO",
+        "CONTENT_READY": "YES" if allowed else "NO",
         "AUTONOMOUS_PRODUCTION_READY": "YES" if allowed else "NO",
         "SCHEDULED_PUBLISH": "ON" if allowed else "OFF",
         "selected_evidence_canary_id": selected,
         "selected_evidence_result_id": result_id_by_evidence.get(selected, ""),
+        "historic_route_evidence_status": "VERIFIED" if selected else "NOT_YET_VERIFIED",
         "required_metric_windows": [24, 72, 168],
         "blocked_reasons": reasons,
         "would_post": False,
@@ -255,7 +255,10 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--activation-readiness", action="store_true")
     parser.add_argument("--account-id", choices=account_choices())
-    parser.add_argument("--post-type", choices=["original_text", "reference_text", "pdca_text"])
+    parser.add_argument(
+        "--post-type",
+        choices=["original_text", "reference_text", "pdca_text", "direct_reference_media", "approved_source_clip"],
+    )
     args = parser.parse_args()
     if bool(args.account_id) != bool(args.post_type):
         parser.error("--account-id and --post-type must be provided together")

@@ -19,14 +19,19 @@ from scheduled_execution_guard import append_job_summary, scheduled_window_decis
 
 
 SAFE_NO_POST_REASONS = {
-    # Candidate/provider outcomes are not workflow failures. The next scheduled
-    # slot must continue even when this slot cannot produce a publishable row.
-    "GEMINI_RATE_LIMITED",
-    "NO_AI_APPROVED_CANDIDATE",
-    "QUALITY_BLOCKED",
-    "NO_READY_CANDIDATE",
-    "NO_AI_APPROVED_SLOT_CANDIDATE",
+    # A schedule invocation outside its bounded window is an intentional skip.
+    # Candidate exhaustion, review waiting and preparation/provider failures
+    # are operational failures unless bounded recovery publishes the slot.
     "SCHEDULED_RUN_OUT_OF_WINDOW",
+}
+
+SLOT_POST_TYPES = {
+    "ns_1600_original": "original_text",
+    "ns_1400_reference": "reference_text",
+    "ns_2500_pdca": "pdca_text",
+    "lm_1000_original": "original_text",
+    "lm_1300_reference": "reference_text",
+    "lm_2100_pdca": "pdca_text",
 }
 
 
@@ -103,6 +108,97 @@ def generated_queue_ids(payload: dict[str, Any]) -> list[str]:
     return []
 
 
+def verified_publish_result(returncode: int, payload: dict[str, Any]) -> bool:
+    """Accept a scheduled publish only with complete persisted post evidence."""
+
+    return (
+        returncode == 0
+        and str(payload.get("status", "")).strip().upper() == "POSTED"
+        and bool(str(payload.get("result_id", "")).strip())
+        and bool(str(payload.get("external_post_id", "")).strip())
+        and bool(str(payload.get("post_url", "")).strip())
+        and int(payload.get("metrics_collection_job_count", 0) or 0) == 3
+        and not str(payload.get("warning", "")).strip()
+    )
+
+
+def run_bounded_text_recovery(
+    *,
+    account_id: str,
+    slot_id: str,
+    reason: str,
+    window: dict[str, Any],
+    safe_env: dict[str, str],
+    base_env: dict[str, str],
+) -> tuple[int, dict[str, Any]]:
+    if window.get("status") != "PASS":
+        return no_post_exit_code("SCHEDULED_RUN_OUT_OF_WINDOW"), {
+            "status": "NO_POST",
+            "reason": "SCHEDULED_RUN_OUT_OF_WINDOW",
+            "window": window,
+        }
+    activation = [
+        sys.executable,
+        "scripts/scheduled_publish_activation_gate.py",
+        "--use-sheets",
+        "--account-id",
+        account_id,
+        "--post-type",
+        str(window.get("post_type") or SLOT_POST_TYPES.get(slot_id, "original_text")),
+    ]
+    rc, activation_payload = run_stage("recovery_activation_gate", activation, safe_env)
+    if rc != 0:
+        return 2, {
+            "status": "FAILED",
+            "reason": "RUNTIME_ACTIVATION_GATE_BLOCKED",
+            "activation": activation_payload,
+        }
+    publish_env = {
+        **base_env,
+        "PUBLISH_ENABLED": "true",
+        "ALLOW_REAL_THREADS_POST": "true",
+        "ALLOW_REAL_X_POST": "false",
+        "ALLOW_MEDIA_POSTS": "false",
+        "ALLOW_REAL_THREADS_VIDEO_POST": "false",
+        "ALLOW_VIDEO_DOWNLOAD": "false",
+        "ALLOW_VIDEO_CUT": "false",
+        "ALLOW_CLOUDINARY_UPLOAD": "false",
+        "ALLOW_TRANSCRIPTION_API": "false",
+    }
+    command = [
+        sys.executable,
+        "scripts/run_slot_text_fallback.py",
+        "--account-id",
+        account_id,
+        "--slot-id",
+        slot_id,
+        "--reason",
+        reason.lower(),
+        "--apply",
+        "--confirm-slot-fallback",
+        "--use-sheets",
+    ]
+    rc, payload = run_stage("bounded_text_recovery", command, publish_env)
+    status = str(payload.get("status", "")).upper()
+    if rc == 0 and status == "POSTED":
+        result = {
+            "status": "POSTED",
+            "account_id": account_id,
+            "slot_id": slot_id,
+            "recovered_from": reason,
+            "selected_queue_id": payload.get("queue_id", ""),
+            "recovery_payload": payload,
+        }
+        append_job_summary("Scheduled text result: RECOVERED", result)
+        return 0, result
+    return 2, {
+        "status": "FAILED",
+        "reason": "BOUNDED_RECOVERY_EXHAUSTED",
+        "recovered_from": reason,
+        "recovery_payload": payload,
+    }
+
+
 def generation_failure_reason(payload: dict[str, Any]) -> str:
     for result in payload.get("results", []):
         if "generate_threads_ideas_from_references.py" not in str(result.get("cmd", "")):
@@ -157,40 +253,30 @@ def main() -> int:
     rc, generation_payload = run_stage("generate_waiting_review", generation, safe_env)
     if rc != 0:
         generation_reason = generation_failure_reason(generation_payload)
-        if generation_reason == "GEMINI_RATE_LIMITED":
-            return no_post(
-                generation_reason,
-                account_id=args.account_id,
-                slot_id=args.slot_id,
-                details=generation_payload,
-            )
-        return no_post(
-            "CANDIDATE_GENERATION_FAILED",
+        recovery_rc, recovery_payload = run_bounded_text_recovery(
             account_id=args.account_id,
             slot_id=args.slot_id,
-            details={
-                "generation_reason": generation_reason,
-                "payload": generation_payload,
-            },
+            reason=generation_reason or "CANDIDATE_GENERATION_FAILED",
+            window=window,
+            safe_env=safe_env,
+            base_env=base_env,
         )
+        print(json.dumps(recovery_payload, ensure_ascii=False, indent=2))
+        return recovery_rc
 
     queue_ids = generated_queue_ids(generation_payload)
     if len(queue_ids) != 1:
         generation_reason = generation_failure_reason(generation_payload)
-        reason = (
-            "GEMINI_RATE_LIMITED"
-            if generation_reason == "GEMINI_RATE_LIMITED"
-            else "NO_AI_APPROVED_CANDIDATE"
-        )
-        return no_post(
-            reason,
+        recovery_rc, recovery_payload = run_bounded_text_recovery(
             account_id=args.account_id,
             slot_id=args.slot_id,
-            details={
-                "generation_reason": generation_reason,
-                "generated_queue_ids": queue_ids,
-            },
+            reason=generation_reason or "NO_AI_APPROVED_CANDIDATE",
+            window=window,
+            safe_env=safe_env,
+            base_env=base_env,
         )
+        print(json.dumps(recovery_payload, ensure_ascii=False, indent=2))
+        return recovery_rc
     generated_queue_id = queue_ids[0]
 
     ready_output = Path(f"/tmp/hybrid-ready-text-{args.account_id}-{args.slot_id}.json")
@@ -225,21 +311,29 @@ def main() -> int:
             if ready_status == "NO_READY_CANDIDATE"
             else "HYBRID_REVIEW_FAILED"
         )
-        return no_post(
-            reason,
+        recovery_rc, recovery_payload = run_bounded_text_recovery(
             account_id=args.account_id,
             slot_id=args.slot_id,
-            details=ready_payload,
+            reason=reason,
+            window=window,
+            safe_env=safe_env,
+            base_env=base_env,
         )
+        print(json.dumps(recovery_payload, ensure_ascii=False, indent=2))
+        return recovery_rc
 
     queue_id = str(ready_payload.get("selected_queue_id", "")).strip()
     if not queue_id or queue_id != generated_queue_id:
-        return no_post(
-            "NO_AI_APPROVED_SLOT_CANDIDATE",
+        recovery_rc, recovery_payload = run_bounded_text_recovery(
             account_id=args.account_id,
             slot_id=args.slot_id,
-            details=ready_payload,
+            reason="NO_AI_APPROVED_SLOT_CANDIDATE",
+            window=window,
+            safe_env=safe_env,
+            base_env=base_env,
         )
+        print(json.dumps(recovery_payload, ensure_ascii=False, indent=2))
+        return recovery_rc
 
     activation = [
         sys.executable,
@@ -248,14 +342,7 @@ def main() -> int:
         "--account-id",
         args.account_id,
         "--post-type",
-        str(window.get("post_type") or "") or {
-            "ns_1600_original": "original_text",
-            "ns_1400_reference": "reference_text",
-            "ns_2500_pdca": "pdca_text",
-            "lm_1000_original": "original_text",
-            "lm_1300_reference": "reference_text",
-            "lm_2100_pdca": "pdca_text",
-        }.get(args.slot_id, "original_text"),
+        str(window.get("post_type") or "") or SLOT_POST_TYPES.get(args.slot_id, "original_text"),
     ]
     rc, activation_payload = run_stage("runtime_activation_gate", activation, safe_env)
     append_job_summary("Runtime activation gate", activation_payload)
@@ -301,8 +388,15 @@ def main() -> int:
         "--confirm-real-post",
     ]
     rc, publish_payload = run_stage("publish_exact_queue", publish, publish_env)
+    publish_status = str(publish_payload.get("status", "")).strip().upper()
+    posted = verified_publish_result(rc, publish_payload)
     result = {
-        "status": "POSTED" if rc == 0 else "FAILED",
+        "status": "POSTED" if posted else "FAILED",
+        "reason": "" if posted else (
+            str(publish_payload.get("reason", "")).strip().upper()
+            or publish_status
+            or "PUBLISH_RESULT_UNVERIFIED"
+        ),
         "account_id": args.account_id,
         "slot_id": args.slot_id,
         "selected_queue_id": queue_id,
@@ -310,7 +404,7 @@ def main() -> int:
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
     append_job_summary("Scheduled text result", result)
-    return rc
+    return 0 if posted else 2
 
 
 if __name__ == "__main__":

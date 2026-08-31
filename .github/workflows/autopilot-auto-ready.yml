@@ -16,6 +16,7 @@ on:
           - "all"
           - "night_scout"
           - "liver_manager"
+          - "beauty_account"
       max_ready:
         description: "Maximum rows to promote to READY"
         required: true
@@ -66,10 +67,25 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Guard account and Sheets secrets
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
+      - name: Resolve scheduled inventory maintenance
+        env:
+          MANUAL_CONFIRM: ${{ github.event.inputs.confirm_auto_ready }}
         run: |
-          if [ "$ACCOUNT_ID" != "all" ] && [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ]; then
+          apply=false
+          max_ready="$MAX_READY"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            apply=true
+            max_ready=3
+          elif [ "$MANUAL_CONFIRM" = "true" ]; then
+            apply=true
+          fi
+          echo "AUTO_READY_APPLY=$apply" >> "$GITHUB_ENV"
+          echo "MAX_READY=$max_ready" >> "$GITHUB_ENV"
+
+      - name: Guard account and Sheets secrets
+        if: env.AUTO_READY_APPLY == 'true'
+        run: |
+          if [ "$ACCOUNT_ID" != "all" ] && [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ] && [ "$ACCOUNT_ID" != "beauty_account" ]; then
             echo "[BLOCKED] unsupported account"
             exit 1
           fi
@@ -89,11 +105,18 @@ jobs:
           PY
 
       - name: Verify Sheets before AUTO_READY
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
+        if: env.AUTO_READY_APPLY == 'true'
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only
 
+      - name: Maintain next text-slot READY inventory
+        if: env.AUTO_READY_APPLY == 'true'
+        run: |
+          python3 scripts/maintain_text_ready_inventory.py \
+            --account-id "$ACCOUNT_ID" --apply \
+            --confirm-ready-maintenance --use-sheets
+
       - name: AUTO_READY apply only
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
+        if: env.AUTO_READY_APPLY == 'true'
         run: |
           python3 scripts/run_autopilot_loop.py \
             --apply \
@@ -106,5 +129,5 @@ jobs:
             --skip-real-post
 
       - name: Verify Sheets after AUTO_READY
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_auto_ready == 'true'
+        if: env.AUTO_READY_APPLY == 'true'
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only

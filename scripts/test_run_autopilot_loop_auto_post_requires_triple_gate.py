@@ -9,7 +9,7 @@ mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 def main()->int:
     old={k:os.environ.get(k) for k in ("PUBLISH_ENABLED","ALLOW_REAL_THREADS_POST")}
     os.environ["PUBLISH_ENABLED"]="true"; os.environ["ALLOW_REAL_THREADS_POST"]="true"
-    rules=mod.load_rules(); rules["defaults"]["auto_post_enabled"]=True
+    rules=mod.load_rules()
     ok=mod.auto_post_gate(SimpleNamespace(auto_post=True,confirm_real_post=True,skip_real_post=False),rules)["allowed"] is True
     for k,v in old.items():
         if v is None: os.environ.pop(k,None)

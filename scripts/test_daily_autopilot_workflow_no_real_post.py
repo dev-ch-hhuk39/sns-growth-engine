@@ -19,7 +19,7 @@ def main() -> int:
         ("no confirm real post", "--confirm-real-post" not in content),
         ("posting env false", 'PUBLISH_ENABLED: "false"' in content and 'ALLOW_REAL_THREADS_POST: "false"' in content),
         ("no process worker real command", "process_threads_queue.py" not in content),
-        ("no beauty option", "beauty_account" not in content),
+        ("three-account inventory", "beauty_account" in content),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

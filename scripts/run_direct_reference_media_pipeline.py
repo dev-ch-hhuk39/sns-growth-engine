@@ -1560,7 +1560,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         append_row(client, "queue", queue)
         _invalidate_records(client, "queue")
     result = process_one(client, queue, dry_run=False, confirm_real_post=True)
-    posted = str(result.get("status", "")) in {"POSTED", "POSTED_SAVE_FAILED"}
+    posted = str(result.get("status", "")) == "POSTED"
     if plan.get("slot_id"):
         slot = build_slot_run(plan["account_id"], plan["slot_id"], status="POSTED_PRIMARY" if posted else "FAILED", actual_post_type="direct_reference_media", fallback_level=0, source_post_id=post["source_post_id"], media_asset_id=plan["media_asset_id"], queue_id=queue_id, result_id=result.get("result_id", ""), post_url=result.get("post_url", ""), actual_posted_at=datetime.now(timezone.utc).isoformat() if posted else "", no_post_reason="" if posted else str(result.get("reason", result.get("status", "failed"))))
         slot_result = upsert_slot_run(client, slot)
@@ -1677,7 +1677,7 @@ def dispatch_ready(
         }
     result = process_one(client, selected, dry_run=False, confirm_real_post=True)
     attempts.append({"phase": "publish", "queue_id": selected.get("queue_id", ""), "status": result.get("status", ""), "reason": result.get("reason", "")})
-    posted = str(result.get("status", "")) in {"POSTED", "POSTED_SAVE_FAILED"}
+    posted = str(result.get("status", "")) == "POSTED"
     if posted:
         slot = build_slot_run(
             account_id, slot_id, status="POSTED_PRIMARY", actual_post_type="direct_reference_media",
@@ -1685,7 +1685,7 @@ def dispatch_ready(
             media_asset_id=selected.get("media_asset_id", ""), queue_id=selected.get("queue_id", ""),
             result_id=result.get("result_id", ""), post_url=result.get("post_url", ""),
             actual_posted_at=datetime.now(timezone.utc).isoformat(),
-            no_post_reason="" if result.get("status") == "POSTED" else "POSTED_SAVE_FAILED",
+            no_post_reason="" if result.get("status") == "POSTED" else str(result.get("status", "publish_not_persisted")),
         )
         return {"status": result.get("status", "POSTED"), "account_id": account_id, "slot_id": slot_id, "selected_queue_id": selected.get("queue_id", ""), "attempts": attempts, "content_slot_run": upsert_slot_run(client, slot), "post_result": result, "would_post": False}
     return {"status": result.get("status", "FAILED"), "account_id": account_id, "slot_id": slot_id, "selected_queue_id": selected.get("queue_id", ""), "attempts": attempts, "would_post": False}
@@ -1780,7 +1780,19 @@ def main() -> int:
     print(rendered)
     if args.json_output:
         Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
-    return 1 if str(plan.get("status", "")).startswith(("FAILED", "BLOCKED")) else 0
+    status = str(plan.get("status", ""))
+    if args.apply and publish_mode:
+        post_result = dict(plan.get("post_result") or {})
+        complete = (
+            status == "POSTED"
+            and bool(str(post_result.get("result_id", "")).strip())
+            and bool(str(post_result.get("external_post_id", "")).strip())
+            and bool(str(post_result.get("post_url", "")).strip())
+            and int(post_result.get("metrics_collection_job_count", 0) or 0) == 3
+            and not str(post_result.get("warning", "")).strip()
+        )
+        return 0 if complete else 1
+    return 1 if status.startswith(("FAILED", "BLOCKED")) else 0
 
 
 if __name__ == "__main__":

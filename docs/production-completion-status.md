@@ -1189,3 +1189,17 @@ Code verification is `877/877` repository tests, `115/115` V1 audit and
 proof: exact-head GitHub CI, merge, bounded production preparation, publisher
 dry-run and authorized canary permalink/read-after-write/metrics evidence are
 still required before the final completion phrase may be used.
+
+## 2026-08-31 Three-account autonomous acceptance implementation
+
+| Area | Implementation | Required live proof |
+|---|---|---|
+| Accounts | Night Scout, Liver Manager, Beauty are all formal Goal and capability-matrix subjects | Three consecutive real schedule posts per account |
+| Approval | Low-risk normal content can auto-READY; genuine policy, medical, or rights risk remains held | No ordinary slot blocked by an unrelated review row |
+| Inventory | Proactive six-hour Night/Liver maintenance plus bounded per-slot recovery; Beauty keeps its dedicated preparation | No operational `NO_READY_QUEUE` on expected slots |
+| Publisher truth | Only complete POSTED + IDs + permalink + warning-free save + three metric jobs is success | Sheets read-after-write for every evidence row |
+| Metrics / PDCA | 24h/72h/168h real windows and same-account measured input references | All three windows collected, then consumed by PDCA |
+| Media | Rights-valid inventory is delegated to the media engine; unsafe assets fail closed | Direct/clip evidence remains separate from text fallback |
+| Configuration | `autonomous_mode.json` is publication SSOT and contradictions fail closed | Exact merged config used by schedule runs |
+
+The capability matrix now contains 48 production capabilities and is deliberately `UNVERIFIED` until the required live evidence exists. CI, workflow dispatch, dry-run, or historical canary evidence cannot promote these fields. Therefore this release must not be described as fully production-complete until the real-time streak and 168-hour metrics window finish successfully.
