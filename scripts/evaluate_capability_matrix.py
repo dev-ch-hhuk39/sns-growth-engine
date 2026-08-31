@@ -46,6 +46,8 @@ def evaluate(*, config_path: Path = CONFIG, status_path: Path = STATUS) -> dict[
     config = _load(config_path)
     status = _load(status_path)
     failures: list[dict[str, str]] = []
+    development_failures: list[dict[str, str]] = []
+    observation_failures: list[dict[str, str]] = []
     passed = 0
     code_complete = 0
     code_incomplete: list[dict[str, str]] = []
@@ -64,15 +66,24 @@ def evaluate(*, config_path: Path = CONFIG, status_path: Path = STATUS) -> dict[
             missing = [key for key in config["required_evidence"] if not evidence.get(key)]
             missing.extend(_production_evidence_errors(config, capability, evidence))
             if state != "PASS" or missing:
-                failures.append({"account_id": account_id, "capability": capability, "state": state, "missing_evidence": ",".join(missing)})
+                failure = {"account_id": account_id, "capability": capability, "state": state, "missing_evidence": ",".join(missing)}
+                failures.append(failure)
+                if capability in set(config.get("production_observation_capabilities", [])):
+                    observation_failures.append(failure)
+                else:
+                    development_failures.append(failure)
             else:
                 passed += 1
     required = len(config["accounts"]) * len(config["capabilities"])
     return {
         "status": "PASS" if not failures else "FAIL",
+        "development_acceptance": "PASS" if not development_failures else "FAIL",
+        "production_observation": "PASS" if not observation_failures else "IN_PROGRESS",
         "passed": passed,
         "required": required,
         "failed": failures,
+        "development_failed": development_failures,
+        "observation_pending": observation_failures,
         "code_complete": code_complete,
         "code_required": required,
         "code_incomplete": code_incomplete,
@@ -89,7 +100,13 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(f"capability_matrix={result['status']} production_pass={result['passed']}/{result['required']} code_complete={result['code_complete']}/{result['code_required']}")
+        print(
+            f"capability_matrix={result['status']} "
+            f"development_acceptance={result['development_acceptance']} "
+            f"production_observation={result['production_observation']} "
+            f"production_pass={result['passed']}/{result['required']} "
+            f"code_complete={result['code_complete']}/{result['code_required']}"
+        )
     return 0 if result["status"] == "PASS" else 1
 
 

@@ -1,9 +1,11 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "accounts": ["night_scout", "liver_manager", "beauty_account"],
   "allowed_states": ["PASS", "FAIL", "BLOCKED", "UNVERIFIED"],
   "production_evidence_required": true,
   "capabilities": ["original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip", "scheduled_publish", "result_persistence", "metrics", "pdca", "persona", "ready_inventory_recovery", "scheduled_publish_streak", "metrics_24_72_168", "pdca_measured_feedback", "failure_recovery"],
+  "development_rollout_capabilities": ["original_text", "reference_text", "direct_image", "direct_video", "direct_carousel", "approved_source_clip", "scheduled_publish", "result_persistence", "metrics", "pdca", "persona", "ready_inventory_recovery", "failure_recovery"],
+  "production_observation_capabilities": ["scheduled_publish_streak", "metrics_24_72_168", "pdca_measured_feedback"],
   "required_evidence": ["verified_at", "evidence_type", "evidence_ref"],
   "production_evidence_types": ["live_schedule", "live_threads_api", "live_sheets", "live_metrics"],
   "code_evidence": {

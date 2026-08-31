@@ -44,7 +44,7 @@ for account_id in ("night_scout", "liver_manager"):
         clip_slots,
     )
 
-    assert clip_slots[0].get("fallback_chain") == [SAVED_TYPE, "original_text"]
+    assert clip_slots[0].get("fallback_chain") == [SAVED_TYPE]
 
 capability_path = (
     ROOT / "config/production_capability_matrix.json"

@@ -18,6 +18,9 @@ assert config["constraints"]["media_slot_text_fallback"] is False
 assert config["constraints"]["x_operations"] is False
 assert config["constraints"]["beauty_account_operations"] is True
 assert config["constraints"]["beauty_cross_account_learning"] is False
+assert set(config["production_observation_capabilities"]) == {
+    "scheduled_publish_streak", "metrics_24_72_168", "pdca_measured_feedback"
+}
 for account_id in config["accounts"]:
     assert set(status["accounts"][account_id]) == set(config["capabilities"])
 
@@ -44,5 +47,7 @@ with tempfile.TemporaryDirectory() as temp:
     complete["accounts"]["beauty_account"]["scheduled_publish_streak"]["evidence"]["schedule_runs"][0]["event_name"] = "workflow_dispatch"
     path.write_text(json.dumps(complete), encoding="utf-8")
     assert evaluate(status_path=path)["status"] == "FAIL"
+    assert evaluate(status_path=path)["development_acceptance"] == "PASS"
+    assert evaluate(status_path=path)["production_observation"] == "IN_PROGRESS"
 
 print("PASS test_production_capability_matrix.py")

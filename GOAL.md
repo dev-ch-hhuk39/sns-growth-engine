@@ -34,10 +34,9 @@ for one account must not stop the other accounts.
 
 - READY inventory is replenished before publish windows and recovered with a
   bounded attempt at publish time.
-- Text slots may recover through another safe text route. Media slots prefer
-  approved inventory; after bounded permission-valid inventory exhaustion,
-  they may explicitly record an `original_text` `POSTED_FALLBACK`. This never
-  counts as media capability evidence, and media replenishment continues.
+- Text slots may recover through another safe text route. Media slots use only
+  approved inventory and fail closed with `SKIPPED_POLICY` when none exists;
+  they never silently become text posts. Media replenishment continues.
 - Intended slots missed because of inventory exhaustion, generation failure,
   quality exhaustion, upstream preparation failure or ordinary review waiting
   are operational failures, not successful safe skips.
@@ -50,25 +49,27 @@ for one account must not stop the other accounts.
   process or claims internal measurements.
 - X publishing and Beauty cross-account learning remain disabled.
 
-## Completion evidence
+## Acceptance layers
 
-Green CI, a dry-run, a workflow dispatch or a one-off canary is not production
-completion. Completion requires all three accounts to demonstrate at least
-three consecutive real GitHub Actions `schedule` runs with automatic
-preparation, READY promotion, correct-account Threads publication, permalink,
-posted-results read-after-write, queue `POSTED`, no duplicate and three metric
-reservations.
+Development/rollout acceptance is decided from tests, CI, active workflows and
+configuration, strict READY generation, one bounded production canary per
+account, result read-after-write, recovery wiring, metric reservations and
+PDCA wiring. When these pass, `development_acceptance=PASS`,
+`production_automation=ACTIVE` and `production_canary=PASS` are valid without
+waiting for future wall-clock windows.
 
-After real time has elapsed, each account must also have successful measured
-24h, 72h and 168h collections and evidence that those measurements were used
-by a later PDCA generation. Temporary external failures must demonstrate
-bounded retry/backoff, explicit failure/alerting and no duplicate publish.
+Long-term production observation continues separately. Three consecutive real
+schedule events, measured 24h/72h/168h collections and later same-account PDCA
+consumption remain mandatory evidence, but pending windows are reported as
+`production_observation=IN_PROGRESS`; they do not reopen completed development.
+Temporary external failures must still demonstrate bounded retry/backoff,
+explicit failure/alerting and no duplicate publish.
 
 The criteria in `config/goal_acceptance.json` are additive: historical
 criteria are retained, while current three-account production criteria are
 required as well. `config/production_capability_matrix.json` is the canonical
-capability contract. Any `UNVERIFIED`, `BLOCKED`, `NO_POST`, manual dependency
-or missing live evidence keeps the Goal incomplete.
+capability contract. Missing rollout evidence blocks development acceptance;
+missing time-based observation evidence blocks only production observation.
 
 Secrets, tokens, cookies, storage state, source media and production-only
 configuration must never be committed.

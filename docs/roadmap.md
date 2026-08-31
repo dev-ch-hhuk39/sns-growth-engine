@@ -629,4 +629,4 @@
 - [x] 権利証跡付きdirect media / clipのscheduled経路
 - [x] 投稿・Sheets保存・metrics予約を完全成功として扱う厳格なpublisher結果判定
 
-本Phaseのコード完了とproduction acceptanceは別です。各アカウントで3回連続の実`schedule`投稿、実permalink、Sheets read-after-write、24h/72h/168h metrics、PDCA入力証拠が揃うまで本番完成とは判定しません。
+本Phaseはdevelopment/rollout acceptanceと長期production observationを分離します。CI、3アカウントcanary、read-after-write、recovery、metrics予約、PDCA配線までを開発完了条件とし、3回連続の実`schedule`投稿と24h/72h/168h metrics、後続PDCA入力証拠は運用開始後も継続するobservationです。

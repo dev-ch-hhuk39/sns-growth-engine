@@ -11,15 +11,17 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "scripts")); sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
 from autonomous_runtime_config import load_runtime_policy  # noqa: E402
 from content_schedule import load_content_schedule  # noqa: E402
-from content_slot_runs import business_date, existing_slot_row  # noqa: E402
+from content_slot_runs import business_date, build_slot_run, existing_slot_row, upsert_slot_run  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
 POSTED = {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
+TERMINAL = POSTED | {"SKIPPED_POLICY"}
 MEDIA_POST_ENV = (
     "PUBLISH_ENABLED",
     "ALLOW_REAL_THREADS_POST",
@@ -72,7 +74,7 @@ def missing_slots(client: SheetsClient, account_id: str, now: datetime | None = 
                     continue
             except ValueError:
                 continue
-        if status not in POSTED:
+        if status not in TERMINAL:
             result.append({"slot_id": slot["slot_id"], "expected_post_type": slot["post_type"], "status": status or "MISSING", "target_jst": target.isoformat()})
     return sorted(result, key=lambda row: row["target_jst"])
 
@@ -125,6 +127,33 @@ def _complete_post(row: dict[str, Any]) -> bool:
     )
 
 
+def _policy_skip_media(
+    client: SheetsClient,
+    account_id: str,
+    slot: dict[str, Any],
+    *,
+    apply: bool,
+    reason: str,
+) -> dict[str, Any]:
+    result = {
+        "status": "POLICY_SKIPPED_NO_ELIGIBLE_MEDIA",
+        "path": "media_fail_closed",
+        "reason": reason,
+        "would_post": False,
+    }
+    if not apply:
+        return {**result, "status": "PLAN_ONLY"}
+    row = build_slot_run(
+        account_id,
+        str(slot["slot_id"]),
+        status="SKIPPED_POLICY",
+        actual_post_type="",
+        no_post_reason=reason,
+    )
+    saved = upsert_slot_run(client, row)
+    return {**result, "content_slot_run": saved}
+
+
 def recover_slot(
     client: SheetsClient,
     account_id: str,
@@ -162,13 +191,12 @@ def recover_slot(
                 "post_result": posted.get("post_result", {}),
             }
         reason = f"direct_media_recovery_{str(preflight.get('reason') or preflight.get('status') or 'unavailable').lower()}"
-        return _text_fallback(
+        return _policy_skip_media(
             client,
             account_id,
             slot,
             apply=apply,
             reason=reason,
-            allow_media_slot_safe_text_fallback=True,
         )
 
     if expected == "approved_source_clip":
@@ -214,13 +242,12 @@ def recover_slot(
         reason = "approved_source_clip_recovery_" + str(
             (media_plan.get("blocked_reasons") or [media_plan.get("status", "unavailable")])[0]
         ).lower()
-        return _text_fallback(
+        return _policy_skip_media(
             client,
             account_id,
             slot,
             apply=apply,
             reason=reason,
-            allow_media_slot_safe_text_fallback=True,
         )
 
     return _text_fallback(client, account_id, slot, apply=apply, reason="missed_text_slot_aftercare")
@@ -234,8 +261,10 @@ def main() -> int:
     parser.add_argument("--confirm-backfill", action="store_true")
     args = parser.parse_args()
     if args.apply and not args.confirm_backfill:
-        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-backfill"})); return 1
-    cfg = get_config(); client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-backfill"}))
+        return 1
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     accounts = ["night_scout", "liver_manager"] if args.account_id == "all" else [args.account_id]
     plans = {account: missing_slots(client, account) for account in accounts}
     result: dict[str, Any] = {"status": "PLAN_ONLY", "aftercare_threshold_minutes": 20, "missing_slots": plans, "would_post": False, "backfills": []}
@@ -243,9 +272,11 @@ def main() -> int:
         for account, slots in plans.items():
             if slots:
                 result["backfills"].append({"account_id": account, "slot_id": slots[0]["slot_id"], **recover_slot(client, account, slots[0], apply=False)})
-        print(json.dumps(result, ensure_ascii=False, indent=2)); return 0
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     if str(os.environ.get("PUBLISH_ENABLED", "")).lower() not in {"1", "true", "yes"} or str(os.environ.get("ALLOW_REAL_THREADS_POST", "")).lower() not in {"1", "true", "yes"}:
-        print(json.dumps({**result, "status": "BLOCKED", "reason": "Threads publishing gates are required"}, ensure_ascii=False, indent=2)); return 1
+        print(json.dumps({**result, "status": "BLOCKED", "reason": "Threads publishing gates are required"}, ensure_ascii=False, indent=2))
+        return 1
     runtime_allowed, runtime_blockers = _runtime_activation_gate()
     if not runtime_allowed:
         print(json.dumps({
@@ -264,15 +295,21 @@ def main() -> int:
         result["backfills"].append({"account_id": account, "slot_id": slot["slot_id"], **recovery})
     missing_count = sum(len(slots) for slots in plans.values())
     completed = [row for row in result["backfills"] if _complete_post(row)]
+    policy_skipped = [
+        row for row in result["backfills"]
+        if str(row.get("status", "")).upper() == "POLICY_SKIPPED_NO_ELIGIBLE_MEDIA"
+    ]
     result["status"] = (
         "NO_ACTION"
         if missing_count == 0
         else "BACKFILLED"
         if len(completed) == len(result["backfills"])
+        else "RECOVERED_OR_POLICY_SKIPPED"
+        if len(completed) + len(policy_skipped) == len(result["backfills"])
         else "OPERATIONAL_FAILURE"
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if result["status"] in {"NO_ACTION", "BACKFILLED"} else 1
+    return 0 if result["status"] in {"NO_ACTION", "BACKFILLED", "RECOVERED_OR_POLICY_SKIPPED"} else 1
 
 
 if __name__ == "__main__":

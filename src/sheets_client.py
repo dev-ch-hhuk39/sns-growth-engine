@@ -219,7 +219,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "auto_publish",
         # Provider-independent automated review evidence.  approval_source is
         # policy provenance and must never impersonate a human decision.
-        "approval_source", "approval_policy",
+        "approval_source", "approval_policy", "approval_mode",
+        "automated_approved", "human_approved",
         "provider_status", "provider_error_type", "provider_http_status",
         "provider_mode", "fallback_mode", "fallback_reason",
         # Phase 2.13-2.15 追加
@@ -323,7 +324,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "media_validator_status", "created_at", "updated_at",
         "review_decision", "reviewer_note", "decision_applied_at",
         "decision_result", "last_sync_at",
-        "approval_source", "approval_policy",
+        "approval_source", "approval_policy", "approval_mode",
+        "automated_approved", "human_approved",
         "provider_status", "provider_error_type", "provider_http_status",
         "provider_mode", "fallback_mode", "fallback_reason",
     ],

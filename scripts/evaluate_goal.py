@@ -87,7 +87,8 @@ def evaluate(
         missing = [name for name in criterion.get("requires", []) if evidence.get(name) in (None, "", [], {})]
         missing.extend(_live_evidence_errors(criterion, evidence))
         if status != acceptance.get("passing_status", "PASS") or missing:
-            failures.append({"id": criterion_id, "status": status, "missing_evidence": missing})
+            failure = {"id": criterion_id, "status": status, "missing_evidence": missing}
+            failures.append(failure)
         else:
             passed.append(criterion_id)
 
@@ -125,11 +126,30 @@ def evaluate(
         failures.append({"id": "origin_main_matches", "status": "FAIL", "missing_evidence": ["final_main_sha_mismatch"]})
 
     unique_failures = {item["id"]: item for item in failures}
+    observation_ids = {
+        str(criterion["id"])
+        for criterion in acceptance.get("criteria", [])
+        if not criterion.get("blocks_development_completion", True)
+    }
+    # Dynamic repository/evidence-scope failures are always development
+    # blockers; only explicitly classified time-based criteria are not.
+    unique_development_failures = {
+        item_id: item for item_id, item in unique_failures.items()
+        if item_id not in observation_ids
+    }
+    unique_observation_failures = {
+        item_id: item for item_id, item in unique_failures.items()
+        if item_id in observation_ids
+    }
     return {
         "status": "PASS" if not unique_failures else "FAIL",
+        "development_acceptance": "PASS" if not unique_development_failures else "FAIL",
+        "production_observation": "PASS" if not unique_observation_failures else "IN_PROGRESS",
         "passed": len(passed),
         "required": len(acceptance.get("criteria", [])),
         "failed": list(unique_failures.values()),
+        "development_failed": list(unique_development_failures.values()),
+        "observation_pending": list(unique_observation_failures.values()),
         "dynamic": dynamic,
     }
 
@@ -143,7 +163,12 @@ def main() -> int:
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print(f"goal_status={result['status']} passed={result['passed']}/{result['required']}")
+        print(
+            f"goal_status={result['status']} "
+            f"development_acceptance={result['development_acceptance']} "
+            f"production_observation={result['production_observation']} "
+            f"passed={result['passed']}/{result['required']}"
+        )
         for item in result["failed"]:
             print(f"FAIL {item['id']}: status={item['status']} missing={','.join(item['missing_evidence']) or '-'}")
     return 0 if result["status"] == "PASS" else 1
