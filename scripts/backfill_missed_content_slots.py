@@ -76,7 +76,11 @@ def missing_slots(client: SheetsClient, account_id: str, now: datetime | None = 
                 continue
         if status not in TERMINAL:
             result.append({"slot_id": slot["slot_id"], "expected_post_type": slot["post_type"], "status": status or "MISSING", "target_jst": target.isoformat()})
-    return sorted(result, key=lambda row: row["target_jst"])
+    # Recovery is bounded to one slot per account and GitHub schedule delivery
+    # can be delayed for hours. Prioritize the latest overdue slot so an older
+    # media failure cannot starve the most recent text slot past the 04:00
+    # business-day boundary.
+    return sorted(result, key=lambda row: row["target_jst"], reverse=True)
 
 
 def _text_fallback(
