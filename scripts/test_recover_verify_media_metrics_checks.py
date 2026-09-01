@@ -190,6 +190,21 @@ def main() -> int:
                    "media_approved_rows_rights_clear" not in scoped["failed"]
                    and "media_uploaded_only_if_approved" not in scoped["failed"]
                    and scoped["verification_scope"]["status"] == "PASS"))
+    scoped_tabs["queue"][0].update({
+        "source_post_id": "sp_reference_only",
+        "source_video_id": "sv_reference_only",
+        "clip_candidate_id": "clip_reference_only",
+    })
+    provenance_client = _FakeClient(scoped_tabs)
+    provenance_scoped = mod.scope_verification_to_exact_text_queue(
+        provenance_client,
+        mod.verify_state(provenance_client),
+        queue_id="q_text",
+        account_id="night_scout",
+    )
+    checks.append(("reference provenance does not turn a text queue into media",
+                   provenance_scoped["verification_scope"]["status"] == "PASS"
+                   and "exact_text_queue_scope_invalid" not in provenance_scoped["failed"]))
     scoped_tabs["queue"][0]["media_asset_id"] = "unrelated"
     media_client = _FakeClient(scoped_tabs)
     blocked = mod.scope_verification_to_exact_text_queue(
