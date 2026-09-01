@@ -2,7 +2,12 @@
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from maintain_text_ready_inventory import _generation_commands, future_text_slots, next_text_slot
+from maintain_text_ready_inventory import (
+    _generation_commands,
+    _ready_exists,
+    future_text_slots,
+    next_text_slot,
+)
 
 jst = timezone(timedelta(hours=9))
 night = next_text_slot("night_scout", now=datetime(2026, 8, 31, 13, 0, tzinfo=jst))
@@ -22,6 +27,29 @@ reference_routes = _generation_commands("night_scout", night)
 assert [route for route, _command in reference_routes] == ["primary", "safe_original_fallback"]
 reference_fallback = reference_routes[1][1]
 assert reference_fallback[reference_fallback.index("--post-type") + 1] == "original_text"
+ready_contract = {
+    "account_id": "night_scout",
+    "slot_id": night["slot_id"],
+    "status": "READY",
+    "validator_status": "PASS",
+    "internal_leak_status": "PASS",
+    "account_fit_status": "PASS",
+}
+assert _ready_exists(
+    [{**ready_contract, "schedule_date_jst": night["business_date_jst"]}],
+    "night_scout",
+    night,
+)
+assert _ready_exists(
+    [{**ready_contract, "business_date_jst": night["business_date_jst"]}],
+    "night_scout",
+    night,
+)
+assert not _ready_exists(
+    [{**ready_contract, "schedule_date_jst": "2026-09-01"}],
+    "night_scout",
+    night,
+)
 source = Path(__file__).with_name("maintain_text_ready_inventory.py").read_text(encoding="utf-8")
 assert "process_threads_queue.py" not in source
 assert "--autonomous-low-risk" in source

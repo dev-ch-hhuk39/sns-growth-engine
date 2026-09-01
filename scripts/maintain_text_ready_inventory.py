@@ -68,10 +68,12 @@ def future_text_slots(
 
 
 def _ready_exists(rows: list[dict[str, Any]], account_id: str, slot: dict[str, str]) -> bool:
+    target_date = str(slot["business_date_jst"])
     return any(
         str(row.get("account_id", "")) == account_id
         and str(row.get("slot_id", "")) == str(slot["slot_id"])
-        and str(row.get("business_date_jst", "")) == str(slot["business_date_jst"])
+        and str(row.get("business_date_jst") or row.get("schedule_date_jst") or "")
+        == target_date
         and str(row.get("status", "")).upper() == "READY"
         and str(row.get("validator_status", "")).upper() == "PASS"
         and str(row.get("internal_leak_status", "")).upper() == "PASS"
