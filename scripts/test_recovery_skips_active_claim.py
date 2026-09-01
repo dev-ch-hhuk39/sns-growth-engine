@@ -35,12 +35,24 @@ claimed.update({"claim_status": "CLAIMED", "lease_expires_at": (now + timedelta(
 active_ids = {item["slot_id"] for item in missing_slots(Client([claimed]), "liver_manager", now)}
 claimed["lease_expires_at"] = (now - timedelta(minutes=1)).isoformat()
 expired_ids = {item["slot_id"] for item in missing_slots(Client([claimed]), "liver_manager", now)}
+night_latest = missing_slots(
+    Client([]),
+    "night_scout",
+    datetime(2026, 7, 18, 2, 0, tzinfo=jst),
+)[0]
+liver_latest = missing_slots(
+    Client([]),
+    "liver_manager",
+    datetime(2026, 7, 18, 2, 0, tzinfo=jst),
+)[0]
 recovery = build_slot_run("liver_manager", slot["slot_id"], status="RECOVERY_REQUIRED", now=now)
 recovery.update({"claim_status": "EXPIRED", "no_post_reason": "stale_slot_claim_requires_explicit_recovery"})
 recovery_claim = claim_slot_run(Client([recovery]), "liver_manager", slot["slot_id"], at=now)
 checks = [
     ("active claim skipped", slot["slot_id"] not in active_ids),
     ("expired claim recoverable", slot["slot_id"] in expired_ids),
+    ("latest Night overdue slot is prioritized", night_latest["slot_id"] == "ns_2500_pdca"),
+    ("latest Liver overdue slot is prioritized", liver_latest["slot_id"] == "lm_2100_pdca"),
     ("recovery-required slot cannot receive a second claim", recovery_claim.get("reason") == "slot_recovery_required"),
 ]
 for name, ok in checks:
