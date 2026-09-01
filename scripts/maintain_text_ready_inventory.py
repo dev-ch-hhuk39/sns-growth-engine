@@ -105,19 +105,22 @@ def _generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[st
         "--schedule-date-jst",
         str(slot["business_date_jst"]),
     ]
-    if slot["post_type"] != "pdca_text":
-        return [("primary", base)]
-    return [
-        ("measured_pdca", [*base, "--require-measured-pdca"]),
-        (
-            "safe_original_fallback",
-            [
-                *base[: base.index("--post-type") + 1],
-                "original_text",
-                *base[base.index("--post-type") + 2 :],
-            ],
-        ),
+    original_fallback = [
+        *base[: base.index("--post-type") + 1],
+        "original_text",
+        *base[base.index("--post-type") + 2 :],
     ]
+    if slot["post_type"] == "pdca_text":
+        return [
+            ("measured_pdca", [*base, "--require-measured-pdca"]),
+            ("safe_original_fallback", original_fallback),
+        ]
+    if slot["post_type"] == "reference_text":
+        return [
+            ("primary", base),
+            ("safe_original_fallback", original_fallback),
+        ]
+    return [("primary", base)]
 
 
 def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str, Any]:
