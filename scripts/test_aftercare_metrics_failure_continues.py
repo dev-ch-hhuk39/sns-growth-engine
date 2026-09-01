@@ -11,8 +11,8 @@ metrics_pos = SOURCE.index("Apply metrics snapshots")
 sync_pos = SOURCE.index("Sync source registry and Sheets schema")
 checks = [
     ("metrics failure is not swallowed", "set +e" not in SOURCE[metrics_pos:sync_pos] and "exit 0" not in SOURCE[metrics_pos:sync_pos]),
-    ("PDCA still follows successful metrics", sync_pos > metrics_pos and "Apply PDCA candidate generation" in SOURCE[sync_pos:]),
-    ("all managed accounts receive PDCA", "night_scout liver_manager beauty_account" in SOURCE),
+    ("PDCA still follows successful metrics", sync_pos > metrics_pos and "Maintain next 24h READY inventory from measured PDCA" in SOURCE[sync_pos:]),
+    ("all managed accounts receive PDCA", "--account-id all" in SOURCE and "beauty_account_pdca_route=dedicated_beauty_generation" in SOURCE),
     ("PDCA failure is operational", "one or more measured PDCA generations failed" in SOURCE),
     ("aftercare health reads operational counts", "--use-sheets" in SOURCE),
 ]
