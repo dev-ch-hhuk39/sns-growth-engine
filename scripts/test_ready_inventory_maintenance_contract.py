@@ -18,6 +18,10 @@ assert [route for route, _command in pdca_routes] == ["measured_pdca", "safe_ori
 assert "--require-measured-pdca" in pdca_routes[0][1]
 fallback_command = pdca_routes[1][1]
 assert fallback_command[fallback_command.index("--post-type") + 1] == "original_text"
+reference_routes = _generation_commands("night_scout", night)
+assert [route for route, _command in reference_routes] == ["primary", "safe_original_fallback"]
+reference_fallback = reference_routes[1][1]
+assert reference_fallback[reference_fallback.index("--post-type") + 1] == "original_text"
 source = Path(__file__).with_name("maintain_text_ready_inventory.py").read_text(encoding="utf-8")
 assert "process_threads_queue.py" not in source
 assert "--autonomous-low-risk" in source
