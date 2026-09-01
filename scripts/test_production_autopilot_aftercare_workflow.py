@@ -123,17 +123,17 @@ checks = [
         ),
     ),
     (
-        "pdca uses production generator",
+        "pdca uses bounded READY maintenance",
         (
-            "generate_threads_ideas_"
-            "from_references.py"
+            "maintain_text_ready_inventory.py"
             in workflow
-            and "--post-type pdca_text"
+            and "--account-id all"
             in workflow
             and (
-                "--require-measured-pdca"
+                "--confirm-ready-maintenance"
                 in workflow
             )
+            and "--slot-id activation_pdca" not in workflow
         ),
     ),
     (

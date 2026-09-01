@@ -144,42 +144,20 @@ jobs:
             --use-sheets \
             --output /tmp/growth-attribution.json
 
-      - name: Apply PDCA candidate generation and maintain next 24h READY inventory
+      - name: Maintain next 24h READY inventory from measured PDCA
         if: env.AFTERCARE_APPLY == 'true'
         run: |
-          failed=0
-          for account in night_scout liver_manager beauty_account; do
-            if [ "$account" = "beauty_account" ]; then
-              echo "beauty_account_pdca_route=dedicated_beauty_generation" >> "$GITHUB_STEP_SUMMARY"
-              continue
-            fi
-            set +e
-            python3 scripts/generate_threads_ideas_from_references.py \
-              --account-id "$account" \
-              --platform threads \
-              --source references \
-              --top-n 3 \
-              --slot-id activation_pdca \
-              --post-type pdca_text \
-              --require-measured-pdca \
-              --apply \
-              --confirm-generate
-            measured_exit=$?
-            set -e
-            echo "${account}_measured_pdca_exit=$measured_exit" >> "$GITHUB_STEP_SUMMARY"
-
-            # Replenishment retries strict PDCA and then a safe original route.
-            # It returns non-zero if neither route can produce strict READY.
-            if ! python3 scripts/maintain_text_ready_inventory.py \
-              --account-id "$account" --apply \
-              --confirm-ready-maintenance --use-sheets; then
-              failed=1
-            fi
-          done
-          if [ "$failed" -ne 0 ]; then
+          # READY maintenance owns PDCA generation for a missing PDCA slot and
+          # retries measured_pdca before safe_original_fallback. Generating an
+          # extra activation_pdca batch first creates near-duplicates and burns
+          # the bounded Gemini budget without adding usable inventory.
+          if ! python3 scripts/maintain_text_ready_inventory.py \
+            --account-id all --apply \
+            --confirm-ready-maintenance --use-sheets; then
             echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed after bounded fallback"
             exit 1
           fi
+          echo "beauty_account_pdca_route=dedicated_beauty_generation" >> "$GITHUB_STEP_SUMMARY"
           echo "ready_inventory_24h_exit=0" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Health summary
