@@ -34,6 +34,14 @@ class FakeLedgerClient:
         raise AssertionError("log must not be called when ledger read fails")
 
 
+class RecordingLedgerClient:
+    def __init__(self) -> None:
+        self.logged: list[dict[str, Any]] = []
+
+    def log(self, **kwargs: Any) -> None:
+        self.logged.append(dict(kwargs))
+
+
 def main() -> None:
     queue = {
         "queue_id": "q_current",
@@ -89,6 +97,32 @@ def main() -> None:
             raise AssertionError("budget read failure must fail closed")
     finally:
         runner.read_records_safely = original_reader
+
+    original_daily_max = runner.DAILY_MAX
+    runner.DAILY_MAX = 1
+    try:
+        other_account_rows = [{
+            "operation": "hybrid_ai_request_reserved",
+            "status": "OK",
+            "account_id": "liver_manager",
+            "timestamp": runner.now_iso(),
+        }]
+        runner.read_records_safely = lambda _client, _logical: other_account_rows
+        recording = RecordingLedgerClient()
+        runner.SheetsBudgetLedger(recording, "night_scout").reserve({"operation": "classify"})
+        assert len(recording.logged) == 1
+
+        same_account_rows = [{**other_account_rows[0], "account_id": "night_scout"}]
+        runner.read_records_safely = lambda _client, _logical: same_account_rows
+        try:
+            runner.SheetsBudgetLedger(RecordingLedgerClient(), "night_scout").reserve({"operation": "classify"})
+        except RuntimeError as exc:
+            assert str(exc) == "hybrid_ai_daily_limit_exceeded"
+        else:
+            raise AssertionError("same-account daily budget must remain fail-closed")
+    finally:
+        runner.read_records_safely = original_reader
+        runner.DAILY_MAX = original_daily_max
 
     workflows = [
         (ROOT / ".github/workflows/hybrid-ai-gate-night-scout.yml").read_text(encoding="utf-8"),

@@ -76,6 +76,7 @@ class SheetsBudgetLedger:
             for row in logs
             if str(row.get("operation", "")) == "hybrid_ai_request_reserved"
             and str(row.get("status", "")).upper() == "OK"
+            and str(row.get("account_id", "")) == self.account_id
         ]
         daily_used = 0
         monthly_used = 0
