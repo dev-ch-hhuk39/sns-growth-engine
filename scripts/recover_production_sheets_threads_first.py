@@ -1597,10 +1597,9 @@ def scope_verification_to_exact_text_queue(
         scope_reasons.append("exact_queue_not_threads")
     if str(row.get("status", "")).strip().upper() not in {"READY", "PROCESSING", "POSTED"}:
         scope_reasons.append("exact_queue_status_not_publishable_or_posted")
-    media_values = [
-        row.get("media_asset_id"), row.get("media_url"), row.get("source_post_id"),
-        row.get("source_video_id"), row.get("clip_candidate_id"),
-    ]
+    # Source identifiers are provenance and are valid on reference-based text
+    # rows. Only fields that attach media to this queue make it a media row.
+    media_values = [row.get("media_asset_id"), row.get("media_url")]
     raw_media_ids = str(row.get("media_asset_ids_json", "")).strip()
     if raw_media_ids not in {"", "[]", "null", "None"}:
         media_values.append(raw_media_ids)
