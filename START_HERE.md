@@ -1,3 +1,10 @@
+## 2026-09-07 Follow-up: Stale Approval and Delayed Slot Recovery
+
+- Automatic READY approvals with stale Hybrid evidence are explicitly withdrawn to WAITING_REVIEW and read back before bounded re-evaluation. Human-approved, excluded, cross-account and POSTED rows are never refreshed this way.
+- Autonomous preparation requests this refresh; publisher validation remains mandatory.
+- A late text schedule event may recover only its exact overdue slot from prebuilt inventory, using existing activation, lease and publisher gates. Missing inventory or an unrecoverable slot is a failure, not a successful no-post.
+- Local focused refresh/recovery tests PASS. Production completion remains unverified; provider capacity and media suitability failures remain tracked separately.
+
 ## 2026-09-07 Scheduled Inventory Delivery Repair
 
 Status: implementation verified locally; production completion NOT proven.
