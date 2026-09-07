@@ -1,3 +1,11 @@
+## 2026-09-08 Exact Threads Identifier Persistence
+
+- Publisher writes use RAW strings to prevent Sheets coercing long external IDs or interpreting public text as formulas.
+- Existing-save repair requires the exact account-scoped live permalink, text and timestamp; it never publishes or retries a post.
+- Liver direct video result ending `20260907172646` recovered without reposting: external ID `18066462212730000`, https://www.threads.com/@ran.liver_pro/post/Dc_pNB7DmGl . Read-after-write PASS, queue POSTED, 24/72/168h reservations confirmed (3).
+- Night direct video also posted via scheduled recovery: https://www.threads.com/@kyaba_consul_mizu/post/Dc_Cf0DjxIm . Neither post should be retried.
+- Focused identifier/repair tests: 9 PASS; worker contract checks: 12 PASS. Full restoration is NOT established: generation exhaustion/provider rate limits, Beauty/media inventory and delayed GitHub schedule events remain unresolved.
+
 ## 2026-09-07 Follow-up: Stale Approval and Delayed Slot Recovery
 
 - Automatic READY approvals with stale Hybrid evidence are explicitly withdrawn to WAITING_REVIEW and read back before bounded re-evaluation. Human-approved, excluded, cross-account and POSTED rows are never refreshed this way.

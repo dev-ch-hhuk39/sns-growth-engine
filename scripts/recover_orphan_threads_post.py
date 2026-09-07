@@ -6,7 +6,7 @@
 
 絶対ルール:
 - 再投稿は絶対にしない
-- posted_results に既にエントリがあれば書かない
+- 既存posted_resultsの補正は --repair-existing-save と実API照合が必要
 - secret/token値を表示しない
 - apply しない限り Sheets は書き変わらない
 
@@ -338,6 +338,66 @@ def _write_recovery(
     }
 
 
+def repair_existing_save(client: SheetsClient, queue: dict[str, Any], api_posts: list[dict], *, apply: bool) -> dict[str, Any]:
+    from process_threads_queue import records, update_row, schedule_metrics_after_post, verify_posted_result_persistence
+    from content_slot_runs import build_slot_run, upsert_slot_run
+
+    queue_id, account = str(queue["queue_id"]), str(queue["account_id"])
+    if queue.get("status") != "POSTED_SAVE_UNVERIFIED" or queue.get("error") != "EXTERNAL_POST_ID_MISMATCH":
+        return {"status": "BLOCKED", "reason": "NOT_AN_IDENTIFIER_SAVE_FAILURE"}
+    rows = [r for r in records(client, "posted_results") if str(r.get("queue_id", "")) == queue_id]
+    if len(rows) != 1 or rows[0].get("account_id") != account or rows[0].get("status") != "POSTED":
+        return {"status": "BLOCKED", "reason": "AMBIGUOUS_POSTED_RESULT"}
+    row = rows[0]
+    text, url = str(row.get("posted_text", "")), str(row.get("post_url", ""))
+    matches = [p for p in api_posts if url and p.get("permalink") == url
+               and text and p.get("text") == text and str(p.get("id", "")).isdigit()]
+    if len(matches) != 1 or str(queue.get("public_post_text", "")) != text:
+        return {"status": "BLOCKED", "reason": "LIVE_POST_EXACT_MATCH_REQUIRED"}
+    try:
+        posted_at = datetime.fromisoformat(str(row["posted_at"]).replace("Z", "+00:00"))
+        remote_at = datetime.fromisoformat(str(matches[0]["timestamp"]).replace("Z", "+00:00"))
+        if posted_at.tzinfo is None or remote_at.tzinfo is None or abs((posted_at - remote_at).total_seconds()) > 120:
+            raise ValueError("timestamp mismatch")
+    except (KeyError, ValueError):
+        return {"status": "BLOCKED", "reason": "LIVE_POST_TIMESTAMP_MISMATCH"}
+    exact_id, result_id = str(matches[0]["id"]), str(row["result_id"])
+    result = {"status": "PLAN_ONLY", "queue_id": queue_id, "result_id": result_id,
+              "external_post_id": exact_id, "post_url": url, "would_post": False}
+    if not apply:
+        return result
+    if not update_row(client, "posted_results", "result_id", result_id, {"external_post_id": exact_id}):
+        raise RuntimeError("identifier_update_failed")
+    check = verify_posted_result_persistence(records(client, "posted_results"), result_id=result_id,
+            queue_id=queue_id, account_id=account, external_post_id=exact_id)
+    if check["status"] != "PASS":
+        raise RuntimeError("identifier_read_after_write_failed")
+    if not update_row(client, "posted_results", "result_id", result_id,
+                      {"verification_status": "READ_AFTER_WRITE_PASS", "verification_checked_at": _now_iso()}):
+        raise RuntimeError("verification_update_failed")
+    verified = [r for r in records(client, "posted_results") if r.get("result_id") == result_id]
+    if len(verified) != 1 or verified[0].get("verification_status") != "READ_AFTER_WRITE_PASS":
+        raise RuntimeError("verification_read_after_write_failed")
+    schedule_metrics_after_post(client, result_id)
+    jobs = [j for j in records(client, "metrics_collection_jobs") if j.get("result_id") == result_id]
+    if len(jobs) != 3 or any(j.get("account_id") != account for j in jobs) or {int(j.get("window_hours") or 0) for j in jobs if j.get("status") not in {"FAILED", "CANCELLED"}} != {24, 72, 168}:
+        raise RuntimeError("metrics_reservation_read_after_write_failed")
+    if queue.get("slot_id"):
+        slot = build_slot_run(account, str(queue["slot_id"]), now=posted_at,
+                status="POSTED_PRIMARY", actual_post_type=str(queue.get("generation_mode", "")),
+                queue_id=queue_id, result_id=result_id, post_url=url,
+                media_asset_id=str(row.get("media_asset_id", "")), actual_posted_at=str(row["posted_at"]))
+        saved = upsert_slot_run(client, slot)
+        if saved.get("status") not in {"UPDATED", "CREATED"}:
+            raise RuntimeError("slot_recovery_save_failed")
+    if not update_row(client, "queue", "queue_id", queue_id, {"status": "POSTED", "error": "", "result_id": result_id}):
+        raise RuntimeError("queue_recovery_update_failed")
+    after = next((r for r in records(client, "queue") if r.get("queue_id") == queue_id), {})
+    if after.get("status") != "POSTED":
+        raise RuntimeError("queue_recovery_read_after_write_failed")
+    return {**result, "status": "RECOVERED", "read_after_write": "PASS", "metrics_reservation_count": len(jobs)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Threads孤児投稿復旧: 投稿成功・Sheets保存失敗のケースを再投稿なしで復旧する"
@@ -348,6 +408,7 @@ def main() -> int:
     parser.add_argument("--post-url", default="", help="既知のThreads投稿URL（省略可）")
     parser.add_argument("--apply", action="store_true", help="Sheetsへの書き込みを実行する（省略時はdry-run）")
     parser.add_argument("--skip-api-lookup", action="store_true", help="Threads API検索をスキップ（APIなしで確定する場合）")
+    parser.add_argument("--repair-existing-save", action="store_true")
     args = parser.parse_args()
 
     dry_run = not args.apply
@@ -368,6 +429,13 @@ def main() -> int:
     if str(queue_row.get("account_id", "")) != args.account_id:
         print(f"[ERROR] queue の account_id={queue_row.get('account_id')} が {args.account_id} と不一致")
         return 1
+
+    if args.repair_existing_save:
+        if args.skip_api_lookup or args.external_post_id or args.post_url:
+            raise RuntimeError("existing_save_repair_requires_live_api_not_supplied_identity")
+        result = repair_existing_save(client, queue_row, _fetch_recent_threads_posts(args.account_id, 25), apply=args.apply)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["status"] in {"PLAN_ONLY", "RECOVERED"} else 2
 
     # 安全チェック: 既に復旧済みでないか
     posted_rows = _get_records(client, "posted_results")
