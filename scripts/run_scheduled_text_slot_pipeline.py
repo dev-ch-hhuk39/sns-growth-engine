@@ -261,6 +261,23 @@ def generation_failure_reason(payload: dict[str, Any]) -> str:
     return "NO_GENERATED_SLOT_CANDIDATE"
 
 
+def recover_delayed_prepared_text(client: Any, account_id: str, slot_id: str) -> dict[str, Any]:
+    """Catch up only the exact overdue slot, never reinterpret an early event."""
+    from backfill_missed_content_slots import _runtime_activation_gate, missing_slots
+
+    allowed, blocked = _runtime_activation_gate()
+    if not allowed:
+        return {"status": "BLOCKED", "reason": "RUNTIME_ACTIVATION_GATE_BLOCKED",
+                "blocked_reasons": blocked}
+    overdue = missing_slots(client, account_id)
+    if not any(row["slot_id"] == slot_id for row in overdue):
+        return {"status": "NO_POST", "reason": "NO_RECOVERABLE_EXACT_SLOT"}
+    result = dispatch_prepared_text(client, account_id, slot_id, apply=True)
+    return {**(result or {"status": "FAILED", "reason": "NO_READY_CANDIDATE"}),
+            "execution_mode": "DELAYED_EXACT_SLOT_RECOVERY", "slot_id": slot_id,
+            "account_id": account_id}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", required=True, choices=account_choices())
@@ -287,14 +304,15 @@ def main() -> int:
     window = scheduled_window_decision(args.slot_id)
     append_job_summary("Scheduled execution window", window)
 
-    if window.get("status") != "PASS":
-        return no_post("SCHEDULED_RUN_OUT_OF_WINDOW", account_id=args.account_id,
-                       slot_id=args.slot_id, details=window)
-
     from config_loader import get_config
     from sheets_client import SheetsClient
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    if window.get("status") != "PASS":
+        delayed = recover_delayed_prepared_text(client, args.account_id, args.slot_id)
+        print(json.dumps(delayed, ensure_ascii=False, indent=2))
+        append_job_summary("Delayed scheduled inventory result", delayed)
+        return 0 if verified_publish_result(0, delayed) else 2
     prepared = dispatch_prepared_text(client, args.account_id, args.slot_id, apply=True)
     if prepared is not None:
         print(json.dumps(prepared, ensure_ascii=False, indent=2))

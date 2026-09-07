@@ -22,7 +22,7 @@ from hybrid_ai_policy import requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
-from accounts.managed_accounts import account_choices  # noqa: E402
+from accounts.managed_accounts import account_choices, account_allows_autonomous_ready  # noqa: E402
 
 JST = ZoneInfo("Asia/Tokyo")
 EXECUTION_MAX = int(os.environ.get("HYBRID_AI_EXECUTION_MAX_REQUESTS", "20"))
@@ -104,6 +104,51 @@ class SheetsBudgetLedger:
         self.execution_used += 1
 
 
+def refresh_stale_autonomous_ready(
+    client: SheetsClient, account_id: str, max_candidates: int, *,
+    slot_id: str = "", queue_ids: set[str] | None = None, apply: bool = False,
+) -> list[str]:
+    """Withdraw stale automatic approvals before any caption re-evaluation."""
+    if not account_allows_autonomous_ready(account_id):
+        raise RuntimeError("autonomous_low_risk_not_allowed_for_account")
+    refreshed: list[str] = []
+    for row in client.get_queue_items(account_id=account_id, platform="threads", status="READY"):
+        queue_id = str(row.get("queue_id", ""))
+        if (
+            not queue_id
+            or str(row.get("account_id", "")) != account_id
+            or str(row.get("target_account_id") or account_id) != account_id
+            or str(row.get("status", "")).upper() != "READY"
+            or str(row.get("human_review_decision", "")).strip()
+            or str(row.get("approval_source", "")) == "human_review"
+            or str(row.get("auto_publish", "")).lower() not in {"true", "1", "yes"}
+            or any(str(row.get(key, "")).lower() in {"true", "1", "yes"}
+                   for key in ("excluded_from_activation", "repost_prohibited"))
+            or (slot_id and str(row.get("slot_id", "")) != slot_id)
+            or (queue_ids and queue_id not in queue_ids)
+            or not requires_hybrid_ai_gate(row)
+        ):
+            continue
+        current, _ = hybrid_ai_gate_current(row, build_source_context(client, row))
+        if current:
+            continue
+        if apply:
+            client.update_queue_item(queue_id, status="WAITING_REVIEW", auto_publish="false",
+                                     blocked_reason="STALE_AUTONOMOUS_APPROVAL_REVIEW_REQUIRED",
+                                     updated_at=now_iso())
+            after = next((r for r in client.get_queue_items(
+                account_id=account_id, platform="threads", status="WAITING_REVIEW")
+                if str(r.get("queue_id", "")) == queue_id), {})
+            if str(after.get("status", "")).upper() != "WAITING_REVIEW" or str(after.get("auto_publish", "")).lower() not in {"false", "0"}:
+                raise RuntimeError("stale_approval_withdrawal_read_after_write_failed")
+            client.log(operation="stale_autonomous_approval_withdrawn", status="OK",
+                       message=queue_id, account_id=account_id, level="INFO")
+        refreshed.append(queue_id)
+        if len(refreshed) >= max_candidates:
+            break
+    return refreshed
+
+
 def candidate_rows(
     client: SheetsClient,
     account_id: str,
@@ -172,6 +217,7 @@ def main() -> int:
     parser.add_argument("--slot-id", default="")
     parser.add_argument("--queue-id", action="append", default=[])
     parser.add_argument("--require-human-review", action="store_true")
+    parser.add_argument("--refresh-stale-autonomous-ready", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
@@ -197,13 +243,19 @@ def main() -> int:
     ledger = SheetsBudgetLedger(client, args.account_id)
     gemini = GeminiHybridClient(reserve_request=ledger.reserve)
     gate = HybridAiGate(gemini)
+    if args.refresh_stale_autonomous_ready and args.require_human_review:
+        raise RuntimeError("human_approval_must_not_be_refreshed_automatically")
+    refreshed = refresh_stale_autonomous_ready(
+        client, args.account_id, args.max_candidates, slot_id=args.slot_id,
+        queue_ids=set(args.queue_id), apply=args.apply,
+    ) if args.refresh_stale_autonomous_ready else []
     selected, skipped_current = candidate_rows(
         client,
         args.account_id,
         args.max_candidates,
         args.slot_id,
         require_human_review=args.require_human_review,
-        queue_ids=set(args.queue_id),
+        queue_ids=set(args.queue_id) or set(refreshed),
     )
     posted_before = records(client, "posted_results")
     statuses_before = {
@@ -326,6 +378,7 @@ def main() -> int:
         "account_id": args.account_id,
         "slot_id": args.slot_id,
         "candidate_count": len(selected),
+        "stale_autonomous_approvals": refreshed,
         "skipped_current_count": len(skipped_current),
         "skipped_current": skipped_current,
         "actual_request_count": gemini.actual_request_count,

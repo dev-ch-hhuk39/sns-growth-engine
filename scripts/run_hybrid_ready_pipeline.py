@@ -56,6 +56,8 @@ def gate_command(
     ]
     if approval_mode == "media" and not autonomous_low_risk:
         command.append("--require-human-review")
+    if autonomous_low_risk:
+        command.append("--refresh-stale-autonomous-ready")
     if queue_id:
         command.extend(["--queue-id", queue_id])
     return command
