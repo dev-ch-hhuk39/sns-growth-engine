@@ -122,6 +122,54 @@ def verified_publish_result(returncode: int, payload: dict[str, Any]) -> bool:
     )
 
 
+def prepared_text_candidates(rows: list[dict[str, Any]], account_id: str, slot_id: str, target_date: str) -> list[dict[str, Any]]:
+    """Select today's prebuilt text only; the worker rechecks every publish gate."""
+    return [row for row in rows if
+        str(row.get("account_id", "")) == account_id
+        and str(row.get("target_account_id") or account_id) == account_id
+        and str(row.get("platform", "")).lower() == "threads"
+        and str(row.get("slot_id", "")) == slot_id
+        and str(row.get("business_date_jst") or row.get("schedule_date_jst") or "") == target_date
+        and str(row.get("status", "")).upper() == "READY"
+        and bool(str(row.get("public_post_text", "")).strip())
+        and str(row.get("media_required", "")).lower() not in {"true", "1", "yes"}
+        and not any(row.get(key) for key in ("media_asset_id", "media_url", "media_urls", "clip_candidate_id"))
+        and all(str(row.get(key, "")).upper() == "PASS" for key in
+                ("validator_status", "internal_leak_status", "account_fit_status"))
+    ]
+
+
+def dispatch_prepared_text(client: Any, account_id: str, slot_id: str, *, apply: bool) -> dict[str, Any] | None:
+    from content_slot_runs import business_date, claim_slot_run, existing_slot_status
+    from process_threads_queue import process_one, records
+
+    if account_id not in {"night_scout", "liver_manager"} or slot_id not in SLOT_POST_TYPES or not slot_id.startswith("ns_" if account_id == "night_scout" else "lm_"):
+        return {"status": "BLOCKED", "reason": "ACCOUNT_SLOT_MISMATCH"}
+    if existing_slot_status(client, account_id, slot_id) in {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}:
+        return {"status": "SKIPPED", "reason": "slot_already_posted"}
+    candidates = prepared_text_candidates(records(client, "queue"), account_id, slot_id, business_date())
+    for queue in candidates[:3]:
+        preview = process_one(client, queue, dry_run=True, confirm_real_post=False)
+        if preview.get("status") != "DRY_RUN":
+            continue
+        if not apply:
+            return {"status": "DRY_RUN", "queue_id": queue["queue_id"], "would_post": False}
+        safe_env = {**os.environ, "PUBLISH_ENABLED": "false", "ALLOW_REAL_THREADS_POST": "false"}
+        rc, gate = run_stage("prepared_inventory_activation", [sys.executable,
+            "scripts/scheduled_publish_activation_gate.py", "--use-sheets", "--account-id", account_id,
+            "--post-type", SLOT_POST_TYPES[slot_id]], safe_env)
+        if rc:
+            return {"status": "BLOCKED", "reason": "RUNTIME_ACTIVATION_GATE_BLOCKED", "activation": gate}
+        claim = claim_slot_run(client, account_id, slot_id)
+        if claim.get("status") != "CLAIMED":
+            return {"status": "SKIPPED", "reason": claim.get("reason", "slot_not_claimed")}
+        # Never try another candidate after a publish call, even if persistence
+        # failed: the remote outcome may already be a real post.
+        result = process_one(client, queue, dry_run=False, confirm_real_post=True)
+        return {**result, "queue_id": queue["queue_id"], "path": "prepared_text_inventory"}
+    return None
+
+
 def run_bounded_text_recovery(
     *,
     account_id: str,
@@ -239,6 +287,20 @@ def main() -> int:
     window = scheduled_window_decision(args.slot_id)
     append_job_summary("Scheduled execution window", window)
 
+    if window.get("status") != "PASS":
+        return no_post("SCHEDULED_RUN_OUT_OF_WINDOW", account_id=args.account_id,
+                       slot_id=args.slot_id, details=window)
+
+    from config_loader import get_config
+    from sheets_client import SheetsClient
+    cfg = get_config()
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    prepared = dispatch_prepared_text(client, args.account_id, args.slot_id, apply=True)
+    if prepared is not None:
+        print(json.dumps(prepared, ensure_ascii=False, indent=2))
+        append_job_summary("Scheduled prepared inventory result", prepared)
+        return 0 if verified_publish_result(0, prepared) or prepared.get("reason") == "slot_already_posted" else 2
+
     generation = [
         sys.executable,
         "scripts/run_autonomous_loop.py",
@@ -293,6 +355,7 @@ def main() -> int:
         "1",
         "--approval-mode",
         "text",
+        "--autonomous-low-risk",
         "--apply",
         "--use-sheets",
         "--json-output",

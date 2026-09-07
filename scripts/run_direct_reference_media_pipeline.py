@@ -1569,6 +1569,22 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     return {**plan, "status": result.get("status", "FAILED"), "queue_id": queue_id, "post_result": result, "content_slot_run": slot_result, "would_post": False}
 
 
+def prepared_media_date_eligible(row: dict[str, Any], target_date: str) -> bool:
+    """Unpublished READY stock carries forward, but future/expired stock does not."""
+    raw_date = str(row.get("business_date_jst") or row.get("schedule_date_jst") or "").strip()
+    try:
+        if datetime.strptime(raw_date, "%Y-%m-%d").date() > datetime.strptime(target_date, "%Y-%m-%d").date():
+            return False
+    except ValueError:
+        return False
+    expiry = str(row.get("expires_at", "")).strip()
+    if expiry:
+        parsed = _parse_time(expiry)
+        if parsed is None or parsed <= datetime.now(timezone.utc):
+            return False
+    return True
+
+
 def dispatch_ready(
     client: SheetsClient,
     account_id: str,
@@ -1597,7 +1613,7 @@ def dispatch_ready(
         )
         and str(row.get("generation_mode", "")) == "direct_reference_media"
         and str(row.get("slot_id", "")) == slot_id
-        and str(row.get("business_date_jst", "")) == target_date
+        and prepared_media_date_eligible(row, target_date)
         and (
             not requested_queue_id
             or str(row.get("queue_id", ""))

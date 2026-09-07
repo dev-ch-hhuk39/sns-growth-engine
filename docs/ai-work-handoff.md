@@ -1,3 +1,15 @@
+## 2026-09-07 Scheduled Inventory Delivery Repair
+
+Status: implementation verified locally; production completion NOT proven.
+Base: bfea7cb899dc171aeefa80735d5d066567f0984d.
+
+- Scheduled text and missed-slot recovery now consume the exact account/slot/date READY inventory before spending another generation call.
+- Unused READY direct media can carry forward from an earlier preparation date; future/expired candidates remain excluded. Publisher rights, provenance, duplicate and account checks remain mandatory.
+- Autonomous low-risk approval is explicit for newly generated scheduled text. Failed preparation retains a redacted provider failure category; stale review output cannot approve a new candidate.
+- Ambiguous publish outcomes never trigger another candidate. Activation, slot lease and persistence checks remain unchanged.
+- Local focused test scripts: 10/10 PASS, including prepared inventory unit cases. No production post is evidence for this patch yet.
+- Still to verify: delayed GitHub schedule delivery, provider quota exhaustion, direct/clip eligible inventory, and real post/read-after-write/metrics results. Earlier completion claims and historical two-account/Beauty-review-only notes below are not current production evidence.
+
 ## 2026-08-10 Threads Video Reference Review Preparation
 
 ### 本システムについて / 今回の変更
