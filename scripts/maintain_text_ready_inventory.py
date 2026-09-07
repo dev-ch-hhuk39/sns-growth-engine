@@ -85,7 +85,16 @@ def _ready_exists(rows: list[dict[str, Any]], account_id: str, slot: dict[str, s
 def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False)
     payloads = _extract_objects(completed.stdout)
-    return completed.returncode, payloads[-1] if payloads else {}
+    payload = payloads[-1] if payloads else {}
+    # Preserve a safe error category, never the provider response or credentials.
+    error = completed.stderr
+    if "RESOURCE_EXHAUSTED" in error or "HTTP 429" in error:
+        payload["failure_category"] = "PROVIDER_RATE_LIMITED"
+    elif "Timeout" in error or "timed out" in error:
+        payload["failure_category"] = "PROVIDER_TIMEOUT"
+    elif completed.returncode:
+        payload.setdefault("failure_category", "GENERATION_PROCESS_FAILED")
+    return completed.returncode, payload
 
 
 def _generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[str, list[str]]]:
@@ -148,11 +157,14 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str
         attempts.append({
             "route": generation_route,
             "status": str(payload.get("status", "")),
+            "reason": str(payload.get("failure_category") or payload.get("reason") or ""),
         })
         if rc != 0:
             continue
         for queue_id in queue_ids[:3]:
             ready_output = Path(f"/tmp/ready-inventory-{account_id}-{slot['slot_id']}.json")
+            # A failed subprocess must not inherit a previous candidate's READY.
+            ready_output.unlink(missing_ok=True)
             command = [
                 sys.executable,
                 "scripts/run_hybrid_ready_pipeline.py",
@@ -179,6 +191,7 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str
                 "route": generation_route,
                 "queue_id": queue_id,
                 "status": str(review.get("status", "")),
+                "reason": str(review.get("failure_category") or review.get("reason") or ""),
             })
             if review_rc == 0 and review.get("status") == "READY":
                 return {
@@ -192,6 +205,7 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool) -> dict[str
         **result,
         "status": "QUALITY_EXHAUSTED",
         "generation_status": str(last_payload.get("status", "")),
+        "failure_category": str(last_payload.get("failure_category") or "QUALITY_EXHAUSTED"),
         "attempts": attempts,
     }
 

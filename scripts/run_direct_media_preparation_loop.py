@@ -82,6 +82,9 @@ def execute(
             "ingest_status": str(ingest_payload.get("status", "")),
             "prepare_status": str(prepare_payload.get("status", "")),
             "queue_id": queue_id,
+            "blocked_reasons": list(prepare_payload.get("blocked_reasons", []))[:10],
+            "ingest_returncode": ingest.returncode,
+            "prepare_returncode": prepared.returncode,
         }
         if not queue_id:
             attempts.append(attempt)

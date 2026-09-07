@@ -92,7 +92,14 @@ def _text_fallback(
     reason: str,
     allow_media_slot_safe_text_fallback: bool = False,
 ) -> dict[str, Any]:
+    from run_scheduled_text_slot_pipeline import dispatch_prepared_text
     from run_slot_text_fallback import build_plan, execute
+
+    if slot.get("expected_post_type") in {"original_text", "reference_text", "pdca_text"}:
+        prepared = dispatch_prepared_text(client, account_id, str(slot["slot_id"]), apply=apply)
+        if prepared is not None:
+            return {"status": prepared.get("status", "FAILED"), "path": "prepared_text_inventory",
+                    "queue_id": prepared.get("queue_id", ""), "post_result": prepared}
 
     plan = build_plan(
         account_id,
