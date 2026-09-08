@@ -163,7 +163,9 @@ def append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     values = [str(row.get(h, "")) for h in headers]
     _call_with_rate_limit_retry(
         f"append_row:{logical}",
-        lambda: ws.append_row(values, value_input_option="USER_ENTERED"),
+        # Platform IDs exceed spreadsheet numeric precision. Keep literal
+        # strings (and public text beginning with "=") out of formula parsing.
+        lambda: ws.append_row(values, value_input_option="RAW"),
     )
 
 
@@ -192,7 +194,7 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
     if update_ranges:
         _call_with_rate_limit_retry(
             f"batch_update:{logical}:{key_value}",
-            lambda: ws.batch_update(update_ranges, value_input_option="USER_ENTERED"),
+            lambda: ws.batch_update(update_ranges, value_input_option="RAW"),
         )
     return True
 
