@@ -494,6 +494,33 @@ def rewrite_reference_post(
     slot_theme: str = "reference_text",
     model: str | None = None,
 ) -> dict[str, Any]:
+    """Fail over once on provider availability, never on rejected content."""
+    primary = _clean(model or os.getenv("REFERENCE_GEMINI_MODEL") or DEFAULT_MODEL)
+    fallback = _clean(os.getenv("REFERENCE_GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite"))
+    kwargs = dict(account_id=account_id, source=source, source_score=source_score,
+                  target_platform=target_platform, slot_theme=slot_theme)
+    try:
+        return _rewrite_reference_post_once(**kwargs, model=primary)
+    except ReferenceRewriteError as exc:
+        unavailable = bool(re.search(r"Gemini API returned HTTP (429|500|502|503|504)\b", str(exc)))
+        unavailable = unavailable or str(exc).startswith("Gemini request failed:")
+        if not unavailable or not fallback or fallback == primary:
+            raise
+    output = _rewrite_reference_post_once(**kwargs, model=fallback)
+    output["generation_failover_reason"] = "PRIMARY_PROVIDER_UNAVAILABLE"
+    output["generation_primary_model"] = primary
+    return output
+
+
+def _rewrite_reference_post_once(
+    *,
+    account_id: str,
+    source: dict[str, Any],
+    source_score: dict[str, Any] | None = None,
+    target_platform: str = "threads",
+    slot_theme: str = "reference_text",
+    model: str | None = None,
+) -> dict[str, Any]:
     """Generate one source-faithful draft and fail closed on semantic mismatch."""
     source_material = build_source_material(source)
     prompt = build_reference_rewrite_prompt(
