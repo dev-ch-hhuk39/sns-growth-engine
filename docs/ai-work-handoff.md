@@ -1,3 +1,9 @@
+## 2026-09-09 Reference Provider Availability
+
+- Reference rewrite now has one model failover after bounded transport/429/5xx retries: `REFERENCE_GEMINI_FALLBACK_MODEL` defaults to the existing Beauty model `gemini-2.5-flash-lite`; an empty value disables failover.
+- The alternate model performs both generation and semantic fidelity review with the same source/account. Actual `generation_model` is retained. Authentication errors, unsuitable sources and content/quality rejection never trigger this failover.
+- This addresses provider availability only. Finite original-text fallback inventory, media suitability and delayed schedule delivery are not declared resolved.
+
 ## 2026-09-08 Exact Threads Identifier Persistence
 
 - Publisher writes use RAW strings to prevent Sheets coercing long external IDs or interpreting public text as formulas.
