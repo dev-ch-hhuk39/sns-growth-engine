@@ -41,6 +41,7 @@ env:
 
 jobs:
   autonomous-growth-loop-night-scout:
+    if: github.event_name != 'schedule' || vars.BUFFERED_INVENTORY_ACTIVE != 'true'
     name: Night Scout scheduled Threads autonomous loop
     runs-on: ubuntu-latest
     environment: production

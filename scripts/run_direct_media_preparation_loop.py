@@ -54,27 +54,36 @@ def execute(
     max_attempts: int,
     *,
     runner: Callable[..., subprocess.CompletedProcess[str]] = run,
+    prefer_existing: bool = False,
 ) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
     autonomous = account_allows_autonomous_ready(account_id)
     for number in range(1, max_attempts + 1):
-        ingest = runner([
+        ingest_command = [
             sys.executable,
             "scripts/ingest_direct_reference_media_reliable.py",
             "--account-id", account_id,
             "--max-assets", "10",
             "--apply", "--confirm-ingest",
-        ])
-        ingest_payload = extract_last_object(ingest.stdout)
+        ]
+        ingest = subprocess.CompletedProcess(ingest_command, 0, '{"status":"EXISTING_ASSETS_FIRST"}', "")
+        if not prefer_existing:
+            ingest = runner(ingest_command)
         prepare_env = os.environ.copy()
         prepare_env.pop("REQUIRE_PREPARED", None)
-        prepared = runner([
+        prepare_command = [
             sys.executable,
             "scripts/run_direct_reference_media_pipeline_batched.py",
             "--account-id", account_id,
             "--slot-id", slot_id,
             "--prepare-only", "--apply", "--confirm-direct-media", "--use-sheets",
-        ], env=prepare_env)
+        ]
+        prepared = runner(prepare_command, env=prepare_env)
+        initial = extract_last_object(prepared.stdout)
+        if prefer_existing and not (initial.get("queue_id") or initial.get("generated_queue_id")):
+            ingest = runner(ingest_command)
+            prepared = runner(prepare_command, env=prepare_env)
+        ingest_payload = extract_last_object(ingest.stdout)
         prepare_payload = extract_last_object(prepared.stdout)
         queue_id = str(prepare_payload.get("queue_id") or prepare_payload.get("generated_queue_id") or "")
         attempt = {
@@ -156,14 +165,43 @@ def main() -> int:
     parser.add_argument("--max-attempts", type=int, default=5)
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-preparation-loop", action="store_true")
+    parser.add_argument("--minimum-ready", type=int, default=3)
     args = parser.parse_args()
     if not args.apply or not args.confirm_preparation_loop:
         raise RuntimeError("production preparation loop requires apply and explicit confirmation")
     if not 1 <= args.max_attempts <= 10:
         raise RuntimeError("max_attempts_must_be_between_1_and_10")
-    result = execute(args.account_id, args.slot_id, args.max_attempts)
+    if not 1 <= args.minimum_ready <= 7:
+        raise RuntimeError("minimum_ready_must_be_between_1_and_7")
+    from config_loader import get_config
+    from sheets_client import SheetsClient
+    from sheets_record_reader import enable_readonly_record_cache, read_records_safely
+    from process_threads_queue import process_one
+    from production_inventory import eligible_ready, has_media
+
+    def inventory():
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        enable_readonly_record_cache(client)
+        return {str(r["media_asset_id"]) for r in read_records_safely(client, "queue")
+            if eligible_ready(r, args.account_id) and has_media(r) and r.get("media_asset_id")
+            and r.get("generation_mode") == "direct_reference_media"
+            and process_one(client, r, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN"}
+
+    initial = inventory()
+    result = {"status": "READY", "ready_media_count": len(initial), "would_post": False}
+    for _ in range(max(0, args.minimum_ready - len(initial))):
+        result = execute(args.account_id, args.slot_id, args.max_attempts, prefer_existing=True)
+        current = inventory()
+        result["ready_media_count"] = len(current)
+        if len(current) >= args.minimum_ready:
+            break
+        if result["status"] != "READY" or len(current) <= len(initial):
+            result["status"] = "MEDIA_INVENTORY_LOW"
+            break
+        initial = current
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0 if result["status"] in {"READY", "WAITING_REVIEW", "NO_ELIGIBLE_MEDIA"} else 1
+    return 0 if result.get("ready_media_count", 0) >= args.minimum_ready else 1
 
 
 if __name__ == "__main__":

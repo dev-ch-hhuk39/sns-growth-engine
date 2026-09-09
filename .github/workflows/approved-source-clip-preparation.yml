@@ -103,7 +103,7 @@ jobs:
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         run: python3 scripts/run_media_growth_engine.py --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-media-growth
       - name: Prepare one approved clip asset
-        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: vars.BUFFERED_INVENTORY_ACTIVE != 'true' && github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_VIDEO_CUT: "true"
@@ -111,7 +111,7 @@ jobs:
         run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-production-media --use-sheets
       - name: Create one exact canonical clip queue
         id: clip_queue
-        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        if: vars.BUFFERED_INVENTORY_ACTIVE != 'true' && github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         run: |
           python3 scripts/run_media_production_pipeline.py \
             --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
@@ -136,6 +136,17 @@ jobs:
             --queue-id "${{ steps.clip_queue.outputs.queue_id }}" \
             --max-candidates 1 --approval-mode media --autonomous-low-risk \
             --apply --use-sheets --json-output /tmp/approved-clip-hybrid.json
+      - name: Refill strictly approved clip buffer
+        if: vars.BUFFERED_INVENTORY_ACTIVE == 'true' && github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
+        env:
+          ALLOW_VIDEO_DOWNLOAD: "true"
+          ALLOW_VIDEO_CUT: "true"
+          ALLOW_CLOUDINARY_UPLOAD: "true"
+        run: |
+          python3 scripts/run_media_production_pipeline.py \
+            --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
+            --prepare-only --minimum-ready 3 --apply --confirm-production-media --use-sheets \
+            --json-output /tmp/approved-clip-buffer.json
       - name: Sync exact clip candidate to publication review
         if: steps.clip_queue.outputs.queue_id != ''
         run: |

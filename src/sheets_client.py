@@ -30,6 +30,11 @@ from seeds import ACCOUNT_SEEDS_V2, CATEGORY_SEEDS, PROMPT_TEMPLATE_SEEDS
 # ------------------------------------------------------------------ #
 
 TAB_DEFINITIONS: dict[str, list[str]] = {
+    "evergreen_bank": [
+        "fallback_id", "queue_id", "account_id", "theme", "text", "text_hash",
+        "normalized_hash", "validator_evidence_json", "persona_evidence_json",
+        "created_at", "last_used_at", "use_count", "cooldown_until", "status",
+    ],
     # アカウント設定。2行シード（night_scout / liver_manager）。
     "accounts": [
         "account_id", "account_name", "platform", "note_url",
@@ -794,11 +799,12 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_post_id", "source_video_id", "no_post_reason", "last_error_redacted",
         "idempotency_key", "claim_status", "lease_expires_at", "publish_attempt_id",
         "actual_generation_mode", "metrics_result_id", "event_name", "workflow_run_id",
-        "workflow_name", "created_at", "updated_at",
+        "workflow_name", "created_at", "updated_at", "delivery_engine", "code_revision",
     ],
 }
 
 TAB_DISPLAY_NAMES: dict[str, str] = {
+    "evergreen_bank": "常備投稿在庫",
     "accounts":                       "アカウント管理",
     "reference_posts":                "参考投稿",
     "content_categories":             "投稿カテゴリ",

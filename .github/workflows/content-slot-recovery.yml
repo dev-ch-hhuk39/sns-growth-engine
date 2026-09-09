@@ -2,8 +2,8 @@ name: Content Slot Recovery
 
 on:
   schedule:
-    # Every 30 minutes. The worker considers only slots overdue by 20 minutes.
-    - cron: "0,30 * * * *"
+    # Owner-authorized five-minute due-slot scan, not five-minute posting.
+    - cron: "*/5 * * * *"
   workflow_dispatch:
     inputs:
       confirm_recovery:
@@ -17,9 +17,6 @@ on:
 permissions:
   contents: read
   actions: read
-concurrency:
-  group: sns-growth-production-recovery-${{ github.ref }}
-  cancel-in-progress: false
 env:
   PUBLISH_ENABLED: "false"
   ALLOW_REAL_THREADS_POST: "false"
@@ -31,18 +28,38 @@ env:
 
 jobs:
   recover-missed-slots:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - account: night_scout
+            lock: night-scout
+          - account: liver_manager
+            lock: liver-manager
+          - account: beauty_account
+            lock: beauty-account
+    concurrency:
+      group: sns-growth-production-${{ matrix.lock }}-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 25
     env:
+      ACCOUNT_ID: ${{ matrix.account }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
       SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
       THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
+      THREADS_HANDLE_NIGHT_SCOUT: ${{ secrets.THREADS_HANDLE_NIGHT_SCOUT }}
       THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
       THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
+      THREADS_HANDLE_LIVER_MANAGER: ${{ secrets.THREADS_HANDLE_LIVER_MANAGER }}
+      THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: ${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}
+      THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
+      THREADS_HANDLE_BEAUTY_ACCOUNT: ${{ secrets.THREADS_HANDLE_BEAUTY_ACCOUNT }}
+      BEAUTY_ACTIVATION_APPROVED: ${{ secrets.BEAUTY_ACTIVATION_APPROVED || vars.BEAUTY_ACTIVATION_APPROVED || 'false' }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -51,12 +68,14 @@ jobs:
         with: {python-version: "3.11"}
       - run: pip install -r requirements.txt
       - name: Dry-run missed-slot scan
-        run: python3 scripts/backfill_missed_content_slots.py --account-id all --dry-run
+        continue-on-error: true
+        run: python3 scripts/reconcile_due_production_slots.py --account-id "$ACCOUNT_ID" --dry-run
       - name: Guard and backfill at most one slot per account
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_recovery == 'true' && github.event.inputs.dry_run_only != 'true')
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
+          BEAUTY_PRODUCTION_ENABLED: ${{ matrix.account == 'beauty_account' && 'true' || 'false' }}
           ALLOW_MEDIA_POSTS: "true"
           ALLOW_REAL_THREADS_VIDEO_POST: "true"
           ALLOW_THREADS_CAROUSEL: "true"
@@ -73,4 +92,12 @@ jobs:
           if json.loads(Path('config/autonomous_mode.json').read_text()).get('kill_switch'):
               raise SystemExit('[BLOCKED] kill_switch=true')
           PY
-          python3 scripts/backfill_missed_content_slots.py --account-id all --apply --confirm-backfill
+          buffered=$(python3 -c 'import json; print(str(json.load(open("config/production_inventory.json"))["activation_enabled"]).lower())')
+          if [ "$buffered" = "true" ]; then
+            python3 scripts/reconcile_due_production_slots.py --account-id "$ACCOUNT_ID" --apply --confirm-reconcile
+          elif [ "$ACCOUNT_ID" != "beauty_account" ]; then
+            # Preserve the current worker until the filled buffer is activated.
+            python3 scripts/backfill_missed_content_slots.py --account-id "$ACCOUNT_ID" --apply --confirm-backfill
+          else
+            echo '[CUTOVER_PENDING] Beauty remains on its existing production workflow'
+          fi

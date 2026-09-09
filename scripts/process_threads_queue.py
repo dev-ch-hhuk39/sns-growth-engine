@@ -1111,6 +1111,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
                 account_id,
                 slot_id,
                 status="POSTED_PRIMARY",
+                schedule_date_jst=str(queue_row.get("business_date_jst") or queue_row.get("schedule_date_jst") or "") or None,
                 actual_post_type=str(queue_row.get("content_type") or queue_row.get("generation_mode") or "threads"),
                 fallback_level=0,
                 queue_id=queue_id,

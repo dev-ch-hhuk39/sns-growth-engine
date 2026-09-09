@@ -45,6 +45,7 @@ env:
 
 jobs:
   post-saved-approved-media:
+    if: github.event_name != 'schedule' || vars.BUFFERED_INVENTORY_ACTIVE != 'true'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45

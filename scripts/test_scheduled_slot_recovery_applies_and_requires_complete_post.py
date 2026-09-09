@@ -9,7 +9,8 @@ workflow = (ROOT / ".github/workflows/content-slot-recovery.yml").read_text(enco
 runner = (ROOT / "scripts/backfill_missed_content_slots.py").read_text(encoding="utf-8")
 
 assert "github.event_name == 'schedule' ||" in workflow
-assert "--apply --confirm-backfill" in workflow
+assert "--apply --confirm-reconcile" in workflow
+assert "reconcile_due_production_slots.py" in workflow
 assert 'PUBLISH_ENABLED: "true"' in workflow
 assert 'ALLOW_REAL_THREADS_POST: "true"' in workflow
 assert 'ALLOW_REAL_X_POST: "false"' in workflow

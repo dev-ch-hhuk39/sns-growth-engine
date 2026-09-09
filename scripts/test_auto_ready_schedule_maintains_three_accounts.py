@@ -6,7 +6,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 workflow = (ROOT / ".github/workflows/autopilot-auto-ready.yml").read_text(encoding="utf-8")
 
-assert 'cron: "0 */6 * * *"' in workflow
+assert 'cron: "7 */2 * * *"' in workflow
+assert "fail-fast: false" in workflow
+assert "matrix.account_id" in workflow
+assert "--evergreen-bank" in workflow
 assert 'beauty_account' in workflow
 assert 'if [ "${{ github.event_name }}" = "schedule" ]' in workflow
 assert 'max_ready=3' in workflow

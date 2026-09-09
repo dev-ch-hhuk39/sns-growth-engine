@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "activation_enabled": false,
+  "accounts": ["night_scout", "liver_manager", "beauty_account"],
+  "text_horizon_hours": 72,
+  "ideal_horizon_hours": 168,
+  "text_candidates_per_slot": 3,
+  "minimum_evergreen_per_account": 30,
+  "minimum_media_per_route": 3,
+  "ideal_media_per_route": 7,
+  "recent_similarity_days": 30,
+  "evergreen_cooldown_days": 90,
+  "recovery_window_minutes": 240,
+  "media_shortage_text_fallback": true,
+  "slot_route_cycles": {
+    "beauty_account": {
+      "beauty_2030": ["direct_reference_media", "approved_source_clip"]
+    }
+  },
+  "scheduler_primary": "UNCONFIGURED",
+  "external_scheduler_verified": false
+}
