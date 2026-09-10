@@ -2,6 +2,8 @@
 
 PR #295 merged as `b79a55635a37351d120bc12b08276701dfce1820`; CI `34446569171` PASS. The complete 18-tab verifier now reads one fresh batch with bounded retry, retaining every safety check. Live read-only text-inventory verification: 63 PASS, zero failures. Direct prep `34445439141` remains low inventory for all accounts; clip recheck `34449801739` advances past zero-start selection but rejects three final captions. No new Threads posts or buffered activation. See `docs/current-work.md`; preserve `.runtime/` untouched.
 
+Saved-clip captions now use the same GitHub Models -> privacy-bounded Gemini failover as direct media. Only transient provider errors may switch Gemini models once; auth/schema/budget errors remain terminal. The clip evidence and final quality gates are unchanged. Real READY/posting is not yet proven by this code change.
+
 ## 2026-09-10 Live Preparation Follow-up
 
 - Saved clip caption evidence preserves numeric `start_seconds=0` instead of rejecting it as missing; negative, non-finite and reversed ranges remain blocked. This fixes a real saved-asset selection blocker without changing rights or persona gates.

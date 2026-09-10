@@ -5,6 +5,7 @@
 - Live read-only verification with this patch: 63 checks PASS, zero failures (`--verify-only --text-inventory-scope`). No Sheets writes or posts during this verification.
 - Direct preparation `34445439141` completed `MEDIA_INVENTORY_LOW` for all three accounts. Evidence/grounding, source suitability and caption-provider failures remain; no media PASS is claimed.
 - Clip recheck `34449801739` on main passes numeric-zero range selection, but three Liver candidates then fail final caption review; none became READY or posted. Buffered activation stays OFF pending actual inventory and delivery proof.
+- The saved-clip caption generator still used GitHub Models alone. It now shares the existing privacy-bounded Gemini failover with direct media. Gemini availability errors may try the existing secondary model once; auth/schema/budget failures do not model-hop. All downstream grounding/persona/alignment gates remain mandatory. Provider status codes are redacted, and the response schema explicitly describes internal analysis fields.
 
 ## 2026-09-10 Live Preparation Follow-up
 

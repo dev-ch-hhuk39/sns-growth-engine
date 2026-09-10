@@ -13,7 +13,7 @@ from acquisition.models import SourcePostBundle
 from generation.semantic_alignment import LocalSemanticAlignmentProvider
 from generation.source_grounded_caption import GitHubModelsGroundedProvider, account_rules
 from generation_quality_gates import evaluate_generation_quality
-from gemini_hybrid_client import GeminiHybridClient
+from gemini_hybrid_client import GeminiHybridClient, provider_error_evidence, retryable_provider_error
 from media_activation_source_suitability import clip_source_suitability
 from public_post_quality import apply_account_voice, final_public_post_validator
 
@@ -178,7 +178,17 @@ class PrivacyBoundedGeminiGroundedProvider:
         schema = {
             "type": "object",
             "properties": {
-                "internal_analysis": {"type": "object"},
+                "internal_analysis": {
+                    "type": "object",
+                    "properties": {
+                        "core_topic": {"type": "string"},
+                        "intended_audience": {"type": "string"},
+                        "main_claims": {"type": "array", "items": {"type": "string"}},
+                        "factual_constraints": {"type": "array", "items": {"type": "string"}},
+                        "prohibited_inferences": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["core_topic", "main_claims", "factual_constraints", "prohibited_inferences"],
+                },
                 "public_post_text": {"type": "string", "minLength": 1},
                 "claim_support": {
                     "type": "array",
@@ -227,27 +237,37 @@ class PrivacyBoundedGeminiGroundedProvider:
             "internal_analysisにmain_claims、core_topic、intended_audience、factual_constraints、prohibited_inferencesを入れる。\n"
             + json.dumps(safe_input, ensure_ascii=False)
         )
-        try:
-            result = self.client.generate_json(
-                model=os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
-                prompt=prompt,
-                schema=schema,
-                operation="direct_reference_caption_generation",
-                account_id=account_id,
-                cache_context={
-                    "source_post_id": post.source_post_id,
-                    "content_hash": post.content_hash,
-                    "caption_mode": source_mode,
-                },
-            )
-        except RuntimeError as exc:
-            return ProviderResult(
-                self.provider_name,
-                self.provider_version,
-                "FAILED",
-                reason=f"{type(exc).__name__}:gemini_direct_caption_failed",
-                retryable=True,
-            )
+        models = list(dict.fromkeys((
+            os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
+            "gemini-3.1-flash-lite",
+        )))
+        for index, model in enumerate(models):
+            try:
+                result = self.client.generate_json(
+                    model=model,
+                    prompt=prompt,
+                    schema=schema,
+                    operation="direct_reference_caption_generation",
+                    account_id=account_id,
+                    cache_context={
+                        "source_post_id": post.source_post_id,
+                        "content_hash": post.content_hash,
+                        "caption_mode": source_mode,
+                    },
+                )
+                break
+            except RuntimeError as exc:
+                if retryable_provider_error(exc) and index + 1 < len(models):
+                    continue
+                status = getattr(exc, "status_code", 0)
+                return ProviderResult(
+                    self.provider_name,
+                    self.provider_version,
+                    "FAILED",
+                    reason=f"{type(exc).__name__}:gemini_direct_caption_failed:http_{status}",
+                    retryable=retryable_provider_error(exc),
+                    metadata=provider_error_evidence(exc),
+                )
         return ProviderResult(
             self.provider_name,
             self.provider_version,
