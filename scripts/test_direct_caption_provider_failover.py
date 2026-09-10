@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,6 +16,8 @@ from evidence_context_caption import (  # noqa: E402
 )
 from gemini_hybrid_client import GeminiHttpError  # noqa: E402
 from run_media_production_pipeline import _default_final_caption_service  # noqa: E402
+from generation.source_grounded_caption import account_rules  # noqa: E402
+from generation.beauty_voice import beauty_voice_prompt  # noqa: E402
 
 
 class Provider:
@@ -53,10 +56,12 @@ class GeminiClient:
 
     def __init__(self) -> None:
         self.prompt = ""
+        self.contexts = []
 
     def generate_json(self, **kwargs):
         self.prompt = str(kwargs["prompt"])
         self.schema = kwargs["schema"]
+        self.contexts.append(dict(kwargs["cache_context"]))
         return {
             "model": "fixture-gemini",
             "data": {
@@ -128,6 +133,12 @@ unavailable = FailingClient(GeminiHttpError(429, "private-body"))
 exhausted = PrivacyBoundedGeminiGroundedProvider(client=unavailable).generate(
     post, account_id="beauty_account", recent_posts=[],
 )
+repeat_client = GeminiClient()
+repeat_provider = PrivacyBoundedGeminiGroundedProvider(client=repeat_client)
+repeat_provider.generate(post, account_id="beauty_account", recent_posts=[])
+first_prompt = repeat_client.prompt
+repeat_provider.generate(post, account_id="beauty_account", recent_posts=[])
+profiles = json.loads((ROOT / "config/account_voice_profiles.json").read_text())["accounts"]
 
 checks = [
     ("primary is attempted once", primary.calls == 1),
@@ -142,6 +153,10 @@ checks = [
     ("auth schema and budget failures never model-hop", all(terminal_cases)),
     ("all-provider failure is bounded and never a PASS", not exhausted.ok and len(unavailable.models) == 2 and "http_429" in exhausted.reason),
     ("analysis response schema defines actual fields", "main_claims" in client.schema["properties"]["internal_analysis"]["properties"]),
+    ("retry is not the same cached generation", first_prompt != repeat_client.prompt and [r["generation_attempt"] for r in repeat_client.contexts] == [0, 1]),
+    ("Liver uses exact current voice contract", account_rules("liver_manager")["voice"] == profiles["liver_manager"]["prompt_contract"] and account_rules("liver_manager")["first_person"] == "私"),
+    ("Night uses own voice without Liver mixing", account_rules("night_scout")["voice"] == profiles["night_scout"]["prompt_contract"] and account_rules("night_scout")["first_person"] == "僕"),
+    ("Beauty uses own style fingerprint prompt", account_rules("beauty_account")["voice"] == beauty_voice_prompt()),
 ]
 for name, passed in checks:
     print(f"  {'PASS' if passed else 'FAIL'} {name}")

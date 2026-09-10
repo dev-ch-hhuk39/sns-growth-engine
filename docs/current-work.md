@@ -1,3 +1,10 @@
+## 2026-09-11 Media Caption Voice Repair
+
+- Main `ef812f416b08067561c7deaa622208db74e2d8d2` includes PR #296 (CI `34450956440` PASS). Live clip preparation `34451324372` now reaches real Gemini `provider_status=PASS`; it still fails final persona/alignment, not acquisition or a fabricated success.
+- Source-grounded captions used a generic tone rather than the validator's canonical voice contract. Generation now reads the exact account-specific prompt contract (Beauty uses its own style fingerprint). No validator thresholds change.
+- Repeated Gemini caption attempts previously reused the identical cached response. Invocation-local attempt identity now changes the generation prompt/cache key, inside the unchanged bounded outer retry limit; source, account and model-budget boundaries remain intact.
+- Scheduled AUTO_READY `34528502634` confirms Beauty 72-hour slot reserves filled; Night/Liver partially filled. Bank stock still below 30, media READY still unproven. Buffered activation remains OFF. No manual production post performed for these fixes.
+
 ## 2026-09-10 Verification Read Repair
 
 - PR #295 merged normally as `b79a55635a37351d120bc12b08276701dfce1820`; exact-head CI `34446569171` passed PR gate and regression tests.

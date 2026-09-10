@@ -153,6 +153,7 @@ class PrivacyBoundedGeminiGroundedProvider:
 
     def __init__(self, client: GeminiHybridClient | None = None) -> None:
         self.client = client or GeminiHybridClient()
+        self._generation_attempts: dict[tuple[str, ...], int] = {}
 
     @property
     def available(self) -> bool:
@@ -175,6 +176,9 @@ class PrivacyBoundedGeminiGroundedProvider:
                 "UNAVAILABLE",
                 reason="gemini_api_key_missing",
             )
+        identity = (account_id, post.source_post_id, post.content_hash, source_mode)
+        attempt = self._generation_attempts.get(identity, 0)
+        self._generation_attempts[identity] = attempt + 1
         schema = {
             "type": "object",
             "properties": {
@@ -216,6 +220,7 @@ class PrivacyBoundedGeminiGroundedProvider:
             "target_account_id": account_id,
             "account_rules": account_rules(account_id),
             "caption_mode": source_mode,
+            "generation_attempt": attempt,
             "source_url": post.canonical_post_url,
             "source_post_text": post.original_post_text[:6000],
             "media_metadata": [
@@ -233,6 +238,10 @@ class PrivacyBoundedGeminiGroundedProvider:
             "source、reference、metadata、transcript、AIなどの内部語を公開文に出さない。"
             "参照投稿だけを根拠に、80〜500文字、1投稿1テーマの新しい読者向け本文にする。"
             "数値・事実・経験を捏造せず、元投稿者の所属や実績を対象アカウント自身の実績に見せない。"
+            "元投稿者固有の名前・実績・経験に触れる場合は、この動画では〜と話している、など誰の事実かを明確にする。"
+            "account_rulesの一人称・口調を守り、読者の状況への共感と根拠から導ける一つの具体的行動を自然に添える。"
+            "ただし根拠にない手順や成果を付け足さず、材料が不足する場合はblocked_reasonsに記載する。"
+            "再生成時は同じ根拠の中の別の論点または具体例で構成を変え、語尾や句読点だけ変えない。"
             "public_post_textの実質的主張ごとにclaim_supportを作り、source_evidenceは入力文の短い正確な根拠にする。"
             "internal_analysisにmain_claims、core_topic、intended_audience、factual_constraints、prohibited_inferencesを入れる。\n"
             + json.dumps(safe_input, ensure_ascii=False)
@@ -253,6 +262,7 @@ class PrivacyBoundedGeminiGroundedProvider:
                         "source_post_id": post.source_post_id,
                         "content_hash": post.content_hash,
                         "caption_mode": source_mode,
+                        "generation_attempt": attempt,
                     },
                 )
                 break

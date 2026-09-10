@@ -93,12 +93,19 @@ def account_rules(account_id: str) -> dict[str, str]:
     legacy = ACCOUNT_RULES.get(account_id, {})
     cta_policy = cfg.get("cta_policy", {})
     forbidden = list(cfg.get("forbidden_themes", [])) + list(cfg.get("forbidden_keywords", []))
+    voice_profiles = json.loads((ROOT / "config/account_voice_profiles.json").read_text(encoding="utf-8"))
+    voice_profile = voice_profiles.get("accounts", {}).get(account_id, {})
+    voice = str(voice_profile.get("prompt_contract") or cfg.get("tone") or legacy.get("voice") or cfg.get("persona") or "")
+    if account_id == "beauty_account":
+        from generation.beauty_voice import beauty_voice_prompt
+        voice = beauty_voice_prompt()
     return {
         "audience": str(cfg.get("target_audience") or legacy.get("audience") or "account-specific audience"),
         "purpose": str(cfg.get("primary_goal") or legacy.get("purpose") or "give one useful reader-facing action"),
         "cta": str(cta_policy.get("style") or cta_policy.get("default") or legacy.get("cta") or "CTA is optional and must be light"),
         "banned": ", ".join(str(value) for value in forbidden[:40]) or str(legacy.get("banned") or "fabricated claims and internal processing terms"),
-        "voice": str(cfg.get("tone") or legacy.get("voice") or cfg.get("persona") or "natural account-specific spoken Japanese"),
+        "voice": voice,
+        "first_person": str(voice_profile.get("first_person") or cfg.get("first_person") or ""),
     }
 
 
