@@ -12,7 +12,7 @@ def main() -> int:
     content = WORKFLOW.read_text(encoding="utf-8")
     checks = [
         ("workflow exists", WORKFLOW.exists()),
-        ("has schedule", "schedule:" in content and "0 */6 * * *" in content),
+        ("has bounded preparation schedule", "schedule:" in content and "7 */2 * * *" in content),
         ("runs autopilot apply", "scripts/run_autopilot_loop.py" in content and "--apply" in content and "--confirm-run" in content),
         ("auto ready only", "--auto-ready" in content),
         ("skip real post", "--skip-real-post" in content),

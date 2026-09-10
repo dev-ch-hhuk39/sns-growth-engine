@@ -63,13 +63,16 @@ def build_slot_run(
     fallback_level: int = 0,
     no_post_reason: str = "",
     now: datetime | None = None,
+    schedule_date_jst: str | None = None,
     **fields: Any,
 ) -> dict[str, Any]:
     local = (now or now_jst()).astimezone(JST)
     slot = slot_by_id(account_id, slot_id)
     if not slot:
         raise ValueError(f"unknown content slot: {account_id}/{slot_id}")
-    schedule_date = datetime.fromisoformat(business_date(local)).date()
+    date_key = schedule_date_jst or business_date(local)
+    schedule_date = datetime.strptime(date_key, "%Y-%m-%d").date()
+    identity = f"slot_{schedule_date.strftime('%Y%m%d')}_{account_id}_{slot_id}"
     target_date = schedule_date
     target_hour, target_minute = map(int, str(slot["target_jst"]).split(":"))
     if target_hour >= 24:
@@ -78,8 +81,8 @@ def build_slot_run(
     target = datetime(target_date.year, target_date.month, target_date.day, target_hour, target_minute, tzinfo=JST)
     created = local.isoformat()
     row = {
-        "slot_run_id": slot_run_id(account_id, slot_id, local),
-        "schedule_date_jst": business_date(local),
+        "slot_run_id": identity,
+        "schedule_date_jst": date_key,
         "account_id": account_id,
         "slot_id": slot_id,
         "scheduled_target_at": target.isoformat(),
@@ -99,7 +102,7 @@ def build_slot_run(
         "source_video_id": "",
         "no_post_reason": no_post_reason,
         "last_error_redacted": "",
-        "idempotency_key": slot_run_id(account_id, slot_id, local),
+        "idempotency_key": identity,
         "claim_status": "",
         "lease_expires_at": "",
         "publish_attempt_id": "",
@@ -189,6 +192,7 @@ def claim_slot_run(
     *,
     at: datetime | None = None,
     lease_minutes: int = 45,
+    schedule_date_jst: str | None = None,
 ) -> dict[str, Any]:
     """Claim a business-date slot or return a safe duplicate/lease outcome.
 
@@ -198,7 +202,9 @@ def claim_slot_run(
     expired claims are intentionally recoverable.
     """
     local = (at or now_jst()).astimezone(JST)
-    expected = slot_run_id(account_id, slot_id, local)
+    planned = build_slot_run(account_id, slot_id, status="CLAIMED", now=local,
+                             schedule_date_jst=schedule_date_jst)
+    expected = planned["slot_run_id"]
     try:
         from sheets_client import TAB_DEFINITIONS
         ws = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"])
@@ -229,7 +235,7 @@ def claim_slot_run(
                 return {"status": "SKIPPED", "reason": "slot_lease_expired_requires_recovery", "slot_run_id": expected}
             except ValueError:
                 return {"status": "SKIPPED", "reason": "slot_lease_invalid", "slot_run_id": expected}
-    row = build_slot_run(account_id, slot_id, status="CLAIMED", now=local)
+    row = planned
     row.update({
         "claim_status": "CLAIMED",
         "lease_expires_at": (local + timedelta(minutes=lease_minutes)).isoformat(),

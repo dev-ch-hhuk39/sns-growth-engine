@@ -287,6 +287,18 @@ def main() -> int:
     if not args.use_sheets:
         raise RuntimeError("--use-sheets is required")
 
+    from production_inventory import policy as inventory_policy
+    if inventory_policy()["activation_enabled"]:
+        from reconcile_due_production_slots import reconcile
+        from config_loader import get_config
+        from sheets_client import SheetsClient
+        cfg = get_config()
+        result = reconcile(SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False),
+            accounts=[args.account_id], slot_id=args.slot_id, apply=True)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        append_job_summary("Buffered slot delivery", result)
+        return 0 if result["status"] == "PASS" else 2
+
     base_env = dict(os.environ)
     safe_env = {
         **base_env,

@@ -4,7 +4,7 @@ name: Autopilot AUTO_READY Pilot
 # This workflow may promote safe Threads queue rows to READY, but it never posts.
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: "7 */2 * * *"
   workflow_dispatch:
     inputs:
       account_id:
@@ -43,12 +43,19 @@ env:
 jobs:
   auto-ready:
     name: AUTO_READY without posting
+    strategy:
+      fail-fast: false
+      matrix:
+        account_id: ${{ fromJSON(github.event.inputs.account_id && github.event.inputs.account_id != 'all' && format('["{0}"]', github.event.inputs.account_id) || '["night_scout","liver_manager","beauty_account"]') }}
+    concurrency:
+      group: sns-growth-buffer-preparation-${{ matrix.account_id }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 20
+    timeout-minutes: 120
 
     env:
-      ACCOUNT_ID: ${{ github.event.inputs.account_id || 'all' }}
+      ACCOUNT_ID: ${{ matrix.account_id }}
       MAX_READY: ${{ github.event.inputs.max_ready || '1' }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
@@ -114,6 +121,13 @@ jobs:
         run: |
           python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
+            --confirm-ready-maintenance --use-sheets
+
+      - name: Refill validated non-AI emergency bank
+        if: always() && env.AUTO_READY_APPLY == 'true'
+        run: |
+          python3 scripts/maintain_text_ready_inventory.py \
+            --account-id "$ACCOUNT_ID" --evergreen-bank --apply \
             --confirm-ready-maintenance --use-sheets
 
       - name: AUTO_READY apply only

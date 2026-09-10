@@ -74,6 +74,7 @@ output/
 !x_pipeline_config.example.json
 !config/reference_sources.example.json
 !config/content_schedule.json
+!config/production_inventory.json
 !config/media_source_usage_modes.json
 !config/goal_acceptance.json
 !config/content_mix/default_mix.json

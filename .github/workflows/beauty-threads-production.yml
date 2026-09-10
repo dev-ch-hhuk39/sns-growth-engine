@@ -42,7 +42,7 @@ on:
     - cron: "30 11 * * *"
 
 concurrency:
-  group: beauty-threads-production
+  group: sns-growth-production-beauty-account-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
@@ -62,6 +62,7 @@ env:
 
 jobs:
   beauty-production:
+    if: github.event_name != 'schedule' || vars.BUFFERED_INVENTORY_ACTIVE != 'true'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 25

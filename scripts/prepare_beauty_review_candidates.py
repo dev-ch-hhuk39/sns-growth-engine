@@ -359,9 +359,13 @@ def _gemini_failure_reason(response: dict) -> tuple[str, bool]:
     return "gemini_api_error", False
 
 
-def generate_candidate(*, slot_index: int, sequence_number: int, _topic_offset: int = 0) -> dict:
-    business_date, slot_id, queue_id = _slot_identity(slot_index)
-    topic_index = (datetime.now(JST).date().toordinal() * 2 + slot_index + _topic_offset) % len(TOPICS)
+def generate_candidate(*, slot_index: int, sequence_number: int, _topic_offset: int = 0,
+                       schedule_date_jst: str = "", candidate_index: int = 0) -> dict:
+    target = datetime.strptime(schedule_date_jst, "%Y-%m-%d").replace(tzinfo=JST) if schedule_date_jst else datetime.now(JST)
+    business_date, slot_id, queue_id = _slot_identity(slot_index, now=target)
+    if candidate_index:
+        queue_id = f"{queue_id}_reserve_{candidate_index}"
+    topic_index = (target.date().toordinal() * 2 + slot_index + _topic_offset + candidate_index * 3) % len(TOPICS)
     topic = TOPICS[topic_index]
     requested_route = select_beauty_route(sequence_number)
     route = requested_route
@@ -438,6 +442,8 @@ def generate_candidate(*, slot_index: int, sequence_number: int, _topic_offset: 
             slot_index=slot_index,
             sequence_number=sequence_number + 1,
             _topic_offset=_topic_offset + 1,
+            schedule_date_jst=schedule_date_jst,
+            candidate_index=candidate_index,
         )
         if recovered.get("status") == "WAITING_REVIEW":
             recovered["route_fallback_reason"] = "quality_gate_topic_regeneration"
@@ -611,13 +617,16 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sequence-start", type=int, default=0)
     parser.add_argument("--slot-index", type=int, choices=[0, 1])
+    parser.add_argument("--schedule-date-jst", default="")
+    parser.add_argument("--candidate-index", type=int, choices=range(3), default=0)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-prepare", action="store_true")
     args = parser.parse_args()
     if args.slot_index is not None:
         sequence_number = args.sequence_start or (datetime.now(JST).date().toordinal() * 2 + args.slot_index + 1)
-        candidate = generate_candidate(slot_index=args.slot_index, sequence_number=sequence_number)
+        candidate = generate_candidate(slot_index=args.slot_index, sequence_number=sequence_number,
+            schedule_date_jst=args.schedule_date_jst, candidate_index=args.candidate_index)
         result = {"mode": "apply" if args.apply else "dry-run", "candidate": candidate, "would_post": False}
         if candidate.get("status") in {"BLOCKED", "QUALITY_EXHAUSTED", "SKIPPED"}:
             print(json.dumps(result, ensure_ascii=False, indent=2))

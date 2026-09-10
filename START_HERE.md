@@ -1,3 +1,20 @@
+## 2026-09-10 Buffered Production Inventory
+
+Current branch: `feat/buffered-production-inventory`; base main: `aff033999ec8261470c893168590c02a3b58fdb0`.
+Status: implementation and local regression verified; production cutover NOT yet verified.
+
+- Current Owner scope is Night Scout, Liver Manager and Beauty, including autonomous low-risk approval. Older two-account / Beauty-human-review-only notes below are historical, not current operating policy.
+- Preparation builds 72-hour canonical text primary/reserves (3 per slot), plus a target of 30 unused strictly validated evergreen candidates per account. Bank admission uses bounded batch writes with read-after-write; no approval cloning or POSTED queue recycling.
+- Direct and clip preparation refill separate validated media buffers (minimum 3). Saved rights-valid Cloudinary assets are preferred; acquisition and generation never execute in the buffered publisher.
+- The existing Content Slot Recovery workflow scans every five minutes, accounts independently, with the same per-account publishing lock. It consumes at most one exact due queue per account/run, within a 240-minute window and existing caps/cooldown. Uncertain publish outcomes stop retries.
+- Owner-authorized media shortage may use a validated text reserve. Evidence retains expected media and actual `text_fallback`; this is never counted as media success.
+- Beauty retains two daily slots; the 20:30 slot alternates direct media and approved clip after cutover. No extra daily posts are added. X publishing stays disabled.
+- Cutover requires `config/production_inventory.json` activation plus `BUFFERED_INVENTORY_ACTIVE=true`. Until inventory is verified, activation remains false and legacy production workers are retained. Do not set the variable first and disable working publishers prematurely.
+- Local regression: 901 script tests PASS; focused inventory/reconciler/generation/clip-preparation tests, Ruff, compileall and CI Mypy PASS. These are not production evidence.
+- Latest read-only Sheets acceptance: text coverage 0%; usable evergreen Night 21 / Liver 25 / Beauty 0; validated media reserve 0 for all six account/route pairs. Legacy posted-results evidence includes 2 duplicate records and 64 unverified/missing-metrics records. No cleanup or replay is authorized by those counts alone.
+- Remaining: exact-head CI and normal merge, real inventory refill/readback, staged activation, real reconciler delivery/repeat-run proof, metrics and PDCA verification. Completion must remain false until these pass. Do not wait for future 168-hour metrics merely to close code development.
+- Preserve `.runtime/` unchanged and uncommitted. `.ai-tmp/`, credentials and runtime outputs are excluded from Git.
+
 ## 2026-09-07 Follow-up: Stale Approval and Delayed Slot Recovery
 
 - Automatic READY approvals with stale Hybrid evidence are explicitly withdrawn to WAITING_REVIEW and read back before bounded re-evaluation. Human-approved, excluded, cross-account and POSTED rows are never refreshed this way.

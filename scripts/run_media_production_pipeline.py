@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -2789,6 +2790,65 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     }
 
 
+def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, minimum: int) -> dict[str, Any]:
+    """Prepare and review a bounded clip reserve; never call a publish mode."""
+    import copy
+    from production_inventory import eligible_ready, media_route
+    from sheets_record_reader import enable_readonly_record_cache, read_records_safely
+
+    if not 1 <= minimum <= 7:
+        raise ValueError("clip_inventory_minimum_out_of_range")
+
+    def ready_ids() -> set[str]:
+        snapshot = copy.copy(client)
+        enable_readonly_record_cache(snapshot)
+        return {str(row["media_asset_id"]) for row in read_records_safely(snapshot, "queue")
+                if eligible_ready(row, account_id) and media_route(row) == "approved_source_clip"
+                and row.get("media_asset_id")
+                and process_one(snapshot, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN"}
+
+    ids, attempts, excluded = ready_ids(), [], set()
+    for _ in range(minimum * 2):
+        if len(ids) >= minimum:
+            break
+        plan = build_plan(account_id=account_id, apply=True, confirm=True, client=client,
+            post_saved_media=True, prepare_saved_media_queue=True, slot_id=slot_id,
+            excluded_clip_ids=excluded)
+        if plan.get("status") != "PLAN_ONLY":
+            asset_plan = build_plan(account_id=account_id, apply=True, confirm=True, client=client,
+                prepare_only=True, slot_id=slot_id, excluded_clip_ids=excluded)
+            if asset_plan.get("status") != "PLAN_ONLY":
+                attempts.append({"status": "NO_ELIGIBLE_CLIP"})
+                break
+            prepared = execute(asset_plan, client)
+            attempts.append({"status": str(prepared.get("status", ""))})
+            if prepared.get("status") != "MEDIA_READY":
+                excluded.add(str(asset_plan.get("selected_clip_candidate_id", "")))
+                continue
+            plan = build_plan(account_id=account_id, apply=True, confirm=True, client=client,
+                post_saved_media=True, prepare_saved_media_queue=True, slot_id=slot_id,
+                excluded_clip_ids=excluded)
+        if plan.get("status") != "PLAN_ONLY":
+            attempts.append({"status": "NO_SAVED_CLIP"})
+            break
+        queued = prepare_saved_media_queue(plan, client)
+        excluded.add(str(plan.get("selected_clip_candidate_id", "")))
+        qid = str(queued.get("queue_id") or "")
+        if qid and queued.get("status") in {"QUEUED_WAITING_REVIEW", "QUEUE_ALREADY_EXISTS"}:
+            review = subprocess.run([sys.executable, "scripts/run_hybrid_ready_pipeline.py",
+                "--account-id", account_id, "--slot-id", slot_id, "--queue-id", qid,
+                "--max-candidates", "1", "--approval-mode", "media", "--autonomous-low-risk", "--apply", "--use-sheets"],
+                cwd=ROOT, env={**os.environ, "PUBLISH_ENABLED": "false", "ALLOW_REAL_THREADS_POST": "false"},
+                capture_output=True, text=True, timeout=480, check=False)
+            attempts.append({"queue_id": qid, "status": "REVIEWED" if review.returncode == 0 else "QUALITY_BLOCKED"})
+        else:
+            attempts.append({"status": str(queued.get("status", "UNKNOWN"))})
+        ids = ready_ids()
+    return {"status": "READY_INVENTORY_OK" if len(ids) >= minimum else "MEDIA_INVENTORY_LOW",
+            "account_id": account_id, "ready_count": len(ids), "minimum": minimum,
+            "attempts": attempts, "would_post_video": False}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="run one approved media production post")
     parser.add_argument("--account-id", default="liver_manager", choices=account_choices())
@@ -2797,11 +2857,15 @@ def main() -> int:
     parser.add_argument("--confirm-production-media", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--prepare-only", action="store_true", help="download/cut/upload one approved clip, but never post it")
+    parser.add_argument("--minimum-ready", type=int, default=0, help="prepare-only: refill strictly approved clip buffer (1-7)")
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
     parser.add_argument("--prepare-saved-media-queue", action="store_true", help="create one WAITING_REVIEW queue row for Hybrid AI; never post")
     parser.add_argument("--slot-id", default="", help="canonical approved_source_clip slot for idempotency and reporting")
     parser.add_argument("--json-output", default="")
     args = parser.parse_args()
+    if args.minimum_ready and (not 1 <= args.minimum_ready <= 7 or not args.prepare_only
+            or not args.apply or not args.confirm_production_media or not args.use_sheets or args.dry_run):
+        parser.error("--minimum-ready requires --prepare-only --apply --confirm-production-media --use-sheets")
     if sum(bool(value) for value in (args.prepare_only, args.post_saved_media, args.prepare_saved_media_queue)) > 1:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["media_modes_are_mutually_exclusive"]}, ensure_ascii=False))
         return 1
@@ -2810,6 +2874,14 @@ def main() -> int:
     if args.use_sheets:
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    if args.minimum_ready:
+        result = maintain_ready_clip_inventory(client, account_id=args.account_id,
+            slot_id=args.slot_id, minimum=args.minimum_ready)
+        rendered = json.dumps(result, ensure_ascii=False, indent=2)
+        print(rendered)
+        if args.json_output:
+            Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
+        return 0 if result["status"] == "READY_INVENTORY_OK" else 1
     excluded_clip_ids: set[str] = set()
     plan = build_plan(
         account_id=args.account_id,
@@ -2953,6 +3025,13 @@ def main() -> int:
         Path(args.json_output).write_text(rendered + "\n", encoding="utf-8")
     final_status = str(plan.get("status", ""))
 
+    if args.apply and args.prepare_saved_media_queue:
+        return 0 if (
+            final_status == "QUEUED_WAITING_REVIEW"
+            and bool(plan.get("queue_id"))
+            and plan.get("read_after_write") is True
+            and plan.get("would_post_video") is False
+        ) else 1
     if args.apply and not args.prepare_only:
         post_result = dict(plan.get("post_result") or {})
         complete = (

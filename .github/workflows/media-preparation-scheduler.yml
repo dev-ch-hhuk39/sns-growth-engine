@@ -4,9 +4,7 @@ on:
   schedule:
     # Direct inventory for all active production accounts: 12:15 JST.
     - cron: "15 3 * * *"
-    # Night/Liver approved clips already have account-specific scheduled
-    # preparation workflows. Beauty has no legacy clip preparer, so schedule
-    # only its approved-source clip lane here: 14:15 JST.
+    # 14:15 JST: Beauty before cutover; all three independent clip buffers after cutover.
     - cron: "15 5 * * *"
 permissions:
   contents: read
@@ -73,13 +71,18 @@ jobs:
       github.event_name == 'schedule' &&
       github.event.schedule == '15 5 * * *'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        account: ${{ vars.BUFFERED_INVENTORY_ACTIVE == 'true' && fromJSON('["night_scout","liver_manager","beauty_account"]') || fromJSON('["beauty_account"]') }}
     steps:
-      - name: Dispatch bounded Beauty approved-source clip preparation
+      - name: Dispatch bounded approved-source clip preparation
         env:
           GH_TOKEN: ${{ github.token }}
+          ACCOUNT_ID: ${{ matrix.account }}
         run: |
           set -euo pipefail
-          payload='{"ref":"main","inputs":{"account_id":"beauty_account","confirm_preparation":"true","dry_run_only":"false"}}'
+          payload=$(printf '{"ref":"main","inputs":{"account_id":"%s","confirm_preparation":"true","dry_run_only":"false"}}' "$ACCOUNT_ID")
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -87,4 +90,4 @@ jobs:
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/approved-source-clip-preparation.yml/dispatches" \
             --data "$payload"
-          echo "[DISPATCHED] Approved-source clip preparation account=beauty_account"
+          echo "[DISPATCHED] Approved-source clip preparation account=$ACCOUNT_ID"
