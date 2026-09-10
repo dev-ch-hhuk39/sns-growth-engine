@@ -38,7 +38,6 @@ from acquisition.models import (  # noqa: E402
 )
 from generation.source_grounded_caption import (  # noqa: E402
     DeterministicGroundedProvider,
-    GitHubModelsGroundedProvider,
     SourceGroundedCaptionService,
 )
 from generation.source_copyedit import (  # noqa: E402
@@ -514,8 +513,10 @@ def _build_final_caption_bundle(
 def _default_final_caption_service(
 ) -> SourceGroundedCaptionService:
     """Use the canonical provider with only a grounded fallback."""
+    from evidence_context_caption import DirectCaptionProviderFailover
+
     return SourceGroundedCaptionService(
-        generation_provider=GitHubModelsGroundedProvider(),
+        generation_provider=DirectCaptionProviderFailover(),
         fallback_provider=DeterministicGroundedProvider(),
         allow_deterministic_fallback=True,
         # The production pipeline owns the explicit three-attempt

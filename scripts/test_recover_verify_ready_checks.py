@@ -34,8 +34,11 @@ def _load():
 
 
 class _FakeWS:
-    def __init__(self, rows):
+    def __init__(self, rows, title="sheet"):
         self.rows = rows
+        self.title = title
+        self.row_count = len(rows) + 1
+        self.col_count = max(1, len({key for row in rows for key in row}))
 
     def get_all_records(self):
         return [dict(r) for r in self.rows]
@@ -46,9 +49,21 @@ class _FakeClient:
 
     def __init__(self, tabs):
         self._tabs = tabs
+        self._sh = self
+
+    def _call_with_rate_limit_retry(self, _label, fn):
+        return fn()
+
+    def values_batch_get(self, ranges, params=None):
+        values = []
+        for name in ranges:
+            rows = self._tabs.get(name.split("'!", 1)[0][1:], [])
+            headers = list(dict.fromkeys(key for row in rows for key in row))
+            values.append({"values": [headers] + [[row.get(h, "") for h in headers] for row in rows]})
+        return {"valueRanges": values}
 
     def _ws(self, logical):
-        return _FakeWS(self._tabs.get(logical, []))
+        return _FakeWS(self._tabs.get(logical, []), logical)
 
 
 def _base_tabs():

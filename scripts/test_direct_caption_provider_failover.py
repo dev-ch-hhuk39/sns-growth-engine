@@ -13,6 +13,8 @@ from evidence_context_caption import (  # noqa: E402
     DirectCaptionProviderFailover,
     PrivacyBoundedGeminiGroundedProvider,
 )
+from gemini_hybrid_client import GeminiHttpError  # noqa: E402
+from run_media_production_pipeline import _default_final_caption_service  # noqa: E402
 
 
 class Provider:
@@ -54,6 +56,7 @@ class GeminiClient:
 
     def generate_json(self, **kwargs):
         self.prompt = str(kwargs["prompt"])
+        self.schema = kwargs["schema"]
         return {
             "model": "fixture-gemini",
             "data": {
@@ -95,6 +98,37 @@ privacy_result = PrivacyBoundedGeminiGroundedProvider(client=client).generate(
     source_mode="transform",
 )
 
+
+class FailingClient(GeminiClient):
+    def __init__(self, error, recover=False):
+        super().__init__()
+        self.error = error
+        self.recover = recover
+        self.models = []
+
+    def generate_json(self, **kwargs):
+        self.models.append(kwargs["model"])
+        if len(self.models) == 1 or not self.recover:
+            raise self.error
+        return super().generate_json(**kwargs)
+
+
+transient = FailingClient(GeminiHttpError(503, "private-body"), recover=True)
+transient_result = PrivacyBoundedGeminiGroundedProvider(client=transient).generate(
+    post, account_id="beauty_account", recent_posts=[],
+)
+terminal_cases = []
+for error in (GeminiHttpError(400, "secret-key"), GeminiHttpError(403, "secret-key"), RuntimeError("hybrid_ai_budget_blocked:daily_limit_exceeded")):
+    failed = FailingClient(error)
+    failed_result = PrivacyBoundedGeminiGroundedProvider(client=failed).generate(
+        post, account_id="beauty_account", recent_posts=[],
+    )
+    terminal_cases.append(len(failed.models) == 1 and not failed_result.ok and not failed_result.retryable and "secret-key" not in str(failed_result))
+unavailable = FailingClient(GeminiHttpError(429, "private-body"))
+exhausted = PrivacyBoundedGeminiGroundedProvider(client=unavailable).generate(
+    post, account_id="beauty_account", recent_posts=[],
+)
+
 checks = [
     ("primary is attempted once", primary.calls == 1),
     ("Gemini fallback is attempted once", fallback.calls == 1),
@@ -103,6 +137,11 @@ checks = [
     ("source post text is included", post.original_post_text in client.prompt),
     ("transcript is excluded", "送信禁止の文字起こし" not in client.prompt),
     ("recent history is excluded", "送信禁止の直近投稿" not in client.prompt),
+    ("clip uses the same real provider failover", isinstance(_default_final_caption_service().generation_provider, DirectCaptionProviderFailover)),
+    ("transient error switches to existing secondary model", transient_result.ok and transient.models == ["gemini-3.5-flash", "gemini-3.1-flash-lite"]),
+    ("auth schema and budget failures never model-hop", all(terminal_cases)),
+    ("all-provider failure is bounded and never a PASS", not exhausted.ok and len(unavailable.models) == 2 and "http_429" in exhausted.reason),
+    ("analysis response schema defines actual fields", "main_claims" in client.schema["properties"]["internal_analysis"]["properties"]),
 ]
 for name, passed in checks:
     print(f"  {'PASS' if passed else 'FAIL'} {name}")
