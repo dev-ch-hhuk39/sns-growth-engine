@@ -45,6 +45,8 @@ jobs:
     name: AUTO_READY without posting
     strategy:
       fail-fast: false
+      # Keep all existing verification gates; serialize shared Sheets access.
+      max-parallel: 1
       matrix:
         account_id: ${{ fromJSON(github.event.inputs.account_id && github.event.inputs.account_id != 'all' && format('["{0}"]', github.event.inputs.account_id) || '["night_scout","liver_manager","beauty_account"]') }}
     concurrency:
@@ -91,6 +93,7 @@ jobs:
           echo "MAX_READY=$max_ready" >> "$GITHUB_ENV"
 
       - name: Guard account and Sheets secrets
+        id: preparation_guard
         if: env.AUTO_READY_APPLY == 'true'
         run: |
           if [ "$ACCOUNT_ID" != "all" ] && [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ] && [ "$ACCOUNT_ID" != "beauty_account" ]; then
@@ -108,7 +111,10 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
-          if not json.loads(Path("config/autonomous_mode.json").read_text()).get("production_publish_activation_approved", False):
+          config = json.loads(Path("config/autonomous_mode.json").read_text())
+          if config.get("kill_switch"):
+              raise SystemExit("[BLOCKED] kill_switch=true")
+          if not config.get("production_publish_activation_approved", False):
               raise SystemExit("[BLOCKED] production_publish_activation_approved=false")
           PY
 
@@ -124,7 +130,7 @@ jobs:
             --confirm-ready-maintenance --use-sheets
 
       - name: Refill validated non-AI emergency bank
-        if: always() && env.AUTO_READY_APPLY == 'true'
+        if: always() && env.AUTO_READY_APPLY == 'true' && steps.preparation_guard.outcome == 'success'
         run: |
           python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --evergreen-bank --apply \

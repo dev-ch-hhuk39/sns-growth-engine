@@ -91,6 +91,14 @@ def _ready_exists(rows: list[dict[str, Any]], account_id: str, slot: dict[str, s
     )
 
 
+def approval_budget_exhausted(payload: dict[str, Any]) -> bool:
+    reasons = {"HYBRID_AI_EXECUTION_LIMIT_EXCEEDED", "HYBRID_AI_DAILY_LIMIT_EXCEEDED",
+               "HYBRID_AI_MONTHLY_LIMIT_EXCEEDED"}
+    packets = [payload, *(s.get("payload", {}) for s in payload.get("stages", []) if isinstance(s, dict))]
+    return any(error.get("reason") in reasons for packet in packets
+               for error in packet.get("runtime_errors", []) if isinstance(error, dict))
+
+
 def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     try:
         completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False, timeout=480,
@@ -101,7 +109,7 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     payload = payloads[-1] if payloads else {}
     # Preserve a safe error category, never the provider response or credentials.
     error = completed.stderr
-    if "hybrid_ai_budget_blocked:" in error:
+    if "hybrid_ai_budget_blocked:" in error or approval_budget_exhausted(payload):
         payload["failure_category"] = "AI_APPROVAL_BUDGET_EXHAUSTED"
     elif "RESOURCE_EXHAUSTED" in error or "HTTP 429" in error:
         payload["failure_category"] = "PROVIDER_RATE_LIMITED"
@@ -216,12 +224,19 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
             review_rc, review = _run(command)
             if ready_output.exists():
                 review = json.loads(ready_output.read_text(encoding="utf-8"))
+            budget_blocked = approval_budget_exhausted(review)
+            if budget_blocked:
+                review["failure_category"] = "AI_APPROVAL_BUDGET_EXHAUSTED"
             attempts.append({
                 "route": generation_route,
                 "queue_id": queue_id,
                 "status": str(review.get("status", "")),
                 "reason": str(review.get("failure_category") or review.get("reason") or ""),
             })
+            if budget_blocked:
+                return {**result, "status": "QUALITY_EXHAUSTED", "queue_ids": approved,
+                        "missing": required - len(approved), "attempts": attempts,
+                        "failure_category": "AI_APPROVAL_BUDGET_EXHAUSTED"}
             if review_rc == 0 and review.get("status") == "READY":
                 approved.append(queue_id)
                 if len(approved) >= required:
@@ -352,6 +367,7 @@ def main() -> int:
             results.append(replenish_bank(client if args.use_sheets else None, account_id, apply=args.apply))
             continue
         now = datetime.now(JST)
+        budget_blocked = False
         slots = scheduled_slots(account_id, now, now + timedelta(hours=args.horizon_hours))
         for expected_slot in slots:
             snapshot = copy.copy(client) if args.use_sheets else None
@@ -374,7 +390,11 @@ def main() -> int:
                     "status": "READY_INVENTORY_OK",
                 })
                 continue
-            result = replenish(account_id, slot, apply=args.apply, required=missing)
+            result = ({"account_id": account_id, "slot_id": slot["slot_id"],
+                       "business_date_jst": slot["business_date_jst"], "status": "QUALITY_EXHAUSTED",
+                       "queue_ids": [], "failure_category": "AI_APPROVAL_BUDGET_EXHAUSTED", "would_post": False}
+                      if budget_blocked else replenish(account_id, slot, apply=args.apply, required=missing))
+            budget_blocked = budget_blocked or result.get("failure_category") == "AI_APPROVAL_BUDGET_EXHAUSTED"
             if args.apply and result["status"] == "QUALITY_EXHAUSTED":
                 from evergreen_inventory import allocate_bank_candidate
                 from generate_threads_ideas_from_references import original_text_similarity_guard

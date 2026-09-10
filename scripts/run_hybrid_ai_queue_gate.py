@@ -58,6 +58,13 @@ def parse_timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(JST)
 
 
+def safe_runtime_reason(exc: Exception) -> str:
+    reasons = {"hybrid_ai_execution_limit_exceeded", "hybrid_ai_daily_limit_exceeded",
+               "hybrid_ai_monthly_limit_exceeded"}
+    message = str(exc)
+    return message.upper() if message in reasons else "HYBRID_AI_GATE_RUNTIME_ERROR"
+
+
 class SheetsBudgetLedger:
     """Persistent global budget based on verified Sheets reservation logs."""
 
@@ -274,6 +281,7 @@ def main() -> int:
             error_evidence = {
                 "queue_id": queue_id,
                 "error": error_code,
+                "reason": safe_runtime_reason(exc),
                 "http_status": getattr(exc, "status_code", ""),
                 "operation": getattr(exc, "operation", ""),
                 "retryable": getattr(exc, "retryable", ""),
@@ -282,8 +290,8 @@ def main() -> int:
             if args.apply:
                 client.update_queue_item(
                     queue_id,
-                    error="HYBRID_AI_GATE_RUNTIME_ERROR",
-                    blocked_reason="HYBRID_AI_GATE_RUNTIME_ERROR",
+                    error=error_evidence["reason"],
+                    blocked_reason=error_evidence["reason"],
                     updated_at=now_iso(),
                 )
                 client.log(
