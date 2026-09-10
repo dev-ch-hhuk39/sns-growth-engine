@@ -1,3 +1,12 @@
+## 2026-09-10 Live Preparation Follow-up
+
+- Saved clip caption evidence preserves numeric `start_seconds=0` instead of rejecting it as missing; negative, non-finite and reversed ranges remain blocked. This fixes a real saved-asset selection blocker without changing rights or persona gates.
+- PR #294 merged normally as `79052a55981702850755ab445f750afa501b84af`. Exact HEAD `ddbb3e5417133a5134bc980b84344f66502432e3` passed PR CI `34418003085` and full CI `34418086153` (tests, dependency audit, secret history).
+- Production preparation started from that main; this is not proof of successful delivery or complete inventory. Beauty bank admission reached 23 usable candidates, but its account-scoped Hybrid ledger reached the unchanged daily limit of 40.
+- Follow-up preserves BOTH whole-Sheets verification steps. AUTO_READY preparation matrix uses `max-parallel: 1` to reduce shared Sheets 429 pressure; failures remain isolated (`fail-fast: false`). Bank writes require a successful credential/activation/kill-switch guard even after other steps fail.
+- Explicit redacted execution/daily/monthly budget reasons are persisted. Once approval capacity is exhausted, preparation stops further generation in that account invocation and may allocate only already-validated canonical evergreen reserves. No budget increase, synthetic approval or quality relaxation.
+- Buffered activation remains false. No new Threads post has been performed for this rollout. Real media inventory, horizon coverage and reconciler evidence still require validation.
+
 ## 2026-09-10 Buffered Production Inventory
 
 Current branch: `feat/buffered-production-inventory`; base main: `aff033999ec8261470c893168590c02a3b58fdb0`.

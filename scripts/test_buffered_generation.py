@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from gemini_hybrid_client import GeminiHttpError
 from generate_threads_ideas_from_references import buffered_original_candidate
+from maintain_text_ready_inventory import approval_budget_exhausted, replenish
+from run_hybrid_ai_queue_gate import safe_runtime_reason
 
 
 class BufferedGenerationTests(unittest.TestCase):
@@ -59,6 +61,29 @@ class BufferedGenerationTests(unittest.TestCase):
         with patch("gemini_hybrid_client.GeminiHybridClient") as factory:
             self.assertEqual(self.generate("beauty_account"), {})
             factory.assert_not_called()
+
+    def test_budget_reason_is_explicit_but_unknown_errors_are_redacted(self):
+        for limit in ('execution', 'daily', 'monthly'):
+            reason = safe_runtime_reason(RuntimeError(f'hybrid_ai_{limit}_limit_exceeded'))
+            self.assertEqual(reason, f'HYBRID_AI_{limit.upper()}_LIMIT_EXCEEDED')
+            self.assertTrue(approval_budget_exhausted({'runtime_errors': [{'reason': reason}]}))
+        self.assertEqual(safe_runtime_reason(RuntimeError('sensitive response detail')),
+                         'HYBRID_AI_GATE_RUNTIME_ERROR')
+        self.assertFalse(approval_budget_exhausted({'status': 'BLOCKED', 'reason': 'quality_rejection'}))
+
+    def test_budget_exhaustion_stops_extra_generation_without_approval(self):
+        slot = {'slot_id': 'test_buffer', 'business_date_jst': '2026-09-10', 'post_type': 'original_text'}
+        review = {'stages': [{'payload': {'runtime_errors': [{'reason': 'HYBRID_AI_DAILY_LIMIT_EXCEEDED'}]}}]}
+        with patch('maintain_text_ready_inventory._generation_commands', return_value=[('primary', ['generator']), ('fallback', ['generator'])]), \
+             patch('maintain_text_ready_inventory._run', side_effect=[(0, {'queue_ids': ['q1', 'q2']}), (1, review)]) as run, \
+             patch('maintain_text_ready_inventory.Path') as path:
+            path.return_value.exists.return_value = False
+            result = replenish('night_scout', slot, apply=True, required=2)
+        self.assertEqual(run.call_count, 2)
+        self.assertEqual(result['failure_category'], 'AI_APPROVAL_BUDGET_EXHAUSTED')
+        self.assertEqual(result['queue_ids'], [])
+        self.assertEqual(result['status'], 'QUALITY_EXHAUSTED')
+        self.assertFalse(result['would_post'])
 
 
 if __name__ == "__main__":

@@ -8,6 +8,10 @@ workflow = (ROOT / ".github/workflows/autopilot-auto-ready.yml").read_text(encod
 
 assert 'cron: "7 */2 * * *"' in workflow
 assert "fail-fast: false" in workflow
+assert "max-parallel: 1" in workflow
+assert workflow.count("--verify-only --text-inventory-scope") == 2
+assert "steps.preparation_guard.outcome == 'success'" in workflow
+assert '[BLOCKED] kill_switch=true' in workflow
 assert "matrix.account_id" in workflow
 assert "--evergreen-bank" in workflow
 assert 'beauty_account' in workflow

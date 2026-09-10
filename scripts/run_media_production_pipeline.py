@@ -402,19 +402,22 @@ def _build_final_caption_bundle(
     if not transcript_excerpt:
         reasons.append("transcript_excerpt_missing")
 
-    start_seconds = str(
-        clip.get("start_seconds")
-        or clip.get("start_time")
-        or ""
-    ).strip()
-    end_seconds = str(
-        clip.get("end_seconds")
-        or clip.get("end_time")
-        or ""
-    ).strip()
+    # Sheets returns zero as a number; it is a valid start, not a missing value.
+    start_seconds = next((str(clip[key]).strip() for key in ("start_seconds", "start_time")
+                          if clip.get(key) is not None and str(clip[key]).strip()), "")
+    end_seconds = next((str(clip[key]).strip() for key in ("end_seconds", "end_time")
+                        if clip.get(key) is not None and str(clip[key]).strip()), "")
 
     if not start_seconds or not end_seconds:
         reasons.append("final_clip_time_range_missing")
+    else:
+        from math import isfinite
+        try:
+            start, end = float(start_seconds), float(end_seconds)
+            if not isfinite(start) or not isfinite(end) or start < 0 or end <= start:
+                reasons.append("final_clip_time_range_invalid")
+        except ValueError:
+            reasons.append("final_clip_time_range_invalid")
 
     video_url = str(
         source_video.get("canonical_video_url")

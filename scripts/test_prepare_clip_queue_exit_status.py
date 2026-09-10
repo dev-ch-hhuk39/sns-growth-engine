@@ -9,6 +9,28 @@ import run_media_production_pipeline as pipeline
 
 
 class ClipQueueExitTests(unittest.TestCase):
+    def test_numeric_zero_start_is_valid_but_invalid_ranges_are_not(self):
+        source = {'source_video_id': 'sv', 'platform': 'youtube',
+                  'canonical_video_url': 'https://www.youtube.com/watch?v=8Xmkojfw90Q'}
+        clip = {'source_video_id': 'sv', 'transcript_grounded': True,
+                'transcript_excerpt': 'Source excerpt for this exact time range.',
+                'start_seconds': 0, 'end_seconds': 15, 'duration_seconds': 15}
+        bundle, _, reasons = pipeline._build_final_caption_bundle(
+            clip=clip, source_video=source, account_id='liver_manager')
+        self.assertIsNotNone(bundle)
+        self.assertEqual(reasons, [])
+        for start, end in [(-1, 15), (0, 0), (15, 8), ('nan', 15), (0, 'inf'), ('bad', 15)]:
+            with self.subTest(start=start, end=end):
+                bundle, _, reasons = pipeline._build_final_caption_bundle(
+                    clip={**clip, 'start_seconds': start, 'end_seconds': end},
+                    source_video=source, account_id='liver_manager')
+                self.assertIsNone(bundle)
+                self.assertIn('final_clip_time_range_invalid', reasons)
+        bundle, _, reasons = pipeline._build_final_caption_bundle(
+            clip={**clip, 'start_seconds': None}, source_video=source, account_id='liver_manager')
+        self.assertIsNone(bundle)
+        self.assertIn('final_clip_time_range_missing', reasons)
+
     def ready_row(self, index=0):
         return {'queue_id': f'q{index}', 'account_id': 'liver_manager', 'platform': 'threads',
                 'status': 'READY', 'public_post_text': 'approved', 'validator_status': 'PASS',
