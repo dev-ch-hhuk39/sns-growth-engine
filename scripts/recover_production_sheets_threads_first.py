@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_cloudinary_config, get_config  # noqa: E402
 from accounts.managed_accounts import account_choices, auto_ready_account_ids  # noqa: E402
 from publishers.threads_credentials import has_required_for_publish, resolve_credentials  # noqa: E402
-from sheets_record_reader import read_records_safely  # noqa: E402
+from sheets_record_reader import read_records_safely, records_from_values  # noqa: E402
 from sheets_client import SheetsClient, TAB_DEFINITIONS, TAB_DISPLAY_NAMES  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
@@ -115,6 +115,38 @@ def _refresh_ws_cache(client: SheetsClient) -> None:
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     return [dict(r) for r in _ws(client, logical).get_all_records()]
+
+
+VERIFICATION_TABS = (
+    "accounts", "content_categories", "prompt_templates", "queue", "posted_results",
+    "learning_rules", "media_assets", "source_accounts", "reference_sources",
+    "source_account_posts", "reference_post_scores", "social_derivatives", "drafts",
+    "prompt_improvement_suggestions", "logs", "source_posts", "source_videos", "media_permissions",
+)
+
+
+def _verification_records(client: SheetsClient) -> dict[str, list[dict[str, Any]]]:
+    # Every verification gets a fresh snapshot, including after recovery writes.
+    # Keep the complete verification surface, not just the current account/queue.
+    worksheets = [_ws(client, logical) for logical in VERIFICATION_TABS]
+    ranges = [
+        "'" + ws.title.replace("'", "''") + "'!A1:"
+        + _col_letter(ws.col_count) + str(ws.row_count)
+        for ws in worksheets
+    ]
+    payload = client._call_with_rate_limit_retry(
+        "values_batch_get:production_verification",
+        lambda: client._sh.values_batch_get(
+            ranges, params={"majorDimension": "ROWS", "valueRenderOption": "UNFORMATTED_VALUE"},
+        ),
+    )
+    value_ranges = payload.get("valueRanges", [])
+    if len(value_ranges) != len(VERIFICATION_TABS):
+        raise RuntimeError("production_verification_range_count_mismatch")
+    return {
+        logical: records_from_values(value_range.get("values", []))
+        for logical, value_range in zip(VERIFICATION_TABS, value_ranges, strict=True)
+    }
 
 
 def _ensure_headers(client: SheetsClient, logical: str, headers: list[str]) -> list[str]:
@@ -852,24 +884,25 @@ def backfill_posted_results(client: SheetsClient) -> int:
 
 
 def verify_state(client: SheetsClient) -> dict[str, Any]:
-    accounts = {r.get("account_id"): r for r in _records(client, "accounts")}
-    categories = _records(client, "content_categories")
-    prompts = _records(client, "prompt_templates")
-    queue = _records(client, "queue")
-    posted = _records(client, "posted_results")
-    learning = _records(client, "learning_rules")
-    media = _records(client, "media_assets")
-    source_accounts = _records(client, "source_accounts")
-    reference_sources = _records(client, "reference_sources")
-    reference_posts = _records(client, "source_account_posts")
-    reference_scores = _records(client, "reference_post_scores")
-    social = _records(client, "social_derivatives")
-    drafts = _records(client, "drafts")
-    suggestions = _records(client, "prompt_improvement_suggestions")
-    logs = _records(client, "logs")
-    source_posts = _records(client, "source_posts")
-    source_videos = _records(client, "source_videos")
-    permissions = _records(client, "media_permissions")
+    snapshot = _verification_records(client)
+    accounts = {r.get("account_id"): r for r in snapshot["accounts"]}
+    categories = snapshot["content_categories"]
+    prompts = snapshot["prompt_templates"]
+    queue = snapshot["queue"]
+    posted = snapshot["posted_results"]
+    learning = snapshot["learning_rules"]
+    media = snapshot["media_assets"]
+    source_accounts = snapshot["source_accounts"]
+    reference_sources = snapshot["reference_sources"]
+    reference_posts = snapshot["source_account_posts"]
+    reference_scores = snapshot["reference_post_scores"]
+    social = snapshot["social_derivatives"]
+    drafts = snapshot["drafts"]
+    suggestions = snapshot["prompt_improvement_suggestions"]
+    logs = snapshot["logs"]
+    source_posts = snapshot["source_posts"]
+    source_videos = snapshot["source_videos"]
+    permissions = snapshot["media_permissions"]
 
     # --- media 承認・Cloudinary upload の整合（承認ゲートの不変条件を verify）---
     from media.queue_media_attach import resolve_media_url

@@ -1,3 +1,11 @@
+## 2026-09-10 Verification Read Repair
+
+- PR #295 merged normally as `b79a55635a37351d120bc12b08276701dfce1820`; exact-head CI `34446569171` passed PR gate and regression tests.
+- Real Night/Beauty preparation failed in the whole-Sheets verifier with read quota 429. All 18 verification tabs and existing checks are retained; a fresh bounded-retry batch snapshot replaces 18 un-retried individual reads. No cached pre-write evidence is reused.
+- Live read-only verification with this patch: 63 checks PASS, zero failures (`--verify-only --text-inventory-scope`). No Sheets writes or posts during this verification.
+- Direct preparation `34445439141` completed `MEDIA_INVENTORY_LOW` for all three accounts. Evidence/grounding, source suitability and caption-provider failures remain; no media PASS is claimed.
+- Clip recheck `34449801739` on main passes numeric-zero range selection, but three Liver candidates then fail final caption review; none became READY or posted. Buffered activation stays OFF pending actual inventory and delivery proof.
+
 ## 2026-09-10 Live Preparation Follow-up
 
 - Saved clip caption evidence preserves numeric `start_seconds=0` instead of rejecting it as missing; negative, non-finite and reversed ranges remain blocked. This fixes a real saved-asset selection blocker without changing rights or persona gates.
