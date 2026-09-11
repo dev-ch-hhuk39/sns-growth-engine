@@ -1491,6 +1491,8 @@ def select_saved_media_candidate(
     posted_results: list[dict[str, Any]],
     account_id: str,
     excluded_clip_ids: set[str] | None = None,
+    *,
+    allow_caption_regeneration: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     """Select one uploaded-but-never-posted approved asset for a timed slot."""
     clips_by_id = {str(row.get("clip_candidate_id") or row.get("clip_id") or ""): row for row in clips}
@@ -1558,7 +1560,16 @@ def select_saved_media_candidate(
             or clip.get("reviewer_status")
             or ""
         ).upper()
-        if clip_status not in {"READY", "AUTO_APPROVED", "MEDIA_READY"}:
+        # A machine caption failure is not a rejection of the physical asset.
+        # Only preparation can retry it; publishers still require READY.
+        caption_retry = (
+            allow_caption_regeneration
+            and clip_status == "REVIEW_REQUIRED"
+            and str(clip.get("post_status", "")).upper() == "REVIEW_REQUIRED"
+            and str(clip.get("reviewer_status", "")).upper() == "REVIEW_REQUIRED"
+            and str(clip.get("last_error", "")).startswith("caption:")
+        )
+        if clip_status not in {"READY", "AUTO_APPROVED", "MEDIA_READY"} and not caption_retry:
             reasons.append(f"{media_id}:clip_not_ready")
             continue
 
@@ -1813,6 +1824,7 @@ def build_plan(
             posted,
             account_id,
             effective_excluded_clip_ids,
+            allow_caption_regeneration=prepare_saved_media_queue,
         )
     else:
         clip, source_video, skipped = select_candidate(

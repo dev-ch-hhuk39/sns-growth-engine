@@ -221,6 +221,32 @@ def main() -> int:
     )
     check(candidate is not None, "saved account-grounded clip accepts numeric zero start")
 
+    caption_failed = {**approved_clip, "clip_status": "REVIEW_REQUIRED", "post_status": "REVIEW_REQUIRED",
+                      "reviewer_status": "REVIEW_REQUIRED", "last_error": "caption:voice_persona_not_pass"}
+    candidate, _, _, _ = select_saved_media_candidate(
+        [caption_failed], source_videos, [media_assets[-1]], [], account_id,
+    )
+    check(candidate is None, "publisher cannot select a caption-rejected clip")
+    candidate, _, _, _ = select_saved_media_candidate(
+        [caption_failed], source_videos, [media_assets[-1]], [], account_id,
+        allow_caption_regeneration=True,
+    )
+    check(candidate == caption_failed and candidate["clip_status"] == "REVIEW_REQUIRED",
+          "preparation can select caption-only failure without approving it")
+    for change in ({"last_error": "permission_missing"}, {"reviewer_status": "REJECTED"},
+                   {"transcript_excerpt": "他分野の短い内容"}, {"post_status": "POSTED"}):
+        candidate, _, _, _ = select_saved_media_candidate(
+            [{**caption_failed, **change}], source_videos, [media_assets[-1]], [], account_id,
+            allow_caption_regeneration=True,
+        )
+        check(candidate is None, f"preparation retains independent blockers: {list(change)}")
+    candidate, _, _, _ = select_saved_media_candidate(
+        [caption_failed], source_videos, [media_assets[-1]],
+        [{"clip_candidate_id": caption_failed["clip_candidate_id"]}], account_id,
+        allow_caption_regeneration=True,
+    )
+    check(candidate is None, "caption retry cannot reuse a posted clip")
+
     print(
         "PASS "
         "test_saved_media_selection_excludes_synthetic.py"
