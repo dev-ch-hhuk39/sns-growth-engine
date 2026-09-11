@@ -42,7 +42,11 @@ off_topic = [{
 blocked, _, reasons = select_candidate(ungrounded, source_videos, [])
 selected, _, _ = select_candidate(grounded, source_videos, [])
 off_topic_selected, _, off_topic_reasons = select_candidate(off_topic, source_videos, [])
+zero_selected, _, zero_reasons = select_candidate(
+    [{**grounded[0], "start_seconds": 0, "end_seconds": 25}], source_videos, [],
+)
 checks = [
+    ("numeric zero start selected", zero_selected is not None and not zero_reasons),
     ("ungrounded clip blocked", blocked is None and any("transcript_grounding_required" in r for r in reasons)),
     ("grounded clip selected", selected and selected["clip_candidate_id"] == "clip_2"),
     ("off-topic grounded clip blocked", off_topic_selected is None and any("clip_account_evidence_insufficient" in reason for reason in off_topic_reasons)),
