@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
-from run_media_production_pipeline import select_saved_media_candidate
+from run_media_production_pipeline import select_saved_media_candidate  # noqa: E402
 
 
 def check(condition: bool, message: str) -> None:
@@ -44,8 +44,8 @@ def main() -> int:
         "permission_status": "approved",
         "transcript_grounded": "TRUE",
         "transcript_excerpt": (
-            "配信前に最初の話題を決めておくと、"
-            "コメントがない時間も進行しやすい。"
+            "キャバクラの店選びでは、時給だけでなく客層や出勤ペースも確認しておきたい。"
+            "ノルマや担当への相談のしやすさも、無理なく続けるための判断材料になる。"
         ),
         "start_seconds": "15",
         "end_seconds": "42",
@@ -84,7 +84,7 @@ def main() -> int:
             ),
             "rights_status": "approved_creator_clip",
             "permission_status": "approved",
-            "title": "初心者向け配信の進め方",
+            "title": "キャバクラの店選びと出勤条件",
         },
         {
             "source_video_id": "sv_ungrounded_01",
@@ -202,6 +202,24 @@ def main() -> int:
         ),
         "missing transcript grounding is auditable",
     )
+
+    for excerpt, expected_reason in (
+        ("配信前に最初の話題を決めておくと、コメントがない時間も進行しやすい。初見のリスナーに話題を伝えてみよう。",
+         "clip_account_evidence_insufficient"),
+        ("キャバクラの時給", "clip_transcript_too_short_for_grounding"),
+    ):
+        candidate, _, _, blocked_reasons = select_saved_media_candidate(
+            [{**approved_clip, "transcript_excerpt": excerpt}],
+            source_videos, [media_assets[-1]], [], account_id,
+        )
+        check(candidate is None and any(expected_reason in reason for reason in blocked_reasons),
+              f"saved media fails closed: {expected_reason}")
+
+    candidate, _, _, _ = select_saved_media_candidate(
+        [{**approved_clip, "start_seconds": 0, "end_seconds": 27}],
+        source_videos, [media_assets[-1]], [], account_id,
+    )
+    check(candidate is not None, "saved account-grounded clip accepts numeric zero start")
 
     print(
         "PASS "

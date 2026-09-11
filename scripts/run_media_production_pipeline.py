@@ -112,8 +112,10 @@ def approved_clip_duration_seconds(clip: dict[str, Any]) -> float:
     if duration > 0:
         return duration
     try:
-        start = float(str(clip.get("start_seconds") or clip.get("start_time") or "").strip())
-        end = float(str(clip.get("end_seconds") or clip.get("end_time") or "").strip())
+        start = float(next((str(clip[key]).strip() for key in ("start_seconds", "start_time")
+                            if clip.get(key) is not None and str(clip[key]).strip()), ""))
+        end = float(next((str(clip[key]).strip() for key in ("end_seconds", "end_time")
+                          if clip.get(key) is not None and str(clip[key]).strip()), ""))
     except (TypeError, ValueError):
         return 0.0
     return max(0.0, end - start)
@@ -1405,8 +1407,10 @@ def select_candidate(
             for blocker in source_blockers:
                 reasons.append(f"{clip_id}:{blocker}")
             continue
-        start_seconds = str(clip.get("start_seconds") or clip.get("start_time") or "").strip()
-        end_seconds = str(clip.get("end_seconds") or clip.get("end_time") or "").strip()
+        start_seconds = next((str(clip[key]).strip() for key in ("start_seconds", "start_time")
+                              if clip.get(key) is not None and str(clip[key]).strip()), "")
+        end_seconds = next((str(clip[key]).strip() for key in ("end_seconds", "end_time")
+                            if clip.get(key) is not None and str(clip[key]).strip()), "")
         if not start_seconds or not end_seconds:
             reasons.append(f"{clip_id}:exact_clip_time_range_missing")
             continue
@@ -1574,6 +1578,13 @@ def select_saved_media_candidate(
                 "final_caption_evidence_missing"
             ]:
                 reasons.append(f"{media_id}:{reason}")
+            continue
+
+        _source_evidence, source_blockers = clip_source_suitability(
+            account_id=account_id, transcript=_transcript_excerpt,
+        )
+        if source_blockers:
+            reasons.extend(f"{media_id}:{reason}" for reason in source_blockers)
             continue
 
         if not asset_has_video_evidence(

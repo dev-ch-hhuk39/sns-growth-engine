@@ -1,3 +1,7 @@
+## 2026-09-11 Media Caption Voice Repair
+
+Continue from main `ef812f416b08067561c7deaa622208db74e2d8d2` (PR #296 / CI `34450956440` PASS). Real Gemini caption provider succeeds in `34451324372`, but final caption validation rejects it. Caption generation now consumes the same canonical account voice contract as validation and varies bounded retry prompts instead of replaying one cached response. Beauty has 72-hour slot reserves per scheduled `34528502634`; evergreen/media targets and buffered delivery remain unverified. Keep all gates, no fabricated readiness; preserve `.runtime/`.
+
 ## 2026-09-10 Verification Read Repair
 
 PR #295 merged as `b79a55635a37351d120bc12b08276701dfce1820`; CI `34446569171` PASS. The complete 18-tab verifier now reads one fresh batch with bounded retry, retaining every safety check. Live read-only text-inventory verification: 63 PASS, zero failures. Direct prep `34445439141` remains low inventory for all accounts; clip recheck `34449801739` advances past zero-start selection but rejects three final captions. No new Threads posts or buffered activation. See `docs/current-work.md`; preserve `.runtime/` untouched.
