@@ -74,7 +74,7 @@ def transcribe_video(path: Path, *, max_seconds: int = 300) -> dict[str, Any]:
     try:
         from faster_whisper import WhisperModel
 
-        model = WhisperModel("tiny", device="cpu", compute_type="int8", cpu_threads=1)
+        model = WhisperModel("small", device="cpu", compute_type="int8", cpu_threads=1, num_workers=1)
         segments, info = model.transcribe(
             str(path), beam_size=1, vad_filter=True, language="ja",
             clip_timestamps=f"0,{max_seconds}",
@@ -83,11 +83,11 @@ def transcribe_video(path: Path, *, max_seconds: int = 300) -> dict[str, Any]:
         return {
             "status": "PASS" if text else "UNAVAILABLE",
             "text": text,
-            "provider": "faster_whisper_tiny",
+            "provider": "faster_whisper_small",
             "language": str(getattr(info, "language", "")),
         }
     except (ImportError, RuntimeError, OSError, TypeError, ValueError) as exc:
-        return {"status": "UNAVAILABLE", "text": "", "provider": "faster_whisper_tiny", "reason": type(exc).__name__}
+        return {"status": "UNAVAILABLE", "text": "", "provider": "faster_whisper_small", "reason": type(exc).__name__}
 
 
 def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:

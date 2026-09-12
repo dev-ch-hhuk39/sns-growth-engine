@@ -129,11 +129,10 @@ def media_understanding_needs_refresh(
     media: dict[str, Any],
     understanding: dict[str, Any] | None,
 ) -> bool:
-    """Revisit legacy uploaded videos that never attempted transcription.
+    """Revisit missing transcripts or the superseded tiny-model evidence once.
 
-    A completed PASS/UNAVAILABLE/DISABLED result is terminal for this refresh
-    path. This keeps scheduled preparation bounded while allowing old visual-
-    only evidence to be upgraded under the current local-transcription path.
+    Current-model results remain terminal. Existing ingest permissions and
+    candidate limits still apply; refreshing does not approve publication.
     """
 
     understanding = dict(understanding or {})
@@ -144,9 +143,14 @@ def media_understanding_needs_refresh(
         and str(media.get("cloudinary_status", "")).strip().upper() == "UPLOADED"
         and bool(str(media.get("storage_url", "")).strip())
         and understanding_status in {"", "PASS"}
-        and not str(understanding.get("transcript_status", "")).strip()
-        and not str(understanding.get("transcript_hash", "")).strip()
-        and not str(understanding.get("transcript_text", "")).strip()
+        and (
+            str(understanding.get("transcription_provider", "")).strip() == "faster_whisper_tiny"
+            or (
+                not str(understanding.get("transcript_status", "")).strip()
+                and not str(understanding.get("transcript_hash", "")).strip()
+                and not str(understanding.get("transcript_text", "")).strip()
+            )
+        )
     )
 
 
