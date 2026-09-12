@@ -140,16 +140,22 @@ def prepared_text_candidates(rows: list[dict[str, Any]], account_id: str, slot_i
 
 
 def dispatch_prepared_text(client: Any, account_id: str, slot_id: str, *, apply: bool) -> dict[str, Any] | None:
-    from content_slot_runs import business_date, claim_slot_run, existing_slot_status
+    from copy import copy
+    from content_slot_runs import business_date, claim_slot_run, existing_slot_status, release_unpublished_claim
     from process_threads_queue import process_one, records
+    from sheets_record_reader import enable_readonly_record_cache
 
     if account_id not in {"night_scout", "liver_manager"} or slot_id not in SLOT_POST_TYPES or not slot_id.startswith("ns_" if account_id == "night_scout" else "lm_"):
         return {"status": "BLOCKED", "reason": "ACCOUNT_SLOT_MISMATCH"}
     if existing_slot_status(client, account_id, slot_id) in {"POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}:
         return {"status": "SKIPPED", "reason": "slot_already_posted"}
     candidates = prepared_text_candidates(records(client, "queue"), account_id, slot_id, business_date())
+    # Share reads only across previews. The publisher retains the live client
+    # so approvals, duplicates and persistence are checked again after claiming.
+    snapshot = copy(client)
+    enable_readonly_record_cache(snapshot)
     for queue in candidates[:3]:
-        preview = process_one(client, queue, dry_run=True, confirm_real_post=False)
+        preview = process_one(snapshot, queue, dry_run=True, confirm_real_post=False)
         if preview.get("status") != "DRY_RUN":
             continue
         if not apply:
@@ -166,6 +172,8 @@ def dispatch_prepared_text(client: Any, account_id: str, slot_id: str, *, apply:
         # Never try another candidate after a publish call, even if persistence
         # failed: the remote outcome may already be a real post.
         result = process_one(client, queue, dry_run=False, confirm_real_post=True)
+        if result.get("status") == "PRE_PUBLISH_SHEETS_FAILED" and result.get("publish_attempted") is False:
+            result["slot_release"] = release_unpublished_claim(client, claim, result)
         return {**result, "queue_id": queue["queue_id"], "path": "prepared_text_inventory"}
     return None
 

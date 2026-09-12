@@ -4,6 +4,7 @@ import subprocess
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import run_scheduled_text_slot_pipeline as scheduled
 import run_direct_reference_media_pipeline as direct
@@ -43,7 +44,7 @@ class PreparedInventoryTests(unittest.TestCase):
              patch("process_threads_queue.records", return_value=[self.row, {**self.row, "queue_id": "other"}]), \
              patch("process_threads_queue.process_one", side_effect=[{"status": "DRY_RUN"}, {"status": "PUBLISH_OUTCOME_UNVERIFIED"}]) as worker, \
              patch.object(scheduled, "run_stage", return_value=(0, {"status": "ALLOW"})):
-            result = scheduled.dispatch_prepared_text(object(), "night_scout", "ns_1600_original", apply=True)
+            result = scheduled.dispatch_prepared_text(SimpleNamespace(), "night_scout", "ns_1600_original", apply=True)
         self.assertEqual(result["status"], "PUBLISH_OUTCOME_UNVERIFIED")
         self.assertEqual(worker.call_count, 2)
         claim.assert_called_once()
@@ -55,10 +56,52 @@ class PreparedInventoryTests(unittest.TestCase):
              patch("process_threads_queue.records", return_value=[self.row]), \
              patch("process_threads_queue.process_one", return_value={"status": "DRY_RUN"}) as worker, \
              patch.object(scheduled, "run_stage", return_value=(1, {"status": "BLOCKED"})):
-            result = scheduled.dispatch_prepared_text(object(), "night_scout", "ns_1600_original", apply=True)
+            result = scheduled.dispatch_prepared_text(SimpleNamespace(), "night_scout", "ns_1600_original", apply=True)
         self.assertEqual(result["reason"], "RUNTIME_ACTIVATION_GATE_BLOCKED")
         claim.assert_not_called()
         worker.assert_called_once()
+
+    def test_preview_snapshot_never_reused_for_real_publish(self):
+        client = SimpleNamespace()
+        seen = []
+        def worker(target, row, *, dry_run, **kwargs):
+            seen.append(target)
+            if dry_run:
+                cache = target._readonly_sheet_record_cache
+                if not cache:
+                    cache['posted_results'] = []
+                    return {"status": "DRY_RUN_BLOCKED"}
+                return {"status": "DRY_RUN"}
+            self.assertIs(target, client)
+            self.assertFalse(hasattr(target, '_readonly_sheet_record_cache'))
+            return {"status": "PUBLISH_OUTCOME_UNVERIFIED"}
+        with patch("content_slot_runs.business_date", return_value="2026-09-07"), \
+             patch("content_slot_runs.existing_slot_status", return_value=""), \
+             patch("content_slot_runs.claim_slot_run", return_value={"status": "CLAIMED"}), \
+             patch("content_slot_runs.release_unpublished_claim") as release, \
+             patch("process_threads_queue.records", return_value=[self.row, {**self.row, "queue_id": "next"}]), \
+             patch("process_threads_queue.process_one", side_effect=worker), \
+             patch.object(scheduled, "run_stage", return_value=(0, {})):
+            scheduled.dispatch_prepared_text(client, "night_scout", "ns_1600_original", apply=True)
+        self.assertEqual(len(seen), 3)
+        self.assertIs(seen[0], seen[1])
+        self.assertIsNot(seen[1], seen[2])
+        release.assert_not_called()
+
+    def test_only_confirmed_pre_publish_failure_releases_claim(self):
+        for result, expected in [({"status": "PRE_PUBLISH_SHEETS_FAILED", "publish_attempted": False}, 1),
+                                 ({"status": "PRE_PUBLISH_SHEETS_FAILED"}, 0),
+                                 ({"status": "POSTED_SAVE_FAILED"}, 0)]:
+            with self.subTest(result=result), \
+                 patch("content_slot_runs.business_date", return_value="2026-09-07"), \
+                 patch("content_slot_runs.existing_slot_status", return_value=""), \
+                 patch("content_slot_runs.claim_slot_run", return_value={"status": "CLAIMED"}), \
+                 patch("content_slot_runs.release_unpublished_claim", return_value={"status": "RELEASED"}) as release, \
+                 patch("process_threads_queue.records", return_value=[self.row]), \
+                 patch("process_threads_queue.process_one", side_effect=[{"status": "DRY_RUN"}, result]), \
+                 patch.object(scheduled, "run_stage", return_value=(0, {})):
+                scheduled.dispatch_prepared_text(SimpleNamespace(), "night_scout", "ns_1600_original", apply=True)
+                self.assertEqual(release.call_count, expected)
 
     def test_unused_media_carries_forward_not_future_or_expired(self):
         self.assertTrue(direct.prepared_media_date_eligible({"business_date_jst": "2026-09-06"}, "2026-09-07"))

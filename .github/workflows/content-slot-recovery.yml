@@ -30,6 +30,8 @@ jobs:
   recover-missed-slots:
     strategy:
       fail-fast: false
+      # Accounts share the Sheets service-account read quota, not post state.
+      max-parallel: 1
       matrix:
         include:
           - account: night_scout
