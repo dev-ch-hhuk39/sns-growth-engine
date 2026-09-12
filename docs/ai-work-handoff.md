@@ -8043,3 +8043,6 @@ always requires a per-post human approval.
 - No production Sheets write, Cloudinary upload or Threads post was performed
   while implementing this change. Production proof follows only after normal
   PR merge and bounded account-specific runs.
+## 2026-09-11 Preparation Retry Follow-up
+
+PR #297 is merged (`2d31f0b2f807a1050cd6489685f7c5ac9cafeec0`, CI `34546460903` PASS). Clip run `34546693328` still failed: prior machine-caption rejections stranded uploaded candidates in REVIEW_REQUIRED. New preparation-only regeneration must preserve every physical/rights/account check and produce a freshly validated caption; publisher selection remains unchanged. Original generation now feeds actual rejection reasons into its existing bounded retries. Direct run `34546694764` remains MEDIA_INVENTORY_LOW for all accounts. Do not call complete or activate the buffered scheduler without real inventory/delivery evidence. Preserve `.runtime/` untouched.

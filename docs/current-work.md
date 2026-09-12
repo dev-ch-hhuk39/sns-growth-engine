@@ -1,3 +1,10 @@
+## 2026-09-11 Preparation Retry Repair
+
+- PR #297 merged as `2d31f0b2f807a1050cd6489685f7c5ac9cafeec0`; exact-head CI `34546460903` passed PR gate and regression tests.
+- Live clip preparation `34546693328` fails because previous machine-caption failures leave clips `REVIEW_REQUIRED`. Only saved-media queue preparation may regenerate those captions; publishing still rejects them. Uploaded evidence, account suitability, rights, quarantine and already-posted exclusions remain mandatory. A new caption still requires final validation and independent Hybrid READY approval.
+- Real read-only Gemini original generation passed persona/topic/diversity but failed the unchanged risk gate on an absolute claim. Bounded original retries now receive only the previous public draft and rejection reasons, and request another topic/structure. Limits remain five AI attempts; no failed candidate becomes READY.
+- Direct preparation `34546694764` remains below minimum in all three accounts: source media understanding/acquisition and usable inventory still block production. It is not media success. No new manual Threads posts or buffered activation were performed.
+
 ## 2026-09-11 Media Caption Voice Repair
 
 - Main `ef812f416b08067561c7deaa622208db74e2d8d2` includes PR #296 (CI `34450956440` PASS). Live clip preparation `34451324372` now reaches real Gemini `provider_status=PASS`; it still fails final persona/alignment, not acquisition or a fabricated success.

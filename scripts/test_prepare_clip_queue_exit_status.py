@@ -9,6 +9,20 @@ import run_media_production_pipeline as pipeline
 
 
 class ClipQueueExitTests(unittest.TestCase):
+    def test_caption_regeneration_flag_is_preparation_only(self):
+        from unittest.mock import Mock
+        for preparing in (False, True):
+            with self.subTest(preparing=preparing), \
+                 patch.dict(pipeline.os.environ, {"BLOCK_MEDIA_SLOT": "false"}), \
+                 patch.object(pipeline, '_load', return_value={'media_public_post_auto_enabled': True}), \
+                 patch.object(pipeline, 'managed_account', return_value={'scheduled_routes': ['approved_source_clip']}), \
+                 patch.object(pipeline, '_records', return_value=[]), \
+                 patch.object(pipeline, 'select_saved_media_candidate', return_value=(None, None, None, [])) as select:
+                result = pipeline.build_plan(apply=False, confirm=False, client=Mock(),
+                    post_saved_media=True, prepare_saved_media_queue=preparing)
+            self.assertEqual(select.call_args.kwargs['allow_caption_regeneration'], preparing)
+            self.assertFalse(result['would_post_video'])
+
     def test_numeric_zero_start_is_valid_but_invalid_ranges_are_not(self):
         source = {'source_video_id': 'sv', 'platform': 'youtube',
                   'canonical_video_url': 'https://www.youtube.com/watch?v=8Xmkojfw90Q'}
