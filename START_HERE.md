@@ -1,3 +1,11 @@
+## 2026-09-13 Transcript Duration Persistence
+
+- Base main `df92c9f64a2890f1635fe5bf64a51622a8a15b91` includes PR #299. CI `34690824338` passed 904 scripts and the PR gate; this is not proof of full production recovery.
+- Live clip prep `34690990075` saved local Whisper output but produced zero eligible media queues. Approved source videos with blank duration were excluded before clip planning. Transcription now retains finite positive yt-dlp source duration in both transcript and source-video records; speech end and the audio processing cap are never substituted for source duration. Uploaded derivative duration is not promoted as original-source evidence.
+- YouTube storage matching retains the `v` identity parameter, preventing distinct watch URLs from matching the same stored media. Existing rights, account, physical media, alignment and quality gates remain unchanged.
+- Latest scheduled AUTO_READY `34717242321` still reports provider/quality exhaustion. Prior live readiness was 47.619% horizon coverage, evergreen 0/0/21, media READY 0 in all six account/route pairs. Buffered activation and external scheduler verification remain OFF/unverified. Do not claim schedule or media recovery from green code tests.
+- Preserve `.runtime/`; do not reset budgets, replay ambiguous posts or release historical leases without definitive no-publish evidence.
+
 ## 2026-09-10 Live Preparation Follow-up
 
 - Saved clip caption evidence preserves numeric `start_seconds=0` instead of rejecting it as missing; negative, non-finite and reversed ranges remain blocked. This fixes a real saved-asset selection blocker without changing rights or persona gates.

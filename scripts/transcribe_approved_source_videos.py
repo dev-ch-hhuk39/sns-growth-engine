@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -20,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -128,7 +129,13 @@ def load_media_assets(client: SheetsClient) -> list[dict[str, Any]]:
 
 def _canonical_match_url(value: Any) -> str:
     parts = urlsplit(str(value or "").strip())
-    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), "", ""))
+    query = ""
+    if parts.hostname in {"youtube.com", "www.youtube.com", "m.youtube.com"} and parts.path == "/watch":
+        video_id = parse_qs(parts.query).get("v", [])
+        if len(video_id) != 1 or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id[0]):
+            return ""
+        query = urlencode({"v": video_id[0]})
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), query, ""))
 
 
 def attach_approved_storage_inputs(source_videos: list[dict[str, Any]], assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -294,7 +301,7 @@ def _download_audio_with_ytdlp(
     video_url: str,
     tmp_path: Path,
     platform: str,
-) -> tuple[Path | None, str, str]:
+) -> tuple[Path | None, str, str, float | None]:
     profiles = _ytdlp_audio_attempt_profiles(platform)
     rehydration_failures = 0
     for mode, overrides in profiles:
@@ -316,7 +323,7 @@ def _download_audio_with_ytdlp(
         )
         try:
             with yt_dlp_module.YoutubeDL(options) as ydl:
-                ydl.download([video_url])
+                info = ydl.extract_info(video_url, download=True)
         except Exception as exc:  # noqa: BLE001
             if TIKTOK_REHYDRATION_ERROR in str(exc).lower():
                 rehydration_failures += 1
@@ -325,12 +332,24 @@ def _download_audio_with_ytdlp(
             candidate
             for candidate in tmp_path.glob(f"audio-{mode}.*")
             if candidate.is_file() and candidate.stat().st_size > 0
+            and candidate.suffix not in {".part", ".ytdl", ".json"}
         )
         if files:
-            return files[0], mode, ""
+            duration = positive_duration(info.get("duration")) if isinstance(info, dict) else None
+            return files[0], mode, "", duration
     if platform == "tiktok" and rehydration_failures == len(profiles):
-        return None, "", "MEDIA_ACQUISITION_BLOCKED"
-    return None, "", "LOCAL_WHISPER_FAILED"
+        return None, "", "MEDIA_ACQUISITION_BLOCKED", None
+    return None, "", "LOCAL_WHISPER_FAILED", None
+
+
+def positive_duration(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        duration = float(value)
+    except (TypeError, ValueError):
+        return None
+    return duration if math.isfinite(duration) and duration > 0 else None
 
 
 def finalize_transcription_status(
@@ -369,7 +388,7 @@ def transcribe_with_local_whisper(
     with TemporaryDirectory(prefix="sns_transcribe_") as tmp:
         tmp_path = Path(tmp)
         platform = "youtube" if "youtu" in video_url.lower() else "tiktok"
-        audio, acquisition_mode, download_status = _download_audio_with_ytdlp(
+        audio, acquisition_mode, download_status, source_duration = _download_audio_with_ytdlp(
             yt_dlp,
             video_url,
             tmp_path,
@@ -428,6 +447,7 @@ def transcribe_with_local_whisper(
                 "language": str(getattr(info, "language", "") or "unknown"),
                 "text": full_text,
                 "segments": segments,
+                "source_duration_seconds": source_duration,
                 "processed_duration_seconds": max(
                     (float(seg["end"]) for seg in segments),
                     default=0.0,
@@ -447,7 +467,9 @@ def transcribe_with_local_whisper(
 def build_transcript_row(video: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     text = str(result.get("text", ""))
     segments = result.get("segments") or []
-    duration = str(video.get("duration_seconds") or "")
+    # Speech end and the bounded Whisper window are not the source duration.
+    source_duration = positive_duration(video.get("duration_seconds")) or positive_duration(result.get("source_duration_seconds"))
+    duration = str(source_duration) if source_duration else ""
     processed_duration = float(result.get("processed_duration_seconds") or duration or 0)
     original_duration = float(duration or 0)
     is_partial = bool(original_duration and processed_duration + 1 < original_duration)
@@ -467,7 +489,7 @@ def build_transcript_row(video: dict[str, Any], result: dict[str, Any]) -> dict[
         "segments_json": json.dumps(segments, ensure_ascii=False),
         "language": result.get("language", ""),
         "processed_minutes": round(processed_duration / 60, 3) if processed_duration else "",
-        "transcription_scope": "PARTIAL" if is_partial else "FULL",
+        "transcription_scope": ("PARTIAL" if is_partial else "FULL") if source_duration else "UNKNOWN",
         "processed_duration_seconds": round(processed_duration, 3) if processed_duration else "",
         "transcript_hash": sha256_text(text),
         "chunk_count": len(segments) or max(1, len(text) // 500 + 1),
@@ -502,6 +524,22 @@ def build_unavailable_row(video: dict[str, Any], status: str, error: str) -> dic
     }
 
 
+def build_source_update(video: dict[str, Any], row: dict[str, Any]) -> dict[str, Any]:
+    duration = positive_duration(video.get("duration_seconds"))
+    if row.get("transcription_status") in DONE_STATUSES:
+        duration = duration or positive_duration(row.get("duration_seconds"))
+    return {
+        **video,
+        "duration_seconds": duration if duration else video.get("duration_seconds", ""),
+        "transcript_status": row["transcription_status"],
+        "analysis_status": "TRANSCRIBED" if row["transcription_status"] in DONE_STATUSES else "TRANSCRIPT_UNAVAILABLE",
+        "processed_at": now_iso(),
+        "skip_reason": row.get("error", ""),
+        "approved_storage_url": video.get("approved_storage_url", ""),
+        "approved_storage_media_asset_id": video.get("approved_storage_media_asset_id", ""),
+    }
+
+
 def transcribe_one(
     video: dict[str, Any],
     *,
@@ -526,6 +564,9 @@ def transcribe_one(
             cpu_threads=cpu_threads,
         )
     if result.get("ok"):
+        if transcription_input_url != url:
+            # An uploaded derivative's duration is not original-video evidence.
+            result = {**result, "source_duration_seconds": None}
         transcript_row = build_transcript_row(video, result)
         return transcript_row, {
             "source_video_id": video.get("source_video_id", ""),
@@ -655,15 +696,7 @@ def main() -> int:
         summary["status"] = row["transcription_status"]
         summary["terminal"] = row["transcription_status"] in TERMINAL_TRANSCRIPT_STATUSES
         transcript_rows.append(row)
-        source_updates.append({
-            **video,
-            "transcript_status": row["transcription_status"],
-            "analysis_status": "TRANSCRIBED" if row["transcription_status"] == "DONE" else "TRANSCRIPT_UNAVAILABLE",
-            "processed_at": now_iso(),
-            "skip_reason": row.get("error", ""),
-            "approved_storage_url": video.get("approved_storage_url", ""),
-            "approved_storage_media_asset_id": video.get("approved_storage_media_asset_id", ""),
-        })
+        source_updates.append(build_source_update(video, row))
         summaries.append(summary)
         if row["transcription_status"] in DONE_STATUSES:
             break
