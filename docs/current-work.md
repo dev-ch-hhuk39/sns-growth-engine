@@ -1,3 +1,11 @@
+## 2026-09-13 Source Duration Recovery
+
+- PR #299 merged as `df92c9f64a2890f1635fe5bf64a51622a8a15b91`; CI `34690824338` passed 904 scripts, Mypy and the PR gate. No manual publish or buffered activation was performed.
+- Clip prep `34690990075` acquired/transcribed approved video `sv_src_lm_tt_owner_ikkyu_7657121720171564296`, but source duration remained blank. The planner correctly refused missing duration. The transcription download now returns its existing extraction metadata without another fetch, retains positive finite source duration, and writes it with the successful transcript/source update. Missing duration remains unknown, not an invented FULL transcript or a speech-end-derived video length. Known registry duration is preserved; Cloudinary derivative duration cannot fill original-source duration.
+- YouTube storage matching previously removed `v`, conflating distinct individual videos. It now retains the individual video ID and rejects watch URLs without one.
+- Focused regression covers download metadata, propagation, invalid/missing metadata, partial audio, derivative isolation, distinct YouTube identity and persistence. Production physical media/provenance/quality validation remains mandatory.
+- Latest schedule `34717242321` still has provider-rate-limit/quality-exhaustion failures. No usable media inventory was proven. Buffered inventory activation remains OFF; external scheduler is still unconfigured. These remain live recovery work, not completion.
+
 ## 2026-09-12 Pre-publish Sheets Failure Recovery
 
 - Main `fd996583bedf817c9fb58d9ab50414938cc07a82` contains PR #298; CI `34563287237` passed gate/regression. Real recovery `34677540526` failed on Sheets 429 while locking the queue, before calling the publisher. Subsequent Night scheduled run `34684360017` refused the resulting expired lease. Neither failure is successful delivery.
