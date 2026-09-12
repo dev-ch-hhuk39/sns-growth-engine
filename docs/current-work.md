@@ -1,3 +1,11 @@
+## 2026-09-12 Pre-publish Sheets Failure Recovery
+
+- Main `fd996583bedf817c9fb58d9ab50414938cc07a82` contains PR #298; CI `34563287237` passed gate/regression. Real recovery `34677540526` failed on Sheets 429 while locking the queue, before calling the publisher. Subsequent Night scheduled run `34684360017` refused the resulting expired lease. Neither failure is successful delivery.
+- Prepared text previews share a read-only snapshot across at most three candidates; actual publication retains the original live client. Recovery account jobs are serialized against the shared Sheets quota, while account locks and failure isolation remain unchanged.
+- Queue PROCESSING writes must succeed and read back a unique matching account/text before publication. Pre-publisher Sheets failures return a redacted explicit failure with `publish_attempted=false`. Only that execution's matching claim can be released, with read-after-write. Old leases and ambiguous API/post-save failures are never released or retried by this path; uncertain queue locks remain excluded.
+- Live clip prep `34689514155` successfully transcribed one approved individual video (local Whisper, 82 chunks, Sheets saved), but produced no usable media queue. Initial clip caption generation still lacked the existing privacy-bounded Gemini failover; it now shares that provider, with the unchanged one-remote-candidate budget and account-suitability check before spending that budget.
+- No buffered activation or manual Threads post for these fixes. Media stock, 72-hour reserves, evergreen targets and on-time scheduled delivery are NOT complete. Preserve `.runtime/` untouched.
+
 ## 2026-09-11 Preparation Retry Repair
 
 - PR #297 merged as `2d31f0b2f807a1050cd6489685f7c5ac9cafeec0`; exact-head CI `34546460903` passed PR gate and regression tests.

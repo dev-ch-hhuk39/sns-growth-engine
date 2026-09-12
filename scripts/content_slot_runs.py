@@ -242,7 +242,43 @@ def claim_slot_run(
         "publish_attempt_id": f"attempt_{local.strftime('%Y%m%dT%H%M%S')}",
     })
     saved = upsert_slot_run(client, row)
-    return {"status": "CLAIMED" if saved.get("status") in {"CREATED", "UPDATED"} else "BLOCKED", "slot_run_id": expected, "save": saved}
+    return {"status": "CLAIMED" if saved.get("status") in {"CREATED", "UPDATED"} else "BLOCKED", "slot_run_id": expected, "publish_attempt_id": row["publish_attempt_id"], "save": saved}
+
+
+def release_unpublished_claim(client: Any, claim: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """Release only this execution's claim on an explicit pre-publisher failure.
+
+    Old/expired or ambiguous publisher outcomes are never repaired here. A
+    queue possibly written PROCESSING remains excluded from candidate selection.
+    """
+    if (claim.get("status") != "CLAIMED" or not claim.get("publish_attempt_id")
+            or result.get("status") != "PRE_PUBLISH_SHEETS_FAILED"
+            or result.get("publish_attempted") is not False):
+        return {"status": "BLOCKED", "reason": "NO_UNPUBLISHED_EXECUTION_PROOF"}
+    try:
+        from sheets_client import TAB_DEFINITIONS
+        ws = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"])
+        rows = client._call_with_rate_limit_retry("read:unpublished_slot_claim", ws.get_all_records)
+        matches = [row for row in rows if row.get("slot_run_id") == claim.get("slot_run_id")]
+        if len(matches) != 1:
+            return {"status": "BLOCKED", "reason": "SLOT_CLAIM_NOT_UNIQUE"}
+        current = matches[0]
+        if (current.get("status") != "CLAIMED" or current.get("claim_status") != "CLAIMED"
+                or current.get("publish_attempt_id") != claim["publish_attempt_id"]
+                or any(current.get(key) for key in ("result_id", "post_url", "actual_posted_at"))):
+            return {"status": "BLOCKED", "reason": "SLOT_CLAIM_CHANGED"}
+        released = {**current, "status": "PRE_PUBLISH_FAILED", "claim_status": "RELEASED",
+                    "lease_expires_at": "", "no_post_reason": result["reason"],
+                    "queue_id": result["queue_id"]}
+        upsert_slot_run(client, released)
+        verified = client._call_with_rate_limit_retry("verify:unpublished_slot_release", ws.get_all_records)
+        matches = [row for row in verified if row.get("slot_run_id") == claim["slot_run_id"]]
+        fields = ("status", "claim_status", "lease_expires_at", "publish_attempt_id", "queue_id", "no_post_reason")
+        if len(matches) != 1 or any(matches[0].get(key, "") != released[key] for key in fields):
+            return {"status": "BLOCKED", "reason": "SLOT_RELEASE_READ_AFTER_WRITE_FAILED"}
+        return {"status": "RELEASED", "publish_attempted": False}
+    except Exception as exc:
+        return {"status": "BLOCKED", "reason": "SLOT_RELEASE_SHEETS_FAILED", "error_type": type(exc).__name__}
 
 
 def _column_letter(column: int) -> str:

@@ -27,6 +27,7 @@ from generation.source_copyedit import (  # noqa: E402
     validate_source_preserving_public_post,
 )
 from evidence_context_caption import (  # noqa: E402
+    DirectCaptionProviderFailover,
     generate_evidence_context_caption,
 )
 from video.semantic_clip_planner import plan_semantic_clips  # noqa: E402
@@ -655,6 +656,14 @@ def select_sources(account_id: str, config: dict[str, Any]) -> list[dict[str, An
     return rows
 
 
+def _default_growth_caption_service(timeout_seconds: int) -> SourceGroundedCaptionService:
+    return SourceGroundedCaptionService(
+        DirectCaptionProviderFailover(primary=GitHubModelsGroundedProvider(timeout_seconds=timeout_seconds)),
+        fallback_provider=DeterministicGroundedProvider(),
+        retry_primary_on_alignment_failure=False,
+    )
+
+
 def build_media_growth_plan(
     account_id: str,
     *,
@@ -737,11 +746,7 @@ def build_media_growth_plan(
             allow_source_copyedit_fallback
         )
     )
-    caption_service = caption_service or SourceGroundedCaptionService(
-        GitHubModelsGroundedProvider(timeout_seconds=remote_caption_timeout),
-        fallback_provider=DeterministicGroundedProvider(),
-        retry_primary_on_alignment_failure=False,
-    )
+    caption_service = caption_service or _default_growth_caption_service(remote_caption_timeout)
     deterministic_caption_service = (
         SourceGroundedCaptionService(
             DeterministicGroundedProvider()
@@ -828,6 +833,7 @@ def build_media_growth_plan(
                 uses_default_caption_service
                 and i <= remote_caption_limit
                 and remote_caption_generation_count < remote_caption_run_limit
+                and not clip_source_suitability(account_id=account_id, transcript=excerpt)[1]
             )
             if use_remote_caption:
                 remote_caption_generation_count += 1

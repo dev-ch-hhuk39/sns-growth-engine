@@ -1,3 +1,7 @@
+## 2026-09-12 Scheduled Recovery Continuation
+
+Base main `fd996583bedf817c9fb58d9ab50414938cc07a82` (PR #298, CI `34563287237` PASS). Recovery `34677540526` hit Sheets 429 BEFORE the real publisher; Night `34684360017` later stopped on the expired claim. This patch reduces preview reads, serializes recovery jobs, checks queue-lock readback, and releases only matching current claims with explicit no-publish proof. Do not release historical leases from log inference or replay uncertain queues. Clip prep `34689514155` transcribed/saved a real approved video but still had no eligible media; the initial caption stage now shares the existing bounded Gemini provider. No threshold/budget changes. See `docs/current-work.md`. Buffered activation remains OFF, `.runtime/` must remain untouched, and production completion is not established.
+
 ## 2026-09-11 Media Caption Voice Repair
 
 Continue from main `ef812f416b08067561c7deaa622208db74e2d8d2` (PR #296 / CI `34450956440` PASS). Real Gemini caption provider succeeds in `34451324372`, but final caption validation rejects it. Caption generation now consumes the same canonical account voice contract as validation and varies bounded retry prompts instead of replaying one cached response. Beauty has 72-hour slot reserves per scheduled `34528502634`; evergreen/media targets and buffered delivery remain unverified. Keep all gates, no fabricated readiness; preserve `.runtime/`.

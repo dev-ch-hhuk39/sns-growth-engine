@@ -960,8 +960,23 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     if not is_true(os.environ.get("PUBLISH_ENABLED", "false")) or not is_true(os.environ.get("ALLOW_REAL_THREADS_POST", "false")):
         return {"status": "BLOCKED", "reason": "PUBLISH_ENABLED=true and ALLOW_REAL_THREADS_POST=true are required", "queue_id": queue_id}
 
-    update_row(client, "queue", "queue_id", queue_id, {"status": "PROCESSING", "error": "", "processed_at": ""})
-    log_event(client, account_id, "PROCESSING", "Threads queue row locked for processing", {"queue_id": queue_id})
+    # This boundary is strictly before the real publisher call. Never label an
+    # exception from publish/persistence as safe to retry.
+    try:
+        locked = update_row(client, "queue", "queue_id", queue_id, {"status": "PROCESSING", "error": "", "processed_at": ""})
+        if not locked:
+            return {"status": "PRE_PUBLISH_SHEETS_FAILED", "reason": "QUEUE_PROCESSING_LOCK_NOT_FOUND",
+                    "queue_id": queue_id, "publish_attempted": False}
+        locked_rows = [row for row in records(client, "queue") if str(row.get("queue_id", "")) == queue_id]
+        if (len(locked_rows) != 1 or locked_rows[0].get("status") != "PROCESSING"
+                or locked_rows[0].get("account_id") != account_id
+                or text_for_queue(locked_rows[0], social, draft) != text):
+            return {"status": "PRE_PUBLISH_SHEETS_FAILED", "reason": "QUEUE_PROCESSING_LOCK_READBACK_FAILED",
+                    "queue_id": queue_id, "publish_attempted": False}
+        log_event(client, account_id, "PROCESSING", "Threads queue row locked for processing", {"queue_id": queue_id})
+    except Exception as exc:
+        return {"status": "PRE_PUBLISH_SHEETS_FAILED", "reason": "QUEUE_PROCESSING_LOCK_FAILED",
+                "queue_id": queue_id, "publish_attempted": False, "error_type": type(exc).__name__}
 
     result = publisher.publish(
         text,
