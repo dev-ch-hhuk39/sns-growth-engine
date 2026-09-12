@@ -242,11 +242,13 @@ def score_clip_candidate(
     account_id = str(source.get("target_account_id") or (source.get("target_account_ids") or [""])[0])
     hook_markers = ("なぜ", "実は", "大事", "ポイント", "理由", "注意", "失敗", "違い", "？", "?")
     learning_markers = ("まず", "確認", "選", "変え", "比べ", "コツ", "方法", "ので", "ため")
-    account_terms = (
-        ("夜職", "店", "時給", "ノルマ", "客層", "出勤", "移籍", "キャバ")
-        if account_id == "night_scout"
-        else ("配信", "初見", "コメント", "リスナー", "ギフト", "事務所", "ライバー")
-    )
+    account_terms = {
+        "night_scout": ("夜職", "店", "時給", "ノルマ", "客層", "出勤", "移籍", "キャバ"),
+        "liver_manager": ("配信", "初見", "コメント", "リスナー", "ギフト", "事務所", "ライバー"),
+    }.get(account_id, ())
+    if account_id == "beauty_account":
+        from media_activation_source_suitability import ACCOUNT_EVIDENCE_TERMS
+        account_terms = ACCOUNT_EVIDENCE_TERMS.get(account_id, ())
     hook_strength = min(20, 7 + int(min(max(semantic_score, 0.0), 5.0) * 2) + sum(2 for term in hook_markers if term in excerpt))
     educational = min(20, (8 if has_transcript else 3) + sum(2 for term in learning_markers if term in excerpt))
     relevance = min(18, 4 + sum(3 for term in account_terms if term in excerpt))
@@ -257,7 +259,7 @@ def score_clip_candidate(
         "emotional_pull": emotional,
         "educational_value": educational,
         "creator_relevance": relevance,
-        "liver_manager_fit": relevance,
+        "liver_manager_fit": relevance if account_id == "liver_manager" else 0,
         "comment_signal_count": max(0, int(comment_signal_count)),
         "comment_reaction_score": reaction,
         "risk_score": 4,
