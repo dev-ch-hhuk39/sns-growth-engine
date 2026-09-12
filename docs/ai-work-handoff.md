@@ -1,5 +1,7 @@
 ## 2026-09-13 Transcript Metadata Continuation
 
+PR #300 is merged: `c1f7ae91c50d18f52bd2ed4f14e8dbb5d4095951`, CI `34722663554`, 905 scripts PASS. Live prep `34722869594` proves 51-second duration persisted to both source-video and transcript rows, but noisy transcript / clip account evidence still prevented READY media. Follow-up removes Beauty's accidental Liver clip-scoring fallback, using canonical Beauty evidence terms with existing weights/caps. Read-only readiness: 61.9% 72h text coverage, bank 0/0/27, all six media reserves zero. No new manual post or activation. Do not claim completion; further media acquisition/transcription/caption quality and inventory/provider/scheduler work remains.
+
 Base main `df92c9f64a2890f1635fe5bf64a51622a8a15b91`, PR #299, CI `34690824338`: 904 script tests and PR gate PASS. Live prep `34690990075` still yielded no usable clip queue despite successful transcription: source duration was blank. This patch preserves actual extraction duration through transcript/source persistence and preserves YouTube `v` identity during storage matching. It does not invent duration from speech, use uploaded derivative duration as original evidence, weaken validators or repair old rows en masse. Scheduled AUTO_READY `34717242321` continues to report provider/quality exhaustion. No buffered cutover; production completion remains false. See current-work and START_HERE; preserve `.runtime/`, budgets and ambiguous-post protections.
 
 ## 2026-09-12 Scheduled Recovery Continuation

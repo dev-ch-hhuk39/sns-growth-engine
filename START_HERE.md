@@ -1,5 +1,8 @@
 ## 2026-09-13 Transcript Duration Persistence
 
+- PR #300 merged as `c1f7ae91c50d18f52bd2ed4f14e8dbb5d4095951`; CI `34722663554` passed 905 scripts and required checks. Live prep `34722869594` saved an approved 51-second video's transcript and source duration; fresh Sheets readback matched both. Its clips failed account-evidence validation, so no usable media queue was produced. The transcript contains noisy recognition; rejection alone does not prove the original video is unsuitable.
+- Follow-up fixes Beauty clip relevance incorrectly using Liver's keyword branch. Beauty now uses its canonical evidence vocabulary; Night/Liver weights and all quality/rights thresholds remain unchanged. No other account receives a Liver-fit score.
+- Latest read-only readiness: 61.9% 72-hour text coverage, evergreen 0/0/27, media READY 0 for all six account/route pairs. No buffered activation.
 - Base main `df92c9f64a2890f1635fe5bf64a51622a8a15b91` includes PR #299. CI `34690824338` passed 904 scripts and the PR gate; this is not proof of full production recovery.
 - Live clip prep `34690990075` saved local Whisper output but produced zero eligible media queues. Approved source videos with blank duration were excluded before clip planning. Transcription now retains finite positive yt-dlp source duration in both transcript and source-video records; speech end and the audio processing cap are never substituted for source duration. Uploaded derivative duration is not promoted as original-source evidence.
 - YouTube storage matching retains the `v` identity parameter, preventing distinct watch URLs from matching the same stored media. Existing rights, account, physical media, alignment and quality gates remain unchanged.
