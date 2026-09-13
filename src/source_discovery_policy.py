@@ -232,7 +232,8 @@ def plan_source_scan(
         mode = "initial"
         start_position = 1
         scan_limit = policy.initial_scan_limit
-    elif inventory_count < policy.min_unprocessed_inventory_per_account:
+    elif (inventory_count < policy.min_unprocessed_inventory_per_account
+          and previous.get("last_scan_mode") not in {"backfill", "backfill_failed"}):
         mode = "backfill"
 
         saved_cursor = previous.get("backfill_cursor")
@@ -258,6 +259,9 @@ def plan_source_scan(
 
         scan_limit = policy.backfill_scan_limit
     else:
+        # Shortage must not starve new uploads while a deep history window is
+        # unavailable. Poll latest once between historical attempts, retaining
+        # the independent backfill cursor.
         mode = "incremental"
         start_position = 1
         scan_limit = policy.incremental_scan_limit
@@ -490,3 +494,15 @@ def build_state_update(
         "consecutive_no_new_runs": (no_new_runs),
         "updated_at": timestamp,
     }
+
+
+def build_failed_state_update(*, scan_plan: Row, platform: str = "") -> Row:
+    """Record an attempted window, never progress or content from a failed read."""
+    previous = scan_plan.get("previous_state", {})
+    result = build_state_update(scan_plan=scan_plan, selection={}, platform=platform)
+    result.update(
+        last_scan_mode=f"{scan_plan['mode']}_failed",
+        backfill_cursor=int(previous.get("backfill_cursor") or scan_plan["start_position"]),
+        last_scanned_position=int(previous.get("last_scanned_position") or 0),
+    )
+    return result

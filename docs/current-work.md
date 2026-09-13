@@ -1,3 +1,10 @@
+## 2026-09-13 Preparation Failure and Latest Discovery Recovery
+
+- PR #303 merged as `615d3b6717747c006d8349c8a24b9a7fbb65c470`; CI `34759498592` passed 909 scripts, Mypy and PR gate. Post-merge Night preparation `34759669202` found zero new posts, and all five bounded preparation attempts ended without READY media. Unsupported historical Threads windows now fail honestly; public browser fallback also failed. Existing safety, permissions and caption alignment still block unsuitable candidates.
+- Force-backfill previously starved latest uploads whenever video inventory was low. Discovery now alternates historical attempts with bounded latest polling. Failed history attempts are recorded as `backfill_failed`, retain the exact cursor and previous source identity, and claim no new content. No fetch limits, permissions, media gates or publisher settings changed.
+- Beauty preparation `34759818073` confirmed six next-three-day text-slot reserves, then failed the evergreen-bank top-up with 26/30 usable. Nested generator failure details were discarded by its parent process. Preparation now categorizes nested provider/context/duplicate failures and retains the bounded attempt summary instead of hiding them behind a generic exhaustion status. No provider budgets or approval thresholds were raised.
+- Read-only readiness before these follow-ups: horizon text coverage 42.9%, evergreen Night 0 / Liver 0 / Beauty 26; all six direct/clip reserves zero. External primary scheduler remains unconfigured. No full production-completion claim, new manual post or buffered activation.
+
 ## 2026-09-13 Beauty Generation Novelty
 
 - PR #302 merged as `3cb05a83544f83056a2848d4f2bc4145c1bb56f6`; CI `34724511170` passed. Live Night preparation `34724866490` refreshed five stored assets with small Whisper and readback confirmed the provider. Source/media account grounding still rejected all eight available candidates; READY remains zero. ASR refresh is proven, usable media inventory is not.

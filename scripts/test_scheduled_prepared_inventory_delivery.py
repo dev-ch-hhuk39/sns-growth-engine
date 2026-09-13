@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prebuilt inventory is consumed without generation and never retried ambiguously."""
 import subprocess
+import json
 import unittest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
@@ -118,6 +119,49 @@ class PreparedInventoryTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(payload["failure_category"], "PROVIDER_RATE_LIMITED")
         self.assertNotIn("private", str(payload))
+
+    def test_nested_beauty_failure_retains_actual_category(self):
+        for reason, expected in [
+            ("gemini_rate_limited", "PROVIDER_RATE_LIMITED"),
+            ("gemini_auth_rejected", "PROVIDER_CREDENTIALS_MISSING_OR_REJECTED"),
+            ("beauty_reference_topic_match_missing", "REFERENCE_CONTEXT_UNAVAILABLE"),
+            ("beauty_route_context_unavailable:APIError", "SOURCE_CONTEXT_READ_FAILED"),
+            ("duplicate_or_near_duplicate", "DUPLICATE_GENERATION_EXHAUSTED"),
+            ("public_quality_low", "QUALITY_EXHAUSTED"),
+        ]:
+            with self.subTest(reason=reason):
+                wrapper = {"mode": "apply", "candidate": {"status": "QUALITY_EXHAUSTED",
+                           "blocked_reasons": [reason]}, "would_post": False}
+                completed = subprocess.CompletedProcess([], 1, json.dumps(wrapper), "")
+                with patch.object(maintenance.subprocess, "run", return_value=completed):
+                    code, payload = maintenance._run(["unused"])
+                self.assertEqual(code, 1)
+                self.assertEqual(payload["status"], "QUALITY_EXHAUSTED")
+                self.assertEqual(payload["failure_category"], expected)
+
+    def test_provider_category_precedes_duplicate_fallback_failure(self):
+        self.assertEqual(maintenance.generation_failure_category({"candidate": {
+            "status": "QUALITY_EXHAUSTED", "blocked_reasons": [
+                "duplicate_or_near_duplicate", "gemini_rate_limited"]}}), "PROVIDER_RATE_LIMITED")
+        self.assertEqual(maintenance.generation_failure_category({"candidate": {
+            "status": "BLOCKED", "reason": "private provider response token=secret"}}),
+            "GENERATION_PROCESS_FAILED")
+
+    def test_bank_reports_nested_attempt_without_claiming_ready(self):
+        generation = {"status": "QUALITY_EXHAUSTED", "queue_ids": [],
+                      "failure_category": "PROVIDER_RATE_LIMITED", "attempts": [
+                          {"route": "beauty_reserve_0", "status": "QUALITY_EXHAUSTED",
+                           "reason": "PROVIDER_RATE_LIMITED"}]}
+        client = SimpleNamespace(_ensure_tab=lambda *args: None)
+        with patch("process_threads_queue.records", return_value=[]), \
+             patch.object(maintenance, "replenish", return_value=generation) as generate:
+            result = maintenance.replenish_bank(client, "beauty_account", apply=True)
+        generate.assert_called_once()
+        self.assertEqual(result["status"], "QUALITY_EXHAUSTED")
+        self.assertEqual(result["usable_evergreen"], 0)
+        self.assertEqual(result["attempts"][0]["failure_category"], "PROVIDER_RATE_LIMITED")
+        self.assertEqual(result["attempts"][0]["generation_attempts"], generation["attempts"])
+        self.assertFalse(result["would_post"])
 
 
 if __name__ == "__main__":

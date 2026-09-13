@@ -7,7 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from source_discovery_policy import (
+from source_discovery_policy import (  # noqa: E402
+    build_failed_state_update,
     build_state_update,
     latest_state,
     plan_source_scan,
@@ -204,5 +205,41 @@ no_new_update = build_state_update(
 
 assert no_new_update["backfill_cursor"] == 41
 assert no_new_update["consecutive_no_new_runs"] == 1
+
+# Both a completed and failed backfill return to latest before resuming history.
+failed_update = build_failed_state_update(scan_plan={**backfill, "previous_state": state_update},
+                                        platform="youtube")
+assert failed_update["last_scan_mode"] == "backfill_failed"
+assert failed_update["backfill_cursor"] == state_update["backfill_cursor"]
+assert failed_update["last_scanned_position"] == state_update["last_scanned_position"]
+assert failed_update["latest_seen_item_id"] == state_update["latest_seen_item_id"]
+assert failed_update["last_new_count"] == 0
+assert failed_update["last_duplicate_count"] == 0
+for previous in (state_update, failed_update):
+    poll = plan_source_scan(source_id="src_1", account_id="night_scout", item_type="video",
+                            existing_rows=existing_low_inventory, state_rows=[previous], config=CONFIG)
+    assert poll["mode"] == "incremental"
+    assert poll["start_position"] == 1
+    assert poll["scan_limit"] == CONFIG["incremental_source_scan_limit"]
+    polled_state = build_state_update(scan_plan=poll, selection={"max_scanned_position": 12})
+    assert polled_state["backfill_cursor"] == previous["backfill_cursor"]
+    resume = plan_source_scan(source_id="src_1", account_id="night_scout", item_type="video",
+                              existing_rows=existing_low_inventory, state_rows=[polled_state], config=CONFIG)
+    assert resume["mode"] == "backfill"
+    assert resume["start_position"] == previous["backfill_cursor"]
+    assert resume["scan_limit"] == CONFIG["backfill_source_scan_limit"]
+    assert resume["max_total_new"] == CONFIG["max_total_new_videos_per_run"]
+    assert resume["per_source_new_limit"] == CONFIG["max_new_videos_per_source_per_run"]
+
+# Failed reads without a persisted cursor keep their requested position.
+first_failed = build_failed_state_update(scan_plan=backfill, platform="threads")
+assert first_failed["backfill_cursor"] == 11
+assert first_failed["last_scanned_position"] == 0
+# Other accounts cannot change this source's scan mode or history cursor.
+foreign_state = {**failed_update, "state_id": "src_1:beauty_account:video"}
+isolated = plan_source_scan(source_id="src_1", account_id="night_scout", item_type="video",
+                            existing_rows=existing_low_inventory, state_rows=[foreign_state], config=CONFIG)
+assert isolated["mode"] == "backfill"
+assert isolated["start_position"] == 8
 
 print("PASS " "test_incremental_source_discovery_policy.py")
