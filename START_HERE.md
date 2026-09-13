@@ -114,3 +114,6 @@ Updated: 2026-08-28
 - Do not auto-promote Beauty.
 - Do not publish to X.
 - Do not describe a dry-run, mock, or software-only result as production proof.
+# 2026-09-13 Continuation
+
+Main includes PR #302 (`3cb05a8`). Night small-ASR refresh succeeded in run `34724866490`, but no READY media was produced. Current fix adds Beauty-only public history and unchanged duplicate checks at generation, including emergency fallback; run `34739383502` demonstrated the prior late duplicate rejection. No posting or buffered activation for this patch. See `docs/current-work.md` for live blockers.

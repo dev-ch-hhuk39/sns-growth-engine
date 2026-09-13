@@ -1,3 +1,9 @@
+## 2026-09-13 Beauty Generation Novelty
+
+- PR #302 merged as `3cb05a83544f83056a2848d4f2bc4145c1bb56f6`; CI `34724511170` passed. Live Night preparation `34724866490` refreshed five stored assets with small Whisper and readback confirmed the provider. Source/media account grounding still rejected all eight available candidates; READY remains zero. ASR refresh is proven, usable media inventory is not.
+- Beauty schedule `34739383502` was a preparation event, not a successful post. Its generated fallback duplicated an existing public post; Hybrid passed but approval correctly rejected it. Generation previously omitted posted/active queue history. All Beauty text generation routes now load only Beauty public history, provide a bounded prompt subset, and apply the unchanged approval duplicate check before accepting either generated or emergency text. Failed history reads block preparation. Full history is not included in returned candidate evidence. Publisher/Hybrid/rights gates remain unchanged.
+- Liver small-model clip preparation `34739690753` is pending live verification. No manual publish or buffered activation has been performed. Provider limits, stock shortage and external scheduler configuration remain unresolved.
+
 ## 2026-09-13 Source Duration Recovery
 
 - PR #301 merged as `93a53d4cc038ca8d0028640d515e17c9cfb0f6c4`; CI `34723218843` passed 906 scripts. Direct Night prep `34723217888` returned one INGESTED_BUNDLE then external DownloadError skips; all usable-source candidates still failed source/media account-evidence checks and READY count stayed zero.
