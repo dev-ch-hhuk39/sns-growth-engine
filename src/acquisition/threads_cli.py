@@ -37,6 +37,19 @@ CommandRunner = Callable[[list[str], dict[str, str], int], tuple[int, str, str]]
 JsonPoster = Callable[[str, dict[str, str], bytes], dict[str, Any]]
 
 
+def _public_window(source: dict[str, Any], limit: int) -> tuple[int, int]:
+    """These anonymous OSS surfaces expose only the first bounded page."""
+    try:
+        start = max(1, int(source.get("_discovery_start_position", 1))) - 1
+    except (TypeError, ValueError) as exc:
+        raise BackendFailure("threads_discovery_position_invalid") from exc
+    if start >= MAX_PROFILE_POSTS:
+        # Let the existing paginated public-browser fallback handle history;
+        # returning page one here would fabricate progress in the scan cursor.
+        raise BackendFailure("threads_public_history_window_unsupported")
+    return start, min(MAX_PROFILE_POSTS, start + max(1, int(limit)))
+
+
 def _target_account(source: dict[str, Any]) -> str:
     targets = source.get("target_account_ids") or [source.get("target_account_id")]
     return str(targets[0] if targets else "")
@@ -213,9 +226,9 @@ class ThreadsCliPublicAdapter:
         handle = threads_handle(str(source.get("source_url") or ""))
         if not handle:
             raise BackendFailure("threads_profile_handle_required")
-        bounded = min(MAX_PROFILE_POSTS, max(1, int(limit)))
+        start, end = _public_window(source, limit)
         payload = self._invoke(
-            ["profile", handle, "--posts", "-n", str(bounded), "-o", "json"]
+            ["profile", handle, "--posts", "-n", str(end), "-o", "json"]
         )
         if not isinstance(payload, list):
             raise BackendFailure("threads_cli_posts_payload_invalid")
@@ -226,7 +239,7 @@ class ThreadsCliPublicAdapter:
                 backend_name=self.backend_name,
                 backend_version=self.backend_version,
             )
-            for row in payload[:bounded]
+            for row in payload[start:end]
             if isinstance(row, dict) and not bool(row.get("is_reply"))
         ]
         if not posts:
@@ -365,6 +378,7 @@ class ThreadsLoggedOutGraphQLAdapter:
     def acquire(
         self, source: dict[str, Any], *, limit: int
     ) -> list[NormalizedSourcePost]:
+        start, end = _public_window(source, limit)
         identity = self._profile_loader(source)
         user_id = str(identity.get("id") or "")
         expected = threads_handle(str(source.get("source_url") or ""))
@@ -373,7 +387,6 @@ class ThreadsLoggedOutGraphQLAdapter:
             raise BackendFailure("threads_graphql_user_id_unavailable")
         if expected and actual != expected:
             raise BackendFailure("threads_profile_identity_mismatch")
-        bounded = min(MAX_PROFILE_POSTS, max(1, int(limit)))
         variables = {
             "userID": user_id,
             "__relay_internal__pv__BarcelonaIsLoggedInrelayprovider": False,
@@ -418,10 +431,13 @@ class ThreadsLoggedOutGraphQLAdapter:
                     backend_version=self.backend_version,
                 )
             )
-            if len(posts) >= bounded:
+            if len(posts) >= end:
                 break
         if not posts:
             raise BackendFailure(
                 "threads_logged_out_graphql_no_posts_or_stale_doc_id"
             )
-        return posts
+        selected = posts[start:end]
+        if not selected:
+            raise BackendFailure("threads_graphql_history_window_unavailable")
+        return selected

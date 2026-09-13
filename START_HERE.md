@@ -117,3 +117,5 @@ Updated: 2026-08-28
 # 2026-09-13 Continuation
 
 Main includes PR #302 (`3cb05a8`). Night small-ASR refresh succeeded in run `34724866490`, but no READY media was produced. Current fix adds Beauty-only public history and unchanged duplicate checks at generation, including emergency fallback; run `34739383502` demonstrated the prior late duplicate rejection. No posting or buffered activation for this patch. See `docs/current-work.md` for live blockers.
+
+Threads historical requests no longer silently reuse the newest five CLI/GraphQL posts; unsupported positions use the existing bounded public-browser fallback. Liver run `34739690753` transcribed one new video but still produced no usable clip evidence. Neither route is fully recovered yet.
