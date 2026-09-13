@@ -38,6 +38,7 @@ from transcription.sheets_limits import (  # noqa: E402
     normalize_transcript_row,
 )
 from source_discovery_policy import (  # noqa: E402
+    build_failed_state_update,
     build_state_update,
     plan_source_scan,
     select_unique_candidates,
@@ -1628,6 +1629,7 @@ def run(
                 )
             )
 
+            state_updates.append(build_failed_state_update(scan_plan=scan_plan, platform=platform))
             item = {
                 **base,
                 "status": "FAILED",
@@ -1637,7 +1639,7 @@ def run(
                 "post_count": 0,
                 "adapter_post_count": 0,
                 "duplicate_post_count": 0,
-                "state_update_planned": False,
+                "state_update_planned": True,
             }
 
         result["source_results"].append(item)

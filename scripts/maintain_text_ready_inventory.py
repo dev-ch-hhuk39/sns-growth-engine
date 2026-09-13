@@ -99,6 +99,30 @@ def approval_budget_exhausted(payload: dict[str, Any]) -> bool:
                for error in packet.get("runtime_errors", []) if isinstance(error, dict))
 
 
+def generation_failure_category(payload: dict[str, Any]) -> str:
+    """Read structured generator failures without emitting provider responses."""
+    candidate = payload.get("candidate")
+    outcome = candidate if isinstance(candidate, dict) else payload
+    reasons = outcome.get("blocked_reasons", [])
+    reasons = reasons if isinstance(reasons, list) else []
+    codes = {str(value) for value in reasons}
+    codes.add(str(outcome.get("reason") or ""))
+    categories = (
+        ({"gemini_auth_rejected", "GEMINI_API_KEY_MISSING"}, "PROVIDER_CREDENTIALS_MISSING_OR_REJECTED"),
+        ({"gemini_rate_limited"}, "PROVIDER_RATE_LIMITED"),
+        ({"gemini_connection_error", "gemini_retryable_server_error"}, "PROVIDER_UNAVAILABLE"),
+        ({"gemini_model_not_found", "gemini_request_rejected"}, "PROVIDER_CONFIGURATION_ERROR"),
+        ({"beauty_reference_source_post_missing", "beauty_reference_topic_match_missing"}, "REFERENCE_CONTEXT_UNAVAILABLE"),
+        ({"duplicate_or_near_duplicate"}, "DUPLICATE_GENERATION_EXHAUSTED"),
+    )
+    for matches, category in categories:
+        if codes & matches:
+            return category
+    if any(code.startswith("beauty_route_context_unavailable:") for code in codes):
+        return "SOURCE_CONTEXT_READ_FAILED"
+    return "QUALITY_EXHAUSTED" if outcome.get("status") == "QUALITY_EXHAUSTED" else "GENERATION_PROCESS_FAILED"
+
+
 def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     try:
         completed = subprocess.run(command, cwd=ROOT, text=True, capture_output=True, check=False, timeout=480,
@@ -107,6 +131,9 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
         return 124, {"status": "FAILED", "failure_category": "GENERATION_PROCESS_TIMEOUT"}
     payloads = _extract_objects(completed.stdout)
     payload = payloads[-1] if payloads else {}
+    candidate = payload.get("candidate")
+    if isinstance(candidate, dict):
+        payload.setdefault("status", candidate.get("status", ""))
     # Preserve a safe error category, never the provider response or credentials.
     error = completed.stderr
     if "hybrid_ai_budget_blocked:" in error or approval_budget_exhausted(payload):
@@ -116,7 +143,7 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     elif "Timeout" in error or "timed out" in error:
         payload["failure_category"] = "PROVIDER_TIMEOUT"
     elif completed.returncode:
-        payload.setdefault("failure_category", "GENERATION_PROCESS_FAILED")
+        payload.setdefault("failure_category", generation_failure_category(payload))
     return completed.returncode, payload
 
 
@@ -317,7 +344,9 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
         if current >= minimum:
             break
         result = replenish(account_id, slot, apply=True, required=min(3, minimum-current))
-        attempts.append({"status": result["status"], "queue_ids": result.get("queue_ids", [])})
+        attempts.append({"status": result["status"], "queue_ids": result.get("queue_ids", []),
+                         "failure_category": result.get("failure_category", ""),
+                         "generation_attempts": result.get("attempts", [])})
         generated_rows = records(client, "queue") if result.get("queue_ids") else []
         admissions = []
         for qid in result.get("queue_ids", []):

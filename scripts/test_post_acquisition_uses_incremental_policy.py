@@ -353,6 +353,31 @@ try:
 
     assert captured_states[0]["last_new_count"] == 3
 
+    class UnavailableHistoryRouter(FakeRouter):
+        def route(self, *args, **kwargs):
+            raise a.BackendFailure("public_history_window_unavailable")
+
+    apply_common(UnavailableHistoryRouter([]), (backfill_existing, backfill_state))
+    failed = a.run("night_scout", "youtube", 30, apply=True, shadow=False, force_backfill=True)
+    assert failed["source_results"][0]["status"] == "FAILED"
+    assert failed["source_results"][0]["state_update_planned"] is True
+    assert failed["saved_source_posts"] == 0
+    assert failed["saved_source_post_media"] == 0
+    assert captured_states[0]["last_scan_mode"] == "backfill_failed"
+    assert captured_states[0]["backfill_cursor"] == 8
+    assert captured_states[0]["last_new_count"] == 0
+    failed_state = list(captured_states)
+
+    latest_router = FakeRouter([post(14), post(1)])
+    apply_common(latest_router, (backfill_existing, failed_state))
+    latest = a.run("night_scout", "youtube", 30, apply=True, shadow=False, force_backfill=True)
+    assert latest_router.calls[0]["start_position"] == 1
+    assert latest_router.calls[0]["limit"] == CONFIG["incremental_source_scan_limit"]
+    assert latest["saved_source_posts"] == 1
+    assert captured_posts[0].external_post_id == "post14"
+    assert captured_states[0]["backfill_cursor"] == 8
+    assert captured_states[0]["last_scan_mode"] == "incremental"
+
 finally:
     for name, value in originals.items():
         setattr(
