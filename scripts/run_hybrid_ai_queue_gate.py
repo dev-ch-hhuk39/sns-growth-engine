@@ -23,6 +23,7 @@ from hybrid_ai_source_context import build_source_context  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
 from accounts.managed_accounts import account_choices, account_allows_autonomous_ready  # noqa: E402
+from offline_original_catalog import requests_offline_review  # noqa: E402
 
 JST = ZoneInfo("Asia/Tokyo")
 EXECUTION_MAX = int(os.environ.get("HYBRID_AI_EXECUTION_MAX_REQUESTS", "20"))
@@ -60,7 +61,7 @@ def parse_timestamp(value: Any) -> datetime | None:
 
 def safe_runtime_reason(exc: Exception) -> str:
     reasons = {"hybrid_ai_execution_limit_exceeded", "hybrid_ai_daily_limit_exceeded",
-               "hybrid_ai_monthly_limit_exceeded"}
+               "hybrid_ai_monthly_limit_exceeded", "missing_gemini_api_key"}
     message = str(exc)
     return message.upper() if message in reasons else "HYBRID_AI_GATE_RUNTIME_ERROR"
 
@@ -233,23 +234,12 @@ def main() -> int:
         raise RuntimeError("specify exactly one of --apply or --dry-run")
     if not 1 <= args.max_candidates <= 2:
         raise RuntimeError("max_candidates_must_be_between_1_and_2")
-    if not os.environ.get("GEMINI_API_KEY", "").strip():
-        print(json.dumps({
-            "status": "FAILED_MISSING_GEMINI_API_KEY",
-            "account_id": args.account_id,
-            "slot_id": args.slot_id,
-            "no_ready_transition": True,
-            "no_post": True,
-        }, ensure_ascii=False))
-        return 2
     if not args.use_sheets:
         raise RuntimeError("--use-sheets is required for production queue review")
 
     cfg = get_config()
     client = SheetsClient(sheet_id=cfg["sheet_id"], sa_dict=cfg["sa_dict"], dry_run=False)
     ledger = SheetsBudgetLedger(client, args.account_id)
-    gemini = GeminiHybridClient(reserve_request=ledger.reserve)
-    gate = HybridAiGate(gemini)
     if args.refresh_stale_autonomous_ready and args.require_human_review:
         raise RuntimeError("human_approval_must_not_be_refreshed_automatically")
     refreshed = refresh_stale_autonomous_ready(
@@ -265,6 +255,10 @@ def main() -> int:
         queue_ids=set(args.queue_id) or set(refreshed),
     )
     posted_before = records(client, "posted_results")
+    queue_history = records(client, "queue") if any(requests_offline_review(row) for row, _ in selected) else []
+    # Cached decisions and finite offline originals do not need provider credentials.
+    # Other candidates still fail closed, independently of their batch neighbors.
+    gemini = None
     statuses_before = {
         str(queue.get("queue_id", "")): str(queue.get("status", ""))
         for queue, _source_context in selected
@@ -275,7 +269,19 @@ def main() -> int:
     for queue, source_context in selected:
         queue_id = str(queue.get("queue_id", ""))
         try:
-            result = gate.evaluate(queue, source_context)
+            if requests_offline_review(queue):
+                active_history = posted_before + [row for row in queue_history
+                    if str(row.get("status", "")).upper() in {"READY", "AUTO_READY", "WAITING_REVIEW", "PROCESSING", "POSTED"}]
+                history = [dict(row) for row in active_history
+                           if str(row.get("account_id", "")) == args.account_id
+                           and str(row.get("queue_id", "")) != queue_id]
+                result = HybridAiGate(None).evaluate(queue, source_context, recent_posts=history)
+            else:
+                if not os.environ.get("GEMINI_API_KEY", "").strip():
+                    raise RuntimeError("missing_gemini_api_key")
+                if gemini is None:
+                    gemini = GeminiHybridClient(reserve_request=ledger.reserve)
+                result = HybridAiGate(gemini).evaluate(queue, source_context)
         except Exception as exc:
             error_code = type(exc).__name__
             error_evidence = {
@@ -389,7 +395,7 @@ def main() -> int:
         "stale_autonomous_approvals": refreshed,
         "skipped_current_count": len(skipped_current),
         "skipped_current": skipped_current,
-        "actual_request_count": gemini.actual_request_count,
+        "actual_request_count": gemini.actual_request_count if gemini is not None else 0,
         "execution_max_requests": EXECUTION_MAX,
         "results": results,
         "runtime_errors": runtime_errors,

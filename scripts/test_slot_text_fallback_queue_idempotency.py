@@ -18,7 +18,7 @@ def main() -> int:
         "asset_unavailable",
         apply=True,
     )
-    queue_id = "slot_fallback_20260719_night_scout_ns_1400_reference_1"
+    queue_id = f"slot_fallback_20260719_night_scout_ns_1400_reference_{plan['variant_attempt']}"
     existing = {
         "queue_id": queue_id,
         "account_id": "night_scout",

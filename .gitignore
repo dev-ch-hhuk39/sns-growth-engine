@@ -75,6 +75,7 @@ output/
 !config/reference_sources.example.json
 !config/content_schedule.json
 !config/production_inventory.json
+!config/offline_original_posts.json
 !config/media_source_usage_modes.json
 !config/goal_acceptance.json
 !config/content_mix/default_mix.json

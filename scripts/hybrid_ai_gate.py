@@ -306,6 +306,17 @@ def hybrid_ai_gate_current(
             return False, "fallback_provider_status_invalid"
         if not _text(gate.get("fallback_reason")):
             return False, "fallback_reason_missing"
+    elif provider_mode == "offline_original_strict":
+        from offline_original_catalog import offline_original_reasons
+
+        if offline_original_reasons(queue):
+            return False, "offline_catalog_evidence_invalid"
+        deterministic = gate.get("deterministic_validation", {})
+        if not isinstance(deterministic, dict) or deterministic.get("status") != status:
+            return False, "offline_validation_evidence_invalid"
+        if (gate.get("provider_status") != "NOT_REQUESTED" or gate.get("actual_requests") != 0
+                or gate.get("fallback_reason") != "owner_authorized_offline_original"):
+            return False, "offline_provider_evidence_invalid"
     elif provider_mode != "gemini":
         return False, "provider_mode_invalid"
     return True, status.lower()
@@ -629,8 +640,17 @@ class HybridAiGate:
             fallback_reason=fallback_reason,
         )
 
-    def evaluate(self, queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> GateResult:
+    def evaluate(self, queue: Mapping[str, Any], source_context: Mapping[str, Any],
+                 *, recent_posts: list[Any] | None = None) -> GateResult:
         """Use Gemini when available and strict local evidence on transient outage."""
+
+        from offline_original_catalog import requests_offline_review
+
+        if requests_offline_review(queue):
+            return self._deterministic_fallback(
+                queue, source_context, evidence={}, actual_requests=0,
+                offline_original=True, recent_posts=recent_posts,
+            )
 
         before_requests = int(getattr(self.client, "actual_request_count", 0))
         try:
@@ -656,6 +676,8 @@ class HybridAiGate:
         *,
         evidence: Mapping[str, Any],
         actual_requests: int,
+        offline_original: bool = False,
+        recent_posts: list[Any] | None = None,
     ) -> GateResult:
         route = decide_route(queue)
         account_id = _text(queue.get("account_id"))
@@ -674,6 +696,22 @@ class HybridAiGate:
         )
         if public_validation.get("status") != "PASS":
             reasons.extend(str(item) for item in public_validation.get("blocked_reasons", []))
+
+        offline_quality: dict[str, Any] = {}
+        if offline_original:
+            from offline_original_catalog import offline_original_reasons
+            from generation_quality_gates import evaluate_generation_quality
+
+            reasons.extend(offline_original_reasons(queue))
+            if recent_posts is None:
+                reasons.append("offline_recent_history_required")
+            offline_quality = evaluate_generation_quality(account_id, current_text, recent_posts or [])
+            if offline_quality.get("status") != "PASS":
+                reasons.extend(offline_quality.get("diversity_blocked_reasons", []))
+                reasons.extend(offline_quality.get("topic_blocked_reasons", []))
+                reasons.append("offline_quality_not_pass")
+            if public_validation.get("requires_human_review"):
+                reasons.append("offline_human_review_required")
 
         source_contract: dict[str, Any] = {}
         if route.route == "external_direct_source_copyedit":
@@ -756,7 +794,7 @@ class HybridAiGate:
             "conversational_naturalness": "PASS" if status == "PASS" else "FAIL",
             "risk_flags": reasons,
             "reasons": reasons,
-            "review_provider": "deterministic_local_strict",
+            "review_provider": "offline_original_strict" if offline_original else "deterministic_local_strict",
         }
         deterministic = {
             "status": status,
@@ -767,6 +805,7 @@ class HybridAiGate:
             "persisted_statuses": persisted_statuses,
             "source_identity": identity_evidence,
             "media_validation": media_validation,
+            "offline_quality": offline_quality,
         }
         error_type = _text(evidence.get("provider_error_type"))
         http_status = _text(evidence.get("provider_http_status"))
@@ -785,12 +824,12 @@ class HybridAiGate:
             review=review,
             deterministic_validation=deterministic,
             actual_requests=actual_requests,
-            provider_status="UNAVAILABLE",
-            provider_mode="deterministic_local_strict",
+            provider_status="NOT_REQUESTED" if offline_original else "UNAVAILABLE",
+            provider_mode="offline_original_strict" if offline_original else "deterministic_local_strict",
             provider_error_type=error_type,
             provider_http_status=http_status,
-            fallback_mode="deterministic_strict",
-            fallback_reason=fallback_reason,
+            fallback_mode="offline_original" if offline_original else "deterministic_strict",
+            fallback_reason="owner_authorized_offline_original" if offline_original else fallback_reason,
         )
 
     def _evaluate_with_provider(self, queue: Mapping[str, Any], source_context: Mapping[str, Any]) -> GateResult:

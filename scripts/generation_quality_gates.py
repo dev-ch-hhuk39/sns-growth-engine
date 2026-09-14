@@ -14,8 +14,8 @@ from typing import Any, Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from accounts.managed_accounts import managed_account
-from generation.semantic_alignment import lexical_similarity
+from accounts.managed_accounts import managed_account  # noqa: E402
+from generation.semantic_alignment import lexical_similarity  # noqa: E402
 
 FULL_TEXT_SIMILARITY_MAX = 0.82
 HOOK_SIMILARITY_MAX = 0.88
@@ -205,11 +205,27 @@ def _topic_scores(account_id: str, text: str) -> Counter[str]:
     taxonomy = _topic_taxonomy(account_id)
     normalized = str(text or "")
     scores: Counter[str] = Counter()
-    for topic, terms in taxonomy.items():
-        for term in terms:
-            occurrences = normalized.count(term)
-            if occurrences:
-                scores[topic] += occurrences * (2 if len(term) >= 4 else 1)
+    if account_id != "beauty_account":
+        for topic, topic_terms in taxonomy.items():
+            for term in topic_terms:
+                scores[topic] += normalized.count(term) * (2 if len(term) >= 4 else 1)
+        return +scores
+    terms = {term for values in taxonomy.values() for term in values}
+    spans = [(match.start(), match.end(), term) for term in terms
+             for match in re.finditer(re.escape(term), normalized)]
+    # A compound such as ヘアケア is not independent evidence of skincare ケア.
+    counts = Counter(term for start, end, term in spans if not any(
+        outer_start <= start and end <= outer_end and len(outer) > len(term)
+        for outer_start, outer_end, outer in spans
+    ))
+    for topic, topic_terms in taxonomy.items():
+        for term in topic_terms:
+            if counts[term]:
+                scores[topic] += counts[term] * (2 if len(term) >= 4 else 1)
+    # beauty_choice repeats the domain words 肌/髪/メイク; it is a catch-all,
+    # not a second independent topic when a specific category is evidenced.
+    if any(value > 0 for topic, value in scores.items() if topic != "beauty_choice"):
+        scores.pop("beauty_choice", None)
     return scores
 
 

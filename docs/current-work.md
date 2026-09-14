@@ -1,3 +1,14 @@
+## 2026-09-15 AI-independent Original Reserve
+
+- Base main: `2639cb0d79b8c94a9dc37dbab36ac358dab1d870` (PR #304). Branch: `fix/ai-independent-ready-reserve`. Production completion remains unproven; this is not a cutover or a posting result.
+- A finite account-specific original-copy catalog supports provider-free fallback. Each account has 30 authored articles validated for public text, persona, coherence and duplicate novelty. Only exact catalog text with matching account/version/hash can use `offline_original_strict`; provider status is honestly `NOT_REQUESTED`, requests zero. Arbitrary text, reference/media/PDCA rows, human-review content and previous semantic rejections cannot use this route.
+- Canonical generation writes WAITING_REVIEW drafts/derivatives/queue with read-after-write. Existing Hybrid-ready/auto-approval/publisher gates still apply. Exhausted AI approval budgets skip more paid generation and continue offline; no budget or quality threshold is raised.
+- Beauty topic scoring no longer counts compound substrings and generic domain words as a second independent subject. Distinct skincare/haircare topics and mismatched visual text remain blocked. Night/Liver scoring is unchanged.
+- Buffered reconciliation can select an unused, unallocated validated evergreen queue after exact-slot stock runs out. Allocation is saved only after slot claim, with fresh queue comparison and readback. No generation, approval cloning, future-slot theft or ambiguous-post retry happens inside publication.
+- Local regression: 910 scripts PASS; focused offline tests 11 PASS and buffered reconciler 18 PASS; Ruff, compileall and diff check PASS. Exact-head CI, merge and production refill still need verification. The finite catalog is not infinite stock: exhausted copy is never recycled to conceal a shortage.
+- September 14 live read-only history inspection found 30 Night / 30 Liver / 31 Beauty unused valid catalog candidates. These are NOT saved READY or bank counts. Last main readiness: text coverage 66.6667%, evergreen 0/0/30, all six media-route reserves zero.
+- Current gcloud user cannot access SNS project `sns-auto-pdca-system`. Unrelated accessible projects must not be used without owner selection. External primary scheduler remains unconfigured; keep buffered activation OFF until readiness/cutover verification. Preserve `.runtime/` unchanged and uncommitted.
+
 ## 2026-09-13 Preparation Failure and Latest Discovery Recovery
 
 - PR #303 merged as `615d3b6717747c006d8349c8a24b9a7fbb65c470`; CI `34759498592` passed 909 scripts, Mypy and PR gate. Post-merge Night preparation `34759669202` found zero new posts, and all five bounded preparation attempts ended without READY media. Unsupported historical Threads windows now fail honestly; public browser fallback also failed. Existing safety, permissions and caption alignment still block unsuitable candidates.
