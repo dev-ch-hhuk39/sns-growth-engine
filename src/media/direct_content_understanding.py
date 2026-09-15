@@ -21,6 +21,26 @@ def _hash(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest() if text else ""
 
 
+def provider_failure_class(exc: BaseException) -> str:
+    """Classify a vision-provider failure without retaining response bodies."""
+    if isinstance(exc, requests.Timeout):
+        return "timeout"
+    if isinstance(exc, requests.ConnectionError):
+        return "network_error"
+    if isinstance(exc, requests.HTTPError):
+        status = int(getattr(getattr(exc, "response", None), "status_code", 0) or 0)
+        if status in {401, 403}:
+            return "auth_rejected"
+        if status == 429:
+            return "rate_limited"
+        if 500 <= status <= 599:
+            return "provider_internal_error"
+        return "invalid_response"
+    if isinstance(exc, (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError)):
+        return "invalid_response"
+    return "internal_error"
+
+
 def _run(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
 
@@ -93,8 +113,10 @@ def transcribe_video(path: Path, *, max_seconds: int = 300) -> dict[str, Any]:
 def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:
     token = os.environ.get("GITHUB_TOKEN", "")
     enabled = os.environ.get("GITHUB_MODELS_ENABLED", "").lower() in {"1", "true", "yes"}
-    if not token or not enabled or not paths:
-        return {"status": "UNAVAILABLE", "visual_summary": "", "visible_text": "", "provider": "github_models_vision"}
+    if not token or not enabled:
+        return {"status": "UNAVAILABLE", "visual_summary": "", "visible_text": "", "provider": "github_models_vision", "failure_class": "auth_missing"}
+    if not paths:
+        return {"status": "UNAVAILABLE", "visual_summary": "", "visible_text": "", "provider": "github_models_vision", "failure_class": "no_frames"}
     content: list[dict[str, Any]] = [{
         "type": "text",
         "text": (
@@ -141,7 +163,14 @@ def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:
             "media_type": media_type,
         }
     except (requests.RequestException, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        return {"status": "UNAVAILABLE", "visual_summary": "", "visible_text": "", "provider": "github_models_vision", "reason": type(exc).__name__}
+        return {
+            "status": "UNAVAILABLE",
+            "visual_summary": "",
+            "visible_text": "",
+            "provider": "github_models_vision",
+            "reason": type(exc).__name__,
+            "failure_class": provider_failure_class(exc),
+        }
 
 
 def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float = 0) -> dict[str, Any]:
@@ -159,10 +188,25 @@ def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float 
             transcript = {"status": "NOT_APPLICABLE", "text": "", "provider": "none"}
         ocr = ocr_images(images)
         vision = vision_summary(images, media_type=media_type)
-        evidence_available = bool(ocr or transcript.get("text") or vision.get("visual_summary") or vision.get("visible_text"))
+        has_asr = bool(transcript.get("text"))
+        has_ocr = bool(ocr)
+        has_vision = bool(vision.get("visual_summary") or vision.get("visible_text"))
+        evidence_available = bool(has_ocr or has_asr or has_vision)
+        if has_vision:
+            aggregate = "PASS_VISION"
+        elif has_asr:
+            aggregate = "PASS_ASR_ONLY"
+        elif has_ocr:
+            aggregate = "PASS_OCR_ONLY"
+        else:
+            aggregate = "BLOCKED_NO_EVIDENCE"
         return {
             "status": "PASS" if evidence_available else "BLOCKED",
+            "aggregate_status": aggregate,
             "provider": vision.get("provider", "local_media_understanding"),
+            "vision_status": vision.get("status", "UNAVAILABLE"),
+            "vision_failure_class": vision.get("failure_class", ""),
+            "vision_summary_hash": _hash(str(vision.get("visual_summary", ""))),
             "visual_summary": vision.get("visual_summary", ""),
             "visible_text": vision.get("visible_text", ""),
             "main_claims_json": json.dumps(vision.get("main_claims", []), ensure_ascii=False),

@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
-ACCOUNTS = ("night_scout", "liver_manager")
+ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
 ROUTES = ("direct_reference_media", "approved_source_clip")
 
 READY = "READY_FOR_REVIEW_EVIDENCE"
