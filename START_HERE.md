@@ -130,3 +130,9 @@ Updated: 2026-08-28
 Main includes PR #302 (`3cb05a8`). Night small-ASR refresh succeeded in run `34724866490`, but no READY media was produced. Current fix adds Beauty-only public history and unchanged duplicate checks at generation, including emergency fallback; run `34739383502` demonstrated the prior late duplicate rejection. No posting or buffered activation for this patch. See `docs/current-work.md` for live blockers.
 
 Threads historical requests no longer silently reuse the newest five CLI/GraphQL posts; unsupported positions use the existing bounded public-browser fallback. Liver run `34739690753` transcribed one new video but still produced no usable clip evidence. Neither route is fully recovered yet.
+# 2026-09-15 production persistence follow-up
+
+- PR #305 merged normally; main baseline `9854d9cffcc357ee91d689f2ead716640ebc9325`.
+- Live preparation `34921321706` exposed Sheets USER_ENTERED numeric coercion (`0.0` -> `0`), not an approval rejection. Offline candidates now use RAW writes and uncached literal read-after-write; other generators retain their existing serialization.
+- Focused offline tests: 12 PASS; repository regression: 910 PASS. Production reserve re-run is in progress; no claim of completed reserve/activation.
+- Existing `sns-growth-xserver` runner is online and SSH confirms the SNS service on the owner's VPS. No timer or publishing activation has been installed yet.

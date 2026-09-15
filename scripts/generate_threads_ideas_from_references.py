@@ -902,7 +902,8 @@ def _row_status(row: dict[str, Any]) -> str:
     return str(row.get("status") or row.get("ai_publish_recommendation") or "").strip().upper()
 
 
-def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, Any]]) -> dict[str, int]:
+def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, Any]],
+                    *, value_input_option: str = "USER_ENTERED") -> dict[str, int]:
     if not rows:
         return {"added": 0, "skipped": 0, "refreshed": 0}
     from gspread.utils import rowcol_to_a1
@@ -963,7 +964,7 @@ def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, An
     if update_ranges:
         batch_update = getattr(ws, "batch_update", None)
         if callable(batch_update):
-            batch_update(update_ranges, value_input_option="USER_ENTERED")
+            batch_update(update_ranges, value_input_option=value_input_option)
         else:
             # Keep the helper compatible with minimal worksheet adapters while
             # production gspread still receives one bounded batch request.
@@ -973,7 +974,7 @@ def _append_missing(client: Any, logical: str, key: str, rows: list[dict[str, An
                 for col, value in enumerate(values, start=1):
                     ws.update_cell(row_number, col, str(value))
     if append_values:
-        ws.append_rows(append_values, value_input_option="USER_ENTERED")
+        ws.append_rows(append_values, value_input_option=value_input_option)
     return {"added": added, "skipped": skipped, "refreshed": refreshed}
 
 
@@ -2522,8 +2523,8 @@ def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
                 "queue_ids": [], "would_post": False, "ai_requests": 0}
     if apply:
         for logical, key in (("drafts", "draft_id"), ("social_derivatives", "derivative_id"), ("queue", "queue_id")):
-            _append_missing(client, logical, key, rows[logical])
-            stored = read_records_safely(client, logical)
+            _append_missing(client, logical, key, rows[logical], value_input_option="RAW")
+            stored = read_records_safely(client, logical, preserve_strings=True)
             for row in rows[logical]:
                 matches = [saved for saved in stored if str(saved.get(key, "")) == str(row[key])]
                 if len(matches) != 1 or any(str(matches[0].get(field, "")) != str(value)
