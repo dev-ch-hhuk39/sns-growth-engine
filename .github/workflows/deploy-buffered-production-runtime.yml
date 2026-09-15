@@ -1,0 +1,88 @@
+name: Deploy Buffered Production Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Immutable main revision to deploy"
+        required: true
+        default: "main"
+      confirm_deploy:
+        description: "Type DEPLOY_BUFFERED_RUNTIME to install the VPS release"
+        required: true
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-buffered-runtime-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 30
+    env:
+      GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
+      SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
+      SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
+      SNS_MASTER_SHEET_ID: ${{ secrets.SNS_MASTER_SHEET_ID || secrets.SPREADSHEET_ID }}
+      THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
+      THREADS_USER_ID_NIGHT_SCOUT: ${{ secrets.THREADS_USER_ID_NIGHT_SCOUT }}
+      THREADS_HANDLE_NIGHT_SCOUT: ${{ secrets.THREADS_HANDLE_NIGHT_SCOUT }}
+      THREADS_ACCESS_TOKEN_LIVER_MANAGER: ${{ secrets.THREADS_ACCESS_TOKEN_LIVER_MANAGER }}
+      THREADS_USER_ID_LIVER_MANAGER: ${{ secrets.THREADS_USER_ID_LIVER_MANAGER }}
+      THREADS_HANDLE_LIVER_MANAGER: ${{ secrets.THREADS_HANDLE_LIVER_MANAGER }}
+      THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: ${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}
+      THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
+      THREADS_HANDLE_BEAUTY_ACCOUNT: ${{ secrets.THREADS_HANDLE_BEAUTY_ACCOUNT }}
+      BEAUTY_ACTIVATION_APPROVED: ${{ secrets.BEAUTY_ACTIVATION_APPROVED || vars.BEAUTY_ACTIVATION_APPROVED || 'false' }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Require explicit deployment confirmation
+        run: |
+          test "${{ inputs.confirm_deploy }}" = "DEPLOY_BUFFERED_RUNTIME"
+      - name: Install immutable runtime and secret environment
+        env:
+          RUNTIME_ENV_FILE: /opt/sns-growth-engine/shared/runtime.env
+        run: |
+          umask 077
+          mkdir -p "$(dirname "$RUNTIME_ENV_FILE")"
+          python3 - <<'PY'
+          import os
+          import shlex
+          from pathlib import Path
+
+          path = Path(os.environ["RUNTIME_ENV_FILE"])
+          keys = (
+              "GCP_SA_JSON_BASE64", "SA_JSON_BASE64", "SPREADSHEET_ID", "SNS_MASTER_SHEET_ID",
+              "THREADS_ACCESS_TOKEN_NIGHT_SCOUT", "THREADS_USER_ID_NIGHT_SCOUT", "THREADS_HANDLE_NIGHT_SCOUT",
+              "THREADS_ACCESS_TOKEN_LIVER_MANAGER", "THREADS_USER_ID_LIVER_MANAGER", "THREADS_HANDLE_LIVER_MANAGER",
+              "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT", "THREADS_USER_ID_BEAUTY_ACCOUNT", "THREADS_HANDLE_BEAUTY_ACCOUNT",
+              "BEAUTY_ACTIVATION_APPROVED",
+          )
+          missing = [key for key in keys[:4] if not os.environ.get(key)]
+          if missing:
+              raise SystemExit("[BLOCKED] required production runtime secret is missing: " + ", ".join(missing))
+          with path.open("w", encoding="utf-8") as handle:
+              for key in keys:
+                  value = os.environ.get(key, "")
+                  handle.write(f"{key}={shlex.quote(value)}\\n")
+              handle.write("THREADS_TOKEN_STORE_DIR=/opt/sns-growth-engine/shared/threads_tokens\\n")
+          path.chmod(0o600)
+          print("[OK] runtime secret environment written without exposing values")
+          PY
+          revision="$(git rev-parse HEAD)"
+          scripts/install_buffered_production_runtime.sh \
+            --source-root "$GITHUB_WORKSPACE" --revision "$revision" \
+            --apply --confirm-install
+      - name: Verify installed runtime without publishing
+        run: |
+          /opt/sns-growth-engine/current/scripts/run_buffered_production_host.sh \
+            --account-id all --dry-run --trigger manual

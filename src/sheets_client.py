@@ -800,6 +800,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "idempotency_key", "claim_status", "lease_expires_at", "publish_attempt_id",
         "actual_generation_mode", "metrics_result_id", "event_name", "workflow_run_id",
         "workflow_name", "created_at", "updated_at", "delivery_engine", "code_revision",
+        "execution_trigger", "host_execution_id", "runtime_release",
     ],
 }
 

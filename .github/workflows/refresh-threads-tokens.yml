@@ -34,7 +34,10 @@ permissions:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    # The running publisher reads the shared token store first.  Refresh in
+    # that same VPS environment so a 60-day rotation does not leave it with a
+    # stale token while GitHub Secrets have already been updated.
+    runs-on: [self-hosted, Linux, X64]
     environment: production
     env:
       THREADS_ACCESS_TOKEN_NIGHT_SCOUT: ${{ secrets.THREADS_ACCESS_TOKEN_NIGHT_SCOUT }}
@@ -47,6 +50,9 @@ jobs:
       THREADS_APP_SECRET_LIVER_MANAGER: ${{ secrets.THREADS_APP_SECRET_LIVER_MANAGER }}
       THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: ${{ secrets.THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT }}
       THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
+      THREADS_APP_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_APP_ID_BEAUTY_ACCOUNT }}
+      THREADS_APP_SECRET_BEAUTY_ACCOUNT: ${{ secrets.THREADS_APP_SECRET_BEAUTY_ACCOUNT }}
+      THREADS_TOKEN_STORE_DIR: /opt/sns-growth-engine/shared/threads_tokens
 
     steps:
       - name: Checkout

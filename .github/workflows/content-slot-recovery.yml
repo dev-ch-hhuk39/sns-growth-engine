@@ -43,7 +43,10 @@ jobs:
     concurrency:
       group: sns-growth-production-${{ matrix.lock }}-${{ github.ref }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    # Scheduled recovery is a secondary trigger only.  The self-hosted VPS
+    # launcher owns the lock and is the sole publisher when the buffered
+    # inventory cutover is active.
+    runs-on: [self-hosted, Linux, X64]
     environment: production
     timeout-minutes: 25
     env:
@@ -96,7 +99,10 @@ jobs:
           PY
           buffered=$(python3 -c 'import json; print(str(json.load(open("config/production_inventory.json"))["activation_enabled"]).lower())')
           if [ "$buffered" = "true" ]; then
-            python3 scripts/reconcile_due_production_slots.py --account-id "$ACCOUNT_ID" --apply --confirm-reconcile
+            scripts/run_buffered_production_host.sh \
+              --account-id "$ACCOUNT_ID" \
+              --apply --confirm-reconcile \
+              --trigger github_schedule_recovery
           elif [ "$ACCOUNT_ID" != "beauty_account" ]; then
             # Preserve the current worker until the filled buffer is activated.
             python3 scripts/backfill_missed_content_slots.py --account-id "$ACCOUNT_ID" --apply --confirm-backfill

@@ -111,6 +111,14 @@ def build_slot_run(
         "event_name": os.environ.get("GITHUB_EVENT_NAME", "local"),
         "workflow_run_id": os.environ.get("GITHUB_RUN_ID", ""),
         "workflow_name": os.environ.get("GITHUB_WORKFLOW", "local"),
+        # The publisher can run from the VPS cron or the GitHub recovery
+        # workflow.  Persist the origin so a later incident investigation does
+        # not infer it from a non-authoritative workflow timestamp.
+        "delivery_engine": os.environ.get("DELIVERY_ENGINE", "direct"),
+        "code_revision": os.environ.get("CODE_REVISION", ""),
+        "execution_trigger": os.environ.get("PRODUCTION_TRIGGER", "local"),
+        "host_execution_id": os.environ.get("PRODUCTION_HOST_EXECUTION_ID", ""),
+        "runtime_release": os.environ.get("PRODUCTION_RUNTIME_RELEASE", ""),
         "created_at": created,
         "updated_at": created,
     }
