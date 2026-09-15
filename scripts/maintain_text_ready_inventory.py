@@ -18,7 +18,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from accounts.managed_accounts import account_choices  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from content_schedule import MEDIA_POST_TYPES, text_slots  # noqa: E402
-from production_inventory import eligible_ready, has_media, scheduled_slots  # noqa: E402
+from production_inventory import eligible_ready, has_media, scheduled_slots, usable_evergreen_entries  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from public_post_quality import final_public_post_validator  # noqa: E402
@@ -297,10 +297,13 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
 
 
 def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
-    from evergreen_inventory import admit_bank_batch
+    from evergreen_inventory import (
+        admit_bank_batch,
+        expired_unpublished_bank_allocations,
+        release_expired_unpublished_bank_allocations,
+    )
     from process_threads_queue import process_one, records
     from sheets_client import TAB_DEFINITIONS
-    from production_inventory import select_evergreen
     from generate_threads_ideas_from_references import original_text_similarity_guard
 
     now = datetime.now(JST)
@@ -308,6 +311,16 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     if not apply:
         return {"status": "PLAN_ONLY", "account_id": account_id, "minimum": minimum, "would_post": False}
     client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
+    initial_queues = records(client, "queue")
+    initial_bank = records(client, "evergreen_bank")
+    initial_posts = records(client, "posted_results")
+    initial_slot_runs = records(client, "content_slot_runs")
+    from content_slot_runs import business_date
+    releases = expired_unpublished_bank_allocations(
+        initial_bank, initial_queues, initial_posts, initial_slot_runs,
+        current_business_date=business_date(now),
+    )
+    release_result = release_expired_unpublished_bank_allocations(client, releases, apply=apply)
     snapshot = copy.copy(client)
     enable_readonly_record_cache(snapshot)
 
@@ -337,13 +350,11 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     def count_usable():
         bank, queues, posted = records(client, "evergreen_bank"), records(client, "queue"), records(client, "posted_results")
         unallocated = [r for r in queues if not (r.get("business_date_jst") or r.get("schedule_date_jst"))]
-        usable = set()
-        for entry in bank:
-            value = select_evergreen([entry], unallocated, posted, account=account_id, now=now,
-                runtime_check=check, similar=lambda a, b: original_text_similarity_guard(a, b)["status"] == "BLOCKED")
-            if value:
-                usable.add(value["normalized_hash"])
-        return len(usable)
+        return len(usable_evergreen_entries(
+            bank, unallocated, posted, account=account_id, now=now,
+            runtime_check=check,
+            similar=lambda a, b: original_text_similarity_guard(a, b)["status"] == "BLOCKED",
+        ))
 
     current, attempts = count_usable(), []
     # Temporary future allocation prevents an approved candidate from becoming
@@ -371,6 +382,7 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             break
     return {"status": "READY_INVENTORY_OK" if current >= minimum else "QUALITY_EXHAUSTED",
             "account_id": account_id, "usable_evergreen": current, "minimum": minimum,
+            "expired_allocation_release": release_result,
             "attempts": attempts, "would_post": False}
 
 

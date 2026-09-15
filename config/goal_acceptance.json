@@ -17,8 +17,8 @@
     {"id": "repository_public", "category": "infrastructure", "requires": ["repository_url", "visibility_checked_at"]},
     {"id": "secret_history_scan", "category": "infrastructure", "requires": ["scanner", "scan_scope", "run_at"]},
     {"id": "production_secrets_private", "category": "infrastructure", "requires": ["secret_names_only", "environment_protection"]},
-    {"id": "github_hosted_only", "category": "infrastructure", "requires": ["workflow_scan", "runner_label"]},
-    {"id": "no_vps_or_self_hosted_dependency", "category": "infrastructure", "requires": ["workflow_scan", "dependency_scan"]},
+    {"id": "github_hosted_only", "category": "infrastructure", "requires": ["workflow_scan", "runner_label", "github_actions_control_plane"]},
+    {"id": "no_vps_or_self_hosted_dependency", "category": "infrastructure", "requires": ["workflow_scan", "dependency_scan", "single_vps_publisher_boundary"]},
     {"id": "working_tree_clean", "category": "infrastructure", "requires": ["head", "checked_at"]},
     {"id": "origin_main_matches", "category": "infrastructure", "requires": ["head", "origin_main"]},
 

@@ -8,6 +8,128 @@ from typing import Callable
 from production_inventory import eligible_ready, has_media, hashes, policy, select_evergreen
 
 
+_AMBIGUOUS_SLOT_STATUSES = {
+    "RECOVERY_REQUIRED", "POSTED_SAVE_UNVERIFIED", "PUBLISH_OUTCOME_UNVERIFIED",
+}
+
+
+def expired_unpublished_bank_allocations(
+    entries: list[dict],
+    queues: list[dict],
+    posted: list[dict],
+    slot_runs: list[dict],
+    *,
+    current_business_date: str,
+) -> list[dict]:
+    """Plan safe reserve releases for missed slots outside the recovery window.
+
+    A bank candidate allocated to a past slot cannot be counted or consumed
+    again.  It may only return to the unallocated reserve when the canonical
+    queue is not posted and the old slot has no claim, ambiguous publication,
+    result, or permalink evidence.  This never repairs or republishes the
+    missed slot; it only recovers its unused canonical text for a later slot.
+    """
+    queue_by_id = {
+        str(row.get("queue_id", "")): row
+        for row in queues
+        if str(row.get("queue_id", ""))
+        and sum(str(other.get("queue_id", "")) == str(row.get("queue_id", "")) for other in queues) == 1
+    }
+    posted_ids = {str(row.get("queue_id", "")) for row in posted if str(row.get("queue_id", ""))}
+    releases: list[dict] = []
+    for entry in entries:
+        queue_id = str(entry.get("queue_id", ""))
+        queue = queue_by_id.get(queue_id)
+        if (not queue or str(entry.get("status", "")) != "VALIDATED"
+                or str(entry.get("account_id", "")) != str(queue.get("account_id", ""))
+                or not eligible_ready(queue, str(entry.get("account_id", ""))) or has_media(queue)):
+            continue
+        if (queue.get("business_date_jst") and queue.get("schedule_date_jst")
+                and str(queue["business_date_jst"]) != str(queue["schedule_date_jst"])):
+            continue
+        scheduled = str(queue.get("business_date_jst") or queue.get("schedule_date_jst") or "")
+        if not scheduled or scheduled >= current_business_date or queue_id in posted_ids:
+            continue
+        matches = [
+            row for row in slot_runs
+            if str(row.get("account_id", "")) == str(queue.get("account_id", ""))
+            and str(row.get("slot_id", "")) == str(queue.get("slot_id", ""))
+            and str(row.get("schedule_date_jst") or row.get("business_date_jst") or "") == scheduled
+        ]
+        if any(
+            str(row.get("claim_status", "")).upper() == "CLAIMED"
+            or str(row.get("status", "")).upper() in _AMBIGUOUS_SLOT_STATUSES
+            or str(row.get("result_id", "")).strip()
+            or str(row.get("post_url", "")).strip()
+            for row in matches
+        ):
+            continue
+        releases.append({
+            "queue_id": queue_id,
+            "account_id": str(queue.get("account_id", "")),
+            "previous_slot_id": str(queue.get("slot_id", "")),
+            "previous_business_date_jst": scheduled,
+            "fields": {"slot_id": "", "business_date_jst": "", "schedule_date_jst": ""},
+            "reason": "EXPIRED_UNPUBLISHED_BANK_ALLOCATION",
+        })
+    return releases
+
+
+def release_expired_unpublished_bank_allocations(
+    client,
+    releases: list[dict],
+    *,
+    apply: bool = False,
+) -> dict:
+    """Persist a reviewed release batch and prove each canonical row changed.
+
+    The batch write is intentionally not retried after an ambiguous response.
+    A later run re-reads the canonical queue and can safely determine whether
+    the release already happened.
+    """
+    if not releases:
+        return {"status": "NO_EXPIRED_ALLOCATIONS", "released": 0, "would_post": False}
+    if not apply:
+        return {"status": "PLAN_ONLY", "released": 0, "planned": len(releases), "would_post": False}
+    from gspread.utils import rowcol_to_a1
+    from sheets_record_reader import records_from_values
+
+    ws = client._ws("queue")
+    read = getattr(client, "_call_with_rate_limit_retry", lambda _label, fn: fn())
+    values = read("get_all_values:evergreen_release", ws.get_all_values)
+    if not values:
+        raise RuntimeError("EVERGREEN_QUEUE_SCHEMA_MISSING")
+    headers = values[0]
+    required = ("queue_id", "slot_id", "business_date_jst", "schedule_date_jst")
+    if any(name not in headers for name in required):
+        raise RuntimeError("EVERGREEN_QUEUE_SCHEMA_MISSING")
+    queue_id_column = headers.index("queue_id")
+    by_id = {
+        str(row[queue_id_column]): index
+        for index, row in enumerate(values[1:], start=2)
+        if len(row) > queue_id_column and str(row[queue_id_column])
+    }
+    updates = []
+    expected = {}
+    for release in releases:
+        row_number = by_id.get(str(release["queue_id"]))
+        if not row_number:
+            raise RuntimeError("EVERGREEN_RELEASE_QUEUE_MISSING")
+        for field, value in release["fields"].items():
+            updates.append({
+                "range": rowcol_to_a1(row_number, headers.index(field) + 1),
+                "values": [[value]],
+            })
+        expected[str(release["queue_id"])] = dict(release["fields"])
+    ws.batch_update(updates, value_input_option="RAW")
+    stored = records_from_values(read("get_all_values:evergreen_release:verify", ws.get_all_values))
+    for queue_id, fields in expected.items():
+        matches = [row for row in stored if str(row.get("queue_id", "")) == queue_id]
+        if len(matches) != 1 or any(str(matches[0].get(key, "")) != value for key, value in fields.items()):
+            raise RuntimeError("EVERGREEN_RELEASE_READ_AFTER_WRITE_FAILED")
+    return {"status": "RELEASED", "released": len(expected), "read_after_write": "PASS", "would_post": False}
+
+
 def bank_record(queue: dict, *, now: datetime, runtime_check: Callable[[dict], bool]) -> dict:
     account = str(queue.get("account_id", ""))
     if account not in policy()["accounts"] or not eligible_ready(queue, account) or has_media(queue):
@@ -90,7 +212,7 @@ def admit_bank_batch(client, candidates: list[dict], *, now: datetime,
         requested = bank_record(candidate, now=now, runtime_check=runtime_check)
         if before != requested:
             raise RuntimeError("EVERGREEN_QUEUE_CHANGED")
-        allocated = {**current, "business_date_jst": "", "schedule_date_jst": ""}
+        allocated = {**current, "slot_id": "", "business_date_jst": "", "schedule_date_jst": ""}
         after = bank_record(allocated, now=now, runtime_check=runtime_check)
         existing = [r for r in bank if r.get("fallback_id") == after["fallback_id"]]
         if existing:
@@ -103,7 +225,7 @@ def admit_bank_batch(client, candidates: list[dict], *, now: datetime,
             additions.append(after)
         physical_row = next(i for i, row in enumerate(qvalues[1:], 2)
                             if len(row) > qheaders.index("queue_id") and str(row[qheaders.index("queue_id")]) == qid)
-        for key in ("business_date_jst", "schedule_date_jst"):
+        for key in ("slot_id", "business_date_jst", "schedule_date_jst"):
             if current.get(key):
                 ranges.append({"range": rowcol_to_a1(physical_row, qheaders.index(key) + 1), "values": [[""]]})
         expected.append((allocated, after))

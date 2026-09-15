@@ -14,7 +14,10 @@ from evaluate_capability_matrix import evaluate  # noqa: E402
 config = json.loads((ROOT / "config" / "production_capability_matrix.json").read_text(encoding="utf-8"))
 status = json.loads((ROOT / "docs" / "capability-matrix-status.json").read_text(encoding="utf-8"))
 assert config["accounts"] == ["night_scout", "liver_manager", "beauty_account"]
-assert config["constraints"]["media_slot_text_fallback"] is False
+# A media slot can consume a separately validated text queue only when its
+# slot record explicitly reports degraded delivery; it can never count as a
+# successful media publication.
+assert config["constraints"]["media_slot_text_fallback"] is True
 assert config["constraints"]["x_operations"] is False
 assert config["constraints"]["beauty_account_operations"] is True
 assert config["constraints"]["beauty_cross_account_learning"] is False

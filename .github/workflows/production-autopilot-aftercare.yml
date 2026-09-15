@@ -2,8 +2,8 @@ name: Production Autopilot Aftercare
 
 on:
   schedule:
-    # JST 23:40 daily. Runs after the scheduled posting windows.
-    - cron: "40 14 * * *"
+    # Per-account batches prevent a 12-post day from leaving metrics behind.
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       confirm_aftercare:
@@ -37,11 +37,17 @@ env:
 jobs:
   aftercare:
     name: Metrics / PDCA / Schema / Health aftercare
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        account: [night_scout, liver_manager, beauty_account]
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 45
 
     env:
+      ACCOUNT_ID: ${{ matrix.account }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
@@ -108,7 +114,7 @@ jobs:
       - name: Dry-run aftercare plan
         run: |
           python3 scripts/process_threads_metric_jobs.py \
-            --account-id all \
+            --account-id "$ACCOUNT_ID" \
             --max-jobs 20 \
             --dry-run \
             --use-sheets
@@ -117,7 +123,7 @@ jobs:
         if: env.AFTERCARE_APPLY == 'true'
         run: |
           python3 scripts/process_threads_metric_jobs.py \
-            --account-id all \
+            --account-id "$ACCOUNT_ID" \
             --max-jobs 20 \
             --apply \
             --confirm-metrics \
@@ -131,14 +137,14 @@ jobs:
             --apply \
             --confirm-seed \
             --skip-setup \
-            --target-account all \
+            --target-account "$ACCOUNT_ID" \
             --platform all
 
       - name: Explain measured outcomes and update bounded strategy
         if: env.AFTERCARE_APPLY == 'true'
         run: |
           python3 scripts/run_growth_attribution_cycle.py \
-            --account-id all \
+            --account-id "$ACCOUNT_ID" \
             --apply \
             --confirm-attribution \
             --use-sheets \
@@ -152,7 +158,7 @@ jobs:
           # extra activation_pdca batch first creates near-duplicates and burns
           # the bounded Gemini budget without adding usable inventory.
           if ! python3 scripts/maintain_text_ready_inventory.py \
-            --account-id all --apply \
+            --account-id "$ACCOUNT_ID" --apply \
             --confirm-ready-maintenance --use-sheets; then
             echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed after bounded fallback"
             exit 1
@@ -162,4 +168,4 @@ jobs:
 
       - name: Health summary
         if: always()
-        run: python3 scripts/check_autonomous_health.py --account-id all --dry-run --use-sheets
+        run: python3 scripts/check_autonomous_health.py --account-id "$ACCOUNT_ID" --dry-run --use-sheets

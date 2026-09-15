@@ -2817,6 +2817,17 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     }
 
 
+def media_availability_status(ready_count: int, minimum: int, attempts: list[dict[str, Any]]) -> str:
+    """Differentiate a real lack of usable media from a preparation defect."""
+    if ready_count >= minimum:
+        return "READY"
+    failure_markers = ("PREPARATION_FAILED", "READ_AFTER_WRITE", "EXCEPTION", "ERROR", "FAILED")
+    statuses = [str(item.get("status", "")).upper() for item in attempts]
+    if any(any(marker in status for marker in failure_markers) for status in statuses):
+        return "PREPARATION_FAILED"
+    return "RESOURCE_SHORTAGE"
+
+
 def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, minimum: int) -> dict[str, Any]:
     """Prepare and review a bounded clip reserve; never call a publish mode."""
     import copy
@@ -2871,8 +2882,10 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
         else:
             attempts.append({"status": str(queued.get("status", "UNKNOWN"))})
         ids = ready_ids()
+    availability = media_availability_status(len(ids), minimum, attempts)
     return {"status": "READY_INVENTORY_OK" if len(ids) >= minimum else "MEDIA_INVENTORY_LOW",
             "account_id": account_id, "ready_count": len(ids), "minimum": minimum,
+            "availability_status": availability,
             "attempts": attempts, "would_post_video": False}
 
 

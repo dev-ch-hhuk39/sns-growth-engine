@@ -13,6 +13,6 @@
   "learning_rules_auto_apply_enabled": false,
   "max_text_posts_per_run": 1,
   "daily_post_cap_per_account": 5,
-  "aftercare_schedule_jst": "23:40",
+  "aftercare_schedule_jst": "hourly",
   "notes": "Threads text and approved-media production are enabled for Night Scout, Liver Manager, and Beauty. Media actions remain fail-closed behind exact account scope, registered-source rights, canonical provenance, media validation, Hybrid AI gates, and Beauty explicit human review. X publishing, unknown/third-party rights inheritance, and external transcription API remain disabled."
 }

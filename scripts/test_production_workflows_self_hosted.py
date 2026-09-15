@@ -10,13 +10,21 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = sorted((ROOT / ".github/workflows").glob("*.yml"))
 RUNNER = "ubuntu-latest"
+HOST_RUNTIME_WORKFLOWS = {
+    "content-slot-recovery.yml",
+    "deploy-buffered-production-runtime.yml",
+    "refresh-threads-tokens.yml",
+}
 
 checks: list[tuple[str, bool]] = []
 for path in WORKFLOWS:
     raw = path.read_text(encoding="utf-8")
     data = yaml.safe_load(raw) or {}
     for job_name, job in (data.get("jobs") or {}).items():
-        checks.append((f"{path.name}:{job_name}:github-hosted", job.get("runs-on") == RUNNER))
+        if path.name in HOST_RUNTIME_WORKFLOWS:
+            checks.append((f"{path.name}:{job_name}:approved-host-runtime", job.get("runs-on") == ["self-hosted", "Linux", "X64"]))
+        else:
+            checks.append((f"{path.name}:{job_name}:github-hosted", job.get("runs-on") == RUNNER))
     forbidden_triggers = ("pull_request_target:", "repository_dispatch:", "issue_comment:", "workflow_run:")
     safe_pr_ci = path.name == "ci.yml" and "pull_request:" in raw and "secrets." not in raw
     checks.append((f"{path.name}:no untrusted production trigger", all(term not in raw for term in forbidden_triggers) and ("pull_request:" not in raw or safe_pr_ci)))

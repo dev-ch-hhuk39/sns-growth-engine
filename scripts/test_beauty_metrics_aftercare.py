@@ -79,8 +79,9 @@ check(
     "scheduled aftercare receives Beauty metric credential",
 )
 check(
-    '--account-id all' in workflow,
-    "scheduled aftercare processes all accounts",
+    "account: [night_scout, liver_manager, beauty_account]" in workflow
+    and '--account-id "$ACCOUNT_ID"' in workflow,
+    "scheduled aftercare processes each managed account independently",
 )
 
 print("PASS test_beauty_metrics_aftercare.py")

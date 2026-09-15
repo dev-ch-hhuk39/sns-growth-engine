@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
-ACCOUNTS = ("night_scout", "liver_manager")
+ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
 ROUTES = ("direct_reference_media", "approved_source_clip")
 
 READY = "READY_FOR_REVIEW_EVIDENCE"
@@ -81,6 +81,10 @@ ACCOUNT_EVIDENCE_TERMS: dict[str, tuple[str, ...]] = {
         "初見", "入室", "コメント", "リスナー", "ギフト", "投げ銭",
         "バトル", "事務所", "所属", "継続", "配信時間", "話題",
         "振り返り", "ダイヤ", "常連", "応援", "企画",
+    ),
+    "beauty_account": (
+        "美容", "コスメ", "スキンケア", "メイク", "ヘアケア", "美容家電", "サロン",
+        "洗顔", "クレンジング", "化粧水", "美容液", "クリーム", "毛穴", "チーク", "リップ", "日焼け止め",
     ),
 }
 
@@ -1070,13 +1074,13 @@ def build_source_inventory(
     ]
     status = (
         "PASS_EXISTING_SOURCES_READY"
-        if len(ready_slots) == 4
+        if len(ready_slots) == len(ACCOUNTS) * len(ROUTES)
         else "BLOCKED_SOURCE_OR_PERMISSION_REPAIR_REQUIRED"
     )
     return {
         "status": status,
         "read_status": "READ_ONLY_COMPLETE",
-        "required_slot_count": 4,
+        "required_slot_count": len(ACCOUNTS) * len(ROUTES),
         "ready_slot_count": len(ready_slots),
         "permission_review_slot_count": len(permission_review_slots),
         "repair_slot_count": len(repair_slots),

@@ -19,11 +19,13 @@ from learning.feature_attribution import build_growth_cycle  # noqa: E402
 from accounts.managed_accounts import account_choices  # noqa: E402
 
 
-def _read_tab(client: Any, logical: str) -> list[dict[str, Any]]:
+def _read_tab(client: Any, logical: str) -> tuple[list[dict[str, Any]], str]:
     try:
-        return [dict(row) for row in client._ws(logical).get_all_records()]
-    except Exception:
-        return []
+        return [dict(row) for row in client._ws(logical).get_all_records()], ""
+    except Exception as exc:
+        # An unavailable evidence source must not masquerade as an empty
+        # dataset: that could turn an operational failure into harmless NO_DATA.
+        return [], f"{logical}_READ_FAILED:{type(exc).__name__}"
 
 
 def _upsert_rows(client: Any, logical: str, key: str, rows: list[dict[str, Any]]) -> dict[str, int]:
@@ -90,8 +92,20 @@ def main() -> int:
         from sheets_client import SheetsClient
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=not args.apply)
-        posted = _read_tab(client, "posted_results")
-        snapshots = _read_tab(client, "metric_snapshots")
+        posted, posted_error = _read_tab(client, "posted_results")
+        snapshots, snapshots_error = _read_tab(client, "metric_snapshots")
+        if posted_error or snapshots_error:
+            result = {
+                "status": "READ_FAILED",
+                "reasons": [item for item in (posted_error, snapshots_error) if item],
+                "would_write": False,
+                "would_post": False,
+            }
+            if args.output:
+                Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+                Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 1
     else:
         print(json.dumps({"status": "BLOCKED", "reason": "--input-json or --use-sheets is required"}, ensure_ascii=False))
         return 1
