@@ -17,6 +17,12 @@ assert "--confirm-reconcile" in launcher
 assert "runtime.env" in launcher and "permissions must be 0600" in launcher
 assert "reconcile_due_production_slots.py" in launcher
 assert "--confirm-install" in installer
+assert "--enable-scheduler" in installer
+assert "--confirm-enable" in installer
+assert "# BEGIN SNS-GROWTH-BUFFERED" in installer
+assert "--account-id night_scout" in installer
+assert "--account-id liver_manager" in installer
+assert "--account-id beauty_account" in installer
 assert "rsync -a --delete" in installer
 assert "--exclude .runtime" in installer
 assert "ln -sfn" in installer
