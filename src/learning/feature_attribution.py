@@ -156,27 +156,40 @@ def build_observations(
     account_id: str = "all",
 ) -> list[dict[str, Any]]:
     """Join post features to the best available measured window per result."""
+    def post_key(row: dict[str, Any]) -> tuple[str, str, str]:
+        return (
+            _text(row.get("account_id")),
+            _text(row.get("platform") or "threads").lower(),
+            _text(row.get("result_id")),
+        )
+
     posts = {
-        _text(row.get("result_id")): dict(row)
+        post_key(dict(row)): dict(row)
         for row in posted_results
         if _text(row.get("result_id"))
         and (account_id == "all" or _text(row.get("account_id")) == account_id)
         and _text(row.get("status")).upper() in {"POSTED", "RECOVERED", ""}
         and _text(row.get("feature_schema_version")) == FEATURE_SCHEMA_VERSION
+        and not _bool(row.get("excluded_from_metrics_baseline"))
+        and not _bool(row.get("legacy_invalid_canary"))
     }
-    snapshots_by_result: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    snapshots_by_result: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in metric_snapshots:
-        result_id = _text(row.get("result_id"))
-        if result_id not in posts:
+        key = post_key(dict(row))
+        if key not in posts:
+            continue
+        measured_status = _text(row.get("metrics_status") or row.get("collection_status")).upper()
+        if measured_status != "MEASURED":
             continue
         metrics = _metric_payload(row)
         if not any(value is not None for key, value in metrics.items() if key in {"views", "likes", "comments", "reposts", "follows"}):
             continue
-        snapshots_by_result[result_id].append(dict(row))
+        snapshots_by_result[key].append(dict(row))
 
     observations: list[dict[str, Any]] = []
-    for result_id, post in posts.items():
-        snapshots = snapshots_by_result.get(result_id, [])
+    for key, post in posts.items():
+        result_id = key[2]
+        snapshots = snapshots_by_result.get(key, [])
         selected: dict[str, Any] | None = None
         if snapshots:
             def priority(row: dict[str, Any]) -> tuple[int, str]:

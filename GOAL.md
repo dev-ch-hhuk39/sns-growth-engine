@@ -34,9 +34,11 @@ for one account must not stop the other accounts.
 
 - READY inventory is replenished before publish windows and recovered with a
   bounded attempt at publish time.
-- Text slots may recover through another safe text route. Media slots use only
-  approved inventory and fail closed with `SKIPPED_POLICY` when none exists;
-  they never silently become text posts. Media replenishment continues.
+- Text slots may recover through another safe text route. A media slot may
+  consume a separately verified text candidate only when its slot evidence
+  records `expected_type=media`, `actual_type=text_fallback` and
+  `fallback_reason=NO_READY_MEDIA`; this is degraded delivery, never media
+  success. Media replenishment continues.
 - Intended slots missed because of inventory exhaustion, generation failure,
   quality exhaustion, upstream preparation failure or ordinary review waiting
   are operational failures, not successful safe skips.

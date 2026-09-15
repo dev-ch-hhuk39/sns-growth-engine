@@ -16,7 +16,7 @@ checks = [
         "workflow has schedule",
         (
             "schedule:" in workflow
-            and 'cron: "40 14 * * *"'
+            and 'cron: "0 * * * *"'
             in workflow
         ),
     ),
@@ -127,7 +127,7 @@ checks = [
         (
             "maintain_text_ready_inventory.py"
             in workflow
-            and "--account-id all"
+            and '--account-id "$ACCOUNT_ID"'
             in workflow
             and (
                 "--confirm-ready-maintenance"
