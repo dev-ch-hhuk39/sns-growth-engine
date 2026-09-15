@@ -138,7 +138,7 @@ Sheetsは引き続き台帳。新DB・新queue serviceを導入しない。読�
 
 **Exact behavior:**
 
-1. runtimeを `/opt/sns-growth-engine/releases/<sha>` と `current` symlink、共有stateを `/opt/sns-growth-engine/shared` に固定。runnerの可変 `_work` checkoutからcronを起動しない。venvはrequirementsから必要publish依存を固定導入。release検証後だけatomic切替。
+1. runtimeを `/opt/github-runners/sns-growth-engine/.buffered-runtime/releases/<sha>` と `current` symlink、共有stateを同ディレクトリ配下の `shared` に固定。これはrunnerの可変 `_work` checkout外で、実行userが書込可能な専用領域である。venvはrequirementsから必要publish依存を固定導入。release検証後だけatomic切替。
 2. launcherは固定列挙3accountsのみ、固定runtime/venvを使用。account別lockを共有stateに置き `flock -n`。lock済みはALREADY_RUNNING。cronとself-hosted GitHub recoveryが同一launcherを呼ぶ。ユーザー入力shell展開・任意コマンド実行は禁止。
 3. cronは既存snsrunner crontabへ管理marker付きで1エントリ追加し、既存cronを保持。5分ごとにaccount別独立実行。bounded各10分、1account1件。timeout中にpublisherを強制終了した場合はpersistent attemptをUNCERTAIN扱いにして再送不可。OSlock解放だけで安全と判断しない。
 4. GitHub recoveryは既存self-hosted labelsを使用し、production environment・main限定でlauncherを呼ぶ。PR/外部forkはこのrunnerに載せない。従来ubuntu publish jobsはcutover後no-opまたは同入口へ転送。手動workflowも迂回禁止。古い実行が残った状態でcutoverしない。

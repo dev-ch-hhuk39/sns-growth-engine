@@ -4,7 +4,10 @@
 # resolves the immutable current release instead of a runner checkout.
 set -euo pipefail
 
-RUNTIME_ROOT="${BUFFERED_RUNTIME_ROOT:-/opt/sns-growth-engine}"
+# This is deliberately outside the Actions _work checkout but within the
+# self-hosted runner's owned directory. The runner account cannot write /opt
+# directly on the production host.
+RUNTIME_ROOT="${BUFFERED_RUNTIME_ROOT:-/opt/github-runners/sns-growth-engine/.buffered-runtime}"
 CURRENT_RELEASE="${RUNTIME_ROOT}/current"
 RUNTIME_ENV_FILE="${BUFFERED_RUNTIME_ENV_FILE:-${RUNTIME_ROOT}/shared/runtime.env}"
 LOCK_DIR="${RUNTIME_ROOT}/shared/locks"

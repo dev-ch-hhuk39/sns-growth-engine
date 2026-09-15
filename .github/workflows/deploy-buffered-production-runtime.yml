@@ -50,7 +50,7 @@ jobs:
           test "${{ inputs.confirm_deploy }}" = "DEPLOY_BUFFERED_RUNTIME"
       - name: Install immutable runtime and secret environment
         env:
-          RUNTIME_ENV_FILE: /opt/sns-growth-engine/shared/runtime.env
+          RUNTIME_ENV_FILE: /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
         run: |
           umask 077
           mkdir -p "$(dirname "$RUNTIME_ENV_FILE")"
@@ -74,7 +74,7 @@ jobs:
               for key in keys:
                   value = os.environ.get(key, "")
                   handle.write(f"{key}={shlex.quote(value)}\\n")
-              handle.write("THREADS_TOKEN_STORE_DIR=/opt/sns-growth-engine/shared/threads_tokens\\n")
+              handle.write("THREADS_TOKEN_STORE_DIR=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens\\n")
           path.chmod(0o600)
           print("[OK] runtime secret environment written without exposing values")
           PY
@@ -84,5 +84,5 @@ jobs:
             --apply --confirm-install
       - name: Verify installed runtime without publishing
         run: |
-          /opt/sns-growth-engine/current/scripts/run_buffered_production_host.sh \
+          /opt/github-runners/sns-growth-engine/.buffered-runtime/current/scripts/run_buffered_production_host.sh \
             --account-id all --dry-run --trigger manual

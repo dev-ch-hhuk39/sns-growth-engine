@@ -4,7 +4,9 @@
 # revision and explicitly confirm the installation.
 set -euo pipefail
 
-RUNTIME_ROOT="${BUFFERED_RUNTIME_ROOT:-/opt/sns-growth-engine}"
+# Keep immutable releases outside the mutable Actions _work checkout, while
+# remaining under the self-hosted runner account's writable directory.
+RUNTIME_ROOT="${BUFFERED_RUNTIME_ROOT:-/opt/github-runners/sns-growth-engine/.buffered-runtime}"
 SOURCE_ROOT=""
 REVISION=""
 APPLY="false"
