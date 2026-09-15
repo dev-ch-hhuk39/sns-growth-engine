@@ -97,31 +97,85 @@ def media_route(row: dict[str, Any]) -> str:
 
 
 def coverage(queues: list[dict], *, now: datetime, settings: dict | None = None,
-             runtime_check: Callable[[dict], bool]) -> list[dict]:
+             runtime_check: Callable[[dict], bool], evergreen_entries: list[dict] | None = None,
+             posted: list[dict] | None = None, similar: Callable[[str, str], bool] | None = None,
+             include_media_fallback: bool = False) -> list[dict]:
+    """Plan ready coverage without mutating the canonical queue.
+
+    Normal text slots require the configured primary-plus-reserve count.  When
+    requested, media slots have a separate one-item text fallback requirement:
+    the returned plan labels it as a fallback and never treats it as media
+    inventory.  The reconciler persists any selected reserve only after its
+    slot claim succeeds.
+    """
     cfg = settings or policy()
-    result, used_ids = [], set()
+    result, used_ids, used_hashes = [], set(), set()
+    bank = evergreen_entries or []
+    posted = posted or []
+    similar = similar or (lambda left, right: hashes(left)[1] == hashes(right)[1])
     ambiguous_ids = {str(row.get("queue_id")) for row in queues
                      if sum(r.get("queue_id") == row.get("queue_id") for r in queues) != 1}
     for account in cfg["accounts"]:
         slots = scheduled_slots(account, now, now + timedelta(hours=cfg["text_horizon_hours"]))
         for slot in slots:
-            if slot["post_type"] in MEDIA_POST_TYPES:
+            media_slot = slot["post_type"] in MEDIA_POST_TYPES
+            if media_slot and not include_media_fallback:
                 continue
-            selected, seen_hashes = [], set()
+            selected, bank_reserve, seen_hashes = [], [], set()
+            required = 1 if media_slot else cfg["text_candidates_per_slot"]
             for row in queues:
                 queue_id = str(row.get("queue_id", ""))
-                if queue_id in used_ids or queue_id in ambiguous_ids or not eligible_ready(row, account) or has_media(row):
+                if queue_id in used_ids or queue_id in ambiguous_ids or not eligible_ready(row, account):
                     continue
                 if row.get("slot_id") != slot["slot_id"] or str(row.get("business_date_jst") or row.get("schedule_date_jst")) != slot["business_date_jst"]:
                     continue
+                if media_slot:
+                    if not has_media(row) or media_route(row) != slot["post_type"]:
+                        continue
+                elif has_media(row):
+                    continue
                 digest = hashes(str(row["public_post_text"]))[1]
-                if digest in seen_hashes or not runtime_check(row):
+                if digest in seen_hashes or digest in used_hashes or not runtime_check(row):
                     continue
                 selected.append(queue_id)
                 seen_hashes.add(digest)
+                used_hashes.add(digest)
                 used_ids.add(queue_id)
-            result.append({**slot, "ready_primary": selected[:1], "ready_reserve": selected[1:],
-                           "missing": max(0, cfg["text_candidates_per_slot"] - len(selected))})
+                if len(selected) >= required:
+                    break
+            # A media slot may consume a text reserve only when no prepared
+            # media was selected.  A normal text slot may use the same reserve
+            # mechanism to reach its configured candidate count.
+            if (not media_slot or not selected) and len(selected) < required:
+                unallocated = [
+                    row for row in queues
+                    if not (row.get("business_date_jst") or row.get("schedule_date_jst"))
+                    and str(row.get("queue_id", "")) not in used_ids
+                ]
+                for candidate in usable_evergreen_entries(
+                    bank, unallocated, posted, account=account, now=now,
+                    runtime_check=runtime_check, similar=similar, settings=cfg,
+                ):
+                    row = candidate["canonical_queue"]
+                    digest = str(candidate["normalized_hash"])
+                    if digest in seen_hashes or digest in used_hashes:
+                        continue
+                    bank_reserve.append(str(row["queue_id"]))
+                    seen_hashes.add(digest)
+                    used_hashes.add(digest)
+                    used_ids.add(str(row["queue_id"]))
+                    if len(selected) + len(bank_reserve) >= required:
+                        break
+            actual = slot["post_type"] if selected else ("text_fallback" if bank_reserve and media_slot else "")
+            result.append({
+                **slot,
+                "ready_primary": selected[:1],
+                "ready_reserve": selected[1:],
+                "bank_reserve": bank_reserve,
+                "expected_post_type": slot["post_type"],
+                "actual_coverage_type": actual,
+                "missing": max(0, required - len(selected) - len(bank_reserve)),
+            })
     return result
 
 
@@ -164,6 +218,34 @@ def select_evergreen(entries: list[dict], queues: list[dict], posted: list[dict]
         if runtime_check(row):
             return {**entry, "canonical_queue": dict(row)}
     return None
+
+
+def usable_evergreen_entries(entries: list[dict], queues: list[dict], posted: list[dict], *, account: str,
+                             now: datetime, runtime_check: Callable[[dict], bool],
+                             similar: Callable[[str, str], bool], settings: dict | None = None) -> list[dict]:
+    """Return each distinct, still-usable canonical reserve exactly once.
+
+    Inventory maintenance and readiness reporting must count the same thing as
+    the reconciler can consume: a validated bank record whose canonical queue
+    is unallocated, unpublished, account-scoped, and still passes runtime
+    checks.  A normalized text hash is deliberately counted once even when a
+    legacy bank has duplicate records.
+    """
+    usable: list[dict] = []
+    seen_hashes: set[str] = set()
+    for entry in entries:
+        selected = select_evergreen(
+            [entry], queues, posted, account=account, now=now,
+            runtime_check=runtime_check, similar=similar, settings=settings,
+        )
+        if not selected:
+            continue
+        normalized = str(selected.get("normalized_hash", ""))
+        if not normalized or normalized in seen_hashes:
+            continue
+        seen_hashes.add(normalized)
+        usable.append(selected)
+    return usable
 
 
 def due_slots(account: str, *, now: datetime, slot_runs: list[dict], posted: list[dict],

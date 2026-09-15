@@ -2,7 +2,10 @@
 import unittest
 from datetime import datetime, timedelta
 
-from production_inventory import JST, coverage, due_slots, hashes, policy, scheduled_slots, select_evergreen
+from production_inventory import (
+    JST, coverage, due_slots, hashes, policy, scheduled_slots, select_evergreen,
+    usable_evergreen_entries,
+)
 
 
 class InventoryTests(unittest.TestCase):
@@ -36,6 +39,14 @@ class InventoryTests(unittest.TestCase):
     def test_runtime_quality_blocked_never_ready(self):
         self.assertIsNone(self.select(check=lambda row: False))
 
+    def test_usable_reserves_count_distinct_canonical_hashes_only(self):
+        duplicate = {**self.entry, "fallback_id": "duplicate"}
+        values = usable_evergreen_entries(
+            [self.entry, duplicate], [self.queue], [], account="night_scout", now=self.now,
+            runtime_check=lambda row: True, similar=lambda _a, _b: False, settings=self.settings,
+        )
+        self.assertEqual([row["fallback_id"] for row in values], ["bank"])
+
     def test_already_published_queue_not_recycled_after_cooldown(self):
         self.assertIsNone(self.select(posted=[dict(queue_id="bank_q", account_id="night_scout",
             posted_at=(self.now-timedelta(days=365)).isoformat(), posted_text=self.queue["public_post_text"])]))
@@ -66,6 +77,33 @@ class InventoryTests(unittest.TestCase):
         selected = next(r for r in rows if r["ready_primary"])
         self.assertEqual(selected["missing"], 2)
         self.assertEqual(len(rows), 9)
+
+    def test_bank_reserve_can_cover_text_slot_without_double_counting(self):
+        self.queue.update(slot_id="ns_1600_original", business_date_jst="2026-09-09")
+        reserve = {**self.queue, "queue_id": "reserve_q", "slot_id": "", "business_date_jst": "", "schedule_date_jst": "",
+                   "public_post_text": "別の検証済み予備本文です。"}
+        exact, normalized = hashes(reserve["public_post_text"])
+        entry = {**self.entry, "queue_id": "reserve_q", "fallback_id": "reserve", "text_hash": exact, "normalized_hash": normalized}
+        at = datetime(2026, 9, 9, 15, tzinfo=JST)
+        rows = coverage([self.queue, reserve], now=at, settings=self.settings, runtime_check=lambda row: True,
+                        evergreen_entries=[entry], posted=[], similar=lambda _a, _b: False)
+        selected = next(row for row in rows if row["ready_primary"])
+        self.assertEqual(selected["bank_reserve"], ["reserve_q"])
+        self.assertEqual(selected["missing"], 1)
+
+    def test_media_slot_reports_text_fallback_without_claiming_media(self):
+        settings = {**policy(), "accounts": ["night_scout"], "text_candidates_per_slot": 1}
+        reserve = {**self.queue, "queue_id": "reserve_media", "slot_id": "", "business_date_jst": "", "schedule_date_jst": "",
+                   "public_post_text": "別の検証済み予備本文です。"}
+        exact, normalized = hashes(reserve["public_post_text"])
+        entry = {**self.entry, "queue_id": "reserve_media", "fallback_id": "media-reserve", "text_hash": exact, "normalized_hash": normalized}
+        at = datetime(2026, 9, 9, 17, tzinfo=JST)
+        rows = coverage([reserve], now=at, settings=settings, runtime_check=lambda row: True,
+                        evergreen_entries=[entry], posted=[], similar=lambda _a, _b: False, include_media_fallback=True)
+        media = next(row for row in rows if row["post_type"] == "direct_reference_media")
+        self.assertEqual(media["expected_post_type"], "direct_reference_media")
+        self.assertEqual(media["actual_coverage_type"], "text_fallback")
+        self.assertEqual(media["bank_reserve"], ["reserve_media"])
 
     def test_duplicate_rows_cannot_inflate_coverage(self):
         self.queue.update(slot_id="ns_1600_original", business_date_jst="2026-09-09")

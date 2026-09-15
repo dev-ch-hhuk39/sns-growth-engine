@@ -38,7 +38,12 @@ def evaluate(client, *, now=None):
         return public.get("status") == "PASS" and hybrid_ai_gate_passed(row, build_source_context(client, row))[0]
 
     queue = tables["queue"]
-    rows = coverage(queue, now=now, settings=cfg, runtime_check=check)
+    rows = coverage(
+        queue, now=now, settings=cfg, runtime_check=check,
+        evergreen_entries=tables["evergreen_bank"], posted=tables["posted_results"],
+        similar=lambda a, b: original_text_similarity_guard(a, b)["status"] == "BLOCKED",
+        include_media_fallback=True,
+    )
     covered = sum(not r["missing"] for r in rows)
     bank_counts, media_counts, accounts = {}, {}, {}
     for account in cfg["accounts"]:
@@ -62,7 +67,13 @@ def evaluate(client, *, now=None):
             media_counts[account][route] = len(valid_ids)
         due = due_slots(account, now=now, slot_runs=tables["content_slot_runs"],
                         posted=enrich_posts(tables["posted_results"], queue), recovery_minutes=cfg["recovery_window_minutes"])
-        accounts[account] = {"unresolved_due_slots": due}
+        account_rows = [row for row in rows if row["account_id"] == account]
+        accounts[account] = {
+            "unresolved_due_slots": due,
+            "text_slots": sum(row["post_type"] not in MEDIA_POST_TYPES for row in account_rows),
+            "media_slots": sum(row["post_type"] in MEDIA_POST_TYPES for row in account_rows),
+            "media_slot_text_fallbacks": sum(row.get("actual_coverage_type") == "text_fallback" for row in account_rows),
+        }
         if bank_counts[account] < cfg["minimum_evergreen_per_account"]:
             blockers.append(f"EVERGREEN_LOW:{account}")
         for route, count in media_counts[account].items():
