@@ -19,12 +19,13 @@ assert [row["slot_id"] for row in night_24h] == [
     "ns_1400_reference", "ns_1600_original", "ns_2500_pdca"
 ]
 pdca_routes = _generation_commands("liver_manager", liver)
-assert [route for route, _command in pdca_routes] == ["measured_pdca", "safe_original_fallback"]
+assert [route for route, _command in pdca_routes] == ["measured_pdca", "safe_original_fallback", "offline_original_bank"]
+assert "--offline-original" in pdca_routes[-1][1]
 assert "--require-measured-pdca" in pdca_routes[0][1]
 fallback_command = pdca_routes[1][1]
 assert fallback_command[fallback_command.index("--post-type") + 1] == "original_text"
 reference_routes = _generation_commands("night_scout", night)
-assert [route for route, _command in reference_routes] == ["primary", "safe_original_fallback"]
+assert [route for route, _command in reference_routes] == ["primary", "safe_original_fallback", "offline_original_bank"]
 reference_fallback = reference_routes[1][1]
 assert reference_fallback[reference_fallback.index("--post-type") + 1] == "original_text"
 ready_contract = {

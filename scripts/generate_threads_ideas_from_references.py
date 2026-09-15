@@ -711,6 +711,7 @@ def build_fallback_generation_rows(
     history: list[str] | None = None,
     fallback_reason: str = "reference_unavailable",
     preferred_topics: list[str] | None = None,
+    offline_original: bool = False,
 ) -> dict[str, list[dict[str, Any]]]:
     """Build safe reader-facing original candidates when reference data is empty.
 
@@ -724,6 +725,10 @@ def build_fallback_generation_rows(
     )
     created = now_iso()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    if offline_original:
+        if account_id not in {"night_scout", "liver_manager", "beauty_account"} or post_type != "original_text":
+            raise ValueError("offline_original_scope_invalid")
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
     drafts: list[dict[str, Any]] = []
     derivatives: list[dict[str, Any]] = []
     queues: list[dict[str, Any]] = []
@@ -737,7 +742,13 @@ def build_fallback_generation_rows(
         rejected_candidate = None
         for attempt in range(FALLBACK_ATTEMPTS_PER_SLOT):
             output = {}
-            if os.environ.get("BUFFERED_PREPARATION") == "true" and attempt < 5:
+            if offline_original:
+                from offline_original_catalog import select_original
+
+                output = select_original(account_id, recent + accepted, batch_compared=accepted)
+                if not output:
+                    break
+            elif os.environ.get("BUFFERED_PREPARATION") == "true" and attempt < 5:
                 output = buffered_original_candidate(account_id, recent=recent,
                     excluded_topics=[str(row.get("primary_topic", "")) for row in accepted],
                     batch_id=batch_id, attempt=attempt + i - 1,
@@ -2485,9 +2496,51 @@ def run_reference_generation(
     }
 
 
+def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
+                                    slot_id: str, schedule_date_jst: str,
+                                    client: Any | None = None) -> dict[str, Any]:
+    """Use the canonical row builder/persistence without source or AI dependencies."""
+    from config_loader import get_config
+    from sheets_client import SheetsClient
+    from sheets_record_reader import read_records_safely
+
+    if client is None:
+        cfg = get_config()
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    posted = [dict(row) for row in read_records_safely(client, "posted_results")
+              if str(row.get("account_id")) == account_id]
+    queue = [dict(row) for row in read_records_safely(client, "queue")
+             if str(row.get("account_id")) == account_id
+             and str(row.get("status", "")).upper() in {"READY", "AUTO_READY", "WAITING_REVIEW", "PROCESSING", "POSTED"}]
+    history = [str(row.get("public_post_text") or row.get("posted_text") or "") for row in posted + queue]
+    rows = build_fallback_generation_rows(
+        account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text",
+        schedule_date_jst=schedule_date_jst, history=history, offline_original=True,
+    )
+    if not rows["queue"]:
+        return {"status": "QUALITY_EXHAUSTED", "failure_category": "OFFLINE_CATALOG_EXHAUSTED",
+                "queue_ids": [], "would_post": False, "ai_requests": 0}
+    if apply:
+        for logical, key in (("drafts", "draft_id"), ("social_derivatives", "derivative_id"), ("queue", "queue_id")):
+            _append_missing(client, logical, key, rows[logical])
+            stored = read_records_safely(client, logical)
+            for row in rows[logical]:
+                matches = [saved for saved in stored if str(saved.get(key, "")) == str(row[key])]
+                if len(matches) != 1 or any(str(matches[0].get(field, "")) != str(value)
+                                           for field, value in row.items()):
+                    raise RuntimeError("offline_original_read_after_write_failed:" + logical)
+    return {"status": "GENERATED" if apply else "PLAN_ONLY", "account_id": account_id,
+            "queue_ids": [row["queue_id"] for row in rows["queue"]] if apply else [],
+            "candidate_count": len(rows["queue"]), "read_after_write": apply,
+            "ai_requests": 0, "would_post": False}
+
+
 def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     """委譲プランを純粋関数で組み立てる（Sheets/LLM 不要・テスト対象）。"""
-    if args.account_id == "beauty_account":
+    offline = bool(getattr(args, "offline_original", False))
+    if offline and (args.source != "references" or args.post_type != "original_text"):
+        return {"status": "BLOCKED", "reason": "offline_original_scope_invalid"}
+    if args.account_id == "beauty_account" and not offline:
         return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "beauty_account は対象外（draft_only）"}
     if args.platform not in ALLOWED_PLATFORMS:
         return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "platform は threads のみ（X は将来対応）"}
@@ -2556,6 +2609,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--post-type", default="reference_text", choices=["original_text", "reference_text", "pdca_text"])
     parser.add_argument("--theme", default="")
     parser.add_argument("--schedule-date-jst", default="")
+    parser.add_argument("--offline-original", action="store_true", help="Finite local original-copy fallback; never calls an AI provider.")
     parser.add_argument(
         "--include-preview-queue",
         action="store_true",
@@ -2584,6 +2638,13 @@ def main() -> int:
     print(json.dumps(plan, ensure_ascii=False, indent=2))
     if plan["status"] == "BLOCKED":
         return 1
+    if args.offline_original:
+        result = run_offline_original_generation(
+            args.account_id, min(3, max(1, args.top_n)), apply=plan["status"] == "WILL_RUN",
+            slot_id=args.slot_id, schedule_date_jst=args.schedule_date_jst,
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["status"] in {"GENERATED", "PLAN_ONLY"} else 2
     if plan["status"] == "PLAN_ONLY" and args.dry_run and plan["source"] == "references":
         result = run_reference_generation(
             plan["account_id"],

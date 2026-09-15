@@ -147,7 +147,7 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     return completed.returncode, payload
 
 
-def _generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[str, list[str]]]:
+def _primary_generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[str, list[str]]]:
     if account_id == "beauty_account":
         from content_schedule import slots_for_account
         index = next(i for i, row in enumerate(slots_for_account(account_id)) if row["slot_id"] == slot["slot_id"])
@@ -190,8 +190,16 @@ def _generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[st
     return [("primary", base)]
 
 
+def _generation_commands(account_id: str, slot: dict[str, str], *, offline_only: bool = False) -> list[tuple[str, list[str]]]:
+    offline = ("offline_original_bank", [sys.executable, "scripts/generate_threads_ideas_from_references.py",
+        "--account-id", account_id, "--apply", "--confirm-generate", "--top-n", "3",
+        "--slot-id", str(slot["slot_id"]), "--post-type", "original_text",
+        "--schedule-date-jst", str(slot["business_date_jst"]), "--offline-original"])
+    return [offline] if offline_only else [*_primary_generation_commands(account_id, slot), offline]
+
+
 def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
-              required: int = 1) -> dict[str, Any]:
+              required: int = 1, offline_only: bool = False) -> dict[str, Any]:
     if not 1 <= required <= 3:
         raise ValueError("inventory_required_must_be_1_to_3")
     result: dict[str, Any] = {
@@ -206,7 +214,10 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
     attempts: list[dict[str, str]] = []
     approved: list[str] = []
     last_payload: dict[str, Any] = {}
-    for generation_route, generation in _generation_commands(account_id, slot):
+    budget_blocked = False
+    for generation_route, generation in _generation_commands(account_id, slot, offline_only=offline_only):
+        if budget_blocked and generation_route != "offline_original_bank":
+            continue
         rc, payload = _run(generation)
         last_payload = payload
         queue_ids = [
@@ -261,9 +272,7 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
                 "reason": str(review.get("failure_category") or review.get("reason") or ""),
             })
             if budget_blocked:
-                return {**result, "status": "QUALITY_EXHAUSTED", "queue_ids": approved,
-                        "missing": required - len(approved), "attempts": attempts,
-                        "failure_category": "AI_APPROVAL_BUDGET_EXHAUSTED"}
+                break
             if review_rc == 0 and review.get("status") == "READY":
                 approved.append(queue_id)
                 if len(approved) >= required:
@@ -281,7 +290,8 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
         "queue_ids": approved,
         "missing": required - len(approved),
         "generation_status": str(last_payload.get("status", "")),
-        "failure_category": str(last_payload.get("failure_category") or "QUALITY_EXHAUSTED"),
+        "failure_category": str(last_payload.get("failure_category") or
+                                ("AI_APPROVAL_BUDGET_EXHAUSTED" if budget_blocked else "QUALITY_EXHAUSTED")),
         "attempts": attempts,
     }
 
@@ -343,7 +353,7 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     for _ in range(10):
         if current >= minimum:
             break
-        result = replenish(account_id, slot, apply=True, required=min(3, minimum-current))
+        result = replenish(account_id, slot, apply=True, required=min(3, minimum-current), offline_only=True)
         attempts.append({"status": result["status"], "queue_ids": result.get("queue_ids", []),
                          "failure_category": result.get("failure_category", ""),
                          "generation_attempts": result.get("attempts", [])})
@@ -419,11 +429,9 @@ def main() -> int:
                     "status": "READY_INVENTORY_OK",
                 })
                 continue
-            result = ({"account_id": account_id, "slot_id": slot["slot_id"],
-                       "business_date_jst": slot["business_date_jst"], "status": "QUALITY_EXHAUSTED",
-                       "queue_ids": [], "failure_category": "AI_APPROVAL_BUDGET_EXHAUSTED", "would_post": False}
-                      if budget_blocked else replenish(account_id, slot, apply=args.apply, required=missing))
-            budget_blocked = budget_blocked or result.get("failure_category") == "AI_APPROVAL_BUDGET_EXHAUSTED"
+            result = replenish(account_id, slot, apply=args.apply, required=missing, offline_only=budget_blocked)
+            budget_blocked = budget_blocked or any(attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
+                                                   for attempt in result.get("attempts", []))
             if args.apply and result["status"] == "QUALITY_EXHAUSTED":
                 from evergreen_inventory import allocate_bank_candidate
                 from generate_threads_ideas_from_references import original_text_similarity_guard

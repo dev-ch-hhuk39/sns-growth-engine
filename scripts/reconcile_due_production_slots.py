@@ -17,7 +17,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from content_schedule import MEDIA_POST_TYPES, slot_by_id  # noqa: E402
 from content_slot_runs import build_slot_run, claim_slot_run, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from process_threads_queue import process_one, records, update_row  # noqa: E402
-from production_inventory import JST, due_slots, eligible_ready, has_media, media_route, policy, timestamp, true  # noqa: E402
+from production_inventory import JST, due_slots, eligible_ready, has_media, media_route, policy, select_evergreen, timestamp, true  # noqa: E402
 from sheets_record_reader import enable_readonly_record_cache  # noqa: E402
 
 
@@ -80,6 +80,22 @@ def assigned_queue(row: dict, slot: dict) -> dict:
             "schedule_date_jst": slot["business_date_jst"]}
 
 
+def reserve_candidate(client, queues: list[dict], posts: list[dict], slot: dict,
+                      cfg: dict, now: datetime) -> dict | None:
+    """Read-only reserve selection; allocation is persisted only after the slot claim."""
+    from generate_threads_ideas_from_references import original_text_similarity_guard
+
+    if slot["post_type"] in MEDIA_POST_TYPES and not cfg["media_shortage_text_fallback"]:
+        return None
+    unallocated = [row for row in queues if not (row.get("business_date_jst") or row.get("schedule_date_jst"))]
+    selected = select_evergreen(records(client, "evergreen_bank"), unallocated, posts,
+        account=slot["account_id"], now=now, settings=cfg,
+        runtime_check=lambda row: process_one(client, assigned_queue(row, slot), dry_run=True,
+            confirm_real_post=False).get("status") == "DRY_RUN",
+        similar=lambda left, right: original_text_similarity_guard(left, right)["status"] == "BLOCKED")
+    return selected["canonical_queue"] if selected else None
+
+
 def actual_route(row: dict, slot: dict) -> str:
     route = str(row.get("content_route") or row.get("generation_mode") or "")
     if has_media(row):
@@ -137,6 +153,8 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                     if process_one(snapshot, assigned_queue(row, slot), dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN":
                         chosen = row
                         break
+                if chosen is None:
+                    chosen = reserve_candidate(snapshot, queues, posts, slot, cfg, now)
                 if chosen is None:
                     outcomes.append({**slot, "status": "FAILED", "reason": "NO_VALIDATED_BUFFERED_QUEUE"})
                     continue

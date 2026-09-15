@@ -115,7 +115,8 @@ def main() -> int:
         assert "Runtime activation gate" in text
 
     hybrid = (ROOT / "scripts/run_hybrid_ai_queue_gate.py").read_text(encoding="utf-8")
-    assert "FAILED_MISSING_GEMINI_API_KEY" in hybrid
+    assert 'raise RuntimeError("missing_gemini_api_key")' in hybrid
+    assert "requests_offline_review(queue)" in hybrid
     assert "SKIPPED_NO_GEMINI_API_KEY" not in hybrid
 
     ready = (ROOT / "scripts/run_hybrid_ready_pipeline.py").read_text(encoding="utf-8")

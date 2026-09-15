@@ -90,8 +90,30 @@ class BufferedReconcilerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bank_record({**self.row, "media_asset_id": "a"}, now=self.now, runtime_check=lambda row: True)
 
+    def test_unallocated_bank_fills_missing_slot_without_write_or_ai(self):
+        row = {**self.row, "business_date_jst": "", "schedule_date_jst": ""}
+        bank = bank_record(row, now=self.now, runtime_check=lambda row: True)
+        with patch.object(runner, "records", return_value=[bank]), \
+             patch.object(runner, "process_one", return_value={"status": "DRY_RUN"}) as worker, \
+             patch.object(runner, "update_row") as write:
+            selected = runner.reserve_candidate(SimpleNamespace(), [row], [], self.slot, policy(), self.now)
+            self.assertEqual(selected, row)
+            self.assertEqual(worker.call_args.args[1]['business_date_jst'], self.slot['business_date_jst'])
+            self.assertTrue(worker.call_args.kwargs['dry_run'])
+            write.assert_not_called()
+            self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [row], [{"queue_id": "q"}], self.slot, policy(), self.now))
+            self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [row],
+                [{"queue_id": "other", "account_id": "night_scout", "posted_text": row['public_post_text']}],
+                self.slot, policy(), self.now))
+            for invalid in ({**row, "business_date_jst": "2026-09-10"},
+                            {**row, "account_id": "liver_manager"},
+                            {**row, "public_post_text": "changed text"}):
+                self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [invalid], [], self.slot, policy(), self.now))
+            self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [row], [], self.slot,
+                {**policy(), "media_shortage_text_fallback": False}, self.now))
+
     def test_dry_run_never_claims_or_posts(self):
-        tables = {"queue": [self.row], "posted_results": [], "content_slot_runs": []}
+        tables = {"queue": [self.row], "posted_results": [], "content_slot_runs": [], "evergreen_bank": []}
         with patch.object(runner, "records", side_effect=lambda _, name: tables[name]), \
              patch.object(runner, "process_one", return_value={"status": "DRY_RUN"}) as worker, \
              patch.object(runner, "claim_slot_run") as claim:
@@ -101,7 +123,7 @@ class BufferedReconcilerTests(unittest.TestCase):
         claim.assert_not_called()
 
     def test_uncertain_publish_is_not_retried(self):
-        tables = {"queue": [self.row], "posted_results": [], "content_slot_runs": []}
+        tables = {"queue": [self.row], "posted_results": [], "content_slot_runs": [], "evergreen_bank": []}
         with patch.object(runner, "policy", return_value={**policy(), "activation_enabled": True}), \
              patch.object(runner, "records", side_effect=lambda _, name: tables[name]), \
              patch.object(runner, "process_one", side_effect=[{"status": "DRY_RUN"}, {"status": "DRY_RUN"}, {"status": "PUBLISH_OUTCOME_UNVERIFIED"}]) as worker, \
