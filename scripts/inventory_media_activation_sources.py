@@ -82,6 +82,10 @@ ACCOUNT_EVIDENCE_TERMS: dict[str, tuple[str, ...]] = {
         "バトル", "事務所", "所属", "継続", "配信時間", "話題",
         "振り返り", "ダイヤ", "常連", "応援", "企画",
     ),
+    "beauty_account": (
+        "美容", "コスメ", "スキンケア", "メイク", "ヘアケア", "美容家電", "サロン",
+        "洗顔", "クレンジング", "化粧水", "美容液", "クリーム", "毛穴", "チーク", "リップ", "日焼け止め",
+    ),
 }
 
 MIN_SOURCE_EVIDENCE_TERM_COUNT = 2
@@ -1070,13 +1074,13 @@ def build_source_inventory(
     ]
     status = (
         "PASS_EXISTING_SOURCES_READY"
-        if len(ready_slots) == 4
+        if len(ready_slots) == len(ACCOUNTS) * len(ROUTES)
         else "BLOCKED_SOURCE_OR_PERMISSION_REPAIR_REQUIRED"
     )
     return {
         "status": status,
         "read_status": "READ_ONLY_COMPLETE",
-        "required_slot_count": 4,
+        "required_slot_count": len(ACCOUNTS) * len(ROUTES),
         "ready_slot_count": len(ready_slots),
         "permission_review_slot_count": len(permission_review_slots),
         "repair_slot_count": len(repair_slots),

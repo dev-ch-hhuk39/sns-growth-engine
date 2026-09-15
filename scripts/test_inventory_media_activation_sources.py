@@ -67,6 +67,9 @@ def direct_fixture(
     if account_id == "night_scout":
         text = "夜職の店を選ぶ時は、時給と控除、客層を確認して体験入店することが大事です。"
         visual = "夜職の店舗で時給と控除、客層について説明している"
+    elif account_id == "beauty_account":
+        text = "洗顔のあとに美容液を少量つけて、毛穴が気になる日は保湿を重ねすぎないようにしています。"
+        visual = "洗顔と美容液、毛穴の保湿について説明している"
     else:
         text = "配信で初見が入りやすくなるには、挨拶とコメントの入口を作ることが大事です。"
         visual = "配信者が初見への挨拶とコメントについて説明している"
@@ -107,7 +110,7 @@ def direct_fixture(
             "status": "PASS" if understanding else "BLOCKED",
             "visual_summary": visual if understanding else "",
             "visible_text": (
-                "配信 初見 コメント" if account_id == "liver_manager" else "夜職 店 時給 控除"
+                "配信 初見 コメント" if account_id == "liver_manager" else "洗顔 美容液 毛穴" if account_id == "beauty_account" else "夜職 店 時給 控除"
             ) if understanding and not off_topic else ("ダンス 練習" if understanding else ""),
         }],
         "source_accounts": [{"source_id": source_id, "priority": "5"}],
@@ -135,6 +138,8 @@ def clip_fixture(
 ) -> dict[str, list[dict[str, Any]]]:
     if account_id == "night_scout":
         transcript = "夜職の店を選ぶなら、時給と控除、客層を確認して体験入店すると判断しやすいです。"
+    elif account_id == "beauty_account":
+        transcript = "洗顔のあとは美容液を少量つけて、毛穴が気になる日は保湿の重ね方を見直すと扱いやすいです。"
     else:
         transcript = "配信で初見に挨拶してコメントの入口を作ると、リスナーが参加しやすくなります。"
     if not transcript_good:
@@ -469,15 +474,17 @@ def test_full_inventory_four_ready():
     data = merge_data(
         direct_fixture("night_scout", source_id="src_ns_d", post_id="sp_ns_d"),
         direct_fixture("liver_manager", source_id="src_lm_d", post_id="sp_lm_d"),
+        direct_fixture("beauty_account", source_id="src_ba_d", post_id="sp_ba_d"),
         clip_fixture("night_scout", source_id="src_ns_c", clip_id="clip_ns"),
         clip_fixture("liver_manager", source_id="src_lm_c", clip_id="clip_lm"),
+        clip_fixture("beauty_account", source_id="src_ba_c", clip_id="clip_ba"),
     )
     report = mod.build_source_inventory(
         datasets=data,
         permission_checker=permission_checker,
     )
     assert report["status"] == "PASS_EXISTING_SOURCES_READY"
-    assert report["ready_slot_count"] == 4
+    assert report["ready_slot_count"] == 6
     assert report["new_source_slot_count"] == 0
     assert report["planned_external_operations"] == []
 
@@ -486,8 +493,10 @@ def test_full_inventory_blocked_and_safe():
     data = merge_data(
         direct_fixture("night_scout", source_id="src_ns_d", post_id="sp_ns_d", permission=False),
         direct_fixture("liver_manager", source_id="src_lm_d", post_id="sp_lm_d", off_topic=True),
+        direct_fixture("beauty_account", source_id="src_ba_d", post_id="sp_ba_d"),
         clip_fixture("night_scout", source_id="src_ns_c", clip_id="clip_ns", quarantined=True),
         clip_fixture("liver_manager", source_id="src_lm_c", clip_id="clip_lm", transcript_good=False),
+        clip_fixture("beauty_account", source_id="src_ba_c", clip_id="clip_ba"),
     )
     report = mod.build_source_inventory(
         datasets=data,

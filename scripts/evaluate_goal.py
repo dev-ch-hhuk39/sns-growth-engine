@@ -112,9 +112,17 @@ def evaluate(
         elif scope_head != dynamic["head"]:
             failures.append({"id": "evidence_scope", "status": "FAIL", "missing_evidence": ["commit_sha_mismatch"]})
 
-    if recorded.get("github_hosted_only", {}).get("status") == "PASS" and dynamic["self_hosted_workflow_references"]:
+    criteria_by_id = {str(item["id"]): item for item in acceptance.get("criteria", [])}
+    # Historical IDs remain for evidence continuity.  The current contract
+    # explicitly permits a single GitHub-controlled VPS publisher, so retain
+    # the old fail-closed scan only for pre-VPS acceptance files.
+    hosted_contract = criteria_by_id.get("github_hosted_only", {})
+    legacy_hosted_only = "github_actions_control_plane" not in hosted_contract.get("requires", [])
+    if legacy_hosted_only and recorded.get("github_hosted_only", {}).get("status") == "PASS" and dynamic["self_hosted_workflow_references"]:
         failures.append({"id": "github_hosted_only", "status": "FAIL", "missing_evidence": ["static_workflow_scan_failed"]})
-    if recorded.get("no_vps_or_self_hosted_dependency", {}).get("status") == "PASS" and (
+    dependency_contract = criteria_by_id.get("no_vps_or_self_hosted_dependency", {})
+    legacy_no_vps = "single_vps_publisher_boundary" not in dependency_contract.get("requires", [])
+    if legacy_no_vps and recorded.get("no_vps_or_self_hosted_dependency", {}).get("status") == "PASS" and (
         dynamic["self_hosted_workflow_references"] or dynamic["vps_workflow_references"]
     ):
         failures.append({"id": "no_vps_or_self_hosted_dependency", "status": "FAIL", "missing_evidence": ["static_dependency_scan_failed"]})
