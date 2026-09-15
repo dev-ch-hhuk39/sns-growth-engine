@@ -40,7 +40,11 @@ class MemorySheet:
     def get_all_records(self):
         return [dict(row) for row in self.rows]
 
-    def append_rows(self, rows, **_kwargs):
+    def get_all_values(self):
+        return [self.headers] + [[row.get(h, '') for h in self.headers] for row in self.rows]
+
+    def append_rows(self, rows, **kwargs):
+        assert kwargs['value_input_option'] == 'RAW'
         self.rows.extend(dict(zip(self.headers, row)) for row in rows)
 
 
@@ -50,6 +54,9 @@ class MemoryClient:
 
     def _ensure_tab(self, name, headers):
         return self.tables.setdefault(name, MemorySheet(headers))
+
+    def _ws(self, name):
+        return self.tables.setdefault(name, MemorySheet([]))
 
 
 class OfflineReserveTests(unittest.TestCase):
@@ -126,7 +133,10 @@ class OfflineReserveTests(unittest.TestCase):
 
     def test_canonical_persistence_and_readback_failure(self):
         client = MemoryClient()
-        def read(client, table):
+        def read(client, table, **kwargs):
+            if kwargs.get('preserve_strings'):
+                from sheets_record_reader import records_from_values
+                return records_from_values(client.tables[table].get_all_values())
             return client.tables[table].get_all_records() if table in client.tables else []
         with patch('sheets_record_reader.read_records_safely', side_effect=read):
             plan = run_offline_original_generation('night_scout', 1, apply=False, slot_id='ns_1600_original',
@@ -139,8 +149,8 @@ class OfflineReserveTests(unittest.TestCase):
             self.assertEqual(set(client.tables), {'drafts', 'social_derivatives', 'queue'})
             self.assertEqual(client.tables['queue'].rows[0]['status'], 'WAITING_REVIEW')
         broken = MemoryClient()
-        def corrupt_read(client, table):
-            rows = read(client, table)
+        def corrupt_read(client, table, **kwargs):
+            rows = read(client, table, **kwargs)
             return [{**row, 'public_post_text': 'corrupted'} for row in rows] if table == 'queue' else rows
         with patch('sheets_record_reader.read_records_safely', side_effect=corrupt_read):
             with self.assertRaisesRegex(RuntimeError, 'read_after_write_failed:queue'):
@@ -160,6 +170,18 @@ class OfflineReserveTests(unittest.TestCase):
             rows = build_fallback_generation_rows(account_id=account, top_n=3,
                 post_type="original_text", offline_original=True)["queue"]
             self.assertEqual(len(rows), 3, account)
+
+    def test_literal_readback_preserves_ids_scores_and_ignores_cache(self):
+        from sheets_record_reader import read_records_safely, enable_readonly_record_cache
+        client = MemoryClient()
+        sheet = client._ensure_tab('queue', ['queue_id', 'similarity_score', 'public_post_text'])
+        sheet.rows = [{'queue_id': '001234567890123456789', 'similarity_score': '0.0',
+                       'public_post_text': '=original text'}]
+        enable_readonly_record_cache(client)
+        client._readonly_sheet_record_cache['queue'] = [{'queue_id': 'stale'}]
+        self.assertEqual(read_records_safely(client, 'queue', preserve_strings=True), sheet.rows)
+        sheet.rows[0]['public_post_text'] = 'changed'
+        self.assertEqual(read_records_safely(client, 'queue', preserve_strings=True)[0]['public_post_text'], 'changed')
 
     def test_compound_topics_not_counted_twice_and_real_mix_blocks(self):
         self.assertNotIn("skincare_routine", _topic_scores("beauty_account", "ヘアケア"))

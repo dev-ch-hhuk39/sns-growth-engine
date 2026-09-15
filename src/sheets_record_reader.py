@@ -126,8 +126,17 @@ def _call_with_optional_retry(
 def read_records_safely(
     client: Any,
     logical: str,
+    *,
+    preserve_strings: bool = False,
 ) -> list[dict[str, Any]]:
     """Preserve get_all_records normally and recover blank headers safely."""
+
+    # Literal write verification must bypass numericisation and stale snapshots.
+    if preserve_strings:
+        worksheet = client._ws(logical)
+        values = _call_with_optional_retry(client, f"get_all_values:{logical}:literal",
+                                          worksheet.get_all_values)
+        return records_from_values(list(values or []))
 
     cached = _cached_records(client, logical)
     if cached is not None:

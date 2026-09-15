@@ -152,3 +152,9 @@ production_operations: after normal merge, bounded preparation and read-after-wr
 - Do not auto-approve Beauty or publish to X.
 - Do not commit `.runtime/`, `.ai-tmp/`, secrets, tokens, cookies, or storage state.
 - Do not claim production evidence from local tests or dry-runs.
+# 2026-09-15 continuation
+
+Branch: `fix/production-reserve-persistence`. Preserve untracked `.runtime/`.
+PR #305 merged at `9854d9cffcc357ee91d689f2ead716640ebc9325`.
+Live stock failure was numeric coercion in canonical drafts RAW verification. Fix is literal storage/read, not looser equality. 910 regression scripts and 12 focused tests pass.
+Preparation runs: AUTO_READY `34921321706`, direct media `34921582346`. No manual Threads post in this continuation. Buffered activation remains OFF pending actual inventory and safe scheduler cutover. Existing SNS VPS SSH is accessible; do not deploy to unrelated GCP projects.
