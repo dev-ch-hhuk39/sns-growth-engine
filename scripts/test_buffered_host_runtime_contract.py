@@ -32,6 +32,9 @@ assert "--trigger github_schedule_recovery" in recovery
 assert "workflow_dispatch" in deploy
 assert "DEPLOY_BUFFERED_RUNTIME" in deploy
 assert "runtime.env" in deploy
+assert 'splitlines()) != len(keys) + 1' in deploy
+assert 'shlex.quote(value)}\\n")' in deploy
+assert 'shlex.quote(value)}\\\\n")' not in deploy
 assert "run_buffered_production_host.sh" in deploy
 assert "runs-on: [self-hosted, Linux, X64]" in refresh
 assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in launcher

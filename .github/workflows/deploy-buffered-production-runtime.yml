@@ -73,9 +73,11 @@ jobs:
           with path.open("w", encoding="utf-8") as handle:
               for key in keys:
                   value = os.environ.get(key, "")
-                  handle.write(f"{key}={shlex.quote(value)}\\n")
-              handle.write("THREADS_TOKEN_STORE_DIR=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens\\n")
+                  handle.write(f"{key}={shlex.quote(value)}\n")
+              handle.write("THREADS_TOKEN_STORE_DIR=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens\n")
           path.chmod(0o600)
+          if len(path.read_text(encoding="utf-8").splitlines()) != len(keys) + 1:
+              raise SystemExit("[BLOCKED] runtime secret environment line serialization failed")
           print("[OK] runtime secret environment written without exposing values")
           PY
           revision="$(git rev-parse HEAD)"
