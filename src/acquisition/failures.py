@@ -1,7 +1,16 @@
 """Stable operator-facing acquisition failure taxonomy."""
 from __future__ import annotations
 
-from enum import StrEnum
+try:
+    from enum import StrEnum
+except ImportError:  # Python 3.10 on the self-hosted production runner.
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        """Minimal Python 3.10-compatible replacement for :class:`enum.StrEnum`."""
+
+        def __str__(self) -> str:
+            return str(self.value)
 
 
 class FailureCategory(StrEnum):
