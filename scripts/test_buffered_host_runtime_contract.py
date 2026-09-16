@@ -16,6 +16,11 @@ assert "ALLOW_REAL_X_POST=false" in launcher
 assert "--confirm-reconcile" in launcher
 assert "runtime.env" in launcher and "permissions must be 0600" in launcher
 assert "reconcile_due_production_slots.py" in launcher
+reconciler = (ROOT / "scripts" / "reconcile_due_production_slots.py").read_text()
+readiness = (ROOT / "scripts" / "run_production_readiness_acceptance.py").read_text()
+assert 'os.environ.get("CODE_REVISION")' in reconciler
+assert 'trigger == "xserver_cron"' in readiness
+assert 'trigger == "github_schedule_recovery"' in readiness
 assert "--confirm-install" in installer
 assert "--enable-scheduler" in installer
 assert "--confirm-enable" in installer

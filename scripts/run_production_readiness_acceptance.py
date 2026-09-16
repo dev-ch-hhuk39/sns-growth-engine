@@ -21,9 +21,42 @@ from public_post_quality import final_public_post_validator  # noqa: E402
 from sheets_record_reader import enable_readonly_record_cache, read_records_safely  # noqa: E402
 
 
+def post_evidence_counts(posts, jobs):
+    seen, duplicates, unverified, missing_metrics = set(), 0, 0, 0
+    for post in posts:
+        key = (post.get("account_id"), str(post.get("external_post_id", "")))
+        if key in seen:
+            duplicates += 1
+        seen.add(key)
+        if not key[1].isdigit() or not post.get("post_url") or post.get("verification_status") != "READ_AFTER_WRITE_PASS":
+            unverified += 1
+        matched = [row for row in jobs if row.get("result_id") == post.get("result_id")
+                   and row.get("account_id") == post.get("account_id")]
+        if len(matched) != 3 or {str(row.get("window_hours")) for row in matched} != {"24", "72", "168"}:
+            missing_metrics += 1
+    return {"duplicate_posts": duplicates, "unverified_posts": unverified, "metrics_missing": missing_metrics}
+
+
+def buffered_run_verified(run, posts):
+    trigger = str(run.get("execution_trigger", ""))
+    execution_evidence = (
+        trigger == "xserver_cron" and bool(run.get("host_execution_id"))
+    ) or (
+        trigger == "github_schedule_recovery" and bool(run.get("workflow_run_id"))
+    )
+    return (
+        run.get("delivery_engine") == "buffered_v1"
+        and len(str(run.get("code_revision", ""))) == 40
+        and run.get("status") in {"POSTED_PRIMARY", "POSTED_FALLBACK"}
+        and execution_evidence
+        and any(post.get("result_id") == run.get("result_id")
+                and post.get("verification_status") == "READ_AFTER_WRITE_PASS" for post in posts)
+    )
+
+
 def evaluate(client, *, now=None):
     now = now or datetime.now(JST)
-    cfg, blockers = policy(), []
+    cfg, blockers, resource_constraints = policy(), [], []
     enable_readonly_record_cache(client)
     tables = {}
     for name in ("queue", "posted_results", "content_slot_runs", "metrics_collection_jobs", "evergreen_bank"):
@@ -78,21 +111,18 @@ def evaluate(client, *, now=None):
             blockers.append(f"EVERGREEN_LOW:{account}")
         for route, count in media_counts[account].items():
             if count < cfg["minimum_media_per_route"]:
-                blockers.append(f"MEDIA_LOW:{account}:{route}")
+                resource_constraints.append(f"MEDIA_LOW:{account}:{route}")
     posts = [p for p in tables["posted_results"] if p.get("account_id") in cfg["accounts"]
              and str(p.get("real_post", "")).lower() == "true"]
-    seen, duplicates, unverified, missing_metrics = set(), 0, 0, 0
-    for post in posts:
-        key = (post.get("account_id"), str(post.get("external_post_id", "")))
-        if key in seen:
-            duplicates += 1
-        seen.add(key)
-        if not key[1].isdigit() or not post.get("post_url") or post.get("verification_status") != "READ_AFTER_WRITE_PASS":
-            unverified += 1
-        jobs = [r for r in tables["metrics_collection_jobs"] if r.get("result_id") == post.get("result_id")
-                and r.get("account_id") == post.get("account_id")]
-        if len(jobs) != 3 or {str(j.get("window_hours")) for j in jobs} != {"24", "72", "168"}:
-            missing_metrics += 1
+    buffered_result_ids = {str(run.get("result_id", "")) for run in tables["content_slot_runs"]
+                           if run.get("delivery_engine") == "buffered_v1" and run.get("result_id")}
+    buffered_posts = [post for post in posts if str(post.get("result_id", "")) in buffered_result_ids]
+    legacy_posts = [post for post in posts if str(post.get("result_id", "")) not in buffered_result_ids]
+    current_evidence = post_evidence_counts(buffered_posts, tables["metrics_collection_jobs"])
+    legacy_evidence = post_evidence_counts(legacy_posts, tables["metrics_collection_jobs"])
+    duplicates = current_evidence["duplicate_posts"]
+    unverified = current_evidence["unverified_posts"]
+    missing_metrics = current_evidence["metrics_missing"]
     unresolved = sum(len(a["unresolved_due_slots"]) for a in accounts.values())
     if covered != len(rows) or not rows:
         blockers.append("READY_COVERAGE_INCOMPLETE")
@@ -105,11 +135,8 @@ def evaluate(client, *, now=None):
     elif cfg["scheduler_primary"] == "external" and not cfg["external_scheduler_verified"]:
         blockers.append("EXTERNAL_SCHEDULER_UNVERIFIED")
     reconciler_verified = bool(cfg["activation_enabled"]) and all(any(
-        r.get("account_id") == account and r.get("workflow_name") == "Content Slot Recovery"
-        and r.get("delivery_engine") == "buffered_v1" and len(str(r.get("code_revision", ""))) == 40
-        and r.get("workflow_run_id") and r.get("status") in {"POSTED_PRIMARY", "POSTED_FALLBACK"}
-        and any(p.get("result_id") == r.get("result_id") and p.get("verification_status") == "READ_AFTER_WRITE_PASS" for p in posts)
-        for r in tables["content_slot_runs"]) for account in cfg["accounts"])
+        run.get("account_id") == account and buffered_run_verified(run, posts)
+        for run in tables["content_slot_runs"]) for account in cfg["accounts"])
     if not reconciler_verified:
         blockers.append("BUFFERED_RECONCILER_UNVERIFIED")
     if not posts:
@@ -119,7 +146,9 @@ def evaluate(client, *, now=None):
             "text_ready_horizon_hours": cfg["text_horizon_hours"],
             "text_ready_coverage": covered / len(rows) if rows else 0,
             "text_slots": rows, "fallback_bank": bank_counts, "media_ready_reserve": media_counts,
-            "media_counts_provisional": False, "accounts": accounts, "unresolved_due_slots": unresolved,
+            "media_counts_provisional": False, "resource_constraints": resource_constraints,
+            "legacy_audit": {"post_count": len(legacy_posts), **legacy_evidence},
+            "accounts": accounts, "unresolved_due_slots": unresolved,
             "duplicate_posts": duplicates, "unverified_posts": unverified, "metrics_missing": missing_metrics,
             "blockers": blockers, "would_post": False}
 

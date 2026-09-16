@@ -198,7 +198,8 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                     upsert_slot_run(client, build_slot_run(account, slot["slot_id"], now=now,
                         schedule_date_jst=slot["business_date_jst"], status="POSTED_FALLBACK" if fallback else "POSTED_PRIMARY",
                         expected_post_type=slot["post_type"], actual_generation_mode=chosen.get("generation_mode", ""),
-                        delivery_engine="buffered_v1", code_revision=os.environ.get("GITHUB_SHA", ""),
+                        delivery_engine="buffered_v1",
+                        code_revision=os.environ.get("CODE_REVISION") or os.environ.get("GITHUB_SHA", ""),
                         actual_post_type="text_fallback" if media_fallback else route, fallback_level=int(fallback),
                         no_post_reason="NO_ELIGIBLE_MEDIA" if media_fallback else "PRIMARY_ROUTE_UNAVAILABLE" if fallback else "", queue_id=chosen["queue_id"],
                         result_id=post["result_id"], post_url=post["post_url"], actual_posted_at=post["posted_at"]))
