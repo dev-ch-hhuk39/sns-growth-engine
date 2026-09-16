@@ -52,7 +52,7 @@ jobs:
       THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
       THREADS_APP_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_APP_ID_BEAUTY_ACCOUNT }}
       THREADS_APP_SECRET_BEAUTY_ACCOUNT: ${{ secrets.THREADS_APP_SECRET_BEAUTY_ACCOUNT }}
-      THREADS_TOKEN_STORE_DIR: /opt/sns-growth-engine/shared/threads_tokens
+      THREADS_TOKEN_STORE_DIR: /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens
 
     steps:
       - name: Checkout

@@ -34,6 +34,8 @@ assert "DEPLOY_BUFFERED_RUNTIME" in deploy
 assert "runtime.env" in deploy
 assert "run_buffered_production_host.sh" in deploy
 assert "runs-on: [self-hosted, Linux, X64]" in refresh
-assert "THREADS_TOKEN_STORE_DIR: /opt/sns-growth-engine/shared/threads_tokens" in refresh
+assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in launcher
+assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in installer
+assert "THREADS_TOKEN_STORE_DIR: /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens" in refresh
 assert "THREADS_APP_ID_BEAUTY_ACCOUNT" in refresh
 print("buffered host runtime contract: PASS")
