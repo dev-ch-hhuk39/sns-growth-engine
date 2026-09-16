@@ -36,6 +36,9 @@ assert 'splitlines()) != len(keys) + 1' in deploy
 assert 'shlex.quote(value)}\\n")' in deploy
 assert 'shlex.quote(value)}\\\\n")' not in deploy
 assert "run_buffered_production_host.sh" in deploy
+assert "COOLDOWN_ACTIVE" in deploy
+assert "DAILY_CAP_REACHED" in deploy
+assert "no-publish runtime verification found an unsafe delivery failure" in deploy
 assert "runs-on: [self-hosted, Linux, X64]" in refresh
 assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in launcher
 assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in installer
