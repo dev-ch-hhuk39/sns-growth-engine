@@ -56,12 +56,19 @@ def expired_unpublished_bank_allocations(
             and str(row.get("slot_id", "")) == str(queue.get("slot_id", ""))
             and str(row.get("schedule_date_jst") or row.get("business_date_jst") or "") == scheduled
         ]
+        # A terminal slot record for a different queue proves that this reserve
+        # was not the published candidate.  Keep fail-closed behavior when the
+        # slot record has no queue identity or points at this exact queue.
+        relevant_matches = [
+            row for row in matches
+            if not str(row.get("queue_id", "")) or str(row.get("queue_id", "")) == queue_id
+        ]
         if any(
             str(row.get("claim_status", "")).upper() == "CLAIMED"
             or str(row.get("status", "")).upper() in _AMBIGUOUS_SLOT_STATUSES
             or str(row.get("result_id", "")).strip()
             or str(row.get("post_url", "")).strip()
-            for row in matches
+            for row in relevant_matches
         ):
             continue
         releases.append({
