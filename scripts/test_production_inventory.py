@@ -105,6 +105,25 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(media["actual_coverage_type"], "text_fallback")
         self.assertEqual(media["bank_reserve"], ["reserve_media"])
 
+    def test_media_slot_counts_preallocated_validated_text_fallback(self):
+        settings = {**policy(), "accounts": ["night_scout"], "text_candidates_per_slot": 1}
+        allocated = {
+            **self.queue,
+            "queue_id": "allocated_text_fallback",
+            "slot_id": "ns_1800_direct_media",
+            "business_date_jst": "2026-09-09",
+            "schedule_date_jst": "2026-09-09",
+        }
+        at = datetime(2026, 9, 9, 17, tzinfo=JST)
+        rows = coverage(
+            [allocated], now=at, settings=settings, runtime_check=lambda row: True,
+            include_media_fallback=True,
+        )
+        media = next(row for row in rows if row["post_type"] == "direct_reference_media")
+        self.assertEqual(media["ready_primary"], ["allocated_text_fallback"])
+        self.assertEqual(media["actual_coverage_type"], "text_fallback")
+        self.assertEqual(media["missing"], 0)
+
     def test_duplicate_rows_cannot_inflate_coverage(self):
         self.queue.update(slot_id="ns_1600_original", business_date_jst="2026-09-09")
         rows = coverage([self.queue]*3, now=self.now, settings=self.settings, runtime_check=lambda row: True)

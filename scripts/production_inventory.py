@@ -130,7 +130,10 @@ def coverage(queues: list[dict], *, now: datetime, settings: dict | None = None,
                 if row.get("slot_id") != slot["slot_id"] or str(row.get("business_date_jst") or row.get("schedule_date_jst")) != slot["business_date_jst"]:
                     continue
                 if media_slot:
-                    if not has_media(row) or media_route(row) != slot["post_type"]:
+                    if has_media(row):
+                        if media_route(row) != slot["post_type"]:
+                            continue
+                    elif not cfg["media_shortage_text_fallback"]:
                         continue
                 elif has_media(row):
                     continue
@@ -166,7 +169,16 @@ def coverage(queues: list[dict], *, now: datetime, settings: dict | None = None,
                     used_ids.add(str(row["queue_id"]))
                     if len(selected) + len(bank_reserve) >= required:
                         break
-            actual = slot["post_type"] if selected else ("text_fallback" if bank_reserve and media_slot else "")
+            selected_media = any(
+                has_media(row) and str(row.get("queue_id", "")) in selected
+                for row in queues
+            )
+            actual = (
+                slot["post_type"] if selected_media
+                else "text_fallback" if media_slot and (selected or bank_reserve)
+                else slot["post_type"] if selected
+                else ""
+            )
             result.append({
                 **slot,
                 "ready_primary": selected[:1],
