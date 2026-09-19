@@ -86,5 +86,30 @@ jobs:
             --apply --confirm-install
       - name: Verify installed runtime without publishing
         run: |
-          /opt/github-runners/sns-growth-engine/.buffered-runtime/current/scripts/run_buffered_production_host.sh \
-            --account-id all --dry-run --trigger manual
+          runtime=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+          for account in night_scout liver_manager beauty_account; do
+            output="$(mktemp)"
+            set +e
+            "$runtime/scripts/run_buffered_production_host.sh" \
+              --account-id "$account" --dry-run --trigger manual >"$output"
+            code=$?
+            set -e
+            cat "$output"
+            if [[ "$code" == "0" ]]; then
+              rm -f "$output"
+              continue
+            fi
+            [[ "$code" == "2" ]] || exit "$code"
+            "$runtime/.venv/bin/python" - "$output" <<'PY'
+          import json
+          import sys
+
+          payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+          allowed = {"COOLDOWN_ACTIVE", "DAILY_CAP_REACHED", "UNVERIFIED_OR_LEASED"}
+          results = payload.get("results", [])
+          if not results or any(row.get("status") != "BLOCKED" or row.get("reason") not in allowed for row in results):
+              raise SystemExit("[BLOCKED] no-publish runtime verification found an unsafe delivery failure")
+          print("[OK] no-publish runtime verification reached a safe delivery limit")
+          PY
+            rm -f "$output"
+          done

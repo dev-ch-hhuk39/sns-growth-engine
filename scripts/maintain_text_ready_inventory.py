@@ -364,7 +364,7 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     for _ in range(10):
         if current >= minimum:
             break
-        result = replenish(account_id, slot, apply=True, required=min(3, minimum-current), offline_only=True)
+        result = replenish(account_id, slot, apply=True, required=min(3, minimum-current), offline_only=False)
         attempts.append({"status": result["status"], "queue_ids": result.get("queue_ids", []),
                          "failure_category": result.get("failure_category", ""),
                          "generation_attempts": result.get("attempts", [])})

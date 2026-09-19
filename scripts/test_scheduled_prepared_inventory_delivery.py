@@ -157,6 +157,7 @@ class PreparedInventoryTests(unittest.TestCase):
              patch.object(maintenance, "replenish", return_value=generation) as generate:
             result = maintenance.replenish_bank(client, "beauty_account", apply=True)
         generate.assert_called_once()
+        self.assertFalse(generate.call_args.kwargs["offline_only"])
         self.assertEqual(result["status"], "QUALITY_EXHAUSTED")
         self.assertEqual(result["usable_evergreen"], 0)
         self.assertEqual(result["attempts"][0]["failure_category"], "PROVIDER_RATE_LIMITED")

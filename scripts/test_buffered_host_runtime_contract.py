@@ -16,6 +16,11 @@ assert "ALLOW_REAL_X_POST=false" in launcher
 assert "--confirm-reconcile" in launcher
 assert "runtime.env" in launcher and "permissions must be 0600" in launcher
 assert "reconcile_due_production_slots.py" in launcher
+reconciler = (ROOT / "scripts" / "reconcile_due_production_slots.py").read_text()
+readiness = (ROOT / "scripts" / "run_production_readiness_acceptance.py").read_text()
+assert 'os.environ.get("CODE_REVISION")' in reconciler
+assert 'trigger == "xserver_cron"' in readiness
+assert 'trigger == "github_schedule_recovery"' in readiness
 assert "--confirm-install" in installer
 assert "--enable-scheduler" in installer
 assert "--confirm-enable" in installer
@@ -36,6 +41,9 @@ assert 'splitlines()) != len(keys) + 1' in deploy
 assert 'shlex.quote(value)}\\n")' in deploy
 assert 'shlex.quote(value)}\\\\n")' not in deploy
 assert "run_buffered_production_host.sh" in deploy
+assert "COOLDOWN_ACTIVE" in deploy
+assert "DAILY_CAP_REACHED" in deploy
+assert "no-publish runtime verification found an unsafe delivery failure" in deploy
 assert "runs-on: [self-hosted, Linux, X64]" in refresh
 assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in launcher
 assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in installer
