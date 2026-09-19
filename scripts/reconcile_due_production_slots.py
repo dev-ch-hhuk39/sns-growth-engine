@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 from content_schedule import MEDIA_POST_TYPES, slot_by_id  # noqa: E402
-from content_slot_runs import build_slot_run, claim_slot_run, posts_used_in_business_date, upsert_slot_run  # noqa: E402
+from content_slot_runs import build_slot_run, claim_slot_run, posts_used_in_business_date, release_unpublished_claim, upsert_slot_run  # noqa: E402
 from process_threads_queue import process_one, records, update_row  # noqa: E402
 from production_inventory import JST, due_slots, eligible_ready, has_media, media_route, policy, select_evergreen, timestamp, true  # noqa: E402
 from sheets_record_reader import enable_readonly_record_cache  # noqa: E402
@@ -207,6 +207,25 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                                      "result_id": post["result_id"], "post_url": post["post_url"],
                                      "actual_route": route, "media_fallback": media_fallback})
                 except Exception as exc:
+                    # process_one changes READY to PROCESSING immediately before
+                    # invoking Threads.  A uniquely READY row therefore proves
+                    # this attempt never crossed the publisher boundary and its
+                    # slot claim can be released without creating duplicate risk.
+                    current = [r for r in records(client, "queue")
+                               if r.get("queue_id") == chosen["queue_id"]]
+                    pre_publish = {
+                        "status": "PRE_PUBLISH_SHEETS_FAILED",
+                        "reason": f"PRE_PUBLISH_READ_FAILED:{type(exc).__name__}",
+                        "queue_id": chosen["queue_id"],
+                        "publish_attempted": False,
+                    }
+                    if len(current) == 1 and current[0].get("status") == "READY":
+                        released = release_unpublished_claim(client, claim, pre_publish)
+                        if released.get("status") == "RELEASED":
+                            outcomes.append({**slot, "status": "PRE_PUBLISH_FAILED",
+                                             "reason": pre_publish["reason"],
+                                             "queue_id": chosen["queue_id"]})
+                            break
                     upsert_slot_run(client, build_slot_run(account, slot["slot_id"], now=now,
                         schedule_date_jst=slot["business_date_jst"], status="RECOVERY_REQUIRED",
                         queue_id=chosen["queue_id"], no_post_reason=f"DELIVERY_UNVERIFIED:{type(exc).__name__}"))

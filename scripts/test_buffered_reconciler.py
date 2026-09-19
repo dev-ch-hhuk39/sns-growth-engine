@@ -136,6 +136,25 @@ class BufferedReconcilerTests(unittest.TestCase):
         self.assertEqual(save.call_args.args[1]["status"], "RECOVERY_REQUIRED")
         self.assertEqual(result["status"], "FAILED")
 
+    def test_ready_queue_after_exception_releases_pre_publish_claim(self):
+        tables = {"queue": [dict(self.row)], "posted_results": [], "content_slot_runs": [],
+                  "evergreen_bank": []}
+        claim = {"status": "CLAIMED", "slot_run_id": "slot-1", "publish_attempt_id": "attempt-1"}
+        with patch.object(runner, "policy", return_value={**policy(), "activation_enabled": True}), \
+             patch.object(runner, "records", side_effect=lambda _, name: tables[name]), \
+             patch.object(runner, "process_one", side_effect=[{"status": "DRY_RUN"}, {"status": "DRY_RUN"}, RuntimeError("sheets")]), \
+             patch.object(runner.subprocess, "run") as gate, \
+             patch.object(runner, "claim_slot_run", return_value=claim), \
+             patch.object(runner, "release_unpublished_claim", return_value={"status": "RELEASED"}) as release, \
+            patch.object(runner, "upsert_slot_run") as save:
+            gate.return_value.returncode = 0
+            result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"], now=self.now,
+                                      slot_id=self.slot["slot_id"], apply=True)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["results"][0]["status"], "PRE_PUBLISH_FAILED")
+        self.assertFalse(release.call_args.args[2]["publish_attempted"])
+        save.assert_not_called()
+
     def test_saved_post_without_slot_columns_stops_replay(self):
         posts = runner.enrich_posts([{"queue_id": "q", "account_id": "night_scout"}], [self.row])
         self.assertEqual(posts[0]["slot_id"], self.slot["slot_id"])
