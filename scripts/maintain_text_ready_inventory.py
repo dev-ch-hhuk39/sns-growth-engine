@@ -30,6 +30,24 @@ JST = timezone(timedelta(hours=9))
 PREPARED_ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
 
 
+def release_temporary_bank_allocations(client: Any, rows: list[dict[str, Any]]) -> None:
+    from process_threads_queue import records, update_row
+
+    for row in rows:
+        if not update_row(client, "queue", "queue_id", row["queue_id"], {
+            "slot_id": "",
+            "business_date_jst": "",
+            "schedule_date_jst": "",
+        }):
+            raise RuntimeError("EVERGREEN_TEMPORARY_ALLOCATION_RELEASE_FAILED")
+    released_rows = records(client, "queue")
+    for row in rows:
+        matches = [item for item in released_rows if item.get("queue_id") == row["queue_id"]]
+        if (len(matches) != 1 or matches[0].get("slot_id")
+                or matches[0].get("business_date_jst") or matches[0].get("schedule_date_jst")):
+            raise RuntimeError("EVERGREEN_ALLOCATION_RELEASE_READ_AFTER_WRITE_FAILED")
+
+
 def _extract_objects(text: str) -> list[dict[str, Any]]:
     decoder = json.JSONDecoder()
     values: list[tuple[int, dict[str, Any]]] = []
@@ -377,6 +395,10 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             admissions.append(matches[0])
         if admissions:
             admit_bank_batch(client, admissions, now=now, runtime_check=check, apply=True)
+            # Generation uses a temporary future allocation so the queue cannot
+            # race today's publisher before bank admission.  Once the bank row
+            # is durable, return the canonical queue to the unallocated pool.
+            release_temporary_bank_allocations(client, admissions)
         current = count_usable()
         if not result.get("queue_ids"):
             break

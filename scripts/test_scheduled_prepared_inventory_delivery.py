@@ -164,6 +164,22 @@ class PreparedInventoryTests(unittest.TestCase):
         self.assertEqual(result["attempts"][0]["generation_attempts"], generation["attempts"])
         self.assertFalse(result["would_post"])
 
+    def test_generated_bank_candidate_releases_temporary_future_allocation(self):
+        rows = [{"queue_id": "q1", "slot_id": "future", "business_date_jst": "2099-01-01",
+                 "schedule_date_jst": "2099-01-01"}]
+
+        def update(_client, _table, _key, queue_id, changes):
+            self.assertEqual(queue_id, "q1")
+            rows[0].update(changes)
+            return True
+
+        with patch("process_threads_queue.update_row", side_effect=update), \
+             patch("process_threads_queue.records", return_value=rows):
+            maintenance.release_temporary_bank_allocations(SimpleNamespace(), [dict(rows[0])])
+        self.assertEqual(rows[0]["slot_id"], "")
+        self.assertEqual(rows[0]["business_date_jst"], "")
+        self.assertEqual(rows[0]["schedule_date_jst"], "")
+
 
 if __name__ == "__main__":
     unittest.main()
