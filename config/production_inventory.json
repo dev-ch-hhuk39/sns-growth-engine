@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "activation_enabled": false,
+  "activation_enabled": true,
   "accounts": ["night_scout", "liver_manager", "beauty_account"],
   "text_horizon_hours": 72,
   "ideal_horizon_hours": 168,
@@ -17,6 +17,6 @@
       "beauty_2030": ["direct_reference_media", "approved_source_clip"]
     }
   },
-  "scheduler_primary": "UNCONFIGURED",
-  "external_scheduler_verified": false
+  "scheduler_primary": "external",
+  "external_scheduler_verified": true
 }
