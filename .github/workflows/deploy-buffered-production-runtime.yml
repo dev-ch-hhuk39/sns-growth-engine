@@ -104,7 +104,19 @@ jobs:
           import json
           import sys
 
-          payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+          raw = open(sys.argv[1], encoding="utf-8").read()
+          payload = None
+          for offset, line in reversed(list(enumerate(raw.splitlines(keepends=True)))):
+              if not line.lstrip().startswith("{"):
+                  continue
+              candidate = "".join(raw.splitlines(keepends=True)[offset:])
+              try:
+                  payload = json.loads(candidate)
+                  break
+              except json.JSONDecodeError:
+                  continue
+          if payload is None:
+              raise SystemExit("[BLOCKED] no-publish runtime verification did not emit a JSON result")
           allowed = {"COOLDOWN_ACTIVE", "DAILY_CAP_REACHED", "UNVERIFIED_OR_LEASED"}
           results = payload.get("results", [])
           if not results or any(row.get("status") != "BLOCKED" or row.get("reason") not in allowed for row in results):
