@@ -77,6 +77,13 @@ run_account() {
       root="$1"; mode="$2"; account="$3"
       python_bin="$root/.venv/bin/python"
       if [[ ! -x "$python_bin" ]]; then python_bin="python3"; fi
+      export BEAUTY_PRODUCTION_ENABLED=false
+      if [[ "$account" == "beauty_account" ]]; then
+        case "${BEAUTY_ACTIVATION_APPROVED:-false}" in
+          1|true|TRUE|yes|YES) export BEAUTY_PRODUCTION_ENABLED=true ;;
+          *) echo "[BLOCKED] Beauty production activation is not approved" >&2; exit 78 ;;
+        esac
+      fi
       if [[ "$mode" == "apply" ]]; then
         export PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true
         export ALLOW_REAL_X_POST=false

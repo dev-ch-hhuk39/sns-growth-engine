@@ -13,6 +13,10 @@ assert "flock -n -E 75" in launcher
 assert "PRODUCTION_TRIGGER" in launcher
 assert "PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true" in launcher
 assert "ALLOW_REAL_X_POST=false" in launcher
+assert "BEAUTY_PRODUCTION_ENABLED=false" in launcher
+assert '"$account" == "beauty_account"' in launcher
+assert "BEAUTY_ACTIVATION_APPROVED" in launcher
+assert "BEAUTY_PRODUCTION_ENABLED=true" in launcher
 assert "--confirm-reconcile" in launcher
 assert "runtime.env" in launcher and "permissions must be 0600" in launcher
 assert "reconcile_due_production_slots.py" in launcher
