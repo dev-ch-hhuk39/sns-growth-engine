@@ -37,7 +37,7 @@ from hybrid_ai_source_context import build_source_context  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
-from sheets_client import SheetsClient  # noqa: E402
+from sheets_client import SheetsClient, _sheets_retry_reason  # noqa: E402
 from accounts.managed_accounts import account_choices, account_status, require_account_match  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
@@ -119,17 +119,15 @@ def _get_headers(ws) -> list[str]:
     delays = [0, 10, 30, 60]
     for attempt, delay in enumerate(delays):
         if delay > 0:
-            print(f"[RATE_LIMIT] Sheets 429; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+            print(f"[SHEETS_RETRY] transient failure; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
             time.sleep(delay)
         try:
             headers = ws.row_values(1)
             _headers_cache[ws_id] = headers
             return headers
         except Exception as exc:
-            msg = str(exc).lower()
-            if "429" in msg or "quota" in msg:
-                if attempt < len(delays) - 1:
-                    continue
+            if _sheets_retry_reason(exc) and attempt < len(delays) - 1:
+                continue
             raise
     return []
 
@@ -146,13 +144,12 @@ def _call_with_rate_limit_retry(label: str, fn):
     delays = [0, 10, 30, 60]
     for attempt, delay in enumerate(delays):
         if delay > 0:
-            print(f"[RATE_LIMIT] Sheets 429 during {label}; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
+            print(f"[SHEETS_RETRY] transient failure during {label}; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
             time.sleep(delay)
         try:
             return fn()
         except Exception as exc:
-            msg = str(exc).lower()
-            if ("429" in msg or "quota" in msg) and attempt < len(delays) - 1:
+            if _sheets_retry_reason(exc) and attempt < len(delays) - 1:
                 continue
             raise
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """test_sheets_rate_limit_backoff.py — Sheets 429 バックオフとヘッダーキャッシュのテスト。"""
 from __future__ import annotations
-import sys, time
+import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -24,7 +24,7 @@ def check(label: str, cond: bool) -> None:
 
 print("=== test_sheets_rate_limit_backoff ===\n")
 
-import scripts.process_threads_queue as ptq
+import scripts.process_threads_queue as ptq  # noqa: E402
 
 
 # ヘルパー: キャッシュをクリア
@@ -74,6 +74,24 @@ with patch("time.sleep") as mock_sleep:
     headers_429 = ptq._get_headers(ws_429)
 check("429後にリトライしてヘッダーを取得する", headers_429 == ["h1", "h2"])
 check("429 発生時に sleep を呼ぶ", mock_sleep.called)
+
+# 4b. Google Sheets が返す一時的な 409 operation aborted もリトライする
+ws_409 = MagicMock()
+call_count_409 = 0
+
+def _row_values_409_then_ok(*args, **kwargs):
+    global call_count_409
+    call_count_409 += 1
+    if call_count_409 < 2:
+        raise Exception("APIError: [409]: The operation was aborted.")
+    return ["h1", "h2"]
+
+ws_409.row_values.side_effect = _row_values_409_then_ok
+clear_cache()
+with patch("time.sleep") as mock_sleep_409:
+    headers_409 = ptq._get_headers(ws_409)
+check("operation-aborted 409後にヘッダー取得をリトライする", headers_409 == ["h1", "h2"])
+check("operation-aborted 409で sleep を呼ぶ", mock_sleep_409.called)
 
 # 5. 429 が 4 回続くと例外が上がる
 call_count_always = 0
@@ -133,6 +151,6 @@ check("update_row が ws.row_values(1) を1回だけ呼ぶ", ws_update.row_value
 check("update_row が ws.batch_update を呼ぶ", ws_update.batch_update.called)
 check("update_row が ws.update_cell を呼ばない", not ws_update.update_cell.called)
 
-print(f"\n--- 結果 ---")
+print("\n--- 結果 ---")
 print(f"PASS: {PASS_COUNT} / FAIL: {FAIL_COUNT}")
 sys.exit(0 if FAIL_COUNT == 0 else 1)

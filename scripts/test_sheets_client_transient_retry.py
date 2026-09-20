@@ -11,7 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from sheets_client import SheetsClient, _sheets_retry_reason
+from sheets_client import SheetsClient, _sheets_retry_reason  # noqa: E402
 
 
 class _Response:
@@ -76,6 +76,14 @@ def main() -> int:
             raised = True
     checks.append(("HTTP 400 is not retried", raised and non_transient_attempts == 1 and not sleep_mock.called))
     checks.append(("quota classifier remains retryable", _sheets_retry_reason(Exception("429 quota exceeded")) == "rate_limit"))
+    checks.append((
+        "Sheets operation-aborted 409 is retryable",
+        _sheets_retry_reason(_SheetsError(409, "The operation was aborted.")) == "operation_aborted",
+    ))
+    checks.append((
+        "unrelated HTTP 409 remains fail-closed",
+        _sheets_retry_reason(_SheetsError(409, "conflict")) is None,
+    ))
 
     payloads: list[list[dict]] = []
 
