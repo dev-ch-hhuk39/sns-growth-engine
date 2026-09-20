@@ -211,12 +211,10 @@ missing_excerpt = _generate_final_media_caption(
     max_attempts=3,
 )
 
-assert missing_excerpt["status"] == "REVIEW_REQUIRED"
-assert missing_excerpt["public_post_text"] == ""
-assert "transcript_excerpt_missing" in (
-    missing_excerpt["blocked_reasons"]
-)
-assert missing_excerpt_service.calls == 0
+assert missing_excerpt["status"] == "PASS"
+assert missing_excerpt["public_post_text"] == GOOD_TEXT
+assert "transcript_excerpt_missing" in missing_excerpt["soft_warning_codes"]
+assert missing_excerpt_service.calls == 2
 
 
 source = (

@@ -27,6 +27,7 @@ from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
+from media_v1_policy import hard_gate_fields, split_public_validation, warning_fields  # noqa: E402
 from media_source_policy import DIRECT_SCOPE, decision  # noqa: E402
 from process_threads_queue import append_row, process_one  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
@@ -1020,6 +1021,7 @@ def build_plan(
     attempted: list[dict[str, Any]] = []
     permission_map, _blocked_permissions = _permission_map(client, account_id)
     for post, media, source in candidates:
+        candidate_soft_warnings: list[str] = []
         permission = permission_map.get(
             str(post.get("source_id", "")),
             {},
@@ -1037,28 +1039,7 @@ def build_plan(
                 )
             )
         ):
-            attempted.append({
-                "source_post_id": (
-                    post.get(
-                        "source_post_id",
-                        "",
-                    )
-                ),
-                "media_asset_id": str(
-                    media.get(
-                        "media_asset_id"
-                    )
-                    or media.get(
-                        "source_post_media_id"
-                    )
-                    or ""
-                ),
-                "blocked_reasons": [
-                    "source_post_text_unusable"
-                ],
-                "quarantined": False,
-            })
-            continue
+            candidate_soft_warnings.append("source_post_text_unusable")
 
         # Direct reference media keeps its exact parent post text as the
         # primary caption source. OCR/transcripts verify it, not replace it.
@@ -1073,29 +1054,13 @@ def build_plan(
             ))
         media_evidence = "\n".join(part for part in media_evidence_parts if part.strip())[:12000]
         if not media_evidence:
-            attempted.append({
-                "source_post_id": post.get("source_post_id", ""),
-                "media_asset_id": str(media.get("media_asset_id") or media.get("source_post_media_id") or ""),
-                "blocked_reasons": ["media_content_understanding_empty"],
-                "quarantined": False,
-            })
-            continue
+            candidate_soft_warnings.append("media_content_understanding_empty")
         source_suitability, source_suitability_blockers = direct_source_suitability(
             account_id=account_id,
             post=post,
             media_evidence_text=media_evidence,
         )
-        if source_suitability_blockers:
-            attempted.append({
-                "source_post_id": post.get("source_post_id", ""),
-                "media_asset_id": str(media.get("media_asset_id") or media.get("source_post_media_id") or ""),
-                "quarantined": False,
-                "source_suitability": source_suitability,
-                "blocked_reasons": source_suitability_blockers,
-            })
-            # Account fit is a slot decision. The source asset may still be
-            # valid for its owning account or another explicitly scoped route.
-            continue
+        candidate_soft_warnings.extend(source_suitability_blockers)
         if uses_default_caption_service and caption_mode == "transform":
             exact_evidence = "\n".join(
                 value
@@ -1152,30 +1117,12 @@ def build_plan(
             if uses_default_caption_service
             else []
         )
-        if scheduled_caption_reasons:
-            generation_reasons = [
-                str(reason)
-                for reason in grounded.get(
-                    "blocked_reasons",
-                    [],
-                )
-                if str(reason)
-            ]
-            attempted.append({
-                "source_post_id": post.get("source_post_id", ""),
-                "media_asset_id": asset_id,
-                "quarantined": False,
-                "caption_provider": grounded.get("provider_name", ""),
-                "caption_status": grounded.get("status", ""),
-                "source_mode": grounded.get("source_mode", caption_mode),
-                "blocked_reasons": list(dict.fromkeys(
-                    generation_reasons
-                    + scheduled_caption_reasons
-                )),
-            })
-            # This is slot suitability, not evidence that the media asset is
-            # invalid globally. Do not increment failure/quarantine state.
-            continue
+        # This is slot suitability, not evidence that the media asset is
+        # invalid globally. Media V1 records it as a post-hoc soft warning.
+        candidate_soft_warnings.extend(scheduled_caption_reasons)
+        candidate_soft_warnings.extend(
+            str(reason) for reason in grounded.get("blocked_reasons", []) if str(reason)
+        )
         validator = validate_media_post({
             "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
             "media_url": media.get("storage_url", ""), "media_asset_id": asset_id, "platform": "threads",
@@ -1190,7 +1137,10 @@ def build_plan(
             "source_copy_similarity": alignment.get("source_copy_similarity", 1),
             "recent_post_similarity": alignment.get("recent_post_similarity", 1),
         })
-        ready = grounded.get("status") == "PASS" and validation["status"] == "PASS" and validator["status"] == "PASS"
+        public_hard, public_soft = split_public_validation(validation)
+        candidate_soft_warnings.extend(public_soft)
+        candidate_soft_warnings.extend(validator.get("soft_warning_codes", []))
+        ready = not public_hard and validator["status"] == "PASS"
         blocked_reasons = (
             list(grounded.get("blocked_reasons", []))
             + list(validation.get("blocked_reasons", []))
@@ -1217,6 +1167,9 @@ def build_plan(
                 "source_suitability": source_suitability,
                 "semantic_alignment": alignment,
                 "media_validator": validator["status"], "would_post": bool(apply and not prepare_only),
+                **hard_gate_fields([]),
+                **warning_fields(candidate_soft_warnings),
+                "human_review_status": "UNREVIEWED",
                 "prepare_only": prepare_only,
                 "candidate_attempt_count": len(attempted) + 1,
                 "skipped_candidate_attempts": attempted,
@@ -1465,6 +1418,9 @@ def _build_queue(plan: dict[str, Any]) -> dict[str, Any]:
         "source_copy_similarity": plan.get("semantic_alignment", {}).get("source_copy_similarity", ""),
         "recent_post_similarity": plan.get("semantic_alignment", {}).get("recent_post_similarity", ""),
         "claim_support_json": json.dumps(plan.get("claim_support", []), ensure_ascii=False),
+        **hard_gate_fields([]),
+        **warning_fields(json.loads(str(plan.get("soft_warning_codes") or "[]"))),
+        "human_review_status": "UNREVIEWED",
         "content_hash": post.get("content_hash", ""),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }

@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 from accounts.managed_accounts import managed_account_ids
 
-ACTIVE_QUEUE_STATUSES = {"WAITING_REVIEW", "READY"}
+ACTIVE_QUEUE_STATUSES = {"WAITING_REVIEW", "READY", "POSTED"}
 ALLOWED_ACCOUNTS = set(managed_account_ids())
 MEDIA_TYPES = {"IMAGE", "VIDEO", "CAROUSEL"}
 
@@ -67,6 +67,9 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
         "media_preview_url": media_url,
         "media_type": text(queue.get("publisher_media_type") or queue.get("media_type")).upper(),
         "source_url": text(queue.get("source_url") or queue.get("source_video_url")),
+        "source_id": text(queue.get("source_id") or queue.get("source_video_id")),
+        "caption": text(queue.get("public_post_text")),
+        "threads_permalink": text(queue.get("post_url") or queue.get("permalink")),
         "primary_topic": text(queue.get("primary_topic")),
         "validator_status": text(queue.get("validator_status")).upper(),
         "internal_leak_status": text(queue.get("internal_leak_status")).upper(),
@@ -90,6 +93,17 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
         "voice_corpus_post_count": text(queue.get("voice_corpus_post_count")),
         "voice_blocked_reasons": text(queue.get("voice_blocked_reasons")),
         "media_validator_status": text(queue.get("media_status")).upper(),
+        "hard_gate_status": text(queue.get("hard_gate_status")).upper(),
+        "hard_gate_blocked_reasons": text(queue.get("hard_gate_blocked_reasons")),
+        "media_readiness_status": text(queue.get("media_readiness_status")).upper(),
+        "soft_warning_status": text(queue.get("soft_warning_status")).upper(),
+        "soft_warning_count": text(queue.get("soft_warning_count")),
+        "soft_warning_codes": text(queue.get("soft_warning_codes")),
+        "soft_warning_summary": text(queue.get("soft_warning_summary")),
+        "human_review_status": text(queue.get("human_review_status") or "UNREVIEWED").upper(),
+        "human_review_reason": text(queue.get("human_review_reason")),
+        "human_review_note": text(queue.get("human_review_note")),
+        "reviewed_at": text(queue.get("reviewed_at")),
         "approval_source": text(queue.get("approval_source")),
         "approval_policy": text(queue.get("approval_policy")),
         "provider_status": text(queue.get("provider_status")).upper(),
@@ -114,7 +128,17 @@ def decision_for_row(review: Mapping[str, Any], queue: Mapping[str, Any], *, all
     decision = text(review.get("review_decision")).upper()
     if decision not in {"OK", "NG", "HOLD"}:
         return "SKIP", {}
-    if text(queue.get("status")).upper() != "WAITING_REVIEW":
+    queue_status = text(queue.get("status")).upper()
+    if queue_status in {"READY", "POSTED"}:
+        # Media V1 review is post-hoc feedback. It must never retract a READY
+        # item or trigger/retry a publish, and UNREVIEWED never blocks it.
+        return "FEEDBACK_RECORDED", {
+            "human_review_status": decision,
+            "human_review_reason": text(review.get("review_reason")),
+            "human_review_note": text(review.get("reviewer_note")),
+            "reviewed_at": now_iso(),
+        }
+    if queue_status != "WAITING_REVIEW":
         return "SKIP", {}
     if decision == "NG":
         return "REJECTED", {

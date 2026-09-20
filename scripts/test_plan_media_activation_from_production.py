@@ -174,15 +174,16 @@ def _build() -> dict[str, Any]:
     )
 
 
-def test_complete_plan_is_review_only() -> None:
+def test_complete_plan_is_autonomous_ready_without_publish() -> None:
     report = _build()
     assert report["source_selection_status"] == "PASS"
     assert report["activation_plan_status"] == "PASS"
-    assert report["candidate_count"] == 4
+    assert report["candidate_count"] == len(integration.ACCOUNTS) * len(integration.ROUTES)
     rows = report["activation_plan"]["rows"]
-    assert len(rows) == 4
-    assert all(row["status"] == "WAITING_REVIEW" for row in rows)
-    assert all(row["auto_publish"] == "false" for row in rows)
+    assert len(rows) == len(integration.ACCOUNTS) * len(integration.ROUTES)
+    assert all(row["status"] == "READY" for row in rows)
+    assert all(row["auto_publish"] == "true" for row in rows)
+    assert all(row["human_review_status"] == "UNREVIEWED" for row in rows)
     assert all(row["canary_id"].startswith("canary_fresh_") for row in rows)
 
 
@@ -230,7 +231,7 @@ def test_missing_permission_fails_closed() -> None:
         planner=planner.build_plan,
         candidate_validator=planner.candidate_blockers,
     )
-    assert report["candidate_count"] == 4
+    assert report["candidate_count"] == len(integration.ACCOUNTS) * len(integration.ROUTES)
     assert report["activation_plan_status"] == "BLOCKED"
     blockers = [
         blocker
@@ -317,7 +318,7 @@ def test_present_candidates_are_diagnosed_when_other_slots_are_missing() -> None
 
 if __name__ == "__main__":
     tests = (
-        test_complete_plan_is_review_only,
+        test_complete_plan_is_autonomous_ready_without_publish,
         test_unsafe_queue_evidence_is_ignored,
         test_missing_permission_fails_closed,
         test_safety_guard_detects_enabled_gates,

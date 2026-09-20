@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Production Direct must reject account-fit manufactured by its caption."""
+"""Account-fit confidence is observable but does not replace hard safety."""
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,9 +48,17 @@ def _media(post_id: str, summary: str, visible_text: str) -> dict:
     return {**item, "carousel_media": [item]}
 
 
-class NeverCalledCaptionService:
+class SoftWarningCaptionService:
     def generate(self, *_args, **_kwargs):
-        raise AssertionError("caption generation must not manufacture account fit")
+        return {
+            "status": "PASS",
+            "public_post_text": "夜職で店を選ぶ時は、時給だけでなく客層や出勤ペースも確認しておくと続けやすい。焦らず条件を整理しよう。",
+            "blocked_reasons": [],
+            "provider_name": "test",
+            "provider_version": "1",
+            "semantic_alignment": {"status": "BLOCKED", "blocked_reasons": ["off_topic"]},
+            "claim_support": [],
+        }
 
 
 original_records = pipeline._records
@@ -68,22 +77,22 @@ try:
         "ns_1800_direct_media",
         object(),
         apply=False,
-        caption_service=NeverCalledCaptionService(),
+        caption_service=SoftWarningCaptionService(),
     )
 finally:
     pipeline._records = original_records
     pipeline.select_direct_candidates = original_candidates
 
-attempt = plan.get("skipped_candidate_attempts", [{}])[0]
+warnings = json.loads(plan.get("soft_warning_codes", "[]"))
 checks = [
-    ("off-topic source is blocked", plan.get("status") == "BLOCKED"),
+    ("off-topic source remains plan-only", plan.get("status") == "PLAN_ONLY"),
     (
-        "source evidence is insufficient",
-        "direct_source_account_evidence_insufficient" in attempt.get("blocked_reasons", []),
+        "source evidence warning is retained",
+        "direct_source_account_evidence_insufficient" in warnings,
     ),
     (
-        "media evidence is insufficient",
-        "direct_media_account_evidence_insufficient" in attempt.get("blocked_reasons", []),
+        "media evidence warning is retained",
+        "direct_media_account_evidence_insufficient" in warnings,
     ),
     ("nothing would post", plan.get("would_post") is False),
 ]

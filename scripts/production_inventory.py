@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from content_schedule import MEDIA_POST_TYPES, slots_for_account
+from media_v1_policy import is_media_candidate
 
 ROOT = Path(__file__).resolve().parents[1]
 JST = timezone(timedelta(hours=9))
@@ -79,11 +80,23 @@ def has_media(row: dict[str, Any]) -> bool:
 
 
 def eligible_ready(row: dict[str, Any], account: str) -> bool:
-    return bool(row.get("queue_id") and str(row.get("public_post_text", "")).strip()
+    base = bool(row.get("queue_id") and str(row.get("public_post_text", "")).strip()
         and row.get("account_id") == account and row.get("target_account_id", account) in {"", account}
         and row.get("platform") == "threads" and row.get("status") == "READY"
-        and not any(true(row.get(key)) for key in ("excluded_from_activation", "repost_prohibited", "superseded"))
-        and all(row.get(key) == "PASS" for key in ("validator_status", "internal_leak_status", "account_fit_status")))
+        and not any(true(row.get(key)) for key in ("excluded_from_activation", "repost_prohibited", "superseded")))
+    if not base:
+        return False
+    if is_media_candidate(row):
+        hard_status = str(row.get("hard_gate_status") or "")
+        readiness = str(row.get("media_readiness_status") or "")
+        if hard_status or readiness:
+            return hard_status == "PASS" and readiness == "MEDIA_READY"
+        # Transitional READY rows predate the Media V1 lifecycle columns.
+        # Their legacy gates remain necessary here; process_one performs the
+        # current rights and technical hard-gate validation before publishing.
+        return all(row.get(key) == "PASS" for key in
+                   ("validator_status", "internal_leak_status", "account_fit_status"))
+    return all(row.get(key) == "PASS" for key in ("validator_status", "internal_leak_status", "account_fit_status"))
 
 
 def media_route(row: dict[str, Any]) -> str:

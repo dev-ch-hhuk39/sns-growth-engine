@@ -151,10 +151,10 @@ def run_stage(stage_name: str, command: list[str], runner: Callable[[list[str]],
     return ({"stage": stage_name, "returncode": completed.returncode, "payload": payload}, completed.returncode == 0)
 
 
-def reviewed_pass_queue_ids(payload: dict[str, Any]) -> list[str]:
+def reviewed_pass_queue_ids(payload: dict[str, Any], *, warn_only: bool = False) -> list[str]:
     queue_ids: list[str] = []
     for row in payload.get("results", []):
-        if str(row.get("status", "")).upper() == "PASS":
+        if warn_only or str(row.get("status", "")).upper() == "PASS":
             queue_ids.append(str(row.get("queue_id", "")))
     for row in payload.get("skipped_current", []):
         if str(row.get("gate_status", "")).upper() == "PASS":
@@ -200,7 +200,10 @@ def execute(
             "would_post": False,
         }
 
-    reviewed_ids = reviewed_pass_queue_ids(gate_stage["payload"])
+    reviewed_ids = reviewed_pass_queue_ids(
+        gate_stage["payload"],
+        warn_only=approval_mode == "media",
+    )
     if queue_id:
         reviewed_ids = [item for item in reviewed_ids if item == queue_id]
     if not reviewed_ids:

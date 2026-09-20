@@ -26,6 +26,10 @@ BASE = {
     "internal_leak_status": "PASS",
     "account_fit_status": "PASS",
     "media_url": "https://res.cloudinary.com/example/video/upload/item.mp4",
+    "media_asset_id": "asset_1",
+    "duration_seconds": "20",
+    "aspect_ratio": "9:16",
+    "public_post_text": "夜職で店を選ぶ時は、時給だけでなく客層や出勤ペースも確認しておくと続けやすい。条件を整理しておこう。",
 }
 
 
@@ -35,7 +39,7 @@ def plan_for(row: dict[str, str], *, autonomous_low_risk: bool = False) -> dict:
     original_gate = promotion.hybrid_ai_gate_passed
     original_context = promotion.build_source_context
     try:
-        promotion.read_records_safely = lambda _client, _logical: [row]
+        promotion.read_records_safely = lambda _client, logical: [row] if logical == "queue" else []
         promotion.requires_hybrid_ai_gate = lambda _row: True
         promotion.hybrid_ai_gate_passed = lambda _row, _context: (True, "pass")
         promotion.build_source_context = lambda _client, _row: {}

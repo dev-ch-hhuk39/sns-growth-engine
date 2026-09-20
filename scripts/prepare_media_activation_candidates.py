@@ -10,9 +10,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-ACCOUNTS = ("night_scout", "liver_manager")
-ROUTES = ("direct_reference_media", "approved_source_clip")
-APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
+from media_v1_policy import (
+    APPROVED_RIGHTS,
+    MEDIA_V1_ACCOUNTS,
+    MEDIA_V1_ROUTES,
+    hard_gate_fields,
+    warning_fields,
+)
+
+ACCOUNTS = MEDIA_V1_ACCOUNTS
+ROUTES = MEDIA_V1_ROUTES
 
 COMMON_REQUIRED = (
     "public_post_text",
@@ -99,18 +106,24 @@ def _identity(row: dict[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()[:16]
 
 
-def candidate_blockers(row: dict[str, Any]) -> list[str]:
+def candidate_gate_results(row: dict[str, Any]) -> tuple[list[str], list[str]]:
     account_id, route = _slot(row)
     blockers: list[str] = []
+    warnings: list[str] = []
 
     if account_id not in ACCOUNTS:
         blockers.append("unsupported_account")
     if route not in ROUTES:
         blockers.append("unsupported_route")
 
+    hard_required = {
+        "public_post_text", "source_id", "permission_evidence",
+        "media_asset_id", "media_url", "publisher_media_type",
+    }
     for field in COMMON_REQUIRED:
         if not _text(row.get(field)):
-            blockers.append(f"{field}_missing")
+            target = blockers if field in hard_required else warnings
+            target.append(f"{field}_missing")
 
     if route == "direct_reference_media":
         if not _text(row.get("source_post_id")):
@@ -127,26 +140,32 @@ def candidate_blockers(row: dict[str, Any]) -> list[str]:
 
     for field in PASS_FIELDS:
         if _text(row.get(field)).upper() != "PASS":
-            blockers.append(f"{field}_not_pass")
+            warnings.append(f"{field}_not_pass")
     for field in TRUE_FIELDS:
         if not _truthy(row.get(field)):
-            blockers.append(f"{field}_not_true")
+            warnings.append(f"{field}_not_true")
     for field, expected in EXPECTED_VERSIONS.items():
         if _text(row.get(field)) != expected:
-            blockers.append(f"{field}_invalid")
+            warnings.append(f"{field}_invalid")
 
     if _number(row.get("topic_confidence")) < 0.70:
-        blockers.append("topic_confidence_below_threshold")
+        warnings.append("topic_confidence_below_threshold")
     if _number(row.get("main_claim_coverage")) < 1.0:
-        blockers.append("main_claim_coverage_below_threshold")
+        warnings.append("main_claim_coverage_below_threshold")
     if int(_number(row.get("unsupported_claim_count"), -1)) != 0:
-        blockers.append("unsupported_claims_present")
+        warnings.append("unsupported_claims_present")
 
-    return sorted(set(blockers))
+    return sorted(set(blockers)), sorted(set(warnings))
+
+
+def candidate_blockers(row: dict[str, Any]) -> list[str]:
+    """Compatibility wrapper: only Media V1 Hard Gate failures block."""
+    blockers, _warnings = candidate_gate_results(row)
+    return blockers
 
 
 def build_queue_row(candidate: dict[str, Any]) -> dict[str, Any]:
-    blockers = candidate_blockers(candidate)
+    blockers, warnings = candidate_gate_results(candidate)
     if blockers:
         raise ValueError("candidate_blocked:" + ",".join(blockers))
 
@@ -175,9 +194,14 @@ def build_queue_row(candidate: dict[str, Any]) -> dict[str, Any]:
             "account_id": account_id,
             "target_account_id": account_id,
             "platform": "threads",
-            "status": "WAITING_REVIEW",
-            "auto_publish": "false",
-            "ai_publish_recommendation": "review",
+            "status": "READY",
+            "auto_publish": "true",
+            "automated_approved": "true",
+            "human_approved": "false",
+            "approval_source": "media_v1_hard_gate",
+            "approval_policy": "hard_gate_required_soft_gate_warn_only",
+            "approval_mode": "autonomous_media_v1",
+            "ai_publish_recommendation": "auto_publish",
             "content_route": route,
             "content_type": route,
             "generation_mode": generation_mode,
@@ -196,13 +220,25 @@ def build_queue_row(candidate: dict[str, Any]) -> dict[str, Any]:
             "result_id": "",
             "error": "",
             "blocked_reason": "",
+            "human_review_status": "UNREVIEWED",
+            "human_review_reason": "",
+            "human_review_note": "",
+            "reviewed_at": "",
+            **hard_gate_fields(blockers),
+            **warning_fields(warnings),
         }
     )
     return row
 
 
 def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
-    expected = {(account, route) for account in ACCOUNTS for route in ROUTES}
+    present_accounts = {
+        _slot(candidate)[0]
+        for candidate in candidates
+        if _slot(candidate)[0] in ACCOUNTS
+    }
+    expected_accounts = tuple(account for account in ACCOUNTS if account in present_accounts)
+    expected = {(account, route) for account in expected_accounts for route in ROUTES}
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for candidate in candidates:
         grouped.setdefault(_slot(candidate), []).append(dict(candidate))
@@ -223,7 +259,7 @@ def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     if not missing and not duplicates:
         for account, route in sorted(expected):
             candidate = grouped[(account, route)][0]
-            blockers = candidate_blockers(candidate)
+            blockers, warnings = candidate_gate_results(candidate)
             if blockers:
                 failures.append(
                     {
@@ -233,16 +269,18 @@ def build_plan(candidates: list[dict[str, Any]]) -> dict[str, Any]:
                     }
                 )
             else:
-                rows.append(build_queue_row(candidate))
+                row = build_queue_row(candidate)
+                row["soft_warning_codes"] = warning_fields(warnings)["soft_warning_codes"]
+                rows.append(row)
 
     status = (
         "PASS"
-        if len(rows) == 4 and not missing and not duplicates and not failures
+        if len(rows) == len(expected) and not missing and not duplicates and not failures
         else "BLOCKED"
     )
     return {
         "status": status,
-        "expected_row_count": 4,
+        "expected_row_count": len(expected),
         "row_count": len(rows),
         "missing_slots": missing,
         "duplicate_slots": duplicates,

@@ -163,6 +163,8 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "media_primary_topic", "visual_topic", "visual_topic_match",
         "visual_cta_match", "visual_plan_version", "visual_text_hash",
         "publisher_media_type", "media_type",
+        "hard_gate_status", "soft_warning_status", "soft_warning_count",
+        "soft_warning_codes", "soft_warning_summary", "human_review_status",
     ],
     # Threads投稿などの計測スナップショット。取得不能値は空欄のまま保存し、0確定と区別する。
     "metric_snapshots": [
@@ -310,13 +312,19 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "canary_id",
         # Explicit human decision imported from the publication review tab.
         "human_review_decision", "human_reviewed_at", "human_review_note",
+        # Media V1 separates non-negotiable publish safety from quality
+        # telemetry. UNREVIEWED is post-hoc feedback and never blocks READY.
+        "hard_gate_status", "hard_gate_blocked_reasons", "media_readiness_status",
+        "soft_warning_status", "soft_warning_count", "soft_warning_codes", "soft_warning_summary",
+        "human_review_status", "human_review_reason", "reviewed_at",
     ],
     # Human-facing review board. queue remains the operational source of truth;
     # this tab mirrors safe previews and preserves operator decisions.
     "publication_review": [
         "review_id", "queue_id", "account_id", "platform", "post_type",
         "queue_status", "review_status", "public_post_text",
-        "media_asset_id", "media_preview_url", "media_type", "source_url",
+        "media_asset_id", "media_preview_url", "media_type", "source_url", "source_id",
+        "caption", "threads_permalink",
         "primary_topic", "validator_status", "internal_leak_status",
         "account_fit_status", "topic_coherence_status", "batch_diversity_status",
         "voice_persona_status", "voice_persona_score", "polite_ending_ratio",
@@ -333,6 +341,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "automated_approved", "human_approved",
         "provider_status", "provider_error_type", "provider_http_status",
         "provider_mode", "fallback_mode", "fallback_reason",
+        "hard_gate_status", "hard_gate_blocked_reasons", "media_readiness_status",
+        "soft_warning_status", "soft_warning_count", "soft_warning_codes", "soft_warning_summary",
+        "human_review_status", "human_review_reason", "human_review_note", "reviewed_at",
     ],
     # 操作ログ。エラー追跡・実行履歴に使う。
     "logs": [
@@ -761,6 +772,9 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "source_video_id", "clip_candidate_id", "media_asset_id",
         "post_url", "external_post_id", "posted_text", "status", "metrics_status",
         "posted_at", "created_at", "updated_at", "notes",
+        "hard_gate_status", "soft_warning_status", "soft_warning_count",
+        "soft_warning_codes", "soft_warning_summary", "human_review_status",
+        "human_review_reason", "human_review_note", "reviewed_at",
     ],
     "media_metrics": [
         "media_metrics_id", "media_post_result_id", "result_id", "account_id", "platform",
