@@ -26,6 +26,9 @@ def main() -> int:
          and '--queue-id "$QUEUE_ID"' in content),
         ("dry-run before process", content.find("Queue worker dry-run") < content.find("Process queue")),
         ("real env scoped", "PUBLISH_ENABLED:" in content and "ALLOW_REAL_THREADS_POST:" in content),
+        ("media env scoped", "ALLOW_MEDIA_POSTS:" in content
+         and "ALLOW_REAL_THREADS_VIDEO_POST:" in content
+         and content.count("github.event.inputs.confirm_real_post == 'true'") >= 5),
         ("no x publisher", "publish_x_post.py" not in content),
         ("beauty option is explicit", '"beauty_account"' in content and "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT" in content),
         ("verify after", "Sheets verify after processing" in content),
