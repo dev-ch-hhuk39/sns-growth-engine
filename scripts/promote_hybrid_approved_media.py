@@ -22,6 +22,8 @@ from hybrid_ai_policy import requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
+from media_post_validator import validate_media_post  # noqa: E402
+from media_v1_policy import hard_gate_fields, warning_fields  # noqa: E402
 
 MEDIA_MODES = {
     "direct_reference_media",
@@ -42,6 +44,40 @@ def is_media(row: dict[str, Any]) -> bool:
     return mode in MEDIA_MODES or truthy(row.get("media_required"))
 
 
+def media_validation_plan(row: dict[str, Any]) -> dict[str, Any]:
+    media_url = str(row.get("media_url") or row.get("storage_url") or "").strip()
+    return {
+        "rights_status": row.get("rights_status", ""),
+        "permission_status": row.get("permission_status", ""),
+        "media_url": media_url,
+        "media_asset_id": row.get("media_asset_id", ""),
+        "platform": row.get("platform", "threads"),
+        "account_id": row.get("account_id", ""),
+        "target_account_id": row.get("target_account_id") or row.get("account_id", ""),
+        "media_type": row.get("media_type", "video"),
+        "content_type": row.get("content_type") or row.get("content_route", ""),
+        "publisher_media_type": row.get("publisher_media_type", ""),
+        "media_urls": [media_url] if media_url else [],
+        "duration_seconds": row.get("duration_seconds", 0),
+        "aspect_ratio": row.get("aspect_ratio", ""),
+        "aspect_ratio_policy": row.get("aspect_ratio_policy", "preserve_source"),
+        "source_aspect_ratio": row.get("source_aspect_ratio", ""),
+        "video_stream_count": row.get("video_stream_count", 0),
+        "audio_stream_count": row.get("audio_stream_count", 0),
+        "media_probe_status": row.get("media_probe_status", ""),
+        "enforce_video_stream_evidence": row.get("enforce_video_stream_evidence", "false"),
+        "public_post_text": row.get("public_post_text", ""),
+        "media_origin": row.get("media_origin", "approved_source_clip"),
+        "caption_mode": row.get("caption_mode", "transform"),
+        "alignment_status": row.get("alignment_status", ""),
+        "final_alignment_score": row.get("final_alignment_score", ""),
+        "main_claim_coverage": row.get("main_claim_coverage", ""),
+        "unsupported_claim_count": row.get("unsupported_claim_count", ""),
+        "source_copy_similarity": row.get("source_copy_similarity", ""),
+        "recent_post_similarity": row.get("recent_post_similarity", ""),
+    }
+
+
 def build_plan(
     client: SheetsClient,
     account_id: str,
@@ -52,6 +88,7 @@ def build_plan(
 ) -> dict[str, Any]:
     requested = set(queue_ids or set())
     rows = [dict(row) for row in read_records_safely(client, "queue")]
+    posted = [dict(row) for row in read_records_safely(client, "posted_results")]
     selected: list[dict[str, Any]] = []
     rejected: list[dict[str, str]] = []
     for row in rows:
@@ -59,6 +96,9 @@ def build_plan(
         if requested and queue_id not in requested:
             continue
         if str(row.get("account_id") or row.get("target_account_id") or "") != account_id:
+            continue
+        if str(row.get("target_account_id") or account_id) != account_id:
+            rejected.append({"queue_id": queue_id, "reasons": "account_namespace_mismatch"})
             continue
         if str(row.get("slot_id", "")) != slot_id:
             continue
@@ -77,21 +117,12 @@ def build_plan(
         reasons: list[str] = []
         if not is_media(row):
             reasons.append("not_media")
-        if not requires_hybrid_ai_gate(row):
-            reasons.append("hybrid_gate_not_required")
+        hybrid_required = requires_hybrid_ai_gate(row)
         gate_ok, gate_reason = hybrid_ai_gate_passed(row, build_source_context(client, row))
-        if not gate_ok:
-            reasons.append(f"hybrid_ai_gate_{gate_reason}")
         if str(row.get("rights_status", "")).lower() not in ALLOWED_RIGHTS:
             reasons.append("rights_not_allowed")
         if str(row.get("permission_status", "")).lower() not in {"approved", "not_required"}:
             reasons.append("permission_not_approved")
-        if str(row.get("validator_status", "")).upper() != "PASS":
-            reasons.append("validator_not_pass")
-        if str(row.get("internal_leak_status", "")).upper() != "PASS":
-            reasons.append("internal_leak_not_pass")
-        if str(row.get("account_fit_status", "")).upper() != "PASS":
-            reasons.append("account_fit_not_pass")
         media_url = str(
             row.get("media_url")
             or row.get("storage_url")
@@ -100,10 +131,34 @@ def build_plan(
         ).strip()
         if not media_url:
             reasons.append("media_url_missing")
+        identities = {
+            "media_asset_id": str(row.get("media_asset_id", "")),
+            "source_post_id": str(row.get("source_post_id", "")),
+            "source_video_id": str(row.get("source_video_id", "")),
+            "clip_candidate_id": str(row.get("clip_candidate_id") or row.get("video_clip_id") or ""),
+        }
+        for posted_row in posted:
+            if str(posted_row.get("account_id", "")) != account_id:
+                continue
+            if any(value and str(posted_row.get(field, "")) == value for field, value in identities.items()):
+                reasons.append("media_identity_already_posted")
+                break
+        validation = validate_media_post(media_validation_plan(row))
+        reasons.extend(validation.get("blocked_reasons", []))
         if reasons:
             rejected.append({"queue_id": queue_id, "reasons": ",".join(reasons)})
             continue
-        selected.append(row)
+        soft = list(validation.get("soft_warning_codes", []))
+        if not hybrid_required:
+            soft.append("HYBRID_AI_NOT_REQUIRED_FOR_ROUTE")
+        if not gate_ok:
+            soft.append(f"HYBRID_AI_{gate_reason.upper()}")
+        selected.append({
+            **row,
+            **hard_gate_fields([]),
+            **warning_fields(soft),
+            "human_review_status": str(row.get("human_review_status") or "UNREVIEWED"),
+        })
     selected.sort(
         key=lambda row: (
             int(str(row.get("priority", "999") or "999")),
@@ -120,6 +175,14 @@ def build_plan(
         "selected_queue_ids": [str(row.get("queue_id", "")) for row in chosen],
         "updated_queue_ids": [],
         "rejected": rejected[:20],
+        "promotion_fields": {
+            str(row.get("queue_id", "")): {
+                **hard_gate_fields([]),
+                **warning_fields(json.loads(str(row.get("soft_warning_codes") or "[]"))),
+                "human_review_status": str(row.get("human_review_status") or "UNREVIEWED"),
+            }
+            for row in chosen
+        },
         "would_post": False,
     }
 
@@ -129,6 +192,7 @@ def apply(client: SheetsClient, result: dict[str, Any], *, autonomous_low_risk: 
     policy = str(managed_account(result["account_id"]).get("review_policy", ""))
     approval_source = policy if autonomous_low_risk else "human_review"
     for queue_id in result["selected_queue_ids"]:
+        media_fields = dict(result.get("promotion_fields", {}).get(queue_id, {}))
         client.update_queue_item(
             queue_id,
             status="READY",
@@ -143,6 +207,7 @@ def apply(client: SheetsClient, result: dict[str, Any], *, autonomous_low_risk: 
                 if autonomous_low_risk
                 else "human_review_hybrid_ai_and_persisted_media_validators_passed"
             ),
+            **media_fields,
         )
         updated.append(queue_id)
     rows_after = {

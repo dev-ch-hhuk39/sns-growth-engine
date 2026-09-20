@@ -66,10 +66,9 @@ assert "account_allows_autonomous_ready" in wrapper
 for token in (
     "rights_not_allowed",
     "permission_not_approved",
-    "validator_not_pass",
-    "internal_leak_not_pass",
-    "account_fit_not_pass",
-    "hybrid_ai_gate_",
+    "media_identity_already_posted",
+    "hard_gate_fields",
+    "warning_fields",
 ):
     assert token in promoter, token
 

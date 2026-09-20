@@ -421,13 +421,13 @@ old_invalid_result = (
 
 assert (
     old_invalid_result["status"]
-    == "BLOCKED"
+    == "PASS"
 )
 
 assert (
     "source_preservation_similarity_below_threshold"
     in old_invalid_result[
-        "blocked_reasons"
+        "soft_warning_codes"
     ]
 )
 
@@ -451,7 +451,7 @@ transform_result = (
 assert (
     "source_copy_similarity_above_threshold"
     in transform_result[
-        "blocked_reasons"
+        "soft_warning_codes"
     ]
 )
 

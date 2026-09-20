@@ -32,6 +32,10 @@ def direct_selection(account_id: str = "liver_manager"):
         original_text = "夜職で店を選ぶ時は、時給と控除、客層を確認して体験入店することが大事です。"
         visual_summary = "夜職の店選びについて、時給と控除、客層を説明している"
         visible_text = "夜職 店 時給 控除 客層"
+    elif account_id == "beauty_account":
+        original_text = "Beauty skincare hydration guidance for sensitive skin."
+        visual_summary = "Beauty skincare and hydration video"
+        visible_text = "beauty skincare hydration"
     else:
         original_text = "配信で初見が入りやすい挨拶とコメントの入口を作ることが大事です。"
         visual_summary = "配信者が初見への挨拶とコメントについて話している"
@@ -70,6 +74,8 @@ def clip_selection(account_id: str = "liver_manager"):
         if account_id == "night_scout"
         else "配信で初見に挨拶してコメントの入口を作ると、リスナーが参加しやすくなります。"
     )
+    if account_id == "beauty_account":
+        transcript = "Beauty skincare hydration guidance for sensitive skin and a simple routine."
     clip = {
         "clip_candidate_id": f"clip_{account_id}",
         "source_video_id": f"sv_{account_id}",
@@ -222,7 +228,7 @@ def activation_planner(rows: list[dict[str, Any]]) -> dict[str, Any]:
     expected = {(a, r) for a in mod.ACCOUNTS for r in mod.ROUTES}
     actual = {(row["account_id"], row["content_route"]) for row in rows}
     return {
-        "status": "PASS" if actual == expected and len(rows) == 4 else "BLOCKED",
+        "status": "PASS" if actual == expected and len(rows) == len(expected) else "BLOCKED",
         "row_count": len(rows),
         "rows": rows,
     }
@@ -256,10 +262,10 @@ def plan(**overrides: Any):
     return mod.build_review_evidence_plan(**args)
 
 
-def test_four_rows_waiting_review_only() -> None:
+def test_all_account_rows_waiting_review_only() -> None:
     result = plan()
     assert result["status"] == "PASS"
-    assert result["candidate_count"] == 4
+    assert result["candidate_count"] == len(mod.ACCOUNTS) * len(mod.ROUTES)
     assert all(row["status"] == "WAITING_REVIEW" for row in result["candidates"])
     assert all(str(row["auto_publish"]).lower() == "false" for row in result["candidates"])
 
@@ -278,23 +284,26 @@ def test_no_ready_or_publish_side_effects() -> None:
 
 def test_missing_permission_blocks_candidate() -> None:
     permissions = {
-        ("night_scout", "direct_reference_media"): {},
-        ("night_scout", "approved_source_clip"): permission("src_clip_night_scout"),
-        ("liver_manager", "direct_reference_media"): permission("src_liver_manager"),
-        ("liver_manager", "approved_source_clip"): permission("src_clip_liver_manager"),
+        (account, route): permission(
+            f"src_{account}" if route == "direct_reference_media" else f"src_clip_{account}"
+        )
+        for account in mod.ACCOUNTS
+        for route in mod.ROUTES
     }
+    permissions[("night_scout", "direct_reference_media")] = {}
     result = plan(permissions=permissions)
     assert result["status"] == "BLOCKED"
-    assert result["candidate_count"] == 3
+    assert result["candidate_count"] == len(mod.ACCOUNTS) * len(mod.ROUTES) - 1
     item = next(x for x in result["candidate_diagnostics"] if x["account_id"] == "night_scout" and x["content_route"] == "direct_reference_media")
     assert "permission_id_missing" in item["blockers"]
 
 
 def test_missing_source_stays_missing() -> None:
-    direct = {"night_scout": None, "liver_manager": direct_selection("liver_manager")}
+    direct = {account: direct_selection(account) for account in mod.ACCOUNTS}
+    direct["night_scout"] = None
     result = plan(direct_selections=direct)
     assert "night_scout:direct_reference_media" in result["missing_source_slots"]
-    assert result["candidate_count"] == 3
+    assert result["candidate_count"] == len(mod.ACCOUNTS) * len(mod.ROUTES) - 1
 
 
 def test_quiet_environment_contract() -> None:

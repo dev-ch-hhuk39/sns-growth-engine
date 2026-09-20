@@ -28,6 +28,7 @@ from content_slot_runs import business_date, build_slot_run, claim_slot_run, exi
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
 from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
 from media_post_validator import validate_media_post  # noqa: E402
+from media_v1_policy import hard_gate_fields, split_public_validation, warning_fields  # noqa: E402
 from media.media_probe import asset_has_video_evidence  # noqa: E402
 from media_growth_schemas import build_media_pdca_records, extract_video_id  # noqa: E402
 from media_activation_source_suitability import clip_source_suitability  # noqa: E402
@@ -390,10 +391,11 @@ def _build_final_caption_bundle(
     media_asset: dict[str, Any] | None = None,
 ) -> tuple[SourcePostBundle | None, str, list[str]]:
     """Build one exact clip evidence packet for final captioning."""
-    reasons: list[str] = []
+    hard_reasons: list[str] = []
+    soft_warnings: list[str] = []
 
     if not _true(clip.get("transcript_grounded")):
-        reasons.append("transcript_grounding_required")
+        soft_warnings.append("transcript_grounding_required")
 
     transcript_excerpt = str(
         clip.get("transcript_excerpt")
@@ -401,7 +403,7 @@ def _build_final_caption_bundle(
     ).strip()
 
     if not transcript_excerpt:
-        reasons.append("transcript_excerpt_missing")
+        soft_warnings.append("transcript_excerpt_missing")
 
     # Sheets returns zero as a number; it is a valid start, not a missing value.
     start_seconds = next((str(clip[key]).strip() for key in ("start_seconds", "start_time")
@@ -410,15 +412,15 @@ def _build_final_caption_bundle(
                         if clip.get(key) is not None and str(clip[key]).strip()), "")
 
     if not start_seconds or not end_seconds:
-        reasons.append("final_clip_time_range_missing")
+        hard_reasons.append("final_clip_time_range_missing")
     else:
         from math import isfinite
         try:
             start, end = float(start_seconds), float(end_seconds)
             if not isfinite(start) or not isfinite(end) or start < 0 or end <= start:
-                reasons.append("final_clip_time_range_invalid")
+                hard_reasons.append("final_clip_time_range_invalid")
         except ValueError:
-            reasons.append("final_clip_time_range_invalid")
+            hard_reasons.append("final_clip_time_range_invalid")
 
     video_url = str(
         source_video.get("canonical_video_url")
@@ -427,10 +429,10 @@ def _build_final_caption_bundle(
     ).strip()
 
     if not is_individual_video_url(video_url):
-        reasons.append("individual_video_url_required")
+        hard_reasons.append("individual_video_url_required")
 
-    if reasons:
-        return None, transcript_excerpt, reasons
+    if hard_reasons:
+        return None, transcript_excerpt, hard_reasons
 
     source_video_id = str(
         source_video.get("source_video_id")
@@ -462,7 +464,14 @@ def _build_final_caption_bundle(
 
     # A generated clip caption must be grounded in the selected time
     # range, not in the broader parent-video title or description.
-    source_text = transcript_excerpt
+    source_text = transcript_excerpt or str(
+        source_video.get("description_preview")
+        or source_video.get("description")
+        or source_video.get("title")
+        or clip.get("hook_text")
+        or clip.get("reason")
+        or ""
+    ).strip()
 
     clip_identity = "\n".join([
         transcript_excerpt,
@@ -509,7 +518,7 @@ def _build_final_caption_bundle(
         content_hash=content_hash,
     )
 
-    return bundle, transcript_excerpt, []
+    return bundle, transcript_excerpt, soft_warnings
 
 
 def _default_final_caption_service(
@@ -573,7 +582,7 @@ def _generate_final_media_caption(
         )
     )
 
-    if grounding_reasons or bundle is None:
+    if bundle is None:
         return {
             "status": "REVIEW_REQUIRED",
             "public_post_text": "",
@@ -590,6 +599,7 @@ def _generate_final_media_caption(
             "recent_post_similarity": 1,
             "claim_support_json": "[]",
         }
+    transcript_excerpt = transcript_excerpt or str(bundle.original_post_text or "")
 
     uses_default_caption_service = (
         caption_service is None
@@ -738,12 +748,8 @@ def _generate_final_media_caption(
             "blocked_reasons": attempt_reasons,
         })
 
-        passed = (
-            output.get("status") == "PASS"
-            and semantic.get("status") == "PASS"
-            and validation.get("status") == "PASS"
-            and bool(finalized_text)
-        )
+        public_hard, public_soft = split_public_validation(validation)
+        passed = bool(finalized_text) and not public_hard
 
         if passed:
             return {
@@ -752,6 +758,9 @@ def _generate_final_media_caption(
                 "caption_attempt_count": attempt,
                 "caption_attempts": attempts,
                 "blocked_reasons": [],
+                "soft_warning_codes": sorted(set(
+                    grounding_reasons + public_soft + attempt_reasons
+                )),
                 "caption_provider": str(
                     output.get("provider_name", "")
                 ),
@@ -904,18 +913,17 @@ def _generate_final_media_caption(
             "blocked_reasons": evidence_reasons,
             "source_mode": "evidence_context",
         })
-        if (
-            evidence_output.get("status") == "PASS"
-            and evidence_semantic.get("status") == "PASS"
-            and evidence_validation.get("status") == "PASS"
-            and bool(evidence_text)
-        ):
+        evidence_hard, evidence_soft = split_public_validation(evidence_validation)
+        if bool(evidence_text) and not evidence_hard:
             return {
                 "status": "PASS",
                 "public_post_text": evidence_text,
                 "caption_attempt_count": len(attempts),
                 "caption_attempts": attempts,
                 "blocked_reasons": [],
+                "soft_warning_codes": sorted(set(
+                    grounding_reasons + evidence_soft + evidence_reasons
+                )),
                 "caption_provider": str(
                     evidence_output.get(
                         "provider_name",
@@ -1073,15 +1081,8 @@ def _generate_final_media_caption(
             "source_mode": "source_copyedit",
         })
 
-        if (
-            copyedit_output.get("status")
-            == "PASS"
-            and copyedit_semantic.get("status")
-            == "PASS"
-            and copyedit_validation.get("status")
-            == "PASS"
-            and bool(copyedit_text)
-        ):
+        copyedit_hard, copyedit_soft = split_public_validation(copyedit_validation)
+        if bool(copyedit_text) and not copyedit_hard:
             return {
                 "status": "PASS",
                 "public_post_text": copyedit_text,
@@ -1090,6 +1091,9 @@ def _generate_final_media_caption(
                 ),
                 "caption_attempts": attempts,
                 "blocked_reasons": [],
+                "soft_warning_codes": sorted(set(
+                    grounding_reasons + copyedit_soft + copyedit_reasons
+                )),
                 "caption_provider": str(
                     copyedit_output.get(
                         "provider_name",
@@ -1555,6 +1559,7 @@ def select_saved_media_candidate(
             reasons.append(f"{media_id}:synthetic_media_forbidden")
             continue
 
+        candidate_warnings: list[str] = []
         clip_status = str(
             clip.get("clip_status")
             or clip.get("reviewer_status")
@@ -1570,8 +1575,10 @@ def select_saved_media_candidate(
             and str(clip.get("last_error", "")).startswith("caption:")
         )
         if clip_status not in {"READY", "AUTO_APPROVED", "MEDIA_READY"} and not caption_retry:
-            reasons.append(f"{media_id}:clip_not_ready")
-            continue
+            if clip_status:
+                candidate_warnings.append(f"clip_status_{clip_status.lower()}")
+            else:
+                candidate_warnings.append("clip_status_blank_repaired")
 
         # Reuse the final-caption evidence contract at selection time so an
         # uploaded asset cannot be chosen unless its transcript, exact time
@@ -1584,19 +1591,18 @@ def select_saved_media_candidate(
                 media_asset=asset,
             )
         )
-        if bundle is None or grounding_reasons:
+        if bundle is None:
             for reason in grounding_reasons or [
                 "final_caption_evidence_missing"
             ]:
                 reasons.append(f"{media_id}:{reason}")
             continue
+        candidate_warnings.extend(grounding_reasons)
 
         _source_evidence, source_blockers = clip_source_suitability(
             account_id=account_id, transcript=_transcript_excerpt,
         )
-        if source_blockers:
-            reasons.extend(f"{media_id}:{reason}" for reason in source_blockers)
-            continue
+        candidate_warnings.extend(source_blockers)
 
         if not asset_has_video_evidence(
             asset
@@ -1607,7 +1613,11 @@ def select_saved_media_candidate(
             )
             continue
 
-        candidates.append((clip, source_video, asset))
+        candidates.append((
+            {**clip, "_media_v1_soft_warnings": candidate_warnings},
+            source_video,
+            asset,
+        ))
     if not candidates:
         return None, None, None, reasons
     candidates.sort(key=lambda row: str(row[2].get("uploaded_at") or row[2].get("created_at") or ""))
@@ -2047,6 +2057,13 @@ def prepare_saved_media_queue(plan: dict[str, Any], client: SheetsClient) -> dic
         "audio_stream_count": asset.get("audio_stream_count", 0),
         "media_probe_status": asset.get("media_probe_status", ""),
         "enforce_video_stream_evidence": "true",
+        **hard_gate_fields(validation.get("blocked_reasons", [])),
+        **warning_fields(
+            list(clip.get("_media_v1_soft_warnings", []))
+            + list(caption.get("soft_warning_codes", []))
+            + list(validation.get("soft_warning_codes", []))
+        ),
+        "human_review_status": "UNREVIEWED",
         "blocked_reason": "hybrid_ai_gate_pending",
         "error": "hybrid_ai_gate_pending",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -2258,6 +2275,13 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
             "",
         ),
         "enforce_video_stream_evidence": "true",
+        **hard_gate_fields(validation.get("blocked_reasons", [])),
+        **warning_fields(
+            list(clip.get("_media_v1_soft_warnings", []))
+            + list(caption.get("soft_warning_codes", []))
+            + list(validation.get("soft_warning_codes", []))
+        ),
+        "human_review_status": "UNREVIEWED",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     existing_queue_ids = {str(row.get("queue_id", "")) for row in _records(client, "queue")}

@@ -122,6 +122,17 @@ def verify_delivery(client, queue: dict, result: dict) -> dict:
     jobs = [r for r in records(client, "metrics_collection_jobs") if r.get("result_id") == post.get("result_id")]
     if len(jobs) != 3 or {str(r.get("window_hours")) for r in jobs} != {"24", "72", "168"} or any(r.get("account_id") != queue["account_id"] for r in jobs):
         raise RuntimeError("DELIVERY_METRICS_UNVERIFIED")
+    if has_media(queue):
+        media_results = [
+            row for row in records(client, "media_post_results")
+            if row.get("result_id") == post.get("result_id")
+            and row.get("queue_id") == queue.get("queue_id")
+            and row.get("account_id") == queue.get("account_id")
+            and row.get("status") == "POSTED"
+            and row.get("post_url") == post.get("post_url")
+        ]
+        if len(media_results) != 1:
+            raise RuntimeError("DELIVERY_MEDIA_RESULT_UNVERIFIED")
     return post
 
 
@@ -201,11 +212,14 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                         delivery_engine="buffered_v1",
                         code_revision=os.environ.get("CODE_REVISION") or os.environ.get("GITHUB_SHA", ""),
                         actual_post_type="text_fallback" if media_fallback else route, fallback_level=int(fallback),
-                        no_post_reason="NO_ELIGIBLE_MEDIA" if media_fallback else "PRIMARY_ROUTE_UNAVAILABLE" if fallback else "", queue_id=chosen["queue_id"],
+                        no_post_reason="NO_HARD_GATE_MEDIA" if media_fallback else "PRIMARY_ROUTE_UNAVAILABLE" if fallback else "", queue_id=chosen["queue_id"],
                         result_id=post["result_id"], post_url=post["post_url"], actual_posted_at=post["posted_at"]))
                     outcomes.append({**slot, "status": "POSTED", "queue_id": chosen["queue_id"],
                                      "result_id": post["result_id"], "post_url": post["post_url"],
-                                     "actual_route": route, "media_fallback": media_fallback})
+                                     "actual_route": route, "media_fallback": media_fallback,
+                                     "expected_type": slot["post_type"],
+                                     "actual_type": "text_fallback" if media_fallback else route,
+                                     "fallback_reason": "NO_HARD_GATE_MEDIA" if media_fallback else ""})
                 except Exception as exc:
                     # process_one changes READY to PROCESSING immediately before
                     # invoking Threads.  A uniquely READY row therefore proves

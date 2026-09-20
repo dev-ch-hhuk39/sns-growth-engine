@@ -18,7 +18,7 @@ base = {
 blocked = validate_media_post(base)
 passed = validate_media_post({**base, "alignment_status": "PASS", "final_alignment_score": 0.9, "main_claim_coverage": 1, "unsupported_claim_count": 0, "source_copy_similarity": 0.3, "recent_post_similarity": 0.2})
 checks = [
-    ("missing semantic evidence is blocked", blocked["status"] == "BLOCKED"),
+    ("missing semantic evidence warns", blocked["status"] == "PASS" and blocked["soft_warning_count"] > 0),
     ("fully aligned media plan passes", passed["status"] == "PASS"),
 ]
 for name, ok in checks:

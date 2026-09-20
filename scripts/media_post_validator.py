@@ -16,12 +16,17 @@ from accounts.managed_accounts import managed_account
 from generation.semantic_alignment import ALIGNMENT_THRESHOLDS
 from generation.source_copyedit import validate_source_preserving_public_post
 from media.media_probe import asset_has_video_evidence
+from media_v1_policy import split_media_reasons
 
 APPROVED_RIGHTS = {"owned", "licensed", "approved_creator_clip"}
 DIRECT_REFERENCE_MAX_VIDEO_SECONDS = 300
 
 
-def publisher_media_type(content_type: str, media_urls: list[str] | None = None) -> str:
+def publisher_media_type(
+    content_type: str,
+    media_urls: list[str] | None = None,
+    media_type: str = "",
+) -> str:
     """Normalize product content types before calling the Threads publisher."""
     content_type = str(content_type or "").lower()
     if content_type == "direct_carousel" or len(media_urls or []) > 1:
@@ -30,6 +35,8 @@ def publisher_media_type(content_type: str, media_urls: list[str] | None = None)
         return "VIDEO"
     if content_type == "direct_image":
         return "IMAGE"
+    if content_type == "direct_reference_media":
+        return "IMAGE" if str(media_type).lower() == "image" else "VIDEO"
     return ""
 
 
@@ -108,6 +115,8 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         reasons.append("media_url_missing")
     if not plan.get("media_asset_id"):
         reasons.append("media_asset_id_missing")
+    if not str(text or "").strip():
+        reasons.append("public_post_text_missing")
     if platform != "threads":
         reasons.append("platform_not_threads")
     try:
@@ -115,6 +124,9 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
     except ValueError:
         account = {}
         reasons.append("account_not_managed")
+    target_account_id = str(plan.get("target_account_id") or account_id)
+    if target_account_id != account_id:
+        reasons.append("account_namespace_mismatch")
     scheduled_route = (
         "direct_reference_media"
         if content_type in {"direct_image", "direct_video", "direct_carousel"}
@@ -138,7 +150,11 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
 
     if media_type not in {"video", "image"}:
         reasons.append("media_type_not_supported")
-    normalized_type = publisher_media_type(content_type, plan.get("media_urls") or [])
+    normalized_type = publisher_media_type(
+        content_type,
+        plan.get("media_urls") or [],
+        media_type,
+    )
     if content_type and not normalized_type:
         reasons.append("content_type_not_supported")
     if declared_publisher_type and normalized_type and declared_publisher_type != normalized_type:
@@ -214,11 +230,21 @@ def validate_media_post(plan: dict[str, Any]) -> dict[str, Any]:
         )
     if recent_similarity > ALIGNMENT_THRESHOLDS["recent_post_similarity"]:
         reasons.append("recent_post_similarity_above_threshold")
+    hard_reasons, soft_warnings = split_media_reasons(
+        reasons,
+        public_validation=text_result,
+    )
     return {
-        "status": "PASS" if not reasons else "BLOCKED",
-        "blocked_reasons": sorted(set(reasons)),
+        "status": "PASS" if not hard_reasons else "BLOCKED",
+        "blocked_reasons": hard_reasons,
+        "hard_gate_status": "PASS" if not hard_reasons else "BLOCKED",
+        "hard_gate_blocked_reasons": hard_reasons,
+        "soft_warning_status": "WARN" if soft_warnings else "PASS",
+        "soft_warning_count": len(soft_warnings),
+        "soft_warning_codes": soft_warnings,
+        "soft_warning_summary": ",".join(soft_warnings)[:500],
         "text_validation": text_result["status"],
-        "alignment_validation": "PASS" if not any(reason.startswith(("semantic_alignment", "final_alignment", "main_claim", "unsupported_claim", "source_copy", "source_preservation", "recent_post")) for reason in reasons) else "BLOCKED",
+        "alignment_validation": "PASS" if not soft_warnings else "WARN",
         "publisher_media_type": normalized_type,
         "caption_mode": caption_mode,
         "source_preserving": source_preserving,

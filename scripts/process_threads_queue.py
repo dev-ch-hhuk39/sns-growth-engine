@@ -39,6 +39,7 @@ from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E4
 from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import SheetsClient, _sheets_retry_reason  # noqa: E402
 from accounts.managed_accounts import account_choices, account_status, require_account_match  # noqa: E402
+from media_v1_policy import is_media_candidate, split_public_validation  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
 # WAITING_REVIEW はレビュー待ち（人間が approve_queue.py で READY に昇格させるまで投稿不可）、
@@ -495,6 +496,12 @@ def save_posted_result(
         "visual_text_hash": queue_row.get("visual_text_hash", ""),
         "publisher_media_type": queue_row.get("publisher_media_type", ""),
         "media_type": queue_row.get("media_type", ""),
+        "hard_gate_status": queue_row.get("hard_gate_status", ""),
+        "soft_warning_status": queue_row.get("soft_warning_status", ""),
+        "soft_warning_count": queue_row.get("soft_warning_count", ""),
+        "soft_warning_codes": queue_row.get("soft_warning_codes", ""),
+        "soft_warning_summary": queue_row.get("soft_warning_summary", ""),
+        "human_review_status": queue_row.get("human_review_status", "UNREVIEWED"),
         "source_queue_status": queue_row.get("status", ""),
         "save_source": "process_threads_queue",
         "created_by": "process_threads_queue",
@@ -526,6 +533,60 @@ def schedule_metrics_after_post(client: SheetsClient, result_id: str) -> int:
     return len(jobs)
 
 
+def save_media_post_result(
+    client: SheetsClient,
+    *,
+    queue_row: dict[str, Any],
+    result_id: str,
+    external_post_id: str,
+    post_url: str,
+    posted_text: str,
+) -> str:
+    """Persist the media-specific join row used by review and metrics."""
+    media_post_result_id = f"mpr_{result_id}"
+    existing = [
+        row for row in records(client, "media_post_results")
+        if str(row.get("result_id", "")) == result_id
+    ]
+    if existing:
+        return str(existing[0].get("media_post_result_id", ""))
+    append_row(client, "media_post_results", {
+        "media_post_result_id": media_post_result_id,
+        "result_id": result_id,
+        "queue_id": queue_row.get("queue_id", ""),
+        "account_id": queue_row.get("account_id", ""),
+        "platform": "threads",
+        "source_video_id": queue_row.get("source_video_id", ""),
+        "clip_candidate_id": queue_row.get("clip_candidate_id") or queue_row.get("video_clip_id", ""),
+        "media_asset_id": queue_row.get("media_asset_id", ""),
+        "post_url": post_url,
+        "external_post_id": external_post_id,
+        "posted_text": posted_text,
+        "status": "POSTED",
+        "metrics_status": "PENDING",
+        "posted_at": now_iso(),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+        "hard_gate_status": queue_row.get("hard_gate_status", "PASS"),
+        "soft_warning_status": queue_row.get("soft_warning_status", "PASS"),
+        "soft_warning_count": queue_row.get("soft_warning_count", 0),
+        "soft_warning_codes": queue_row.get("soft_warning_codes", "[]"),
+        "soft_warning_summary": queue_row.get("soft_warning_summary", ""),
+        "human_review_status": queue_row.get("human_review_status", "UNREVIEWED"),
+        "human_review_reason": queue_row.get("human_review_reason", ""),
+        "human_review_note": queue_row.get("human_review_note", ""),
+        "reviewed_at": queue_row.get("reviewed_at", ""),
+    })
+    saved = [
+        row for row in records(client, "media_post_results")
+        if str(row.get("result_id", "")) == result_id
+        and str(row.get("media_post_result_id", "")) == media_post_result_id
+    ]
+    if len(saved) != 1:
+        raise RuntimeError("MEDIA_POST_RESULT_READ_AFTER_WRITE_FAILED")
+    return media_post_result_id
+
+
 def write_fallback(queue_row: dict[str, Any], social: dict[str, Any] | None = None, text: str = "", result: Any = None, *, dry_run: bool = False) -> Path | None:
     if dry_run:
         return None
@@ -552,15 +613,10 @@ def build_media_validation_plan(
     media: dict[str, Any],
     text: str,
 ) -> dict[str, Any]:
-    direct_reference = (
-        str(
-            queue_row.get(
-                "generation_mode",
-                "",
-            )
-        )
-        == "direct_reference_media"
-    )
+    direct_reference = str(queue_row.get("generation_mode", "")) in {
+        "direct_reference_media",
+        "saved_direct_reference_media",
+    }
 
     return {
         "rights_status": queue_row.get(
@@ -579,6 +635,7 @@ def build_media_validation_plan(
         ],
         "platform": "threads",
         "account_id": account_id,
+        "target_account_id": queue_row.get("target_account_id") or account_id,
         "media_type": media[
             "media_type"
         ],
@@ -699,6 +756,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     social = find_social_for_queue(client, queue_row, social_rows)
     draft = find_draft_for_queue(queue_row, row_by_key(draft_rows, "draft_id"))
     text = text_for_queue(queue_row, social, draft)
+    media_candidate = is_media_candidate(queue_row)
 
     if account_id == BEAUTY_ACCOUNT:
         allowed, reason = beauty_publish_gate(dry_run=dry_run)
@@ -719,7 +777,7 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             queue_row,
             build_source_context(client, queue_row),
         )
-        if not gate_ok:
+        if not gate_ok and not media_candidate:
             status = "DRY_RUN_BLOCKED" if dry_run else "SAFETY_STOP_HYBRID_AI_GATE"
             reason = f"HYBRID_AI_GATE_BLOCKED:{gate_reason}"
             if not dry_run:
@@ -750,8 +808,10 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         else final_public_post_validator(text, account_id)
     )
 
-    if public_validation["status"] != "PASS":
-        reason = "FINAL_PUBLIC_POST_VALIDATOR_BLOCKED:" + ",".join(public_validation["blocked_reasons"])
+    public_hard_reasons, public_soft_warnings = split_public_validation(public_validation)
+    if public_validation["status"] != "PASS" and (not media_candidate or public_hard_reasons):
+        blocked = public_hard_reasons if media_candidate else public_validation["blocked_reasons"]
+        reason = "FINAL_PUBLIC_POST_VALIDATOR_BLOCKED:" + ",".join(blocked)
         if not dry_run:
             update_row(client, "queue", "queue_id", queue_id, {
                 "status": "BLOCKED_INTERNAL_LEAK",
@@ -887,7 +947,11 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=True,
         media_url=media["effective_media_url"] or None,
-        media_type=publisher_media_type(str(queue_row.get("content_type", "")), media["effective_media_urls"]) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
+        media_type=publisher_media_type(
+            str(queue_row.get("content_type", "")),
+            media["effective_media_urls"],
+            media["media_type"],
+        ) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
         media_urls=media["effective_media_urls"],
         media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )
@@ -917,6 +981,8 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "media_required": media["media_required"],
             "media_planned": bool(media["effective_media_url"]),
             "message": dry_result.message,
+            "soft_warning_status": "WARN" if public_soft_warnings else str(queue_row.get("soft_warning_status") or "PASS"),
+            "soft_warning_codes": sorted(set(public_soft_warnings)),
         }
 
     # media 付き実投稿は追加gateとmedia validatorが必須。既定ではOFF。
@@ -982,7 +1048,11 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         queue_item={"queue_id": queue_id, "platform": "threads"},
         dry_run=False,
         media_url=media["effective_media_url"] or None,
-        media_type=publisher_media_type(str(queue_row.get("content_type", "")), media["effective_media_urls"]) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
+        media_type=publisher_media_type(
+            str(queue_row.get("content_type", "")),
+            media["effective_media_urls"],
+            media["media_type"],
+        ) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
         media_urls=media["effective_media_urls"],
         media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )
@@ -1101,6 +1171,15 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "post_url": result.posted_url or "",
             "result_id": result_id,
         })
+        if media["effective_media_url"]:
+            save_media_post_result(
+                client,
+                queue_row=queue_row,
+                result_id=result_id,
+                external_post_id=result.external_post_id or "",
+                post_url=result.posted_url or "",
+                posted_text=text,
+            )
     except Exception as exc:
         fallback = write_fallback(queue_row, social, text, result)
         try:

@@ -75,17 +75,18 @@ def candidates() -> list[dict[str, object]]:
     ]
 
 
-def test_four_rows() -> None:
+def test_all_account_route_rows() -> None:
     plan = module.build_plan(candidates())
     assert plan["status"] == "PASS"
-    assert plan["row_count"] == 4
+    assert plan["row_count"] == len(module.ACCOUNTS) * len(module.ROUTES)
 
 
-def test_never_ready_or_publishable() -> None:
+def test_hard_pass_is_ready_but_not_posted() -> None:
     plan = module.build_plan(candidates())
     for row in plan["rows"]:
-        assert row["status"] == "WAITING_REVIEW"
-        assert row["auto_publish"] == "false"
+        assert row["status"] == "READY"
+        assert row["auto_publish"] == "true"
+        assert row["human_review_status"] == "UNREVIEWED"
         assert row["posted_at"] == ""
         assert row["post_url"] == ""
         assert row["result_id"] == ""
@@ -112,8 +113,8 @@ def test_duplicate_slot_blocks() -> None:
 
 if __name__ == "__main__":
     tests = (
-        test_four_rows,
-        test_never_ready_or_publishable,
+        test_all_account_route_rows,
+        test_hard_pass_is_ready_but_not_posted,
         test_missing_evidence_blocks,
         test_duplicate_slot_blocks,
     )
