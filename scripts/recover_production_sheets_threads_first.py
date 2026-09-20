@@ -1664,6 +1664,72 @@ def scope_verification_to_exact_text_queue(
     return result
 
 
+def scope_verification_to_exact_queue(
+    client: SheetsClient,
+    verification: dict[str, Any],
+    *,
+    queue_id: str,
+    account_id: str,
+) -> dict[str, Any]:
+    """Scope workbook-wide inventory checks to one exact publish operation.
+
+    The queue worker runs the exact row through the publisher dry-run before
+    enabling real publishing.  Workbook-wide media inventory findings from
+    unrelated historical rows must therefore remain visible, but cannot block
+    an otherwise valid exact row.  Identity, account, platform, status,
+    duplicate, publisher, and every row-level hard gate remain mandatory.
+    """
+    matches = [
+        row for row in _records(client, "queue")
+        if str(row.get("queue_id", "")).strip() == queue_id
+    ]
+    scope_reasons: list[str] = []
+    if len(matches) != 1:
+        scope_reasons.append("exact_queue_identity_not_unique")
+    row = matches[0] if len(matches) == 1 else {}
+    if str(row.get("account_id", "")).strip() != account_id:
+        scope_reasons.append("exact_queue_account_mismatch")
+    if str(row.get("platform", "threads")).strip().lower() != "threads":
+        scope_reasons.append("exact_queue_not_threads")
+    if str(row.get("status", "")).strip().upper() not in {"READY", "PROCESSING", "POSTED"}:
+        scope_reasons.append("exact_queue_status_not_publishable_or_posted")
+
+    result = dict(verification)
+    failed_before = list(result.get("failed", []))
+    non_applicable: list[str] = []
+    if not scope_reasons:
+        non_applicable = [
+            "media_approved_rows_rights_clear",
+            "media_no_unapproved_upload",
+            "media_uploaded_only_if_approved",
+            "generated_candidates_not_ready_by_default",
+            "no_ready_for_x_or_beauty",
+        ]
+        failed = [name for name in failed_before if name not in non_applicable]
+    else:
+        failed = failed_before + ["exact_queue_scope_invalid"]
+    result["failed"] = list(dict.fromkeys(failed))
+    result["passed"] = len(result.get("checks", {})) - len(result["failed"])
+    result["verification_scope"] = {
+        "mode": "EXACT_QUEUE",
+        "queue_id": queue_id,
+        "account_id": account_id,
+        "has_media": bool(
+            _bool(row.get("media_required"))
+            or str(row.get("media_asset_id", "")).strip()
+            or str(row.get("media_url", "")).strip()
+            or str(row.get("media_asset_ids_json", "")).strip() not in {"", "[]", "null", "None"}
+        ),
+        "status": "PASS" if not scope_reasons else "BLOCKED",
+        "blocked_reasons": scope_reasons,
+        "non_applicable_checks": non_applicable,
+        "historical_inventory_failures": [
+            name for name in failed_before if name in non_applicable
+        ],
+    }
+    return result
+
+
 def scope_verification_to_text_inventory(verification: dict[str, Any]) -> dict[str, Any]:
     """Scope pre-generation verification to the text-only inventory operation.
 
@@ -1783,7 +1849,8 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Do not write to Sheets")
     parser.add_argument("--audit-only", action="store_true", help="Only read tab state")
     parser.add_argument("--verify-only", action="store_true", help="Only run read-after-write verification")
-    parser.add_argument("--exact-text-queue-id", help="Scope unrelated media inventory checks to one text-only queue")
+    parser.add_argument("--exact-text-queue-id", help="Legacy: scope checks to one exact text-only queue")
+    parser.add_argument("--exact-queue-id", help="Scope unrelated inventory checks to one exact queue row")
     parser.add_argument(
         "--text-inventory-scope",
         action="store_true",
@@ -1803,12 +1870,13 @@ def main() -> int:
     if args.audit_only:
         result = {"audit": _audit_tabs(client), "credentials": credential_status()}
     elif args.verify_only:
+        exact_queue_id = args.exact_queue_id or args.exact_text_queue_id
         if args.post_publish_evidence_only:
-            if not args.exact_text_queue_id or not args.account_id:
-                parser.error("--post-publish-evidence-only requires --exact-text-queue-id and --account-id")
+            if not exact_queue_id or not args.account_id:
+                parser.error("--post-publish-evidence-only requires --exact-queue-id and --account-id")
             verification = verify_exact_text_post_evidence(
                 client,
-                queue_id=args.exact_text_queue_id,
+                queue_id=exact_queue_id,
                 account_id=args.account_id,
             )
         else:
@@ -1816,7 +1884,16 @@ def main() -> int:
             verification = verify_state(client)
             if args.text_inventory_scope:
                 verification = scope_verification_to_text_inventory(verification)
-            if args.exact_text_queue_id:
+            if args.exact_queue_id:
+                if not args.account_id:
+                    parser.error("--exact-queue-id requires --account-id")
+                verification = scope_verification_to_exact_queue(
+                    client,
+                    verification,
+                    queue_id=args.exact_queue_id,
+                    account_id=args.account_id,
+                )
+            elif args.exact_text_queue_id:
                 if not args.account_id:
                     parser.error("--exact-text-queue-id requires --account-id")
                 verification = scope_verification_to_exact_text_queue(

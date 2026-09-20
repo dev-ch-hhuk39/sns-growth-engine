@@ -29,7 +29,7 @@ def main() -> int:
         ("no x publisher", "publish_x_post.py" not in content),
         ("beauty option is explicit", '"beauty_account"' in content and "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT" in content),
         ("verify after", "Sheets verify after processing" in content),
-        ("verify scoped to exact text queue", content.count('--exact-text-queue-id "$QUEUE_ID"') == 2),
+        ("verify scoped to exact queue", content.count('--exact-queue-id "$QUEUE_ID"') == 2),
         ("post verify uses bounded evidence reads", "--post-publish-evidence-only" in content),
         ("existing evidence remains default", 'default: "REQUIRE_EXISTING_EVIDENCE"' in content),
         ("evidence gate skipped only by exact approval",

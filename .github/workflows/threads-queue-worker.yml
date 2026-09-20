@@ -178,15 +178,15 @@ jobs:
             --approve \
             --reason "Owner-approved exact Beauty queue via workflow run $GITHUB_RUN_ID"
 
-      # Dry-run may inspect a scoped candidate even when unrelated legacy
-      # evidence is incomplete. Real posting keeps every applicable global
-      # check blocking and excludes media inventory only for an exact text row.
+      # Exact-row publishing keeps identity/account/platform checks blocking.
+      # Unrelated historical inventory failures remain reported, while the
+      # exact row still has to pass the publisher dry-run and all hard gates.
       - name: Sheets verify before processing
         continue-on-error: ${{ github.event.inputs.mode == 'dry_run' }}
         run: |
           python3 scripts/recover_production_sheets_threads_first.py \
             --verify-only \
-            --exact-text-queue-id "$QUEUE_ID" \
+            --exact-queue-id "$QUEUE_ID" \
             --account-id "$ACCOUNT_ID"
 
       - name: Queue worker dry-run
@@ -234,7 +234,7 @@ jobs:
           python3 scripts/recover_production_sheets_threads_first.py \
             --verify-only \
             --post-publish-evidence-only \
-            --exact-text-queue-id "$QUEUE_ID" \
+            --exact-queue-id "$QUEUE_ID" \
             --account-id "$ACCOUNT_ID"
 
       - name: Upload posted_results fallback (if any)
