@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hybrid candidate rejection advances to the next Direct media candidate."""
+"""Soft Hybrid results reach promotion; only a hard promotion reject advances."""
 from __future__ import annotations
 
 import json
@@ -17,6 +17,7 @@ responses = iter([
     {"status": "INGESTED_BUNDLE"},
     {"status": "PREPARED", "queue_id": "q_bad"},
     {"status": "PASS", "results": [{"queue_id": "q_bad", "status": "BLOCKED", "blocked_reasons": ["account_fit"]}]},
+    {"status": "APPLIED", "updated_queue_ids": []},
     {"status": "INGESTED_BUNDLE"},
     {"status": "PREPARED", "queue_id": "q_good"},
     {"status": "PASS", "results": [{"queue_id": "q_good", "status": "PASS", "blocked_reasons": []}]},
@@ -39,5 +40,6 @@ assert result["status"] == "READY"
 assert result["selected_queue_id"] == "q_good"
 assert len(result["attempts"]) == 2
 assert result["attempts"][0]["hybrid_status"] == "BLOCKED"
+assert result["attempts"][0]["promotion_status"] == "APPLIED"
 assert result["attempts"][1]["hybrid_status"] == "PASS"
 print("PASS test_direct_media_preparation_loop_failover.py")

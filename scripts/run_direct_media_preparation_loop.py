@@ -117,9 +117,9 @@ def execute(
         attempt["hybrid_status"] = gate_status or "NO_RESULT"
         attempt["blocked_reasons"] = list(exact.get("blocked_reasons", []))[:10]
         attempts.append(attempt)
-        if gate_status != "PASS":
-            continue
         if not autonomous:
+            if gate_status != "PASS":
+                continue
             return {
                 "status": "WAITING_REVIEW",
                 "account_id": account_id,
@@ -128,6 +128,10 @@ def execute(
                 "attempts": attempts,
                 "would_post": False,
             }
+        # Media V1 keeps semantic/persona/alignment results as post-hoc soft
+        # warnings. The promotion command independently reruns every rights,
+        # account, duplicate and technical hard gate, so a Hybrid quality
+        # result must not prevent it from making the final readiness decision.
         promotion = runner([
             sys.executable,
             "scripts/promote_hybrid_approved_media.py",
