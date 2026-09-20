@@ -886,6 +886,13 @@ def _sheets_retry_reason(exc: Exception) -> str | None:
     message = str(exc).lower()
     if status_code == 429 or "quota" in message or re.search(r"\b429\b", message):
         return "rate_limit"
+    # Google Sheets can abort a concurrent read/write transaction with 409.
+    # Only the explicit transient "operation was aborted" response is safe to
+    # retry; other conflicts remain fail-closed.
+    if status_code == 409 and "operation was aborted" in message:
+        return "operation_aborted"
+    if re.search(r"\b409\b", message) and "operation was aborted" in message:
+        return "operation_aborted"
     if status_code in _TRANSIENT_SHEETS_HTTP_STATUSES:
         return f"transient_http_{status_code}"
 
