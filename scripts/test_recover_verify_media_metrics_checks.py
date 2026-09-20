@@ -228,6 +228,24 @@ def main() -> int:
     checks.append(("media queue cannot use exact text scope",
                    "exact_text_queue_scope_invalid" in blocked["failed"]))
 
+    exact_media = mod.scope_verification_to_exact_queue(
+        media_client, mod.verify_state(media_client),
+        queue_id="q_text", account_id="night_scout",
+    )
+    checks.append(("exact media queue excludes unrelated historical inventory only",
+                   exact_media["verification_scope"]["status"] == "PASS"
+                   and exact_media["verification_scope"]["has_media"] is True
+                   and "media_approved_rows_rights_clear" not in exact_media["failed"]
+                   and "exact_queue_scope_invalid" not in exact_media["failed"]))
+
+    wrong_account = mod.scope_verification_to_exact_queue(
+        media_client, mod.verify_state(media_client),
+        queue_id="q_text", account_id="liver_manager",
+    )
+    checks.append(("exact queue scope fails closed on account mismatch",
+                   "exact_queue_scope_invalid" in wrong_account["failed"]
+                   and wrong_account["verification_scope"]["status"] == "BLOCKED"))
+
     failed = [n for n, ok in checks if not ok]
     for n, ok in checks:
         print(f"  {'PASS' if ok else 'FAIL'} {n}")
