@@ -10,6 +10,7 @@ deploy = (ROOT / ".github" / "workflows" / "deploy-buffered-production-runtime.y
 refresh = (ROOT / ".github" / "workflows" / "refresh-threads-tokens.yml").read_text()
 
 assert "flock -n -E 75" in launcher
+assert 'flock -w 240 "$sheets_lock_file"' in launcher
 assert "PRODUCTION_TRIGGER" in launcher
 assert "PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true" in launcher
 assert "ALLOW_REAL_X_POST=false" in launcher
@@ -32,10 +33,14 @@ assert "# BEGIN SNS-GROWTH-BUFFERED" in installer
 assert "--account-id night_scout" in installer
 assert "--account-id liver_manager" in installer
 assert "--account-id beauty_account" in installer
+assert "*/5 * * * *" in installer
+assert "1-59/5 * * * *" in installer
+assert "2-59/5 * * * *" in installer
 assert "rsync -a --delete" in installer
 assert "--exclude .runtime" in installer
 assert "ln -sfn" in installer
 assert "runs-on: [self-hosted, Linux, X64]" in recovery
+assert 'cron: "3-58/5 * * * *"' in recovery
 assert "run_buffered_production_host.sh" in recovery
 assert "--trigger github_schedule_recovery" in recovery
 assert "workflow_dispatch" in deploy

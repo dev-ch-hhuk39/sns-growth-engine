@@ -68,11 +68,16 @@ export THREADS_TOKEN_STORE_DIR="${THREADS_TOKEN_STORE_DIR:-${RUNTIME_ROOT}/share
 run_account() {
   local account="$1"
   local lock_file="${LOCK_DIR}/${account}.lock"
+  local sheets_lock_file="${LOCK_DIR}/sheets-io.lock"
   local invocation_id
   invocation_id="${TRIGGER}_$(date -u +%Y%m%dT%H%M%SZ)_$$"
   export PRODUCTION_HOST_EXECUTION_ID="$invocation_id"
   set +e
-  flock -n -E 75 "$lock_file" bash -c '
+  # The accounts remain independently scheduled and claimed, but all three
+  # share one Google service-account quota. Serialize only the Sheets-heavy
+  # runtime section so simultaneous account slots and the recovery workflow
+  # cannot exhaust that shared quota before the publisher boundary.
+  flock -w 240 "$sheets_lock_file" flock -n -E 75 "$lock_file" bash -c '
       set -euo pipefail
       root="$1"; mode="$2"; account="$3"
       python_bin="$root/.venv/bin/python"
