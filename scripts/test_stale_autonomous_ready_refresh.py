@@ -69,10 +69,13 @@ class RefreshTests(unittest.TestCase):
             self.assertEqual(gate.refresh_stale_autonomous_ready(client, "liver_manager", 1, apply=True), [])
         self.assertEqual(client.writes, [])
 
-    def test_only_autonomous_command_requests_refresh(self):
+    def test_media_v1_does_not_withdraw_hard_gate_ready_for_soft_warnings(self):
+        self.assertNotIn("--refresh-stale-autonomous-ready",
+                         gate_command("liver_manager", "lm_1600_direct_media", 1, True,
+                                      approval_mode="media", autonomous_low_risk=True))
         self.assertIn("--refresh-stale-autonomous-ready",
-                      gate_command("liver_manager", "lm_1600_direct_media", 1, True,
-                                   approval_mode="media", autonomous_low_risk=True))
+                      gate_command("liver_manager", "lm_1000_original", 1, True,
+                                   approval_mode="text", autonomous_low_risk=True))
         self.assertNotIn("--refresh-stale-autonomous-ready",
                          gate_command("liver_manager", "lm_1600_direct_media", 1, True,
                                       approval_mode="media"))

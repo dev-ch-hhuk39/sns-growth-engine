@@ -56,7 +56,13 @@ def gate_command(
     ]
     if approval_mode == "media" and not autonomous_low_risk:
         command.append("--require-human-review")
-    if autonomous_low_risk:
+    # Media V1 already persists READY only after its rights/provenance/media
+    # hard gates pass.  The legacy Hybrid AI refresh also evaluates caption
+    # quality/persona signals, which are warning-only for Media V1, so running
+    # it here can incorrectly withdraw an otherwise publishable media item.
+    # Keep stale approval refresh for text while preserving hard-gate READY
+    # media inventory.
+    if autonomous_low_risk and approval_mode != "media":
         command.append("--refresh-stale-autonomous-ready")
     if queue_id:
         command.extend(["--queue-id", queue_id])
