@@ -636,6 +636,18 @@ def select_direct_candidates(
         }
     )
 
+    # Delivery-terminal queue rows are permanent evidence for the physical
+    # asset. Re-preparing the same asset after a confirmed Threads processing
+    # failure starves later candidates and can repeatedly exercise a known-bad
+    # upload. POSTED is included defensively even when posted_results is
+    # temporarily unavailable; neither state is eligible for automatic reuse.
+    used_assets.update(
+        str(row.get("media_asset_id", ""))
+        for row in queued
+        if str(row.get("generation_mode", "")) == "direct_reference_media"
+        and str(row.get("status", "")).upper() in {"FAILED", "POSTED"}
+    )
+
     # A post-fix Hybrid/persona/text rejection is terminal for the exact
     # caption/media attempt. Pre-fix rows are ignored only once when the exact
     # physical asset is independently proven to have been falsely quarantined
