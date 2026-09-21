@@ -212,6 +212,8 @@ jobs:
         env:
           PUBLISH_ENABLED: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
           ALLOW_REAL_THREADS_POST: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
+          ALLOW_MEDIA_POSTS: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
+          ALLOW_REAL_THREADS_VIDEO_POST: ${{ github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
           BEAUTY_PRODUCTION_ENABLED: ${{ github.event.inputs.account_id == 'beauty_account' && github.event.inputs.mode == 'real_post' && github.event.inputs.confirm_real_post == 'true' && 'true' || 'false' }}
         run: |
           if [ "$MODE" = "real_post" ] && [ "$CONFIRM_REAL_POST" = "true" ]; then
