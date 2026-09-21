@@ -1071,7 +1071,13 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "processed_at": now_iso(),
         })
         log_event(client, account_id, "FAILED", "Threads post failed; no immediate retry", {"queue_id": queue_id, "message": result.message})
-        return {"status": "FAILED", "reason": result.message, "queue_id": queue_id}
+        return {
+            "status": "FAILED",
+            "reason": result.message,
+            "queue_id": queue_id,
+            "publish_attempted": True,
+            "delivery_state": result.delivery_state,
+        }
 
     try:
         result_id = save_posted_result(

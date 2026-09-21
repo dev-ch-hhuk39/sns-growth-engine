@@ -302,6 +302,41 @@ def release_unpublished_claim(client: Any, claim: dict[str, Any], result: dict[s
         return {"status": "BLOCKED", "reason": "SLOT_RELEASE_SHEETS_FAILED", "error_type": type(exc).__name__}
 
 
+def release_confirmed_no_post_claim(client: Any, claim: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """Release a claim only when Threads explicitly confirms no post exists."""
+    safe_states = {"CONTAINER_CREATE_FAILED", "CONTAINER_CREATED_NOT_PUBLISHABLE"}
+    if (claim.get("status") != "CLAIMED" or not claim.get("publish_attempt_id")
+            or result.get("status") != "FAILED" or result.get("publish_attempted") is not True
+            or result.get("delivery_state") not in safe_states):
+        return {"status": "BLOCKED", "reason": "NO_CONFIRMED_NO_POST_PROOF"}
+    try:
+        from sheets_client import TAB_DEFINITIONS
+        ws = client._ensure_tab("content_slot_runs", TAB_DEFINITIONS["content_slot_runs"])
+        rows = client._call_with_rate_limit_retry("read:confirmed_no_post_claim", ws.get_all_records)
+        matches = [row for row in rows if row.get("slot_run_id") == claim.get("slot_run_id")]
+        if len(matches) != 1:
+            return {"status": "BLOCKED", "reason": "SLOT_CLAIM_NOT_UNIQUE"}
+        current = matches[0]
+        if (current.get("status") != "CLAIMED" or current.get("claim_status") != "CLAIMED"
+                or current.get("publish_attempt_id") != claim["publish_attempt_id"]
+                or any(current.get(key) for key in ("result_id", "post_url", "actual_posted_at"))):
+            return {"status": "BLOCKED", "reason": "SLOT_CLAIM_CHANGED"}
+        released = {**current, "status": "DELIVERY_FAILED_CONFIRMED", "claim_status": "RELEASED",
+                    "lease_expires_at": "", "no_post_reason": str(result["delivery_state"]),
+                    "queue_id": result["queue_id"]}
+        upsert_slot_run(client, released)
+        verified = client._call_with_rate_limit_retry("verify:confirmed_no_post_release", ws.get_all_records)
+        matches = [row for row in verified if row.get("slot_run_id") == claim["slot_run_id"]]
+        fields = ("status", "claim_status", "lease_expires_at", "publish_attempt_id", "queue_id", "no_post_reason")
+        if len(matches) != 1 or any(matches[0].get(key, "") != released[key] for key in fields):
+            return {"status": "BLOCKED", "reason": "CONFIRMED_NO_POST_RELEASE_READ_AFTER_WRITE_FAILED"}
+        return {"status": "RELEASED", "publish_attempted": True,
+                "delivery_state": result["delivery_state"]}
+    except Exception as exc:
+        return {"status": "BLOCKED", "reason": "CONFIRMED_NO_POST_RELEASE_SHEETS_FAILED",
+                "error_type": type(exc).__name__}
+
+
 def _column_letter(column: int) -> str:
     letters = ""
     while column:

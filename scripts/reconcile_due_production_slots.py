@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 from content_schedule import MEDIA_POST_TYPES, slot_by_id  # noqa: E402
-from content_slot_runs import build_slot_run, claim_slot_run, posts_used_in_business_date, release_unpublished_claim, upsert_slot_run  # noqa: E402
+from content_slot_runs import build_slot_run, claim_slot_run, posts_used_in_business_date, release_confirmed_no_post_claim, release_unpublished_claim, upsert_slot_run  # noqa: E402
 from process_threads_queue import process_one, records, update_row  # noqa: E402
 from production_inventory import JST, due_slots, eligible_ready, has_media, media_route, policy, select_evergreen, timestamp, true  # noqa: E402
 from sheets_record_reader import enable_readonly_record_cache  # noqa: E402
@@ -204,6 +204,16 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                         raise RuntimeError("FINAL_PREFLIGHT_FAILED")
                     result = process_one(client, chosen, dry_run=False, confirm_real_post=True)
                     if result.get("status") != "POSTED":
+                        if (result.get("status") == "FAILED"
+                                and result.get("delivery_state") in {
+                                    "CONTAINER_CREATE_FAILED", "CONTAINER_CREATED_NOT_PUBLISHABLE"
+                                }):
+                            released = release_confirmed_no_post_claim(client, claim, result)
+                            if released.get("status") == "RELEASED":
+                                outcomes.append({**slot, "status": "DELIVERY_FAILED_CONFIRMED",
+                                                 "reason": str(result["delivery_state"]),
+                                                 "queue_id": chosen["queue_id"]})
+                                break
                         raise RuntimeError("PUBLISH_NOT_VERIFIED")
                     post = verify_delivery(client, chosen, result)
                     upsert_slot_run(client, build_slot_run(account, slot["slot_id"], now=now,

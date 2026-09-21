@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import process_threads_queue as worker
-from content_slot_runs import release_unpublished_claim
+from content_slot_runs import release_confirmed_no_post_claim, release_unpublished_claim
 
 
 class PrePublishTests(unittest.TestCase):
@@ -16,14 +16,16 @@ class PrePublishTests(unittest.TestCase):
                         "条件が良くても続けにくいことって結構ある。\n\n"
                         "僕なら、無理なく続けられる店か体入前に確認するんだよね。")
 
-    def process(self, *, update=True, locked_rows=None, log_error=None, publish_error=None):
+    def process(self, *, update=True, locked_rows=None, log_error=None, publish_error=None,
+                delivery_state="FAILED"):
         locked = [{**self.row, "status": "PROCESSING"}] if locked_rows is None else locked_rows
         calls = []
         def publish(text, **kwargs):
             calls.append(kwargs['dry_run'])
             if not kwargs['dry_run'] and publish_error:
                 raise publish_error
-            return SimpleNamespace(success=kwargs['dry_run'], message="test transport", delivery_state="FAILED")
+            return SimpleNamespace(success=kwargs['dry_run'], message="test transport",
+                                   delivery_state=delivery_state)
         with patch.dict(worker.os.environ, {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true"}), \
              patch.object(worker, 'records', side_effect=lambda _, tab: locked if tab == 'queue' else []), \
              patch.object(worker, 'update_row', side_effect=update if isinstance(update, Exception) else None, return_value=update), \
@@ -60,7 +62,14 @@ class PrePublishTests(unittest.TestCase):
     def test_confirmed_api_failure_has_no_unpublished_claim_proof(self):
         result, calls = self.process()
         self.assertEqual(calls, [True, False])
-        self.assertNotIn('publish_attempted', result)
+        self.assertTrue(result['publish_attempted'])
+        self.assertEqual(result['delivery_state'], 'FAILED')
+
+    def test_confirmed_media_processing_failure_is_machine_readable(self):
+        result, calls = self.process(delivery_state='CONTAINER_CREATED_NOT_PUBLISHABLE')
+        self.assertEqual(calls, [True, False])
+        self.assertTrue(result['publish_attempted'])
+        self.assertEqual(result['delivery_state'], 'CONTAINER_CREATED_NOT_PUBLISHABLE')
 
 
 class ReleaseTests(unittest.TestCase):
@@ -102,6 +111,32 @@ class ReleaseTests(unittest.TestCase):
         for result in ({'status': 'POSTED_SAVE_FAILED'}, {'status': 'PRE_PUBLISH_SHEETS_FAILED'},
                        {**self.result, 'publish_attempted': True}):
             self.assertEqual(release_unpublished_claim(None, self.claim, result)['reason'], 'NO_UNPUBLISHED_EXECUTION_PROOF')
+
+    def test_confirmed_no_post_release_requires_explicit_delivery_state(self):
+        state = [dict(self.row)]
+        ws = SimpleNamespace(get_all_records=lambda: [dict(row) for row in state])
+        client = SimpleNamespace(_ensure_tab=lambda *_: ws, _call_with_rate_limit_retry=lambda _, f: f())
+
+        def save(_, row):
+            state[:] = [dict(row)]
+
+        result = {"status": "FAILED", "publish_attempted": True,
+                  "delivery_state": "CONTAINER_CREATED_NOT_PUBLISHABLE", "queue_id": "q"}
+        with patch('content_slot_runs.upsert_slot_run', side_effect=save):
+            released = release_confirmed_no_post_claim(client, self.claim, result)
+        self.assertEqual(released['status'], 'RELEASED')
+        self.assertEqual(state[0]['status'], 'DELIVERY_FAILED_CONFIRMED')
+        self.assertEqual(state[0]['no_post_reason'], 'CONTAINER_CREATED_NOT_PUBLISHABLE')
+
+        for unsafe in (
+            {**result, "delivery_state": "CONTAINER_CREATED_PUBLISH_UNVERIFIED"},
+            {**result, "publish_attempted": False},
+            {**result, "status": "PUBLISH_OUTCOME_UNVERIFIED"},
+        ):
+            self.assertEqual(
+                release_confirmed_no_post_claim(None, self.claim, unsafe)['reason'],
+                'NO_CONFIRMED_NO_POST_PROOF',
+            )
 
 
 if __name__ == '__main__':

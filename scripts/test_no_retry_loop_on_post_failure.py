@@ -16,7 +16,8 @@ def main() -> int:
         ("failure branch exists", failure_idx >= 0),
         ("failure sets FAILED", '"status": "FAILED"' in failure_block),
         ("failure logs no retry", "no immediate retry" in failure_block),
-        ("failure returns immediately", 'return {"status": "FAILED"' in failure_block),
+        ("failure returns immediately", '"publish_attempted": True' in failure_block
+         and '"delivery_state": result.delivery_state' in failure_block),
         ("no publisher retry loop", "publisher.publish(" not in failure_block),
     ]
     failed = [name for name, ok in checks if not ok]
