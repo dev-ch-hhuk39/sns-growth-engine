@@ -70,8 +70,8 @@ if [[ "$ENABLE_SCHEDULER" == "true" ]]; then
   cat >> "$updated_crontab" <<EOF
 # BEGIN SNS-GROWTH-BUFFERED
 */5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id night_scout --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/night_scout.cron.log 2>&1
-*/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id liver_manager --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/liver_manager.cron.log 2>&1
-*/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id beauty_account --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/beauty_account.cron.log 2>&1
+1-59/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id liver_manager --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/liver_manager.cron.log 2>&1
+2-59/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id beauty_account --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/beauty_account.cron.log 2>&1
 # END SNS-GROWTH-BUFFERED
 EOF
   crontab "$updated_crontab"

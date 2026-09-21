@@ -2,8 +2,9 @@ name: Content Slot Recovery
 
 on:
   schedule:
-    # Owner-authorized five-minute due-slot scan, not five-minute posting.
-    - cron: "*/5 * * * *"
+    # Recovery starts after the three staggered VPS scans (minute 0/1/2), so
+    # it does not compete for the shared Sheets service-account quota.
+    - cron: "3-58/5 * * * *"
   workflow_dispatch:
     inputs:
       confirm_recovery:

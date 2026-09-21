@@ -179,7 +179,7 @@ def main() -> int:
             results.append((f"{name} activation output visible", ">/dev/null 2>&1" not in text))
 
         elif name == "content-slot-recovery.yml":
-            results.append((f"{name} owner-authorized recovery cadence", 'cron: "*/5 * * * *"' in text))
+            results.append((f"{name} owner-authorized recovery cadence", 'cron: "3-58/5 * * * *"' in text))
             results.append((f"{name} explicit reconcile confirmation", "--confirm-reconcile" in text))
             results.append((f"{name} isolated account concurrency", "matrix.lock" in text and "cancel-in-progress: false" in text))
 
