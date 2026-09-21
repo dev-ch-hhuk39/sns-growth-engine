@@ -197,11 +197,20 @@ def ledger_permission(
     account_id: str = "",
     source_handle: str = "",
 ) -> dict[str, Any] | None:
-    client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
-    rows = client._call_with_rate_limit_retry(
-        "get_all_records:media_permissions:acquisition",
-        lambda: client._ws("media_permissions").get_all_records(),
-    )
+    # One acquisition run can evaluate dozens of sources.  The permission
+    # ledger is immutable during that run, so reading the entire worksheet for
+    # every source only burns the shared per-minute Sheets quota.  Keep one
+    # invocation-scoped snapshot; each source is still evaluated independently
+    # and fail-closed against the exact same live ledger evidence.
+    rows = getattr(client, "_acquisition_permission_rows", None)
+    if rows is None:
+        client._ensure_tab("media_permissions", TAB_DEFINITIONS["media_permissions"])
+        rows = client._call_with_rate_limit_retry(
+            "get_all_records:media_permissions:acquisition",
+            lambda: client._ws("media_permissions").get_all_records(),
+        )
+        rows = [dict(row) for row in rows]
+        setattr(client, "_acquisition_permission_rows", rows)
     decision = evaluate_permission(
         rows,
         source_id,

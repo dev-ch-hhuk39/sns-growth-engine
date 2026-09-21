@@ -122,13 +122,26 @@ jobs:
       - name: Start bounded YouTube PO Token Provider
         if: github.event.inputs.confirm_preparation == 'true'
         run: scripts/start_youtube_pot_provider.sh
+      - name: Cool down shared Sheets quota before acquisition
+        if: github.event.inputs.confirm_preparation == 'true'
+        run: |
+          echo "[SHEETS_QUOTA] waiting for the shared per-minute read window"
+          sleep 70
       - name: Acquire bounded approved reference posts before media preparation
+        id: acquisition
+        continue-on-error: true
         if: github.event.inputs.confirm_preparation == 'true'
         run: |
           python3 scripts/acquire_approved_source_posts_failsoft.py \
             --account-id "$ACCOUNT_ID" --platform all --max-posts 30 \
             --media-filter video-only --force-backfill \
             --apply --confirm-acquisition
+      - name: Cool down shared Sheets quota before preparation
+        if: github.event.inputs.confirm_preparation == 'true'
+        run: |
+          echo "acquisition_outcome=${{ steps.acquisition.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "[SHEETS_QUOTA] waiting before the independent saved-inventory check"
+          sleep 70
       - name: Dry-run direct preparation plan
         run: |
           python3 scripts/ingest_direct_reference_media.py --account-id "$ACCOUNT_ID" --dry-run
