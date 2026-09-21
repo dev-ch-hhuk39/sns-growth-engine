@@ -46,6 +46,7 @@ assert "--trigger github_schedule_recovery" in recovery
 assert "workflow_dispatch" in deploy
 assert "DEPLOY_BUFFERED_RUNTIME" in deploy
 assert "runtime.env" in deploy
+assert "--enable-scheduler --confirm-enable" in deploy
 assert 'splitlines()) != len(keys) + 1' in deploy
 assert 'shlex.quote(value)}\\n")' in deploy
 assert 'shlex.quote(value)}\\\\n")' not in deploy
