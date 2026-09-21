@@ -83,7 +83,8 @@ jobs:
           revision="$(git rev-parse HEAD)"
           scripts/install_buffered_production_runtime.sh \
             --source-root "$GITHUB_WORKSPACE" --revision "$revision" \
-            --apply --confirm-install
+            --apply --confirm-install \
+            --enable-scheduler --confirm-enable
       - name: Verify installed runtime without publishing
         run: |
           runtime=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
