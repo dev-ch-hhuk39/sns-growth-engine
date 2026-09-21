@@ -91,6 +91,8 @@ run_account() {
       fi
       if [[ "$mode" == "apply" ]]; then
         export PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true
+        export ALLOW_MEDIA_POSTS=true ALLOW_REAL_THREADS_VIDEO_POST=true
+        export ALLOW_THREADS_CAROUSEL=true ALLOW_THREADS_MIXED_CAROUSEL=false
         export ALLOW_REAL_X_POST=false
         exec "$python_bin" "$root/scripts/reconcile_due_production_slots.py" --account-id "$account" --apply --confirm-reconcile
       fi
