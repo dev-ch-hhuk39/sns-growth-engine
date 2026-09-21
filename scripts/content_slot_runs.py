@@ -73,21 +73,34 @@ def build_slot_run(
     date_key = schedule_date_jst or business_date(local)
     schedule_date = datetime.strptime(date_key, "%Y-%m-%d").date()
     identity = f"slot_{schedule_date.strftime('%Y%m%d')}_{account_id}_{slot_id}"
-    target_date = schedule_date
-    target_hour, target_minute = map(int, str(slot["target_jst"]).split(":"))
-    if target_hour >= 24:
-        target_hour -= 24
-        target_date += timedelta(days=1)
-    target = datetime(target_date.year, target_date.month, target_date.day, target_hour, target_minute, tzinfo=JST)
+    target_text = str(slot.get("target_jst", "")).strip()
+    scheduled_target_at = ""
+    allowed_window_start = ""
+    allowed_window_end = ""
+    if target_text:
+        target_date = schedule_date
+        target_hour, target_minute = map(int, target_text.split(":"))
+        if target_hour >= 24:
+            target_hour -= 24
+            target_date += timedelta(days=1)
+        target = datetime(
+            target_date.year, target_date.month, target_date.day,
+            target_hour, target_minute, tzinfo=JST,
+        )
+        scheduled_target_at = target.isoformat()
+        allowed_window_start = (target - timedelta(minutes=15)).isoformat()
+        allowed_window_end = (target + timedelta(minutes=15)).isoformat()
+    elif not slot.get("review_only"):
+        raise ValueError(f"content slot target_jst missing: {account_id}/{slot_id}")
     created = local.isoformat()
     row = {
         "slot_run_id": identity,
         "schedule_date_jst": date_key,
         "account_id": account_id,
         "slot_id": slot_id,
-        "scheduled_target_at": target.isoformat(),
-        "allowed_window_start": (target - timedelta(minutes=15)).isoformat(),
-        "allowed_window_end": (target + timedelta(minutes=15)).isoformat(),
+        "scheduled_target_at": scheduled_target_at,
+        "allowed_window_start": allowed_window_start,
+        "allowed_window_end": allowed_window_end,
         "actual_started_at": created,
         "actual_posted_at": "",
         "expected_post_type": slot["post_type"],
