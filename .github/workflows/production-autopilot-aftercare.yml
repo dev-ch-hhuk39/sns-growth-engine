@@ -163,8 +163,15 @@ jobs:
             echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed after bounded fallback"
             exit 1
           fi
+          if ! python3 scripts/maintain_text_ready_inventory.py \
+            --account-id "$ACCOUNT_ID" --apply \
+            --confirm-ready-maintenance --use-sheets --evergreen-bank; then
+            echo "[OPERATIONAL_FAILURE] validated evergreen reserve could not be replenished"
+            exit 1
+          fi
           echo "beauty_account_pdca_route=dedicated_beauty_generation" >> "$GITHUB_STEP_SUMMARY"
           echo "ready_inventory_24h_exit=0" >> "$GITHUB_STEP_SUMMARY"
+          echo "evergreen_inventory_exit=0" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Health summary
         if: always()
