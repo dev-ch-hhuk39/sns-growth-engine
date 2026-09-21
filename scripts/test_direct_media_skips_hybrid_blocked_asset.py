@@ -71,23 +71,38 @@ def asset(post_id: str) -> dict[str, str]:
 
 
 tables = {
-    "source_posts": [post("blocked", "src_blocked"), post("next", "src_next")],
-    "source_accounts": [source("src_blocked"), source("src_next")],
+    "source_posts": [
+        post("blocked", "src_blocked"),
+        post("failed", "src_failed"),
+        post("next", "src_next"),
+    ],
+    "source_accounts": [source("src_blocked"), source("src_failed"), source("src_next")],
     "reference_sources": [],
-    "media_permissions": [permission("src_blocked"), permission("src_next")],
+    "media_permissions": [permission("src_blocked"), permission("src_failed"), permission("src_next")],
     "posted_results": [],
-    "queue": [{
-        "queue_id": "q_blocked",
-        "account_id": "liver_manager",
-        "generation_mode": "direct_reference_media",
-        "media_asset_id": "asset_blocked",
-        "status": "WAITING_REVIEW",
-        "validator_status": "BLOCKED",
-    }],
-    "media_assets": [asset("blocked"), asset("next")],
-    "source_post_media": [media("blocked"), media("next")],
+    "queue": [
+        {
+            "queue_id": "q_blocked",
+            "account_id": "liver_manager",
+            "generation_mode": "direct_reference_media",
+            "media_asset_id": "asset_blocked",
+            "status": "WAITING_REVIEW",
+            "validator_status": "BLOCKED",
+        },
+        {
+            "queue_id": "q_failed",
+            "account_id": "liver_manager",
+            "generation_mode": "direct_reference_media",
+            "media_asset_id": "asset_failed",
+            "status": "FAILED",
+            "validator_status": "PASS",
+        },
+    ],
+    "media_assets": [asset("blocked"), asset("failed"), asset("next")],
+    "source_post_media": [media("blocked"), media("failed"), media("next")],
     "source_media_understanding": [
         {"source_post_media_id": "spm_blocked", "status": "PASS"},
+        {"source_post_media_id": "spm_failed", "status": "PASS"},
         {"source_post_media_id": "spm_next", "status": "PASS"},
     ],
 }
