@@ -15,7 +15,7 @@ from content_schedule import MEDIA_POST_TYPES  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from production_inventory import JST, coverage, due_slots, eligible_ready, has_media, media_route, policy, select_evergreen  # noqa: E402
-from reconcile_due_production_slots import enrich_posts  # noqa: E402
+from reconcile_due_production_slots import delivery_limit, enrich_posts  # noqa: E402
 from generate_threads_ideas_from_references import original_text_similarity_guard  # noqa: E402
 from public_post_quality import final_public_post_validator  # noqa: E402
 from sheets_record_reader import enable_readonly_record_cache, read_records_safely  # noqa: E402
@@ -52,6 +52,13 @@ def buffered_run_verified(run, posts):
         and any(post.get("result_id") == run.get("result_id")
                 and post.get("verification_status") == "READ_AFTER_WRITE_PASS" for post in posts)
     )
+
+
+def effective_due_slots(account, due, posts, now):
+    """Do not call a deliberately cap-suppressed slot an outage."""
+    if due and delivery_limit(account, posts, now) == "DAILY_CAP_REACHED":
+        return [], due
+    return due, []
 
 
 def evaluate(client, *, now=None):
@@ -98,11 +105,14 @@ def evaluate(client, *, now=None):
                     if process_one(client, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN":
                         valid_ids.add(row["queue_id"])
             media_counts[account][route] = len(valid_ids)
+        enriched_posts = enrich_posts(tables["posted_results"], queue)
         due = due_slots(account, now=now, slot_runs=tables["content_slot_runs"],
-                        posted=enrich_posts(tables["posted_results"], queue), recovery_minutes=cfg["recovery_window_minutes"])
+                        posted=enriched_posts, recovery_minutes=cfg["recovery_window_minutes"])
+        due, cap_suppressed = effective_due_slots(account, due, enriched_posts, now)
         account_rows = [row for row in rows if row["account_id"] == account]
         accounts[account] = {
             "unresolved_due_slots": due,
+            "cap_suppressed_due_slots": cap_suppressed,
             "text_slots": sum(row["post_type"] not in MEDIA_POST_TYPES for row in account_rows),
             "media_slots": sum(row["post_type"] in MEDIA_POST_TYPES for row in account_rows),
             "media_slot_text_fallbacks": sum(row.get("actual_coverage_type") == "text_fallback" for row in account_rows),

@@ -137,6 +137,10 @@ checks = [
         ),
     ),
     (
+        "aftercare replenishes evergreen reserve",
+        "--evergreen-bank" in workflow,
+    ),
+    (
         "scheduled aftercare applies",
         (
             'if [ "${{ github.event_name }}" '
