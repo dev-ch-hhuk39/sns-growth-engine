@@ -1287,21 +1287,19 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         strat = str(r.get("media_strategy", "")).strip().lower()
         return _bool(r.get("media_required")) or (strat not in ("", "none", "text_only"))
 
-    def _zero_claims(value: Any) -> bool:
-        try:
-            return float(str(value).strip()) == 0.0
-        except (TypeError, ValueError):
-            return False
-
     def _validated_media_row(r: dict[str, Any]) -> bool:
         asset = _row_media(r)
+        hard_gate_status = str(r.get("hard_gate_status", "")).strip().upper()
+        hard_gate_pass = (
+            hard_gate_status == "PASS"
+            if hard_gate_status
+            else str(r.get("validator_status", "")).strip().upper() == "PASS"
+        )
         return bool(
             asset
             and _approved(asset)
             and (_row_media_url(r) or resolve_media_url(asset))
-            and str(r.get("validator_status", "")).strip().upper() == "PASS"
-            and str(r.get("alignment_status", "")).strip().upper() == "PASS"
-            and _zero_claims(r.get("unsupported_claim_count"))
+            and hard_gate_pass
             and str(r.get("public_post_text") or r.get("posted_text") or "").strip()
         )
 

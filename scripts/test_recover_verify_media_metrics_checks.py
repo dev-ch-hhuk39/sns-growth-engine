@@ -186,6 +186,31 @@ def main() -> int:
     checks.append(("historical quarantine: upload checks do not block fresh queue",
                    res["media_no_unapproved_upload"] is True and res["media_uploaded_only_if_approved"] is True))
 
+    media_v1_posted = _base_tabs()
+    media_v1_posted["media_assets"] = [{
+        "media_asset_id": "m_posted", "approval_status": "APPROVED", "status": "APPROVED",
+        "rights_policy": "owned", "reuse_policy": "allow_reuse", "media_policy": "owned",
+        "cloudinary_url": "https://res.cloudinary.com/x/posted.mp4",
+    }]
+    media_v1_posted["posted_results"] = [{
+        "result_id": "r_posted", "queue_id": "q_posted", "account_id": "liver_manager",
+        "platform": "threads", "status": "POSTED", "real_post": "true", "media_used": "true",
+        "external_post_id": "external", "post_url": "https://www.threads.com/@x/post/y",
+        "media_asset_id": "m_posted", "media_url": "https://res.cloudinary.com/x/posted.mp4",
+        "posted_text": "reader-facing post", "hard_gate_status": "PASS",
+        "validator_status": "PASS", "alignment_status": "BLOCKED", "unsupported_claim_count": "1",
+        "metrics_status": "PENDING",
+    }]
+    media_v1_checks = mod.verify_state(_FakeClient(media_v1_posted))["checks"]
+    checks.append(("Media V1 soft warnings do not invalidate authorized posted media",
+                   media_v1_checks["posted_media_used_false"] is True
+                   and media_v1_checks["posted_media_use_authorized"] is True))
+
+    media_v1_posted["posted_results"][0]["hard_gate_status"] = "BLOCKED"
+    blocked_posted_checks = mod.verify_state(_FakeClient(media_v1_posted))["checks"]
+    checks.append(("Media V1 hard-gate failure still invalidates posted media",
+                   blocked_posted_checks["posted_media_use_authorized"] is False))
+
     scoped_tabs = _base_tabs()
     scoped_tabs["queue"] = [{
         "queue_id": "q_text", "account_id": "night_scout", "platform": "threads",
