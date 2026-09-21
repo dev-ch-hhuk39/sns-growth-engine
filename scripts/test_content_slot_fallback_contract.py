@@ -41,4 +41,11 @@ assert beauty_clip["post_type"] == "approved_source_clip", beauty_clip
 assert beauty_clip["review_only"] is True, beauty_clip
 assert slot_by_id("beauty_account", "unknown_media_slot") is None
 assert build_slot_run("beauty_account", "beauty_2030")["slot_id"] == "beauty_2030"
+beauty_review_run = build_slot_run(
+    "beauty_account", "beauty_direct_media_review", schedule_date_jst="2026-09-21"
+)
+assert beauty_review_run["slot_id"] == "beauty_direct_media_review"
+assert beauty_review_run["scheduled_target_at"] == ""
+assert beauty_review_run["allowed_window_start"] == ""
+assert beauty_review_run["allowed_window_end"] == ""
 print("PASS test_content_slot_fallback_contract.py")
