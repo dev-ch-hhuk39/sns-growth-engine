@@ -37,7 +37,10 @@ env:
 
 jobs:
   prepare-one-approved-clip:
-    runs-on: ubuntu-latest
+    # Physical YouTube acquisition cannot reliably use GitHub's shared runner
+    # IP ranges. Keep the bounded, permission-gated clip job on the same
+    # production host that owns the scheduler and proven media runtime.
+    runs-on: [self-hosted, Linux, X64]
     environment: production
     timeout-minutes: 60
     env:
@@ -61,8 +64,8 @@ jobs:
           python-version: "3.11"
       - name: Install bounded media runtime
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
+          command -v ffmpeg >/dev/null || { echo "[BLOCKED] ffmpeg is unavailable on the production runner"; exit 1; }
+          command -v docker >/dev/null || { echo "[BLOCKED] Docker is unavailable on the production runner"; exit 1; }
           python3 -m pip install --requirement requirements-media-runtime.txt
       - name: Start bounded YouTube PO Token Provider
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'

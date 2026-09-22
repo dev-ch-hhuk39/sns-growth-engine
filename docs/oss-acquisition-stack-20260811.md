@@ -25,7 +25,7 @@ reported as `DEFERRED`; it is never fabricated as acquisition success.
 |---|---|---|---|
 | X exact-status physical media | yt-dlp 2026.7.4 | none | 4/4 prior live A/V goldens; unchanged |
 | X bounded profile metadata | gallery-dl 1.32.9 | manual JSON/browser export only after explicit failure | public-or-explicit-auth per source |
-| YouTube channel/video/physical | yt-dlp 2026.7.4 | bgutil PO Token Provider 2.0.0, then public embedded client | The plugin and loopback-only Docker provider are version-matched; production routes use the same bounded fallback after a default-client bot challenge |
+| YouTube channel/video/physical | yt-dlp 2026.7.4 | bgutil PO Token Provider 2.0.0, then public embedded client | The plugin and loopback-only Docker provider are version-matched; physical clip preparation runs on the dedicated production runner rather than GitHub shared egress, while preserving the same bounded fallback |
 | YouTube comments | youtube-comment-downloader 0.1.78 | none | installed and dependency-pinned |
 | YouTube transcript | youtube-transcript-api 1.2.4 | yt-dlp subtitles, gated local faster-whisper | source-caption dependent |
 | Research | local aggregation | Agent Reach 1.5.0 shadow | Agent Reach measured 4/15 channels |
