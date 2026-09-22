@@ -202,6 +202,18 @@ checks = [
         == "PASS",
     ),
     (
+        "semantic window records standalone confirmation",
+        top.get("standalone_segment_confirmed") is True,
+    ),
+    (
+        "semantic window records standalone story score",
+        float(top.get("standalone_story_score") or 0) >= 85,
+    ),
+    (
+        "eligible semantic window is clip worthy",
+        top.get("clip_worthy") is True,
+    ),
+    (
         "night female metadata cue passes",
         night_policy["status"] == "PASS",
     ),

@@ -1076,11 +1076,33 @@ def build_media_growth_plan(
                 account_id=account_id,
                 transcript=excerpt,
             )
+            semantic_segment_score = float(spec.get("semantic_score", 0) or 0)
+            standalone_segment_confirmed = bool(
+                excerpt.strip()
+                and float(cand.get("duration_seconds") or 0)
+                >= float(config.get("clip_duration_min_seconds", 8))
+                and clip_validation["status"] == "PASS"
+                and clip_output.get("status") == "PASS"
+                and alignment.get("status") == "PASS"
+                and not source_blockers
+            )
+            # The semantic planner score measures whether the selected window
+            # contains a hook plus enough explanation.  Persist that evidence
+            # explicitly; the generic engagement-oriented clip_score is a soft
+            # ranking signal and must not stand in for standalone-story proof.
+            standalone_story_score = (
+                min(100.0, 80.0 + semantic_segment_score * 5.0)
+                if standalone_segment_confirmed
+                else 0.0
+            )
             cand.update({
                 "source_evidence_status": "PASS" if not source_blockers else "SOURCE_EVIDENCE_UNSUITABLE",
                 "source_evidence_blockers": json.dumps(source_blockers, ensure_ascii=False),
                 "source_evidence_account_terms": json.dumps(source_suitability.get("account_terms", []), ensure_ascii=False),
                 "source_evidence_transcript_hash": source_suitability.get("transcript_hash", ""),
+                "standalone_segment_confirmed": standalone_segment_confirmed,
+                "standalone_story_score": round(standalone_story_score, 4),
+                "clip_worthy": standalone_segment_confirmed and standalone_story_score >= 85,
             })
             if source_blockers:
                 cand["clip_status"] = "SKIPPED"
@@ -1191,6 +1213,9 @@ def build_media_growth_plan(
                 "alignment_status": row.get("alignment_status", ""),
                 "final_alignment_score": row.get("final_alignment_score", ""),
                 "unsupported_claim_count": row.get("unsupported_claim_count", ""),
+                "standalone_segment_confirmed": row.get("standalone_segment_confirmed", False),
+                "standalone_story_score": row.get("standalone_story_score", 0),
+                "clip_worthy": row.get("clip_worthy", False),
             }
             for row in clip_candidates[:5]
         ],
