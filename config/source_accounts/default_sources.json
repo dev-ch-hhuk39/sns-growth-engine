@@ -128,8 +128,8 @@
         "manual_url"
       ],
       "candidate_status": "approved",
-      "active": false,
-      "fetch_enabled": false,
+      "active": true,
+      "fetch_enabled": true,
       "allow_network_fetch": true,
       "allow_download": "gated",
       "allow_cut": "gated",
