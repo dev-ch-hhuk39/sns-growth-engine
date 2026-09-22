@@ -28,6 +28,11 @@ clip_workflow = (ROOT / ".github" / "workflows" / "approved-source-clip-preparat
 assert "runs-on: [self-hosted, Linux, X64]" in clip_workflow
 assert "command -v ffmpeg" in clip_workflow
 assert "command -v docker" in clip_workflow
+assert "command -v google-chrome" in clip_workflow
+assert "command -v xvfb-run" in clip_workflow
+assert "SNS_YTDLP_NODE_PATH: /opt/sns-node-v22.23.2/bin/node" in clip_workflow
+assert "xvfb-run -a python3 scripts/transcribe_approved_source_videos.py" in clip_workflow
+assert "xvfb-run -a python3 scripts/run_media_production_pipeline.py" in clip_workflow
 assert "apt-get" not in clip_workflow
 
 start = (ROOT / "scripts/start_youtube_pot_provider.sh").read_text(encoding="utf-8")

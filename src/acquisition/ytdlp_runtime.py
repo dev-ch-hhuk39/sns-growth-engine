@@ -56,7 +56,10 @@ def physical_download_option_attempts(
     engine's 300 MiB download budget.
     """
 
-    primary = metadata_options(platform, options)
+    primary_options = dict(options or {})
+    if str(platform).lower() == "youtube":
+        primary_options["format"] = YOUTUBE_BOUNDED_AV_FORMAT
+    primary = metadata_options(platform, primary_options)
     if str(platform).lower() != "youtube":
         return [primary]
 

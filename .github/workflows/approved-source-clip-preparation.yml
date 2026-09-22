@@ -34,6 +34,7 @@ env:
   ALLOW_VIDEO_CUT: "false"
   ALLOW_CLOUDINARY_UPLOAD: "false"
   ALLOW_TRANSCRIPTION_API: "false"
+  SNS_YTDLP_NODE_PATH: /opt/sns-node-v22.23.2/bin/node
 
 jobs:
   prepare-one-approved-clip:
@@ -66,6 +67,10 @@ jobs:
         run: |
           command -v ffmpeg >/dev/null || { echo "[BLOCKED] ffmpeg is unavailable on the production runner"; exit 1; }
           command -v docker >/dev/null || { echo "[BLOCKED] Docker is unavailable on the production runner"; exit 1; }
+          command -v google-chrome >/dev/null || { echo "[BLOCKED] Google Chrome is unavailable for the bounded WPC provider"; exit 1; }
+          command -v xvfb-run >/dev/null || { echo "[BLOCKED] xvfb-run is unavailable for the bounded WPC provider"; exit 1; }
+          test -x "$SNS_YTDLP_NODE_PATH" || { echo "[BLOCKED] approved Node 22 runtime is unavailable"; exit 1; }
+          test "$($SNS_YTDLP_NODE_PATH --version | cut -d. -f1)" = "v22" || { echo "[BLOCKED] approved Node runtime is not v22"; exit 1; }
           python3 -m pip install --requirement requirements-media-runtime.txt
       - name: Start bounded YouTube PO Token Provider
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
@@ -103,7 +108,7 @@ jobs:
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_LOCAL_TRANSCRIPTION: "true"
-        run: python3 scripts/transcribe_approved_source_videos.py --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-transcribe --allow-local-whisper --limit 2 --model-size small --max-audio-seconds 900 --cpu-threads 1
+        run: xvfb-run -a python3 scripts/transcribe_approved_source_videos.py --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-transcribe --allow-local-whisper --limit 2 --model-size small --max-audio-seconds 900 --cpu-threads 1
       - name: Generate transcript-grounded candidates
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         run: python3 scripts/run_media_growth_engine.py --account-id "$ACCOUNT_ID" --use-sheets --apply --confirm-media-growth
@@ -113,12 +118,12 @@ jobs:
           ALLOW_VIDEO_DOWNLOAD: "true"
           ALLOW_VIDEO_CUT: "true"
           ALLOW_CLOUDINARY_UPLOAD: "true"
-        run: python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-production-media --use-sheets
+        run: xvfb-run -a python3 scripts/run_media_production_pipeline.py --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" --prepare-only --apply --confirm-production-media --use-sheets
       - name: Create one exact canonical clip queue
         id: clip_queue
         if: vars.BUFFERED_INVENTORY_ACTIVE != 'true' && github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         run: |
-          python3 scripts/run_media_production_pipeline.py \
+          xvfb-run -a python3 scripts/run_media_production_pipeline.py \
             --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
             --prepare-saved-media-queue --apply --confirm-production-media --use-sheets \
             --json-output /tmp/approved-clip-queue.json
@@ -148,7 +153,7 @@ jobs:
           ALLOW_VIDEO_CUT: "true"
           ALLOW_CLOUDINARY_UPLOAD: "true"
         run: |
-          python3 scripts/run_media_production_pipeline.py \
+          xvfb-run -a python3 scripts/run_media_production_pipeline.py \
             --account-id "$ACCOUNT_ID" --slot-id "$CONTENT_SLOT_ID" \
             --prepare-only --minimum-ready 3 --apply --confirm-production-media --use-sheets \
             --json-output /tmp/approved-clip-buffer.json
