@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 data = json.loads((ROOT / "config/external_libraries.json").read_text(encoding="utf-8"))
 rows = {row["id"]: row for row in data["libraries"]}
 required = {
-    "agent_reach", "last30days_skill", "yt_dlp", "bgutil_ytdlp_pot_provider", "tiktok_to_ytdlp",
+    "agent_reach", "last30days_skill", "yt_dlp", "bgutil_ytdlp_pot_provider", "yt_dlp_getpot_wpc", "tiktok_to_ytdlp",
     "youtube_transcript_api", "youtube_comment_downloader", "faster_whisper",
     "ffmpeg", "threads_scraper_vdite", "threads_scraper_zeeshan",
     "threads_comment_scraper_galihkjaya", "hasdata_tiktok", "firecrawl",
@@ -21,6 +21,11 @@ checks = [
         "YouTube PO provider is revision and dependency pinned",
         rows["bgutil_ytdlp_pot_provider"]["revision"] == "37169ee2656e08c5c2e5dc9df4c598c0cb4c88a8"
         and rows["bgutil_ytdlp_pot_provider"]["license"] == "GPL-3.0-or-later",
+    ),
+    (
+        "YouTube browser PO fallback is revision and dependency pinned",
+        rows["yt_dlp_getpot_wpc"]["revision"] == "c75bca75ae94b07908ce62303eafeeb45bcbcec1"
+        and rows["yt_dlp_getpot_wpc"]["license"] == "MIT",
     ),
 ]
 for name, ok in checks:

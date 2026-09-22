@@ -23,7 +23,7 @@ base = {
 }
 youtube = physical_download_option_attempts("youtube", base)
 assert len(youtube) == 3, youtube
-assert youtube[0]["format"] == base["format"]
+assert youtube[0]["format"] == YOUTUBE_BOUNDED_AV_FORMAT
 assert youtube[1]["format"] == YOUTUBE_BOUNDED_AV_FORMAT
 assert youtube[1]["extractor_args"]["youtube"]["player_client"] == [
     YOUTUBE_POT_PLAYER_FALLBACK
@@ -46,10 +46,18 @@ for relative in (
 
 requirements = (ROOT / "requirements-acquisition.txt").read_text(encoding="utf-8")
 assert "bgutil-ytdlp-pot-provider==2.0.0" in requirements
+assert "yt-dlp-getpot-wpc==1.1.2" in requirements
 
 start_script = (ROOT / "scripts/start_youtube_pot_provider.sh").read_text(encoding="utf-8")
 assert "brainicism/bgutil-ytdlp-pot-provider@sha256:" in start_script
 assert "127.0.0.1:4416:4416" in start_script
 assert "/ping" in start_script
+
+clip_workflow = (ROOT / ".github/workflows/approved-source-clip-preparation.yml").read_text(encoding="utf-8")
+assert "SNS_YTDLP_NODE_PATH: /opt/sns-node-v22.23.2/bin/node" in clip_workflow
+assert "command -v google-chrome" in clip_workflow
+assert "command -v xvfb-run" in clip_workflow
+assert "xvfb-run -a python3 scripts/transcribe_approved_source_videos.py" in clip_workflow
+assert "xvfb-run -a python3 scripts/run_media_production_pipeline.py" in clip_workflow
 
 print("PASS test_ytdlp_physical_download_fallback.py")
