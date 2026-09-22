@@ -792,7 +792,15 @@ def build_media_growth_plan(
             source_video["analysis_status"] = "ANALYSIS_ONLY"
             source_video["skip_reason"] = subject_check["reason"]
             continue
-        duration = float(source_video.get("duration_seconds") or 0)
+        transcript_segments = _segments(transcript)
+        duration = float(
+            source_video.get("duration_seconds")
+            or (
+                transcript_segments[-1]["end"]
+                if transcript_segments
+                else 0
+            )
+        )
         if duration < float(config.get("clip_duration_min_seconds", 8)):
             source_video["skip_reason"] = "duration_metadata_required_or_too_short"
             source_video["analysis_status"] = "SKIPPED"
