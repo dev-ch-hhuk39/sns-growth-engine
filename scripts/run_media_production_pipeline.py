@@ -2875,6 +2875,22 @@ def media_availability_status(ready_count: int, minimum: int, attempts: list[dic
     return "RESOURCE_SHORTAGE"
 
 
+def _last_json_object(output: str) -> dict[str, Any]:
+    """Return the final complete JSON object emitted by a child runner."""
+    decoder = json.JSONDecoder()
+    objects: list[tuple[int, dict[str, Any]]] = []
+    for index, char in enumerate(output):
+        if char != "{":
+            continue
+        try:
+            value, end = decoder.raw_decode(output[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            objects.append((index + end, value))
+    return max(objects, key=lambda item: item[0])[1] if objects else {}
+
+
 def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, minimum: int) -> dict[str, Any]:
     """Prepare and review a bounded clip reserve; never call a publish mode."""
     import copy
@@ -2887,7 +2903,12 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
     def ready_ids() -> set[str]:
         snapshot = copy.copy(client)
         enable_readonly_record_cache(snapshot)
-        return {str(row["media_asset_id"]) for row in read_records_safely(snapshot, "queue")
+        # Queue promotion happens in a child process. Read the queue itself
+        # without an invocation snapshot so every refill cycle observes the
+        # promoter's read-after-write result. The copied client remains cached
+        # for process_one's supporting tab reads to keep Sheets traffic bounded.
+        queue_rows = read_records_safely(client, "queue", preserve_strings=True)
+        return {str(row["media_asset_id"]) for row in queue_rows
                 if eligible_ready(row, account_id) and media_route(row) == "approved_source_clip"
                 and row.get("media_asset_id")
                 and process_one(snapshot, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN"}
@@ -2934,7 +2955,16 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
                 "--max-candidates", "1", "--approval-mode", "media", "--autonomous-low-risk", "--apply", "--use-sheets"],
                 cwd=ROOT, env={**os.environ, "PUBLISH_ENABLED": "false", "ALLOW_REAL_THREADS_POST": "false"},
                 capture_output=True, text=True, timeout=480, check=False)
-            attempts.append({"queue_id": qid, "status": "REVIEWED" if review.returncode == 0 else "QUALITY_BLOCKED"})
+            review_payload = _last_json_object(review.stdout)
+            review_status = str(review_payload.get("status", ""))
+            attempts.append({
+                "queue_id": qid,
+                "status": "READY" if review.returncode == 0 and review_status == "READY" else (
+                    "QUALITY_BLOCKED" if review.returncode == 0 else "PREPARATION_FAILED"
+                ),
+                "review_status": review_status or "MISSING_RESULT",
+                "review_reason": str(review_payload.get("reason", "")),
+            })
         else:
             attempts.append({"status": str(queued.get("status", "UNKNOWN"))})
         ids = ready_ids()

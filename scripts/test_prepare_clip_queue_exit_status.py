@@ -68,14 +68,40 @@ class ClipQueueExitTests(unittest.TestCase):
              patch.object(pipeline, 'process_one', return_value={'status': 'DRY_RUN'}), \
              patch.object(pipeline, 'build_plan', return_value={'status': 'PLAN_ONLY', 'selected_clip_candidate_id': 'clip'}), \
              patch.object(pipeline, 'prepare_saved_media_queue', return_value={'status': 'QUEUED_WAITING_REVIEW', 'queue_id': 'q0'}), \
-             patch.object(pipeline.subprocess, 'run') as review, \
-             patch.object(pipeline, 'execute') as execute:
+            patch.object(pipeline.subprocess, 'run') as review, \
+            patch.object(pipeline, 'execute') as execute:
             review.return_value.returncode = 0
+            review.return_value.stdout = '{"status":"READY","updated_queue_ids":["q0"]}'
             result = pipeline.maintain_ready_clip_inventory(Mock(), account_id='liver_manager', slot_id='lm_1800_clip_media', minimum=1)
         self.assertEqual(result['status'], 'READY_INVENTORY_OK')
+        self.assertEqual(result['attempts'][-1]['status'], 'READY')
         self.assertIn('--autonomous-low-risk', review.call_args.args[0])
         self.assertEqual(review.call_args.kwargs['env']['PUBLISH_ENABLED'], 'false')
         execute.assert_not_called()
+
+    def test_no_ready_review_is_not_reported_as_success(self):
+        from unittest.mock import Mock
+        with patch('sheets_record_reader.read_records_safely', return_value=[]), \
+             patch.object(pipeline, 'build_plan', side_effect=[
+                 {'status': 'PLAN_ONLY', 'selected_clip_candidate_id': 'clip'},
+                 {'status': 'NO_ELIGIBLE_CLIP', 'skipped_candidates': []},
+                 {'status': 'NO_ELIGIBLE_CLIP', 'skipped_candidates': []},
+             ]), \
+             patch.object(pipeline, 'prepare_saved_media_queue', return_value={
+                 'status': 'QUEUED_WAITING_REVIEW', 'queue_id': 'q0'}), \
+             patch.object(pipeline.subprocess, 'run') as review:
+            review.return_value.returncode = 0
+            review.return_value.stdout = '{"status":"NO_READY_CANDIDATE","reason":"quality_blocked"}'
+            result = pipeline.maintain_ready_clip_inventory(
+                Mock(), account_id='liver_manager', slot_id='lm_1800_clip_media', minimum=1)
+        attempt = next(row for row in result['attempts'] if row.get('queue_id') == 'q0')
+        self.assertEqual(attempt['status'], 'QUALITY_BLOCKED')
+        self.assertEqual(attempt['review_status'], 'NO_READY_CANDIDATE')
+        self.assertEqual(result['status'], 'MEDIA_INVENTORY_LOW')
+
+    def test_child_runner_json_parser_uses_final_complete_object(self):
+        output = '{"status":"PASS"}\nnoise\n{"status":"READY","stages":[{"status":"PASS"}]}\n'
+        self.assertEqual(pipeline._last_json_object(output)['status'], 'READY')
 
     def invoke(self, result):
         with patch('sys.argv', ['runner', '--account-id', 'liver_manager', '--use-sheets',
