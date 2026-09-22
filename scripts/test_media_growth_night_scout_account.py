@@ -20,7 +20,9 @@ def main() -> int:
             "account_id": "night_scout", "platform": "youtube",
             "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk",
             "title": "キャバ嬢の働き方", "description_preview": "女の子が店選びを考える動画",
-            "duration_seconds": 50, "rights_status": "approved_creator_clip",
+            # Production discovery can lack duration metadata even when the
+            # saved transcript has timestamped segments.
+            "duration_seconds": "", "rights_status": "approved_creator_clip",
             "permission_status": "approved", "discovery_status": "DISCOVERED",
         }],
         existing_transcripts=[{
@@ -36,6 +38,7 @@ def main() -> int:
         ("night growth plan is valid", growth["status"] == "PLAN_ONLY"),
         ("unknown night subject stays analysis only", growth["clip_candidate_count"] == 0),
         ("female-subject metadata creates candidates", safe_growth["clip_candidate_count"] > 0),
+        ("timestamped transcript supplies missing duration", safe_growth["source_videos_preview"][0]["analysis_status"] == "ANALYZED"),
         ("night candidate metadata is night-specific", all("配信初心者" not in row.get("target_audience", "") for row in safe_growth["top_clip_candidates"])),
         ("night public text passes validator", safe_growth["final_public_post_validator"] == "PASS"),
         ("dry-run never performs external media actions", not any(safe_growth[key] for key in ("would_download", "would_cut", "would_upload", "would_post_video"))),
