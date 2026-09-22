@@ -33,6 +33,13 @@ assert "apt-get" not in clip_workflow
 start = (ROOT / "scripts/start_youtube_pot_provider.sh").read_text(encoding="utf-8")
 assert 'PROVIDER_VERSION="2.0.0"' in start
 assert "@sha256:ed86b6fdd5e430ddd7c8ce1adb55e1ab54db7c7dbc1bcbf3a82454a85b971164" in start
+assert "sudo -n docker info" in start
+assert '"${DOCKER[@]}" run' in start
+assert "Docker daemon is unavailable to the production runner" in start
+
+stop = (ROOT / "scripts/stop_youtube_pot_provider.sh").read_text(encoding="utf-8")
+assert "sudo -n docker info" in stop
+assert '"${DOCKER[@]}" stop' in stop
 assert "plugin/server version mismatch" in start
 assert "--publish 127.0.0.1:4416:4416" in start
 assert "curl --fail --silent --show-error" in start
