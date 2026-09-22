@@ -25,7 +25,9 @@ for name in WORKFLOWS:
     assert "if: always()" in text, name
 
 start = (ROOT / "scripts/start_youtube_pot_provider.sh").read_text(encoding="utf-8")
-assert "@sha256:78502f24ce2b716272cf7d6e146f570069b987e9a77a1b346c161ac5bdb028e6" in start
+assert 'PROVIDER_VERSION="2.0.0"' in start
+assert "@sha256:ed86b6fdd5e430ddd7c8ce1adb55e1ab54db7c7dbc1bcbf3a82454a85b971164" in start
+assert "plugin/server version mismatch" in start
 assert "--publish 127.0.0.1:4416:4416" in start
 assert "curl --fail --silent --show-error" in start
 assert "seq 1 30" in start

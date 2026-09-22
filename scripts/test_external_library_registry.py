@@ -19,7 +19,7 @@ checks = [
     ("unlicensed HasData code is not installed", rows["hasdata_tiktok"]["install"] == "not_installed"),
     (
         "YouTube PO provider is revision and dependency pinned",
-        rows["bgutil_ytdlp_pot_provider"]["revision"] == "7511309af023b09788dc8f2efc96cc3671291e6c"
+        rows["bgutil_ytdlp_pot_provider"]["revision"] == "37169ee2656e08c5c2e5dc9df4c598c0cb4c88a8"
         and rows["bgutil_ytdlp_pot_provider"]["license"] == "GPL-3.0-or-later",
     ),
 ]
