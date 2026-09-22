@@ -162,7 +162,11 @@ def coverage(queues: list[dict], *, now: datetime, settings: dict | None = None,
             # A media slot may consume a text reserve only when no prepared
             # media was selected.  A normal text slot may use the same reserve
             # mechanism to reach its configured candidate count.
-            if (not media_slot or not selected) and len(selected) < required:
+            reserve_allowed = (
+                not media_slot
+                or bool(cfg["media_shortage_text_fallback"])
+            )
+            if reserve_allowed and (not media_slot or not selected) and len(selected) < required:
                 unallocated = [
                     row for row in queues
                     if not (row.get("business_date_jst") or row.get("schedule_date_jst"))
