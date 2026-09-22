@@ -11,10 +11,10 @@
   "recent_similarity_days": 30,
   "evergreen_cooldown_days": 90,
   "recovery_window_minutes": 240,
-  "media_shortage_text_fallback": true,
+  "media_shortage_text_fallback": false,
   "slot_route_cycles": {
     "beauty_account": {
-      "beauty_2030": ["direct_reference_media", "approved_source_clip"]
+      "beauty_2030": ["direct_reference_media"]
     }
   },
   "scheduler_primary": "external",

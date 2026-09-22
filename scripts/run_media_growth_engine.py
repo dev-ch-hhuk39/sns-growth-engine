@@ -467,19 +467,30 @@ def _transcript_done(row: dict[str, Any]) -> bool:
     )
 
 
-def night_subject_policy_check(source: dict[str, Any], video: dict[str, Any]) -> dict[str, str]:
-    """Conservative Night-domain eligibility check before transcript analysis."""
+def night_subject_policy_check(
+    source: dict[str, Any],
+    video: dict[str, Any],
+    transcript_text: str = "",
+) -> dict[str, str]:
+    """Require Night-domain evidence from metadata or the saved transcript."""
     if "night_scout" not in (source.get("target_account_ids") or [source.get("target_account_id")]):
         return {"status": "PASS", "reason": "not_night_scout"}
     if str(video.get("subject_review_status", "")).upper() in {"APPROVED_FEMALE_SUBJECT", "APPROVED_NIGHT_DOMAIN"}:
         return {"status": "PASS", "reason": "explicit_subject_review"}
-    text = " ".join(str(video.get(key, "")) for key in ("title", "description_preview", "description")).lower()
+    metadata_text = " ".join(
+        str(video.get(key, ""))
+        for key in ("title", "description_preview", "description")
+    ).lower()
+    transcript_text = str(transcript_text or "").lower()
+    text = f"{metadata_text} {transcript_text}"
     blocked = ("男性スカウト", "ホスト密着", "店舗pr", "店pr", "recruitment only")
     if any(token.lower() in text for token in blocked):
         return {"status": "BLOCKED", "reason": "night_subject_policy_analysis_only"}
     domain_cues = ("夜職", "キャバ", "ラウンジ", "店選び", "時給", "ノルマ", "客層", "出勤", "移籍")
-    if any(token.lower() in text for token in domain_cues):
-        return {"status": "PASS", "reason": "metadata_night_domain_cue"}
+    metadata_hits = {token for token in domain_cues if token.lower() in metadata_text}
+    transcript_hits = {token for token in domain_cues if token.lower() in transcript_text}
+    if metadata_hits or len(transcript_hits) >= 2:
+        return {"status": "PASS", "reason": "saved_evidence_night_domain_cues"}
     return {"status": "BLOCKED", "reason": "night_domain_evidence_required"}
 
 
@@ -765,17 +776,21 @@ def build_media_growth_plan(
         source = source_by_id.get(str(source_video.get("source_id", "")))
         if not source:
             continue
-        subject_check = night_subject_policy_check(source, source_video)
+        transcript = transcript_by_source_video.get(str(source_video.get("source_video_id", "")))
+        if not transcript:
+            source_video["transcript_status"] = source_video.get("transcript_status") or "TRANSCRIPT_PENDING"
+            source_video["analysis_status"] = "TRANSCRIPT_PENDING"
+            continue
+        subject_check = night_subject_policy_check(
+            source,
+            source_video,
+            str(transcript.get("transcript_text", "")),
+        )
         source_video["subject_policy_status"] = subject_check["status"]
         source_video["subject_policy_reason"] = subject_check["reason"]
         if subject_check["status"] != "PASS":
             source_video["analysis_status"] = "ANALYSIS_ONLY"
             source_video["skip_reason"] = subject_check["reason"]
-            continue
-        transcript = transcript_by_source_video.get(str(source_video.get("source_video_id", "")))
-        if not transcript:
-            source_video["transcript_status"] = source_video.get("transcript_status") or "TRANSCRIPT_PENDING"
-            source_video["analysis_status"] = "TRANSCRIPT_PENDING"
             continue
         duration = float(source_video.get("duration_seconds") or 0)
         if duration < float(config.get("clip_duration_min_seconds", 8)):

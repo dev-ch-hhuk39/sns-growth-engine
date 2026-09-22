@@ -147,6 +147,18 @@ night_policy = growth.night_subject_policy_check(
     },
 )
 
+night_transcript_policy = growth.night_subject_policy_check(
+    {
+        "target_account_ids": [
+            "night_scout"
+        ],
+    },
+    {
+        "title": "働き方について聞いてみた",
+    },
+    "キャバクラの店選びでは、時給だけでなく客層と出勤ペースも確認したい。",
+)
+
 checks = [
     (
         "chunked transcript rows merge",
@@ -167,6 +179,10 @@ checks = [
     (
         "copyedit fallback creates candidate",
         plan["clip_candidate_count"] > 0,
+    ),
+    (
+        "night policy accepts saved transcript domain evidence",
+        night_transcript_policy["status"] == "PASS",
     ),
     (
         "copyedit fallback provider recorded",
