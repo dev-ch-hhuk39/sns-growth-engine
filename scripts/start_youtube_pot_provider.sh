@@ -2,8 +2,15 @@
 set -euo pipefail
 
 readonly CONTAINER_NAME="sns-youtube-pot-provider"
-readonly IMAGE="brainicism/bgutil-ytdlp-pot-provider@sha256:78502f24ce2b716272cf7d6e146f570069b987e9a77a1b346c161ac5bdb028e6"
+readonly PROVIDER_VERSION="2.0.0"
+readonly IMAGE="brainicism/bgutil-ytdlp-pot-provider@sha256:ed86b6fdd5e430ddd7c8ce1adb55e1ab54db7c7dbc1bcbf3a82454a85b971164"
 readonly HEALTH_URL="http://127.0.0.1:4416/ping"
+
+installed_version="$(python3 -c 'import importlib.metadata; print(importlib.metadata.version("bgutil-ytdlp-pot-provider"))')"
+if [[ "$installed_version" != "$PROVIDER_VERSION" ]]; then
+  echo "[BLOCKED] YouTube PO Token Provider plugin/server version mismatch" >&2
+  exit 1
+fi
 
 docker run \
   --detach \
@@ -15,7 +22,7 @@ docker run \
 
 for _ in $(seq 1 30); do
   if curl --fail --silent --show-error "$HEALTH_URL" >/dev/null; then
-    echo "[OK] bounded YouTube PO Token Provider is ready"
+    echo "[OK] bounded YouTube PO Token Provider ${PROVIDER_VERSION} is ready"
     exit 0
   fi
   sleep 1

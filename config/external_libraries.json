@@ -37,7 +37,7 @@
     {
       "id": "bgutil_ytdlp_pot_provider",
       "repository": "https://github.com/Brainicism/bgutil-ytdlp-pot-provider",
-      "revision": "7511309af023b09788dc8f2efc96cc3671291e6c",
+      "revision": "37169ee2656e08c5c2e5dc9df4c598c0cb4c88a8",
       "license": "GPL-3.0-or-later",
       "role": "production_youtube_po_token_provider_for_bounded_approved_media",
       "install": "requirements-acquisition.txt plus pinned Docker digest",

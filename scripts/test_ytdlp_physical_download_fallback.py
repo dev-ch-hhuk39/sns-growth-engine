@@ -45,7 +45,7 @@ for relative in (
     assert "physical_download_option_attempts" in text, relative
 
 requirements = (ROOT / "requirements-acquisition.txt").read_text(encoding="utf-8")
-assert "bgutil-ytdlp-pot-provider==1.3.2" in requirements
+assert "bgutil-ytdlp-pot-provider==2.0.0" in requirements
 
 start_script = (ROOT / "scripts/start_youtube_pot_provider.sh").read_text(encoding="utf-8")
 assert "brainicism/bgutil-ytdlp-pot-provider@sha256:" in start_script
