@@ -94,6 +94,8 @@ jobs:
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         run: python3 scripts/discover_approved_source_videos.py --account-id "$ACCOUNT_ID" --use-sheets --fetch-real --apply --confirm-discovery
       - name: Transcribe one approved source locally
+        id: transcribe
+        continue-on-error: true
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true' && steps.media_budget.outcome == 'success'
         env:
           ALLOW_VIDEO_DOWNLOAD: "true"

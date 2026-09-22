@@ -91,7 +91,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(selected["bank_reserve"], ["reserve_q"])
         self.assertEqual(selected["missing"], 1)
 
-    def test_media_slot_reports_text_fallback_without_claiming_media(self):
+    def test_media_slot_does_not_consume_text_reserve(self):
         settings = {**policy(), "accounts": ["night_scout"], "text_candidates_per_slot": 1}
         reserve = {**self.queue, "queue_id": "reserve_media", "slot_id": "", "business_date_jst": "", "schedule_date_jst": "",
                    "public_post_text": "別の検証済み予備本文です。"}
@@ -102,10 +102,11 @@ class InventoryTests(unittest.TestCase):
                         evergreen_entries=[entry], posted=[], similar=lambda _a, _b: False, include_media_fallback=True)
         media = next(row for row in rows if row["post_type"] == "direct_reference_media")
         self.assertEqual(media["expected_post_type"], "direct_reference_media")
-        self.assertEqual(media["actual_coverage_type"], "text_fallback")
-        self.assertEqual(media["bank_reserve"], ["reserve_media"])
+        self.assertEqual(media["actual_coverage_type"], "")
+        self.assertEqual(media["bank_reserve"], [])
+        self.assertEqual(media["missing"], 1)
 
-    def test_media_slot_counts_preallocated_validated_text_fallback(self):
+    def test_media_slot_rejects_preallocated_text_fallback(self):
         settings = {**policy(), "accounts": ["night_scout"], "text_candidates_per_slot": 1}
         allocated = {
             **self.queue,
@@ -120,9 +121,9 @@ class InventoryTests(unittest.TestCase):
             include_media_fallback=True,
         )
         media = next(row for row in rows if row["post_type"] == "direct_reference_media")
-        self.assertEqual(media["ready_primary"], ["allocated_text_fallback"])
-        self.assertEqual(media["actual_coverage_type"], "text_fallback")
-        self.assertEqual(media["missing"], 0)
+        self.assertEqual(media["ready_primary"], [])
+        self.assertEqual(media["actual_coverage_type"], "")
+        self.assertEqual(media["missing"], 1)
 
     def test_duplicate_rows_cannot_inflate_coverage(self):
         self.queue.update(slot_id="ns_1600_original", business_date_jst="2026-09-09")

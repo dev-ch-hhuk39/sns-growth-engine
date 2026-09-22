@@ -4,7 +4,7 @@ on:
   schedule:
     # Direct inventory for all active production accounts: 12:15 JST.
     - cron: "15 3 * * *"
-    # 14:15 JST: Beauty before cutover; all three independent clip buffers after cutover.
+    # 14:15 JST: approved-source clip buffers for accounts with scheduled clip slots.
     - cron: "15 5 * * *"
 permissions:
   contents: read
@@ -74,7 +74,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        account: ${{ vars.BUFFERED_INVENTORY_ACTIVE == 'true' && fromJSON('["night_scout","liver_manager","beauty_account"]') || fromJSON('["beauty_account"]') }}
+        account: ${{ fromJSON('["night_scout","liver_manager"]') }}
     steps:
       - name: Dispatch bounded approved-source clip preparation
         env:

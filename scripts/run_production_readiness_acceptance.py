@@ -98,7 +98,13 @@ def evaluate(client, *, now=None):
         bank_counts[account] = len(usable_bank)
         from process_threads_queue import process_one
         media_counts[account] = {}
-        for route in sorted(MEDIA_POST_TYPES):
+        scheduled_media_routes = {
+            str(row.get("post_type", ""))
+            for row in rows
+            if row.get("account_id") == account
+            and row.get("post_type") in MEDIA_POST_TYPES
+        }
+        for route in sorted(scheduled_media_routes):
             valid_ids = set()
             for row in queue:
                 if row.get("queue_id") in approved and has_media(row) and media_route(row) == route:
@@ -121,7 +127,12 @@ def evaluate(client, *, now=None):
             blockers.append(f"EVERGREEN_LOW:{account}")
         for route, count in media_counts[account].items():
             if count < cfg["minimum_media_per_route"]:
-                resource_constraints.append(f"MEDIA_LOW:{account}:{route}")
+                shortage = f"MEDIA_LOW:{account}:{route}"
+                resource_constraints.append(shortage)
+                blockers.append(shortage)
+        fallback_count = accounts[account]["media_slot_text_fallbacks"]
+        if fallback_count:
+            blockers.append(f"MEDIA_TEXT_FALLBACK:{account}:{fallback_count}")
     posts = [p for p in tables["posted_results"] if p.get("account_id") in cfg["accounts"]
              and str(p.get("real_post", "")).lower() == "true"]
     buffered_result_ids = {str(run.get("result_id", "")) for run in tables["content_slot_runs"]

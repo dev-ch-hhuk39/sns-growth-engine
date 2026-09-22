@@ -2877,10 +2877,19 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
             post_saved_media=True, prepare_saved_media_queue=True, slot_id=slot_id,
             excluded_clip_ids=excluded)
         if plan.get("status") != "PLAN_ONLY":
+            attempts.append({
+                "stage": "select_saved_media",
+                "status": str(plan.get("status", "")),
+                "reasons": list(plan.get("skipped_candidates", []))[:20],
+            })
             asset_plan = build_plan(account_id=account_id, apply=True, confirm=True, client=client,
                 prepare_only=True, slot_id=slot_id, excluded_clip_ids=excluded)
             if asset_plan.get("status") != "PLAN_ONLY":
-                attempts.append({"status": "NO_ELIGIBLE_CLIP"})
+                attempts.append({
+                    "stage": "select_unprepared_clip",
+                    "status": "NO_ELIGIBLE_CLIP",
+                    "reasons": list(asset_plan.get("skipped_candidates", []))[:20],
+                })
                 break
             prepared = execute(asset_plan, client)
             attempts.append({"status": str(prepared.get("status", ""))})

@@ -21,9 +21,18 @@ class BufferedReconcilerTests(unittest.TestCase):
                     "slot_id": self.slot["slot_id"], "business_date_jst": "2026-09-09",
                     "schedule_date_jst": "2026-09-09"}
 
+    def media_row(self):
+        return {
+            **self.row,
+            "media_asset_id": "asset-q",
+            "media_url": "https://example.com/media.mp4",
+            "media_required": "true",
+            "generation_mode": "direct_reference_media",
+        }
+
     def test_media_primary_text_reserve(self):
         media = {**self.row, "queue_id": "m", "media_asset_id": "asset", "generation_mode": "direct_reference_media"}
-        self.assertEqual([r["queue_id"] for r in runner.candidates([self.row, media], self.slot, policy())], ["m", "q"])
+        self.assertEqual([r["queue_id"] for r in runner.candidates([self.row, media], self.slot, policy())], ["m"])
         self.assertEqual(runner.candidates([self.row], self.slot, {**policy(), "media_shortage_text_fallback": False}), [])
 
     def test_wrong_media_route_blocked(self):
@@ -33,7 +42,7 @@ class BufferedReconcilerTests(unittest.TestCase):
         slots = scheduled_slots("beauty_account", self.now, self.now + timedelta(days=2))
         self.assertEqual(len(slots), 4)
         evening = [s for s in slots if s["slot_id"] == "beauty_2030"]
-        self.assertEqual({s['post_type'] for s in evening}, {"direct_reference_media", "approved_source_clip"})
+        self.assertEqual({s['post_type'] for s in evening}, {"direct_reference_media"})
         slot = evening[0]
         row = {**self.row, "account_id": "beauty_account", "generation_mode": slot['post_type'],
                "media_asset_id": "beauty_asset", "business_date_jst": "", "schedule_date_jst": "",
@@ -93,27 +102,28 @@ class BufferedReconcilerTests(unittest.TestCase):
     def test_unallocated_bank_fills_missing_slot_without_write_or_ai(self):
         row = {**self.row, "business_date_jst": "", "schedule_date_jst": ""}
         bank = bank_record(row, now=self.now, runtime_check=lambda row: True)
+        text_slot = {**self.slot, "slot_id": "ns_1600_original", "post_type": "original_text"}
         with patch.object(runner, "records", return_value=[bank]), \
              patch.object(runner, "process_one", return_value={"status": "DRY_RUN"}) as worker, \
              patch.object(runner, "update_row") as write:
-            selected = runner.reserve_candidate(SimpleNamespace(), [row], [], self.slot, policy(), self.now)
+            selected = runner.reserve_candidate(SimpleNamespace(), [row], [], text_slot, policy(), self.now)
             self.assertEqual(selected, row)
-            self.assertEqual(worker.call_args.args[1]['business_date_jst'], self.slot['business_date_jst'])
+            self.assertEqual(worker.call_args.args[1]['business_date_jst'], text_slot['business_date_jst'])
             self.assertTrue(worker.call_args.kwargs['dry_run'])
             write.assert_not_called()
-            self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [row], [{"queue_id": "q"}], self.slot, policy(), self.now))
+            self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [row], [{"queue_id": "q"}], text_slot, policy(), self.now))
             self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [row],
                 [{"queue_id": "other", "account_id": "night_scout", "posted_text": row['public_post_text']}],
-                self.slot, policy(), self.now))
+                text_slot, policy(), self.now))
             for invalid in ({**row, "business_date_jst": "2026-09-10"},
                             {**row, "account_id": "liver_manager"},
                             {**row, "public_post_text": "changed text"}):
-                self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [invalid], [], self.slot, policy(), self.now))
+                self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [invalid], [], text_slot, policy(), self.now))
             self.assertIsNone(runner.reserve_candidate(SimpleNamespace(), [row], [], self.slot,
                 {**policy(), "media_shortage_text_fallback": False}, self.now))
 
     def test_dry_run_never_claims_or_posts(self):
-        tables = {"queue": [self.row], "posted_results": [], "content_slot_runs": [], "evergreen_bank": []}
+        tables = {"queue": [self.media_row()], "posted_results": [], "content_slot_runs": [], "evergreen_bank": []}
         with patch.object(runner, "records", side_effect=lambda _, name: tables[name]), \
              patch.object(runner, "process_one", return_value={"status": "DRY_RUN"}) as worker, \
              patch.object(runner, "claim_slot_run") as claim:
@@ -123,7 +133,7 @@ class BufferedReconcilerTests(unittest.TestCase):
         claim.assert_not_called()
 
     def test_uncertain_publish_is_not_retried(self):
-        tables = {"queue": [self.row], "posted_results": [], "content_slot_runs": [], "evergreen_bank": []}
+        tables = {"queue": [self.media_row()], "posted_results": [], "content_slot_runs": [], "evergreen_bank": []}
         with patch.object(runner, "policy", return_value={**policy(), "activation_enabled": True}), \
              patch.object(runner, "records", side_effect=lambda _, name: tables[name]), \
              patch.object(runner, "process_one", side_effect=[{"status": "DRY_RUN"}, {"status": "DRY_RUN"}, {"status": "PUBLISH_OUTCOME_UNVERIFIED"}]) as worker, \
@@ -137,7 +147,7 @@ class BufferedReconcilerTests(unittest.TestCase):
         self.assertEqual(result["status"], "FAILED")
 
     def test_ready_queue_after_exception_releases_pre_publish_claim(self):
-        tables = {"queue": [dict(self.row)], "posted_results": [], "content_slot_runs": [],
+        tables = {"queue": [self.media_row()], "posted_results": [], "content_slot_runs": [],
                   "evergreen_bank": []}
         claim = {"status": "CLAIMED", "slot_run_id": "slot-1", "publish_attempt_id": "attempt-1"}
         with patch.object(runner, "policy", return_value={**policy(), "activation_enabled": True}), \
@@ -156,7 +166,7 @@ class BufferedReconcilerTests(unittest.TestCase):
         save.assert_not_called()
 
     def test_confirmed_no_post_releases_slot_without_ambiguous_recovery(self):
-        tables = {"queue": [dict(self.row)], "posted_results": [], "content_slot_runs": [],
+        tables = {"queue": [self.media_row()], "posted_results": [], "content_slot_runs": [],
                   "evergreen_bank": []}
         claim = {"status": "CLAIMED", "slot_run_id": "slot-1", "publish_attempt_id": "attempt-1"}
         confirmed = {"status": "FAILED", "publish_attempted": True,
@@ -181,8 +191,8 @@ class BufferedReconcilerTests(unittest.TestCase):
         self.assertEqual(posts[0]["slot_id"], self.slot["slot_id"])
 
     def test_second_reconcile_does_not_repeat_verified_delivery(self):
-        tables = {"queue": [dict(self.row)], "posted_results": [], "content_slot_runs": [],
-                  "metrics_collection_jobs": []}
+        tables = {"queue": [self.media_row()], "posted_results": [], "content_slot_runs": [],
+                  "metrics_collection_jobs": [], "media_post_results": []}
         publish_calls = []
 
         def worker(client, row, *, dry_run, confirm_real_post):
@@ -198,6 +208,9 @@ class BufferedReconcilerTests(unittest.TestCase):
             tables['posted_results'].append(post)
             tables['metrics_collection_jobs'] = [{"result_id": "r1", "account_id": row['account_id'],
                                                   "window_hours": str(window)} for window in (24, 72, 168)]
+            tables['media_post_results'] = [{"result_id": "r1", "queue_id": row['queue_id'],
+                                             "account_id": row['account_id'], "status": "POSTED",
+                                             "post_url": post["post_url"]}]
             return {"status": "POSTED", "result_id": "r1"}
 
         with patch.object(runner, 'policy', return_value={**policy(), 'activation_enabled': True}), \
@@ -217,7 +230,7 @@ class BufferedReconcilerTests(unittest.TestCase):
         self.assertEqual(second['results'], [])
         self.assertEqual(publish_calls, ['q'])
         self.assertEqual(len(tables['metrics_collection_jobs']), 3)
-        self.assertEqual(tables['content_slot_runs'][0]['actual_post_type'], 'text_fallback')
+        self.assertEqual(tables['content_slot_runs'][0]['actual_post_type'], 'direct_reference_media')
 
     def test_missing_metrics_is_not_verified_delivery(self):
         post = {'queue_id': 'q', 'account_id': 'night_scout', 'result_id': 'r',
