@@ -496,6 +496,7 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "final_alignment_score", "main_claim_coverage", "unsupported_claim_count",
         "source_copy_similarity", "recent_post_similarity", "claim_support_json",
         "semantic_segment_score", "selected_reason",
+        "standalone_segment_confirmed", "standalone_story_score", "clip_worthy",
         "comment_signal_count", "comment_reaction_score",
         "retry_count", "last_error", "last_attempt_at",
         "failure_signature", "same_failure_count", "quarantined_at", "quarantine_reason",

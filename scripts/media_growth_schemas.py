@@ -29,6 +29,7 @@ VIDEO_CLIP_CANDIDATE_FIELDS = [
     "hook_strength", "emotional_pull", "educational_value", "creator_relevance",
     "liver_manager_fit", "comment_signal_count", "comment_reaction_score",
     "risk_score", "rights_score", "clip_score",
+    "standalone_segment_confirmed", "standalone_story_score", "clip_worthy",
 ]
 
 SOURCE_VIDEO_FIELDS = [

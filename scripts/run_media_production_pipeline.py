@@ -1433,8 +1433,31 @@ def select_candidate(
                 "status": clip.get("content_understanding_status") or clip.get("understanding_status") or "PASS",
                 "transcript_status": clip.get("transcript_status") or "PASS",
                 "standalone_segment_confirmed": clip.get("standalone_segment_confirmed", bool(transcript_excerpt and start_seconds and end_seconds)),
-                "standalone_story_score": clip.get("standalone_story_score") or clip.get("confidence_score") or clip.get("clip_score") or 0,
-                "clip_worthy": clip.get("clip_worthy", str(clip.get("alignment_status", "")).upper() == "PASS"),
+                # Legacy READY rows were approved before the explicit
+                # standalone fields existed. Preserve that reviewed evidence,
+                # but never promote a new WAITING_REVIEW row from the generic
+                # soft ranking score alone.
+                "standalone_story_score": (
+                    clip.get("standalone_story_score")
+                    or (
+                        (
+                            clip.get("confidence_score")
+                            or clip.get("clip_score")
+                            or 0
+                        )
+                        if status in ready_statuses
+                        else 0
+                    )
+                ),
+                "clip_worthy": (
+                    clip.get("clip_worthy")
+                    if clip.get("clip_worthy") not in (None, "")
+                    else (
+                        str(clip.get("alignment_status", "")).upper() == "PASS"
+                        if status in ready_statuses
+                        else False
+                    )
+                ),
             },
         )
         # A clip slot is never converted to text or an arbitrary media asset.
