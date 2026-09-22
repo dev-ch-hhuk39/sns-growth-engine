@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = sorted((ROOT / ".github/workflows").glob("*.yml"))
 RUNNER = "ubuntu-latest"
 HOST_RUNTIME_WORKFLOWS = {
+    "approved-source-clip-preparation.yml",
     "content-slot-recovery.yml",
     "deploy-buffered-production-runtime.yml",
     "refresh-threads-tokens.yml",
