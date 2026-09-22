@@ -34,6 +34,7 @@ def main() -> int:
     )
     checks = [
         ("night discovery selects active authorized sources", {row["source_id"] for row in discovery["selected_sources"]} == expected_active_sources),
+        ("approved transcript-backed Night source remains active", "src_ns_yt_cand_001" in expected_active_sources),
         ("night discovery is bounded", discovery["limits"]["max_total_new_videos_per_run"] == 12),
         ("night growth plan is valid", growth["status"] == "PLAN_ONLY"),
         ("unknown night subject stays analysis only", growth["clip_candidate_count"] == 0),
