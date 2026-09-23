@@ -163,7 +163,12 @@ def reviewed_pass_queue_ids(payload: dict[str, Any], *, warn_only: bool = False)
         if warn_only or str(row.get("status", "")).upper() == "PASS":
             queue_ids.append(str(row.get("queue_id", "")))
     for row in payload.get("skipped_current", []):
-        if str(row.get("gate_status", "")).upper() == "PASS":
+        # Media V1 treats Hybrid caption/persona quality as a persisted soft
+        # signal. An already-current BLOCKED result must therefore follow the
+        # same path as a freshly evaluated BLOCKED result when warn_only is
+        # enabled. The media promoter still re-runs rights, provenance,
+        # account, technical-media and public-text hard gates before READY.
+        if warn_only or str(row.get("gate_status", "")).upper() == "PASS":
             queue_ids.append(str(row.get("queue_id", "")))
     return list(dict.fromkeys(item for item in queue_ids if item))
 

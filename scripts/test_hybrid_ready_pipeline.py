@@ -3,7 +3,12 @@ from __future__ import annotations
 
 import subprocess
 
-from run_hybrid_ready_pipeline import command_plan, execute, extract_json_objects
+from run_hybrid_ready_pipeline import (
+    command_plan,
+    execute,
+    extract_json_objects,
+    reviewed_pass_queue_ids,
+)
 
 
 def main() -> int:
@@ -53,6 +58,12 @@ def main() -> int:
         'noise\n{"status":"A"}\nmore\n{"updated_queue_ids":["q1"]}\n'
     )
     assert parsed[-1]["updated_queue_ids"] == ["q1"]
+    current_blocked = {
+        "results": [],
+        "skipped_current": [{"queue_id": "q_media", "gate_status": "BLOCKED"}],
+    }
+    assert reviewed_pass_queue_ids(current_blocked) == []
+    assert reviewed_pass_queue_ids(current_blocked, warn_only=True) == ["q_media"]
 
     commands: list[list[str]] = []
     responses = iter(
