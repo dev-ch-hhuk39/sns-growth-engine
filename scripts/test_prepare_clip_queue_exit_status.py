@@ -99,6 +99,27 @@ class ClipQueueExitTests(unittest.TestCase):
         self.assertEqual(attempt['review_status'], 'NO_READY_CANDIDATE')
         self.assertEqual(result['status'], 'MEDIA_INVENTORY_LOW')
 
+    def test_existing_waiting_review_queue_is_recovered_before_acquisition(self):
+        from unittest.mock import Mock
+        pending = {
+            **self.ready_row(), 'status': 'WAITING_REVIEW',
+            'slot_id': 'lm_1800_clip_media', 'target_account_id': 'liver_manager',
+        }
+        with patch('sheets_record_reader.read_records_safely', side_effect=[
+                 [pending], [self.ready_row()],
+             ]), \
+             patch.object(pipeline, 'process_one', return_value={'status': 'DRY_RUN'}), \
+             patch.object(pipeline, 'build_plan') as planner, \
+             patch.object(pipeline.subprocess, 'run') as review:
+            review.return_value.returncode = 0
+            review.return_value.stdout = '{"status":"READY","updated_queue_ids":["q0"]}'
+            result = pipeline.maintain_ready_clip_inventory(
+                Mock(), account_id='liver_manager', slot_id='lm_1800_clip_media', minimum=1)
+        self.assertEqual(result['status'], 'READY_INVENTORY_OK')
+        self.assertEqual(result['ready_count'], 1)
+        self.assertEqual(result['attempts'][0]['queue_id'], 'q0')
+        planner.assert_not_called()
+
     def test_child_runner_json_parser_uses_final_complete_object(self):
         output = '{"status":"PASS"}\nnoise\n{"status":"READY","stages":[{"status":"PASS"}]}\n'
         self.assertEqual(pipeline._last_json_object(output)['status'], 'READY')
