@@ -9,6 +9,7 @@ from run_hybrid_ready_pipeline import (
     extract_json_objects,
     reviewed_pass_queue_ids,
 )
+from promote_hybrid_approved_media import media_validation_plan
 
 
 def main() -> int:
@@ -64,6 +65,12 @@ def main() -> int:
     }
     assert reviewed_pass_queue_ids(current_blocked) == []
     assert reviewed_pass_queue_ids(current_blocked, warn_only=True) == ["q_media"]
+    promotion_plan = media_validation_plan({
+        "width": "854", "height": "480", "video_stream_count": "1",
+        "audio_stream_count": "1", "media_probe_status": "PASS",
+    })
+    assert promotion_plan["width"] == "854"
+    assert promotion_plan["height"] == "480"
 
     commands: list[list[str]] = []
     responses = iter(

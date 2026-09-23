@@ -62,6 +62,8 @@ def media_validation_plan(row: dict[str, Any]) -> dict[str, Any]:
         "aspect_ratio": row.get("aspect_ratio", ""),
         "aspect_ratio_policy": row.get("aspect_ratio_policy", "preserve_source"),
         "source_aspect_ratio": row.get("source_aspect_ratio", ""),
+        "width": row.get("width", ""),
+        "height": row.get("height", ""),
         "video_stream_count": row.get("video_stream_count", 0),
         "audio_stream_count": row.get("audio_stream_count", 0),
         "media_probe_status": row.get("media_probe_status", ""),
