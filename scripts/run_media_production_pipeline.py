@@ -2900,23 +2900,65 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
     if not 1 <= minimum <= 7:
         raise ValueError("clip_inventory_minimum_out_of_range")
 
-    def ready_ids() -> set[str]:
+    def queue_rows() -> list[dict[str, Any]]:
+        return read_records_safely(client, "queue", preserve_strings=True)
+
+    def ready_ids(rows: list[dict[str, Any]] | None = None) -> set[str]:
         snapshot = copy.copy(client)
         enable_readonly_record_cache(snapshot)
         # Queue promotion happens in a child process. Read the queue itself
         # without an invocation snapshot so every refill cycle observes the
         # promoter's read-after-write result. The copied client remains cached
         # for process_one's supporting tab reads to keep Sheets traffic bounded.
-        queue_rows = read_records_safely(client, "queue", preserve_strings=True)
-        return {str(row["media_asset_id"]) for row in queue_rows
+        current_rows = rows if rows is not None else queue_rows()
+        return {str(row["media_asset_id"]) for row in current_rows
                 if eligible_ready(row, account_id) and media_route(row) == "approved_source_clip"
                 and row.get("media_asset_id")
                 and process_one(snapshot, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN"}
 
-    ids, attempts, excluded = ready_ids(), [], set()
+    def pending_queue_ids(rows: list[dict[str, Any]], reviewed: set[str]) -> list[str]:
+        pending = [row for row in rows
+                   if str(row.get("account_id") or row.get("target_account_id") or "") == account_id
+                   and str(row.get("target_account_id") or account_id) == account_id
+                   and str(row.get("slot_id") or "") == slot_id
+                   and str(row.get("status") or "").upper() == "WAITING_REVIEW"
+                   and media_route(row) == "approved_source_clip"
+                   and str(row.get("queue_id") or "") not in reviewed
+                   and not any(_true(row.get(key)) for key in
+                               ("excluded_from_activation", "repost_prohibited", "superseded"))]
+        pending.sort(key=lambda row: (str(row.get("created_at") or ""), str(row.get("queue_id") or "")))
+        return [str(row.get("queue_id") or "") for row in pending if row.get("queue_id")]
+
+    def review_queue(qid: str) -> dict[str, Any]:
+        review = subprocess.run([sys.executable, "scripts/run_hybrid_ready_pipeline.py",
+            "--account-id", account_id, "--slot-id", slot_id, "--queue-id", qid,
+            "--max-candidates", "1", "--approval-mode", "media", "--autonomous-low-risk", "--apply", "--use-sheets"],
+            cwd=ROOT, env={**os.environ, "PUBLISH_ENABLED": "false", "ALLOW_REAL_THREADS_POST": "false"},
+            capture_output=True, text=True, timeout=480, check=False)
+        review_payload = _last_json_object(review.stdout)
+        review_status = str(review_payload.get("status", ""))
+        return {
+            "queue_id": qid,
+            "status": "READY" if review.returncode == 0 and review_status == "READY" else (
+                "QUALITY_BLOCKED" if review.returncode == 0 else "PREPARATION_FAILED"
+            ),
+            "review_status": review_status or "MISSING_RESULT",
+            "review_reason": str(review_payload.get("reason", "")),
+        }
+
+    rows = queue_rows()
+    ids, attempts, excluded, reviewed_queues = ready_ids(rows), [], set(), set()
     for _ in range(minimum * 2):
         if len(ids) >= minimum:
             break
+        pending = pending_queue_ids(rows, reviewed_queues)
+        if pending:
+            qid = pending[0]
+            reviewed_queues.add(qid)
+            attempts.append(review_queue(qid))
+            rows = queue_rows()
+            ids = ready_ids(rows)
+            continue
         plan = build_plan(account_id=account_id, apply=True, confirm=True, client=client,
             post_saved_media=True, prepare_saved_media_queue=True, slot_id=slot_id,
             excluded_clip_ids=excluded)
@@ -2950,24 +2992,12 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
         excluded.add(str(plan.get("selected_clip_candidate_id", "")))
         qid = str(queued.get("queue_id") or "")
         if qid and queued.get("status") in {"QUEUED_WAITING_REVIEW", "QUEUE_ALREADY_EXISTS"}:
-            review = subprocess.run([sys.executable, "scripts/run_hybrid_ready_pipeline.py",
-                "--account-id", account_id, "--slot-id", slot_id, "--queue-id", qid,
-                "--max-candidates", "1", "--approval-mode", "media", "--autonomous-low-risk", "--apply", "--use-sheets"],
-                cwd=ROOT, env={**os.environ, "PUBLISH_ENABLED": "false", "ALLOW_REAL_THREADS_POST": "false"},
-                capture_output=True, text=True, timeout=480, check=False)
-            review_payload = _last_json_object(review.stdout)
-            review_status = str(review_payload.get("status", ""))
-            attempts.append({
-                "queue_id": qid,
-                "status": "READY" if review.returncode == 0 and review_status == "READY" else (
-                    "QUALITY_BLOCKED" if review.returncode == 0 else "PREPARATION_FAILED"
-                ),
-                "review_status": review_status or "MISSING_RESULT",
-                "review_reason": str(review_payload.get("reason", "")),
-            })
+            reviewed_queues.add(qid)
+            attempts.append(review_queue(qid))
         else:
             attempts.append({"status": str(queued.get("status", "UNKNOWN"))})
-        ids = ready_ids()
+        rows = queue_rows()
+        ids = ready_ids(rows)
     availability = media_availability_status(len(ids), minimum, attempts)
     return {"status": "READY_INVENTORY_OK" if len(ids) >= minimum else "MEDIA_INVENTORY_LOW",
             "account_id": account_id, "ready_count": len(ids), "minimum": minimum,
