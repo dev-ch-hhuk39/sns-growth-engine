@@ -72,6 +72,22 @@ jobs:
           test -x "$SNS_YTDLP_NODE_PATH" || { echo "[BLOCKED] approved Node 22 runtime is unavailable"; exit 1; }
           test "$($SNS_YTDLP_NODE_PATH --version | cut -d. -f1)" = "v22" || { echo "[BLOCKED] approved Node runtime is not v22"; exit 1; }
           python3 -m pip install --requirement requirements-media-runtime.txt
+      - name: Inspect and reclaim disposable host caches
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
+        run: |
+          set -euo pipefail
+          echo "[storage] before"
+          df -B1 "$GITHUB_WORKSPACE"
+          echo "[storage] unused Docker build cache"
+          docker builder du || true
+          echo "[storage] pip download/wheel cache"
+          python3 -m pip cache info || true
+          echo "[storage] pruning only unused Docker build cache older than 7 days"
+          docker builder prune --force --filter until=168h
+          echo "[storage] removing pip download/wheel cache only"
+          python3 -m pip cache purge
+          echo "[storage] after"
+          df -B1 "$GITHUB_WORKSPACE"
       - name: Start bounded YouTube PO Token Provider
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
         run: scripts/start_youtube_pot_provider.sh
