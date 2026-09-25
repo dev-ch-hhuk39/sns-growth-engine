@@ -61,6 +61,7 @@ jobs:
           python3 - <<'PY'
           import os
           import shlex
+          import subprocess
           from pathlib import Path
 
           path = Path(os.environ["RUNTIME_ENV_FILE"])
@@ -90,8 +91,15 @@ jobs:
                   handle.write(f"{key}={shlex.quote(value)}\n")
               handle.write("THREADS_TOKEN_STORE_DIR=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens\n")
           path.chmod(0o600)
-          if len(path.read_text(encoding="utf-8").splitlines()) != len(keys) + 1:
+          lines = path.read_text(encoding="utf-8").splitlines()
+          assignments = {line.split("=", 1)[0] for line in lines if "=" in line}
+          if not set(keys).issubset(assignments) or "THREADS_TOKEN_STORE_DIR" not in assignments:
               raise SystemExit("[BLOCKED] runtime secret environment line serialization failed")
+          check = subprocess.run(["bash", "-n", str(path)], capture_output=True, check=False)
+          if check.returncode:
+              raise SystemExit("[BLOCKED] runtime secret environment syntax validation failed")
+          if path.stat().st_mode & 0o777 != 0o600:
+              raise SystemExit("[BLOCKED] runtime secret environment permissions must be 0600")
           print("[OK] runtime secret environment written without exposing values")
           PY
           revision="$(git rev-parse HEAD)"
