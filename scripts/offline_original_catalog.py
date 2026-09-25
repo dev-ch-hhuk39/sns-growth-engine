@@ -94,7 +94,8 @@ def offline_original_reasons(queue: Mapping[str, Any]) -> list[str]:
     return reasons
 
 
-def select_original(account_id: str, history: list[Any], *, batch_compared: list[Any] | None = None) -> dict[str, Any]:
+def select_original(account_id: str, history: list[Any], *, batch_compared: list[Any] | None = None,
+                    used_texts: list[Any] | None = None) -> dict[str, Any]:
     from generation_quality_gates import evaluate_generation_quality
     from public_post_quality import final_public_post_validator
     from auto_approve_queue import near_duplicate, normalize_text
@@ -103,7 +104,10 @@ def select_original(account_id: str, history: list[Any], *, batch_compared: list
                or str(row.get("account_id") or row.get("target_account_id") or account_id) == account_id]
     old_texts = [str(row.get("public_post_text") or row.get("posted_text") or "")
                  if isinstance(row, dict) else str(row) for row in history]
-    used = {normalize_text(text) for text in old_texts}
+    all_used = [str(row.get("public_post_text") or row.get("posted_text") or "")
+                if isinstance(row, dict) else str(row)
+                for row in (used_texts or [])]
+    used = {normalize_text(text) for text in old_texts + all_used if text}
     for text in catalog(account_id):
         if normalize_text(text) in used:
             continue

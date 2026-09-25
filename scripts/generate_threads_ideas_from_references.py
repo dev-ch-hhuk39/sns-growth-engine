@@ -742,6 +742,7 @@ def build_fallback_generation_rows(
     theme: str = "",
     schedule_date_jst: str = "",
     history: list[str] | None = None,
+    used_texts: list[str] | None = None,
     fallback_reason: str = "reference_unavailable",
     preferred_topics: list[str] | None = None,
     offline_original: bool = False,
@@ -778,7 +779,8 @@ def build_fallback_generation_rows(
             if offline_original:
                 from offline_original_catalog import select_original
 
-                output = select_original(account_id, recent + accepted, batch_compared=accepted)
+                output = select_original(account_id, recent + accepted, batch_compared=accepted,
+                                         used_texts=used_texts)
                 if not output:
                     break
             elif os.environ.get("BUFFERED_PREPARATION") == "true" and attempt < 5:
@@ -2530,11 +2532,37 @@ def run_reference_generation(
     }
 
 
+def offline_history_context(posted: list[dict[str, Any]], queue: list[dict[str, Any]], *,
+                            account_id: str, now: datetime, recent_days: int) -> tuple[list[str], list[str]]:
+    """Keep lifetime exact dedupe while bounding semantic comparison to active/recent content."""
+    from production_inventory import timestamp as production_timestamp
+
+    account_posted = [row for row in posted if str(row.get("account_id")) == account_id]
+    account_queue = [row for row in queue if str(row.get("account_id")) == account_id]
+    active_statuses = {"READY", "AUTO_READY", "WAITING_REVIEW", "PROCESSING"}
+    cutoff = now.astimezone(timezone.utc) - timedelta(days=recent_days)
+    recent_posted = []
+    for row in account_posted:
+        at = production_timestamp(row.get("posted_at") or row.get("actual_posted_at"))
+        if at is None or at.astimezone(timezone.utc) >= cutoff:
+            recent_posted.append(str(row.get("public_post_text") or row.get("posted_text") or ""))
+    active_queue = [row for row in account_queue if str(row.get("status", "")).upper() in active_statuses]
+    semantic_history = recent_posted + [
+        str(row.get("public_post_text") or row.get("posted_text") or "") for row in active_queue
+    ]
+    exact_dedupe = [
+        str(row.get("public_post_text") or row.get("posted_text") or "")
+        for row in account_posted + account_queue
+    ]
+    return semantic_history, exact_dedupe
+
+
 def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
                                     slot_id: str, schedule_date_jst: str,
                                     client: Any | None = None) -> dict[str, Any]:
     """Use the canonical row builder/persistence without source or AI dependencies."""
     from config_loader import get_config
+    from production_inventory import policy as production_inventory_policy
     from sheets_client import SheetsClient
     from sheets_record_reader import read_records_safely
 
@@ -2543,13 +2571,16 @@ def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     posted = [dict(row) for row in read_records_safely(client, "posted_results")
               if str(row.get("account_id")) == account_id]
-    queue = [dict(row) for row in read_records_safely(client, "queue")
-             if str(row.get("account_id")) == account_id
-             and str(row.get("status", "")).upper() in {"READY", "AUTO_READY", "WAITING_REVIEW", "PROCESSING", "POSTED"}]
-    history = [str(row.get("public_post_text") or row.get("posted_text") or "") for row in posted + queue]
+    all_queue = [dict(row) for row in read_records_safely(client, "queue")
+                 if str(row.get("account_id")) == account_id]
+    days = int(production_inventory_policy().get("recent_similarity_days", 30))
+    history, used_texts = offline_history_context(
+        posted, all_queue, account_id=account_id, now=datetime.now(timezone.utc), recent_days=days,
+    )
     rows = build_fallback_generation_rows(
         account_id=account_id, top_n=top_n, slot_id=slot_id, post_type="original_text",
-        schedule_date_jst=schedule_date_jst, history=history, offline_original=True,
+        schedule_date_jst=schedule_date_jst, history=history, used_texts=used_texts,
+        offline_original=True,
     )
     if not rows["queue"]:
         return {"status": "QUALITY_EXHAUSTED", "failure_category": "OFFLINE_CATALOG_EXHAUSTED",

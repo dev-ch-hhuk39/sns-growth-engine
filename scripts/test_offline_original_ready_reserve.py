@@ -8,6 +8,7 @@ import io
 import json
 import sys
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,7 +19,9 @@ from hybrid_ai_gate import HybridAiGate, hybrid_ai_gate_passed, merge_gate_audit
 from offline_original_catalog import ACCOUNTS, catalog, evidence, select_original  # noqa: E402
 from learning.feature_attribution import build_observations  # noqa: E402
 from maintain_text_ready_inventory import _generation_commands, replenish  # noqa: E402
-from generate_threads_ideas_from_references import build_fallback_generation_rows, run_offline_original_generation  # noqa: E402
+from generate_threads_ideas_from_references import (  # noqa: E402
+    build_fallback_generation_rows, offline_history_context, run_offline_original_generation,
+)
 from public_post_quality import final_public_post_validator  # noqa: E402
 from generation_quality_gates import evaluate_generation_quality, _topic_scores  # noqa: E402
 from auto_approve_queue import near_duplicate, evaluate_item, load_rules, rules_for_account  # noqa: E402
@@ -225,6 +228,49 @@ class OfflineReserveTests(unittest.TestCase):
 
     def test_exhaustion_does_not_recycle_catalog_text(self):
         self.assertEqual(select_original("beauty_account", list(catalog("beauty_account"))), {})
+
+    def test_old_post_is_exactly_deduped_but_not_semantically_scored(self):
+        old_text = catalog("liver_manager")[0]
+        posted = [{"account_id": "liver_manager", "posted_text": old_text,
+                   "posted_at": "2025-01-01T00:00:00Z"}]
+        queue = [{"account_id": "liver_manager", "status": "POSTED",
+                  "public_post_text": "previous posted queue copy"}]
+        semantic, exact = offline_history_context(
+            posted, queue, account_id="liver_manager", now=datetime(2026, 9, 25, tzinfo=timezone.utc),
+            recent_days=30,
+        )
+        self.assertEqual(semantic, [])
+        self.assertEqual(exact, [old_text, "previous posted queue copy"])
+        selected = select_original("liver_manager", semantic, used_texts=exact)
+        self.assertTrue(selected)
+        self.assertNotEqual(selected["public_post_text"], old_text)
+
+    def test_recent_and_active_queue_remain_semantic_protection(self):
+        posted = [
+            {"account_id": "night_scout", "posted_text": "recent post", "posted_at": "2026-09-10T00:00:00Z"},
+            {"account_id": "liver_manager", "posted_text": "other account", "posted_at": "2026-09-24T00:00:00Z"},
+        ]
+        queue = [
+            {"account_id": "night_scout", "status": "WAITING_REVIEW", "public_post_text": "active review"},
+            {"account_id": "night_scout", "status": "POSTED", "public_post_text": "old queue"},
+        ]
+        semantic, exact = offline_history_context(
+            posted, queue, account_id="night_scout", now=datetime(2026, 9, 25, tzinfo=timezone.utc),
+            recent_days=30,
+        )
+        self.assertEqual(semantic, ["recent post", "active review"])
+        self.assertEqual(exact, ["recent post", "active review", "old queue"])
+
+    def test_old_lifetime_catalog_usage_does_not_exhaust_bounded_topup(self):
+        old_texts = list(catalog("liver_manager")[:80])
+        rows = build_fallback_generation_rows(
+            account_id="liver_manager", top_n=3, post_type="original_text",
+            history=[], used_texts=old_texts, offline_original=True,
+        )
+        self.assertEqual(len(rows["queue"]), 3)
+        generated = [row["public_post_text"] for row in rows["queue"]]
+        self.assertEqual(len(set(generated)), 3)
+        self.assertFalse(set(generated) & set(old_texts))
 
     def test_queue_cli_without_provider_key_and_cached_evidence(self):
         row = self.rows['night_scout']
