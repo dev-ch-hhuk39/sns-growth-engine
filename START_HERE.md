@@ -1,138 +1,34 @@
-## 2026-09-15 AI-independent Original Reserve
+# SNS Growth Engine - Current Work
 
-- Base main: `2639cb0d79b8c94a9dc37dbab36ac358dab1d870` (PR #304). Branch: `fix/ai-independent-ready-reserve`. Production completion remains unproven; this is not a cutover or a posting result.
-- A finite account-specific original-copy catalog supports provider-free fallback. Each account has 30 authored articles validated for public text, persona, coherence and duplicate novelty. Only exact catalog text with matching account/version/hash can use `offline_original_strict`; provider status is honestly `NOT_REQUESTED`, requests zero. Arbitrary text, reference/media/PDCA rows, human-review content and previous semantic rejections cannot use this route.
-- Canonical generation writes WAITING_REVIEW drafts/derivatives/queue with read-after-write. Existing Hybrid-ready/auto-approval/publisher gates still apply. Exhausted AI approval budgets skip more paid generation and continue offline; no budget or quality threshold is raised.
-- Beauty topic scoring no longer counts compound substrings and generic domain words as a second independent subject. Distinct skincare/haircare topics and mismatched visual text remain blocked. Night/Liver scoring is unchanged.
-- Buffered reconciliation can select an unused, unallocated validated evergreen queue after exact-slot stock runs out. Allocation is saved only after slot claim, with fresh queue comparison and readback. No generation, approval cloning, future-slot theft or ambiguous-post retry happens inside publication.
-- Local regression: 910 scripts PASS; focused offline tests 11 PASS and buffered reconciler 18 PASS; Ruff, compileall and diff check PASS. Exact-head CI, merge and production refill still need verification. The finite catalog is not infinite stock: exhausted copy is never recycled to conceal a shortage.
-- September 14 live read-only history inspection found 30 Night / 30 Liver / 31 Beauty unused valid catalog candidates. These are NOT saved READY or bank counts. Last main readiness: text coverage 66.6667%, evergreen 0/0/30, all six media-route reserves zero.
-- Current gcloud user cannot access SNS project `sns-auto-pdca-system`. Unrelated accessible projects must not be used without owner selection. External primary scheduler remains unconfigured; keep buffered activation OFF until readiness/cutover verification. Preserve `.runtime/` unchanged and uncommitted.
+Updated: 2026-09-25
 
-## 2026-09-13 Transcript Duration Persistence
+## Current task
 
-- PR #301 merged as `93a53d4cc038ca8d0028640d515e17c9cfb0f6c4`; CI `34723218843` passed 906 scripts. Night direct preparation `34723217888` materialized one bundle but produced zero READY; downloaded assets still lacked sufficient content evidence and other bounded downloads were unavailable.
-- Follow-up uses local Whisper small instead of tiny for direct understanding and approved-clip preparation, keeping int8 CPU / one thread, video counts and audio bounds. Only stored, non-blocked tiny-model understanding may be refreshed once under existing ingest permissions; current-model results remain terminal. This is an accuracy remediation to verify, not proof of improved recognition or READY stock. No paid transcription API, quality threshold relaxation or publication.
-- PR #300 merged as `c1f7ae91c50d18f52bd2ed4f14e8dbb5d4095951`; CI `34722663554` passed 905 scripts and required checks. Live prep `34722869594` saved an approved 51-second video's transcript and source duration; fresh Sheets readback matched both. Its clips failed account-evidence validation, so no usable media queue was produced. The transcript contains noisy recognition; rejection alone does not prove the original video is unsuitable.
-- Follow-up fixes Beauty clip relevance incorrectly using Liver's keyword branch. Beauty now uses its canonical evidence vocabulary; Night/Liver weights and all quality/rights thresholds remain unchanged. No other account receives a Liver-fit score.
-- Latest read-only readiness: 61.9% 72-hour text coverage, evergreen 0/0/27, media READY 0 for all six account/route pairs. No buffered activation.
-- Base main `df92c9f64a2890f1635fe5bf64a51622a8a15b91` includes PR #299. CI `34690824338` passed 904 scripts and the PR gate; this is not proof of full production recovery.
-- Live clip prep `34690990075` saved local Whisper output but produced zero eligible media queues. Approved source videos with blank duration were excluded before clip planning. Transcription now retains finite positive yt-dlp source duration in both transcript and source-video records; speech end and the audio processing cap are never substituted for source duration. Uploaded derivative duration is not promoted as original-source evidence.
-- YouTube storage matching retains the `v` identity parameter, preventing distinct watch URLs from matching the same stored media. Existing rights, account, physical media, alignment and quality gates remain unchanged.
-- Latest scheduled AUTO_READY `34717242321` still reports provider/quality exhaustion. Prior live readiness was 47.619% horizon coverage, evergreen 0/0/21, media READY 0 in all six account/route pairs. Buffered activation and external scheduler verification remain OFF/unverified. Do not claim schedule or media recovery from green code tests.
-- Preserve `.runtime/`; do not reset budgets, replay ambiguous posts or release historical leases without definitive no-publish evidence.
+- Base main: `ecfddbd9440e4284623e33c2ed44ad944b62d0b2`.
+- Branch: `fix/xserver-primary-media-replenishment`.
+- Objective: close production reliability gaps for the existing Text V1, Media V1, buffered runtime, Xserver scheduler and reconciler. No architecture redesign and no relaxation of rights, quality, publisher or account-isolation gates.
+- Changes add a bounded Xserver media-preparation cron using existing Direct and approved-clip preparation commands, and correct acceptance metrics to separate text slot coverage from media inventory and use the actual publisher's non-posting dry-run for usable-media counts.
+- GitHub media preparation is explicit-confirmation/manual fallback only; Xserver remains the single natural preparation scheduler. Publisher/X gates are forced off in preparation children.
 
-## 2026-09-10 Live Preparation Follow-up
+## Evidence and limits
 
-- Saved clip caption evidence preserves numeric `start_seconds=0` instead of rejecting it as missing; negative, non-finite and reversed ranges remain blocked. This fixes a real saved-asset selection blocker without changing rights or persona gates.
-- PR #294 merged normally as `79052a55981702850755ab445f750afa501b84af`. Exact HEAD `ddbb3e5417133a5134bc980b84344f66502432e3` passed PR CI `34418003085` and full CI `34418086153` (tests, dependency audit, secret history).
-- Production preparation started from that main; this is not proof of successful delivery or complete inventory. Beauty bank admission reached 23 usable candidates, but its account-scoped Hybrid ledger reached the unchanged daily limit of 40.
-- Follow-up preserves BOTH whole-Sheets verification steps. AUTO_READY preparation matrix uses `max-parallel: 1` to reduce shared Sheets 429 pressure; failures remain isolated (`fail-fast: false`). Bank writes require a successful credential/activation/kill-switch guard even after other steps fail.
-- Explicit redacted execution/daily/monthly budget reasons are persisted. Once approval capacity is exhausted, preparation stops further generation in that account invocation and may allocate only already-validated canonical evergreen reserves. No budget increase, synthetic approval or quality relaxation.
-- Buffered activation remains false. No new Threads post has been performed for this rollout. Real media inventory, horizon coverage and reconciler evidence still require validation.
+- Focused contracts, 923/923 repository regression, Ruff fatal rules, Python compilation, workflow YAML parsing, source registry validation, 116-check completion audit, 509 workflow safety checks, workflow permissions/capability registry, and `git diff --check` pass. Exact-head PR CI and post-merge deployment are pending.
+- Live pre-change read-only snapshot: Xserver disk 72.31%, preparation permitted. Text READY coverage calculation was wrong (58.33%) because it counted media slots; observed text slots were all covered. Actual publisher dry-runs showed Night Direct/Clip 3/3, Liver Direct/Clip 4/3, Beauty Direct 3. Evergreen bank Night/Liver/Beauty 50/30/50. Current-scope duplicate, unverified and missing-metrics counts were zero; legacy audit remains separate and unchanged.
+- Runtime secret-presence check found Cloudinary credentials missing before redeploy. The deployment workflow now stages required existing Cloudinary/Gemini runtime secrets without printing values; preparation must still fail closed if Cloudinary usage cannot be verified.
+- No media cleanup, historical Sheets mutation, publish, Cloudinary upload or manual post was initiated during local implementation. Natural replenishment remains unverified until an Xserver cron run follows deployment.
+- Preserve untracked `.runtime/`; never stage, clean, or delete it.
 
-## 2026-09-10 Buffered Production Inventory
+## Next steps
 
-Current branch: `feat/buffered-production-inventory`; base main: `aff033999ec8261470c893168590c02a3b58fdb0`.
-Status: implementation and local regression verified; production cutover NOT yet verified.
+1. Complete full local regression and inspect the final diff.
+2. Commit and push the one focused branch/PR; wait for exact-head required CI and merge normally.
+3. Deploy merged main to the existing Xserver runtime and verify runtime revision, cron, service, disk and secret presence (presence only).
+4. Run read-only production readiness; then verify a natural Xserver preparation cycle refills routes to their minimums. Manual dispatch is not natural-run evidence.
+5. Verify Text 72-hour coverage, evergreen reserve, current duplicate/unverified counts, read-after-write, metrics and PDCA without altering historical evidence.
+6. Claim `FULL_SCHEDULE_PRODUCTION_COMPLETE=YES` only if every requested production condition is evidenced; otherwise list the exact external/runtime blocker.
 
-- Current Owner scope is Night Scout, Liver Manager and Beauty, including autonomous low-risk approval. Older two-account / Beauty-human-review-only notes below are historical, not current operating policy.
-- Preparation builds 72-hour canonical text primary/reserves (3 per slot), plus a target of 30 unused strictly validated evergreen candidates per account. Bank admission uses bounded batch writes with read-after-write; no approval cloning or POSTED queue recycling.
-- Direct and clip preparation refill separate validated media buffers (minimum 3). Saved rights-valid Cloudinary assets are preferred; acquisition and generation never execute in the buffered publisher.
-- The existing Content Slot Recovery workflow scans every five minutes, accounts independently, with the same per-account publishing lock. It consumes at most one exact due queue per account/run, within a 240-minute window and existing caps/cooldown. Uncertain publish outcomes stop retries.
-- Owner-authorized media shortage may use a validated text reserve. Evidence retains expected media and actual `text_fallback`; this is never counted as media success.
-- Beauty retains two daily slots; the 20:30 slot alternates direct media and approved clip after cutover. No extra daily posts are added. X publishing stays disabled.
-- Cutover requires `config/production_inventory.json` activation plus `BUFFERED_INVENTORY_ACTIVE=true`. Until inventory is verified, activation remains false and legacy production workers are retained. Do not set the variable first and disable working publishers prematurely.
-- Local regression: 901 script tests PASS; focused inventory/reconciler/generation/clip-preparation tests, Ruff, compileall and CI Mypy PASS. These are not production evidence.
-- Latest read-only Sheets acceptance: text coverage 0%; usable evergreen Night 21 / Liver 25 / Beauty 0; validated media reserve 0 for all six account/route pairs. Legacy posted-results evidence includes 2 duplicate records and 64 unverified/missing-metrics records. No cleanup or replay is authorized by those counts alone.
-- Remaining: exact-head CI and normal merge, real inventory refill/readback, staged activation, real reconciler delivery/repeat-run proof, metrics and PDCA verification. Completion must remain false until these pass. Do not wait for future 168-hour metrics merely to close code development.
-- Preserve `.runtime/` unchanged and uncommitted. `.ai-tmp/`, credentials and runtime outputs are excluded from Git.
+## Safety
 
-## 2026-09-07 Follow-up: Stale Approval and Delayed Slot Recovery
-
-- Automatic READY approvals with stale Hybrid evidence are explicitly withdrawn to WAITING_REVIEW and read back before bounded re-evaluation. Human-approved, excluded, cross-account and POSTED rows are never refreshed this way.
-- Autonomous preparation requests this refresh; publisher validation remains mandatory.
-- A late text schedule event may recover only its exact overdue slot from prebuilt inventory, using existing activation, lease and publisher gates. Missing inventory or an unrecoverable slot is a failure, not a successful no-post.
-- Local focused refresh/recovery tests PASS. Production completion remains unverified; provider capacity and media suitability failures remain tracked separately.
-
-## 2026-09-07 Scheduled Inventory Delivery Repair
-
-Status: implementation verified locally; production completion NOT proven.
-Base: bfea7cb899dc171aeefa80735d5d066567f0984d.
-
-- Scheduled text and missed-slot recovery now consume the exact account/slot/date READY inventory before spending another generation call.
-- Unused READY direct media can carry forward from an earlier preparation date; future/expired candidates remain excluded. Publisher rights, provenance, duplicate and account checks remain mandatory.
-- Autonomous low-risk approval is explicit for newly generated scheduled text. Failed preparation retains a redacted provider failure category; stale review output cannot approve a new candidate.
-- Ambiguous publish outcomes never trigger another candidate. Activation, slot lease and persistence checks remain unchanged.
-- Local focused test scripts: 10/10 PASS, including prepared inventory unit cases. No production post is evidence for this patch yet.
-- Still to verify: delayed GitHub schedule delivery, provider quota exhaustion, direct/clip eligible inventory, and real post/read-after-write/metrics results. Earlier completion claims and historical two-account/Beauty-review-only notes below are not current production evidence.
-
-# START HERE - V1 Production Completion
-
-Updated: 2026-08-28
-
-## Read first
-
-1. Current user task and task-specific Owner Source of Truth
-2. `AGENTS.md`
-3. `GOAL.md`
-4. `docs/current-work.md`
-5. Latest section of `docs/ai-work-handoff.md`
-
-## Current state
-
-- Base main: `2f1749d4167d91d8c4d6d45ef0abdb3333bb00df` (PR #264 merged)
-- Active work branch: `fix/v1-direct-evidence-voice-final-20260827`
-- Keep the existing dirty worktree and do not reset, clean, rebase, or discard it.
-- `.runtime/`, `.ai-tmp/`, credentials, tokens, cookies, and storage state are never committed.
-- Active production accounts: `night_scout`, `liver_manager`, `beauty_account`.
-- `tiktok_shop` remains `CREDENTIAL_PENDING` and must not receive a fabricated identity.
-
-## Current implementation target
-
-- Direct Media selection requires usable source text before external download cost.
-- Stored Cloudinary media that only needs understanding refresh is preferred over a new network download.
-- Caption, semantic, persona, or public-validator failures never quarantine physically valid media.
-- Only narrowly proven legacy downstream false quarantines receive one bounded retry.
-- Night Scout and Liver Manager Direct Media may become `READY` only through strict Hybrid AI, rights, permission, validator, internal-leak, account-fit, and media URL gates.
-- Beauty remains human-review-only and is never included in autonomous READY promotion.
-- Direct preparation never publishes. Scheduled publishers remain separately gated and bounded to one post.
-
-## Validation baseline
-
-- Direct Media focused tests: 46/46 PASS.
-- Repository script regression: 876/876 PASS.
-- Pytest suite: 146/146 PASS.
-- V1 autonomous completion audit: 100/100 PASS.
-- Workflow safety contracts: 504/504 PASS.
-- Ruff fatal rules, compileall, source registry validation, and `git diff --check`: PASS.
-
-## Exact next order
-
-1. Commit this branch, push it, open one PR, and obtain exact-head CI success.
-2. Merge normally and synchronize local `main` with `origin/main`.
-3. Run Liver Manager Direct preparation in production and require a real non-empty `READY` queue ID with Sheets read-after-write.
-4. Run the Liver Direct publisher in dry-run mode against that inventory.
-5. Run Night Direct preparation; `READY` is accepted when eligible media exists, otherwise exact `NO_ELIGIBLE_MEDIA` is fail-closed.
-6. Run Beauty preparation and require a reviewable `WAITING_REVIEW` candidate without fabricating approval.
-7. Verify Night/Liver text dry-runs, active workflows, schedules, global config, and X publishing disabled.
-8. Claim V1 completion only when every condition in the current Owner contract is backed by production evidence.
-
-## Safety boundary
-
-- Do not lower rights, provenance, permission, author, parent, account, semantic, persona, quality, or Hybrid AI gates.
-- Do not bypass CAPTCHA/login challenges. External provider failures are bounded and fail-soft.
-- Do not auto-promote Beauty.
-- Do not publish to X.
-- Do not describe a dry-run, mock, or software-only result as production proof.
-# 2026-09-13 Continuation
-
-Main includes PR #302 (`3cb05a8`). Night small-ASR refresh succeeded in run `34724866490`, but no READY media was produced. Current fix adds Beauty-only public history and unchanged duplicate checks at generation, including emergency fallback; run `34739383502` demonstrated the prior late duplicate rejection. No posting or buffered activation for this patch. See `docs/current-work.md` for live blockers.
-
-Threads historical requests no longer silently reuse the newest five CLI/GraphQL posts; unsupported positions use the existing bounded public-browser fallback. Liver run `34739690753` transcribed one new video but still produced no usable clip evidence. Neither route is fully recovered yet.
-# 2026-09-15 production persistence follow-up
-
-- PR #305 merged normally; main baseline `9854d9cffcc357ee91d689f2ead716640ebc9325`.
-- Live preparation `34921321706` exposed Sheets USER_ENTERED numeric coercion (`0.0` -> `0`), not an approval rejection. Offline candidates now use RAW writes and uncached literal read-after-write; other generators retain their existing serialization.
-- Focused offline tests: 12 PASS; repository regression: 910 PASS. Production reserve re-run is in progress; no claim of completed reserve/activation.
-- Existing `sns-growth-xserver` runner is online and SSH confirms the SNS service on the owner's VPS. No timer or publishing activation has been installed yet.
+- Never publish from preparation; never post to X or Beauty outside existing account gates.
+- Never weaken rights/provenance, persona/quality, account isolation, duplicate/idempotency, read-after-write, or kill-switch checks.
+- Do not remove production data, assets, queues, evidence, logs, credentials, current release, or `.runtime/`.

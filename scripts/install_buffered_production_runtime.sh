@@ -50,6 +50,7 @@ if [[ ! -d "$target" ]]; then
   printf '%s\n' "$REVISION" > "$stage/.production-release"
   python3 -m venv "$stage/.venv"
   "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements.txt"
+  "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements-media-runtime.txt"
   mv "$stage" "$target"
 fi
 ln -sfn "$target" "$RUNTIME_ROOT/current"
@@ -72,6 +73,9 @@ if [[ "$ENABLE_SCHEDULER" == "true" ]]; then
 */5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id night_scout --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/night_scout.cron.log 2>&1
 1-59/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id liver_manager --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/liver_manager.cron.log 2>&1
 2-59/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id beauty_account --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/beauty_account.cron.log 2>&1
+# Run after the previous-day Night 25:00 recovery window closes and finish
+# before the next 10:00 JST post slot. GitHub Actions remains manual fallback.
+15 5 * * * /usr/bin/timeout 270m ${RUNTIME_ROOT}/current/scripts/run_buffered_media_preparation_host.sh >> ${RUNTIME_ROOT}/shared/logs/media-preparation.cron.log 2>&1
 # END SNS-GROWTH-BUFFERED
 EOF
   crontab "$updated_crontab"

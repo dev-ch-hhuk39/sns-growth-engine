@@ -1,3 +1,14 @@
+## 2026-09-25 Production Closure (Active)
+
+- Base: `origin/main` `ecfddbd9440e4284623e33c2ed44ad944b62d0b2`; branch: `fix/xserver-primary-media-replenishment`.
+- Scope is production reliability only: add the existing bounded Direct/approved-clip prepare commands to the Xserver primary host schedule, correct readiness accounting so text coverage excludes media slots and media inventory is counted by actual publisher dry-run, then verify production. Existing publication, rights, quality, account, duplicate and kill-switch gates remain unchanged.
+- Local runner invokes preparation-only commands; all child publisher/X gates are forced off. Preparation requires Cloudinary usage to be available, checks the existing resource budget, and keeps a separate non-blocking prep lock. GitHub media-preparation workflow is explicit-confirmation/manual fallback, not a competing timer.
+- Local focused contracts, 923/923 repository regression, Ruff fatal rules, compileall, workflow YAML parse, source registry validation, completion audit (116 checks), workflow safety (509 checks), workflow permissions/capability registry and diff check pass. Exact-head PR CI has not run yet.
+- Live pre-change readiness at this scope: text coverage was incorrectly measured as 58.33% because the old denominator included guaranteed-media slots; every text slot was present. Actual publisher dry-run showed Night direct/clip 3/3, Liver direct/clip 4/3 (one duplicate excluded), Beauty direct 3, with current duplicate/unverified/metrics-missing counts 0. Evergreen usable counts were 50/30/50. Historical audit remains separate (2 duplicate candidates, 64 unverified/missing-metrics records) and must not be modified.
+- Previous Xserver disk failure was 82.59%; latest read-only probe was 72.31% and preparation allowed. Runtime currently lacks Cloudinary credentials, so Xserver preparation must fail closed until deploy supplies the existing Cloudinary secrets. No cleanup or deletion is in scope.
+- Production natural replenish is not yet proven. After merge and Xserver deploy, verify exact runtime SHA, installed cron, and the next natural preparation cycle; do not count manual preparation dispatch as natural recovery. No Threads post was initiated in this task.
+- Preserve untracked `.runtime/` untouched and never commit it.
+
 ## 2026-09-15 AI-independent Original Reserve
 
 - Base main: `2639cb0d79b8c94a9dc37dbab36ac358dab1d870` (PR #304). Branch: `fix/ai-independent-ready-reserve`. Production completion remains unproven; this is not a cutover or a posting result.

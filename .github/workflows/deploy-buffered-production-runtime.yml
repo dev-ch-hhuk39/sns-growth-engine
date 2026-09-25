@@ -23,7 +23,7 @@ jobs:
   deploy:
     runs-on: [self-hosted, Linux, X64]
     environment: production
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
@@ -39,6 +39,10 @@ jobs:
       THREADS_USER_ID_BEAUTY_ACCOUNT: ${{ secrets.THREADS_USER_ID_BEAUTY_ACCOUNT }}
       THREADS_HANDLE_BEAUTY_ACCOUNT: ${{ secrets.THREADS_HANDLE_BEAUTY_ACCOUNT }}
       BEAUTY_ACTIVATION_APPROVED: ${{ secrets.BEAUTY_ACTIVATION_APPROVED || vars.BEAUTY_ACTIVATION_APPROVED || 'false' }}
+      CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+      CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+      CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -66,8 +70,18 @@ jobs:
               "THREADS_ACCESS_TOKEN_LIVER_MANAGER", "THREADS_USER_ID_LIVER_MANAGER", "THREADS_HANDLE_LIVER_MANAGER",
               "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT", "THREADS_USER_ID_BEAUTY_ACCOUNT", "THREADS_HANDLE_BEAUTY_ACCOUNT",
               "BEAUTY_ACTIVATION_APPROVED",
+              "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "GEMINI_API_KEY",
           )
-          missing = [key for key in keys[:4] if not os.environ.get(key)]
+          required = {
+              "Google service-account JSON": ("GCP_SA_JSON_BASE64", "SA_JSON_BASE64"),
+              "Spreadsheet ID": ("SPREADSHEET_ID", "SNS_MASTER_SHEET_ID"),
+              "CLOUDINARY_CLOUD_NAME": ("CLOUDINARY_CLOUD_NAME",),
+              "CLOUDINARY_API_KEY": ("CLOUDINARY_API_KEY",),
+              "CLOUDINARY_API_SECRET": ("CLOUDINARY_API_SECRET",),
+              "GEMINI_API_KEY": ("GEMINI_API_KEY",),
+          }
+          missing = [label for label, alternatives in required.items()
+                     if not any(os.environ.get(key) for key in alternatives)]
           if missing:
               raise SystemExit("[BLOCKED] required production runtime secret is missing: " + ", ".join(missing))
           with path.open("w", encoding="utf-8") as handle:
@@ -85,6 +99,17 @@ jobs:
             --source-root "$GITHUB_WORKSPACE" --revision "$revision" \
             --apply --confirm-install \
             --enable-scheduler --confirm-enable
+      - name: Install checksum-pinned Threads source acquisition CLI
+        env:
+          THREADS_CLI_INSTALL_DIR: /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads-cli
+        run: bash scripts/install_threads_cli.sh
+      - name: Verify media preparation runtime dependencies
+        run: |
+          runtime=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+          "$runtime/.venv/bin/python" -c 'import cloudinary, faster_whisper, yt_dlp, playwright'
+          test -x "$runtime/scripts/run_buffered_media_preparation_host.sh"
+          command -v ffmpeg >/dev/null
+          command -v xvfb-run >/dev/null
       - name: Verify installed runtime without publishing
         run: |
           runtime=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
