@@ -261,6 +261,26 @@ class OfflineReserveTests(unittest.TestCase):
         self.assertEqual(semantic, ["recent post", "active review"])
         self.assertEqual(exact, ["recent post", "active review", "old queue"])
 
+    def test_stale_scheduled_queue_stays_exactly_deduped_but_not_semantically_active(self):
+        queue = [
+            {"account_id": "liver_manager", "status": "WAITING_REVIEW",
+             "business_date_jst": "2026-09-25", "public_post_text": "expired review"},
+            {"account_id": "liver_manager", "status": "READY",
+             "schedule_date_jst": "2026-09-20", "public_post_text": "expired ready"},
+            {"account_id": "liver_manager", "status": "READY",
+             "business_date_jst": "2026-09-27", "public_post_text": "future ready"},
+            {"account_id": "liver_manager", "status": "WAITING_REVIEW",
+             "created_at": "2026-09-20T00:00:00Z", "public_post_text": "recent unscheduled"},
+            {"account_id": "liver_manager", "status": "WAITING_REVIEW",
+             "created_at": "2026-08-01T00:00:00Z", "public_post_text": "old unscheduled"},
+        ]
+        semantic, exact = offline_history_context(
+            [], queue, account_id="liver_manager", now=datetime(2026, 9, 26, tzinfo=timezone.utc),
+            recent_days=30,
+        )
+        self.assertEqual(semantic, ["future ready", "recent unscheduled"])
+        self.assertEqual(exact, [row["public_post_text"] for row in queue])
+
     def test_old_lifetime_catalog_usage_does_not_exhaust_bounded_topup(self):
         old_texts = list(catalog("liver_manager")[:80])
         rows = build_fallback_generation_rows(
