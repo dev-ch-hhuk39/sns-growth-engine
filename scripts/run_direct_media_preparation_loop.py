@@ -181,14 +181,21 @@ def main() -> int:
     from sheets_client import SheetsClient
     from sheets_record_reader import enable_readonly_record_cache, read_records_safely
     from process_threads_queue import process_one
-    from production_inventory import eligible_ready, has_media
+    from production_inventory import eligible_ready, has_media, recently_used_media_asset_ids
+    from datetime import datetime, timezone
 
     def inventory():
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
         enable_readonly_record_cache(client)
+        used_assets = recently_used_media_asset_ids(
+            read_records_safely(client, "posted_results"),
+            account=args.account_id,
+            now=datetime.now(timezone.utc),
+        )
         return {str(r["media_asset_id"]) for r in read_records_safely(client, "queue")
             if eligible_ready(r, args.account_id) and has_media(r) and r.get("media_asset_id")
+            and str(r.get("media_asset_id")) not in used_assets
             and r.get("generation_mode") == "direct_reference_media"
             and process_one(client, r, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN"}
 

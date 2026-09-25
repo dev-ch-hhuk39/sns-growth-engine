@@ -7,7 +7,7 @@ from unittest.mock import patch
 import reconcile_due_production_slots as runner
 from content_slot_runs import build_slot_run
 from evergreen_inventory import admit_bank_batch, bank_record
-from production_inventory import JST, has_media, policy, scheduled_slots
+from production_inventory import JST, has_media, media_asset_ids, policy, recently_used_media_asset_ids, scheduled_slots
 
 
 class BufferedReconcilerTests(unittest.TestCase):
@@ -34,6 +34,26 @@ class BufferedReconcilerTests(unittest.TestCase):
         media = {**self.row, "queue_id": "m", "media_asset_id": "asset", "generation_mode": "direct_reference_media"}
         self.assertEqual([r["queue_id"] for r in runner.candidates([self.row, media], self.slot, policy())], ["m"])
         self.assertEqual(runner.candidates([self.row], self.slot, {**policy(), "media_shortage_text_fallback": False}), [])
+
+    def test_recently_posted_asset_is_not_reused_within_seven_days(self):
+        media = {**self.media_row(), "media_asset_id": "asset-q"}
+        posted = [{"account_id": "night_scout", "status": "POSTED", "real_post": "true",
+                   "queue_id": "old-q", "media_asset_id": "asset-q",
+                   "posted_at": (self.now - timedelta(days=1)).isoformat()}]
+        self.assertEqual(runner.candidates([media], self.slot, policy(), posted, self.now), [])
+        self.assertEqual(runner.candidates([media], self.slot, policy(),
+            [{**posted[0], "account_id": "liver_manager"}], self.now), [media])
+        aged = [{**posted[0], "posted_at": (self.now - timedelta(days=8)).isoformat()}]
+        self.assertEqual(runner.candidates([media], self.slot, policy(), aged, self.now), [media])
+
+    def test_carousel_assets_are_all_considered_recently_used(self):
+        posted = [{"account_id": "night_scout", "status": "POSTED", "real_post": "true",
+                   "media_asset_ids_json": '["asset-a", "asset-b"]',
+                   "posted_at": (self.now - timedelta(hours=1)).isoformat()}]
+        self.assertEqual(recently_used_media_asset_ids(posted, account="night_scout", now=self.now),
+                         {"asset-a", "asset-b"})
+        self.assertEqual(media_asset_ids({"media_asset_ids_json": '["asset-a", "asset-b"]'}),
+                         {"asset-a", "asset-b"})
 
     def test_wrong_media_route_blocked(self):
         self.assertEqual(runner.candidates([{**self.row, "media_asset_id": "a", "generation_mode": "approved_source_clip"}], self.slot, policy()), [])

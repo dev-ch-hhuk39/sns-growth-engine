@@ -14,7 +14,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from content_schedule import MEDIA_POST_TYPES  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
-from production_inventory import JST, coverage, due_slots, eligible_ready, has_media, media_route, policy, select_evergreen  # noqa: E402
+from production_inventory import JST, coverage, due_slots, eligible_ready, has_media, media_asset_ids, media_route, policy, recently_used_media_asset_ids, select_evergreen  # noqa: E402
 from reconcile_due_production_slots import delivery_limit, enrich_posts  # noqa: E402
 from generate_threads_ideas_from_references import original_text_similarity_guard  # noqa: E402
 from public_post_quality import final_public_post_validator  # noqa: E402
@@ -68,7 +68,7 @@ def text_ready_coverage(rows):
     return covered, len(text_rows)
 
 
-def publisher_usable_media_ids(rows, *, account, route, publisher_check):
+def publisher_usable_media_ids(rows, *, account, route, publisher_check, posted=None, now=None):
     """Count distinct assets that pass the actual publisher's read-only gate.
 
     Media V1 soft quality warnings remain warnings. Rights, provenance,
@@ -76,9 +76,14 @@ def publisher_usable_media_ids(rows, *, account, route, publisher_check):
     by ``process_one(..., dry_run=True)`` and are the acceptance authority.
     """
     usable = set()
+    recent_assets = recently_used_media_asset_ids(
+        posted or [], account=account, now=now or datetime.now(JST)
+    )
     for row in rows:
         if (not eligible_ready(row, account) or not has_media(row)
                 or media_route(row) != route):
+            continue
+        if media_asset_ids(row) & recent_assets:
             continue
         result = publisher_check(row)
         if result.get("status") != "DRY_RUN":
@@ -140,6 +145,8 @@ def evaluate(client, *, now=None):
                 publisher_check=lambda row: process_one(
                     client, row, dry_run=True, confirm_real_post=False
                 ),
+                posted=tables["posted_results"],
+                now=now,
             )
             media_counts[account][route] = len(valid_ids)
         enriched_posts = enrich_posts(tables["posted_results"], queue)

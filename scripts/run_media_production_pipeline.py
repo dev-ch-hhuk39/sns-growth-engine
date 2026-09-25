@@ -2894,8 +2894,9 @@ def _last_json_object(output: str) -> dict[str, Any]:
 def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, minimum: int) -> dict[str, Any]:
     """Prepare and review a bounded clip reserve; never call a publish mode."""
     import copy
-    from production_inventory import eligible_ready, media_route
+    from production_inventory import eligible_ready, media_asset_ids, media_route, recently_used_media_asset_ids
     from sheets_record_reader import enable_readonly_record_cache, read_records_safely
+    from datetime import datetime, timezone
 
     if not 1 <= minimum <= 7:
         raise ValueError("clip_inventory_minimum_out_of_range")
@@ -2911,9 +2912,15 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
         # promoter's read-after-write result. The copied client remains cached
         # for process_one's supporting tab reads to keep Sheets traffic bounded.
         current_rows = rows if rows is not None else queue_rows()
+        recent_assets = recently_used_media_asset_ids(
+            read_records_safely(snapshot, "posted_results"),
+            account=account_id,
+            now=datetime.now(timezone.utc),
+        )
         return {str(row["media_asset_id"]) for row in current_rows
                 if eligible_ready(row, account_id) and media_route(row) == "approved_source_clip"
                 and row.get("media_asset_id")
+                and not (media_asset_ids(row) & recent_assets)
                 and process_one(snapshot, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN"}
 
     def pending_queue_ids(rows: list[dict[str, Any]], reviewed: set[str]) -> list[str]:
