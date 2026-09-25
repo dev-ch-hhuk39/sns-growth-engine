@@ -64,7 +64,7 @@ class ClipQueueExitTests(unittest.TestCase):
 
     def test_saved_asset_is_reviewed_before_any_new_download(self):
         from unittest.mock import Mock
-        with patch('sheets_record_reader.read_records_safely', side_effect=[[], [self.ready_row()]]), \
+        with patch('sheets_record_reader.read_records_safely', side_effect=[[], [], [self.ready_row()], []]), \
              patch.object(pipeline, 'process_one', return_value={'status': 'DRY_RUN'}), \
              patch.object(pipeline, 'build_plan', return_value={'status': 'PLAN_ONLY', 'selected_clip_candidate_id': 'clip'}), \
              patch.object(pipeline, 'prepare_saved_media_queue', return_value={'status': 'QUEUED_WAITING_REVIEW', 'queue_id': 'q0'}), \
@@ -106,7 +106,7 @@ class ClipQueueExitTests(unittest.TestCase):
             'slot_id': 'lm_1800_clip_media', 'target_account_id': 'liver_manager',
         }
         with patch('sheets_record_reader.read_records_safely', side_effect=[
-                 [pending], [self.ready_row()],
+                 [pending], [], [self.ready_row()], [],
              ]), \
              patch.object(pipeline, 'process_one', return_value={'status': 'DRY_RUN'}), \
              patch.object(pipeline, 'build_plan') as planner, \

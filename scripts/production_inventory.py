@@ -16,6 +16,7 @@ from media_v1_policy import is_media_candidate
 ROOT = Path(__file__).resolve().parents[1]
 JST = timezone(timedelta(hours=9))
 FINAL_POST_STATUSES = {"POSTED", "POSTED_PRIMARY", "POSTED_FALLBACK", "BACKFILLED"}
+MEDIA_ASSET_REUSE_COOLDOWN = timedelta(days=7)
 
 
 def policy() -> dict[str, Any]:
@@ -79,6 +80,47 @@ def has_media(row: dict[str, Any]) -> bool:
     return False
 
 
+def media_asset_ids(row: dict[str, Any]) -> set[str]:
+    """Return canonical asset identities attached to a queue or post row."""
+    values: set[str] = set()
+    for key in ("media_asset_id", "media_id"):
+        value = str(row.get(key) or "").strip()
+        if value:
+            values.add(value)
+    for key in ("media_asset_ids_json", "media_asset_ids"):
+        raw = row.get(key)
+        if isinstance(raw, str):
+            if not raw.strip():
+                continue
+            try:
+                raw = json.loads(raw)
+            except ValueError:
+                continue
+        if isinstance(raw, (list, tuple, set)):
+            values.update(str(value).strip() for value in raw if str(value).strip())
+    return values
+
+
+def recently_used_media_asset_ids(posts: list[dict[str, Any]], *, account: str,
+                                   now: datetime, cooldown: timedelta = MEDIA_ASSET_REUSE_COOLDOWN) -> set[str]:
+    """Assets posted by this account within the reuse cooldown are not inventory."""
+    if now.tzinfo is None:
+        raise ValueError("aware_now_required")
+    cutoff = now.astimezone(JST) - cooldown
+    used: set[str] = set()
+    for row in posts:
+        if str(row.get("account_id", "")) != account:
+            continue
+        status = str(row.get("status", "")).upper()
+        if status not in {"POSTED", *FINAL_POST_STATUSES} and not true(row.get("real_post")):
+            continue
+        at = timestamp(row.get("posted_at") or row.get("actual_posted_at"))
+        if at is None or at < cutoff or at > now.astimezone(JST):
+            continue
+        used.update(media_asset_ids(row))
+    return used
+
+
 def eligible_ready(row: dict[str, Any], account: str) -> bool:
     base = bool(row.get("queue_id") and str(row.get("public_post_text", "")).strip()
         and row.get("account_id") == account and row.get("target_account_id", account) in {"", account}
@@ -126,6 +168,10 @@ def coverage(queues: list[dict], *, now: datetime, settings: dict | None = None,
     bank = evergreen_entries or []
     posted = posted or []
     similar = similar or (lambda left, right: hashes(left)[1] == hashes(right)[1])
+    recently_used_media = {
+        account: recently_used_media_asset_ids(posted, account=account, now=now)
+        for account in cfg["accounts"]
+    }
     ambiguous_ids = {str(row.get("queue_id")) for row in queues
                      if sum(r.get("queue_id") == row.get("queue_id") for r in queues) != 1}
     for account in cfg["accounts"]:
@@ -145,6 +191,8 @@ def coverage(queues: list[dict], *, now: datetime, settings: dict | None = None,
                 if media_slot:
                     if has_media(row):
                         if media_route(row) != slot["post_type"]:
+                            continue
+                        if media_asset_ids(row) & recently_used_media[account]:
                             continue
                     elif not cfg["media_shortage_text_fallback"]:
                         continue

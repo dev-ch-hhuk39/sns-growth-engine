@@ -16,6 +16,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 from hybrid_ai_gate import HybridAiGate, hybrid_ai_gate_passed, merge_gate_audit  # noqa: E402
 from offline_original_catalog import ACCOUNTS, catalog, evidence, select_original  # noqa: E402
+from learning.feature_attribution import build_observations  # noqa: E402
 from maintain_text_ready_inventory import _generation_commands, replenish  # noqa: E402
 from generate_threads_ideas_from_references import build_fallback_generation_rows, run_offline_original_generation  # noqa: E402
 from public_post_quality import final_public_post_validator  # noqa: E402
@@ -123,6 +124,9 @@ class OfflineReserveTests(unittest.TestCase):
             row = rows["queue"][0]
             self.assertEqual(row["status"], "WAITING_REVIEW")
             self.assertEqual(row["auto_publish"], "false")
+            self.assertEqual(row["feature_schema_version"], "post_features_v1", account)
+            self.assertTrue(row["primary_topic"], account)
+            self.assertTrue(row["structure_variant"], account)
             self.assertFalse(row["media_asset_id"])
             result = HybridAiGate(NoProvider()).evaluate(row, {}, recent_posts=[])
             self.assertEqual(result.status, "PASS", result.blocked_reasons)
@@ -130,6 +134,33 @@ class OfflineReserveTests(unittest.TestCase):
             approval = evaluate_item(queue=row, draft=rows['drafts'][0], derivative=rows['social_derivatives'][0],
                 scores_by_ref={}, existing_texts=[], rules=rules_for_account(load_rules(), account), source_context={})
             self.assertEqual(approval['status'], 'APPROVABLE', approval['reasons'])
+
+    def test_beauty_measured_metrics_can_enter_account_scoped_pdca(self):
+        queue = build_fallback_generation_rows(
+            account_id="beauty_account", top_n=1, post_type="original_text", offline_original=True,
+        )["queue"][0]
+        posted = {
+            **queue,
+            "result_id": "beauty_measured_result",
+            "status": "POSTED",
+            "posted_at": "2026-09-24T10:00:00Z",
+        }
+        measured = {
+            "result_id": "beauty_measured_result",
+            "account_id": "beauty_account",
+            "platform": "threads",
+            "metrics_status": "MEASURED",
+            "collection_window_hours": "24",
+            "views": "240",
+            "likes": "18",
+            "comments": "3",
+        }
+        observations = build_observations([posted], [measured], account_id="beauty_account")
+        self.assertEqual(len(observations), 1)
+        self.assertEqual(observations[0]["account_id"], "beauty_account")
+        self.assertEqual(observations[0]["metrics"]["views"], 240)
+        self.assertEqual(observations[0]["features"]["primary_topic"], queue["primary_topic"])
+        self.assertEqual(build_observations([posted], [measured], account_id="night_scout"), [])
 
     def test_canonical_persistence_and_readback_failure(self):
         client = MemoryClient()

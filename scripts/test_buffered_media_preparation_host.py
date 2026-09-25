@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,7 @@ from run_production_readiness_acceptance import (  # noqa: E402
     publisher_usable_media_ids,
     text_ready_coverage,
 )
+from production_inventory import JST  # noqa: E402
 
 
 def test_media_slots_do_not_reduce_text_coverage() -> None:
@@ -65,6 +67,25 @@ def test_media_inventory_uses_publisher_hard_gate_and_distinct_assets() -> None:
         publisher_check=publisher,
     )
     assert usable == {"asset-a", "asset-b"}
+
+
+def test_recently_posted_assets_do_not_count_as_replenished_inventory() -> None:
+    now = datetime(2026, 9, 25, 12, tzinfo=JST)
+    row = {
+        "queue_id": "q-recent", "account_id": "night_scout", "target_account_id": "night_scout",
+        "platform": "threads", "status": "READY", "public_post_text": "別の新規本文です",
+        "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
+        "hard_gate_status": "PASS", "media_readiness_status": "MEDIA_READY",
+        "generation_mode": "direct_reference_media", "media_asset_id": "asset-recent",
+        "media_url": "https://media.example/recent.mp4",
+    }
+    posted = [{"account_id": "night_scout", "status": "POSTED", "real_post": "true",
+               "media_asset_id": "asset-recent", "posted_at": (now - timedelta(hours=12)).isoformat()}]
+    assert publisher_usable_media_ids([row], account="night_scout", route="direct_reference_media",
+        publisher_check=lambda _row: {"status": "DRY_RUN"}, posted=posted, now=now) == set()
+    old = [{**posted[0], "posted_at": (now - timedelta(days=8)).isoformat()}]
+    assert publisher_usable_media_ids([row], account="night_scout", route="direct_reference_media",
+        publisher_check=lambda _row: {"status": "DRY_RUN"}, posted=old, now=now) == {"asset-recent"}
 
 
 def test_runtime_configuration_and_cloudinary_fail_closed() -> None:

@@ -125,6 +125,22 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(media["actual_coverage_type"], "")
         self.assertEqual(media["missing"], 1)
 
+    def test_recently_used_media_does_not_count_as_ready_coverage(self):
+        settings = {**policy(), "accounts": ["night_scout"], "text_candidates_per_slot": 1}
+        slot = next(s for s in scheduled_slots("night_scout", self.now, self.now + timedelta(days=2))
+                    if s["post_type"] in {"direct_reference_media", "approved_source_clip"})
+        media = {**self.queue, "queue_id": "recent_media", "media_asset_id": "asset-recent",
+                 "generation_mode": slot["post_type"], "slot_id": slot["slot_id"],
+                 "business_date_jst": slot["business_date_jst"],
+                 "schedule_date_jst": slot["business_date_jst"]}
+        posted = [{"account_id": "night_scout", "status": "POSTED", "real_post": "true",
+                   "media_asset_id": "asset-recent", "posted_at": (self.now - timedelta(hours=1)).isoformat()}]
+        rows = coverage([media], now=self.now, settings=settings, runtime_check=lambda row: True,
+                        posted=posted, include_media_fallback=True)
+        result = next(r for r in rows if r["allocation_key"] == slot["allocation_key"])
+        self.assertEqual(result["ready_primary"], [])
+        self.assertEqual(result["missing"], 1)
+
     def test_duplicate_rows_cannot_inflate_coverage(self):
         self.queue.update(slot_id="ns_1600_original", business_date_jst="2026-09-09")
         rows = coverage([self.queue]*3, now=self.now, settings=self.settings, runtime_check=lambda row: True)

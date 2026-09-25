@@ -17,7 +17,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from content_schedule import MEDIA_POST_TYPES, slot_by_id  # noqa: E402
 from content_slot_runs import build_slot_run, claim_slot_run, posts_used_in_business_date, release_confirmed_no_post_claim, release_unpublished_claim, upsert_slot_run  # noqa: E402
 from process_threads_queue import process_one, records, update_row  # noqa: E402
-from production_inventory import JST, due_slots, eligible_ready, has_media, media_route, policy, select_evergreen, timestamp, true  # noqa: E402
+from production_inventory import JST, due_slots, eligible_ready, has_media, media_asset_ids, media_route, policy, recently_used_media_asset_ids, select_evergreen, timestamp, true  # noqa: E402
 from sheets_record_reader import enable_readonly_record_cache  # noqa: E402
 
 
@@ -46,14 +46,19 @@ def delivery_limit(account: str, posts: list[dict], now: datetime) -> str:
     return ""
 
 
-def candidates(queues: list[dict], slot: dict, cfg: dict, posts: list[dict] | None = None) -> list[dict]:
+def candidates(queues: list[dict], slot: dict, cfg: dict, posts: list[dict] | None = None,
+               now: datetime | None = None) -> list[dict]:
     selected = []
     counts: dict[str, int] = {}
     for row in queues:
         key = str(row.get("queue_id", ""))
         counts[key] = counts.get(key, 0) + 1
     media_slot = slot["post_type"] in MEDIA_POST_TYPES
-    used = {str(p.get("queue_id")) for p in (posts or [])}
+    posts = posts or []
+    used = {str(p.get("queue_id")) for p in posts}
+    recent_assets = recently_used_media_asset_ids(
+        posts, account=slot["account_id"], now=now or datetime.now(JST)
+    ) if media_slot else set()
     for row in queues:
         if str(row.get("queue_id")) in used or counts[str(row.get("queue_id", ""))] != 1 or not eligible_ready(row, slot["account_id"]):
             continue
@@ -68,6 +73,8 @@ def candidates(queues: list[dict], slot: dict, cfg: dict, posts: list[dict] | No
         if not exact_slot and not reusable_media:
             continue
         if media and (not media_slot or media_route(row) != slot["post_type"]):
+            continue
+        if media and media_asset_ids(row) & recent_assets:
             continue
         if media_slot and not media and not cfg["media_shortage_text_fallback"]:
             continue
@@ -160,7 +167,7 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                 chosen = None
                 snapshot = copy.copy(client)
                 enable_readonly_record_cache(snapshot)
-                for row in candidates(queues, slot, cfg, posts):
+                for row in candidates(queues, slot, cfg, posts, now):
                     if process_one(snapshot, assigned_queue(row, slot), dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN":
                         chosen = row
                         break

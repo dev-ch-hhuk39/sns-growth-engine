@@ -197,19 +197,52 @@ def build_thread_body(account_id: str, post: dict[str, Any], score: dict[str, An
 def _feature_fields(output: dict[str, Any], quality: dict[str, Any]) -> dict[str, Any]:
     design = dict(output.get("post_design") or {})
     policy = dict(output.get("generation_policy") or {})
+    text = str(output.get("public_post_text") or "").strip()
+    if text and not all(str(design.get(key) or "").strip() for key in ("hook_text", "body_text", "closing_text")):
+        sentences = [part.strip() for part in re.split(r"(?<=[。！？!?])|\n+", text) if part.strip()]
+        design = {
+            **design,
+            "hook_text": str(design.get("hook_text") or (sentences[0] if sentences else text)),
+            "body_text": str(design.get("body_text") or "\n".join(sentences[1:-1] or sentences)),
+            "closing_text": str(design.get("closing_text") or (sentences[-1] if sentences else text)),
+            "key_claims": design.get("key_claims", []),
+        }
+    if text:
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", text) if part.strip()]
+        sentences = [part.strip() for part in re.split(r"(?<=[。！？!?])|\n+", text) if part.strip()]
+        design.setdefault("observed_paragraph_count", len(paragraphs))
+        design.setdefault("observed_sentence_count", len(sentences))
+    primary_topic = str(quality.get("primary_topic") or "").strip()
+    structure_variant = str(
+        quality.get("structure_variant")
+        or output.get("grounding_summary", {}).get("structure_variant")
+        or ""
+    ).strip()
+    if not structure_variant and text:
+        structure_variant = f"observed_p{len(paragraphs)}_s{len(sentences)}"
+    schema_version = str(output.get("feature_schema_version") or "").strip()
+    if (not schema_version and quality.get("status") == "PASS"
+            and quality.get("quality_gate_version") == "generation_quality_v3"
+            and primary_topic and structure_variant and text):
+        schema_version = "post_features_v1"
+    design.setdefault("primary_topic", primary_topic)
+    design.setdefault("structure_variant", structure_variant)
+    quality_evidence = persisted_quality_evidence(quality)
+    if structure_variant:
+        quality_evidence["structure_variant"] = structure_variant
     return {
         "batch_id": output.get("generation_batch_id", ""),
-        "feature_schema_version": output.get("feature_schema_version", ""),
+        "feature_schema_version": schema_version,
         "hook_text": design.get("hook_text", ""),
         "body_text": design.get("body_text", ""),
         "closing_text": design.get("closing_text", ""),
-        "cta_intent": design.get("cta_intent", ""),
+        "cta_intent": design.get("cta_intent", "none"),
         "key_claims_json": json.dumps(design.get("key_claims", []), ensure_ascii=False),
         "post_design_json": json.dumps(design, ensure_ascii=False),
         "generation_policy_json": json.dumps(policy, ensure_ascii=False),
         "generation_attempt": output.get("generation_attempt", ""),
         "generation_rule_version": output.get("generation_rule_version", ""),
-        **persisted_quality_evidence(quality),
+        **quality_evidence,
     }
 
 
