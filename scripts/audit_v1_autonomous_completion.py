@@ -138,12 +138,13 @@ require('ALLOW_MEDIA_POSTS: "true"' in liver_direct, "Liver Manager Direct media
 require('ALLOW_REAL_X_POST: "true"' not in liver_direct, "Liver Manager Direct X posting stays off")
 
 media_scheduler = content(".github/workflows/media-preparation-scheduler.yml")
-require('cron: "15 3 * * *"' in media_scheduler, "Direct inventory preparation cron 12:15 JST")
-require('cron: "15 5 * * *"' in media_scheduler, "Beauty clip preparation cron 14:15 JST")
-require("\n  push:\n" not in media_scheduler, "temporary acceptance push trigger removed")
-require("TARGET_ACCOUNT: all" in media_scheduler, "scheduled Direct preparation targets all production accounts")
+host_scheduler = content("scripts/install_buffered_production_runtime.sh")
+require('15 5 * * *' in host_scheduler, "Xserver primary media replenishment cron 05:15 JST")
+require("run_buffered_media_preparation_host.sh" in host_scheduler, "Xserver runs bounded existing media preparation commands")
+require("workflow_dispatch:" in media_scheduler, "GitHub retains explicit manual preparation fallback")
+require("schedule:" not in media_scheduler, "GitHub preparation cannot compete with Xserver primary")
 require("direct-media-preparation.yml/dispatches" in media_scheduler, "Direct preparation dispatcher connected")
-require("approved-source-clip-preparation.yml/dispatches" in media_scheduler, "Beauty clip dispatcher connected")
+require("approved-source-clip-preparation.yml/dispatches" in media_scheduler, "Night/Liver approved-clip fallback connected")
 
 direct_prepare = content(".github/workflows/direct-media-preparation.yml")
 require("workflow_dispatch:" in direct_prepare, "Direct Media preparation dispatch endpoint exists")

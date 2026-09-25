@@ -61,6 +61,34 @@ def effective_due_slots(account, due, posts, now):
     return due, []
 
 
+def text_ready_coverage(rows):
+    """Measure text inventory independently from media-guaranteed slots."""
+    text_rows = [row for row in rows if row.get("post_type") not in MEDIA_POST_TYPES]
+    covered = sum(not row.get("missing", 0) for row in text_rows)
+    return covered, len(text_rows)
+
+
+def publisher_usable_media_ids(rows, *, account, route, publisher_check):
+    """Count distinct assets that pass the actual publisher's read-only gate.
+
+    Media V1 soft quality warnings remain warnings. Rights, provenance,
+    technical, account, duplicate, and other publisher hard gates are applied
+    by ``process_one(..., dry_run=True)`` and are the acceptance authority.
+    """
+    usable = set()
+    for row in rows:
+        if (not eligible_ready(row, account) or not has_media(row)
+                or media_route(row) != route):
+            continue
+        result = publisher_check(row)
+        if result.get("status") != "DRY_RUN":
+            continue
+        identity = str(row.get("media_asset_id") or row.get("clip_candidate_id") or "")
+        if identity:
+            usable.add(identity)
+    return usable
+
+
 def evaluate(client, *, now=None):
     now = now or datetime.now(JST)
     cfg, blockers, resource_constraints = policy(), [], []
@@ -84,10 +112,9 @@ def evaluate(client, *, now=None):
         similar=lambda a, b: original_text_similarity_guard(a, b)["status"] == "BLOCKED",
         include_media_fallback=True,
     )
-    covered = sum(not r["missing"] for r in rows)
+    text_covered, text_total = text_ready_coverage(rows)
     bank_counts, media_counts, accounts = {}, {}, {}
     for account in cfg["accounts"]:
-        approved = {r["queue_id"] for r in queue if eligible_ready(r, account) and check(r)}
         usable_bank = set()
         for entry in tables["evergreen_bank"]:
             candidate = select_evergreen([entry], [r for r in queue if not (r.get("business_date_jst") or r.get("schedule_date_jst"))],
@@ -106,10 +133,14 @@ def evaluate(client, *, now=None):
         }
         for route in sorted(scheduled_media_routes):
             valid_ids = set()
-            for row in queue:
-                if row.get("queue_id") in approved and has_media(row) and media_route(row) == route:
-                    if process_one(client, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN":
-                        valid_ids.add(row["queue_id"])
+            valid_ids = publisher_usable_media_ids(
+                queue,
+                account=account,
+                route=route,
+                publisher_check=lambda row: process_one(
+                    client, row, dry_run=True, confirm_real_post=False
+                ),
+            )
             media_counts[account][route] = len(valid_ids)
         enriched_posts = enrich_posts(tables["posted_results"], queue)
         due = due_slots(account, now=now, slot_runs=tables["content_slot_runs"],
@@ -145,7 +176,7 @@ def evaluate(client, *, now=None):
     unverified = current_evidence["unverified_posts"]
     missing_metrics = current_evidence["metrics_missing"]
     unresolved = sum(len(a["unresolved_due_slots"]) for a in accounts.values())
-    if covered != len(rows) or not rows:
+    if text_covered != text_total or not text_total:
         blockers.append("READY_COVERAGE_INCOMPLETE")
     for name, count in (("DUPLICATE_POSTS", duplicates), ("UNVERIFIED_POSTS", unverified),
                         ("METRICS_MISSING", missing_metrics), ("UNRESOLVED_DUE_SLOTS", unresolved)):
@@ -165,7 +196,9 @@ def evaluate(client, *, now=None):
     return {"development_complete": not blockers, "production_autonomous": not blockers,
             "scheduler": {"primary": cfg["scheduler_primary"], "reconciler": reconciler_verified},
             "text_ready_horizon_hours": cfg["text_horizon_hours"],
-            "text_ready_coverage": covered / len(rows) if rows else 0,
+            "text_ready_coverage": text_covered / text_total if text_total else 0,
+            "text_ready_slots": text_total,
+            "text_ready_slots_covered": text_covered,
             "text_slots": rows, "fallback_bank": bank_counts, "media_ready_reserve": media_counts,
             "media_counts_provisional": False, "resource_constraints": resource_constraints,
             "legacy_audit": {"post_count": len(legacy_posts), **legacy_evidence},

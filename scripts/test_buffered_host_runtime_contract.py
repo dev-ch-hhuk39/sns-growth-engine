@@ -8,6 +8,7 @@ installer = (ROOT / "scripts" / "install_buffered_production_runtime.sh").read_t
 recovery = (ROOT / ".github" / "workflows" / "content-slot-recovery.yml").read_text()
 deploy = (ROOT / ".github" / "workflows" / "deploy-buffered-production-runtime.yml").read_text()
 refresh = (ROOT / ".github" / "workflows" / "refresh-threads-tokens.yml").read_text()
+media_preparation = (ROOT / "scripts" / "run_buffered_media_preparation_host.sh").read_text()
 
 assert "flock -n -E 75" in launcher
 assert 'flock -w 240 "$sheets_lock_file"' in launcher
@@ -49,6 +50,14 @@ assert "workflow_dispatch" in deploy
 assert "DEPLOY_BUFFERED_RUNTIME" in deploy
 assert "runtime.env" in deploy
 assert "--enable-scheduler --confirm-enable" in deploy
+assert "CLOUDINARY_API_SECRET" in deploy and "GEMINI_API_KEY" in deploy
+assert "requirements-media-runtime.txt" in installer
+assert "15 5 * * *" in installer
+assert "run_buffered_media_preparation_host.sh" in installer
+assert "PUBLISH_ENABLED=false" in media_preparation
+assert "ALLOW_REAL_THREADS_POST=false" in media_preparation
+assert "ALLOW_REAL_X_POST=false" in media_preparation
+assert "run_buffered_media_preparation_host.py" in media_preparation
 assert 'splitlines()) != len(keys) + 1' in deploy
 assert 'shlex.quote(value)}\\n")' in deploy
 assert 'shlex.quote(value)}\\\\n")' not in deploy

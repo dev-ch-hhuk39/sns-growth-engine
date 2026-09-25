@@ -1,17 +1,22 @@
 name: Media Preparation Scheduler
 
+# Xserver is the primary replenishment scheduler. This workflow is an
+# explicitly confirmed, bounded operator fallback and is not scheduled, avoiding
+# cross-host concurrent preparation against the same Sheets inventory.
 on:
-  schedule:
-    # Direct inventory for all active production accounts: 12:15 JST.
-    - cron: "15 3 * * *"
-    # 14:15 JST: approved-source clip buffers for accounts with scheduled clip slots.
-    - cron: "15 5 * * *"
+  workflow_dispatch:
+    inputs:
+      confirm_preparation:
+        description: "Type true to run existing bounded Direct and approved-clip preparation"
+        required: true
+        default: "false"
+
 permissions:
   contents: read
   actions: write
 
 concurrency:
-  group: media-preparation-scheduler-${{ github.event_name }}-${{ github.event.schedule || 'acceptance' }}
+  group: media-preparation-scheduler-manual
   cancel-in-progress: false
 
 jobs:
@@ -24,7 +29,9 @@ jobs:
         with:
           persist-credentials: false
       - id: guard
-        name: Verify scheduled preparation activation
+        name: Verify explicit fallback confirmation and preparation activation
+        env:
+          CONFIRM_PREPARATION: ${{ github.event.inputs.confirm_preparation }}
         run: |
           python3 - <<'PY'
           import json
@@ -32,29 +39,30 @@ jobs:
           from pathlib import Path
 
           config = json.loads(Path("config/autonomous_mode.json").read_text(encoding="utf-8"))
-          enabled = bool(config.get("scheduled_prepare_enabled")) and not bool(config.get("kill_switch"))
+          enabled = (
+              os.environ.get("CONFIRM_PREPARATION", "false").lower() == "true"
+              and bool(config.get("scheduled_prepare_enabled"))
+              and not bool(config.get("kill_switch"))
+          )
           with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
               handle.write(f"enabled={'true' if enabled else 'false'}\n")
           if not enabled:
-              print("[NO_OP] scheduled preparation is disabled or kill switch is active")
+              print("[NO_OP] explicit confirmation is missing, preparation is disabled, or kill switch is active")
           else:
-              print("[OK] scheduled preparation is enabled")
+              print("[OK] bounded preparation fallback confirmed; publishing remains disabled in child workflow")
           PY
 
   dispatch-direct:
     needs: guard
-    if: >-
-      needs.guard.outputs.enabled == 'true' &&
-      github.event.schedule == '15 3 * * *'
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Dispatch bounded Direct preparation
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_ACCOUNT: all
         run: |
           set -euo pipefail
-          payload=$(printf '{"ref":"main","inputs":{"confirm_preparation":"true","target_account":"%s"}}' "$TARGET_ACCOUNT")
+          payload='{"ref":"main","inputs":{"confirm_preparation":"true","target_account":"all"}}'
           curl --fail-with-body --silent --show-error \
             --request POST \
             --header "Accept: application/vnd.github+json" \
@@ -62,19 +70,16 @@ jobs:
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/direct-media-preparation.yml/dispatches" \
             --data "$payload"
-          echo "[DISPATCHED] Direct preparation target=$TARGET_ACCOUNT"
+          echo "[DISPATCHED] bounded Direct preparation for active production accounts"
 
-  dispatch-beauty-clip:
+  dispatch-approved-clip:
     needs: guard
-    if: >-
-      needs.guard.outputs.enabled == 'true' &&
-      github.event_name == 'schedule' &&
-      github.event.schedule == '15 5 * * *'
+    if: needs.guard.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        account: ${{ fromJSON('["night_scout","liver_manager"]') }}
+        account: [night_scout, liver_manager]
     steps:
       - name: Dispatch bounded approved-source clip preparation
         env:
@@ -90,4 +95,4 @@ jobs:
             --header "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/workflows/approved-source-clip-preparation.yml/dispatches" \
             --data "$payload"
-          echo "[DISPATCHED] Approved-source clip preparation account=$ACCOUNT_ID"
+          echo "[DISPATCHED] bounded approved-source clip preparation account=$ACCOUNT_ID"
