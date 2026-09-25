@@ -49,6 +49,7 @@ if [[ ! -d "$target" ]]; then
   rsync -a --delete --exclude .git --exclude .runtime --exclude data --exclude output --exclude .ai-tmp "$SOURCE_ROOT/" "$stage/"
   printf '%s\n' "$REVISION" > "$stage/.production-release"
   python3 -m venv "$stage/.venv"
+  "$stage/.venv/bin/pip" install --quiet --upgrade "pip==26.2.1"
   "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements.txt"
   "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements-media-runtime.txt"
   mv "$stage" "$target"
