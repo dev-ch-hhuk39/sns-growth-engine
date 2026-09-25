@@ -58,7 +58,9 @@ assert "PUBLISH_ENABLED=false" in media_preparation
 assert "ALLOW_REAL_THREADS_POST=false" in media_preparation
 assert "ALLOW_REAL_X_POST=false" in media_preparation
 assert "run_buffered_media_preparation_host.py" in media_preparation
-assert 'splitlines()) != len(keys) + 1' in deploy
+assert 'set(keys).issubset(assignments)' in deploy
+assert '["bash", "-n", str(path)]' in deploy
+assert 'path.stat().st_mode & 0o777 != 0o600' in deploy
 assert 'shlex.quote(value)}\\n")' in deploy
 assert 'shlex.quote(value)}\\\\n")' not in deploy
 assert "run_buffered_production_host.sh" in deploy
