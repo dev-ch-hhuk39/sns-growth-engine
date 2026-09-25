@@ -2534,19 +2534,35 @@ def run_reference_generation(
 
 def offline_history_context(posted: list[dict[str, Any]], queue: list[dict[str, Any]], *,
                             account_id: str, now: datetime, recent_days: int) -> tuple[list[str], list[str]]:
-    """Keep lifetime exact dedupe while bounding semantic comparison to active/recent content."""
-    from production_inventory import timestamp as production_timestamp
+    """Keep exact dedupe for life; compare semantics against recent/actionable rows only."""
+    from production_inventory import JST, timestamp as production_timestamp
 
     account_posted = [row for row in posted if str(row.get("account_id")) == account_id]
     account_queue = [row for row in queue if str(row.get("account_id")) == account_id]
     active_statuses = {"READY", "AUTO_READY", "WAITING_REVIEW", "PROCESSING"}
     cutoff = now.astimezone(timezone.utc) - timedelta(days=recent_days)
+    today_jst = now.astimezone(JST).date()
     recent_posted = []
     for row in account_posted:
         at = production_timestamp(row.get("posted_at") or row.get("actual_posted_at"))
         if at is None or at.astimezone(timezone.utc) >= cutoff:
             recent_posted.append(str(row.get("public_post_text") or row.get("posted_text") or ""))
-    active_queue = [row for row in account_queue if str(row.get("status", "")).upper() in active_statuses]
+    active_queue = []
+    for row in account_queue:
+        if str(row.get("status", "")).upper() not in active_statuses:
+            continue
+        slot_date = str(row.get("business_date_jst") or row.get("schedule_date_jst") or "").strip()
+        try:
+            slot_day = datetime.fromisoformat(slot_date[:10]).date() if slot_date else None
+        except ValueError:
+            slot_day = None
+        if slot_day is not None:
+            if slot_day >= today_jst:
+                active_queue.append(row)
+            continue
+        created = production_timestamp(row.get("created_at") or row.get("updated_at"))
+        if created is None or created.astimezone(timezone.utc) >= cutoff:
+            active_queue.append(row)
     semantic_history = recent_posted + [
         str(row.get("public_post_text") or row.get("posted_text") or "") for row in active_queue
     ]
