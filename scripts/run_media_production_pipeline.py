@@ -31,6 +31,7 @@ from media_post_validator import validate_media_post  # noqa: E402
 from media_v1_policy import hard_gate_fields, split_public_validation, warning_fields  # noqa: E402
 from media.media_probe import asset_has_video_evidence  # noqa: E402
 from media_growth_schemas import build_media_pdca_records, extract_video_id  # noqa: E402
+from reference.source_registry import load_registry  # noqa: E402
 from media_activation_source_suitability import clip_source_suitability  # noqa: E402
 from acquisition.models import (  # noqa: E402
     SourceMediaItem,
@@ -52,6 +53,7 @@ from process_threads_queue import process_one, update_row  # noqa: E402
 from public_post_quality import final_public_post_validator, public_preview  # noqa: E402
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 from sheets_record_reader import READONLY_RECORD_CACHE_ATTR, read_records_safely  # noqa: E402
+from sheets_record_reader import enable_readonly_record_cache, prime_readonly_record_cache  # noqa: E402
 from upload_media_assets import build_upload_plan, execute_cloudinary_uploads  # noqa: E402
 from acquisition.reliability import build_quarantine_record, clear_failure, is_quarantined, register_failure  # noqa: E402
 from accounts.managed_accounts import account_choices, managed_account  # noqa: E402
@@ -103,6 +105,12 @@ def persisted_hybrid_gate_status(row: dict[str, Any]) -> str:
 
 APPROVED_CLIP_REVIEW_MIN_SECONDS = 12.0
 APPROVED_CLIP_REVIEW_MAX_SECONDS = 45.0
+MEDIA_PREPARATION_SNAPSHOT_LOGICALS = (
+    "queue", "posted_results", "source_videos", "video_clip_candidates",
+    "media_assets", "source_posts", "source_post_media", "media_permissions",
+    "quarantined_items",
+)
+MEDIA_CLIP_MUTABLE_SNAPSHOT_LOGICALS = ("source_videos", "video_clip_candidates", "media_assets")
 
 
 def approved_clip_duration_seconds(clip: dict[str, Any]) -> float:
@@ -147,8 +155,10 @@ def _load(path: Path) -> dict[str, Any]:
 
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
-    client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+    if isinstance(cache, dict) and logical in cache:
+        return read_records_safely(client, logical)
+    client._ensure_tab(logical, TAB_DEFINITIONS[logical])
     if isinstance(cache, dict):
         return read_records_safely(client, logical)
 
@@ -169,6 +179,9 @@ def _fresh_records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
 
     retry = getattr(client, "_call_with_rate_limit_retry", None)
     rows = retry(f"get_all_records:{logical}:read_after_write", operation) if retry else operation()
+    cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+    if isinstance(cache, dict):
+        cache[logical] = [dict(row) for row in rows]
     return [dict(row) for row in rows]
 
 
@@ -2393,12 +2406,24 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     source_video_id = str(source_video.get("source_video_id"))
     account_id = str(plan["account_id"])
 
+    stored_context = _stored_full_source_context(client, source_video)
+    registered_sources = [row for row in load_registry()
+                          if str(row.get("source_id") or "") == str(source_video.get("source_id") or "")]
+    registered_source = stored_context.get("registered_source_row") or (
+        registered_sources[0] if len(registered_sources) == 1 else {}
+    )
     download_args = SimpleNamespace(
         source_video_id=source_video_id,
         source_video_row=source_video,
         source_videos_json="",
         source_url="",
         rights_status=source_video.get("rights_status", ""),
+        media_permissions_rows=stored_context.get("media_permissions_rows") or _records(client, "media_permissions"),
+        registered_source_row=registered_source,
+        source_post_row=stored_context.get("source_post_row"),
+        source_media_row=stored_context.get("source_media_row"),
+        media_assets_rows=stored_context.get("media_assets_rows", []),
+        stored_source_only=bool(stored_context),
         download=True,
         confirm_download=True,
         dry_run=False,
@@ -2414,7 +2439,11 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
             "candidate_quarantined": is_quarantined(failure),
         }
     local_source = str(download["download_result"]["local_path"])
-    client.save_source_video({**source_video, "download_status": "DOWNLOADED", "local_path": "", "downloaded_at": datetime.now(timezone.utc).isoformat()})
+    try:
+        client.save_source_video({**source_video, "download_status": "DOWNLOADED", "local_path": "", "downloaded_at": datetime.now(timezone.utc).isoformat()})
+    except Exception:
+        Path(local_source).unlink(missing_ok=True)
+        raise
 
     clip_for_cut = dict(clip)
 
@@ -2447,7 +2476,10 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         confirm_cut=True,
         dry_run=False,
     )
-    cut = execute_cut(build_cut_plan(cut_args))
+    try:
+        cut = execute_cut(build_cut_plan(cut_args))
+    finally:
+        Path(local_source).unlink(missing_ok=True)
     if cut.get("status") != "CUT":
         reason = "cut:" + "|".join(cut.get("blocked_reasons", []) or [str(cut.get("status", "failed"))])
         failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
@@ -2467,7 +2499,10 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     )
 
     upload_args = SimpleNamespace(upload=True, confirm_upload=True, dry_run=False)
-    upload = execute_cloudinary_uploads(build_upload_plan(upload_args, [asset]))
+    try:
+        upload = execute_cloudinary_uploads(build_upload_plan(upload_args, [asset]))
+    finally:
+        Path(str(asset.get("local_path") or "")).unlink(missing_ok=True)
     if upload.get("status") != "UPLOADED":
         reason = "upload:" + "|".join(upload.get("blocked_reasons", []) or [str(upload.get("status", "failed"))])
         failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
@@ -2894,6 +2929,50 @@ def _last_json_object(output: str) -> dict[str, Any]:
     return max(objects, key=lambda item: item[0])[1] if objects else {}
 
 
+def _stored_full_source_context(client: SheetsClient, source_video: dict[str, Any]) -> dict[str, Any]:
+    """Find the one uploaded original whose parent and child match exactly."""
+    source_id = str(source_video.get("source_id") or "")
+    account_id = str(source_video.get("account_id") or "")
+    source_url = str(source_video.get("canonical_video_url") or "")
+    registered = [row for row in load_registry() if str(row.get("source_id") or "") == source_id]
+    if len(registered) != 1:
+        return {}
+    posts = [row for row in _records(client, "source_posts")
+             if row.get("source_id") == source_id and row.get("target_account_id") == account_id
+             and row.get("canonical_post_url") == source_url]
+    if len(posts) != 1:
+        return {}
+    post = posts[0]
+    children = [row for row in _records(client, "source_post_media")
+                if row.get("source_post_id") == post.get("source_post_id")
+                and row.get("canonical_post_url") == source_url]
+    if len(children) != 1:
+        return {}
+    media = children[0]
+    if (str(media.get("media_index") or "") != "0"
+            or str(media.get("media_type") or "").lower() != "video"
+            or str(media.get("cloudinary_status") or "").upper() != "UPLOADED"
+            or not media.get("storage_url")):
+        return {}
+    media_id = str(media.get("media_asset_id") or media.get("media_id") or "")
+    assets = [row for row in _records(client, "media_assets") if str(row.get("media_id") or "") == media_id]
+    if len(assets) != 1:
+        return {}
+    return {
+        "source_post_row": post,
+        "source_media_row": media,
+        "media_assets_rows": assets,
+        "media_permissions_rows": _records(client, "media_permissions"),
+        "registered_source_row": registered[0],
+    }
+
+
+def _refresh_mutable_clip_snapshot(client: SheetsClient) -> None:
+    """Refresh one batched snapshot after child preparation writes."""
+    if isinstance(getattr(client, READONLY_RECORD_CACHE_ATTR, None), dict):
+        prime_readonly_record_cache(client, MEDIA_CLIP_MUTABLE_SNAPSHOT_LOGICALS)
+
+
 def maintain_ready_clip_inventory(
     client, *, account_id: str, slot_id: str, minimum: int, reuse_uploaded_only: bool = False
 ) -> dict[str, Any]:
@@ -2907,11 +2986,19 @@ def maintain_ready_clip_inventory(
         raise ValueError("clip_inventory_minimum_out_of_range")
 
     def queue_rows() -> list[dict[str, Any]]:
-        return read_records_safely(client, "queue", preserve_strings=True)
+        rows = read_records_safely(client, "queue", preserve_strings=True)
+        cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+        if isinstance(cache, dict):
+            cache["queue"] = [dict(row) for row in rows]
+        return rows
 
     def ready_ids(rows: list[dict[str, Any]] | None = None) -> set[str]:
         snapshot = copy.copy(client)
-        enable_readonly_record_cache(snapshot)
+        cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+        if isinstance(cache, dict):
+            setattr(snapshot, READONLY_RECORD_CACHE_ATTR, dict(cache))
+        else:
+            enable_readonly_record_cache(snapshot)
         # Queue promotion happens in a child process. Read the queue itself
         # without an invocation snapshot so every refill cycle observes the
         # promoter's read-after-write result. The copied client remains cached
@@ -2993,6 +3080,7 @@ def maintain_ready_clip_inventory(
                 })
                 break
             prepared = execute(asset_plan, client)
+            _refresh_mutable_clip_snapshot(client)
             attempts.append({"status": str(prepared.get("status", ""))})
             if prepared.get("status") != "MEDIA_READY":
                 excluded.add(str(asset_plan.get("selected_clip_candidate_id", "")))
@@ -3051,6 +3139,8 @@ def main() -> int:
     if args.use_sheets:
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        enable_readonly_record_cache(client)
+        prime_readonly_record_cache(client, MEDIA_PREPARATION_SNAPSHOT_LOGICALS)
     if args.minimum_ready:
         result = maintain_ready_clip_inventory(client, account_id=args.account_id,
             slot_id=args.slot_id, minimum=args.minimum_ready,

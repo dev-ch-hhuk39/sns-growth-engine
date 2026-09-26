@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from acquisition.ytdlp_runtime import physical_download_option_attempts  # noqa: E402
 from acquisition.models import canonical_url  # noqa: E402
-from acquisition.threads_public import ThreadsPublicHttpAdapter  # noqa: E402
+from acquisition.threads_cli import ThreadsCliPublicAdapter, ThreadsLoggedOutGraphQLAdapter  # noqa: E402
+from acquisition.threads_official import canonical_threads_post_url, threads_handle  # noqa: E402
+from acquisition.threads_public import ThreadsPublicScreenAdapter  # noqa: E402
 from generation.media_platform_policy import can_attempt_physical_media, normalize_platform  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from media.permission_ledger import evaluate_permission  # noqa: E402
@@ -54,6 +56,8 @@ _SAFE_INGEST_ERROR_CODES = {
     "threads_refreshed_media_child_mismatch",
     "threads_post_author_mismatch",
     "threads_post_application_404",
+    "threads_public_refresh_unavailable",
+    "youtube_members_only",
     "threads_post_parent_mismatch",
     "threads_public_page_failed",
     "threads_http_status",
@@ -302,6 +306,14 @@ def probe_video(path: Path) -> dict[str, str]:
             ratio = f"{w}:{h}"
     return {"duration_seconds": f"{duration:.2f}", "width": str(width), "height": str(height), "aspect_ratio": ratio}
 
+def youtube_members_only(error: Any) -> bool:
+    text = str(error).lower()
+    return any(marker in text for marker in (
+        "youtube_members_only", "members-only", "members only",
+        "only available to members of", "join this channel to get access",
+    ))
+
+
 def download_with_ytdlp(url: str, path: Path, *, platform: str) -> None:
     import yt_dlp
     def guard_resolved_stream(info: dict[str, Any]) -> None:
@@ -336,6 +348,8 @@ def download_with_ytdlp(url: str, path: Path, *, platform: str) -> None:
                 planned = ydl.extract_info(url, download=False)
                 if not isinstance(planned, dict):
                     raise RuntimeError("yt_dlp_metadata_missing")
+                if platform == "youtube" and planned.get("availability") == "subscriber_only":
+                    raise RuntimeError("youtube_members_only")
                 requested = planned.get("requested_formats") or planned.get("requested_downloads") or [planned]
                 for item in requested:
                     if isinstance(item, dict):
@@ -351,6 +365,8 @@ def download_with_ytdlp(url: str, path: Path, *, platform: str) -> None:
                     actual.replace(path)
                 return
         except Exception as exc:
+            if platform == "youtube" and youtube_members_only(exc):
+                raise RuntimeError("youtube_members_only") from None
             last_error = exc
     if last_error is not None:
         raise last_error
@@ -408,42 +424,64 @@ def refresh_threads_media_url(
     post: dict[str, Any],
     media: dict[str, Any],
     *,
-    adapter: ThreadsPublicHttpAdapter | None = None,
+    adapter: Any | None = None,
 ) -> tuple[str, str]:
     """Refresh a volatile CDN URL from the same canonical Threads post only."""
-    parent_url = canonical_url(
+    parent_url = canonical_threads_post_url(
         str(media.get("canonical_post_url") or post.get("canonical_post_url") or "")
     )
-    if "/post/" not in parent_url:
+    if not parent_url:
         raise RuntimeError("threads_individual_post_url_required")
+    if post.get("canonical_post_url") and canonical_threads_post_url(str(post["canonical_post_url"])) != parent_url:
+        raise RuntimeError("threads_refreshed_parent_mismatch")
+    if post.get("source_post_id") and media.get("source_post_id") != post["source_post_id"]:
+        raise RuntimeError("threads_refreshed_parent_mismatch")
     profile_url = canonical_url(str(post.get("profile_url") or ""))
     if not profile_url:
         profile_url = parent_url.split("/post/", 1)[0]
+    expected_author = threads_handle(profile_url)
+    if not expected_author or threads_handle(parent_url) != expected_author:
+        raise RuntimeError("threads_post_author_mismatch")
+    if post.get("author_handle") and str(post["author_handle"]).lower().lstrip("@") != expected_author:
+        raise RuntimeError("threads_post_author_mismatch")
     source = {
         "source_id": str(post.get("source_id") or ""),
         "source_url": profile_url,
         "target_account_id": str(post.get("target_account_id") or ""),
         "target_account_ids": [str(post.get("target_account_id") or "")],
     }
-    resolved = (adapter or ThreadsPublicHttpAdapter()).acquire_post(source, parent_url)
-    if canonical_url(resolved.canonical_post_url) != parent_url:
+    adapters = [adapter] if adapter is not None else [
+        ThreadsCliPublicAdapter(), ThreadsLoggedOutGraphQLAdapter(), ThreadsPublicScreenAdapter(),
+    ]
+    for candidate in adapters:
+        try:
+            resolved = candidate.acquire_post(source, parent_url)
+            break
+        except Exception as exc:
+            # Identity failures are terminal; application404 and transport
+            # failures only describe this public backend, never deletion.
+            if "mismatch" in str(exc) or "individual_post_url_required" in str(exc):
+                raise
+    else:
+        raise RuntimeError("threads_public_refresh_unavailable")
+    if canonical_threads_post_url(resolved.canonical_post_url) != parent_url:
         raise RuntimeError("threads_refreshed_parent_mismatch")
+    if resolved.author_handle.lower().lstrip("@") != expected_author:
+        raise RuntimeError("threads_post_author_mismatch")
     if resolved.source_id != source["source_id"]:
         raise RuntimeError("threads_refreshed_source_mismatch")
     if resolved.target_account_id != source["target_account_id"]:
         raise RuntimeError("threads_refreshed_account_mismatch")
     try:
-        expected_index = int(str(media.get("media_index") or "0"))
+        expected_index = int(str(media.get("media_index", "")))
     except ValueError as exc:
         raise RuntimeError("threads_refreshed_media_index_invalid") from exc
     expected_type = str(media.get("media_type") or "").lower()
-    child = next(
-        (item for item in resolved.media_items if item.media_index == expected_index),
-        None,
-    )
-    if child is None or child.media_type != expected_type:
+    children = [item for item in resolved.media_items if item.media_index == expected_index]
+    if expected_index < 0 or len(children) != 1 or children[0].media_type != expected_type:
         raise RuntimeError("threads_refreshed_media_child_mismatch")
-    if child.source_post_id != resolved.source_post_id:
+    child = children[0]
+    if child.source_post_id != resolved.source_post_id or canonical_threads_post_url(child.canonical_post_url) != parent_url:
         raise RuntimeError("threads_refreshed_parent_mismatch")
     refreshed_url = canonical_url(child.original_media_url)
     if not safe_https_url(refreshed_url, stream_url=True):
@@ -1294,6 +1332,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
         # are persisted as a retryable, visible skip and never bypassed with
         # browser cookies or another authentication workaround.
         error_text = str(exc).lower()
+        terminal_unavailable = normalize_platform(str(post.get("platform") or ""), str(media.get("canonical_post_url") or "")) == "youtube" and youtube_members_only(exc)
         external_unavailable = any(marker in error_text for marker in (
             "sign in to confirm you\u2019re not a bot",
             "sign in to confirm you're not a bot",
@@ -1301,11 +1340,15 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             "http error 403",
             "http error 429",
             "threads_public_http_failed",
-        ))
+            "threads_public_refresh_unavailable",
+            "threads_post_application_404",
+        )) or terminal_unavailable
         status = "SKIPPED_EXTERNAL_UNAVAILABLE" if external_unavailable else "FAILED"
         error_code = _safe_ingest_error_code(
             exc
         )
+        if terminal_unavailable:
+            error_code = "youtube_members_only"
         try:
             update_media_row(
                 client,

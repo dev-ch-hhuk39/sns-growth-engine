@@ -37,6 +37,22 @@ CommandRunner = Callable[[list[str], dict[str, str], int], tuple[int, str, str]]
 JsonPoster = Callable[[str, dict[str, str], bytes], dict[str, Any]]
 
 
+def _exact_public_post(adapter: Any, source: dict[str, Any], post_url: str) -> NormalizedSourcePost:
+    parent = canonical_threads_post_url(post_url)
+    if not parent:
+        raise BackendFailure("threads_individual_post_url_required")
+    if threads_handle(parent) != threads_handle(str(source.get("source_url") or "")):
+        raise BackendFailure("threads_post_author_mismatch")
+    # Reuse the bounded anonymous surface; absence in page one is not deletion.
+    posts = adapter.acquire({**source, "_discovery_start_position": 1}, limit=MAX_PROFILE_POSTS)
+    matches = [post for post in posts if canonical_threads_post_url(post.canonical_post_url) == parent]
+    if not matches:
+        raise BackendFailure("threads_exact_post_unavailable")
+    if len(matches) != 1:
+        raise BackendFailure("threads_post_parent_mismatch")
+    return matches[0]
+
+
 def _public_window(source: dict[str, Any], limit: int) -> tuple[int, int]:
     """These anonymous OSS surfaces expose only the first bounded page."""
     try:
@@ -124,14 +140,14 @@ def normalize_public_post(
         for raw_url in media_urls:
             media_url = canonical_url(str(raw_url or ""))
             if not media_url.startswith("https://"):
-                continue
+                raise BackendFailure("threads_refreshed_media_child_mismatch")
             index = len(media)
             media.append(
                 NormalizedMediaItem(
                     source_post_media_id=f"spm_{source_post_id}_{index}",
                     source_post_id=source_post_id,
                     media_index=index,
-                    media_type=_media_kind(parent_type, media_url),
+                    media_type=(row["media_types"][index] if row.get("media_types") else _media_kind(parent_type, media_url)),
                     canonical_post_url=post_url,
                     original_media_url=media_url,
                     resolver_backend=backend_name,
@@ -220,6 +236,9 @@ class ThreadsCliPublicAdapter:
             raise BackendFailure("threads_profile_identity_mismatch")
         return payload
 
+    def acquire_post(self, source: dict[str, Any], post_url: str) -> NormalizedSourcePost:
+        return _exact_public_post(self, source, post_url)
+
     def acquire(
         self, source: dict[str, Any], *, limit: int
     ) -> list[NormalizedSourcePost]:
@@ -294,6 +313,7 @@ def _raw_graph_post(node: dict[str, Any]) -> dict[str, Any]:
     caption = node.get("caption") if isinstance(node.get("caption"), dict) else {}
     media_type = int(node.get("media_type") or 0)
     media_urls: list[str] = []
+    media_types: list[str] = []
     kind = "TEXT_POST"
     if media_type == 1:
         kind = "IMAGE"
@@ -302,17 +322,19 @@ def _raw_graph_post(node: dict[str, Any]) -> dict[str, Any]:
             url = _candidate_url(versions, "candidates")
             if url:
                 media_urls.append(url)
+                media_types.append("image")
     elif media_type == 2:
         kind = "VIDEO"
         url = _candidate_url(node, "video_versions")
         if url:
             media_urls.append(url)
+            media_types.append("video")
     elif media_type == 8:
         kind = "CAROUSEL_ALBUM"
         children = node.get("carousel_media") or []
         for child in children if isinstance(children, list) else []:
             if not isinstance(child, dict):
-                continue
+                raise BackendFailure("threads_refreshed_media_child_mismatch")
             if int(child.get("media_type") or 0) == 2:
                 url = _candidate_url(child, "video_versions")
             else:
@@ -322,8 +344,10 @@ def _raw_graph_post(node: dict[str, Any]) -> dict[str, Any]:
                     if isinstance(versions, dict)
                     else ""
                 )
-            if url:
-                media_urls.append(url)
+            if not url:
+                raise BackendFailure("threads_refreshed_media_child_mismatch")
+            media_urls.append(url)
+            media_types.append("video" if int(child.get("media_type") or 0) == 2 else "image")
     handle = str(user.get("username") or "").lower().lstrip("@")
     code = str(node.get("code") or "")
     taken_at = node.get("taken_at")
@@ -345,6 +369,7 @@ def _raw_graph_post(node: dict[str, Any]) -> dict[str, Any]:
         "text": str(caption.get("text") or ""),
         "media_type": kind,
         "media_urls": media_urls,
+        "media_types": media_types,
         "permalink": (
             f"https://www.threads.com/@{handle}/post/{code}"
             if handle and code
@@ -374,6 +399,9 @@ class ThreadsLoggedOutGraphQLAdapter:
     ) -> None:
         self._profile_loader = profile_loader or ThreadsCliPublicAdapter().profile_identity
         self._json_poster = json_poster or _default_json_poster
+
+    def acquire_post(self, source: dict[str, Any], post_url: str) -> NormalizedSourcePost:
+        return _exact_public_post(self, source, post_url)
 
     def acquire(
         self, source: dict[str, Any], *, limit: int
