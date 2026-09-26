@@ -398,27 +398,29 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     if not apply:
         return {"status": "PLAN_ONLY", "account_id": account_id, "minimum": minimum, "would_post": False}
     client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
-    initial_queues = records(client, "queue")
-    initial_bank = records(client, "evergreen_bank")
-    initial_posts = records(client, "posted_results")
-    initial_slot_runs = records(client, "content_slot_runs")
+    snapshot = copy.copy(client)
+    enable_readonly_record_cache(snapshot)
+    initial_queues = records(snapshot, "queue")
+    initial_bank = records(snapshot, "evergreen_bank")
+    initial_posts = records(snapshot, "posted_results")
+    initial_slot_runs = records(snapshot, "content_slot_runs")
     from content_slot_runs import business_date
     releases = expired_unpublished_bank_allocations(
         initial_bank, initial_queues, initial_posts, initial_slot_runs,
         current_business_date=business_date(now),
     )
     release_result = release_expired_unpublished_bank_allocations(client, releases, apply=apply)
-    snapshot = copy.copy(client)
-    enable_readonly_record_cache(snapshot)
+    if releases:
+        prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
 
     def check(row):
         return (final_public_post_validator(str(row.get("public_post_text", "")), account_id).get("status") == "PASS"
                 and hybrid_ai_gate_passed(row, build_source_context(snapshot, row))[0]
                 and process_one(snapshot, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN")
 
-    posted_ids = {r.get("queue_id") for r in records(client, "posted_results")}
-    existing_bank_ids = {r.get("queue_id") for r in records(client, "evergreen_bank")}
-    canonical_queues = records(client, "queue")
+    posted_ids = {r.get("queue_id") for r in records(snapshot, "posted_results")}
+    existing_bank_ids = {r.get("queue_id") for r in records(snapshot, "evergreen_bank")}
+    canonical_queues = records(snapshot, "queue")
     admissions = []
     for row in canonical_queues:
         date = str(row.get("business_date_jst") or row.get("schedule_date_jst") or "")
@@ -433,9 +435,10 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             break
     if admissions:
         admit_bank_batch(client, admissions, now=now, runtime_check=check, apply=True)
+        prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
 
     def count_usable():
-        bank, queues, posted = records(client, "evergreen_bank"), records(client, "queue"), records(client, "posted_results")
+        bank, queues, posted = records(snapshot, "evergreen_bank"), records(snapshot, "queue"), records(snapshot, "posted_results")
         unallocated = [r for r in queues if not (r.get("business_date_jst") or r.get("schedule_date_jst"))]
         return len(usable_evergreen_entries(
             bank, unallocated, posted, account=account_id, now=now,
@@ -459,7 +462,9 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
                          "failure_category": result.get("failure_category", ""),
                          "theme_variant": slot.get("theme", ""),
                          "generation_attempts": result.get("attempts", [])})
-        generated_rows = records(client, "queue") if result.get("queue_ids") else []
+        if result.get("queue_ids"):
+            prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
+        generated_rows = records(snapshot, "queue") if result.get("queue_ids") else []
         admissions = []
         for qid in result.get("queue_ids", []):
             matches = [r for r in generated_rows if r.get("queue_id") == qid]
@@ -472,6 +477,7 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             # race today's publisher before bank admission.  Once the bank row
             # is durable, return the canonical queue to the unallocated pool.
             release_temporary_bank_allocations(client, admissions)
+            prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         current = count_usable()
         if not result.get("queue_ids"):
             break

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from datetime import datetime, timezone, timedelta
+import inspect
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,6 +14,7 @@ from maintain_text_ready_inventory import (
     evergreen_theme_variants,
     future_text_slots,
     next_text_slot,
+    replenish_bank,
 )
 
 jst = timezone(timedelta(hours=9))
@@ -82,6 +84,12 @@ with patch("maintain_text_ready_inventory.final_public_post_validator", return_v
     assert _publishable_ready_rows(None, [publishable], "night_scout", night) == [publishable]
     assert _publishable_ready_rows(None, [{**publishable, "media_asset_id": "media"}], "night_scout", night) == []
     assert _publishable_ready_rows(None, [{**publishable, "post_type": "direct_reference_media"}], "night_scout", night) == []
+bank_source = inspect.getsource(replenish_bank)
+assert 'records(snapshot, "queue")' in bank_source
+assert 'records(snapshot, "evergreen_bank")' in bank_source
+assert 'prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))' in bank_source
+assert 'records(client, "evergreen_bank")' not in bank_source
+assert 'records(client, "posted_results")' not in bank_source
 source = Path(__file__).with_name("maintain_text_ready_inventory.py").read_text(encoding="utf-8")
 assert "process_threads_queue.py" not in source
 assert "--autonomous-low-risk" in source
