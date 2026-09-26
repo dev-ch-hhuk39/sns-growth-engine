@@ -48,6 +48,27 @@ def run(command: list[str], *, env: dict[str, str] | None = None) -> subprocess.
     return completed
 
 
+def _sheets_quota_exhausted(result: subprocess.CompletedProcess[str]) -> bool:
+    if result.returncode == 0:
+        return False
+    output = f"{result.stdout}\n{result.stderr}"
+    return "[SHEETS_RETRY]" in output and "failed with rate_limit" in output.lower()
+
+
+def _quota_deferred(
+    account_id: str, slot_id: str, attempts: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return {
+        "status": "SHEETS_QUOTA_DEFERRED",
+        "account_id": account_id,
+        "slot_id": slot_id,
+        "selected_queue_id": "",
+        "blocked_reasons": ["sheets_rate_limit_exhausted"],
+        "attempts": attempts,
+        "would_post": False,
+    }
+
+
 def execute(
     account_id: str,
     slot_id: str,
@@ -69,6 +90,17 @@ def execute(
         ingest = subprocess.CompletedProcess(ingest_command, 0, '{"status":"EXISTING_ASSETS_FIRST"}', "")
         if not prefer_existing:
             ingest = runner(ingest_command)
+            if _sheets_quota_exhausted(ingest):
+                attempts.append({
+                    "attempt": number,
+                    "ingest_status": "SHEETS_QUOTA_DEFERRED",
+                    "prepare_status": "NOT_RUN",
+                    "queue_id": "",
+                    "blocked_reasons": ["sheets_rate_limit_exhausted"],
+                    "ingest_returncode": ingest.returncode,
+                    "prepare_returncode": None,
+                })
+                return _quota_deferred(account_id, slot_id, attempts)
         prepare_env = os.environ.copy()
         prepare_env.pop("REQUIRE_PREPARED", None)
         prepare_command = [
@@ -82,6 +114,17 @@ def execute(
         initial = extract_last_object(prepared.stdout)
         if prefer_existing and not (initial.get("queue_id") or initial.get("generated_queue_id")):
             ingest = runner(ingest_command)
+            if _sheets_quota_exhausted(ingest):
+                attempts.append({
+                    "attempt": number,
+                    "ingest_status": "SHEETS_QUOTA_DEFERRED",
+                    "prepare_status": str(initial.get("status", "NO_QUEUE")),
+                    "queue_id": "",
+                    "blocked_reasons": ["sheets_rate_limit_exhausted"],
+                    "ingest_returncode": ingest.returncode,
+                    "prepare_returncode": prepared.returncode,
+                })
+                return _quota_deferred(account_id, slot_id, attempts)
             prepared = runner(prepare_command, env=prepare_env)
         ingest_payload = extract_last_object(ingest.stdout)
         prepare_payload = extract_last_object(prepared.stdout)
@@ -95,6 +138,11 @@ def execute(
             "ingest_returncode": ingest.returncode,
             "prepare_returncode": prepared.returncode,
         }
+        if _sheets_quota_exhausted(prepared):
+            attempt["prepare_status"] = "SHEETS_QUOTA_DEFERRED"
+            attempt["blocked_reasons"] = ["sheets_rate_limit_exhausted"]
+            attempts.append(attempt)
+            return _quota_deferred(account_id, slot_id, attempts)
         if not queue_id:
             attempts.append(attempt)
             continue
@@ -108,6 +156,11 @@ def execute(
             "--max-candidates", "1",
             "--apply", "--use-sheets",
         ])
+        if _sheets_quota_exhausted(gate):
+            attempt["hybrid_status"] = "SHEETS_QUOTA_DEFERRED"
+            attempt["blocked_reasons"] = ["sheets_rate_limit_exhausted"]
+            attempts.append(attempt)
+            return _quota_deferred(account_id, slot_id, attempts)
         gate_payload = extract_last_object(gate.stdout)
         exact = next(
             (row for row in gate_payload.get("results", []) if str(row.get("queue_id", "")) == queue_id),
@@ -141,6 +194,11 @@ def execute(
             "--autonomous-low-risk",
             "--apply", "--confirm-promote", "--use-sheets",
         ])
+        if _sheets_quota_exhausted(promotion):
+            attempt["promotion_status"] = "SHEETS_QUOTA_DEFERRED"
+            attempt["blocked_reasons"] = ["sheets_rate_limit_exhausted"]
+            attempts[-1] = attempt
+            return _quota_deferred(account_id, slot_id, attempts)
         promotion_payload = extract_last_object(promotion.stdout)
         if queue_id in promotion_payload.get("updated_queue_ids", []):
             return {
