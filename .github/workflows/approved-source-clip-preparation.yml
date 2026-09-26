@@ -64,6 +64,36 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      - name: Read Xserver timezone and installed preparation cron
+        run: |
+          python3 - <<'PY'
+          import subprocess
+
+          def output(argv):
+              result = subprocess.run(argv, capture_output=True, text=True, check=False, timeout=10)
+              return result.stdout.strip() if result.returncode == 0 else "UNAVAILABLE"
+
+          local_time = output(["date", "--iso-8601=seconds"])
+          timezone = output(["timedatectl", "show", "-p", "Timezone", "--value"])
+          timezone_abbr = output(["date", "+%Z"])
+          crontab = output(["crontab", "-l"])
+          cron_rows = []
+          cron_tz = ""
+          for line in crontab.splitlines():
+              stripped = line.strip()
+              if stripped.startswith("CRON_TZ="):
+                  cron_tz = stripped.split("=", 1)[1].strip()
+              if "run_buffered_media_preparation_host.sh" not in stripped:
+                  continue
+              fields = stripped.split()
+              if len(fields) >= 6:
+                  cron_rows.append(" ".join(fields[:5]))
+          print(f"XSERVER_LOCAL_TIME={local_time}")
+          print(f"XSERVER_TIMEZONE={timezone}")
+          print(f"XSERVER_TIMEZONE_ABBR={timezone_abbr}")
+          print(f"XSERVER_MEDIA_CRON={' | '.join(cron_rows) if cron_rows else 'NOT_FOUND'}")
+          print(f"XSERVER_CRON_TZ={cron_tz or 'SYSTEM_TIMEZONE'}")
+          PY
       - name: Create this run's owned media workspace
         run: |
           python3 - <<'PY'

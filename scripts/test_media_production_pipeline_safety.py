@@ -6,8 +6,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from run_media_production_pipeline import REQUIRED_ENV, build_plan, select_candidate
-from run_media_growth_engine import is_real_discovered_video
+from run_media_production_pipeline import REQUIRED_ENV, build_plan, select_candidate  # noqa: E402
+from run_media_growth_engine import is_real_discovered_video  # noqa: E402
 
 for name in REQUIRED_ENV:
     os.environ.pop(name, None)
@@ -52,7 +52,23 @@ checks.extend([
     selected_video["source_video_id"] == "sv_tt",
     is_real_discovered_video({"discovery_status": "PLANNED_ONLY", "platform": "youtube", "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk"}) is False,
 ])
-next_selected, _, _ = select_candidate(clips, source_videos, [{"clip_candidate_id": "clip_tt"}])
+next_selected, _, _ = select_candidate(clips, source_videos, [{"account_id": "liver_manager", "status": "POSTED",
+                                                                "clip_candidate_id": "clip_tt"}])
 checks.append(next_selected["clip_candidate_id"] == "clip_yt_1")
+posted = [{"account_id": "liver_manager", "status": "POSTED", "clip_candidate_id": "clip_yt_1",
+           "source_video_id": "sv_yt"}]
+nonoverlap_clips = [
+    {**clips[1], "clip_candidate_id": "clip_yt_1"},
+    {**clips[2], "clip_candidate_id": "clip_yt_2"},
+    {**clips[1], "clip_candidate_id": "clip_yt_3", "start_seconds": "45", "end_seconds": "70",
+     "clip_score": 99},
+]
+nonoverlap_selected, _, overlap_reasons = select_candidate(
+    nonoverlap_clips, [source_videos[1]], posted,
+)
+checks.extend([
+    nonoverlap_selected["clip_candidate_id"] == "clip_yt_3",
+    any(reason == "clip_yt_2:posted_clip_range_overlap" for reason in overlap_reasons),
+])
 print(f"PASS: {sum(checks)} / FAIL: {len(checks)-sum(checks)}")
 raise SystemExit(0 if all(checks) else 1)

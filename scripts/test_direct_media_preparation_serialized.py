@@ -42,7 +42,16 @@ assert "schedule:" not in clip_workflow
 assert "if: github.event_name == 'workflow_dispatch'" in clip_workflow
 assert "refill-existing-approved-clips:" in workflow
 assert "needs: [resolve-accounts, prepare-direct-media]" in workflow
-assert "--reuse-uploaded-only" in workflow
+assert "--stored-source-only" in workflow
+pipeline = (Path(__file__).resolve().parents[1] / "scripts/run_media_production_pipeline.py").read_text(encoding="utf-8")
+assert "select_stored_full_source" in pipeline
+assert 'ALLOW_VIDEO_DOWNLOAD: "true"' in workflow
+assert 'ALLOW_VIDEO_CUT: "true"' in workflow
+assert 'ALLOW_CLOUDINARY_UPLOAD: "true"' in workflow
+assert "Check free-tier resource budget" in workflow
+assert "Create this run's owned clip workspace" in workflow
+assert "Clean this run's owned clip workspace" in workflow
+assert "if: github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true'" in workflow
 assert 'ALLOW_VIDEO_DOWNLOAD: "false"' in workflow
 assert 'ALLOW_VIDEO_CUT: "false"' in workflow
 assert 'ALLOW_CLOUDINARY_UPLOAD: "false"' in workflow
