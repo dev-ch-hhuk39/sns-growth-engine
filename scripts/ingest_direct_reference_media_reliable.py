@@ -67,6 +67,9 @@ def external_unavailable_cooldown_active(
 ) -> bool:
     """Do not immediately retry the same provider-blocked physical asset."""
 
+    if core.youtube_members_only(media.get("last_error", "")):
+        return True
+
     if str(media.get("download_status", "")).upper() != "SKIPPED_EXTERNAL_UNAVAILABLE":
         return False
 

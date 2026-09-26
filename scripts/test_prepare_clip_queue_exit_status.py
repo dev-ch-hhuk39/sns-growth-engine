@@ -129,6 +129,7 @@ class ClipQueueExitTests(unittest.TestCase):
                                '--apply', '--confirm-production-media', '--prepare-saved-media-queue']), \
              patch.object(pipeline, 'get_config', return_value={'sheet_id': 'test', 'sa_dict': {}}), \
              patch.object(pipeline, 'SheetsClient'), \
+             patch.object(pipeline, 'prime_readonly_record_cache'), \
              patch.object(pipeline, 'build_plan', return_value={'status': 'PLAN_ONLY'}), \
              patch.object(pipeline, 'prepare_saved_media_queue', return_value=result), \
              patch.object(pipeline, 'execute') as execute, \

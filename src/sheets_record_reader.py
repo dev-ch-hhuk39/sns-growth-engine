@@ -14,6 +14,41 @@ def enable_readonly_record_cache(client: Any) -> None:
     setattr(client, READONLY_RECORD_CACHE_ATTR, {})
 
 
+def _column_letter(index: int) -> str:
+    result = ""
+    while index:
+        index, remainder = divmod(index - 1, 26)
+        result = chr(65 + remainder) + result
+    return result or "A"
+
+
+def prime_readonly_record_cache(client: Any, logicals: tuple[str, ...]) -> None:
+    """Load a bounded set of existing tabs in one request; never create tabs."""
+    ranges = []
+    for logical in logicals:
+        worksheet = client._ws(logical)
+        title = worksheet.title.replace("'", "''")
+        row_count = max(int(getattr(worksheet, "row_count", 1) or 1), 1)
+        col_count = max(int(getattr(worksheet, "col_count", 1) or 1), 1)
+        ranges.append(f"'{title}'!A1:{_column_letter(col_count)}{row_count}")
+    payload = _call_with_optional_retry(
+        client, "values_batch_get:media_preparation_snapshot",
+        lambda: client._sh.values_batch_get(ranges, params={
+            "majorDimension": "ROWS", "valueRenderOption": "FORMATTED_VALUE",
+        }),
+    )
+    values = payload.get("valueRanges", [])
+    if len(values) != len(logicals):
+        raise RuntimeError("media_preparation_snapshot_range_count_mismatch")
+    parsed = {logical: records_from_values(value.get("values", []))
+              for logical, value in zip(logicals, values)}
+    cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+    if not isinstance(cache, dict):
+        enable_readonly_record_cache(client)
+    for logical, rows in parsed.items():
+        _store_cached_records(client, logical, rows)
+
+
 def _cached_records(
     client: Any,
     logical: str,
