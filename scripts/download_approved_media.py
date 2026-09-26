@@ -111,7 +111,7 @@ def build_download_plan(args: argparse.Namespace) -> dict:
         "rights_status": decision.rights_status,
         "rights_decision": decision.as_dict(),
         "adapter_status": {"yt_dlp": "installed" if importlib.util.find_spec("yt_dlp") else "not_installed"},
-        "output_dir": str(ROOT / "output" / "downloads"),
+        "output_dir": str(Path(os.environ.get("SNS_MEDIA_PREP_WORKSPACE", ROOT / "output")) / "downloads"),
         "download": bool(args.download),
         "confirm_download": bool(args.confirm_download),
         "allow_video_download": allow_env,

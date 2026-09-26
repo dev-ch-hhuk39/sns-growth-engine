@@ -75,7 +75,8 @@ if [[ "$ENABLE_SCHEDULER" == "true" ]]; then
 1-59/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id liver_manager --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/liver_manager.cron.log 2>&1
 2-59/5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id beauty_account --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/beauty_account.cron.log 2>&1
 # Run after the previous-day Night 25:00 recovery window closes and finish
-# before the next 10:00 JST post slot. GitHub Actions remains manual fallback.
+# before the next 10:00 JST post slot. The scheduled GitHub-hosted preparation
+# fallback starts after the full bounded Xserver window plus a 60-minute margin.
 15 5 * * * /usr/bin/timeout 270m ${RUNTIME_ROOT}/current/scripts/run_buffered_media_preparation_host.sh >> ${RUNTIME_ROOT}/shared/logs/media-preparation.cron.log 2>&1
 # END SNS-GROWTH-BUFFERED
 EOF

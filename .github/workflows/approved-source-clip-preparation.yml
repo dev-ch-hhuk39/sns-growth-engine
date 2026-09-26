@@ -42,8 +42,12 @@ jobs:
     # IP ranges. Keep the bounded, permission-gated clip job on the same
     # production host that owns the scheduler and proven media runtime.
     runs-on: [self-hosted, Linux, X64]
+    if: github.event_name == 'workflow_dispatch'
     environment: production
     timeout-minutes: 60
+    concurrency:
+      group: sns-growth-approved-clip-hosted-reuse-${{ github.event.inputs.account_id }}
+      cancel-in-progress: false
     env:
       ACCOUNT_ID: ${{ github.event.inputs.account_id }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
@@ -60,6 +64,22 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           persist-credentials: false
+      - name: Create this run's owned media workspace
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]).resolve()
+          name = f"sns-media-prep-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-{os.environ['ACCOUNT_ID']}"
+          workspace = root / name
+          if workspace.parent.resolve() != root or workspace.exists() or workspace.is_symlink():
+              raise SystemExit("[BLOCKED] media workspace path is not a new runner-temp child")
+          workspace.mkdir(mode=0o700)
+          (workspace / ".sns-media-prep-owned").touch(mode=0o600)
+          with Path(os.environ["GITHUB_ENV"]).open("a", encoding="utf-8") as env_file:
+              for key in ("SNS_MEDIA_PREP_WORKSPACE", "TMPDIR", "TMP", "TEMP"):
+                  env_file.write(f"{key}={workspace}\n")
+          PY
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.11"
@@ -72,22 +92,6 @@ jobs:
           test -x "$SNS_YTDLP_NODE_PATH" || { echo "[BLOCKED] approved Node 22 runtime is unavailable"; exit 1; }
           test "$($SNS_YTDLP_NODE_PATH --version | cut -d. -f1)" = "v22" || { echo "[BLOCKED] approved Node runtime is not v22"; exit 1; }
           python3 -m pip install --requirement requirements-media-runtime.txt
-      - name: Inspect and reclaim disposable host caches
-        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
-        run: |
-          set -euo pipefail
-          echo "[storage] before"
-          df -B1 "$GITHUB_WORKSPACE"
-          echo "[storage] unused Docker build cache"
-          docker builder du || true
-          echo "[storage] pip download/wheel cache"
-          python3 -m pip cache info || true
-          echo "[storage] pruning only unused Docker build cache older than 7 days"
-          docker builder prune --force --filter until=168h
-          echo "[storage] removing pip download/wheel cache only"
-          python3 -m pip cache purge
-          echo "[storage] after"
-          df -B1 "$GITHUB_WORKSPACE"
       - name: Start bounded YouTube PO Token Provider
         if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
         run: scripts/start_youtube_pot_provider.sh
@@ -190,12 +194,26 @@ jobs:
             /tmp/approved-clip-review.json
           if-no-files-found: ignore
           retention-days: 30
-      - name: Clean expired transient media
-        if: always()
-        run: python3 scripts/cleanup_media_workspace.py --apply --confirm-cleanup
       - name: Stop bounded YouTube PO Token Provider
         if: always()
         run: scripts/stop_youtube_pot_provider.sh
+      - name: Clean expired transient media
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          root = Path(os.environ["RUNNER_TEMP"]).resolve()
+          workspace_value = os.environ.get("SNS_MEDIA_PREP_WORKSPACE", "")
+          if not workspace_value:
+              print("[NO_OP] this run did not create an owned media workspace")
+              raise SystemExit(0)
+          workspace = Path(workspace_value)
+          expected = f"sns-media-prep-{os.environ['GITHUB_RUN_ID']}-{os.environ['GITHUB_RUN_ATTEMPT']}-"
+          if (workspace.parent.resolve() == root and workspace.name.startswith(expected)
+                  and not workspace.is_symlink() and (workspace / ".sns-media-prep-owned").is_file()):
+              shutil.rmtree(workspace)
+          PY
       - name: Health summary
         if: always()
         continue-on-error: true

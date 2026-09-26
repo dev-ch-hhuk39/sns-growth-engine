@@ -15,8 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from media.rights_policy import build_rights_decision
-from media.media_probe import probe_video_file
+from media.rights_policy import build_rights_decision  # noqa: E402
+from media.media_probe import probe_video_file  # noqa: E402
 
 
 def _load_clip_candidates(path: str) -> list[dict]:
@@ -75,7 +75,8 @@ def build_plan(args: argparse.Namespace) -> dict:
         blocked.append("ffmpeg CLI is not installed")
     clip_id = str(getattr(args, "clip_candidate_id", "") or clip_candidate.get("clip_id") or datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S"))
     safe_clip_id = "".join(c if c.isalnum() or c in "_-" else "_" for c in clip_id)[:140]
-    output_path = str(ROOT / "output" / "clips" / f"{safe_clip_id}.mp4")
+    workspace = Path(os.environ.get("SNS_MEDIA_PREP_WORKSPACE", ROOT / "output"))
+    output_path = str(workspace / "clips" / f"{safe_clip_id}.mp4")
     return {
         "status": "READY" if args.cut and not blocked else "BLOCKED" if blocked else "PLAN_ONLY",
         "adapter_status": {
