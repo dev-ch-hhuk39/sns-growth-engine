@@ -17,13 +17,18 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 from accounts.managed_accounts import account_choices  # noqa: E402
 from config_loader import get_config  # noqa: E402
-from content_schedule import MEDIA_POST_TYPES, text_slots  # noqa: E402
+from content_schedule import TEXT_POST_TYPES, text_slots  # noqa: E402
 from production_inventory import eligible_ready, has_media, scheduled_slots, usable_evergreen_entries  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from public_post_quality import final_public_post_validator  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
-from sheets_record_reader import enable_readonly_record_cache, read_records_safely  # noqa: E402
+from sheets_record_reader import (  # noqa: E402
+    READONLY_RECORD_CACHE_ATTR,
+    enable_readonly_record_cache,
+    prime_readonly_record_cache,
+    read_records_safely,
+)
 from production_inventory import policy  # noqa: E402
 
 JST = timezone(timedelta(hours=9))
@@ -107,6 +112,56 @@ def _ready_exists(rows: list[dict[str, Any]], account_id: str, slot: dict[str, s
         and str(row.get("account_fit_status", "")).upper() == "PASS"
         for row in rows
     )
+
+
+def _publishable_ready_rows(
+    snapshot: Any,
+    rows: list[dict[str, Any]],
+    account_id: str,
+    slot: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Count only exact-slot text rows that pass the same no-publish runtime check."""
+    from process_threads_queue import process_one
+
+    selected = []
+    for row in rows:
+        if (str(slot.get("post_type") or "") not in TEXT_POST_TYPES
+                or str(row.get("post_type") or "") not in TEXT_POST_TYPES
+                or not eligible_ready(row, account_id) or has_media(row)
+                or not _ready_exists([row], account_id, slot)):
+            continue
+        if final_public_post_validator(str(row.get("public_post_text", "")), account_id).get("status") != "PASS":
+            continue
+        context = build_source_context(snapshot, row) if snapshot is not None else {}
+        if not hybrid_ai_gate_passed(row, context)[0]:
+            continue
+        if snapshot is not None and process_one(
+            snapshot, row, dry_run=True, confirm_real_post=False,
+        ).get("status") != "DRY_RUN":
+            continue
+        selected.append(row)
+    return selected
+
+
+def _reserve_status(delivery_count: int, reserve_target: int) -> str:
+    if delivery_count < 1:
+        return "DELIVERY_SLO_FAILED"
+    if delivery_count < reserve_target:
+        return "RESERVE_DEGRADED"
+    return "DELIVERY_READY"
+
+
+def _coverage_result(required: int, covered: int) -> tuple[str, float, str]:
+    if required <= 0:
+        return "FAILED", 0.0, "NO_REQUIRED_TEXT_SLOTS"
+    coverage = round(100 * covered / required, 2)
+    return ("PASS" if covered == required else "FAILED"), coverage, ""
+
+
+def _required_text_slots(account_id: str, start: datetime, end: datetime) -> list[dict[str, Any]]:
+    """Use each scheduled slot's resolved route, not its static/base route."""
+    return [slot for slot in scheduled_slots(account_id, start, end)
+            if str(slot.get("post_type") or "") in TEXT_POST_TYPES]
 
 
 def approval_budget_exhausted(payload: dict[str, Any]) -> bool:
@@ -213,7 +268,21 @@ def _generation_commands(account_id: str, slot: dict[str, str], *, offline_only:
         "--account-id", account_id, "--apply", "--confirm-generate", "--top-n", "3",
         "--slot-id", str(slot["slot_id"]), "--post-type", "original_text",
         "--schedule-date-jst", str(slot["business_date_jst"]), "--offline-original"])
+    if slot.get("theme"):
+        offline[1].extend(["--theme", str(slot["theme"])])
     return [offline] if offline_only else [*_primary_generation_commands(account_id, slot), offline]
+
+
+def evergreen_theme_variants(account_id: str) -> list[str]:
+    """Build bounded, persona-scoped generation angles from the canonical account taxonomy."""
+    account_path = ROOT / "config" / "accounts" / f"{account_id}.json"
+    try:
+        config = json.loads(account_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    categories = [str(value).strip() for value in config.get("content_categories", []) if str(value).strip()]
+    framings = ("見落としやすい判断材料", "最初に試せる小さな工夫", "続ける前に確認したいこと")
+    return [f"{category} / {framing}" for category in categories for framing in framings]
 
 
 def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
@@ -379,12 +448,16 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     # today's publish target during the two-phase bank admission.
     slot = next((r for r in text_slots(account_id) if r["post_type"] == "original_text"), text_slots(account_id)[0])
     slot = {**slot, "business_date_jst": (now.date() + timedelta(days=7)).isoformat()}
-    for _ in range(10):
+    theme_variants = evergreen_theme_variants(account_id)
+    for attempt_number in range(10):
         if current >= minimum:
             break
+        if theme_variants:
+            slot["theme"] = theme_variants[attempt_number % len(theme_variants)]
         result = replenish(account_id, slot, apply=True, required=min(3, minimum-current), offline_only=False)
         attempts.append({"status": result["status"], "queue_ids": result.get("queue_ids", []),
                          "failure_category": result.get("failure_category", ""),
+                         "theme_variant": slot.get("theme", ""),
                          "generation_attempts": result.get("attempts", [])})
         generated_rows = records(client, "queue") if result.get("queue_ids") else []
         admissions = []
@@ -435,45 +508,45 @@ def main() -> int:
             from sheets_client import TAB_DEFINITIONS
             client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
     results: list[dict[str, Any]] = []
+    coverage_by_account: dict[str, dict[str, int]] = {}
     for account_id in accounts:
         if args.evergreen_bank:
             results.append(replenish_bank(client if args.use_sheets else None, account_id, apply=args.apply))
             continue
         now = datetime.now(JST)
         budget_blocked = False
-        slots = scheduled_slots(account_id, now, now + timedelta(hours=args.horizon_hours))
-        for expected_slot in slots:
-            snapshot = copy.copy(client) if args.use_sheets else None
-            if snapshot is not None:
-                enable_readonly_record_cache(snapshot)
-            # Only the reserve generation route changes. The canonical slot
-            # remains media and delivery must explicitly report text fallback.
-            slot = {**expected_slot, "post_type": "original_text"} if expected_slot["post_type"] in MEDIA_POST_TYPES else expected_slot
-            ready_ids = {str(row["queue_id"]) for row in queue_rows
-                         if eligible_ready(row, account_id) and not has_media(row)
-                         and _ready_exists([row], account_id, slot)
-                         and final_public_post_validator(str(row["public_post_text"]), account_id).get("status") == "PASS"
-                         and hybrid_ai_gate_passed(row, build_source_context(snapshot, row))[0]}
-            missing = max(0, policy()["text_candidates_per_slot"] - len(ready_ids))
-            if not missing:
-                results.append({
-                    "account_id": account_id,
-                    "slot_id": slot["slot_id"],
-                    "business_date_jst": slot["business_date_jst"],
-                    "status": "READY_INVENTORY_OK",
-                })
-                continue
-            result = replenish(account_id, slot, apply=args.apply, required=missing, offline_only=budget_blocked)
-            budget_blocked = budget_blocked or any(attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
-                                                   for attempt in result.get("attempts", []))
-            if args.apply and result["status"] == "QUALITY_EXHAUSTED":
+        snapshot = copy.copy(client) if args.use_sheets else None
+        if snapshot is not None:
+            enable_readonly_record_cache(snapshot)
+            setattr(snapshot, READONLY_RECORD_CACHE_ATTR, {"queue": [dict(row) for row in queue_rows]})
+        slots = _required_text_slots(account_id, now, now + timedelta(hours=args.horizon_hours))
+        account_covered = 0
+        for slot in slots:
+            ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+            reserve_target = int(policy()["text_candidates_per_slot"])
+            missing = max(0, reserve_target - len(ready_rows))
+            result: dict[str, Any] = {
+                "account_id": account_id,
+                "slot_id": slot["slot_id"],
+                "business_date_jst": slot["business_date_jst"],
+                "post_type": slot["post_type"],
+                "reserve_target": reserve_target,
+                "initial_publishable_ready": len(ready_rows),
+                "would_post": False,
+            }
+            if missing:
+                generated = replenish(account_id, slot, apply=args.apply, required=missing, offline_only=budget_blocked)
+                result.update(generated)
+                result["reserve_generation_status"] = generated.get("status", "")
+                result["reserve_generation_failure_category"] = generated.get("failure_category", "")
+                budget_blocked = budget_blocked or any(attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
+                                                       for attempt in generated.get("attempts", []))
+            if args.apply and missing:
                 from evergreen_inventory import allocate_bank_candidate
                 from generate_threads_ideas_from_references import original_text_similarity_guard
                 recovered = list(result.get("queue_ids", []))
-                # Refresh once after generation; reuse read-only source evidence across reserves.
-                snapshot = copy.copy(client)
-                enable_readonly_record_cache(snapshot)
-                for _ in range(max(0, missing - len(recovered))):
+                bank_needed = max(0, reserve_target - len(ready_rows) - len(recovered))
+                for _ in range(bank_needed):
                     allocated = allocate_bank_candidate(client, account=account_id, slot=slot, now=now, apply=True,
                         runtime_check=lambda row: hybrid_ai_gate_passed(row, build_source_context(snapshot, row))[0]
                             and final_public_post_validator(str(row.get("public_post_text", "")), account_id).get("status") == "PASS",
@@ -482,12 +555,40 @@ def main() -> int:
                         break
                     recovered.append(allocated["queue_id"])
                 result["queue_ids"] = recovered
-                if len(recovered) >= missing:
-                    result.update(status="READY_REPLENISHED", generation_route="validated_evergreen_fallback")
+            if args.use_sheets and args.apply:
+                prime_readonly_record_cache(snapshot, ("queue",))
+                queue_rows = [dict(row) for row in read_records_safely(snapshot, "queue")]
+                setattr(snapshot, READONLY_RECORD_CACHE_ATTR, {"queue": [dict(row) for row in queue_rows]})
+            verified_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+            reserve_state = _reserve_status(len(verified_rows), reserve_target)
+            account_covered += int(len(verified_rows) >= 1)
+            result.update(
+                status=(reserve_state if args.apply or ready_rows else "PLAN_ONLY"),
+                delivery_slo="PASS" if len(verified_rows) >= 1 else "FAIL",
+                publishable_ready_count=len(verified_rows),
+                reserve_status="FULL" if len(verified_rows) >= reserve_target else "RESERVE_DEGRADED",
+                reserve_shortfall=max(0, reserve_target - len(verified_rows)),
+                would_post=False,
+            )
             results.append(result)
-    failed = [row for row in results if row["status"] == "QUALITY_EXHAUSTED"]
-    print(json.dumps({"status": "PASS" if not failed else "FAILED", "results": results, "would_post": False}, ensure_ascii=False, indent=2))
-    return 1 if failed else 0
+        coverage_by_account[account_id] = {"covered_slots": account_covered, "required_slots": len(slots)}
+    delivery_failures = [row for row in results if row.get("delivery_slo") == "FAIL"]
+    coverage_total = sum(item["required_slots"] for item in coverage_by_account.values())
+    coverage_covered = sum(item["covered_slots"] for item in coverage_by_account.values())
+    coverage_status, coverage_percent, coverage_failure_reason = _coverage_result(coverage_total, coverage_covered)
+    payload = {
+        "status": "PASS" if not delivery_failures and coverage_status == "PASS" else "FAILED",
+        "text_delivery_coverage_72h_percent": coverage_percent,
+        "text_delivery_coverage_by_account": coverage_by_account,
+        "coverage_failure_reason": coverage_failure_reason,
+        "reserve_status": "RESERVE_DEGRADED" if any(row.get("reserve_status") == "RESERVE_DEGRADED" for row in results) else "FULL",
+        "hard_delivery_failures": [{"account_id": row["account_id"], "slot_id": row["slot_id"],
+                                    "reason": "NO_PUBLISHABLE_READY"} for row in delivery_failures],
+        "results": results,
+        "would_post": False,
+    }
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 1 if delivery_failures or coverage_status != "PASS" else 0
 
 
 if __name__ == "__main__":

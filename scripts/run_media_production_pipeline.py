@@ -26,11 +26,16 @@ from generation.reference_first_router import choose_reference_first_route  # no
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
-from download_approved_media import build_download_plan, execute_download, is_individual_video_url  # noqa: E402
+from download_approved_media import (  # noqa: E402
+    build_download_plan,
+    execute_download,
+    is_individual_video_url,
+    select_stored_full_source,
+)
 from media_post_validator import validate_media_post  # noqa: E402
 from media_v1_policy import hard_gate_fields, split_public_validation, warning_fields  # noqa: E402
 from media.media_probe import asset_has_video_evidence  # noqa: E402
-from media_growth_schemas import build_media_pdca_records, extract_video_id  # noqa: E402
+from media_growth_schemas import build_media_pdca_records, clips_overlap, extract_video_id  # noqa: E402
 from reference.source_registry import load_registry  # noqa: E402
 from media_activation_source_suitability import clip_source_suitability  # noqa: E402
 from acquisition.models import (  # noqa: E402
@@ -1306,7 +1311,21 @@ def select_candidate(
     allow_waiting_review: bool = False,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
     sources = {str(row.get("source_video_id", "")): row for row in source_videos}
-    posted_clip_ids = {str(row.get("clip_candidate_id", "")) for row in posted_results if row.get("clip_candidate_id")}
+    posted_account_rows = [row for row in posted_results
+                           if str(row.get("account_id") or "") == account_id
+                           and str(row.get("status") or "").upper() in {"POSTED", "POSTED_PRIMARY", "POSTED_FALLBACK"}]
+    posted_clip_ids = {str(row.get("clip_candidate_id", "")) for row in posted_account_rows if row.get("clip_candidate_id")}
+    clips_by_id = {str(row.get("clip_candidate_id") or row.get("clip_id") or ""): row for row in clips}
+    posted_intervals = []
+    for post in posted_account_rows:
+        clip_id = str(post.get("clip_candidate_id") or "")
+        persisted_clip = clips_by_id.get(clip_id, {})
+        interval = dict(persisted_clip or post)
+        if not interval.get("source_video_id"):
+            interval["source_video_id"] = post.get("source_video_id", "")
+        if (interval.get("source_video_id") and interval.get("start_seconds") not in (None, "")
+                and interval.get("end_seconds") not in (None, "")):
+            posted_intervals.append(interval)
     prepared_clip_ids = {
         str(
             row.get("clip_candidate_id")
@@ -1338,6 +1357,7 @@ def select_candidate(
     reasons: list[str] = []
     eligible = []
     excluded = excluded_clip_ids or set()
+    overlap_tolerance = float(_load(MEDIA_CONFIG).get("clip_overlap_tolerance_seconds", 2))
     for clip in clips:
         clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
         if clip_id in excluded:
@@ -1481,6 +1501,13 @@ def select_candidate(
             continue
         if clip_id in posted_clip_ids:
             reasons.append(f"{clip_id}:already_posted")
+            continue
+        if any(
+            str(interval.get("source_video_id") or "") == source_video_id
+            and clips_overlap(clip, interval, overlap_tolerance)
+            for interval in posted_intervals
+        ):
+            reasons.append(f"{clip_id}:posted_clip_range_overlap")
             continue
         # Clip-row upload fields can be stale or falsely declared.
         # Only a linked media_assets row with persisted AV-stream
@@ -1760,6 +1787,7 @@ def build_plan(
     prepare_saved_media_queue: bool = False,
     slot_id: str = "",
     excluded_clip_ids: set[str] | None = None,
+    stored_source_only: bool = False,
 ) -> dict[str, Any]:
     media_cfg = _load(MEDIA_CONFIG)
     autonomous_cfg = _load(AUTONOMOUS_CONFIG)
@@ -1830,6 +1858,11 @@ def build_plan(
         }
 
     source_videos = _records(client, "source_videos")
+    stored_source_skips = 0
+    if stored_source_only:
+        source_videos, stored_source_skips = verified_stored_source_videos(
+            client, source_videos, account_id=account_id,
+        )
     clips = _records(client, "video_clip_candidates")
     media_assets = _records(client, "media_assets")
     posted = _records(client, "posted_results")
@@ -1943,6 +1976,9 @@ def build_plan(
         "selected_source_video_id": str((source_video or {}).get("source_video_id") or ""),
         "selected_clip": clip or {},
         "selected_source_video": source_video or {},
+        "stored_source_only": stored_source_only,
+        "verified_stored_source_count": len(source_videos) if stored_source_only else 0,
+        "stored_source_rejected_count": stored_source_skips,
         "selected_media_asset": selected_asset or {},
         "repair_invalid_saved_asset": (
             repair_invalid_saved_asset
@@ -2967,6 +3003,38 @@ def _stored_full_source_context(client: SheetsClient, source_video: dict[str, An
     }
 
 
+def verified_stored_source_videos(
+    client: SheetsClient,
+    source_videos: list[dict[str, Any]],
+    *,
+    account_id: str,
+) -> tuple[list[dict[str, Any]], int]:
+    """Keep only account-local videos with one currently permitted, hash-verified stored original."""
+    verified = []
+    rejected = 0
+    for source_video in source_videos:
+        if str(source_video.get("account_id") or "") != account_id:
+            rejected += 1
+            continue
+        context = _stored_full_source_context(client, source_video)
+        if not context:
+            rejected += 1
+            continue
+        stored = select_stored_full_source(
+            source_video,
+            [context.get("source_post_row") or {}],
+            [context.get("source_media_row") or {}],
+            context.get("media_assets_rows") or [],
+            context.get("media_permissions_rows") or [],
+            context.get("registered_source_row") or {},
+        )
+        if not stored.get("allowed"):
+            rejected += 1
+            continue
+        verified.append(source_video)
+    return verified, rejected
+
+
 def _refresh_mutable_clip_snapshot(client: SheetsClient) -> None:
     """Refresh one batched snapshot after child preparation writes."""
     if isinstance(getattr(client, READONLY_RECORD_CACHE_ATTR, None), dict):
@@ -2974,7 +3042,8 @@ def _refresh_mutable_clip_snapshot(client: SheetsClient) -> None:
 
 
 def maintain_ready_clip_inventory(
-    client, *, account_id: str, slot_id: str, minimum: int, reuse_uploaded_only: bool = False
+    client, *, account_id: str, slot_id: str, minimum: int,
+    reuse_uploaded_only: bool = False, stored_source_only: bool = False,
 ) -> dict[str, Any]:
     """Prepare and review a bounded clip reserve; never call a publish mode."""
     import copy
@@ -2984,6 +3053,8 @@ def maintain_ready_clip_inventory(
 
     if not 1 <= minimum <= 7:
         raise ValueError("clip_inventory_minimum_out_of_range")
+    if reuse_uploaded_only and stored_source_only:
+        raise ValueError("clip_inventory_source_modes_are_mutually_exclusive")
 
     def queue_rows() -> list[dict[str, Any]]:
         rows = read_records_safely(client, "queue", preserve_strings=True)
@@ -3032,7 +3103,10 @@ def maintain_ready_clip_inventory(
         review = subprocess.run([sys.executable, "scripts/run_hybrid_ready_pipeline.py",
             "--account-id", account_id, "--slot-id", slot_id, "--queue-id", qid,
             "--max-candidates", "1", "--approval-mode", "media", "--autonomous-low-risk", "--apply", "--use-sheets"],
-            cwd=ROOT, env={**os.environ, "PUBLISH_ENABLED": "false", "ALLOW_REAL_THREADS_POST": "false"},
+            cwd=ROOT, env={**os.environ, "PUBLISH_ENABLED": "false", "ALLOW_REAL_THREADS_POST": "false",
+                           "ALLOW_VIDEO_DOWNLOAD": "false", "ALLOW_VIDEO_CUT": "false",
+                           "ALLOW_CLOUDINARY_UPLOAD": "false", "ALLOW_LOCAL_TRANSCRIPTION": "false",
+                           "ALLOW_TRANSCRIPTION_API": "false"},
             capture_output=True, text=True, timeout=480, check=False)
         review_payload = _last_json_object(review.stdout)
         review_status = str(review_payload.get("status", ""))
@@ -3071,7 +3145,8 @@ def maintain_ready_clip_inventory(
                 attempts.append({"stage": "physical_preparation", "status": "DEFERRED_RESOURCE_DEPENDENT"})
                 break
             asset_plan = build_plan(account_id=account_id, apply=True, confirm=True, client=client,
-                prepare_only=True, slot_id=slot_id, excluded_clip_ids=excluded)
+                prepare_only=True, slot_id=slot_id, excluded_clip_ids=excluded,
+                stored_source_only=stored_source_only)
             if asset_plan.get("status") != "PLAN_ONLY":
                 attempts.append({
                     "stage": "select_unprepared_clip",
@@ -3121,6 +3196,10 @@ def main() -> int:
         "--reuse-uploaded-only", action="store_true",
         help="restore READY from existing uploaded, unused approved clips only; never acquire/cut/upload",
     )
+    parser.add_argument(
+        "--stored-source-only", action="store_true",
+        help="prepare clips only from an exact, hash-verified, permission-active stored full source",
+    )
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
     parser.add_argument("--prepare-saved-media-queue", action="store_true", help="create one WAITING_REVIEW queue row for Hybrid AI; never post")
     parser.add_argument("--slot-id", default="", help="canonical approved_source_clip slot for idempotency and reporting")
@@ -3131,6 +3210,10 @@ def main() -> int:
         parser.error("--minimum-ready requires --prepare-only --apply --confirm-production-media --use-sheets")
     if args.reuse_uploaded_only and not args.minimum_ready:
         parser.error("--reuse-uploaded-only requires --minimum-ready")
+    if args.stored_source_only and not args.minimum_ready:
+        parser.error("--stored-source-only requires --minimum-ready")
+    if args.reuse_uploaded_only and args.stored_source_only:
+        parser.error("--reuse-uploaded-only and --stored-source-only are mutually exclusive")
     if sum(bool(value) for value in (args.prepare_only, args.post_saved_media, args.prepare_saved_media_queue)) > 1:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["media_modes_are_mutually_exclusive"]}, ensure_ascii=False))
         return 1
@@ -3144,7 +3227,8 @@ def main() -> int:
     if args.minimum_ready:
         result = maintain_ready_clip_inventory(client, account_id=args.account_id,
             slot_id=args.slot_id, minimum=args.minimum_ready,
-            reuse_uploaded_only=args.reuse_uploaded_only)
+            reuse_uploaded_only=args.reuse_uploaded_only,
+            stored_source_only=args.stored_source_only)
         rendered = json.dumps(result, ensure_ascii=False, indent=2)
         print(rendered)
         if args.json_output:
