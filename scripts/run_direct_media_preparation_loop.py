@@ -170,8 +170,9 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-preparation-loop", action="store_true")
     parser.add_argument("--minimum-ready", type=int, default=3)
+    parser.add_argument("--check-only", action="store_true", help="read publisher-usable inventory without writes")
     args = parser.parse_args()
-    if not args.apply or not args.confirm_preparation_loop:
+    if not args.check_only and (not args.apply or not args.confirm_preparation_loop):
         raise RuntimeError("production preparation loop requires apply and explicit confirmation")
     if not 1 <= args.max_attempts <= 10:
         raise RuntimeError("max_attempts_must_be_between_1_and_10")
@@ -200,6 +201,17 @@ def main() -> int:
             and process_one(client, r, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN"}
 
     initial = inventory()
+    if args.check_only:
+        payload = {
+            "status": "NO_OP" if len(initial) >= args.minimum_ready else "SHORTAGE",
+            "account_id": args.account_id,
+            "ready_media_count": len(initial),
+            "minimum": args.minimum_ready,
+            "would_write": False,
+            "would_post": False,
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
     result = {"status": "READY", "ready_media_count": len(initial), "would_post": False}
     for _ in range(max(0, args.minimum_ready - len(initial))):
         result = execute(args.account_id, args.slot_id, args.max_attempts, prefer_existing=True)

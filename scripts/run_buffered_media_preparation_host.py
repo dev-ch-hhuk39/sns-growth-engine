@@ -12,8 +12,11 @@ import fcntl
 import json
 import os
 import re
+import shutil
+import signal
 import subprocess
 import sys
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -25,6 +28,7 @@ ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
 CLIP_ACCOUNTS = ("night_scout", "liver_manager")
 MINIMUM_READY = 3
 TASK_TIMEOUT_SECONDS = 45 * 60
+STALE_WORKSPACE_TTL_SECONDS = 24 * 60 * 60
 REQUIRED_MEDIA_ENV = (
     ("SPREADSHEET_ID", "SNS_MASTER_SHEET_ID"),
     ("GCP_SA_JSON_BASE64", "SA_JSON_BASE64"),
@@ -105,7 +109,7 @@ def build_tasks(root: Path, env: dict[str, str] | None = None) -> list[dict[str,
     return tasks
 
 
-def child_environment(base: dict[str, str], *, route: str) -> dict[str, str]:
+def child_environment(base: dict[str, str], *, route: str, reuse_only: bool = False) -> dict[str, str]:
     env = dict(base)
     env.update(PUBLISH_OFF)
     # Preparation does not need Threads publishing credentials or the runner's
@@ -114,15 +118,17 @@ def child_environment(base: dict[str, str], *, route: str) -> dict[str, str]:
         if name.startswith(("THREADS_ACCESS_TOKEN_", "THREADS_USER_ID_", "THREADS_HANDLE_")):
             env.pop(name, None)
     env.pop("GITHUB_TOKEN", None)
-    env["ALLOW_VIDEO_DOWNLOAD"] = "true"
-    env["ALLOW_CLOUDINARY_UPLOAD"] = "true"
-    env["ALLOW_LOCAL_TRANSCRIPTION"] = "true"
-    env["ALLOW_VIDEO_CUT"] = "true" if route == "approved_source_clip" else "false"
+    env["ALLOW_VIDEO_DOWNLOAD"] = "false" if reuse_only else "true"
+    env["ALLOW_CLOUDINARY_UPLOAD"] = "false" if reuse_only else "true"
+    env["ALLOW_LOCAL_TRANSCRIPTION"] = "false" if reuse_only else "true"
+    env["ALLOW_VIDEO_CUT"] = "true" if route == "approved_source_clip" and not reuse_only else "false"
     env["BEAUTY_PRODUCTION_ENABLED"] = "true" if truth(base.get("BEAUTY_ACTIVATION_APPROVED")) else "false"
     return env
 
 
-def task_command(task: dict[str, str], root: Path, env: dict[str, str]) -> list[str]:
+def task_command(
+    task: dict[str, str], root: Path, env: dict[str, str], *, reuse_uploaded_only: bool = False
+) -> list[str]:
     python = str(root / ".venv" / "bin" / "python")
     if task["route"] == "direct_reference_media":
         media = json.loads((root / "config/media_growth_engine.json").read_text(encoding="utf-8"))
@@ -131,10 +137,13 @@ def task_command(task: dict[str, str], root: Path, env: dict[str, str]) -> list[
                 "--account-id", task["account_id"], "--slot-id", task["slot_id"],
                 "--max-attempts", str(attempts), "--minimum-ready", str(MINIMUM_READY),
                 "--apply", "--confirm-preparation-loop"]
-    return ["xvfb-run", "-a", python, "scripts/run_media_production_pipeline.py",
+    command = ["xvfb-run", "-a", python, "scripts/run_media_production_pipeline.py",
             "--account-id", task["account_id"], "--slot-id", task["slot_id"],
             "--prepare-only", "--minimum-ready", str(MINIMUM_READY),
             "--apply", "--confirm-production-media", "--use-sheets"]
+    if reuse_uploaded_only:
+        command.append("--reuse-uploaded-only")
+    return command
 
 
 def last_json_object(output: str) -> dict[str, Any]:
@@ -195,6 +204,28 @@ def _budget_allowed(payload: dict[str, Any]) -> bool:
             and payload.get("cloudinary_status") == "AVAILABLE")
 
 
+def cleanup_stale_workspaces(root: Path, *, now: float, ttl_seconds: int = STALE_WORKSPACE_TTL_SECONDS) -> int:
+    """Remove only old run directories carrying this runner's ownership marker."""
+    removed = 0
+    if not root.is_dir() or root.is_symlink():
+        return removed
+    resolved_root = root.resolve()
+    for candidate in root.iterdir():
+        if (not candidate.name.startswith("run-") or candidate.is_symlink()
+                or not candidate.is_dir() or not (candidate / ".sns-media-prep-owned").is_file()):
+            continue
+        try:
+            resolved = candidate.resolve(strict=True)
+            age = now - candidate.stat().st_mtime
+        except OSError:
+            continue
+        if resolved.parent != resolved_root or age < ttl_seconds:
+            continue
+        shutil.rmtree(candidate)
+        removed += 1
+    return removed
+
+
 def _ensure_pot_provider(*, root: Path, env: dict[str, str], runner) -> tuple[bool, bool]:
     """Return (ready, started_here); never stop a provider owned by another job."""
     try:
@@ -212,13 +243,15 @@ def _ensure_pot_provider(*, root: Path, env: dict[str, str], runner) -> tuple[bo
 
 def run_preparation(*, root: Path = ROOT, env: dict[str, str] | None = None,
                     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
-                    lock_path: Path | None = None) -> dict[str, Any]:
+                    lock_path: Path | None = None,
+                    workspace_root: Path | None = None) -> dict[str, Any]:
     base = dict(os.environ if env is None else env)
     blockers = validate_runtime_config(root, base)
     if blockers:
         return {"status": "BLOCKED", "blockers": blockers, "tasks": [], "would_post": False}
 
-    actual_lock = lock_path or Path(base.get("BUFFERED_RUNTIME_ROOT", "/opt/github-runners/sns-growth-engine/.buffered-runtime")) / "shared/locks/media-preparation.lock"
+    runtime_root = Path(base.get("BUFFERED_RUNTIME_ROOT", "/opt/github-runners/sns-growth-engine/.buffered-runtime"))
+    actual_lock = lock_path or runtime_root / "shared/locks/media-preparation.lock"
     actual_lock.parent.mkdir(parents=True, exist_ok=True)
     with actual_lock.open("a+", encoding="utf-8") as handle:
         try:
@@ -230,56 +263,81 @@ def run_preparation(*, root: Path = ROOT, env: dict[str, str] | None = None,
         provider_ready, provider_started = False, False
         base.update(PUBLISH_OFF)
         base["ALLOW_REAL_X_POST"] = "false"
-        # Temporary transcription/download/cut/upload gates are enabled only
-        # for the existing bounded prepare-only children below.
-        try:
-            for task in tasks:
-                if task.get("blocked"):
-                    results.append({**task, "status": "BLOCKED", "reason": task["blocked"], "ready_count": 0})
-                    continue
-                env_for_task = child_environment(base, route=task["route"])
-                if task["route"] == "approved_source_clip" and not provider_ready:
-                    provider_ready, provider_started = _ensure_pot_provider(
-                        root=root, env=env_for_task, runner=runner
-                    )
-                    if not provider_ready:
-                        results.append({**task, "status": "PREPARATION_FAILED",
-                                        "reason": "youtube_po_token_provider_unavailable", "ready_count": 0})
+        preparation_root = workspace_root or runtime_root / "shared/media-prep"
+        preparation_root.mkdir(parents=True, exist_ok=True)
+        cleanup_stale_workspaces(preparation_root, now=datetime.now(timezone.utc).timestamp())
+        with tempfile.TemporaryDirectory(prefix="run-", dir=preparation_root) as temp_dir:
+            workspace = Path(temp_dir)
+            (workspace / ".sns-media-prep-owned").touch()
+            base["SNS_MEDIA_PREP_WORKSPACE"] = str(workspace)
+            base["TMPDIR"] = str(workspace)
+            base["TMP"] = str(workspace)
+            base["TEMP"] = str(workspace)
+            # Temporary transcription/download/cut/upload gates are enabled
+            # only for the existing bounded prepare-only children below.
+            try:
+                for task in tasks:
+                    if task.get("blocked"):
+                        results.append({**task, "status": "BLOCKED", "reason": task["blocked"], "ready_count": 0})
                         continue
-                budget_code, budget = _run(_budget_command(root, env_for_task), root=root,
-                                           env=child_environment(base, route="resource_check"),
-                                           runner=runner, timeout=120)
-                if budget_code != 0 or not _budget_allowed(budget):
-                    budget_summary = safe_summary(budget)
-                    results.append({**task, "status": "PREPARATION_BLOCKED",
-                                    "reason": budget_summary.get("preparation_stop_reason") or budget_summary.get("cloudinary_status") or "resource_budget_unavailable",
-                                    "disk_used_percent": budget.get("disk_used_percent"), "ready_count": 0})
-                    continue
-                command = task_command(task, root, env_for_task)
-                code, payload = _run(command, root=root, env=env_for_task,
-                                     runner=runner, timeout=TASK_TIMEOUT_SECONDS)
-                payload_status = str(payload.get("status", ""))
-                count = payload.get("ready_media_count", payload.get("ready_count", 0))
-                try:
-                    count = int(count)
-                except (TypeError, ValueError):
-                    count = 0
-                success_status = "READY" if task["route"] == "direct_reference_media" else "READY_INVENTORY_OK"
-                ok = code == 0 and payload_status == success_status and count >= MINIMUM_READY
-                payload_summary = safe_summary(payload)
-                results.append({**task, "status": "READY" if ok else "PREPARATION_FAILED",
-                                "reason": "" if ok else (payload_summary.get("reason") or payload_status or f"exit_{code}"),
-                                "ready_count": count, "minimum": MINIMUM_READY,
-                                "attempt_statuses": payload_summary.get("attempt_statuses", [])})
-        finally:
-            if provider_started:
-                _run(["bash", str(root / "scripts/stop_youtube_pot_provider.sh")],
-                     root=root, env=child_environment(base, route="approved_source_clip"),
-                     runner=runner, timeout=30)
+                    env_for_task = child_environment(base, route=task["route"])
+                    if task["route"] == "approved_source_clip":
+                        reuse_env = child_environment(base, route=task["route"], reuse_only=True)
+                        reuse_code, reuse_payload = _run(
+                            task_command(task, root, reuse_env, reuse_uploaded_only=True),
+                            root=root, env=reuse_env, runner=runner, timeout=TASK_TIMEOUT_SECONDS,
+                        )
+                        try:
+                            reuse_count = int(reuse_payload.get("ready_count", 0))
+                        except (TypeError, ValueError):
+                            reuse_count = 0
+                        if (reuse_code == 0 and reuse_payload.get("status") == "READY_INVENTORY_OK"
+                                and reuse_count >= MINIMUM_READY):
+                            results.append({**task, "status": "READY", "reason": "reused_uploaded_assets",
+                                            "ready_count": reuse_count, "minimum": MINIMUM_READY})
+                            continue
+                    budget_code, budget = _run(_budget_command(root, env_for_task), root=root,
+                                               env=child_environment(base, route="resource_check"),
+                                               runner=runner, timeout=120)
+                    if budget_code != 0 or not _budget_allowed(budget):
+                        budget_summary = safe_summary(budget)
+                        results.append({**task, "status": "PREPARATION_BLOCKED",
+                                        "reason": budget_summary.get("preparation_stop_reason") or budget_summary.get("cloudinary_status") or "resource_budget_unavailable",
+                                        "disk_used_percent": budget.get("disk_used_percent"), "ready_count": 0})
+                        continue
+                    if task["route"] == "approved_source_clip" and not provider_ready:
+                        provider_ready, provider_started = _ensure_pot_provider(
+                            root=root, env=env_for_task, runner=runner
+                        )
+                        if not provider_ready:
+                            results.append({**task, "status": "PREPARATION_FAILED",
+                                            "reason": "youtube_po_token_provider_unavailable", "ready_count": 0})
+                            continue
+                    command = task_command(task, root, env_for_task)
+                    code, payload = _run(command, root=root, env=env_for_task,
+                                         runner=runner, timeout=TASK_TIMEOUT_SECONDS)
+                    payload_status = str(payload.get("status", ""))
+                    count = payload.get("ready_media_count", payload.get("ready_count", 0))
+                    try:
+                        count = int(count)
+                    except (TypeError, ValueError):
+                        count = 0
+                    success_status = "READY" if task["route"] == "direct_reference_media" else "READY_INVENTORY_OK"
+                    ok = code == 0 and payload_status == success_status and count >= MINIMUM_READY
+                    payload_summary = safe_summary(payload)
+                    results.append({**task, "status": "READY" if ok else "PREPARATION_FAILED",
+                                    "reason": "" if ok else (payload_summary.get("reason") or payload_status or f"exit_{code}"),
+                                    "ready_count": count, "minimum": MINIMUM_READY,
+                                    "attempt_statuses": payload_summary.get("attempt_statuses", [])})
+            finally:
+                if provider_started:
+                    _run(["bash", str(root / "scripts/stop_youtube_pot_provider.sh")],
+                         root=root, env=child_environment(base, route="approved_source_clip"),
+                         runner=runner, timeout=30)
 
-        return {"status": "PASS" if all(item["status"] == "READY" for item in results) else "PARTIAL_FAILURE",
-                "execution_id": base.get("PRODUCTION_HOST_EXECUTION_ID", ""),
-                "tasks": results, "would_post": False}
+            return {"status": "PASS" if all(item["status"] == "READY" for item in results) else "PARTIAL_FAILURE",
+                    "execution_id": base.get("PRODUCTION_HOST_EXECUTION_ID", ""),
+                    "tasks": results, "would_post": False}
 
 
 def main() -> int:
@@ -289,6 +347,10 @@ def main() -> int:
     args = parser.parse_args()
     if not args.apply or not args.confirm_preparation:
         parser.error("--apply and --confirm-preparation are required")
+    def terminate(signum, _frame):
+        raise SystemExit(128 + signum)
+    signal.signal(signal.SIGTERM, terminate)
+    signal.signal(signal.SIGINT, terminate)
     result = run_preparation()
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0 if result.get("status") in {"PASS", "SKIPPED_LOCKED"} else 1

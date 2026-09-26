@@ -940,7 +940,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
     if media_type not in {"image", "video"} or not safe_https_url(url, stream_url=True):
         return {"status": "BLOCKED", "source_post_media_id": source_post_media_id, "reason": "unsupported_or_non_https_media"}
 
-    target_dir = ROOT / "output" / "direct_media"
+    target_dir = Path(os.environ.get("SNS_MEDIA_PREP_WORKSPACE", ROOT / "output")) / "direct_media"
     target_dir.mkdir(parents=True, exist_ok=True)
     suffix = ".mp4" if media_type == "video" else ".jpg"
     local_path = target_dir / f"{source_post_media_id}{suffix}"

@@ -21,8 +21,11 @@ assert 'max-parallel: 1' in direct_prepare
 assert "run_direct_media_preparation_loop.py" in direct_prepare
 assert "direct_media_candidate_attempts" in direct_prepare
 assert 'ALLOW_REAL_THREADS_POST: "false"' in direct_prepare
+assert 'cron: "45 1 * * *"' in direct_prepare
+assert "--check-only" in direct_prepare
 
 assert "schedule:" not in clip_prepare
+assert "refill-existing-approved-clips:" in direct_prepare
 assert "account_production_enabled" in clip_prepare
 assert "route_slot_id" in clip_prepare
 assert "--limit 2" in clip_prepare

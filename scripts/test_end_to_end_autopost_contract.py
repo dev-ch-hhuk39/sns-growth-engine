@@ -54,7 +54,7 @@ def main() -> int:
         ".github/workflows/direct-reference-media-liver-manager.yml": ["45 6 * * *"],
         ".github/workflows/media-growth-post-night-scout.yml": ["45 11 * * *"],
         ".github/workflows/media-growth-post-liver-manager.yml": ["45 8 * * *"],
-        ".github/workflows/direct-media-preparation.yml": [],
+        ".github/workflows/direct-media-preparation.yml": ["45 1 * * *"],
         ".github/workflows/media-growth-production.yml": ["30 6 * * *"],
         ".github/workflows/media-growth-production-night-scout.yml": ["30 9 * * *"],
     }

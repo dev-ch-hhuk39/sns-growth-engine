@@ -2342,7 +2342,7 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
         clip_status="POSTED" if externally_posted else retry_status,
     )
     if externally_posted:
-        client.save_source_video({**source_video, "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
+        client.save_source_video({**source_video, "local_path": "", "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
     if publisher_complete:
         try:
             media_pdca = _save_media_pdca_records(
@@ -2407,14 +2407,14 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     if download.get("status") != "DOWNLOADED":
         reason = "download:" + "|".join(download.get("blocked_reasons", []) or [str(download.get("status", "failed"))])
         failure = _record_clip_failure(client, clip, account_id=account_id, reason=reason)
-        client.save_source_video({**source_video, "download_status": "FAILED", "skip_reason": reason})
+        client.save_source_video({**source_video, "download_status": "FAILED", "local_path": "", "skip_reason": reason})
         return {
             **plan, "status": "BLOCKED_MEDIA_DOWNLOAD_FAILED", "download_result": download,
             "would_download": False, "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
         }
     local_source = str(download["download_result"]["local_path"])
-    client.save_source_video({**source_video, "download_status": "DOWNLOADED", "local_path": local_source, "downloaded_at": datetime.now(timezone.utc).isoformat()})
+    client.save_source_video({**source_video, "download_status": "DOWNLOADED", "local_path": "", "downloaded_at": datetime.now(timezone.utc).isoformat()})
 
     clip_for_cut = dict(clip)
 
@@ -2563,7 +2563,9 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
             )
         ),
         "video_clip_id": clip_id,
-        "local_path": asset.get("local_path", ""),
+        # Local preparation paths are ephemeral and must never become durable
+        # production references; the Cloudinary URL is the durable asset.
+        "local_path": "",
         "uploaded_at": datetime.now(timezone.utc).isoformat(),
         "upload_status": "UPLOADED",
         "allow_download": "true",
@@ -2600,7 +2602,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         client.update_video_clip_candidate(
             clip_id,
             cut_status="DONE",
-            local_clip_path=asset.get("local_path", ""),
+            local_clip_path="",
             clip_media_asset_id=media_id,
             media_asset_id=media_id,
             storage_url=media_url,
@@ -2618,6 +2620,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         client.save_source_video({
             **source_video,
             "download_status": "DOWNLOADED",
+            "local_path": "",
             "cut_status": "CUT",
             "upload_status": "UPLOADED",
             "post_status": "MEDIA_READY",
@@ -2815,7 +2818,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
     client.update_video_clip_candidate(
         clip_id,
         cut_status="DONE",
-        local_clip_path=asset.get("local_path", ""),
+        local_clip_path="",
         clip_media_asset_id=media_id,
         media_asset_id=media_id,
         storage_url=media_url,
@@ -2831,7 +2834,7 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
         clip_status="POSTED" if externally_posted else retry_status,
     )
     if externally_posted:
-        client.save_source_video({**source_video, "download_status": "DOWNLOADED", "cut_status": "CUT", "upload_status": "UPLOADED", "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
+        client.save_source_video({**source_video, "download_status": "DOWNLOADED", "local_path": "", "cut_status": "CUT", "upload_status": "UPLOADED", "post_status": "POSTED", "processed_at": datetime.now(timezone.utc).isoformat()})
     if publisher_complete:
         try:
             media_pdca = _save_media_pdca_records(
@@ -2891,7 +2894,9 @@ def _last_json_object(output: str) -> dict[str, Any]:
     return max(objects, key=lambda item: item[0])[1] if objects else {}
 
 
-def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, minimum: int) -> dict[str, Any]:
+def maintain_ready_clip_inventory(
+    client, *, account_id: str, slot_id: str, minimum: int, reuse_uploaded_only: bool = False
+) -> dict[str, Any]:
     """Prepare and review a bounded clip reserve; never call a publish mode."""
     import copy
     from production_inventory import eligible_ready, media_asset_ids, media_route, recently_used_media_asset_ids
@@ -2975,6 +2980,9 @@ def maintain_ready_clip_inventory(client, *, account_id: str, slot_id: str, mini
                 "status": str(plan.get("status", "")),
                 "reasons": list(plan.get("skipped_candidates", []))[:20],
             })
+            if reuse_uploaded_only:
+                attempts.append({"stage": "physical_preparation", "status": "DEFERRED_RESOURCE_DEPENDENT"})
+                break
             asset_plan = build_plan(account_id=account_id, apply=True, confirm=True, client=client,
                 prepare_only=True, slot_id=slot_id, excluded_clip_ids=excluded)
             if asset_plan.get("status") != "PLAN_ONLY":
@@ -3021,6 +3029,10 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--prepare-only", action="store_true", help="download/cut/upload one approved clip, but never post it")
     parser.add_argument("--minimum-ready", type=int, default=0, help="prepare-only: refill strictly approved clip buffer (1-7)")
+    parser.add_argument(
+        "--reuse-uploaded-only", action="store_true",
+        help="restore READY from existing uploaded, unused approved clips only; never acquire/cut/upload",
+    )
     parser.add_argument("--post-saved-media", action="store_true", help="post one previously uploaded unused approved clip")
     parser.add_argument("--prepare-saved-media-queue", action="store_true", help="create one WAITING_REVIEW queue row for Hybrid AI; never post")
     parser.add_argument("--slot-id", default="", help="canonical approved_source_clip slot for idempotency and reporting")
@@ -3029,6 +3041,8 @@ def main() -> int:
     if args.minimum_ready and (not 1 <= args.minimum_ready <= 7 or not args.prepare_only
             or not args.apply or not args.confirm_production_media or not args.use_sheets or args.dry_run):
         parser.error("--minimum-ready requires --prepare-only --apply --confirm-production-media --use-sheets")
+    if args.reuse_uploaded_only and not args.minimum_ready:
+        parser.error("--reuse-uploaded-only requires --minimum-ready")
     if sum(bool(value) for value in (args.prepare_only, args.post_saved_media, args.prepare_saved_media_queue)) > 1:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["media_modes_are_mutually_exclusive"]}, ensure_ascii=False))
         return 1
@@ -3039,7 +3053,8 @@ def main() -> int:
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
     if args.minimum_ready:
         result = maintain_ready_clip_inventory(client, account_id=args.account_id,
-            slot_id=args.slot_id, minimum=args.minimum_ready)
+            slot_id=args.slot_id, minimum=args.minimum_ready,
+            reuse_uploaded_only=args.reuse_uploaded_only)
         rendered = json.dumps(result, ensure_ascii=False, indent=2)
         print(rendered)
         if args.json_output:
