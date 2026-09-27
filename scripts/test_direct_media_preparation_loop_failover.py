@@ -63,6 +63,45 @@ assert quota_result["status"] == "SHEETS_QUOTA_DEFERRED"
 assert quota_result["blocked_reasons"] == ["sheets_rate_limit_exhausted"]
 assert len(quota_calls) == 1
 
+cooldowns = []
+stage_calls = {"prepare": 0, "gate": 0, "promote": 0}
+
+def recoverable_quota_runner(command: list[str], **_kwargs) -> subprocess.CompletedProcess[str]:
+    name = " ".join(command)
+    if "run_direct_reference_media_pipeline_batched.py" in name:
+        stage_calls["prepare"] += 1
+        payload = {"status": "PREPARED", "queue_id": "q_exact"}
+    elif "run_hybrid_ai_queue_gate.py" in name:
+        stage_calls["gate"] += 1
+        if stage_calls["gate"] == 1:
+            return subprocess.CompletedProcess(
+                command, 1, "", "[SHEETS_RETRY] open_by_key failed with rate_limit; response body suppressed",
+            )
+        payload = {"status": "PASS", "results": [{"queue_id": "q_exact", "status": "PASS"}]}
+    elif "promote_hybrid_approved_media.py" in name:
+        stage_calls["promote"] += 1
+        if stage_calls["promote"] == 1:
+            return subprocess.CompletedProcess(
+                command, 1, "", "[SHEETS_RETRY] open_by_key failed with rate_limit; response body suppressed",
+            )
+        payload = {"status": "APPLIED", "updated_queue_ids": ["q_exact"]}
+    else:
+        raise AssertionError(f"unexpected command: {name}")
+    return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+
+recovered = loop.execute(
+    "night_scout", "ns_1800_direct_media", 1,
+    runner=recoverable_quota_runner, prefer_existing=True,
+    sleeper=cooldowns.append,
+)
+assert recovered["status"] == "READY"
+assert recovered["selected_queue_id"] == "q_exact"
+assert stage_calls == {"prepare": 1, "gate": 2, "promote": 2}
+assert cooldowns == [loop.SHEETS_QUOTA_COOLDOWN_SECONDS] * 2
+assert recovered["attempts"][0]["hybrid_quota_retries"] == 1
+assert recovered["attempts"][0]["promotion_quota_retries"] == 1
+
 provider_429 = subprocess.CompletedProcess(
     ["provider"], 1, "", "HTTP 429 from external media provider",
 )
