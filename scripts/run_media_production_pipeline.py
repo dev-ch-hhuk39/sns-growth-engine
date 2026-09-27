@@ -113,9 +113,10 @@ APPROVED_CLIP_REVIEW_MAX_SECONDS = 45.0
 MEDIA_PREPARATION_SNAPSHOT_LOGICALS = (
     "queue", "posted_results", "source_videos", "video_clip_candidates",
     "media_assets", "source_posts", "source_post_media", "media_permissions",
-    "quarantined_items",
+    "social_derivatives", "quarantined_items",
 )
 MEDIA_CLIP_MUTABLE_SNAPSHOT_LOGICALS = ("source_videos", "video_clip_candidates", "media_assets")
+SOURCE_VIDEO_LINEAGE_REPAIR_LIMIT = 5
 
 
 def approved_clip_duration_seconds(clip: dict[str, Any]) -> float:
@@ -3003,6 +3004,238 @@ def _stored_full_source_context(client: SheetsClient, source_video: dict[str, An
     }
 
 
+def source_video_lineage_repairs(
+    *,
+    clips: list[dict[str, Any]],
+    source_videos: list[dict[str, Any]],
+    source_posts: list[dict[str, Any]],
+    source_post_media: list[dict[str, Any]],
+    media_assets: list[dict[str, Any]],
+    media_permissions: list[dict[str, Any]],
+    registered_sources: list[dict[str, Any]],
+    account_id: str,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Rebuild only source-video ledger rows proved by one complete stored-source chain."""
+    from media.permission_ledger import _targets, evaluate_permission, truthy
+    from media_growth_schemas import build_source_video, extract_video_id, source_video_duplicate_key
+
+    counters = {"missing_ledger": 0, "repairable": 0, "ambiguous": 0, "provenance_insufficient": 0}
+    existing_ids = {str(row.get("source_video_id") or "") for row in source_videos}
+    repair_rows: list[dict[str, Any]] = []
+    config = _load(MEDIA_CONFIG)
+    allowed_ids = set(config.get("allowed_source_ids", []))
+
+    for clip in clips:
+        clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
+        video_id = str(clip.get("source_video_id") or "")
+        if (not video_id or str(clip.get("account_id") or "") != account_id
+                or clip_id in {""} or is_quarantined(clip)):
+            continue
+        if video_id in existing_ids or any(row.get("source_video_id") == video_id for row in repair_rows):
+            continue
+        counters["missing_ledger"] += 1
+
+        source_id = str(clip.get("source_id") or "")
+        platform = str(clip.get("platform") or clip.get("source_platform") or "").lower()
+        canonical_url = str(clip.get("canonical_video_url") or clip.get("source_video_url") or "")
+        extracted_id = extract_video_id(canonical_url, platform)
+        if not all((source_id, platform, canonical_url, extracted_id)) or source_id not in allowed_ids:
+            counters["provenance_insufficient"] += 1
+            continue
+
+        registered = [row for row in registered_sources if str(row.get("source_id") or "") == source_id]
+        parents = [row for row in source_posts
+                   if str(row.get("source_id") or "") == source_id
+                   and str(row.get("target_account_id") or "") == account_id
+                   and str(row.get("platform") or "").lower() == platform
+                   and str(row.get("canonical_post_url") or "") == canonical_url
+                   and str(row.get("external_post_id") or "") == extracted_id]
+        if len(registered) != 1 or len(parents) != 1:
+            counters["ambiguous" if len(registered) > 1 or len(parents) > 1 else "provenance_insufficient"] += 1
+            continue
+        source = registered[0]
+        post = parents[0]
+        handle = str(source.get("source_handle") or "").strip().lstrip("@").lower()
+        author = str(post.get("author_handle") or "").strip().lstrip("@").lower()
+        targets = _targets(source.get("target_account_ids") or source.get("target_account_id"))
+        if (not truthy(source.get("active")) or account_id not in targets
+                or not truthy(source.get("media_pipeline_eligible")) or not truthy(source.get("clip_enabled"))
+                or source_id not in allowed_ids or not handle or author != handle
+                or str(post.get("media_count") or "") != "1"
+                or str(clip.get("video_id") or extracted_id) != extracted_id):
+            counters["provenance_insufficient"] += 1
+            continue
+
+        children = [row for row in source_post_media
+                    if str(row.get("source_post_id") or "") == str(post.get("source_post_id") or "")
+                    and str(row.get("canonical_post_url") or "") == canonical_url]
+        if len(children) != 1:
+            counters["ambiguous" if len(children) > 1 else "provenance_insufficient"] += 1
+            continue
+        media = children[0]
+        media_id = str(media.get("media_asset_id") or media.get("media_id") or "")
+        assets = [row for row in media_assets if str(row.get("media_id") or "") == media_id]
+        if len(assets) != 1:
+            counters["ambiguous" if len(assets) > 1 else "provenance_insufficient"] += 1
+            continue
+        asset = assets[0]
+        hashes = {
+            str(row.get("content_hash") or "").strip().lower()
+            for row in (media, asset)
+        }
+        hash_value = next(iter(hashes)) if len(hashes) == 1 else ""
+        candidate_source_hash = str(clip.get("source_content_hash") or "").strip().lower()
+        duration_values = [str(row.get(key) or "").strip() for row, key in (
+            (media, "duration_seconds"), (asset, "duration_seconds"),
+        )]
+        try:
+            duration_match = (all(duration_values)
+                              and max(float(value) for value in duration_values)
+                              - min(float(value) for value in duration_values) <= 1)
+            duration = float(duration_values[1]) if duration_match else 0.0
+        except (TypeError, ValueError):
+            duration_match, duration = False, 0.0
+        storage_url = str(media.get("storage_url") or asset.get("storage_url") or "")
+        permission = evaluate_permission(
+            media_permissions, source_id, account_id=account_id, source_handle=handle,
+            required_flags=("allow_download", "allow_cloudinary_storage", "allow_analysis",
+                            "allow_cut", "allow_clip_repost", "allow_new_caption", "allow_edit"),
+        )
+        permission_row = permission.get("row", {})
+        scoped_accounts = _targets(permission_row.get("allowed_accounts") or permission_row.get("account_id"))
+        permission_scoped = account_id in scoped_accounts and str(permission_row.get("account_id") or "") == account_id
+        rights_values = {
+            str(row.get("rights_status") or "").lower() for row in (post, media, asset)
+        }
+        evidence_ok = (
+            len(hash_value) == 64 and all(char in "0123456789abcdef" for char in hash_value)
+            and duration_match and bool(duration > 0)
+            and str(media.get("media_type") or "").lower() == "video"
+            and str(media.get("media_index") or "") == "0"
+            and str(media.get("original_media_url") or "") == canonical_url
+            and is_individual_video_url(str(media.get("original_media_url") or ""))
+            and str(media.get("cloudinary_status") or "").upper() == "UPLOADED"
+            and str(asset.get("upload_status") or "").upper() == "UPLOADED"
+            and str(asset.get("media_type") or "").lower() == "video"
+            and str(asset.get("account_id") or "") == account_id
+            and str(asset.get("reference_post_id") or "") == str(post.get("source_post_id") or "")
+            and str(asset.get("source_post_url") or "") == canonical_url
+            and str(asset.get("storage_url") or "") == storage_url
+            and str(asset.get("media_role") or "full_source") == "full_source"
+            and not asset.get("clip_candidate_id") and not asset.get("parent_media_asset_id")
+            and str(media.get("resolver_backend") or "").lower() in {
+                "yt_dlp", "tiktok_public_embed", "tiktok_public_embed_direct_http",
+                "public_embed_direct_http", "threads_public_http_refreshed_direct_http",
+            }
+            and str(post.get("rights_status") or "").lower() in APPROVED_RIGHTS
+            and rights_values <= APPROVED_RIGHTS and "" not in rights_values
+            and all(str(row.get("permission_status") or "").lower() == "approved" for row in (post, media, asset))
+            and str(media.get("content_hash") or "").strip().lower() == str(asset.get("content_hash") or "").strip().lower()
+            and (not candidate_source_hash or candidate_source_hash == hash_value)
+            and bool(permission.get("allowed")) and permission_scoped
+            and not truthy(permission_row.get("revoked"))
+            and bool(storage_url)
+            and not any(is_quarantined(row) for row in (clip, post, media, asset))
+            and str(post.get("collection_status") or "").upper() not in {"FAILED", "BLOCKED", "QUARANTINED"}
+        )
+        if not evidence_ok:
+            counters["provenance_insufficient"] += 1
+            continue
+
+        row = build_source_video(
+            source, video_url=canonical_url,
+            title=str(clip.get("title") or ""), duration_seconds=duration,
+            description="", discovery_status="REPAIRED_FROM_VERIFIED_LINEAGE",
+        )
+        if (str(row.get("source_video_id") or "") != video_id
+                or str(row.get("source_id") or "") != source_id
+                or str(row.get("account_id") or "") != account_id):
+            counters["provenance_insufficient"] += 1
+            continue
+        if any(str(existing.get("canonical_video_url") or "") == canonical_url for existing in source_videos + repair_rows):
+            counters["ambiguous"] += 1
+            continue
+        row.update({
+            "source_video_id": video_id,
+            "author_handle": author,
+            "published_at": post.get("published_at", ""),
+            "duration_seconds": duration,
+            "download_status": str(media.get("download_status") or ""),
+            "upload_status": "UPLOADED",
+            "rights_status": str(permission["row"].get("rights_status") or "").lower(),
+            "permission_status": "approved",
+            "content_hash": hash_value,
+            "approved_storage_url": storage_url,
+            "approved_storage_media_asset_id": media_id,
+        })
+        row["duplicate_key"] = source_video_duplicate_key(row)
+        stored = select_stored_full_source(
+            row, [post], [media], [asset], media_permissions, source,
+        )
+        if not stored.get("allowed"):
+            counters["provenance_insufficient"] += 1
+            continue
+        repair_rows.append(row)
+        counters["repairable"] += 1
+    return repair_rows, counters
+
+
+def repair_missing_source_video_lineage(
+    client: SheetsClient,
+    *,
+    account_id: str,
+    limit: int = SOURCE_VIDEO_LINEAGE_REPAIR_LIMIT,
+) -> dict[str, Any]:
+    """Append bounded, uniquely proven ledger rows and verify each with a fresh read."""
+    if not 1 <= limit <= SOURCE_VIDEO_LINEAGE_REPAIR_LIMIT:
+        raise ValueError("source_video_lineage_repair_limit_out_of_range")
+    snapshots = {
+        logical: _records(client, logical)
+        for logical in ("source_videos", "video_clip_candidates", "source_posts",
+                        "source_post_media", "media_assets", "media_permissions")
+    }
+    candidates, counts = source_video_lineage_repairs(
+        clips=snapshots["video_clip_candidates"], source_videos=snapshots["source_videos"],
+        source_posts=snapshots["source_posts"], source_post_media=snapshots["source_post_media"],
+        media_assets=snapshots["media_assets"], media_permissions=snapshots["media_permissions"],
+        registered_sources=load_registry(), account_id=account_id,
+    )
+    repaired: list[str] = []
+    for row in candidates[:limit]:
+        # Re-read before append so a concurrent discovery cannot create a
+        # duplicate ledger identity between the snapshot and this write.
+        fresh_before_write = _fresh_records(client, "source_videos")
+        same_id = [item for item in fresh_before_write
+                   if str(item.get("source_video_id") or "") == row["source_video_id"]]
+        same_url = [item for item in fresh_before_write
+                    if str(item.get("canonical_video_url") or "") == row["canonical_video_url"]]
+        if same_id:
+            if len(same_id) == 1 and all(
+                str(same_id[0].get(key) or "") == str(row.get(key) or "")
+                for key in ("source_id", "account_id", "platform", "video_id", "canonical_video_url", "content_hash")
+            ):
+                continue
+            raise RuntimeError("source_video_lineage_repair_identity_conflict")
+        if same_url:
+            raise RuntimeError("source_video_lineage_repair_duplicate_url_conflict")
+        _append(client, "source_videos", row)
+        fresh = _fresh_records(client, "source_videos")
+        matches = [item for item in fresh if str(item.get("source_video_id") or "") == row["source_video_id"]]
+        if len(matches) != 1 or any(
+            str(matches[0].get(key) or "") != str(row.get(key) or "")
+            for key in ("source_id", "account_id", "platform", "video_id", "canonical_video_url", "content_hash")
+        ):
+            raise RuntimeError("source_video_lineage_repair_read_after_write_failed")
+        repaired.append(str(row["source_video_id"]))
+        snapshots["source_videos"] = fresh
+    cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
+    if isinstance(cache, dict) and repaired:
+        cache["source_videos"] = snapshots["source_videos"]
+    return {"repaired_count": len(repaired), "repaired_source_video_ids": repaired,
+            "repair_candidates": counts["repairable"], "provenance_insufficient": counts["provenance_insufficient"],
+            "ambiguous": counts["ambiguous"], "bounded_limit": limit}
+
+
 def verified_stored_source_videos(
     client: SheetsClient,
     source_videos: list[dict[str, Any]],
@@ -3056,6 +3289,11 @@ def maintain_ready_clip_inventory(
     if reuse_uploaded_only and stored_source_only:
         raise ValueError("clip_inventory_source_modes_are_mutually_exclusive")
 
+    lineage_repair = {"repaired_count": 0, "repair_candidates": 0,
+                      "provenance_insufficient": 0, "ambiguous": 0,
+                      "bounded_limit": SOURCE_VIDEO_LINEAGE_REPAIR_LIMIT,
+                      "status": "NOT_REQUESTED"}
+
     def queue_rows() -> list[dict[str, Any]]:
         rows = read_records_safely(client, "queue", preserve_strings=True)
         cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
@@ -3099,6 +3337,25 @@ def maintain_ready_clip_inventory(
         pending.sort(key=lambda row: (str(row.get("created_at") or ""), str(row.get("queue_id") or "")))
         return [str(row.get("queue_id") or "") for row in pending if row.get("queue_id")]
 
+    rows = queue_rows()
+    ids = ready_ids(rows)
+    if stored_source_only:
+        if len(ids) < minimum:
+            # Repair only canonical source-video rows that can be reconstructed
+            # from a single, currently permitted full-source evidence chain.
+            lineage_repair = repair_missing_source_video_lineage(
+                client, account_id=account_id,
+            )
+            lineage_repair["status"] = (
+                "PASS" if lineage_repair["provenance_insufficient"] == 0
+                and lineage_repair["ambiguous"] == 0 else "PARTIAL_FAIL_CLOSED"
+            )
+            # The repair refreshes the source_videos cache; re-evaluate existing
+            # queue rows before acquiring or cutting any additional media.
+            ids = ready_ids(rows)
+        else:
+            lineage_repair["status"] = "SKIPPED_INVENTORY_AT_TARGET"
+
     def review_queue(qid: str) -> dict[str, Any]:
         review = subprocess.run([sys.executable, "scripts/run_hybrid_ready_pipeline.py",
             "--account-id", account_id, "--slot-id", slot_id, "--queue-id", qid,
@@ -3119,8 +3376,7 @@ def maintain_ready_clip_inventory(
             "review_reason": str(review_payload.get("reason", "")),
         }
 
-    rows = queue_rows()
-    ids, attempts, excluded, reviewed_queues = ready_ids(rows), [], set(), set()
+    attempts, excluded, reviewed_queues = [], set(), set()
     for _ in range(minimum * 2):
         if len(ids) >= minimum:
             break
@@ -3180,7 +3436,8 @@ def maintain_ready_clip_inventory(
     return {"status": "READY_INVENTORY_OK" if len(ids) >= minimum else "MEDIA_INVENTORY_LOW",
             "account_id": account_id, "ready_count": len(ids), "minimum": minimum,
             "availability_status": availability,
-            "attempts": attempts, "would_post_video": False}
+            "attempts": attempts, "source_video_lineage_repair": lineage_repair,
+            "would_post_video": False}
 
 
 def main() -> int:

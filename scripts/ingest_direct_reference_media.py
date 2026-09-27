@@ -877,7 +877,7 @@ def select_pending_media_id(
         if truthy(os.environ.get("ALLOW_LOCAL_TRANSCRIPTION"))
         else {}
     )
-    pending: list[tuple[int, str, str]] = []
+    pending: list[tuple[int, int, str, str]] = []
     for media in client._ws("source_post_media").get_all_records():
         post = posts.get(str(media.get("source_post_id", "")))
         if not post or str(post.get("target_account_id", "")) != account_id:
@@ -917,8 +917,18 @@ def select_pending_media_id(
             # slot. They are normally much smaller than a channel long-form
             # upload and still fall back to the same permitted source set.
             platform_priority = 0 if platform == "x" else 1
-            pending.append((platform_priority, str(media.get("created_at", "")), media_id))
-    return sorted(pending)[0][2] if pending else ""
+            materialized = (
+                str(media.get("cloudinary_status", "")).upper() == "UPLOADED"
+                and bool(str(media.get("storage_url", "")).strip())
+            )
+            refresh_tier = 0 if materialized and refresh_understanding else 1
+            pending.append((
+                refresh_tier,
+                platform_priority,
+                str(media.get("created_at", "")),
+                media_id,
+            ))
+    return sorted(pending)[0][3] if pending else ""
 
 
 def source_post_media_bundle(client: SheetsClient, source_post_id: str) -> list[dict[str, Any]]:

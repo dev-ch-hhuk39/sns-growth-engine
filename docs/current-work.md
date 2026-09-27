@@ -1,4 +1,15 @@
-## 2026-09-25 Production Closure (Active)
+## 2026-09-27 Text/Media Supply-Loop Closure (Active)
+
+- Latest locally confirmed `origin/main` / base: `3818e38fdd04185c9f2b70cda73daf2fe22b2f35`; branch: `fix/production-supply-loop-closure`.
+- Scope is bounded production reliability. No architecture redesign or changes to rights, quality, publisher, duplicate, account-isolation, X-posting or host-disk gates.
+- Text maintenance recovers one exact-slot publishable READY first, then best-effort builds reserves. Evergreen retries continue across bounded themes after soft failures; explicit operational hard blocks stop retries.
+- Direct-media selection puts uploaded Cloudinary assets needing only understanding refresh before new external acquisition. Stored-source Clip maintenance can repair up to five missing canonical `source_videos` rows, only from exact parent/child/account/source/author/permission/hash/duration/Cloudinary full-source proof, with fresh read-after-write. Preparation snapshot includes `social_derivatives`.
+- Existing GitHub-hosted stored-source fallback uses its own runner budget and remains independent from Xserver disk. The Xserver 80% heavy-preparation guard remains enforced; all prepare workflows keep publish gates false.
+- Local evidence: regression 929/929 PASS; workflow safety 522/522 PASS; source registry validation PASS; focused tests, Ruff, compileall and diff check PASS.
+- Owner-supplied production evidence remains 81.64% Xserver disk and prior Aftercare/Direct/Clip shortages. No production Sheets write, Cloudinary operation, download/cut/upload or post was run in this turn.
+- `git fetch origin main` is currently blocked by DNS (`Could not resolve host: github.com`), so the branch has no PR/remote CI/merge/deploy yet. Retry network, then exact-head CI, normal merge/deploy, authorized no-post recovery, and natural scheduled acceptance. Do not claim full closure before live evidence.
+
+## Historical 2026-09-25 Xserver Media Replenishment Closure
 
 - Base: `origin/main` `ecfddbd9440e4284623e33c2ed44ad944b62d0b2`; branch: `fix/xserver-primary-media-replenishment`.
 - Scope is production reliability only: add the existing bounded Direct/approved-clip prepare commands to the Xserver primary host schedule, correct readiness accounting so text coverage excludes media slots and media inventory is counted by actual publisher dry-run, then verify production. Existing publication, rights, quality, account, duplicate and kill-switch gates remain unchanged.

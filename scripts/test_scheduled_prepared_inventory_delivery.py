@@ -153,16 +153,33 @@ class PreparedInventoryTests(unittest.TestCase):
                           {"route": "beauty_reserve_0", "status": "QUALITY_EXHAUSTED",
                            "reason": "PROVIDER_RATE_LIMITED"}]}
         client = SimpleNamespace(_ensure_tab=lambda *args: None)
+        observed_themes = []
+
+        def fail_for_theme(_account_id, slot, **_kwargs):
+            observed_themes.append(slot["theme"])
+            return generation
+
         with patch("process_threads_queue.records", return_value=[]), \
-             patch.object(maintenance, "replenish", return_value=generation) as generate:
+             patch.object(maintenance, "replenish", side_effect=fail_for_theme) as generate:
             result = maintenance.replenish_bank(client, "beauty_account", apply=True)
-        generate.assert_called_once()
+        self.assertEqual(generate.call_count, 10)
+        self.assertEqual(len(observed_themes), len(set(observed_themes)))
         self.assertFalse(generate.call_args.kwargs["offline_only"])
         self.assertEqual(result["status"], "QUALITY_EXHAUSTED")
         self.assertEqual(result["usable_evergreen"], 0)
         self.assertEqual(result["attempts"][0]["failure_category"], "PROVIDER_RATE_LIMITED")
         self.assertEqual(result["attempts"][0]["generation_attempts"], generation["attempts"])
         self.assertFalse(result["would_post"])
+
+    def test_bank_stops_on_hard_ai_budget_blocker(self):
+        generation = {"status": "BLOCKED", "queue_ids": [],
+                      "failure_category": "AI_APPROVAL_BUDGET_EXHAUSTED", "attempts": []}
+        client = SimpleNamespace(_ensure_tab=lambda *args: None)
+        with patch("process_threads_queue.records", return_value=[]), \
+             patch.object(maintenance, "replenish", return_value=generation) as generate:
+            result = maintenance.replenish_bank(client, "beauty_account", apply=True)
+        generate.assert_called_once()
+        self.assertEqual(result["usable_evergreen"], 0)
 
     def test_generated_bank_candidate_releases_temporary_future_allocation(self):
         rows = [{"queue_id": "q1", "slot_id": "future", "business_date_jst": "2099-01-01",
