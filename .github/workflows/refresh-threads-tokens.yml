@@ -80,9 +80,36 @@ jobs:
             echo "DRY_RUN=${{ github.event.inputs.dry_run }}" >> "$GITHUB_ENV"
           fi
 
+      - name: Bootstrap pinned GitHub CLI
+        if: env.DRY_RUN == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "$(uname -s)" != "Linux" ] || [ "$(uname -m)" != "x86_64" ]; then
+            echo "ERROR: pinned GitHub CLI bootstrap supports only Linux x86_64 runners."
+            exit 1
+          fi
+          version="2.101.0"
+          expected_sha256="9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8"
+          archive="$RUNNER_TEMP/gh_${version}_linux_amd64.tar.gz"
+          install_dir="$RUNNER_TEMP/gh-${version}"
+          mkdir -p "$install_dir"
+          curl --fail --silent --show-error --location --retry 2 --retry-delay 2 \
+            "https://github.com/cli/cli/releases/download/v${version}/gh_${version}_linux_amd64.tar.gz" \
+            --output "$archive"
+          printf '%s  %s\n' "$expected_sha256" "$archive" | sha256sum --check --status
+          tar -xzf "$archive" -C "$install_dir"
+          cli_path="$install_dir/gh_${version}_linux_amd64/bin"
+          test -x "$cli_path/gh"
+          echo "$cli_path" >> "$GITHUB_PATH"
+          rm -f "$archive"
+          echo "Pinned GitHub CLI ${version} installed in runner temp storage."
+
       # ---- GH_SECRET_WRITE_TOKEN の確認 ----
       - name: Verify GH_SECRET_WRITE_TOKEN
         env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
           _GH_TOKEN_SET: ${{ secrets.GH_SECRET_WRITE_TOKEN != '' }}
         run: |
           if [ "$DRY_RUN" = "true" ]; then
@@ -95,11 +122,55 @@ jobs:
             echo "  必要なスコープ: secrets:write"
             exit 1
           fi
-          if ! command -v gh >/dev/null 2>&1; then
-            echo "ERROR: GitHub CLI is unavailable on this runner; secret update was not attempted."
+          if ! command -v gh >/dev/null 2>&1 || [ -z "${GH_TOKEN:-}" ]; then
+            echo "ERROR: GitHub CLI or secret-write credential is unavailable; refresh was not attempted."
             exit 1
           fi
-          echo "GH_SECRET_WRITE_TOKEN: SET"
+          gh --version | head -n 1
+
+      - name: Preflight GitHub Secret write capability
+        if: env.DRY_RUN == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          set +x
+          probe_name="SNS_GH_SECRET_WRITE_PREFLIGHT_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
+          probe_file="$RUNNER_TEMP/gh-secret-write-probe"
+          cleanup() {
+            rm -f "$probe_file"
+            gh secret delete "$probe_name" --env production --repo "$GH_REPO" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          umask 077
+          openssl rand -hex 32 > "$probe_file"
+          gh secret set "$probe_name" --env production --repo "$GH_REPO" < "$probe_file" >/dev/null
+          if ! gh secret list --env production --repo "$GH_REPO" --json name --jq '.[].name' | grep -Fxq "$probe_name"; then
+            echo "ERROR: temporary GitHub Secret write could not be read back; refresh was not attempted."
+            exit 1
+          fi
+          gh secret delete "$probe_name" --env production --repo "$GH_REPO" >/dev/null
+          if gh secret list --env production --repo "$GH_REPO" --json name --jq '.[].name' | grep -Fxq "$probe_name"; then
+            echo "ERROR: temporary GitHub Secret cleanup could not be verified; refresh was not attempted."
+            exit 1
+          fi
+          trap - EXIT
+          rm -f "$probe_file"
+          echo "GitHub Secret write and cleanup capability: PASS"
+
+      - name: Preflight current Threads tokens
+        if: env.DRY_RUN == 'false'
+        run: |
+          set -euo pipefail
+          case "$ACCOUNT" in
+            all) accounts="night_scout liver_manager beauty_account" ;;
+            night_scout|liver_manager|beauty_account) accounts="$ACCOUNT" ;;
+            *) echo "ERROR: unsupported account selection; refresh was not attempted."; exit 1 ;;
+          esac
+          for account in $accounts; do
+            python3 scripts/refresh_threads_token.py --account-id "$account" --dry-run
+          done
 
       # ============================================================
       # night_scout
@@ -119,14 +190,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          TOKEN_FILE="data/threads_tokens/night_scout.json"
+          set -euo pipefail
+          set +x
+          TOKEN_FILE="$THREADS_TOKEN_STORE_DIR/night_scout.json"
           if [ ! -f "$TOKEN_FILE" ]; then
             echo "ERROR: $TOKEN_FILE が見つかりません。リフレッシュが成功しなかった可能性があります。"
             exit 1
           fi
-          # トークン値はパイプ経由で渡す — echo やログへの出力なし
-          jq -r '.access_token' "$TOKEN_FILE" \
-            | gh secret set THREADS_ACCESS_TOKEN_NIGHT_SCOUT --repo "$GH_REPO"
+          if [ "$(stat -c '%a' "$TOKEN_FILE")" != "600" ]; then
+            echo "ERROR: refreshed token file permissions are not 0600."
+            exit 1
+          fi
+          jq -er '. | select(.account_id == "night_scout") | .access_token | strings | select(length > 0)' "$TOKEN_FILE" \
+            | gh secret set THREADS_ACCESS_TOKEN_NIGHT_SCOUT --env production --repo "$GH_REPO" >/dev/null
+          gh secret list --env production --repo "$GH_REPO" --json name,updatedAt --jq '.[] | select(.name == "THREADS_ACCESS_TOKEN_NIGHT_SCOUT" and (.updatedAt | length > 0)) | .name' \
+            | grep -Fxq THREADS_ACCESS_TOKEN_NIGHT_SCOUT
           echo "GitHub Secret THREADS_ACCESS_TOKEN_NIGHT_SCOUT: 更新完了"
 
       # ============================================================
@@ -147,13 +225,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          TOKEN_FILE="data/threads_tokens/liver_manager.json"
+          set -euo pipefail
+          set +x
+          TOKEN_FILE="$THREADS_TOKEN_STORE_DIR/liver_manager.json"
           if [ ! -f "$TOKEN_FILE" ]; then
             echo "ERROR: $TOKEN_FILE が見つかりません。リフレッシュが成功しなかった可能性があります。"
             exit 1
           fi
-          jq -r '.access_token' "$TOKEN_FILE" \
-            | gh secret set THREADS_ACCESS_TOKEN_LIVER_MANAGER --repo "$GH_REPO"
+          if [ "$(stat -c '%a' "$TOKEN_FILE")" != "600" ]; then
+            echo "ERROR: refreshed token file permissions are not 0600."
+            exit 1
+          fi
+          jq -er '. | select(.account_id == "liver_manager") | .access_token | strings | select(length > 0)' "$TOKEN_FILE" \
+            | gh secret set THREADS_ACCESS_TOKEN_LIVER_MANAGER --env production --repo "$GH_REPO" >/dev/null
+          gh secret list --env production --repo "$GH_REPO" --json name,updatedAt --jq '.[] | select(.name == "THREADS_ACCESS_TOKEN_LIVER_MANAGER" and (.updatedAt | length > 0)) | .name' \
+            | grep -Fxq THREADS_ACCESS_TOKEN_LIVER_MANAGER
           echo "GitHub Secret THREADS_ACCESS_TOKEN_LIVER_MANAGER: 更新完了"
 
       # ============================================================
@@ -174,13 +260,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_SECRET_WRITE_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          TOKEN_FILE="data/threads_tokens/beauty_account.json"
+          set -euo pipefail
+          set +x
+          TOKEN_FILE="$THREADS_TOKEN_STORE_DIR/beauty_account.json"
           if [ ! -f "$TOKEN_FILE" ]; then
             echo "ERROR: $TOKEN_FILE が見つかりません。リフレッシュが成功しなかった可能性があります。"
             exit 1
           fi
-          jq -r '.access_token' "$TOKEN_FILE" \
-            | gh secret set THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT --repo "$GH_REPO"
+          if [ "$(stat -c '%a' "$TOKEN_FILE")" != "600" ]; then
+            echo "ERROR: refreshed token file permissions are not 0600."
+            exit 1
+          fi
+          jq -er '. | select(.account_id == "beauty_account") | .access_token | strings | select(length > 0)' "$TOKEN_FILE" \
+            | gh secret set THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT --env production --repo "$GH_REPO" >/dev/null
+          gh secret list --env production --repo "$GH_REPO" --json name,updatedAt --jq '.[] | select(.name == "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT" and (.updatedAt | length > 0)) | .name' \
+            | grep -Fxq THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT
           echo "GitHub Secret THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT: 更新完了"
 
       # ============================================================
