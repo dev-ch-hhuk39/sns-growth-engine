@@ -1,14 +1,16 @@
 # SNS Growth Engine - Current Work
 
-Updated: 2026-09-25
+Updated: 2026-09-27
 
 ## Current task
 
-- Current main: `2697ed64aff20f5145554bff8e7a804732c9d479` (PRs #346/#347 merged); base for the pending pip fix: PR #347.
-- Follow-up branch: `fix/xserver-pinned-pip-bootstrap` (to be created from current main).
-- Objective: close production reliability gaps for the existing Text V1, Media V1, buffered runtime, Xserver scheduler and reconciler. No architecture redesign and no relaxation of rights, quality, publisher or account-isolation gates.
-- Changes add a bounded Xserver media-preparation cron using existing Direct and approved-clip preparation commands, and correct acceptance metrics to separate text slot coverage from media inventory and use the actual publisher's non-posting dry-run for usable-media counts.
-- GitHub media preparation is explicit-confirmation/manual fallback only; Xserver remains the single natural preparation scheduler. Publisher/X gates are forced off in preparation children.
+- Latest locally confirmed `origin/main` / closure base: `3818e38fdd04185c9f2b70cda73daf2fe22b2f35`; branch `fix/production-supply-loop-closure`.
+- Objective: close verified text/media supply-loop defects without architecture redesign or relaxing rights, quality, publisher, duplicate, account-isolation, X-posting or 80% host-disk guards.
+- Local changes: delivery-first text replenishment; bounded theme retries; uploaded Direct assets needing understanding refresh before external acquisition; strict missing `source_videos` lineage repair; batched preparation snapshot includes `social_derivatives`.
+- Stored-source Clip fallback uses an independent GitHub-hosted runner. Xserver heavy preparation remains blocked above 80%; posting/transcription API gates remain off in preparation.
+- Validation: repository scripts 929/929 PASS; workflow safety 522/522 PASS; source registry validation PASS; focused contracts, Ruff, compileall and diff check PASS.
+- Production Sheets writes, inventory generation, download/cut/upload and posting were not performed. The owner-supplied live evidence still reports Xserver disk 81.64% and previous text/direct/clip shortages.
+- GitHub DNS currently fails (`Could not resolve host: github.com`), so push/PR/CI/merge/deploy and production recovery are pending. Preserve untracked `.runtime/` exactly.
 
 ## Evidence and limits
 

@@ -99,6 +99,41 @@ try:
         permissions=PERMISSIONS,
     ) == "media-1"
 
+    # Stored, already-permitted media needing only understanding is chosen
+    # before a newer externally acquired item that would require a download.
+    mixed = Client("")
+    mixed.rows["source_posts"].append({
+        **mixed.rows["source_posts"][0],
+        "source_post_id": "post-external",
+        "source_id": "source-external",
+        "platform": "youtube",
+    })
+    mixed.rows["source_post_media"].append({
+        **mixed.rows["source_post_media"][0],
+        "source_post_media_id": "media-external",
+        "source_post_id": "post-external",
+        "original_media_url": "https://www.youtube.com/watch?v=external",
+        "canonical_post_url": "https://www.youtube.com/watch?v=external",
+        "cloudinary_status": "",
+        "storage_url": "",
+        "created_at": "2026-08-02T00:00:00+00:00",
+    })
+    mixed.rows["source_media_understanding"] = []
+    mixed_permissions = [
+        *PERMISSIONS,
+        {**PERMISSIONS[0], "source_id": "source-external"},
+    ]
+    assert core.select_pending_media_id(
+        mixed,
+        "night_scout",
+        permissions=mixed_permissions,
+    ) == "media-1"
+    assert reliable.select_pending_media_id(
+        mixed,
+        "night_scout",
+        permissions=mixed_permissions,
+    ) == "media-1"
+
     missing = Client("")
     missing.rows["source_media_understanding"] = []
     assert core.media_understanding_needs_refresh(

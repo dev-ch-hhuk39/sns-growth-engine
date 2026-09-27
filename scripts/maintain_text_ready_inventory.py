@@ -151,6 +151,37 @@ def _reserve_status(delivery_count: int, reserve_target: int) -> str:
     return "DELIVERY_READY"
 
 
+def delivery_generation_required(publishable_ready: int) -> int:
+    """Recover the delivery SLO before spending effort on reserve inventory."""
+    return 1 if publishable_ready < 1 else 0
+
+
+def reserve_generation_required(publishable_ready: int, reserve_target: int) -> int:
+    """Return only the best-effort shortfall after one deliverable is secured."""
+    if publishable_ready < 1:
+        return 0
+    return max(0, reserve_target - publishable_ready)
+
+
+def hard_replenishment_blocker(result: dict[str, Any]) -> bool:
+    """Only stop bounded evergreen attempts for known operational hard blocks."""
+    hard_categories = {
+        "AI_APPROVAL_BUDGET_EXHAUSTED",
+        "PROVIDER_CREDENTIALS_MISSING_OR_REJECTED",
+        "SHEETS_QUOTA_EXHAUSTED",
+        "KILL_SWITCH_ACTIVE",
+        "PERMISSION_OR_SAFETY_FAILURE",
+    }
+    if str(result.get("failure_category", "")) in hard_categories:
+        return True
+    attempts = result.get("attempts", [])
+    return any(
+        isinstance(attempt, dict)
+        and str(attempt.get("reason") or attempt.get("failure_category") or "") in hard_categories
+        for attempt in attempts
+    )
+
+
 def _coverage_result(required: int, covered: int) -> tuple[str, float, str]:
     if required <= 0:
         return "FAILED", 0.0, "NO_REQUIRED_TEXT_SLOTS"
@@ -479,7 +510,7 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             release_temporary_bank_allocations(client, admissions)
             prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         current = count_usable()
-        if not result.get("queue_ids"):
+        if hard_replenishment_blocker(result):
             break
     return {"status": "READY_INVENTORY_OK" if current >= minimum else "QUALITY_EXHAUSTED",
             "account_id": account_id, "usable_evergreen": current, "minimum": minimum,
@@ -530,7 +561,7 @@ def main() -> int:
         for slot in slots:
             ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
             reserve_target = int(policy()["text_candidates_per_slot"])
-            missing = max(0, reserve_target - len(ready_rows))
+            delivery_missing = delivery_generation_required(len(ready_rows))
             result: dict[str, Any] = {
                 "account_id": account_id,
                 "slot_id": slot["slot_id"],
@@ -538,20 +569,25 @@ def main() -> int:
                 "post_type": slot["post_type"],
                 "reserve_target": reserve_target,
                 "initial_publishable_ready": len(ready_rows),
+                "delivery_generation_required": delivery_missing,
                 "would_post": False,
             }
-            if missing:
-                generated = replenish(account_id, slot, apply=args.apply, required=missing, offline_only=budget_blocked)
-                result.update(generated)
-                result["reserve_generation_status"] = generated.get("status", "")
-                result["reserve_generation_failure_category"] = generated.get("failure_category", "")
-                budget_blocked = budget_blocked or any(attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
-                                                       for attempt in generated.get("attempts", []))
-            if args.apply and missing:
+
+            def refresh_queue_snapshot() -> list[dict[str, Any]]:
+                if not (args.use_sheets and args.apply):
+                    return queue_rows
+                prime_readonly_record_cache(snapshot, ("queue",))
+                updated = [dict(row) for row in read_records_safely(snapshot, "queue")]
+                setattr(snapshot, READONLY_RECORD_CACHE_ATTR, {"queue": updated})
+                return updated
+
+            def allocate_bank(required: int, already_ready: int) -> list[str]:
+                if not (args.apply and required > 0):
+                    return []
                 from evergreen_inventory import allocate_bank_candidate
                 from generate_threads_ideas_from_references import original_text_similarity_guard
-                recovered = list(result.get("queue_ids", []))
-                bank_needed = max(0, reserve_target - len(ready_rows) - len(recovered))
+                recovered: list[str] = []
+                bank_needed = min(required, max(0, reserve_target - already_ready))
                 for _ in range(bank_needed):
                     allocated = allocate_bank_candidate(client, account=account_id, slot=slot, now=now, apply=True,
                         runtime_check=lambda row: hybrid_ai_gate_passed(row, build_source_context(snapshot, row))[0]
@@ -560,11 +596,60 @@ def main() -> int:
                     if allocated["status"] != "ALLOCATED":
                         break
                     recovered.append(allocated["queue_id"])
-                result["queue_ids"] = recovered
-            if args.use_sheets and args.apply:
-                prime_readonly_record_cache(snapshot, ("queue",))
-                queue_rows = [dict(row) for row in read_records_safely(snapshot, "queue")]
-                setattr(snapshot, READONLY_RECORD_CACHE_ATTR, {"queue": [dict(row) for row in queue_rows]})
+                return recovered
+
+            if delivery_missing and args.apply:
+                # Reuse an already validated bank candidate before spending an
+                # AI request; it still has to pass the exact-slot publisher check.
+                bank_ids = allocate_bank(1, len(ready_rows))
+                if bank_ids:
+                    result["delivery_recovery_route"] = "evergreen_bank"
+                    result["delivery_recovery_queue_ids"] = bank_ids
+                    queue_rows = refresh_queue_snapshot()
+                    ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+
+            if delivery_missing and len(ready_rows) == 0:
+                generated = replenish(
+                    account_id, slot, apply=args.apply, required=1, offline_only=budget_blocked,
+                )
+                result["delivery_generation_status"] = generated.get("status", "")
+                result["delivery_generation_failure_category"] = generated.get("failure_category", "")
+                result["delivery_generation_attempts"] = generated.get("attempts", [])
+                result["delivery_recovery_queue_ids"] = list(
+                    result.get("delivery_recovery_queue_ids", [])
+                ) + list(generated.get("queue_ids", []))
+                budget_blocked = budget_blocked or any(
+                    attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
+                    for attempt in generated.get("attempts", [])
+                )
+                queue_rows = refresh_queue_snapshot()
+                ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+
+            # A delivery-safe row is the hard requirement. Additional reserve
+            # candidates are attempted only after that row is durably visible.
+            reserve_missing = reserve_generation_required(len(ready_rows), reserve_target)
+            if reserve_missing:
+                reserve_result = replenish(
+                    account_id, slot, apply=args.apply,
+                    required=reserve_missing, offline_only=budget_blocked,
+                )
+                result["reserve_generation_status"] = reserve_result.get("status", "")
+                result["reserve_generation_failure_category"] = reserve_result.get("failure_category", "")
+                result["reserve_generation_attempts"] = reserve_result.get("attempts", [])
+                result["reserve_queue_ids"] = list(reserve_result.get("queue_ids", []))
+                budget_blocked = budget_blocked or any(
+                    attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
+                    for attempt in reserve_result.get("attempts", [])
+                )
+                queue_rows = refresh_queue_snapshot()
+                ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+                bank_ids = allocate_bank(
+                    max(0, reserve_target - len(ready_rows)), len(ready_rows),
+                )
+                if bank_ids:
+                    result["reserve_queue_ids"] = list(result.get("reserve_queue_ids", [])) + bank_ids
+                    queue_rows = refresh_queue_snapshot()
+
             verified_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
             reserve_state = _reserve_status(len(verified_rows), reserve_target)
             account_covered += int(len(verified_rows) >= 1)

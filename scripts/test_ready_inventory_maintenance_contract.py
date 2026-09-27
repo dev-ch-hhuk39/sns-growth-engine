@@ -10,6 +10,9 @@ from maintain_text_ready_inventory import (
     _publishable_ready_rows,
     _reserve_status,
     _coverage_result,
+    delivery_generation_required,
+    reserve_generation_required,
+    hard_replenishment_blocker,
     _required_text_slots,
     evergreen_theme_variants,
     future_text_slots,
@@ -68,6 +71,14 @@ assert not _ready_exists(
 assert _reserve_status(0, 3) == "DELIVERY_SLO_FAILED"
 assert _reserve_status(1, 3) == "RESERVE_DEGRADED"
 assert _reserve_status(3, 3) == "DELIVERY_READY"
+assert delivery_generation_required(0) == 1
+assert delivery_generation_required(1) == 0
+assert reserve_generation_required(0, 3) == 0
+assert reserve_generation_required(1, 3) == 2
+assert reserve_generation_required(3, 3) == 0
+assert not hard_replenishment_blocker({"status": "QUALITY_EXHAUSTED"})
+assert not hard_replenishment_blocker({"failure_category": "QUALITY_EXHAUSTED"})
+assert hard_replenishment_blocker({"failure_category": "AI_APPROVAL_BUDGET_EXHAUSTED"})
 assert _coverage_result(10, 10) == ("PASS", 100.0, "")
 assert _coverage_result(10, 9) == ("FAILED", 90.0, "")
 assert _coverage_result(0, 0) == ("FAILED", 0.0, "NO_REQUIRED_TEXT_SLOTS")
@@ -90,6 +101,12 @@ assert 'records(snapshot, "evergreen_bank")' in bank_source
 assert 'prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))' in bank_source
 assert 'records(client, "evergreen_bank")' not in bank_source
 assert 'records(client, "posted_results")' not in bank_source
+assert "if hard_replenishment_blocker(result):" in bank_source
+assert "if not result.get(\"queue_ids\"):" not in bank_source
+main_source = inspect.getsource(__import__("maintain_text_ready_inventory").main)
+assert main_source.index("delivery_missing = delivery_generation_required") < main_source.index(
+    "reserve_missing = reserve_generation_required"
+)
 source = Path(__file__).with_name("maintain_text_ready_inventory.py").read_text(encoding="utf-8")
 assert "process_threads_queue.py" not in source
 assert "--autonomous-low-risk" in source
