@@ -65,6 +65,18 @@ export PRODUCTION_TRIGGER="$TRIGGER"
 export PRODUCTION_RUNTIME_RELEASE="$CURRENT_RELEASE"
 export THREADS_TOKEN_STORE_DIR="${THREADS_TOKEN_STORE_DIR:-${RUNTIME_ROOT}/shared/threads_tokens}"
 
+posting_enabled="${BUFFERED_POSTING_ENABLED:-true}"
+case "$posting_enabled" in
+  1|true|TRUE|yes|YES) ;;
+  0|false|FALSE|no|NO)
+    if [[ "$MODE" == "apply" ]]; then
+      echo "[SKIPPED] buffered production posting is disabled by runtime configuration"
+      exit 0
+    fi
+    ;;
+  *) echo "[BLOCKED] BUFFERED_POSTING_ENABLED must be an explicit boolean" >&2; exit 64 ;;
+esac
+
 run_account() {
   local account="$1"
   local lock_file="${LOCK_DIR}/${account}.lock"

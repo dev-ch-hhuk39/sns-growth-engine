@@ -14,6 +14,8 @@ assert "flock -n -E 75" in launcher
 assert 'flock -w 240 "$sheets_lock_file"' in launcher
 assert "PRODUCTION_TRIGGER" in launcher
 assert "PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true" in launcher
+assert 'posting_enabled="${BUFFERED_POSTING_ENABLED:-true}"' in launcher
+assert "[SKIPPED] buffered production posting is disabled" in launcher
 assert "ALLOW_MEDIA_POSTS=true ALLOW_REAL_THREADS_VIDEO_POST=true" in launcher
 assert "ALLOW_THREADS_CAROUSEL=true ALLOW_THREADS_MIXED_CAROUSEL=false" in launcher
 assert "ALLOW_REAL_X_POST=false" in launcher
@@ -48,6 +50,9 @@ assert "run_buffered_production_host.sh" in recovery
 assert "--trigger github_schedule_recovery" in recovery
 assert "workflow_dispatch" in deploy
 assert "DEPLOY_BUFFERED_RUNTIME" in deploy
+assert 'posting_enabled:\n        description: "Allow scheduled Threads publishing after deploy (defaults to no-post)"\n        required: true\n        default: false\n        type: boolean' in deploy
+assert "ENABLE_BUFFERED_POSTING" in deploy
+assert 'BUFFERED_POSTING_ENABLED: ${{ inputs.posting_enabled }}' in deploy
 assert "runtime.env" in deploy
 assert "--enable-scheduler --confirm-enable" in deploy
 assert "CLOUDINARY_API_SECRET" in deploy and "GEMINI_API_KEY" in deploy
