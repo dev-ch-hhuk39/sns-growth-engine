@@ -11,6 +11,15 @@ on:
         description: "Type DEPLOY_BUFFERED_RUNTIME to install the VPS release"
         required: true
         default: ""
+      posting_enabled:
+        description: "Allow scheduled Threads publishing after deploy (defaults to no-post)"
+        required: true
+        default: false
+        type: boolean
+      confirm_posting:
+        description: "Required only when posting_enabled is true: ENABLE_BUFFERED_POSTING"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -43,6 +52,7 @@ jobs:
       CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
       CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      BUFFERED_POSTING_ENABLED: ${{ inputs.posting_enabled }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -52,6 +62,9 @@ jobs:
       - name: Require explicit deployment confirmation
         run: |
           test "${{ inputs.confirm_deploy }}" = "DEPLOY_BUFFERED_RUNTIME"
+          if [ "${{ inputs.posting_enabled }}" = "true" ]; then
+            test "${{ inputs.confirm_posting }}" = "ENABLE_BUFFERED_POSTING"
+          fi
       - name: Install immutable runtime and secret environment
         env:
           RUNTIME_ENV_FILE: /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
@@ -70,7 +83,7 @@ jobs:
               "THREADS_ACCESS_TOKEN_NIGHT_SCOUT", "THREADS_USER_ID_NIGHT_SCOUT", "THREADS_HANDLE_NIGHT_SCOUT",
               "THREADS_ACCESS_TOKEN_LIVER_MANAGER", "THREADS_USER_ID_LIVER_MANAGER", "THREADS_HANDLE_LIVER_MANAGER",
               "THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT", "THREADS_USER_ID_BEAUTY_ACCOUNT", "THREADS_HANDLE_BEAUTY_ACCOUNT",
-              "BEAUTY_ACTIVATION_APPROVED",
+              "BEAUTY_ACTIVATION_APPROVED", "BUFFERED_POSTING_ENABLED",
               "CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "GEMINI_API_KEY",
           )
           required = {
@@ -85,6 +98,8 @@ jobs:
                      if not any(os.environ.get(key) for key in alternatives)]
           if missing:
               raise SystemExit("[BLOCKED] required production runtime secret is missing: " + ", ".join(missing))
+          if os.environ.get("BUFFERED_POSTING_ENABLED", "").lower() not in {"true", "false"}:
+              raise SystemExit("[BLOCKED] buffered posting mode must be true or false")
           with path.open("w", encoding="utf-8") as handle:
               for key in keys:
                   value = os.environ.get(key, "")
