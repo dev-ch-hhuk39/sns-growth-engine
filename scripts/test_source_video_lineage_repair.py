@@ -101,10 +101,12 @@ def fixture():
 
 
 def plan(parts, *, parents_override=None, media_override=None, asset_override=None,
-         permissions_override=None, registered_override=None):
+         permissions_override=None, registered_override=None, clips_override=None,
+         source_videos_override=None):
     source, clip, source_video, parent, media, asset, permission = parts
     return source_video_lineage_repairs(
-        clips=[clip], source_videos=[], source_posts=parents_override or [parent],
+        clips=clips_override or [clip], source_videos=source_videos_override or [],
+        source_posts=parents_override or [parent],
         source_post_media=media_override or [media], media_assets=asset_override or [asset],
         media_permissions=permissions_override or [permission],
         registered_sources=registered_override or [source], account_id="liver_manager",
@@ -151,6 +153,37 @@ def run() -> int:
                   and rows[0]["discovery_status"] == "REPAIRED_FROM_VERIFIED_LINEAGE")
     if not rows:
         failures.append("exact_provenance_must_repair")
+
+    source, clip, source_video, *_rest = parts
+    missing_link = {**clip, "source_video_id": ""}
+    rows, counters = plan(parts, clips_override=[missing_link])
+    passed += int(len(rows) == 1 and counters["repairable"] == 1
+                  and rows[0]["source_video_id"] == source_video["source_video_id"]
+                  and rows[0]["_repair_clip_link"] is True)
+    if not rows:
+        failures.append("missing_candidate_link_must_require_and_derive_from_exact_source_evidence")
+
+    second_clip = {**missing_link, "clip_candidate_id": "clip-second-range", "start_seconds": 12,
+                   "end_seconds": 24}
+    rows, counters = plan(parts, clips_override=[missing_link, second_clip])
+    passed += int(len(rows) == 2 and counters["repairable"] == 2
+                  and len({row["source_video_id"] for row in rows}) == 1
+                  and all(row["_repair_clip_link"] for row in rows))
+    if len(rows) != 2:
+        failures.append("multiple_clips_from_same_verified_video_must_share_one_ledger_identity")
+
+    mismatched_video = {**missing_link, "video_id": "different-video"}
+    rows, counters = plan(parts, clips_override=[mismatched_video])
+    passed += int(not rows and counters["provenance_insufficient"] == 1)
+    if rows:
+        failures.append("missing_candidate_link_with_wrong_video_id_must_fail_closed")
+
+    _, counters = plan(parts, source_videos_override=[{
+        **source_video, "content_hash": "f" * 64,
+    }])
+    passed += int(counters["repairable"] == 0 and counters["ambiguous"] == 1)
+    if counters["repairable"]:
+        failures.append("existing_source_video_hash_mismatch_must_fail_closed")
 
     _, counters = plan(parts, parents_override=[parts[3], dict(parts[3])])
     passed += int(counters["ambiguous"] == 1)
@@ -202,6 +235,55 @@ def run() -> int:
     passed += int(repeated["repaired_count"] == 0 and len(client._ws("source_videos").rows) == 1)
     if repeated["repaired_count"] or len(client._ws("source_videos").rows) != 1:
         failures.append("repair_rerun_must_be_idempotent")
+
+    missing_link_clip = {**clip, "source_video_id": ""}
+    client = SheetClient({
+        "source_videos": [], "video_clip_candidates": [missing_link_clip],
+        "source_posts": [parent], "source_post_media": [media],
+        "media_assets": [asset], "media_permissions": [permission],
+    })
+    from unittest.mock import patch
+
+    def update_candidate(client_arg, logical, key, key_value, fields):
+        rows = client_arg._ws(logical).rows
+        matches = [row for row in rows if row.get(key) == key_value]
+        if len(matches) != 1:
+            return False
+        matches[0].update(fields)
+        return True
+
+    with patch("process_threads_queue.update_row", side_effect=update_candidate):
+        applied = repair_missing_source_video_lineage(client, account_id="liver_manager")
+    saved_clips = client._ws("video_clip_candidates").get_all_records()
+    passed += int(
+        applied["repaired_count"] == 1
+        and applied["linked_clip_candidate_ids"] == [clip["clip_candidate_id"]]
+        and len(client._ws("source_videos").rows) == 1
+        and saved_clips[0]["source_video_id"] == source_video["source_video_id"]
+    )
+    if not applied.get("linked_clip_candidate_ids"):
+        failures.append("exact_missing_clip_link_must_read_after_write")
+
+    second_missing_link_clip = {
+        **missing_link_clip, "clip_candidate_id": "clip-second-range", "start_seconds": 12,
+        "end_seconds": 24,
+    }
+    client = SheetClient({
+        "source_videos": [], "video_clip_candidates": [missing_link_clip, second_missing_link_clip],
+        "source_posts": [parent], "source_post_media": [media],
+        "media_assets": [asset], "media_permissions": [permission],
+    })
+    with patch("process_threads_queue.update_row", side_effect=update_candidate):
+        applied = repair_missing_source_video_lineage(client, account_id="liver_manager")
+    saved_clips = client._ws("video_clip_candidates").get_all_records()
+    passed += int(
+        applied["repaired_count"] == 1
+        and len(applied["linked_clip_candidate_ids"]) == 2
+        and len(client._ws("source_videos").rows) == 1
+        and all(row["source_video_id"] == source_video["source_video_id"] for row in saved_clips)
+    )
+    if len(applied.get("linked_clip_candidate_ids", [])) != 2:
+        failures.append("multiple_verified_clips_must_link_to_single_read_back_ledger_row")
 
     print(f"PASS: {passed} / FAIL: {len(failures)}")
     for failure in failures:

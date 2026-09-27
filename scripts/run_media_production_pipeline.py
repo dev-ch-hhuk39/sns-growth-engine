@@ -3019,27 +3019,37 @@ def source_video_lineage_repairs(
     from media.permission_ledger import _targets, evaluate_permission, truthy
     from media_growth_schemas import build_source_video, extract_video_id, source_video_duplicate_key
 
-    counters = {"missing_ledger": 0, "repairable": 0, "ambiguous": 0, "provenance_insufficient": 0}
-    existing_ids = {str(row.get("source_video_id") or "") for row in source_videos}
+    counters = {
+        "missing_ledger": 0,
+        "repairable": 0,
+        "ambiguous": 0,
+        "provenance_insufficient": 0,
+        "clip_link_repairable": 0,
+    }
     repair_rows: list[dict[str, Any]] = []
     config = _load(MEDIA_CONFIG)
     allowed_ids = set(config.get("allowed_source_ids", []))
 
     for clip in clips:
         clip_id = str(clip.get("clip_candidate_id") or clip.get("clip_id") or "")
-        video_id = str(clip.get("source_video_id") or "")
-        if (not video_id or str(clip.get("account_id") or "") != account_id
-                or clip_id in {""} or is_quarantined(clip)):
+        claimed_video_id = str(clip.get("source_video_id") or "").strip()
+        clip_accounts = {
+            str(clip.get(key) or "").strip()
+            for key in ("account_id", "target_account_id")
+            if str(clip.get(key) or "").strip()
+        }
+        if (not clip_id or (clip_accounts and clip_accounts != {account_id})
+                or is_quarantined(clip)):
             continue
-        if video_id in existing_ids or any(row.get("source_video_id") == video_id for row in repair_rows):
-            continue
-        counters["missing_ledger"] += 1
 
         source_id = str(clip.get("source_id") or "")
         platform = str(clip.get("platform") or clip.get("source_platform") or "").lower()
         canonical_url = str(clip.get("canonical_video_url") or clip.get("source_video_url") or "")
         extracted_id = extract_video_id(canonical_url, platform)
         if not all((source_id, platform, canonical_url, extracted_id)) or source_id not in allowed_ids:
+            counters["provenance_insufficient"] += 1
+            continue
+        if str(clip.get("video_id") or "") != extracted_id:
             counters["provenance_insufficient"] += 1
             continue
 
@@ -3062,7 +3072,7 @@ def source_video_lineage_repairs(
                 or not truthy(source.get("media_pipeline_eligible")) or not truthy(source.get("clip_enabled"))
                 or source_id not in allowed_ids or not handle or author != handle
                 or str(post.get("media_count") or "") != "1"
-                or str(clip.get("video_id") or extracted_id) != extracted_id):
+                or str(post.get("external_post_id") or "") != extracted_id):
             counters["provenance_insufficient"] += 1
             continue
 
@@ -3147,12 +3157,39 @@ def source_video_lineage_repairs(
             title=str(clip.get("title") or ""), duration_seconds=duration,
             description="", discovery_status="REPAIRED_FROM_VERIFIED_LINEAGE",
         )
-        if (str(row.get("source_video_id") or "") != video_id
+        video_id = str(row.get("source_video_id") or "")
+        if ((claimed_video_id and claimed_video_id != video_id)
                 or str(row.get("source_id") or "") != source_id
                 or str(row.get("account_id") or "") != account_id):
             counters["provenance_insufficient"] += 1
             continue
-        if any(str(existing.get("canonical_video_url") or "") == canonical_url for existing in source_videos + repair_rows):
+        existing_matches = [
+            existing for existing in source_videos
+            if str(existing.get("source_video_id") or "") == video_id
+        ]
+        planned_matches = [
+            existing for existing in repair_rows
+            if str(existing.get("source_video_id") or "") == video_id
+        ]
+        if not existing_matches and not planned_matches:
+            counters["missing_ledger"] += 1
+        known_matches = existing_matches or planned_matches
+        if known_matches:
+            if (len(existing_matches) > 1 or any(
+                str(known.get(key) or "") != str(row.get(key) or "")
+                for known in known_matches
+                for key in ("source_id", "account_id", "platform", "video_id",
+                            "canonical_video_url")
+            ) or any(
+                str(known.get("content_hash") or "").strip().lower() != hash_value
+                for known in known_matches
+            )):
+                counters["ambiguous"] += 1
+                continue
+        same_url = [existing for existing in source_videos + repair_rows
+                    if str(existing.get("canonical_video_url") or "") == canonical_url
+                    and str(existing.get("source_video_id") or "") != video_id]
+        if same_url:
             counters["ambiguous"] += 1
             continue
         row.update({
@@ -3175,8 +3212,11 @@ def source_video_lineage_repairs(
         if not stored.get("allowed"):
             counters["provenance_insufficient"] += 1
             continue
+        row["_clip_candidate_id"] = clip_id
+        row["_repair_clip_link"] = not claimed_video_id
         repair_rows.append(row)
         counters["repairable"] += 1
+        counters["clip_link_repairable"] += int(not claimed_video_id)
     return repair_rows, counters
 
 
@@ -3201,7 +3241,12 @@ def repair_missing_source_video_lineage(
         registered_sources=load_registry(), account_id=account_id,
     )
     repaired: list[str] = []
-    for row in candidates[:limit]:
+    linked: list[str] = []
+    for candidate in candidates[:limit]:
+        row = {key: value for key, value in candidate.items()
+               if key not in {"_clip_candidate_id", "_repair_clip_link"}}
+        clip_candidate_id = str(candidate.get("_clip_candidate_id") or "")
+        repair_clip_link = bool(candidate.get("_repair_clip_link"))
         # Re-read before append so a concurrent discovery cannot create a
         # duplicate ledger identity between the snapshot and this write.
         fresh_before_write = _fresh_records(client, "source_videos")
@@ -3210,15 +3255,15 @@ def repair_missing_source_video_lineage(
         same_url = [item for item in fresh_before_write
                     if str(item.get("canonical_video_url") or "") == row["canonical_video_url"]]
         if same_id:
-            if len(same_id) == 1 and all(
-                str(same_id[0].get(key) or "") == str(row.get(key) or "")
+            if len(same_id) != 1 or any(
+                str(same_id[0].get(key) or "") != str(row.get(key) or "")
                 for key in ("source_id", "account_id", "platform", "video_id", "canonical_video_url", "content_hash")
             ):
-                continue
-            raise RuntimeError("source_video_lineage_repair_identity_conflict")
-        if same_url:
+                raise RuntimeError("source_video_lineage_repair_identity_conflict")
+        elif same_url:
             raise RuntimeError("source_video_lineage_repair_duplicate_url_conflict")
-        _append(client, "source_videos", row)
+        else:
+            _append(client, "source_videos", row)
         fresh = _fresh_records(client, "source_videos")
         matches = [item for item in fresh if str(item.get("source_video_id") or "") == row["source_video_id"]]
         if len(matches) != 1 or any(
@@ -3226,13 +3271,41 @@ def repair_missing_source_video_lineage(
             for key in ("source_id", "account_id", "platform", "video_id", "canonical_video_url", "content_hash")
         ):
             raise RuntimeError("source_video_lineage_repair_read_after_write_failed")
-        repaired.append(str(row["source_video_id"]))
+        if not same_id:
+            repaired.append(str(row["source_video_id"]))
         snapshots["source_videos"] = fresh
+        if repair_clip_link:
+            from process_threads_queue import update_row
+
+            fresh_clips = _fresh_records(client, "video_clip_candidates")
+            matches = [item for item in fresh_clips
+                       if str(item.get("clip_candidate_id") or "") == clip_candidate_id]
+            if len(matches) != 1:
+                raise RuntimeError("source_video_lineage_clip_candidate_identity_conflict")
+            if str(matches[0].get("source_video_id") or "") not in {"", str(row["source_video_id"])}:
+                raise RuntimeError("source_video_lineage_clip_candidate_link_conflict")
+            if not matches[0].get("source_video_id"):
+                if not update_row(client, "video_clip_candidates", "clip_candidate_id",
+                                  clip_candidate_id, {"source_video_id": row["source_video_id"]}):
+                    raise RuntimeError("source_video_lineage_clip_candidate_update_failed")
+                verified_clips = _fresh_records(client, "video_clip_candidates")
+                linked_matches = [item for item in verified_clips
+                                  if str(item.get("clip_candidate_id") or "") == clip_candidate_id
+                                  and str(item.get("source_video_id") or "") == str(row["source_video_id"])]
+                if len(linked_matches) != 1:
+                    raise RuntimeError("source_video_lineage_clip_candidate_read_after_write_failed")
+                linked.append(clip_candidate_id)
+                snapshots["video_clip_candidates"] = verified_clips
     cache = getattr(client, READONLY_RECORD_CACHE_ATTR, None)
-    if isinstance(cache, dict) and repaired:
-        cache["source_videos"] = snapshots["source_videos"]
+    if isinstance(cache, dict):
+        if repaired:
+            cache["source_videos"] = snapshots["source_videos"]
+        if linked:
+            cache["video_clip_candidates"] = snapshots["video_clip_candidates"]
     return {"repaired_count": len(repaired), "repaired_source_video_ids": repaired,
+            "linked_clip_candidate_ids": linked,
             "repair_candidates": counts["repairable"], "provenance_insufficient": counts["provenance_insufficient"],
+            "clip_link_repairable": counts["clip_link_repairable"],
             "ambiguous": counts["ambiguous"], "bounded_limit": limit}
 
 

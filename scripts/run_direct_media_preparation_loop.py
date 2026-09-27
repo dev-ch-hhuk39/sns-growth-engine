@@ -7,11 +7,15 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
+
+SHEETS_QUOTA_COOLDOWN_SECONDS = 70
+SHEETS_QUOTA_STAGE_RETRIES = 1
 
 from accounts.managed_accounts import account_allows_autonomous_ready, account_choices  # noqa: E402
 
@@ -55,6 +59,22 @@ def _sheets_quota_exhausted(result: subprocess.CompletedProcess[str]) -> bool:
     return "[SHEETS_RETRY]" in output and "failed with rate_limit" in output.lower()
 
 
+def _run_stage_with_quota_recovery(
+    command: list[str],
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+    sleeper: Callable[[float], None],
+) -> tuple[subprocess.CompletedProcess[str], int]:
+    """Retry only an idempotent exact-queue stage after the Sheets window resets."""
+    result = runner(command)
+    retries = 0
+    while _sheets_quota_exhausted(result) and retries < SHEETS_QUOTA_STAGE_RETRIES:
+        sleeper(SHEETS_QUOTA_COOLDOWN_SECONDS)
+        retries += 1
+        result = runner(command)
+    return result, retries
+
+
 def _quota_deferred(
     account_id: str, slot_id: str, attempts: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -76,6 +96,7 @@ def execute(
     *,
     runner: Callable[..., subprocess.CompletedProcess[str]] = run,
     prefer_existing: bool = False,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> dict[str, Any]:
     attempts: list[dict[str, Any]] = []
     autonomous = account_allows_autonomous_ready(account_id)
@@ -147,7 +168,7 @@ def execute(
             attempts.append(attempt)
             continue
 
-        gate = runner([
+        gate_command = [
             sys.executable,
             "scripts/run_hybrid_ai_queue_gate.py",
             "--account-id", account_id,
@@ -155,7 +176,11 @@ def execute(
             "--queue-id", queue_id,
             "--max-candidates", "1",
             "--apply", "--use-sheets",
-        ])
+        ]
+        gate, gate_quota_retries = _run_stage_with_quota_recovery(
+            gate_command, runner=runner, sleeper=sleeper,
+        )
+        attempt["hybrid_quota_retries"] = gate_quota_retries
         if _sheets_quota_exhausted(gate):
             attempt["hybrid_status"] = "SHEETS_QUOTA_DEFERRED"
             attempt["blocked_reasons"] = ["sheets_rate_limit_exhausted"]
@@ -185,7 +210,7 @@ def execute(
         # warnings. The promotion command independently reruns every rights,
         # account, duplicate and technical hard gate, so a Hybrid quality
         # result must not prevent it from making the final readiness decision.
-        promotion = runner([
+        promotion_command = [
             sys.executable,
             "scripts/promote_hybrid_approved_media.py",
             "--account-id", account_id,
@@ -193,7 +218,11 @@ def execute(
             "--queue-id", queue_id,
             "--autonomous-low-risk",
             "--apply", "--confirm-promote", "--use-sheets",
-        ])
+        ]
+        promotion, promotion_quota_retries = _run_stage_with_quota_recovery(
+            promotion_command, runner=runner, sleeper=sleeper,
+        )
+        attempt["promotion_quota_retries"] = promotion_quota_retries
         if _sheets_quota_exhausted(promotion):
             attempt["promotion_status"] = "SHEETS_QUOTA_DEFERRED"
             attempt["blocked_reasons"] = ["sheets_rate_limit_exhausted"]
