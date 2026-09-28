@@ -65,6 +65,7 @@ READY_GATE = "approve_queue.py or auto_approve_queue.py"
 SIMILARITY_BLOCK_THRESHOLD = 0.62
 MAX_QUOTE_CHARS = 80
 from generation_quality_gates import batch_diversity_validator, evaluate_generation_quality, persisted_quality_evidence  # noqa: E402
+from generation.content_quality_v2 import hard_gate as content_v2_hard_gate, rank_candidate as rank_v2_candidate, repair_style_only  # noqa: E402
 from generation.reference_source_rewriter import (  # noqa: E402
     ReferenceRewriteError,
     reference_source_eligibility,
@@ -509,7 +510,14 @@ def build_generation_rows(
             account_id, body, recent + accepted, batch_compared=accepted,
             structure_variant=output.get("grounding_summary", {}).get("structure_variant", ""),
         )
-        if validation["status"] != "PASS" or quality["status"] != "PASS":
+        v2_gate = content_v2_hard_gate(
+            {"account_id": account_id, "target_account_id": account_id,
+             "platform": "threads", "public_post_text": body,
+             "supported_claims": output.get("claim_support", [])},
+            account_id=account_id,
+            public_validation=validation,
+        )
+        if v2_gate["status"] != "PASS":
             continue
         output["generation_batch_id"] = batch_id
         output["generation_attempt"] = i
@@ -525,6 +533,22 @@ def build_generation_rows(
         if candidate["status"] == "BLOCKED":
             continue
         similarity_guard = candidate["similarity_guard"]
+        v2_rank = rank_v2_candidate({
+            "quality_components": {
+                "reader_value": validation.get("reader_value_score", 45),
+                "account_relevance": validation.get("account_fit_score", 45),
+                "naturalness": validation.get("naturalness_score", 45),
+                "persona_evidence": validation.get("account_fit_score", 45),
+                "topic_coherence": quality.get("topic_coherence_score", 45),
+                "media_caption_relevance": 45,
+                "concrete_evidence": 45,
+                "novelty": max(0, 100 - float(similarity_guard.get("similarity", 0)) * 100),
+                "cta_fit": max(0, 100 - float(validation.get("cta_pressure_score", 0) or 0)),
+                "style_diversity": 100 if quality.get("batch_diversity_status") == "PASS" else 55,
+            },
+            "warnings": list(quality.get("diversity_blocked_reasons", []))
+                + list(quality.get("topic_blocked_reasons", [])),
+        }, account_id=account_id)
         title = body.splitlines()[0][:80]
         drafts.append({
             "draft_id": draft_id,
@@ -612,6 +636,17 @@ def build_generation_rows(
             "reader_value_score": str(validation["reader_value_score"]),
             "naturalness_score": str(validation["naturalness_score"]),
             "cta_pressure_score": str(validation["cta_pressure_score"]),
+            "content_quality_v2_version": "content_quality_v2",
+            "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+            "selected_candidate_id": queue_id,
+            "candidate_count": 1,
+            "repair_count": 0,
+            "hard_gate_reasons": "[]",
+            "quality_rank": v2_rank["quality_rank"],
+            "quality_rank_components_json": json.dumps(v2_rank["quality_rank_components"], ensure_ascii=False),
+            "content_quality_warnings_json": json.dumps(v2_rank["warnings"], ensure_ascii=False),
+            "fallback_reason": "",
+            "route_status": "DRAFT_ONLY",
             **feature_fields,
             "rejected_reason": "",
             "blocked_reason": "",
@@ -641,9 +676,8 @@ def _fallback_template_index(offset: int, account_id: str, *, slot_id: str = "",
     return ((seed + offset * 7) % count) + 1
 
 
-# Keep fallback generation bounded while allowing the strict validator,
-# topic-coherence, diversity and duplicate gates to reject unsuitable
-# local compositions. No quality threshold is relaxed.
+# Candidate attempts remain bounded. Content Quality V2 preserves safety
+# blockers while ranking editorial quality rather than discarding drafts.
 FALLBACK_ATTEMPTS_PER_SLOT = 64
 
 
@@ -772,7 +806,7 @@ def build_fallback_generation_rows(
     if os.environ.get("BUFFERED_PREPARATION") == "true":
         batch_id += f"_{stamp}"
     for i in range(1, max(1, top_n) + 1):
-        selected = None
+        candidate_pool: list[dict[str, Any]] = []
         rejected_candidate = None
         for attempt in range(FALLBACK_ATTEMPTS_PER_SLOT):
             output = {}
@@ -780,7 +814,10 @@ def build_fallback_generation_rows(
                 from offline_original_catalog import select_original
 
                 output = select_original(account_id, recent + accepted, batch_compared=accepted,
-                                         used_texts=used_texts)
+                                         used_texts=[
+                                             *(used_texts or []),
+                                             *(str(item.get("public_post_text") or "") for item in candidate_pool),
+                                         ])
                 if not output:
                     break
             elif os.environ.get("BUFFERED_PREPARATION") == "true" and attempt < 5:
@@ -798,29 +835,77 @@ def build_fallback_generation_rows(
                 excluded_topics=[str(row.get("primary_topic", "")) for row in accepted],
                 preferred_topics=preferred_topics or [],
                 )
-            body = str(output.get("public_post_text", ""))
+            repair = repair_style_only(str(output.get("public_post_text", "")), account_id)
+            body = str(repair["public_post_text"])
             validation = final_public_post_validator(body, account_id)
             quality = evaluate_generation_quality(
                 account_id, body, recent + accepted, batch_compared=accepted,
                 structure_variant=output.get("grounding_summary", {}).get("structure_variant", ""),
                 primary_topic=output.get("grounding_summary", {}).get("quality_topic", ""),
             )
-            duplicate = any(original_text_similarity_guard(old, body)["status"] == "BLOCKED" for old in recent[-30:])
-            if body and validation["status"] == "PASS" and quality["status"] == "PASS" and not duplicate:
-                selected = (output, body, validation, quality)
-                break
+            normalized = re.sub(r"[\s、。，．！？!?・:：;；()（）「」『』【】]", "", body).lower()
+            exact_duplicate = bool(normalized) and any(
+                normalized == re.sub(r"[\s、。，．！？!?・:：;；()（）「」『』【】]", "", old).lower()
+                for old in recent[-100:]
+            )
+            exact_duplicate = exact_duplicate or any(
+                normalized == re.sub(r"[\s、。，．！？!?・:：;；()（）「」『』【】]", "", str(item["public_post_text"])).lower()
+                for item in candidate_pool
+            )
+            hard = content_v2_hard_gate(
+                {"account_id": account_id, "target_account_id": account_id,
+                 "platform": "threads", "public_post_text": body,
+                 "supported_claims": output.get("claim_support", [])},
+                account_id=account_id,
+                public_validation=validation,
+            )
+            if body and hard["status"] == "PASS" and not exact_duplicate:
+                voice = validation.get("voice_persona_check", {})
+                full_similarity = float(quality.get("full_text_similarity_score", 0) or 0)
+                candidate = {
+                    "candidate_id": f"{account_id}:{batch_id}:{i}:{attempt}",
+                    "public_post_text": body,
+                    "quality_components": {
+                        "reader_value": validation.get("reader_value_score", 45),
+                        "account_relevance": validation.get("account_fit_score", 45),
+                        "naturalness": validation.get("naturalness_score", 45),
+                        "persona_evidence": voice.get("score", validation.get("account_fit_score", 45)),
+                        "topic_coherence": quality.get("topic_coherence_score", 45),
+                        "media_caption_relevance": 45,
+                        "concrete_evidence": 45,
+                        "novelty": max(0, 100 - full_similarity * 100),
+                        "cta_fit": max(0, 100 - float(validation.get("cta_pressure_score", 0) or 0)),
+                        "style_diversity": 100 if quality.get("status") == "PASS" else 55,
+                    },
+                    "warnings": sorted(set(
+                        list(validation.get("blocked_reasons", []))
+                        + list(quality.get("diversity_blocked_reasons", []))
+                        + list(quality.get("topic_blocked_reasons", []))
+                    )),
+                    "hard_gate_status": "PASS",
+                }
+                candidate.update(rank_v2_candidate(candidate, account_id=account_id))
+                candidate_pool.append({
+                    **candidate, "generation_output": output, "validation": validation,
+                    "legacy_quality": quality, "repair": repair,
+                    "hard_gate_reasons": hard["hard_gate_reasons"],
+                })
+                if len(candidate_pool) >= 5:
+                    break
             rejected_candidate = {
                 "public_post_text": body,
                 "blocked_reasons": sorted(set(
-                    validation.get("blocked_reasons", [])
-                    + quality.get("diversity_blocked_reasons", [])
-                    + quality.get("topic_blocked_reasons", [])
-                    + (["recent_semantic_duplicate"] if duplicate else [])
+                    hard["hard_gate_reasons"]
+                    + (["exact_duplicate"] if exact_duplicate else [])
                 )),
             }
-        if selected is None:
+        if not candidate_pool:
             continue
-        output, body, validation, quality = selected
+        selected = max(candidate_pool, key=lambda item: (item["quality_rank"], item["candidate_id"]))
+        output = selected["generation_output"]
+        body = selected["public_post_text"]
+        validation = selected["validation"]
+        quality = selected["legacy_quality"]
         feature_fields = _feature_fields(output, quality)
         stable = _safe_id(f"{account_id}_fallback_{stamp}_{i}")
         draft_id = f"idea_{stable}"
@@ -919,6 +1004,17 @@ def build_fallback_generation_rows(
             "rejected_reason": "",
             "blocked_reason": "",
             "updated_at": created,
+            "content_quality_v2_version": "content_quality_v2",
+            "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+            "selected_candidate_id": selected["candidate_id"],
+            "candidate_count": len(candidate_pool),
+            "repair_count": selected["repair"]["repair_count"],
+            "hard_gate_reasons": json.dumps(selected["hard_gate_reasons"], ensure_ascii=False),
+            "quality_rank": selected["quality_rank"],
+            "quality_rank_components_json": json.dumps(selected["quality_rank_components"], ensure_ascii=False),
+            "content_quality_warnings_json": json.dumps(selected["warnings"], ensure_ascii=False),
+            "fallback_reason": fallback_reason if "offline" in str(output.get("generation_provider", "")).lower() else "",
+            "route_status": "DRAFT_ONLY",
         })
         accepted.append({
             "account_id": account_id, "candidate_id": queue_id, "batch_id": batch_id,
@@ -2099,6 +2195,16 @@ def run_reference_generation(
     video_only_reference: bool = False,
     client: Any | None = None,
 ) -> dict[str, Any]:
+    if apply:
+        return {
+            "status": "DRAFT_ONLY",
+            "account_id": account_id,
+            "post_type": post_type,
+            "candidate_count": 0,
+            "reason": "content_quality_v2_owner_review_required",
+            "worker_selectable": False,
+            "real_post_possible_now": False,
+        }
     from sheets_record_reader import read_records_safely
 
     if client is None:
@@ -2577,6 +2683,10 @@ def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
                                     slot_id: str, schedule_date_jst: str,
                                     client: Any | None = None) -> dict[str, Any]:
     """Use the canonical row builder/persistence without source or AI dependencies."""
+    if apply:
+        return {"status": "DRAFT_ONLY", "account_id": account_id, "candidate_count": 0,
+                "reason": "content_quality_v2_owner_review_required", "would_post": False,
+                "ai_requests": 0}
     from config_loader import get_config
     from production_inventory import policy as production_inventory_policy
     from sheets_client import SheetsClient

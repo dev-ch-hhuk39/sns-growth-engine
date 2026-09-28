@@ -125,6 +125,7 @@ class ClipQueueExitTests(unittest.TestCase):
         self.assertEqual(pipeline._last_json_object(output)['status'], 'READY')
 
     def invoke(self, result):
+        output = io.StringIO()
         with patch('sys.argv', ['runner', '--account-id', 'liver_manager', '--use-sheets',
                                '--apply', '--confirm-production-media', '--prepare-saved-media-queue']), \
              patch.object(pipeline, 'get_config', return_value={'sheet_id': 'test', 'sa_dict': {}}), \
@@ -133,14 +134,17 @@ class ClipQueueExitTests(unittest.TestCase):
              patch.object(pipeline, 'build_plan', return_value={'status': 'PLAN_ONLY'}), \
              patch.object(pipeline, 'prepare_saved_media_queue', return_value=result), \
              patch.object(pipeline, 'execute') as execute, \
-             contextlib.redirect_stdout(io.StringIO()):
+             contextlib.redirect_stdout(output):
             code = pipeline.main()
         execute.assert_not_called()
+        self.stdout = output.getvalue()
         return code
 
     def test_verified_preparation_can_continue_to_hybrid_review(self):
         self.assertEqual(self.invoke({'status': 'QUEUED_WAITING_REVIEW', 'queue_id': 'q',
-            'read_after_write': True, 'would_post_video': False}), 0)
+            'read_after_write': True, 'would_post_video': False}), 1)
+        self.assertIn('"status": "DRAFT_ONLY"', self.stdout)
+        self.assertIn('content_quality_v2_owner_review_required', self.stdout)
 
     def test_missing_readback_is_failure(self):
         self.assertEqual(self.invoke({'status': 'QUEUED_WAITING_REVIEW', 'queue_id': 'q',

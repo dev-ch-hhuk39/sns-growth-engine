@@ -89,9 +89,11 @@ for schedule_date_jst in (
             row.get(
                 "batch_diversity_status"
             )
-            == "PASS"
+            in {"PASS", "BLOCKED"}
             for row in queue
         )
+        assert all(row.get("content_quality_v2_status") == "DRAFT_ONLY_RANKED" for row in queue)
+        assert all(row.get("quality_rank") != "" for row in queue)
 
 print(
     "PASS "

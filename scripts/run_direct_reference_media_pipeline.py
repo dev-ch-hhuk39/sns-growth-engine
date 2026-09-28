@@ -40,6 +40,11 @@ from generation.source_copyedit import (  # noqa: E402
     source_text_is_usable,
     validate_source_preserving_public_post,
 )
+from generation.content_quality_v2 import (  # noqa: E402
+    build_post_package,
+    hard_gate as content_v2_hard_gate,
+    load_policy as load_content_quality_v2_policy,
+)
 from direct_caption_policy import direct_caption_mode  # noqa: E402
 from evidence_context_caption import DirectCaptionProviderFailover, generate_evidence_context_caption  # noqa: E402
 from media_activation_source_suitability import direct_source_suitability  # noqa: E402
@@ -1031,6 +1036,7 @@ def build_plan(
         allow_deterministic_fallback=True,
     )
     attempted: list[dict[str, Any]] = []
+    ranked_ready: list[dict[str, Any]] = []
     permission_map, _blocked_permissions = _permission_map(client, account_id)
     for post, media, source in candidates:
         candidate_soft_warnings: list[str] = []
@@ -1150,9 +1156,67 @@ def build_plan(
             "recent_post_similarity": alignment.get("recent_post_similarity", 1),
         })
         public_hard, public_soft = split_public_validation(validation)
+        carousel_understandings = [
+            item.get("media_understanding", {})
+            for item in carousel_media
+            if isinstance(item.get("media_understanding"), dict)
+        ]
+        visual_summary = " ".join(str(item.get("visual_summary", "")) for item in carousel_understandings if item.get("visual_summary"))
+        visible_text = " ".join(str(item.get("visible_text", "")) for item in carousel_understandings if item.get("visible_text"))
+        transcript_text = " ".join(str(item.get("transcript_text", "")) for item in carousel_understandings if item.get("transcript_text"))
+        visual_verified = bool(carousel_understandings) and all(
+            str(item.get("vision_status") or "").upper() in {"PASS", "PASS_VISION", "VISUAL_VERIFIED"}
+            and bool(str(item.get("visual_summary") or item.get("visible_text") or "").strip())
+            for item in carousel_understandings
+        )
+        media_for_package = {
+            **media,
+            "media_asset_id": asset_id,
+            "visual_summary": visual_summary,
+            "visible_text": visible_text,
+            "transcript_text": transcript_text,
+            "transcript_status": "PASS" if transcript_text else "UNAVAILABLE",
+            "vision_status": "PASS" if visual_verified else "UNAVAILABLE",
+            "main_topic": str(grounded.get("internal_analysis", {}).get("topic", "")),
+            "claim_support": grounded.get("claim_support", []),
+        }
+        v2_gate = content_v2_hard_gate(
+            {
+                "account_id": account_id, "target_account_id": account_id,
+                "platform": "threads", "public_post_text": text,
+                "media_required": True, "rights_status": post.get("rights_status", ""),
+                "permission_status": post.get("permission_status", ""),
+                "media_asset_id": asset_id, "media_url": media.get("storage_url", ""),
+                "source_creator_context": str(post.get("original_post_text", "")) + " " + media_evidence,
+                "claim_support": grounded.get("claim_support", []),
+            },
+            account_id=account_id,
+            public_validation=validation,
+            media_validation=validator,
+        )
+        package = build_post_package(
+            account_id=account_id,
+            media=media_for_package,
+            public_caption=text,
+            source_creator_context=str(post.get("original_post_text", "")),
+            hard_gate_result=v2_gate,
+            quality_components={
+                "reader_value": validation.get("reader_value_score", 45),
+                "account_relevance": validation.get("account_fit_score", 45),
+                "naturalness": validation.get("naturalness_score", 45),
+                "persona_evidence": validation.get("account_fit_score", 45),
+                "topic_coherence": grounded.get("generation_quality", {}).get("topic_coherence_score", 45),
+                "media_caption_relevance": alignment.get("final_alignment_score", 0) * 100,
+                "concrete_evidence": alignment.get("main_claim_coverage", 0) * 100,
+                "novelty": max(0, 100 - float(alignment.get("recent_post_similarity", 1) or 1) * 100),
+                "cta_fit": max(0, 100 - float(validation.get("cta_pressure_score", 0) or 0)),
+                "style_diversity": 65,
+            },
+        )
+        candidate_soft_warnings.extend(package.get("warnings", []))
         candidate_soft_warnings.extend(public_soft)
         candidate_soft_warnings.extend(validator.get("soft_warning_codes", []))
-        ready = not public_hard and validator["status"] == "PASS"
+        ready = not public_hard and validator.get("hard_gate_status") == "PASS" and v2_gate.get("status") == "PASS"
         blocked_reasons = (
             list(grounded.get("blocked_reasons", []))
             + list(validation.get("blocked_reasons", []))
@@ -1161,7 +1225,7 @@ def build_plan(
         if apply:
             _record_caption_attempt(client, post=post, account_id=account_id, grounded=grounded)
         if ready:
-            return {
+            ranked_ready.append({
                 "status": "WILL_APPLY" if apply else "PLAN_ONLY",
                 "account_id": account_id, "slot_id": slot_id, "manual_e2e_proof": manual_e2e_proof, "source_post": post, "source_post_media": media,
                 "source_post_id": post["source_post_id"], "media_asset_id": asset_id, "public_post_text": text,
@@ -1179,6 +1243,17 @@ def build_plan(
                 "source_suitability": source_suitability,
                 "semantic_alignment": alignment,
                 "media_validator": validator["status"], "would_post": bool(apply and not prepare_only),
+                "content_quality_v2_version": "content_quality_v2",
+                "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+                "quality_rank": package.get("quality_rank", 0),
+                "quality_rank_components": package.get("quality_rank_components", {}),
+                "media_understanding_status": package.get("media_understanding", {}).get("visual_status", "VISUAL_UNVERIFIED"),
+                "generic_caption_risk": package.get("generic_caption_risk", "UNKNOWN"),
+                "media_package": package,
+                "hard_gate_reasons": v2_gate.get("hard_gate_reasons", []),
+                "final_public_post_validator": validation.get("status", "UNVERIFIED"),
+                "internal_leak_status": validation.get("internal_leak_check", {}).get("status", "UNVERIFIED"),
+                "account_fit_status": validation.get("account_fit_check", {}).get("status", "UNVERIFIED"),
                 **hard_gate_fields([]),
                 **warning_fields(candidate_soft_warnings),
                 "human_review_status": "UNREVIEWED",
@@ -1186,7 +1261,8 @@ def build_plan(
                 "candidate_attempt_count": len(attempted) + 1,
                 "skipped_candidate_attempts": attempted,
                 "blocked_reasons": [],
-            }
+            })
+            continue
         failure_reason = "|".join(sorted(set(str(reason) for reason in blocked_reasons if reason))) or "caption_or_alignment_blocked"
         attempted.append({
             "source_post_id": post.get("source_post_id", ""),
@@ -1198,6 +1274,8 @@ def build_plan(
             "quarantined": False,
             "blocked_reasons": blocked_reasons[:10],
         })
+    if ranked_ready:
+        return max(ranked_ready, key=lambda item: (float(item.get("quality_rank", 0)), str(item.get("media_asset_id", ""))))
     return {
         "status": "BLOCKED",
         "account_id": account_id,
@@ -1418,7 +1496,10 @@ def _build_queue(plan: dict[str, Any]) -> dict[str, Any]:
         "media_status": "UPLOADED", "media_required": "true", "media_type": media.get("media_type", "video"),
         "media_origin": "direct_reference", "duration_seconds": media.get("duration_seconds", ""),
         "aspect_ratio": media.get("aspect_ratio", ""), "rights_status": post.get("rights_status", ""), "permission_status": post.get("permission_status", ""),
-        "public_post_text": plan["public_post_text"], "validator_status": "PASS", "internal_leak_status": "PASS", "account_fit_status": "PASS",
+        "public_post_text": plan["public_post_text"],
+        "validator_status": plan.get("final_public_post_validator", "UNVERIFIED"),
+        "internal_leak_status": plan.get("internal_leak_status", "UNVERIFIED"),
+        "account_fit_status": plan.get("account_fit_status", "UNVERIFIED"),
         "transformation_type": plan.get("caption_mode", plan.get("transformation_type", "source_copyedit")),
         "source_generation_mode": plan.get("caption_mode", plan.get("transformation_type", "source_copyedit")),
         "caption_provider": plan.get("caption_provider", ""),
@@ -1430,8 +1511,21 @@ def _build_queue(plan: dict[str, Any]) -> dict[str, Any]:
         "source_copy_similarity": plan.get("semantic_alignment", {}).get("source_copy_similarity", ""),
         "recent_post_similarity": plan.get("semantic_alignment", {}).get("recent_post_similarity", ""),
         "claim_support_json": json.dumps(plan.get("claim_support", []), ensure_ascii=False),
-        **hard_gate_fields([]),
+        **hard_gate_fields(plan.get("hard_gate_reasons", [])),
         **warning_fields(json.loads(str(plan.get("soft_warning_codes") or "[]"))),
+        "content_quality_v2_version": "content_quality_v2",
+        "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+        "selected_candidate_id": str(plan.get("media_asset_id", "")),
+        "candidate_count": plan.get("candidate_attempt_count", 0),
+        "repair_count": plan.get("repair_count", 0),
+        "hard_gate_reasons": json.dumps(plan.get("hard_gate_reasons", []), ensure_ascii=False),
+        "quality_rank": plan.get("quality_rank", ""),
+        "quality_rank_components_json": json.dumps(plan.get("quality_rank_components", {}), ensure_ascii=False),
+        "content_quality_warnings_json": json.dumps(json.loads(str(plan.get("soft_warning_codes") or "[]")), ensure_ascii=False),
+        "media_understanding_status": plan.get("media_understanding_status", "VISUAL_UNVERIFIED"),
+        "generic_caption_risk": plan.get("generic_caption_risk", "UNKNOWN"),
+        "fallback_reason": "",
+        "route_status": "DRAFT_ONLY",
         "human_review_status": "UNREVIEWED",
         "content_hash": post.get("content_hash", ""),
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1694,6 +1788,9 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--json-output", default="")
     args = parser.parse_args()
+    if args.apply and not load_content_quality_v2_policy().get("publishing_enabled", False):
+        print(json.dumps({"status": "DRAFT_ONLY", "blocked_reasons": ["content_quality_v2_owner_review_required"], "would_post": False}, ensure_ascii=False))
+        return 1
     client = None
     if args.use_sheets:
         cfg = get_config()

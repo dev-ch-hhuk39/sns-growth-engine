@@ -1,0 +1,109 @@
+{
+  "schema_version": "content_quality_v2",
+  "draft_only": true,
+  "publishing_enabled": false,
+  "max_candidates_per_text_slot": 5,
+  "max_style_repairs": 1,
+  "max_media_angles_per_asset": 3,
+  "hard_gates": {
+    "preserve_existing_rights_and_permission": true,
+    "preserve_existing_account_and_platform_scope": true,
+    "preserve_duplicate_and_idempotency": true,
+    "preserve_media_technical_validation": true,
+    "preserve_internal_private_data_checks": true,
+    "preserve_serious_safety_and_legal_checks": true,
+    "block_unsupported_high_risk_claims": true,
+    "block_fabricated_first_person_experience": true,
+    "preserve_runtime_kill_switch_and_credentials": true,
+    "block_broken_japanese": true
+  },
+  "quality_ranking": {
+    "weights": {
+      "reader_value": 0.14,
+      "account_relevance": 0.13,
+      "naturalness": 0.12,
+      "persona_evidence": 0.12,
+      "topic_coherence": 0.10,
+      "media_caption_relevance": 0.14,
+      "concrete_evidence": 0.10,
+      "novelty": 0.07,
+      "cta_fit": 0.04,
+      "style_diversity": 0.04
+    },
+    "missing_component_score": 45,
+    "visual_unverified_penalty": 18,
+    "generic_caption_high_penalty": 24,
+    "warning_only": [
+      "hook_quality", "reader_value", "naturalness", "persona_fit", "topic_coherence",
+      "semantic_alignment", "media_caption_relevance", "cta_quality", "structure",
+      "style", "emoji_style", "conversationality", "diversity", "visual_unverified",
+      "generic_caption_risk"
+    ]
+  },
+  "template_phrases": {
+    "repairable_literal_lines": [
+      "確認することは一つ。",
+      "見るポイントは次の通り。",
+      "この順番で考える理由はシンプル。",
+      "次に試すこと：",
+      "整理してみましょう。"
+    ],
+    "repetition_rank_only": [
+      "僕なら",
+      "私ならまず",
+      "個人的には",
+      "これ結構大事"
+    ]
+  },
+  "accounts": {
+    "night_scout": {
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.night_scout",
+      "persona_evidence": ["field_specificity", "decision_criteria", "shop_or_work_context"],
+      "blocked_first_person_experience_patterns": ["僕が使ってみた", "僕が1週間使った", "僕の売上は", "僕が稼いだ"]
+    },
+    "liver_manager": {
+      "voice_profile_ref": "config/account_voice_profiles.json#accounts.liver_manager",
+      "persona_evidence": ["stream_problem", "why_it_happens", "one_next_stream_action"],
+      "emoji_batch_guidance": {"target_per_10_posts_min": 2, "target_per_10_posts_max": 4, "hard_gate": false},
+      "emoji_max_per_post": 1,
+      "emoji_allowed": ["☺️", "💡", "✨", "🌱", "🫶"],
+      "blocked_first_person_experience_patterns": ["私が使ってみた", "私が1週間使った", "私の売上は", "私が稼いだ"]
+    },
+    "beauty_account": {
+      "voice_profile_ref": "config/beauty_voice_profile.json#style_fingerprint",
+      "emoji_target_min": 1,
+      "emoji_target_max": 4,
+      "emoji_repair_once_when_zero": true,
+      "emoji_repair_is_hard_gate": false,
+      "emoji_allowed": ["🥺", "✨", "🤍", "🫶🏻", "😭", "💭"],
+      "blocked_first_person_experience_patterns": ["私が使ってみた", "私が1週間使った", "私も1週間使った", "私が使い続けた", "私の肌が治った"]
+    }
+  },
+  "media_understanding": {
+    "visual_status_requires_vision_evidence": true,
+    "transcript_alone_must_not_set_visual_summary": true,
+    "unverified_visual_state": "VISUAL_UNVERIFIED",
+    "required_package_fields": [
+      "media_asset_id", "account_id", "media_type", "visual_summary", "visible_people_or_objects",
+      "visible_action", "spoken_content_summary", "transcript_confidence", "visual_confidence",
+      "key_moment", "main_topic", "factual_claims", "uncertain_claims", "source_creator_context",
+      "what_viewer_actually_sees", "what_viewer_actually_hears"
+    ]
+  },
+  "draft_pack": {
+    "text_per_account": 20,
+    "media_packages_per_account": 10,
+    "status": "DRAFT_ONLY",
+    "never_write_ready": true
+  },
+  "pairwise_regression": [
+    {"id": "LM-03-vs-LM-01", "account_id": "liver_manager", "preferred": "LM-03", "lower_ranked": "LM-01", "reason": "problem-to-next-stream-action is more concrete than generic advice"},
+    {"id": "NS-08-vs-NS-04", "account_id": "night_scout", "preferred": "NS-08", "lower_ranked": "NS-04", "reason": "specific workplace observation outranks boilerplate/repeated template"},
+    {"id": "BA-07-vs-BA-03", "account_id": "beauty_account", "preferred": "BA-07", "lower_ranked": "BA-03", "reason": "human, topic-specific voice outranks generic or mechanically styled copy"}
+  ],
+  "media_regression": [
+    {"id": "NS-M03", "account_id": "night_scout", "expected_warning": "GENERIC_CAPTION_RISK_HIGH"},
+    {"id": "LM-M02", "account_id": "liver_manager", "expected_warning": "VISUAL_UNVERIFIED"},
+    {"id": "BA-M01", "account_id": "beauty_account", "expected_warning": "GENERIC_CAPTION_RISK_HIGH"}
+  ]
+}

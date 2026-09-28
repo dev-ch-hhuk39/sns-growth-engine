@@ -76,6 +76,8 @@ class OfflineReserveTests(unittest.TestCase):
                 "target_account_id": account, "platform": "threads", "status": "WAITING_REVIEW",
                 "content_type": "original_text", "generation_mode": "original_text",
                 "public_post_text": text,
+                "content_quality_v2_version": "content_quality_v2",
+                "content_quality_v2_status": "DRAFT_ONLY_RANKED",
                 "generation_policy_json": json.dumps({"offline_original": evidence(account, text)}),
             }
 
@@ -91,6 +93,20 @@ class OfflineReserveTests(unittest.TestCase):
                 self.assertEqual(hybrid_ai_gate_passed(persisted, {}), (True, "pass"))
                 self.assertEqual(row["status"], "WAITING_REVIEW")
 
+    def test_legacy_editorial_status_columns_do_not_override_v2_hard_safety(self):
+        row = {
+            **self.rows["night_scout"],
+            "validator_status": "BLOCKED",
+            "account_fit_status": "BLOCKED",
+            "internal_leak_status": "PASS",
+        }
+        result = HybridAiGate(NoProvider()).evaluate(row, {}, recent_posts=[])
+        self.assertEqual(result.status, "PASS", result.blocked_reasons)
+        row["internal_leak_status"] = "BLOCKED"
+        blocked = HybridAiGate(NoProvider()).evaluate(row, {}, recent_posts=[])
+        self.assertEqual(blocked.status, "BLOCKED")
+        self.assertIn("persisted_internal_leak_status_not_pass", blocked.blocked_reasons)
+
     def test_scope_and_text_tampering_block(self):
         row = self.rows["night_scout"]
         for update in (
@@ -99,7 +115,6 @@ class OfflineReserveTests(unittest.TestCase):
             {"media_required": "true"}, {"platform": "x"},
             {"content_type": "pdca_text"}, {"generation_mode": "reference_text"},
             {"target_account_id": "beauty_account"}, {"repost_prohibited": "true"},
-            {"validator_status": "BLOCKED"},
         ):
             with self.subTest(update=update):
                 result = HybridAiGate(NoProvider()).evaluate({**row, **update}, {}, recent_posts=[])
@@ -136,7 +151,7 @@ class OfflineReserveTests(unittest.TestCase):
             row['generation_policy_json'] = merge_gate_audit(row['generation_policy_json'], result)
             approval = evaluate_item(queue=row, draft=rows['drafts'][0], derivative=rows['social_derivatives'][0],
                 scores_by_ref={}, existing_texts=[], rules=rules_for_account(load_rules(), account), source_context={})
-            self.assertEqual(approval['status'], 'APPROVABLE', approval['reasons'])
+            self.assertEqual(approval['status'], 'DRAFT_ONLY', approval['reasons'])
 
     def test_beauty_measured_metrics_can_enter_account_scoped_pdca(self):
         queue = build_fallback_generation_rows(
@@ -165,31 +180,19 @@ class OfflineReserveTests(unittest.TestCase):
         self.assertEqual(observations[0]["features"]["primary_topic"], queue["primary_topic"])
         self.assertEqual(build_observations([posted], [measured], account_id="night_scout"), [])
 
-    def test_canonical_persistence_and_readback_failure(self):
+    def test_apply_is_draft_only_and_never_writes_sheets(self):
         client = MemoryClient()
-        def read(client, table, **kwargs):
-            if kwargs.get('preserve_strings'):
-                from sheets_record_reader import records_from_values
-                return records_from_values(client.tables[table].get_all_values())
-            return client.tables[table].get_all_records() if table in client.tables else []
-        with patch('sheets_record_reader.read_records_safely', side_effect=read):
-            plan = run_offline_original_generation('night_scout', 1, apply=False, slot_id='ns_1600_original',
-                schedule_date_jst='2026-09-16', client=client)
-            self.assertEqual(plan['status'], 'PLAN_ONLY')
-            self.assertEqual(client.tables, {})
-            saved = run_offline_original_generation('night_scout', 1, apply=True, slot_id='ns_1600_original',
-                schedule_date_jst='2026-09-16', client=client)
-            self.assertTrue(saved['read_after_write'])
-            self.assertEqual(set(client.tables), {'drafts', 'social_derivatives', 'queue'})
-            self.assertEqual(client.tables['queue'].rows[0]['status'], 'WAITING_REVIEW')
-        broken = MemoryClient()
-        def corrupt_read(client, table, **kwargs):
-            rows = read(client, table, **kwargs)
-            return [{**row, 'public_post_text': 'corrupted'} for row in rows] if table == 'queue' else rows
-        with patch('sheets_record_reader.read_records_safely', side_effect=corrupt_read):
-            with self.assertRaisesRegex(RuntimeError, 'read_after_write_failed:queue'):
-                run_offline_original_generation('night_scout', 1, apply=True, slot_id='ns_1600_original',
-                    schedule_date_jst='2026-09-16', client=broken)
+        plan = run_offline_original_generation('night_scout', 1, apply=False, slot_id='ns_1600_original',
+            schedule_date_jst='2026-09-16', client=client)
+        self.assertEqual(plan['status'], 'PLAN_ONLY')
+        self.assertFalse(client.tables.get('drafts'))
+        self.assertFalse(client.tables.get('social_derivatives'))
+        saved = run_offline_original_generation('night_scout', 1, apply=True, slot_id='ns_1600_original',
+            schedule_date_jst='2026-09-16', client=client)
+        self.assertEqual(saved['status'], 'DRAFT_ONLY')
+        self.assertFalse(saved.get('read_after_write', False))
+        self.assertFalse(saved['would_post'])
+        self.assertTrue(all(not sheet.rows for sheet in client.tables.values()))
 
     def test_thirty_independent_safe_originals_per_account(self):
         for account in ACCOUNTS:

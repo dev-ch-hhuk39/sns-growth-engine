@@ -84,10 +84,12 @@ class BufferedGenerationTests(unittest.TestCase):
             return {"public_post_text": text, "grounding_summary": {"quality_topic": "transfer"}}
         with patch.dict(os.environ, {"BUFFERED_PREPARATION": "true"}), \
              patch("generate_threads_ideas_from_references.buffered_original_candidate",
-                   side_effect=[result("絶対" + good), result(good)]) as generate:
-            rows = build_fallback_generation_rows(account_id="night_scout", top_n=1)
-        self.assertEqual(generate.call_count, 2)
-        self.assertIn("risk_score_above_max", generate.call_args.kwargs["rejected_candidate"]["blocked_reasons"])
+                   side_effect=[result("絶対" + good), result(good), None, None, None]) as generate, \
+             patch("generate_threads_ideas_from_references.generate_production_post", return_value={}):
+            with patch("generate_threads_ideas_from_references.FALLBACK_ATTEMPTS_PER_SLOT", 5):
+                rows = build_fallback_generation_rows(account_id="night_scout", top_n=1)
+        self.assertEqual(generate.call_count, 5)
+        self.assertIn("risk_score_above_max", generate.call_args_list[1].kwargs["rejected_candidate"]["blocked_reasons"])
         self.assertEqual(len(rows["queue"]), 1)
         self.assertEqual(rows["queue"][0]["public_post_text"], good)
         self.assertEqual(rows["queue"][0]["status"], "WAITING_REVIEW")

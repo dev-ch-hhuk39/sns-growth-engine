@@ -205,6 +205,55 @@ def evaluate_item(
     s_score, s_parts = safety_score(text, queue, rules)
     public_validation = final_public_post_validator(text, account_id)
     voice_validation = dict(public_validation.get("voice_persona_check", {}))
+    v2_draft_only = (
+        str(queue.get("content_quality_v2_version", "")).strip() == "content_quality_v2"
+        and str(queue.get("content_quality_v2_status", "")).upper().startswith("DRAFT_ONLY")
+    )
+    v2_hard_reasons: list[str] = []
+    if v2_draft_only:
+        from generation.content_quality_v2 import hard_gate as content_v2_hard_gate
+        v2_gate = content_v2_hard_gate(
+            {**queue, "public_post_text": text},
+            account_id=account_id,
+            public_validation=public_validation,
+        )
+        v2_hard_reasons = list(v2_gate.get("hard_gate_reasons", []))
+        identity_reasons = []
+        if account_id not in ALLOWED_ACCOUNTS:
+            identity_reasons.append("account_not_allowed")
+        if platform != "threads":
+            identity_reasons.append("platform_not_threads")
+        if status != ELIGIBLE_STATUS:
+            identity_reasons.append("status_not_waiting_review")
+        if not text.strip():
+            identity_reasons.append("public_post_text_missing")
+        if near_duplicate(text, existing_texts):
+            identity_reasons.append("duplicate_or_near_duplicate")
+        hard_reasons = sorted(set(v2_hard_reasons + identity_reasons))
+        return {
+            "queue_id": queue.get("queue_id", ""),
+            "account_id": account_id,
+            "status": "REJECTED" if hard_reasons else "DRAFT_ONLY",
+            "reasons": hard_reasons,
+            "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+            "quality_score": q_score,
+            "safety_score": s_score,
+            "risk_score": r_score,
+            "public_post_quality_score": public_validation["public_post_quality_score"],
+            "internal_leak_score": public_validation["internal_leak_check"]["internal_leak_score"],
+            "reader_value_score": public_validation["reader_value_score"],
+            "naturalness_score": public_validation["naturalness_score"],
+            "account_fit_score": public_validation["account_fit_score"],
+            "cta_pressure_score": public_validation["cta_pressure_score"],
+            "final_public_post_validator": public_validation["status"],
+            "voice_persona_status": voice_validation.get("status", "BLOCKED"),
+            "voice_persona_score": voice_validation.get("score", 0),
+            "score_total": q_score + s_score - r_score,
+            "quality_parts": q_parts,
+            "safety_parts": s_parts,
+            "risk_parts": r_parts,
+            "text_length": len(text),
+        }
     # The public validator is the stronger reader-facing quality contract. The
     # lightweight heuristic remains diagnostic and cannot reject a post that
     # already passes the public-quality evaluation.
@@ -239,16 +288,18 @@ def evaluate_item(
         reasons.append("third_party_media_not_allowed")
     if _contains_any(text, list(rules.get("blocked_terms", []))):
         reasons.append("blocked_terms")
-    if public_validation["status"] != "PASS":
+    if v2_draft_only:
+        reasons.extend(v2_hard_reasons)
+    elif public_validation["status"] != "PASS":
         reasons.append("final_public_post_validator_blocked")
         reasons.extend(str(r) for r in public_validation["blocked_reasons"])
-    if voice_validation.get("status") != "VOICE_PERSONA_PASS":
+    if not v2_draft_only and voice_validation.get("status") != "VOICE_PERSONA_PASS":
         reasons.append("voice_persona_not_pass")
         reasons.extend(str(r) for r in voice_validation.get("reasons", []))
 
     # New production-composition candidates carry an auditable generation
     # contract. Once present, every field must pass before AUTO_READY.
-    if str(queue.get("feature_schema_version", "")).strip():
+    if not v2_draft_only and str(queue.get("feature_schema_version", "")).strip():
         if str(queue.get("feature_schema_version", "")) != "post_features_v1":
             reasons.append("feature_schema_version_unsupported")
         if str(queue.get("quality_gate_version", "")) != "generation_quality_v3":
@@ -269,19 +320,19 @@ def evaluate_item(
             reasons.append("shared_hook_detected")
         if str(queue.get("shared_closing_detected", "")).lower() in {"true", "1", "yes"}:
             reasons.append("shared_closing_detected")
-    if q_score < int(rules.get("min_quality_score", 75)):
+    if not v2_draft_only and q_score < int(rules.get("min_quality_score", 75)):
         reasons.append("quality_below_threshold")
     if s_score < int(rules.get("min_safety_score", 90)):
         reasons.append("safety_below_threshold")
     if r_score > int(rules.get("max_risk_score", 10)):
         reasons.append("risk_above_threshold")
-    if int(public_validation["reader_value_score"]) < int(rules.get("min_reader_value_score", 80)):
+    if not v2_draft_only and int(public_validation["reader_value_score"]) < int(rules.get("min_reader_value_score", 80)):
         reasons.append("reader_value_below_threshold")
-    if int(public_validation["naturalness_score"]) < int(rules.get("min_naturalness_score", 80)):
+    if not v2_draft_only and int(public_validation["naturalness_score"]) < int(rules.get("min_naturalness_score", 80)):
         reasons.append("naturalness_below_threshold")
-    if int(public_validation["account_fit_score"]) < int(rules.get("min_account_fit_score", 80)):
+    if not v2_draft_only and int(public_validation["account_fit_score"]) < int(rules.get("min_account_fit_score", 80)):
         reasons.append("account_fit_below_threshold")
-    if int(public_validation["cta_pressure_score"]) > int(rules.get("max_cta_pressure_score", 30)):
+    if not v2_draft_only and int(public_validation["cta_pressure_score"]) > int(rules.get("max_cta_pressure_score", 30)):
         reasons.append("cta_pressure_above_threshold")
     if near_duplicate(text, existing_texts):
         reasons.append("duplicate_or_near_duplicate")
@@ -289,7 +340,8 @@ def evaluate_item(
     return {
         "queue_id": queue.get("queue_id", ""),
         "account_id": account_id,
-        "status": "APPROVABLE" if not reasons else "REJECTED",
+        "status": ("DRAFT_ONLY" if v2_draft_only and not reasons else
+                   "APPROVABLE" if not reasons else "REJECTED"),
         "reasons": sorted(set(reasons)),
         "quality_score": q_score,
         "safety_score": s_score,
@@ -314,6 +366,7 @@ def evaluate_item(
         "safety_parts": s_parts,
         "risk_parts": r_parts,
         "text_length": len(text),
+        "content_quality_v2_status": "DRAFT_ONLY_RANKED" if v2_draft_only else "",
     }
 
 
