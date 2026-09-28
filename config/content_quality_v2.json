@@ -91,8 +91,8 @@
     ]
   },
   "draft_pack": {
-    "text_per_account": 20,
-    "media_packages_per_account": 10,
+    "text_per_account": 5,
+    "media_packages_per_account": 5,
     "status": "DRAFT_ONLY",
     "never_write_ready": true
   },

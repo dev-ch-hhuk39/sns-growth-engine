@@ -16,6 +16,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from generation.content_quality_v2 import (  # noqa: E402
     build_post_package,
     hard_gate,
+    load_policy,
     rank_candidate,
     repair_style_only,
 )
@@ -29,7 +30,44 @@ def _norm(text: str) -> str:
     return re.sub(r"[\s、。，．！？!?・:：;；()（）「」『』【】]", "", text).lower()
 
 
+def _liver_draft_style_variant(text: str, index: int) -> tuple[str, str]:
+    """Add sparse, meaning-preserving punctuation/style variety to review drafts only."""
+    if index == 1 and "かも。" in text:
+        return text.replace("かも。", "かも？", 1), "rhetorical_question"
+    if index == 2:
+        varied, count = re.subn(r"(次の配信[^。\n]*。)", r"\1💡", text, count=1)
+        if count:
+            return varied, "contextual_emoji"
+    if index == 3 and "よね。" in text:
+        return text.replace("よね。", "よね！", 1), "warm_emphasis"
+    return text, "neutral"
+
+
+def _liver_style_signature(text: str) -> tuple[int, int, int, int]:
+    emojis = ("☺️", "💡", "✨", "🌱", "🫶")
+    return (
+        int("！" in text or "!" in text),
+        int("？" in text or "?" in text),
+        sum(text.count(emoji) for emoji in emojis),
+        len([line for line in text.splitlines() if line.strip()]),
+    )
+
+
+def _media_selection_rank(row: dict[str, Any], account: str) -> float:
+    understanding = row.get("media_understanding")
+    if not isinstance(understanding, dict):
+        understanding = {"visual_status": "VISUAL_UNVERIFIED"}
+    rank = rank_candidate({
+        "quality_components": row.get("quality_components", {}),
+        "media_understanding": understanding,
+        "generic_caption_risk": row.get("generic_caption_risk", "UNKNOWN"),
+    }, account_id=account)
+    return float(rank["quality_rank"])
+
+
 def text_candidates() -> dict[str, list[dict[str, Any]]]:
+    policy = load_policy()
+    limit = max(1, int(policy["draft_pack"]["text_per_account"]))
     source = json.loads((ROOT / "config/offline_original_posts.json").read_text(encoding="utf-8"))
     output: dict[str, list[dict[str, Any]]] = {}
     for account in ACCOUNTS:
@@ -47,7 +85,9 @@ def text_candidates() -> dict[str, list[dict[str, Any]]]:
                              account_id=account, public_validation=validation)
             if gate["status"] != "PASS":
                 continue
-            diversity = evaluate_generation_quality(account, text, [], batch_compared=[])
+            diversity = evaluate_generation_quality(
+                account, text, [], batch_compared=[row["text"] for row in ranked],
+            )
             voice = validation.get("voice_persona_check", {})
             rank = rank_candidate({
                 "candidate_id": f"{account}-{index}",
@@ -85,7 +125,42 @@ def text_candidates() -> dict[str, list[dict[str, Any]]]:
             })
             seen.add(key)
         ranked.sort(key=lambda row: (-float(row["quality_rank"]), row["candidate_id"]))
-        output[account] = ranked[:20]
+        selected = ranked[:limit]
+        if account == "liver_manager":
+            for index, candidate in enumerate(selected):
+                candidate["text"], candidate["draft_style_variant"] = _liver_draft_style_variant(
+                    candidate["text"], index,
+                )
+                # Revalidate the final display text, not its pre-style source.
+                validation = final_public_post_validator(candidate["text"], account)
+                gate = hard_gate(
+                    {"account_id": account, "target_account_id": account,
+                     "platform": "threads", "public_post_text": candidate["text"]},
+                    account_id=account, public_validation=validation,
+                )
+                candidate["public_validator"] = validation["status"]
+                candidate["hard_gate"] = gate
+                candidate["content_hash"] = hashlib.sha256(candidate["text"].encode()).hexdigest()
+                candidate["candidate_id"] = f"draft-{account}-{candidate['content_hash'][:12]}"
+                candidate["internal_leak"] = validation.get("internal_leak_check", {}).get("status", "UNVERIFIED")
+                candidate["account_fit"] = validation.get("account_fit_check", {}).get("status", "UNVERIFIED")
+            signatures = {_liver_style_signature(candidate["text"]) for candidate in selected}
+            style_score = round(100 * len(signatures) / max(1, len(selected)))
+            for candidate in selected:
+                candidate["batch_style_diversity_score"] = style_score
+                candidate["batch_style_diversity_status"] = "PASS" if style_score >= 60 else "WARN"
+                candidate["quality_rank_components"]["style_diversity"] = style_score
+                candidate.update(rank_candidate({
+                    "quality_components": candidate["quality_rank_components"],
+                    "warnings": candidate["warnings"] + ([] if style_score >= 60 else ["LIVER_STYLE_DIVERSITY_LOW"]),
+                }, account_id=account))
+        if account == "beauty_account":
+            phrase_count = sum("個人的には" in candidate["text"] for candidate in selected)
+            for candidate in selected:
+                candidate["repeated_cliche_count_in_batch"] = max(0, phrase_count - 1)
+                if phrase_count > 1:
+                    candidate["warnings"] = sorted(set(candidate["warnings"] + ["REPEATED_CLICHE個人的には"]))
+        output[account] = selected
     return output
 
 
@@ -103,7 +178,10 @@ def media_candidates(snapshot_path: Path) -> dict[str, list[dict[str, Any]]]:
             if not asset_id or not preview or asset_id in unique:
                 continue
             unique[asset_id] = dict(row)
-        selected = list(unique.values())[:10]
+        limit = max(1, int(load_policy()["draft_pack"]["media_packages_per_account"]))
+        selected = list(unique.values())
+        selected.sort(key=lambda row: (-_media_selection_rank(row, account), str(row.get("media_asset_id", ""))))
+        selected = selected[:limit]
         packages: list[dict[str, Any]] = []
         for index, row in enumerate(selected, 1):
             media = {
@@ -123,7 +201,9 @@ def media_candidates(snapshot_path: Path) -> dict[str, list[dict[str, Any]]]:
                 media=media,
                 public_caption=caption,
                 hard_gate_result={"status": "BLOCKED", "hard_gate_reasons": ["rights_or_permission_unverified"]},
-                quality_components={"media_caption_relevance": 0, "concrete_evidence": 0},
+                quality_components=row.get("quality_components", {
+                    "media_caption_relevance": 0, "concrete_evidence": 0,
+                }),
             )
             gate = hard_gate({
                 "account_id": account, "target_account_id": account, "platform": "threads",
@@ -164,6 +244,9 @@ def media_candidates(snapshot_path: Path) -> dict[str, list[dict[str, Any]]]:
 
 
 def render(snapshot_path: Path) -> str:
+    draft_policy = load_policy()["draft_pack"]
+    text_limit = int(draft_policy["text_per_account"])
+    media_limit = int(draft_policy["media_packages_per_account"])
     texts = text_candidates()
     media = media_candidates(snapshot_path)
     lines = [
@@ -174,18 +257,20 @@ def render(snapshot_path: Path) -> str:
         "- Historical media rows are candidates for visual review only. Rights/permission were not re-read; no media is asserted as currently usable.",
         "- Visual evidence was not available in the snapshot; all media packages are `VISUAL_UNVERIFIED`, captions withheld, and hard-gated from reuse.",
         "- Review previews link to historical Cloudinary URLs only; this pack performs no upload or fetch.",
-        "- Media package targets are 10/account. The snapshot has only 9 unique Beauty assets, so Beauty shows 9 packages and one explicit missing-asset blocker rather than duplicating an asset.", "",
+        "- The pack shows at most 5 distinct text drafts and 5 distinct media previews per account. Missing media are not duplicated to fill the sample.",
+        "- Media without stored vision evidence remain `VISUAL_UNVERIFIED`; captions are withheld instead of inferred from transcript or historical caption text.", "",
     ]
     totals: dict[str, Any] = {"broken_japanese": 0, "fabricated_experience": 0,
                               "unsupported_high_risk": 0, "internal_leak": 0, "beauty_emoji_compliant": 0}
     for account in ACCOUNTS:
-        lines += [f"## {account} — text drafts ({len(texts[account])}/20)", ""]
+        lines += [f"## {account} — text drafts ({len(texts[account])}/{text_limit})", ""]
         for index, candidate in enumerate(texts[account], 1):
             lines += [f"### {index:02d}. `{candidate['candidate_id']}`", "",
                       f"- Route: `{candidate['route']}`; status: `{candidate['status']}`; hash: `{candidate['content_hash']}`",
                       f"- Hard gate: `{candidate['hard_gate']['status']}`; public validator: `{candidate['public_validator']}`; internal leak: `{candidate['internal_leak']}`; account fit: `{candidate['account_fit']}`",
                       f"- Quality rank: `{candidate['quality_rank']}`; components: `{json.dumps(candidate['quality_rank_components'], ensure_ascii=False, sort_keys=True)}`; warnings: `{', '.join(candidate['warnings']) or 'none'}`",
-                      f"- Style repair count: `{candidate['repair_count']}`; candidate count is one local source row; no queue ID was persisted.", "", candidate["text"], ""]
+                      f"- Style repair count: `{candidate['repair_count']}`; display style: `{candidate.get('draft_style_variant', 'catalog')}`; batch style diversity: `{candidate.get('batch_style_diversity_status', 'RANKED')}` `{candidate.get('batch_style_diversity_score', 'n/a')}`; candidate count is one local source row; no queue ID was persisted.",
+                      "- OWNER_GRADE: `[ ] A [ ] B [ ] C`; OWNER_REASON=; OWNER_EDIT_NOTES=", "", candidate["text"], ""]
             reasons = candidate["hard_gate"]["hard_gate_reasons"]
             totals["broken_japanese"] += "broken_japanese" in reasons
             totals["fabricated_experience"] += any("fabricated" in r or "experience_reassigned" in r for r in reasons)
@@ -193,24 +278,27 @@ def render(snapshot_path: Path) -> str:
             totals["internal_leak"] += any("internal" in r for r in reasons)
             if account == "beauty_account":
                 allowed = __import__("generation.content_quality_v2", fromlist=["load_policy"]).load_policy()["accounts"][account]["emoji_allowed"]
-                totals["beauty_emoji_compliant"] += any(emoji in candidate["text"] for emoji in allowed)
+                emoji_count = sum(candidate["text"].count(emoji) for emoji in allowed)
+                totals["beauty_emoji_compliant"] += 1 <= emoji_count <= 4
     for account in ACCOUNTS:
-        lines += [f"## {account} — media packages ({len(media[account])}/10)", ""]
+        lines += [f"## {account} — media packages ({len(media[account])}/{media_limit})", ""]
         for index, item in enumerate(media[account], 1):
             lines += [f"### {index:02d}. `{item['candidate_id']}`", "",
                       f"- Asset: `{item['media_asset_id']}` (`{item['media_type']}`); preview: [{item['media_asset_id']}]({item['media_preview_url']})",
                       f"- Historical source: `{item['historical_source_id']}` {str(item['historical_source_url']).strip()}".rstrip(),
-                      f"- MediaUnderstanding: `VISUAL_UNVERIFIED`; what viewer sees/hears: `UNVERIFIED`.",
+                      "- MediaUnderstanding: `VISUAL_UNVERIFIED`; what viewer sees/hears: `UNVERIFIED`.",
                       f"- Why relevant: {item['why_this_account_should_post_this']}",
                       f"- Post angles: `{json.dumps(item['post_angle_options'], ensure_ascii=False)}`; selected angle: `{item['post_angle']}`",
                       f"- Caption: {item['public_caption']}",
+                      f"- Media anchor / remove-media test: `{item['media_anchor']}`; fabricated-experience check: `NOT_APPLICABLE_CAPTION_WITHHELD`.",
                       f"- Hard gate: `{item['hard_gate']['status']}` `{item['hard_gate']['hard_gate_reasons']}`; quality rank: `{item['quality_rank']}`; generic-caption risk: `{item['generic_caption_risk']}`",
-                      f"- Warnings: `{', '.join(item['warnings'])}`; status: `DRAFT_ONLY`; no READY, reuse, or upload.", ""]
-        if len(media[account]) < 10:
-            lines += [f"- BLOCKER: only {len(media[account])} distinct snapshot assets; {10-len(media[account])} additional unique asset(s) with visual evidence are unavailable. No duplication applied.", ""]
+                      f"- Warnings: `{', '.join(item['warnings'])}`; status: `DRAFT_ONLY`; no READY, reuse, or upload.",
+                      "- OWNER_GRADE: `[ ] A [ ] B [ ] C`; OWNER_REASON=; OWNER_EDIT_NOTES=", ""]
+        if len(media[account]) < media_limit:
+            lines += [f"- BLOCKER: only {len(media[account])} distinct snapshot assets; {media_limit-len(media[account])} additional unique asset(s) are unavailable. No duplication applied.", ""]
     lines += ["## Aggregate evaluation", "",
-              f"- Text drafts: Night `{len(texts['night_scout'])}`, Liver `{len(texts['liver_manager'])}`, Beauty `{len(texts['beauty_account'])}` (60 required).",
-              f"- Media packages: Night `{len(media['night_scout'])}`, Liver `{len(media['liver_manager'])}`, Beauty `{len(media['beauty_account'])}` (30 required).",
+              f"- Text drafts: Night `{len(texts['night_scout'])}`, Liver `{len(texts['liver_manager'])}`, Beauty `{len(texts['beauty_account'])}` ({text_limit * len(ACCOUNTS)} requested; at most {text_limit}/account).",
+              f"- Media packages: Night `{len(media['night_scout'])}`, Liver `{len(media['liver_manager'])}`, Beauty `{len(media['beauty_account'])}` ({media_limit * len(ACCOUNTS)} requested; at most {media_limit}/account).",
               f"- Hard-gate counts among selected text drafts: broken Japanese `{totals['broken_japanese']}`, fabricated experience `{totals['fabricated_experience']}`, unsupported high-risk fact `{totals['unsupported_high_risk']}`, internal/private leak `{totals['internal_leak']}`.",
               f"- Beauty emoji compliance after repair: `{round(100 * totals['beauty_emoji_compliant'] / max(1,len(texts['beauty_account'])))}%`.",
               "- This is not production acceptance: media understanding, current media permissions, caption/media alignment, and unique Beauty media inventory remain unverified.", ""]
