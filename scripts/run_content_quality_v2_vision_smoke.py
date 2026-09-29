@@ -12,15 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from acquisition.models import SourcePostBundle  # noqa: E402
 from build_media_first_review_pack import inspect_preview, selected_previews  # noqa: E402
-from generation.content_quality_v2 import generate_media_first_caption  # noqa: E402
+from generation.content_quality_v2 import generate_media_first_caption, prepare_media_context  # noqa: E402
 from generation.source_grounded_caption import (  # noqa: E402
-    GitHubModelsGroundedProvider, SourceGroundedCaptionService, account_rules,
+    SourceGroundedCaptionService, account_rules,
 )
+from gemini_hybrid_client import GeminiHybridClient, provider_error_evidence
+from evidence_context_caption import PrivacyBoundedGeminiGroundedProvider
 from public_post_quality import voice_persona_validation  # noqa: E402
 
 ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
 PRODUCTION_SECRETS = ("SPREADSHEET_ID", "SNS_MASTER_SHEET_ID", "SA_JSON_BASE64", "GCP_SA_JSON_BASE64",
-                      "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "GEMINI_API_KEY", "THREADS_ACCESS_TOKEN")
+                      "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "GITHUB_TOKEN", "THREADS_ACCESS_TOKEN")
 
 
 def smoke_previews(document: str) -> list[dict]:
@@ -29,6 +31,31 @@ def smoke_previews(document: str) -> list[dict]:
     if len({row["media_asset_id"] for row in result}) != 3:
         raise ValueError("three_distinct_previews_required")
     return result
+
+
+def relevance_review(media: dict, contract: dict, client: GeminiHybridClient) -> dict:
+    context = prepare_media_context(media, account_id=media["account_id"])
+    if context["visual_status"] != "VISUAL_VERIFIED":
+        return {"status": "RELEVANCE_UNVERIFIED"}
+    schema = {"type": "object", "properties": {
+        **{key: {"type": "string"} for key in ("account_id", "reason", "audience_need", "content_pillar")},
+        "status": {"type": "string", "enum": ["PASS", "RELEVANCE_UNVERIFIED"]},
+        "anchor_fact_types": {"type": "array", "items": {"type": "string", "enum": [
+            "visible_action", "key_moment", "visible_people_or_objects", "visible_text"]}},
+    }, "required": ["account_id", "status", "reason", "audience_need", "content_pillar", "anchor_fact_types"]}
+    prompt = (
+        "検証済みの視覚事実と対象アカウントの読者・content pillarだけから関連性を判定。"
+        "事実や音声、発言、効果を補完しない。ジャンルや人物の見た目だけではPASS不可。"
+        "Nightは夜職女性の店・接客・条件・働き方の具体的な判断材料、"
+        "Liverは次回配信で変えられる具体的な配信行動、Beautyは20〜30代女性の美容判断に役立つこと。"
+        "不明や対象外ならRELEVANCE_UNVERIFIED。無理に関連付けない。JSONのみ。\n"
+        + json.dumps({"account_contract": contract, "visual_facts": context["visual_facts"]}, ensure_ascii=False))
+    try:
+        return client.generate_json(model=os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
+                                    prompt=prompt, schema=schema, operation="vision_smoke_relevance",
+                                    account_id=media["account_id"])["data"]
+    except RuntimeError as exc:
+        return {"status": "RELEVANCE_UNVERIFIED", **provider_error_evidence(exc)}
 
 
 def build_package(row: dict, directory: Path) -> dict:
@@ -47,12 +74,14 @@ def build_package(row: dict, directory: Path) -> dict:
              "rights_status": "unknown", "permission_status": "unverified", "strict_relevance_review": True,
              "visual_evidence": {"status": "UNDERSTOOD" if vision.get("status") == "PASS" else "UNVERIFIED",
                                  "media_asset_id": row["media_asset_id"], "content_hash": inspected.get("content_hash", ""),
-                                 "provider": vision.get("provider", "github_models_vision"),
+                                 "provider": vision.get("provider", "gemini"),
                                  "frame_hashes": [frame["sha256"] for frame in inspected.get("frames", [])]}}
     bundle = SourcePostBundle(source_post_id="", source_id="", target_account_id=account,
                               platform="", profile_url="", canonical_post_url="", external_post_id="",
                               original_post_text="", published_at="")
-    service = SourceGroundedCaptionService(GitHubModelsGroundedProvider(),
+    client = GeminiHybridClient(max_attempts=1)
+    media["account_relevance_review"] = relevance_review(media, contract, client)
+    service = SourceGroundedCaptionService(PrivacyBoundedGeminiGroundedProvider(client=client),
                                           allow_deterministic_fallback=False, retry_primary_on_alignment_failure=False)
     result = generate_media_first_caption(
         media=media, account_id=account, account_content_contract=contract, recent_posts=[],
@@ -68,13 +97,17 @@ def summary(packages: list[dict]) -> dict:
     verified = sum(
         p["vision"].get("status") == "PASS"
         and p["result"].get("status") == "PASS"
-        and p["result"].get("provider_name") == GitHubModelsGroundedProvider.provider_name
+        and p["result"].get("provider_name") == PrivacyBoundedGeminiGroundedProvider.provider_name
         and p["result"].get("provider_status") == "PASS"
         and bool(p["result"].get("public_post_text"))
         and p["result"].get("remove_media_test", {}).get("status") == "PASS"
         and p["result"].get("fabricated_experience_check", {}).get("status") == "PASS"
         for p in packages)
     return {
+        "VISION_VERIFIED_COUNT": sum(p["result"].get("media_context", {}).get("visual_status") == "VISUAL_VERIFIED" for p in packages),
+        "RELEVANCE_PASS_COUNT": sum(p["result"].get("account_relevance", {}).get("status") == "PASS" for p in packages),
+        "CAPTION_GENERATED_COUNT": sum(bool(p["result"].get("public_post_text")) for p in packages),
+        "GITHUB_MODELS_CALLS": 0,
         "VERIFIED_MEDIA_PACKAGE_COUNT": verified,
         "FABRICATED_EXPERIENCE_COUNT": sum(p["result"].get("fabricated_experience_check", {}).get("status") == "BLOCKED" for p in packages),
         "GENERIC_CAPTION_SELECTED_COUNT": sum(bool(p["result"].get("public_post_text")) and p["result"].get("remove_media_test", {}).get("generic_caption_risk") == "HIGH" for p in packages),
@@ -91,13 +124,18 @@ def render(packages: list[dict]) -> str:
         anchor = result.get("remove_media_test", {})
         fields = {
             "ACCOUNT": package["account_id"], "MEDIA_ASSET_ID": package["media_asset_id"],
-            "MEDIA_PREVIEW": package["preview_url"], "VISION_PROVIDER": vision.get("provider", "github_models_vision"),
+            "MEDIA_PREVIEW": package["preview_url"], "VISION_PROVIDER": vision.get("provider", "gemini"),
+            "VISION_MODEL": vision.get("model", ""),
+            "HTTP_STATUS": vision.get("http_status", ""),
+            "PROVIDER_ERROR_TYPE": vision.get("provider_error_type", ""),
+            "RESPONSE_SCHEMA_STATUS": vision.get("response_schema_status", "NOT_RUN"),
             "VISION_STATUS": vision.get("status", "NOT_RUN"), "REPRESENTATIVE_FRAME_HASHES": package["frames"],
             **{key.upper(): vision.get(key, "UNVERIFIED") for key in ("visual_summary", "visible_action", "key_moment", "main_topic")},
             "VISUAL_FACTS": context.get("visual_facts", []),
             "VISUAL_EVIDENCE_STATUS": context.get("visual_evidence", {}).get("status", "UNVERIFIED"),
             "EDITORIAL_DRAFT_ELIGIBILITY": result.get("editorial_draft_eligibility", {}),
             "PUBLISH_ELIGIBILITY": result.get("publish_eligibility", {}),
+            "RELEVANCE_STATUS": result.get("account_relevance", {}).get("status", "NOT_RUN"),
             "WHY_THIS_ACCOUNT_SHOULD_POST_THIS": result.get("account_relevance", {}).get("why_this_account_should_post_this", "UNVERIFIED"),
             "POST_ANGLE_OPTIONS": result.get("post_angles", {}).get("options", []),
             "SELECTED_ANGLE": result.get("post_angles", {}).get("selected", {}),
@@ -132,7 +170,7 @@ def main() -> int:
                 "ALLOW_MEDIA_POSTS", "ALLOW_CLOUDINARY_UPLOAD"):
         if os.environ.get(key, "false").lower() != "false":
             raise SystemExit("PRODUCTION_GATE_ENABLED")
-    print("GITHUB_TOKEN_PRESENT=" + str(bool(os.environ.get("GITHUB_TOKEN"))).lower())
+    print("GEMINI_API_KEY_PRESENT=" + str(bool(os.environ.get("GEMINI_API_KEY"))).lower())
     previews = smoke_previews((ROOT / "docs/CONTENT_QUALITY_V2_REVIEW_PACK.md").read_text())
     root = Path(os.environ["RUNNER_TEMP"]) / "cq-v2-vision-smoke"
     packages = [build_package(row, root / row["account_id"]) for row in previews]
@@ -143,7 +181,11 @@ def main() -> int:
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as handle:
             handle.write(review)
-    return 0 if summary(packages)["VERIFIED_MEDIA_PACKAGE_COUNT"] == 3 else 1
+    # Irrelevant media is a valid Vision proof, but never a successful media package.
+    vision_pass = summary(packages)["VISION_VERIFIED_COUNT"] == 3
+    relevant_drafts_pass = all(p["result"].get("status") == "PASS" for p in packages
+                              if p["result"].get("account_relevance", {}).get("status") == "PASS")
+    return 0 if vision_pass and relevant_drafts_pass else 1
 
 
 if __name__ == "__main__":

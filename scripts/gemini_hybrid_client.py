@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import re
 import json
 import os
 import socket
@@ -175,6 +177,51 @@ class GeminiHybridClient:
         self.timeout_seconds = max(1, timeout_seconds)
         self.max_attempts = max(1, min(max_attempts, 2))
         self.actual_request_count = 0
+
+    def generate_multimodal_json(
+        self, *, model: str, prompt: str, image_paths: list[Path],
+        schema: Mapping[str, Any], operation: str, account_id: str,
+    ) -> dict[str, Any]:
+        """One bounded multimodal request; never persist frames or raw errors."""
+        if not self.api_key:
+            raise RuntimeError("missing_GEMINI_API_KEY")
+        if not re.fullmatch(r"gemini-[a-zA-Z0-9.-]+", model):
+            raise RuntimeError("invalid_gemini_model")
+        if not 1 <= len(image_paths) <= 3:
+            raise RuntimeError("vision_frame_count_invalid")
+        parts = [{"text": prompt}]
+        hashes = []
+        for path in image_paths:
+            if not 0 < path.stat().st_size <= 4 * 1024 * 1024:
+                raise RuntimeError("vision_frame_size_invalid")
+            image = path.read_bytes()
+            hashes.append(hashlib.sha256(image).hexdigest())
+            parts.append({"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(image).decode("ascii")}})
+        body = {"contents": [{"parts": parts}], "generationConfig": {
+            "responseMimeType": "application/json", "responseJsonSchema": dict(schema),
+            "temperature": 0, "maxOutputTokens": 4096}}
+        self.reserve_request({"operation": operation, "account_id": account_id, "model": model})
+        self.actual_request_count += 1
+        try:
+            response = self.transport(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}",
+                body, min(self.timeout_seconds, 90))
+        except GeminiHttpError as exc:
+            # Deliberately discard arbitrary response text (which can echo keys).
+            raise GeminiHttpError(exc.status_code, "multimodal_request_rejected") from None
+        except (GeminiProviderUnavailableError, TimeoutError, ConnectionError) as exc:
+            raise GeminiProviderUnavailableError("TRANSPORT", type(exc).__name__) from None
+        try:
+            data = _extract_json(response)
+            _validate_schema(data, schema)
+            if self.api_key in json.dumps(data, ensure_ascii=False):
+                raise RuntimeError("credential_echo")
+        except (RuntimeError, ValueError, TypeError, AttributeError, KeyError, IndexError):
+            error = RuntimeError("gemini_multimodal_invalid_response")
+            error.status_code = 200
+            raise error from None
+        return {"data": data, "model": model, "http_status": 200,
+                "response_schema_status": "PASS", "frame_hashes": hashes, "actual_requests": 1}
 
     def generate_json(
         self,

@@ -43,10 +43,13 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-      models: read
     env:
-      GITHUB_TOKEN: ${{ github.token }}
-      GITHUB_MODELS_ENABLED: "true"
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_VISION_MODEL: gemini-3.5-flash
+      GEMINI_GENERATOR_MODEL: gemini-3.5-flash
+      GEMINI_MAX_ATTEMPTS: "1"
+      GEMINI_CACHE_DIR: ${{ runner.temp }}/cq-v2-gemini-cache
+      HYBRID_AI_BUDGET_STATE: ${{ runner.temp }}/cq-v2-gemini-budget.json
       BUFFERED_POSTING_ENABLED: "false"
       PUBLISH_ENABLED: "false"
       ALLOW_REAL_THREADS_POST: "false"

@@ -297,6 +297,17 @@ def understand_media_contract(
         and bool(media.get("content_hash"))
         and evidence.get("content_hash") == media.get("content_hash")
     )
+    if isinstance(evidence, Mapping) and evidence.get("provider") == "github_models_vision":
+        visual_verified = False  # Retired evidence is never promoted into new runtime verification.
+    if isinstance(evidence, Mapping) and evidence.get("provider") == "gemini":
+        facts = media.get("visual_facts")
+        visual_verified = (visual_verified and media.get("http_status") == 200
+                           and media.get("response_schema_status") == "PASS"
+                           and all(str(media.get(k) or "").strip() for k in ("visual_summary", "visible_action", "key_moment"))
+                           and isinstance(facts, list) and bool(facts)
+                           and all(isinstance(f, Mapping) and f.get("id") and f.get("type") in {
+                               "visible_action", "key_moment", "visible_people_or_objects", "visible_text"}
+                               and isinstance(f.get("text"), str) and f["text"].strip() for f in facts))
     transcript_text = _compact(media.get("transcript_summary") or media.get("spoken_content_summary") or media.get("transcript_text"))
     transcript_status = str(media.get("transcript_status") or "UNAVAILABLE").upper()
     claims = media.get("main_claims", media.get("main_claims_json", []))
@@ -375,12 +386,17 @@ def prepare_media_context(media: Mapping[str, Any], *, account_id: str,
         "status": "BLOCKED" if editorial_reasons else "PASS", "hard_reasons": editorial_reasons}
     context["visual_facts"] = []
     if context["visual_status"] == "VISUAL_VERIFIED":
-        for kind in ("visible_action", "key_moment", "visible_people_or_objects", "visible_text"):
-            fact = str(context.get(kind) or "").strip()
-            if fact:
-                identity = json.dumps([context["media_asset_id"], context["content_hash"], kind, fact], ensure_ascii=False)
-                context["visual_facts"].append({"id": "VF_" + hashlib.sha256(identity.encode()).hexdigest()[:16],
-                                                "type": kind, "text": fact})
+        source_facts = merged.get("visual_facts", []) if context.get("visual_evidence", {}).get("provider") == "gemini" else [
+            {"id": kind, "type": kind, "text": str(context.get(kind) or "").strip()}
+            for kind in ("visible_action", "key_moment", "visible_people_or_objects", "visible_text")
+            if str(context.get(kind) or "").strip()]
+        for fact in source_facts:
+            identity_parts = [context["media_asset_id"], context["content_hash"], fact["type"], fact["text"]]
+            if context.get("visual_evidence", {}).get("provider") == "gemini":
+                identity_parts.append(fact["id"])
+            identity = json.dumps(identity_parts, ensure_ascii=False)
+            context["visual_facts"].append({"id": "VF_" + hashlib.sha256(identity.encode()).hexdigest()[:16],
+                                            "type": fact["type"], "text": fact["text"]})
     context["strict_relevance_review"] = bool(media.get("strict_relevance_review"))
     context["account_relevance_review"] = merged.get("account_relevance_review", {})
     context["context_completeness"] = sum(bool(context.get(k)) for k in (

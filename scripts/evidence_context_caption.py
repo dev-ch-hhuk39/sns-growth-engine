@@ -173,7 +173,8 @@ class PrivacyBoundedGeminiGroundedProvider:
         transcript_excerpt: str = "",
         source_mode: str = "transform",
     ) -> ProviderResult[dict[str, Any]]:
-        del recent_posts, transcript_excerpt
+        del recent_posts
+        media_request = json.loads(transcript_excerpt) if transcript_excerpt.startswith('{"media_context":') else None
         if not self.available:
             return ProviderResult(
                 self.provider_name,
@@ -238,6 +239,11 @@ class PrivacyBoundedGeminiGroundedProvider:
                 for item in post.media_items
             ],
         }
+        if media_request:
+            safe_input["media_first_input"] = media_request
+            claim_schema = schema["properties"]["claim_support"]["items"]
+            claim_schema["properties"]["anchor_fact_ids"] = {"type": "array", "items": {"type": "string"}}
+            claim_schema["required"].append("anchor_fact_ids")
         prompt = (
             "日本語Threadsの公開本文をJSONで作成する。"
             "source、reference、metadata、transcript、AIなどの内部語を公開文に出さない。"
@@ -251,10 +257,20 @@ class PrivacyBoundedGeminiGroundedProvider:
             "internal_analysisにmain_claims、core_topic、intended_audience、factual_constraints、prohibited_inferencesを入れる。\n"
             + json.dumps(safe_input, ensure_ascii=False)
         )
+        if media_request:
+            prompt += (
+                "\n選択Angleに属するVisual Factsを根拠に自然な本文を作る。逐語コピーは不要。"
+                "claim_supportのanchor_fact_idsに選択されたfact IDを指定し、caption_claimは本文の主張、"
+                "source_evidenceは対応するfactの原文。観察できない発言・効果・体験を補完しない。"
+                "Nightは現行口調、絵文字必須でない。Liverは女性マネージャー、自然な！や？、適切な絵文字は任意。"
+                "Beautyは意味に合う絵文字1〜4個。個人的には・これ結構大事を固定テンプレートにしない。"
+            )
         models = list(dict.fromkeys((
             os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
             "gemini-3.1-flash-lite",
         )))
+        if media_request:
+            models = models[:1]  # Single existing Gemini provider; no retired-provider fallback.
         for index, model in enumerate(models):
             try:
                 result = self.client.generate_json(

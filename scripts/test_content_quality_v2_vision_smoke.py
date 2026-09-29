@@ -3,9 +3,6 @@
 import copy
 import json
 import sys
-import tempfile
-
-import requests
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -19,8 +16,7 @@ from test_media_first_pipeline import asset  # noqa: E402
 from run_content_quality_v2_vision_smoke import smoke_previews, build_package, render, summary  # noqa: E402
 
 
-from media.direct_content_understanding import vision_summary  # noqa: E402
-from generation.source_grounded_caption import GitHubModelsGroundedProvider  # noqa: E402
+from evidence_context_caption import PrivacyBoundedGeminiGroundedProvider  # noqa: E402
 
 
 class VisionSmokeTests(unittest.TestCase):
@@ -104,30 +100,10 @@ class VisionSmokeTests(unittest.TestCase):
             "provider_status": "PASS", "remove_media_test": {"status": "PASS", "generic_caption_risk": "LOW"},
             "fabricated_experience_check": {"status": "PASS"}}}
         self.assertEqual(summary([package] * 3)["VERIFIED_MEDIA_PACKAGE_COUNT"], 0)
-        package["result"]["provider_name"] = GitHubModelsGroundedProvider.provider_name
+        package["result"]["provider_name"] = PrivacyBoundedGeminiGroundedProvider.provider_name
         self.assertEqual(summary([package] * 3)["VERIFIED_MEDIA_PACKAGE_COUNT"], 3)
         package["result"]["fabricated_experience_check"]["status"] = "BLOCKED"
         self.assertEqual(summary([package] * 3)["VERIFIED_MEDIA_PACKAGE_COUNT"], 0)
-
-    def test_vision_failures_are_classified_without_response_body(self):
-        with tempfile.TemporaryDirectory() as folder:
-            frame = Path(folder) / "frame.jpg"
-            frame.write_bytes(b"fixture")
-            with patch.dict("os.environ", {"GITHUB_TOKEN": "fixture", "GITHUB_MODELS_ENABLED": "true"}):
-                for status, expected in ((401, "auth_rejected"), (429, "rate_limited"), (404, "model_unavailable")):
-                    response = requests.Response()
-                    response.status_code = status
-                    failure = requests.HTTPError("private_response", response=response)
-                    with patch("media.direct_content_understanding.requests.post", side_effect=failure):
-                        result = vision_summary([frame], media_type="video")
-                    self.assertEqual(result["failure_class"], expected)
-                    self.assertNotIn("private_response", json.dumps(result))
-                response = Mock()
-                response.json.return_value = {"choices": [{"message": {"content": json.dumps({
-                    "visual_summary": "fixture", "visible_action": ["invalid"]})}}]}
-                with patch("media.direct_content_understanding.requests.post", return_value=response):
-                    result = vision_summary([frame], media_type="video", account_content_contract={"account_id": "liver_manager"})
-                self.assertEqual(result["failure_class"], "invalid_response")
 
     def test_workflow_smoke_isolation(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/direct-media-preparation.yml").read_text())
@@ -135,9 +111,12 @@ class VisionSmokeTests(unittest.TestCase):
         for name, job in jobs.items():
             if name == "content-quality-v2-vision-smoke":
                 self.assertNotIn("environment", job)
-                self.assertNotIn("secrets.", json.dumps(job))
-                self.assertEqual(job["env"]["GITHUB_TOKEN"], "${{ github.token }}")
-                self.assertEqual(job["permissions"], {"contents": "read", "models": "read"})
+                import re
+                self.assertEqual(re.findall(r"secrets\.([A-Z_]+)", json.dumps(job)), ["GEMINI_API_KEY"])
+                self.assertEqual(job["env"]["GEMINI_API_KEY"], "${{ secrets.GEMINI_API_KEY }}")
+                self.assertNotIn("GITHUB_TOKEN", job["env"])
+                self.assertNotIn("GITHUB_MODELS_ENABLED", job["env"])
+                self.assertEqual(job["permissions"], {"contents": "read"})
                 self.assertNotIn("--apply", json.dumps(job))
                 for step in job["steps"]:
                     if "upload-artifact" in step.get("uses", ""):
