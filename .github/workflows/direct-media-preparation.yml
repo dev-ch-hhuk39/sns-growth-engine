@@ -48,8 +48,6 @@ jobs:
       GEMINI_VISION_MODEL: gemini-3.5-flash
       GEMINI_GENERATOR_MODEL: gemini-3.5-flash
       GEMINI_MAX_ATTEMPTS: "1"
-      GEMINI_CACHE_DIR: ${{ runner.temp }}/cq-v2-gemini-cache
-      HYBRID_AI_BUDGET_STATE: ${{ runner.temp }}/cq-v2-gemini-budget.json
       BUFFERED_POSTING_ENABLED: "false"
       PUBLISH_ENABLED: "false"
       ALLOW_REAL_THREADS_POST: "false"
@@ -69,6 +67,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends ffmpeg
       - name: Understand exactly three historical previews and draft captions
+        env:
+          GEMINI_CACHE_DIR: ${{ runner.temp }}/cq-v2-gemini-cache
+          HYBRID_AI_BUDGET_STATE: ${{ runner.temp }}/cq-v2-gemini-budget.json
         run: |
           python3 scripts/run_content_quality_v2_vision_smoke.py \
             --output docs/CONTENT_QUALITY_V2_VISION_SMOKE_REVIEW.md
