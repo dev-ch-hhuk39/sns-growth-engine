@@ -236,6 +236,15 @@ class GitHubModelsGroundedProvider:
                 "intended_audience, media_role, factual_constraints, prohibited_inferences, main_claimsを必ず含める。"
                 "JSON keys: internal_analysis, public_post_text, claim_support[{caption_claim,source_evidence}], safety_notes, blocked_reasons。"
             )
+        if "media_first_input" in source_payload:
+            developer_prompt += (
+                "選択angleの視覚factを根拠に自然なコメントを書く。視覚説明文の丸写しは不要。"
+                "claim_support各項目にcaption_claim、source_evidence、anchor_fact_idsを含める。"
+                "caption_claimは公開本文中の意味ある観察または主張。source_evidenceはvisual_factsの原文。"
+                "anchor_fact_idsは選択angleに属するvisual_factsのIDのみ。"
+                "Nightは絵文字必須ではない。Liverは女性マネージャーの自然な口語。"
+                "Beautyは意味に合う絵文字1〜4個、個人的には・これ結構大事を定型で繰り返さない。"
+            )
         user_prompt = json.dumps({
             "account_rules": rules,
             "caption_mode": source_mode,
@@ -269,6 +278,13 @@ class GitHubModelsGroundedProvider:
             body = response.json()
             content = body["choices"][0]["message"]["content"]
             data = _json_object(content)
+            if "media_first_input" in source_payload:
+                if (not isinstance(data.get("public_post_text"), str)
+                        or not isinstance(data.get("internal_analysis"), dict)
+                        or not isinstance(data["internal_analysis"].get("main_claims"), list)
+                        or not isinstance(data.get("claim_support"), list)
+                        or not isinstance(data.get("blocked_reasons", []), list)):
+                    raise ValueError("media_caption_response_invalid")
             return ProviderResult(
                 self.provider_name,
                 self.provider_version,
@@ -279,6 +295,7 @@ class GitHubModelsGroundedProvider:
             )
         except (requests.RequestException, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
             # Never include response bodies or authorization material.
+            from media.direct_content_understanding import provider_failure_class
             return ProviderResult(
                 self.provider_name,
                 self.provider_version,
@@ -286,7 +303,7 @@ class GitHubModelsGroundedProvider:
                 reason=f"{type(exc).__name__}:github_models_generation_failed",
                 retryable=True,
                 duration_ms=int((time.monotonic() - started) * 1000),
-                metadata={"model": self.model},
+                metadata={"model": self.model, "failure_class": provider_failure_class(exc)},
             )
 
 
@@ -737,9 +754,10 @@ class SourceGroundedCaptionService:
         recent_posts: list[str],
     ) -> dict[str, Any]:
         """Project verified media facts, not a historical caption, into the provider."""
+        eligibility_key = "editorial_draft_eligibility" if media_context.get("editorial_draft_only") else "eligibility"
         if (media_context.get("account_id") != post.target_account_id
                 or media_context.get("visual_status") != "VISUAL_VERIFIED"
-                or media_context.get("eligibility", {}).get("status") != "PASS"
+                or media_context.get(eligibility_key, {}).get("status") != "PASS"
                 or selected_post_angle.get("media_asset_id") != media_context.get("media_asset_id")):
             return {"status": "BLOCKED", "public_post_text": "", "blocked_reasons": ["media_context_required"]}
         evidence = "\n".join(str(media_context.get(key) or "") for key in (
@@ -750,7 +768,7 @@ class SourceGroundedCaptionService:
             "media_context": media_context, "selected_post_angle": selected_post_angle,
             "account_content_contract": account_content_contract,
             "instruction": (
-                "Use the selected observed action and key moment in the caption. "
+                "Ground a natural caption in selected visual fact IDs; do not copy fact wording. "
                 "Metadata and uncertain claims are not visual facts. Attribute creator experiences; "
                 "never claim them as the managed account's own. No historical caption rewriting."
             ),
@@ -888,6 +906,7 @@ class SourceGroundedCaptionService:
                 "primary_provider_failure": (
                     primary_failure
                 ),
+                "provider_failure_class": (generated.metadata or {}).get("failure_class", ""),
             }
 
         def evaluate_payload(

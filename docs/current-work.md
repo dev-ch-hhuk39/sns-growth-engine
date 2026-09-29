@@ -1,3 +1,13 @@
+## 2026-09-29 Content Quality V2 Vision Smoke (active)
+
+- Branch `feat/content-quality-v2`; baseline HEAD `8a5c730ca02a1c3e2103726c992a51c79a4682fe`.
+- Scope: exactly one existing historical preview each for Night, Liver and Beauty; read-only download, existing GitHub Models Vision, unpublished editorial caption review. No new media discovery, provider or credential.
+- `FULL_SUITE_BEFORE=934/934 PASS` on a clean temporary export of the baseline commit (8 external credential/network probes and 3 optional local-tool probes excluded by the repository runner).
+- Stable asset/hash-bound visual facts and selected angle fact IDs support natural caption paraphrases through the existing claim alignment verifier. Generic captions cannot count as successful media packages.
+- Editorial review can draft with unverified rights; production eligibility and publication gates remain blocked. Smoke job has no production environment or production secrets; every other workflow job explicitly skips when smoke=true.
+- Validation: Media focused 212/212 scripts PASS; Smoke 9/9 cases PASS; final full repository suite 935/935 scripts PASS; workflow safety 527/527 PASS; Ruff fatal rules, compileall and diff check PASS. One bounded Actions smoke run remains pending; real-media quality is NOT yet proven. Preserve `.runtime/` and unrelated untracked review documents.
+- Never merge/deploy, promote READY, mutate production Sheets/permissions, publish or upload to Cloudinary for this task.
+
 ## 2026-09-27 Text/Media Supply-Loop Closure (Active)
 
 - Latest locally confirmed `origin/main` / base: `3818e38fdd04185c9f2b70cda73daf2fe22b2f35`; branch: `fix/production-supply-loop-closure`.

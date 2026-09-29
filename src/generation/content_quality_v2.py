@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -367,6 +368,21 @@ def prepare_media_context(media: Mapping[str, Any], *, account_id: str,
     if context["technical_status"] != "PASS" or not context["media_asset_id"] or not context["preview_url"]:
         reasons.append("technical_media_unverified")
     context["eligibility"] = {"status": "BLOCKED" if reasons else "PASS", "hard_reasons": reasons}
+    context["publish_eligibility"] = dict(context["eligibility"])
+    editorial_reasons = [reason for reason in reasons if reason not in {
+        "rights_not_approved", "permission_evidence_required"}]
+    context["editorial_draft_eligibility"] = {
+        "status": "BLOCKED" if editorial_reasons else "PASS", "hard_reasons": editorial_reasons}
+    context["visual_facts"] = []
+    if context["visual_status"] == "VISUAL_VERIFIED":
+        for kind in ("visible_action", "key_moment", "visible_people_or_objects", "visible_text"):
+            fact = str(context.get(kind) or "").strip()
+            if fact:
+                identity = json.dumps([context["media_asset_id"], context["content_hash"], kind, fact], ensure_ascii=False)
+                context["visual_facts"].append({"id": "VF_" + hashlib.sha256(identity.encode()).hexdigest()[:16],
+                                                "type": kind, "text": fact})
+    context["strict_relevance_review"] = bool(media.get("strict_relevance_review"))
+    context["account_relevance_review"] = merged.get("account_relevance_review", {})
     context["context_completeness"] = sum(bool(context.get(k)) for k in (
         "visual_summary", "visible_action", "key_moment", "main_topic", "source_post_id")) / 5
     return context
@@ -377,6 +393,20 @@ def evaluate_media_relevance(context: Mapping[str, Any], account_contract: Mappi
     action = _compact(context.get("visible_action"))
     moment = _compact(context.get("key_moment"))
     verified = context.get("visual_status") == "VISUAL_VERIFIED"
+    if context.get("strict_relevance_review"):
+        review = context.get("account_relevance_review") or {}
+        if not isinstance(review, Mapping):
+            review = {}
+        facts = [fact for fact in context.get("visual_facts", []) if fact["type"] in review.get("anchor_fact_types", [])]
+        relevant = (verified and review.get("status") == "PASS"
+                    and review.get("account_id") == context.get("account_id")
+                    and bool(review.get("audience_need")) and bool(review.get("content_pillar"))
+                    and any(fact["type"] == "visible_action" for fact in facts)
+                    and bool(review.get("reason")))
+        return {"status": "PASS" if relevant else "RELEVANCE_UNVERIFIED", "score": 80 if relevant else 20,
+                "evidence": action if relevant else "", "key_moment": moment if relevant else "",
+                "anchor_fact_ids": [fact["id"] for fact in facts] if relevant else [],
+                "why_this_account_should_post_this": review.get("reason", "") if relevant else "RELEVANCE_UNVERIFIED"}
     terms = {
         "night_scout": ("接客", "時給", "出勤", "客", "店舗", "キャバ", "移籍"),
         "liver_manager": ("配信", "初見", "コメント", "リスナー", "ライブ", "ギフト"),
@@ -398,23 +428,52 @@ def select_media_angles(context: Mapping[str, Any], relevance: Mapping[str, Any]
         for kind, score in (("observation", 90), ("practical_takeaway", 75), ("commentary", 65)):
             options.append({"type": kind, "basis": relevance["evidence"],
                             "key_moment": relevance["key_moment"], "score": score,
+                            "anchor_fact_ids": relevance.get("anchor_fact_ids") or [
+                                fact["id"] for fact in context.get("visual_facts", [])
+                                if fact["type"] in {"visible_action", "key_moment"}],
                             "media_asset_id": context["media_asset_id"]})
     return {"options": options[:3], "selected": max(options, key=lambda x: x["score"]) if options else {}}
 
 
-def remove_media_test(caption: str, context: Mapping[str, Any], angle: Mapping[str, Any]) -> dict[str, Any]:
-    # Require an entire observed proposition AND its contextual moment. A shared
-    # topic word (or a boilerplate deictic such as "this video") is insufficient.
-    action, moment = _compact(angle.get("basis")), _compact(angle.get("key_moment"))
+def remove_media_test(caption: str, context: Mapping[str, Any], angle: Mapping[str, Any],
+                      claim_support: Iterable[Mapping[str, Any]] = ()) -> dict[str, Any]:
+    from generation.semantic_alignment import LocalSemanticAlignmentProvider
+
+    facts = {fact["id"]: fact for fact in context.get("visual_facts", [])
+             if fact["id"] in angle.get("anchor_fact_ids", [])}
+    supports = list(claim_support) if isinstance(claim_support, (list, tuple)) else []
+    # Legacy literal captions can still provide evidence, but paraphrases use
+    # explicit fact IDs and the existing semantic verifier instead of copying.
+    if not supports:
+        supports = [{"caption_claim": fact["text"], "source_evidence": fact["text"], "anchor_fact_ids": [fid]}
+                    for fid, fact in facts.items() if _normalized(fact["text"]) in _normalized(caption)]
+    accepted = []
+    for support in supports:
+        if not isinstance(support, Mapping):
+            continue
+        ids = support.get("anchor_fact_ids", [])
+        claim = str(support.get("caption_claim") or "")
+        evidence = str(support.get("source_evidence") or "")
+        if not isinstance(ids, list) or not ids or any(not isinstance(fid, str) or fid not in facts for fid in ids):
+            continue
+        if not claim or _normalized(claim) not in _normalized(caption) or not evidence:
+            continue
+        source = "\n".join(facts[fid]["text"] for fid in ids)
+        if _normalized(evidence) not in _normalized(source):
+            continue
+        verification = LocalSemanticAlignmentProvider().evaluate(
+            source_text=source, public_post_text=caption, main_claims=[claim],
+            claim_support=[{"caption_claim": claim, "source_evidence": evidence}], recent_posts=[])
+        if any(item.get("verified") for item in (verification.data or {}).get("verified_claim_support", [])):
+            accepted.append(dict(support))
     anchored = (context.get("visual_status") == "VISUAL_VERIFIED"
-                and angle.get("media_asset_id") == context.get("media_asset_id")
-                and len(action) >= 12 and len(moment) >= 8
-                and _normalized(action) in _normalized(caption)
-                and _normalized(moment) in _normalized(caption))
+                and angle.get("media_asset_id") == context.get("media_asset_id") and bool(accepted))
     return {"status": "PASS" if anchored else "GENERIC_CAPTION_RISK_HIGH",
+            "media_anchor_status": "PASS" if anchored else "UNVERIFIED",
+            "anchor_fact_ids": sorted({fid for item in accepted for fid in item["anchor_fact_ids"]}) if anchored else [],
+            "claim_support": accepted if anchored else [],
             "generic_caption_risk": "LOW" if anchored else "HIGH",
-            "anchor_specificity": "observed_action_and_moment" if anchored else "insufficient",
-            "action": action, "key_moment": moment}
+            "anchor_specificity": "verified_claim_to_visual_fact" if anchored else "insufficient"}
 
 
 def fabricated_media_experience(caption: str) -> dict[str, Any]:
@@ -428,14 +487,19 @@ def fabricated_media_experience(caption: str) -> dict[str, Any]:
 
 def generate_media_first_caption(*, media: Mapping[str, Any], account_id: str,
                                  account_content_contract: Mapping[str, Any], recent_posts: list[str],
-                                 caption_generator: Any, source_creator_context: str = "") -> dict[str, Any]:
+                                 caption_generator: Any, source_creator_context: str = "",
+                                 editorial_draft: bool = False) -> dict[str, Any]:
     """Single caption entry: no I/O until evidence, eligibility and angle exist."""
     context = prepare_media_context(media, account_id=account_id, source_creator_context=source_creator_context)
+    context["editorial_draft_only"] = editorial_draft
     relevance = evaluate_media_relevance(context, account_content_contract)
     angles = select_media_angles(context, relevance)
     base = {"media_context": context, "account_relevance": relevance, "post_angles": angles,
+            "editorial_draft_eligibility": context["editorial_draft_eligibility"],
+            "publish_eligibility": context["publish_eligibility"],
             "media_counted_as_success": False, "MEDIA_SUCCESS": False, "would_post": False}
-    reasons = list(context["eligibility"]["hard_reasons"])
+    eligibility = context["editorial_draft_eligibility"] if editorial_draft else context["eligibility"]
+    reasons = list(eligibility["hard_reasons"])
     if context["visual_status"] != "VISUAL_VERIFIED":
         reasons.append("visual_understanding_required")
     if not angles["selected"]:
@@ -447,7 +511,7 @@ def generate_media_first_caption(*, media: Mapping[str, Any], account_id: str,
                                account_content_contract=dict(account_content_contract), recent_posts=recent_posts)
     text = str(output.get("public_post_text") or "")
     experience = fabricated_media_experience(text)
-    anchor = remove_media_test(text, context, angles["selected"])
+    anchor = remove_media_test(text, context, angles["selected"], output.get("claim_support", []))
     reasons = list(output.get("blocked_reasons", []))
     reasons.extend(experience["reasons"])
     if anchor["status"] != "PASS":
@@ -479,7 +543,7 @@ def build_post_package(
     relevance = dict(prepared_relevance or {})
     angles = list((prepared_angles or {}).get("options", []))
     selected = dict((prepared_angles or {}).get("selected", {}))
-    anchor = remove_media_test(caption, understanding, selected)
+    anchor = remove_media_test(caption, understanding, selected, media.get("claim_support", []))
     anchor_status = anchor["status"]
     generic_risk = anchor["generic_caption_risk"]
     relevance_reason = relevance.get("why_this_account_should_post_this", "UNVERIFIED: no precaption relevance")

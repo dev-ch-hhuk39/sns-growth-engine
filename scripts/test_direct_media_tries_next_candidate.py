@@ -74,7 +74,10 @@ class CaptionService:
             "status": "PASS",
             "public_post_text": GOOD_TEXT,
             "internal_analysis": {"topic": "店選び"},
-            "claim_support": [{"claim": "店選び", "evidence": "source"}],
+            "claim_support": [{"caption_claim": _kwargs["media_context"]["visible_action"],
+                               "source_evidence": _kwargs["media_context"]["visible_action"],
+                               "anchor_fact_ids": [fact["id"] for fact in _kwargs["media_context"]["visual_facts"]
+                                                   if fact["type"] == "visible_action"]}],
             "blocked_reasons": [],
             "provider_name": "fixture",
             "provider_version": "1",

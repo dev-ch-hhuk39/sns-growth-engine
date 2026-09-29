@@ -8102,3 +8102,13 @@ Direct media run `34921582346` started without publish capability. Existing Xser
 - Local verification: repository regression 929/929 PASS (8 external probes and 3 optional local-tool checks excluded), workflow safety 522/522 PASS, source registry validation PASS, focused contracts PASS, Ruff PASS, compileall PASS, diff check PASS.
 - Owner-supplied production evidence still reports Xserver disk 81.64%, the failed natural Aftercare run with 0% text coverage, Night Direct understanding backlog, and Night/Liver Clip shortages. This turn did not mutate production Sheets, download/cut/upload media, or publish; live inventory remains unverified here.
 - `git fetch origin main` fails with `Could not resolve host: github.com`; no PR, remote CI, merge, deploy, production apply, or natural schedule acceptance could be completed. Keep untracked `.runtime/` untouched. Next: restore GitHub connectivity, push one PR, run exact-head CI, merge/deploy, execute authorized no-post recovery, then verify natural scheduled replenishment.
+
+## 2026-09-29 Content Quality V2 Vision Smoke (active)
+
+- Branch `feat/content-quality-v2`; baseline HEAD `8a5c730ca02a1c3e2103726c992a51c79a4682fe`.
+- Scope: exactly one existing historical preview each for Night, Liver and Beauty; read-only download, existing GitHub Models Vision, unpublished editorial caption review. No new media discovery, provider or credential.
+- `FULL_SUITE_BEFORE=934/934 PASS` on a clean temporary export of the baseline commit (8 external credential/network probes and 3 optional local-tool probes excluded by the repository runner).
+- Stable asset/hash-bound visual facts and selected angle fact IDs support natural caption paraphrases through the existing claim alignment verifier. Generic captions cannot count as successful media packages.
+- Editorial review can draft with unverified rights; production eligibility and publication gates remain blocked. Smoke job has no production environment or production secrets; every other workflow job explicitly skips when smoke=true.
+- Validation: Media focused 212/212 scripts PASS; Smoke 9/9 cases PASS; final full repository suite 935/935 scripts PASS; workflow safety 527/527 PASS; Ruff fatal rules, compileall and diff check PASS. One bounded Actions smoke run remains pending; real-media quality is NOT yet proven. Preserve `.runtime/` and unrelated untracked review documents.
+- Never merge/deploy, promote READY, mutate production Sheets/permissions, publish or upload to Cloudinary for this task.

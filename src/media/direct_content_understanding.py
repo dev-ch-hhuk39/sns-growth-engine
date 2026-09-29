@@ -41,6 +41,8 @@ def provider_failure_class(exc: BaseException) -> str:
             return "auth_rejected"
         if status == 429:
             return "rate_limited"
+        if status == 404:
+            return "model_unavailable"
         if 500 <= status <= 599:
             return "provider_internal_error"
         return "invalid_response"
@@ -120,7 +122,8 @@ def transcribe_video(path: Path, *, max_seconds: int = 300) -> dict[str, Any]:
 
 def vision_summary(paths: list[Path], *, media_type: str,
                    source_metadata: dict[str, Any] | None = None,
-                   transcript: dict[str, Any] | None = None) -> dict[str, Any]:
+                   transcript: dict[str, Any] | None = None,
+                   account_content_contract: dict[str, Any] | None = None) -> dict[str, Any]:
     token = os.environ.get("GITHUB_TOKEN", "")
     enabled = os.environ.get("GITHUB_MODELS_ENABLED", "").lower() in {"1", "true", "yes"}
     if not token or not enabled:
@@ -130,7 +133,7 @@ def vision_summary(paths: list[Path], *, media_type: str,
     content: list[dict[str, Any]] = [{
         "type": "text",
         "text": (
-            "許可済みSNSメディアの内容を日本語で客観的に分析してください。"
+            "内部レビュー用SNSメディアの内容を日本語で客観的に分析してください。"
             "人物・場面・表示文字・主要テーマだけを記述し、見えない事実や効果を推測しないでください。"
             "JSON keys: visual_summary, visible_text, visible_people_or_objects, visible_action, "
             "key_moment, main_topic, main_claims, uncertain_claims, safety_flags。"
@@ -140,14 +143,22 @@ def vision_summary(paths: list[Path], *, media_type: str,
     content.append({"type": "text", "text": json.dumps({
         "source_metadata_not_visual_evidence": source_metadata or {},
         "transcript_not_visual_evidence": transcript or {"status": "UNAVAILABLE"},
+        "account_content_contract": account_content_contract or {},
     }, ensure_ascii=False)})
+    if account_content_contract:
+        content.append({"type": "text", "text": (
+            "画像で確認できる行動が対象読者のどの課題・content pillarに役立つかを判定。"
+            "単に同ジャンル・出演者属性だけではPASS不可。関連性不明ならRELEVANCE_UNVERIFIED。"
+            "追加JSON account_relevance_review: {account_id,status,reason,audience_need,content_pillar,"
+            "anchor_fact_types:[visible_action,key_moment]}。話している内容を画像から推測しない。"
+        )})
     for path in paths[:4]:
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}", "detail": "low"}})
     payload = {
         "model": os.environ.get("GITHUB_MODELS_VISION_MODEL", "openai/gpt-4.1"),
         "temperature": 0,
-        "max_tokens": 700,
+        "max_tokens": 1400,
         "response_format": {"type": "json_object"},
         "messages": [{"role": "user", "content": content}],
     }
@@ -169,6 +180,15 @@ def vision_summary(paths: list[Path], *, media_type: str,
         parsed = json.loads(raw)
         if not isinstance(parsed, dict):
             raise ValueError("vision_result_not_object")
+        if not str(parsed.get("visual_summary") or "").strip():
+            raise ValueError("vision_summary_empty")
+        if account_content_contract:
+            for key in ("visual_summary", "visible_people_or_objects", "visible_action", "key_moment", "main_topic"):
+                if not isinstance(parsed.get(key), str) or not parsed[key].strip():
+                    raise ValueError("vision_required_fact_invalid")
+            review = parsed.get("account_relevance_review", {})
+            if not isinstance(review, dict) or not isinstance(review.get("anchor_fact_types", []), list):
+                raise ValueError("vision_relevance_invalid")
         return {
             "status": "PASS",
             "visual_summary": _compact(parsed.get("visual_summary", ""), 4000),
@@ -177,6 +197,7 @@ def vision_summary(paths: list[Path], *, media_type: str,
             "safety_flags": [str(value)[:200] for value in parsed.get("safety_flags", [])[:20]],
             "provider": "github_models_vision",
             "media_type": media_type,
+            "account_relevance_review": parsed.get("account_relevance_review", {}),
             **{key: _compact(parsed.get(key, ""), 2000) for key in (
                 "visible_people_or_objects", "visible_action", "key_moment", "main_topic")},
             "uncertain_claims": [str(value)[:500] for value in parsed.get("uncertain_claims", [])[:20]],

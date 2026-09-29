@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -34,13 +35,14 @@ def selected_previews(document: str) -> list[dict[str, str]]:
     return selected
 
 
-def inspect_preview(row: dict[str, str], directory: Path) -> dict:
+def inspect_preview(row: dict[str, str], directory: Path, *, account_content_contract: dict | None = None) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     url = row["preview_url"]
     if urlsplit(url).hostname != "res.cloudinary.com" or urlsplit(url).scheme != "https":
         return {**row, "status": "BLOCKED_PREVIEW_HOST"}
     target = directory / "preview.mp4"
     try:
+        deadline = time.monotonic() + 90
         with requests.get(url, stream=True, timeout=(10, 25), allow_redirects=False) as response:
             response.raise_for_status()
             if response.status_code != 200:
@@ -48,6 +50,8 @@ def inspect_preview(row: dict[str, str], directory: Path) -> dict:
             size = 0
             with target.open("wb") as handle:
                 for block in response.iter_content(1024 * 1024):
+                    if time.monotonic() > deadline:
+                        raise ValueError("preview_total_timeout")
                     size += len(block)
                     if size > 64 * 1024 * 1024:
                         raise ValueError("preview_size_limit")
@@ -59,7 +63,8 @@ def inspect_preview(row: dict[str, str], directory: Path) -> dict:
             raise ValueError("video_stream_missing")
         frames = representative_frames(target, float(details["format"]["duration"]), directory)
         vision = vision_summary([path for _, path in frames], media_type="video",
-                                source_metadata=row, transcript={"status": "UNAVAILABLE"})
+                                source_metadata=row, transcript={"status": "UNAVAILABLE"},
+                                account_content_contract=account_content_contract)
         with target.open("rb") as handle:
             digest = hashlib.file_digest(handle, "sha256").hexdigest()
         return {**row, "status": "PREVIEW_READ_OK", "content_hash": digest,
