@@ -24,6 +24,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from config_loader import get_config  # noqa: E402
 from generation.reference_first_router import choose_reference_first_route  # noqa: E402
 from generation.content_quality_v2 import (  # noqa: E402
+    generate_media_first_caption,
     build_post_package as build_v2_post_package,
     hard_gate as v2_hard_gate,
     load_policy as load_content_quality_v2_policy,
@@ -585,6 +586,50 @@ def _finalize_generated_caption(text: Any) -> str:
 
 
 def _generate_final_media_caption(
+    *, clip: dict[str, Any], source_video: dict[str, Any], media_asset: dict[str, Any],
+    account_id: str, recent_posts: list[str], caption_service: Any | None = None,
+    max_attempts: int = 3, allow_source_copyedit_fallback: bool | None = None,
+    allow_evidence_context_fallback: bool | None = None,
+) -> dict[str, Any]:
+    from generation.source_grounded_caption import account_rules
+
+    if any(row.get(key) and row[key] != account_id
+           for row in (clip, source_video, media_asset)
+           for key in ("account_id", "target_account_id")):
+        return {"status": "REVIEW_REQUIRED", "public_post_text": "", "caption_attempt_count": 0,
+                "route_status": "DEGRADED_TO_TEXT", "MEDIA_SUCCESS": False,
+                "blocked_reasons": ["account_isolation"]}
+
+    service = caption_service or _default_final_caption_service()
+
+    def generate(**request):
+        class ContextBoundService:
+            def generate(self, bundle, **_legacy_arguments):
+                return service.generate_media_context(bundle, **request)
+
+        # Every retry uses the same verified final-asset context. Transcript-only
+        # legacy fallbacks cannot silently bypass the media-first boundary.
+        return _generate_context_bound_caption(
+            clip=clip, source_video=source_video, media_asset=media_asset,
+            account_id=account_id, recent_posts=recent_posts,
+            caption_service=ContextBoundService(), max_attempts=max_attempts,
+            allow_source_copyedit_fallback=False, allow_evidence_context_fallback=False,
+        )
+
+    media = {**media_asset,
+             "account_id": media_asset.get("account_id") or clip.get("account_id", ""),
+             "source_id": source_video.get("source_id", ""),
+             "source_post_id": media_asset.get("source_post_id") or source_video.get("source_post_id", ""),
+             "rights_status": media_asset.get("rights_status") or source_video.get("rights_status", ""),
+             "permission_status": media_asset.get("permission_status") or source_video.get("permission_status", "")}
+    return generate_media_first_caption(
+        media=media, account_id=account_id, account_content_contract=account_rules(account_id),
+        recent_posts=recent_posts, caption_generator=generate,
+        source_creator_context=str(source_video.get("title") or ""),
+    )
+
+
+def _generate_context_bound_caption(
     *,
     clip: dict[str, Any],
     source_video: dict[str, Any],
@@ -1335,6 +1380,9 @@ def _attach_v2_media_package(
         account_id=account_id,
         media=media,
         public_caption=str(caption.get("public_post_text") or ""),
+        prepared_context=caption.get("media_context"),
+        prepared_relevance=caption.get("account_relevance"),
+        prepared_angles=caption.get("post_angles"),
         source_creator_context=str(source_video.get("title") or ""),
         why_account=str(understanding.get("why_this_account_should_post_this") or ""),
         hard_gate_result={"status": "UNVERIFIED", "hard_gate_reasons": []},

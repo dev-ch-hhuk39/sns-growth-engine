@@ -21,6 +21,14 @@ def _hash(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest() if text else ""
 
 
+def _file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def provider_failure_class(exc: BaseException) -> str:
     """Classify a vision-provider failure without retaining response bodies."""
     if isinstance(exc, requests.Timeout):
@@ -110,7 +118,9 @@ def transcribe_video(path: Path, *, max_seconds: int = 300) -> dict[str, Any]:
         return {"status": "UNAVAILABLE", "text": "", "provider": "faster_whisper_small", "reason": type(exc).__name__}
 
 
-def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:
+def vision_summary(paths: list[Path], *, media_type: str,
+                   source_metadata: dict[str, Any] | None = None,
+                   transcript: dict[str, Any] | None = None) -> dict[str, Any]:
     token = os.environ.get("GITHUB_TOKEN", "")
     enabled = os.environ.get("GITHUB_MODELS_ENABLED", "").lower() in {"1", "true", "yes"}
     if not token or not enabled:
@@ -122,9 +132,15 @@ def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:
         "text": (
             "許可済みSNSメディアの内容を日本語で客観的に分析してください。"
             "人物・場面・表示文字・主要テーマだけを記述し、見えない事実や効果を推測しないでください。"
-            "JSON keys: visual_summary, visible_text, main_claims, safety_flags。"
+            "JSON keys: visual_summary, visible_text, visible_people_or_objects, visible_action, "
+            "key_moment, main_topic, main_claims, uncertain_claims, safety_flags。"
+            "メタデータと音声は画像で確認した事実に混ぜない。key_momentは場面の具体的な条件を記述する。"
         ),
     }]
+    content.append({"type": "text", "text": json.dumps({
+        "source_metadata_not_visual_evidence": source_metadata or {},
+        "transcript_not_visual_evidence": transcript or {"status": "UNAVAILABLE"},
+    }, ensure_ascii=False)})
     for path in paths[:4]:
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}", "detail": "low"}})
@@ -161,6 +177,9 @@ def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:
             "safety_flags": [str(value)[:200] for value in parsed.get("safety_flags", [])[:20]],
             "provider": "github_models_vision",
             "media_type": media_type,
+            **{key: _compact(parsed.get(key, ""), 2000) for key in (
+                "visible_people_or_objects", "visible_action", "key_moment", "main_topic")},
+            "uncertain_claims": [str(value)[:500] for value in parsed.get("uncertain_claims", [])[:20]],
         }
     except (requests.RequestException, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return {
@@ -173,7 +192,8 @@ def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:
         }
 
 
-def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float = 0) -> dict[str, Any]:
+def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float = 0,
+                        media_asset_id: str = "") -> dict[str, Any]:
     workdir = path.parent / f".understanding_{path.stem}"
     workdir.mkdir(parents=True, exist_ok=True)
     try:
@@ -187,10 +207,11 @@ def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float 
             images = [image]
             transcript = {"status": "NOT_APPLICABLE", "text": "", "provider": "none"}
         ocr = ocr_images(images)
-        vision = vision_summary(images, media_type=media_type)
+        vision = vision_summary(images, media_type=media_type, transcript=transcript)
         has_asr = bool(transcript.get("text"))
         has_ocr = bool(ocr)
         has_vision = bool(vision.get("visual_summary") or vision.get("visible_text"))
+        content_hash = _file_hash(path)
         evidence_available = bool(has_ocr or has_asr or has_vision)
         if has_vision:
             aggregate = "PASS_VISION"
@@ -208,6 +229,15 @@ def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float 
             "vision_failure_class": vision.get("failure_class", ""),
             "vision_summary_hash": _hash(str(vision.get("visual_summary", ""))),
             "visual_summary": vision.get("visual_summary", ""),
+            **{key: vision.get(key, "") for key in (
+                "visible_people_or_objects", "visible_action", "key_moment", "main_topic")},
+            "visual_evidence": {
+                "status": "UNDERSTOOD" if has_vision else "EXTRACTED_ONLY",
+                "provider": vision.get("provider", ""),
+                "media_asset_id": media_asset_id or f"ma_{content_hash[:24]}",
+                "content_hash": content_hash,
+                "frame_hashes": [hashlib.sha256(image.read_bytes()).hexdigest() for image in images],
+            },
             "visible_text": vision.get("visible_text", ""),
             "main_claims_json": json.dumps(vision.get("main_claims", []), ensure_ascii=False),
             "safety_flags_json": json.dumps(vision.get("safety_flags", []), ensure_ascii=False),

@@ -41,12 +41,13 @@ from generation.source_copyedit import (  # noqa: E402
     validate_source_preserving_public_post,
 )
 from generation.content_quality_v2 import (  # noqa: E402
+    generate_media_first_caption,
     build_post_package,
     hard_gate as content_v2_hard_gate,
     load_policy as load_content_quality_v2_policy,
 )
 from direct_caption_policy import direct_caption_mode  # noqa: E402
-from evidence_context_caption import DirectCaptionProviderFailover, generate_evidence_context_caption  # noqa: E402
+from evidence_context_caption import DirectCaptionProviderFailover  # noqa: E402
 from media_activation_source_suitability import direct_source_suitability  # noqa: E402
 from acquisition.reliability import (  # noqa: E402
     build_quarantine_record,
@@ -984,6 +985,30 @@ def _record_caption_attempt(
     })
 
 
+def _generate_direct_media_caption(*, post, media, bundle, account_id, recent_posts, caption_service):
+    from generation.source_grounded_caption import account_rules
+
+    if (media.get("source_post_id") and media["source_post_id"] != post.get("source_post_id")) or (
+        post.get("target_account_id") != account_id
+    ):
+        return {"status": "REVIEW_REQUIRED", "public_post_text": "", "MEDIA_SUCCESS": False,
+                "route_status": "DEGRADED_TO_TEXT", "blocked_reasons": ["parent_or_account_mismatch"]}
+
+    def generate(**request):
+        return caption_service.generate_media_context(bundle, **request)
+
+    return generate_media_first_caption(
+        media={**media, "source_id": post.get("source_id", ""),
+               "source_post_id": post.get("source_post_id", ""),
+               "account_id": media.get("account_id") or post.get("target_account_id", post.get("account_id", "")),
+               "rights_status": post.get("rights_status", ""),
+               "permission_status": post.get("permission_status", "")},
+        account_id=account_id, account_content_contract=account_rules(account_id),
+        recent_posts=recent_posts, caption_generator=generate,
+        source_creator_context=str(post.get("original_post_text") or ""),
+    )
+
+
 def build_plan(
     account_id: str,
     slot_id: str,
@@ -1079,36 +1104,18 @@ def build_plan(
             media_evidence_text=media_evidence,
         )
         candidate_soft_warnings.extend(source_suitability_blockers)
-        if uses_default_caption_service and caption_mode == "transform":
-            exact_evidence = "\n".join(
-                value
-                for value in (
-                    str(post.get("original_post_text", "")).strip(),
-                    media_evidence,
-                )
-                if value
-            )
-            grounded = generate_evidence_context_caption(
-                account_id=account_id,
-                transcript_excerpt=exact_evidence,
-                recent_posts=recent_posts,
-            )
-            if str(grounded.get("status", "")).upper() != "PASS":
-                grounded = caption_service.generate(
-                    bundle,
-                    account_id=account_id,
-                    recent_posts=recent_posts,
-                    transcript_excerpt=media_evidence,
-                    source_mode=caption_mode,
-                )
-        else:
-            grounded = caption_service.generate(
-                bundle,
-                account_id=account_id,
-                recent_posts=recent_posts,
-                transcript_excerpt=media_evidence,
-                source_mode=caption_mode,
-            )
+        grounded = _generate_direct_media_caption(
+            post=post, media=media, bundle=bundle, account_id=account_id,
+            recent_posts=recent_posts, caption_service=caption_service,
+        )
+        if grounded.get("status") != "PASS":
+            attempted.append({"source_post_id": post.get("source_post_id", ""),
+                              "blocked_reasons": grounded.get("blocked_reasons", []),
+                              "soft_warning_codes": candidate_soft_warnings,
+                              "route_status": "DEGRADED_TO_TEXT", "MEDIA_SUCCESS": False,
+                              "media_context": grounded.get("media_context", {})})
+            continue
+        caption_mode = "transform"
         grounded["source_mode"] = caption_mode
         text = str(
             grounded.get(
@@ -1198,6 +1205,9 @@ def build_plan(
             account_id=account_id,
             media=media_for_package,
             public_caption=text,
+            prepared_context=grounded["media_context"],
+            prepared_relevance=grounded["account_relevance"],
+            prepared_angles=grounded["post_angles"],
             source_creator_context=str(post.get("original_post_text", "")),
             hard_gate_result=v2_gate,
             quality_components={
@@ -1232,7 +1242,7 @@ def build_plan(
                 "media_asset_ids": carousel_asset_ids, "media_urls": carousel_urls, "media_types": carousel_types,
                 "today_post_count": len(today_posts), "today_direct_media_post_count": len(direct_today),
                 "daily_post_cap": daily_cap, "direct_media_daily_post_cap": direct_cap,
-                "public_post_preview": public_preview(text), "final_public_post_validator": validation["status"],
+                "public_post_preview": public_preview(text),
                 "internal_analysis": grounded.get("internal_analysis", {}),
                 "claim_support": grounded.get("claim_support", []),
                 "caption_provider": grounded.get("provider_name", ""),
@@ -1281,6 +1291,9 @@ def build_plan(
         "account_id": account_id,
         "slot_id": slot_id,
         "manual_e2e_proof": manual_e2e_proof,
+        "route_status": "DEGRADED_TO_TEXT",
+        "MEDIA_SUCCESS": False,
+        "text_fallback_required": True,
         "would_post": False,
         "candidate_attempt_count": len(attempted),
         "skipped_candidate_attempts": attempted,

@@ -201,12 +201,12 @@ def main() -> int:
     )
 
     check(
-        night_caption.get("status") == "PASS",
-        "night_scout deterministic caption passes",
+        night_caption.get("status") == "REVIEW_REQUIRED",
+        "night_scout transcript-only media stays unverified",
     )
 
     check(
-        bool(
+        not bool(
             str(
                 night_caption.get(
                     "public_post_text",
@@ -214,13 +214,12 @@ def main() -> int:
                 )
             ).strip()
         ),
-        "night_scout public caption is non-empty",
+        "night_scout public caption is withheld",
     )
 
     check(
-        night_caption.get("caption_provider")
-        == "deterministic_grounded_fallback",
-        "night_scout uses deterministic fallback",
+        night_caption.get("caption_attempt_count") == 0,
+        "night_scout does not invoke a transcript-only fallback",
     )
 
     parent_only_caption = build_caption(
@@ -255,7 +254,7 @@ def main() -> int:
     )
 
     check(
-        "account_relevant_source_evidence_missing"
+        "visual_understanding_required"
         in parent_only_caption.get(
             "blocked_reasons",
             [],
@@ -298,12 +297,12 @@ def main() -> int:
     )
 
     check(
-        liver_caption.get("status") == "PASS",
-        "liver_manager deterministic caption passes",
+        liver_caption.get("status") == "REVIEW_REQUIRED",
+        "liver_manager transcript-only media stays unverified",
     )
 
     check(
-        bool(
+        not bool(
             str(
                 liver_caption.get(
                     "public_post_text",
@@ -311,25 +310,17 @@ def main() -> int:
                 )
             ).strip()
         ),
-        "liver_manager public caption is non-empty",
+        "liver_manager public caption is withheld",
     )
 
     check(
-        liver_caption.get("caption_provider")
-        == "deterministic_grounded_fallback",
-        "liver_manager uses deterministic fallback",
+        liver_caption.get("caption_attempt_count") == 0,
+        "liver_manager does not invoke a transcript-only fallback",
     )
 
     check(
-        float(
-            liver_caption.get(
-                "final_alignment_score",
-                0,
-            )
-            or 0
-        )
-        >= 0.9,
-        "liver_manager caption remains strongly grounded",
+        "visual_understanding_required" in liver_caption.get("blocked_reasons", []),
+        "liver_manager missing visual evidence is explicit",
     )
 
     print(

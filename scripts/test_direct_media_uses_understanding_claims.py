@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 
 import run_direct_reference_media_pipeline as pipeline  # noqa: E402
+from test_media_first_pipeline import asset as verified_media_fixture  # noqa: E402
 
 
 POST = {
@@ -20,24 +21,29 @@ POST = {
     "permission_status": "approved",
 }
 MEDIA = {
+    **verified_media_fixture("beauty_account"),
     "source_post_media_id": "spm_beauty_claims",
     "media_asset_id": "ma_beauty_claims",
     "media_type": "video",
     "storage_url": "https://res.cloudinary.com/demo/beauty.mp4",
     "duration_seconds": "20",
     "media_understanding": {
+        **{key: verified_media_fixture("beauty_account")[key] for key in (
+            "vision_status", "visible_action", "key_moment")},
         "status": "PASS",
         "visual_summary": "女性が鏡の前で手順を見せる映像",
         "visible_text": "",
         "main_claims_json": '["メイク前に肌を保湿する", "スキンケアの順番を整える"]',
     },
 }
+MEDIA["source_post_id"] = "beauty_claims"
+MEDIA["visual_evidence"]["media_asset_id"] = "ma_beauty_claims"
 
 
 class CaptionService:
     called = False
 
-    def generate(self, *_args, **_kwargs):
+    def generate_media_context(self, *_args, **_kwargs):
         self.called = True
         return {
             "status": "BLOCKED",

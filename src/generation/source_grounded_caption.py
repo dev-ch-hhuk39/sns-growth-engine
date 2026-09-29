@@ -10,7 +10,7 @@ import json
 import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -192,6 +192,10 @@ class GitHubModelsGroundedProvider:
                 for item in post.media_items
             ],
         }
+        if transcript_excerpt.startswith('{"media_context":'):
+            media_request = json.loads(transcript_excerpt)
+            source_payload["media_first_input"] = media_request
+            source_payload["transcript_excerpt"] = media_request["media_context"].get("what_viewer_hears", "AUDIO_UNVERIFIED")
         if source_mode == "source_copyedit":
             developer_prompt = (
                 "あなたはSNSの校正編集者です。出力はJSONオブジェクトのみ。"
@@ -726,6 +730,36 @@ class SourceGroundedCaptionService:
             self.copyedit_fallback_provider = (
                 DeterministicSourceCopyeditProvider()
             )
+
+    def generate_media_context(
+        self, post: SourcePostBundle, *, media_context: dict[str, Any],
+        selected_post_angle: dict[str, Any], account_content_contract: dict[str, Any],
+        recent_posts: list[str],
+    ) -> dict[str, Any]:
+        """Project verified media facts, not a historical caption, into the provider."""
+        if (media_context.get("account_id") != post.target_account_id
+                or media_context.get("visual_status") != "VISUAL_VERIFIED"
+                or media_context.get("eligibility", {}).get("status") != "PASS"
+                or selected_post_angle.get("media_asset_id") != media_context.get("media_asset_id")):
+            return {"status": "BLOCKED", "public_post_text": "", "blocked_reasons": ["media_context_required"]}
+        evidence = "\n".join(str(media_context.get(key) or "") for key in (
+            "visual_summary", "visible_action", "key_moment", "visible_text"))
+        if media_context.get("transcript_status") in {"PASS", "AVAILABLE", "VERIFIED"}:
+            evidence += "\n" + str(media_context.get("spoken_content_summary") or "")
+        request = {
+            "media_context": media_context, "selected_post_angle": selected_post_angle,
+            "account_content_contract": account_content_contract,
+            "instruction": (
+                "Use the selected observed action and key moment in the caption. "
+                "Metadata and uncertain claims are not visual facts. Attribute creator experiences; "
+                "never claim them as the managed account's own. No historical caption rewriting."
+            ),
+        }
+        return self.generate(
+            replace(post, original_post_text=evidence, comments=()),
+            account_id=media_context["account_id"], recent_posts=recent_posts,
+            transcript_excerpt=json.dumps(request, ensure_ascii=False), source_mode="transform",
+        )
 
     def generate(
         self,

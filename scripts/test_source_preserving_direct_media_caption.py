@@ -12,21 +12,21 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-from acquisition.contracts import ProviderResult
-from acquisition.models import SourcePostBundle
-from generation.semantic_alignment import (
+from acquisition.contracts import ProviderResult  # noqa: E402
+from acquisition.models import SourcePostBundle  # noqa: E402
+from generation.semantic_alignment import (  # noqa: E402
     ALIGNMENT_THRESHOLDS,
 )
-from generation.source_copyedit import (
+from generation.source_copyedit import (  # noqa: E402
     SOURCE_PRESERVATION_MIN,
     clean_source_post_text,
     evaluate_source_copyedit_contract,
     validate_source_preserving_public_post,
 )
-from generation.source_grounded_caption import (
+from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService,
 )
-from media_post_validator import (
+from media_post_validator import (  # noqa: E402
     validate_media_post,
 )
 
@@ -509,7 +509,7 @@ assert (
 )
 
 assert (
-    "source_mode=caption_mode"
+    "_generate_direct_media_caption("
     in pipeline_source
 )
 
