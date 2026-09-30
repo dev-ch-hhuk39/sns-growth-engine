@@ -164,7 +164,9 @@ def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float 
             "vision_status": vision.get("status", "UNAVAILABLE"),
             "vision_failure_class": vision.get("failure_class", ""),
             "visual_facts": vision.get("visual_facts", []),
-            **{key: vision.get(key, "") for key in ("http_status", "model", "response_schema_status", "provider_error_type")},
+            **{key: vision.get(key, "") for key in ("http_status", "model", "response_schema_status", "provider_error_type",
+                "raw_response_type", "parse_stage", "schema_error", "missing_fields", "empty_fields",
+                "field", "expected_type", "actual_type", "normalizations", "attempt_count")},
             "vision_summary_hash": _hash(str(vision.get("visual_summary", ""))),
             "visual_summary": vision.get("visual_summary", ""),
             **{key: vision.get(key, "") for key in (

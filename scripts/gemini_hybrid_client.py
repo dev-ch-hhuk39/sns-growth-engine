@@ -182,7 +182,7 @@ class GeminiHybridClient:
         self, *, model: str, prompt: str, image_paths: list[Path],
         schema: Mapping[str, Any], operation: str, account_id: str,
     ) -> dict[str, Any]:
-        """One bounded multimodal request; never persist frames or raw errors."""
+        """Bounded multimodal transport: at most two transient retries, no raw errors."""
         if not self.api_key:
             raise RuntimeError("missing_GEMINI_API_KEY")
         if not re.fullmatch(r"gemini-[a-zA-Z0-9.-]+", model):
@@ -200,28 +200,36 @@ class GeminiHybridClient:
         body = {"contents": [{"parts": parts}], "generationConfig": {
             "responseMimeType": "application/json", "responseJsonSchema": dict(schema),
             "temperature": 0, "maxOutputTokens": 4096}}
-        self.reserve_request({"operation": operation, "account_id": account_id, "model": model})
-        self.actual_request_count += 1
+        from gemini_vision_response import parse_vision_response, VisionResponseError
+        for attempt in range(1, 4):
+            self.reserve_request({"operation": operation, "account_id": account_id, "model": model, "attempt": attempt})
+            self.actual_request_count += 1
+            try:
+                response = self.transport(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}",
+                    body, min(self.timeout_seconds, 90))
+                break
+            except GeminiHttpError as exc:
+                error = GeminiHttpError(exc.status_code, "multimodal_request_rejected")
+                transient = exc.status_code == 503
+            except (GeminiProviderUnavailableError, TimeoutError, ConnectionError) as exc:
+                error = GeminiProviderUnavailableError("TRANSPORT", type(exc).__name__)
+                transient = True
+            except (ValueError, TypeError):
+                # Invalid HTTP response JSON must not lose its HTTP-success evidence.
+                error = VisionResponseError("http_json_parse", "unknown", schema_error="JSON_PARSE_FAILURE")
+                transient = False
+            error.attempt_count = attempt
+            if not transient or attempt == 3:
+                raise error from None
+            time.sleep((5, 15)[attempt - 1])
         try:
-            response = self.transport(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}",
-                body, min(self.timeout_seconds, 90))
-        except GeminiHttpError as exc:
-            # Deliberately discard arbitrary response text (which can echo keys).
-            raise GeminiHttpError(exc.status_code, "multimodal_request_rejected") from None
-        except (GeminiProviderUnavailableError, TimeoutError, ConnectionError) as exc:
-            raise GeminiProviderUnavailableError("TRANSPORT", type(exc).__name__) from None
-        try:
-            data = _extract_json(response)
-            _validate_schema(data, schema)
-            if self.api_key in json.dumps(data, ensure_ascii=False):
-                raise RuntimeError("credential_echo")
-        except (RuntimeError, ValueError, TypeError, AttributeError, KeyError, IndexError):
-            error = RuntimeError("gemini_multimodal_invalid_response")
-            error.status_code = 200
-            raise error from None
+            data, diagnostics = parse_vision_response(response, schema, api_key=self.api_key)
+        except VisionResponseError as exc:
+            exc.attempt_count = attempt
+            raise
         return {"data": data, "model": model, "http_status": 200,
-                "response_schema_status": "PASS", "frame_hashes": hashes, "actual_requests": 1}
+                **diagnostics, "frame_hashes": hashes, "actual_requests": attempt}
 
     def generate_json(
         self,

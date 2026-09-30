@@ -1,3 +1,10 @@
+## 2026-09-30 Vision response diagnostics (active)
+
+- Base `73e976a4a9348854859710e97a91b65adc5df326`; branch `feat/content-quality-v2`. Previous smoke `36712822605`: Night HTTP 200 with invalid visual evidence, Liver/Beauty HTTP 503; all production jobs skipped, no captions.
+- Scope is Vision response processing only: exact JSON object or complete JSON fence, fixed `visible_actions` alias normalization, required observation fields, safe missing/type/empty/duplicate-fact diagnostics. No response bodies or arbitrary response values enter error output. Vision HTTP/JSON/schema/visual-evidence stages remain distinct from existing relevance/caption counters.
+- Multimodal requests retry only HTTP 503 or transient transport failures, at most two retries with 5/15-second delays. Every attempt uses the existing budget reservation; 4xx and schema errors never retry. Text-only transport behavior, account relevance, caption generation and workflow configuration are unchanged.
+- Validation: Gemini Vision 16/16, Smoke 8/8, Media-first 16/16 and understanding contract 7/7 PASS; full repository suite 936/936 PASS (one run); Ruff fatal rules, compileall and diff check PASS. Real API behavior remains untested in this change. One local commit only; do not push or dispatch. No production posting, READY, Sheets, Cloudinary, acquisition or scheduler changes. Preserve `.runtime/` and the four untracked audit Markdown files.
+
 ## 2026-09-29 Gemini Vision migration (active)
 
 - Base `167cf1126eed46e115741da6f765bf20fe294bb9`, branch `feat/content-quality-v2`. Previous authorized push succeeded; smoke run `36537637253` failed all three Vision requests with `INVALID_RESPONSE`; all three production jobs skipped. This supersedes the old push-blocked note below.

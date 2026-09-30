@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'src')]
-from gemini_hybrid_client import GeminiHybridClient, GeminiHttpError
+from gemini_hybrid_client import GeminiHybridClient, GeminiHttpError, GeminiProviderUnavailableError
 from media.gemini_vision import GeminiVisionProvider
 from media.direct_content_understanding import vision_summary
 from generation import content_quality_v2 as quality
@@ -39,6 +39,9 @@ class GeminiVisionTests(unittest.TestCase):
         self.client = GeminiHybridClient(api_key='SECRET_TEST_KEY', transport=self.transport,
                                          reserve_request=Mock(), cache_dir=Path(self.temp.name) / 'cache')
         self.provider = GeminiVisionProvider(self.client)
+        sleeper = patch('gemini_hybrid_client.time.sleep')
+        self.sleep = sleeper.start()
+        self.addCleanup(sleeper.stop)
 
     def test_inline_images_and_no_persistence(self):
         result = self.provider.understand([self.frame] * 4, media_type='video')
@@ -90,6 +93,97 @@ class GeminiVisionTests(unittest.TestCase):
             self.assertEqual(result['http_status'], 200)
             self.assertEqual(result['response_schema_status'], 'INVALID')
             self.assertNotIn('SECRET_TEST_KEY', json.dumps(result))
+
+    def respond(self, value):
+        self.transport.side_effect = None
+        self.transport.return_value = {'candidates': [{'content': {'parts': [{'text': value}]}}]}
+        return self.provider.understand([self.frame], media_type='video')
+
+    def test_fenced_json_and_safe_alias(self):
+        data = observation()
+        data['visible_actions'] = [data.pop('visible_action')]
+        result = self.respond('```json\n' + json.dumps(data) + '\n```')
+        self.assertEqual(result['status'], 'PASS')
+        self.assertEqual(result['visible_action'], observation()['visible_action'])
+        self.assertEqual(result['normalizations'], ['visible_actions->visible_action'])
+        self.assertEqual(result['parse_stage'], 'complete')
+        self.sleep.assert_not_called()
+
+    def test_missing_facts_diagnostic_without_retry(self):
+        data = observation()
+        del data['visual_facts']
+        result = self.respond(json.dumps(data))
+        self.assertEqual(result['failure_class'], 'schema_missing_field')
+        self.assertEqual(result['missing_fields'], ['visual_facts'])
+        self.assertEqual(result['parse_stage'], 'schema_validation')
+        self.assertEqual(result['attempt_count'], 1)
+        self.sleep.assert_not_called()
+
+    def test_wrong_type_diagnostic_without_values(self):
+        result = self.respond(json.dumps({**observation(), 'visual_action': 'UNKNOWN_SECRET', 'visual_facts': 'PRIVATE_VALUE'}))
+        self.assertEqual(result['failure_class'], 'invalid_response')
+        self.assertNotIn('UNKNOWN_SECRET', json.dumps(result))
+        self.assertNotIn('PRIVATE_VALUE', json.dumps(result))
+        result = self.respond(json.dumps({**observation(), 'visual_facts': 'PRIVATE_VALUE'}))
+        self.assertEqual(result['schema_error'], 'TYPE_MISMATCH')
+        self.assertEqual(result['field'], 'visual_facts')
+        self.assertEqual(result['expected_type'], 'array')
+        self.assertEqual(result['raw_response_type'], 'string')
+        self.sleep.assert_not_called()
+
+    def test_prose_truncated_json_and_conflicting_alias_rejected(self):
+        for text in ('Here is JSON: ' + json.dumps(observation()), '```json\n{}', '[1,2]', '{invalid}'):
+            result = self.respond(text)
+            self.assertEqual(result['failure_class'], 'invalid_response')
+            self.assertEqual(result['parse_stage'], 'json_parse')
+        result = self.respond(json.dumps({**observation(), 'visible_actions': 'different'}))
+        self.assertEqual(result['schema_error'], 'CONFLICTING_ALIAS')
+        self.sleep.assert_not_called()
+
+    def test_503_then_success_and_retry_cap(self):
+        good = self.transport.return_value
+        self.transport.side_effect = [GeminiHttpError(503, 'PRIVATE'), good]
+        result = self.provider.understand([self.frame], media_type='video')
+        self.assertEqual(result['status'], 'PASS')
+        self.assertEqual(result['attempt_count'], 2)
+        self.sleep.assert_called_once_with(5)
+        self.sleep.reset_mock()
+        self.transport.reset_mock()
+        self.transport.side_effect = GeminiHttpError(503, 'PRIVATE')
+        result = self.provider.understand([self.frame], media_type='video')
+        self.assertEqual(result['status'], 'UNAVAILABLE')
+        self.assertEqual(result['attempt_count'], 3)
+        self.assertEqual(self.transport.call_count, 3)
+        self.assertEqual([c.args[0] for c in self.sleep.call_args_list], [5, 15])
+
+    def test_transient_transport_and_nonretryable_http(self):
+        good = self.transport.return_value
+        self.transport.side_effect = [GeminiProviderUnavailableError('TIMEOUT'), good]
+        self.assertEqual(self.provider.understand([self.frame], media_type='video')['status'], 'PASS')
+        for status in (400, 401, 403, 404, 429, 500):
+            self.transport.reset_mock()
+            self.sleep.reset_mock()
+            self.transport.side_effect = GeminiHttpError(status, 'PRIVATE')
+            self.provider.understand([self.frame], media_type='video')
+            self.assertEqual(self.transport.call_count, 1)
+            self.sleep.assert_not_called()
+
+    def test_empty_field_and_duplicate_fact_diagnostics(self):
+        result = self.respond(json.dumps({**observation(), 'visible_action': ' '}))
+        self.assertEqual(result['empty_fields'], ['visible_action'])
+        self.assertEqual(result['parse_stage'], 'visual_evidence')
+        data = observation()
+        data['visual_facts'] *= 2
+        result = self.respond(json.dumps(data))
+        self.assertEqual(result['schema_error'], 'DUPLICATE_FACT_IDS')
+        self.sleep.assert_not_called()
+
+    def test_only_required_fields_can_pass(self):
+        data = observation()
+        data = {k: data[k] for k in ('visual_summary', 'visible_action', 'key_moment', 'visual_facts')}
+        result = self.respond(json.dumps(data))
+        self.assertEqual(result['status'], 'PASS')
+        self.assertNotIn('main_topic', result)
 
     def test_no_frame_no_request(self):
         self.assertEqual(self.provider.understand([], media_type='video')['failure_class'], 'no_frames')

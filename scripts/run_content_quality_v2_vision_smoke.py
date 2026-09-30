@@ -65,7 +65,7 @@ def build_package(row: dict, directory: Path) -> dict:
                 "content_pillars": config.get("content_categories", [])}
     inspected = inspect_preview(row, directory, account_content_contract=contract)
     vision = inspected.get("vision", {})
-    required = ("visual_summary", "visible_people_or_objects", "visible_action", "key_moment", "main_topic")
+    required = ("visual_summary", "visible_action", "key_moment")
     if vision.get("status") == "PASS" and not all(isinstance(vision.get(key), str) and vision[key].strip() for key in required):
         vision = {**vision, "status": "UNAVAILABLE", "failure_class": "invalid_response"}
     media = {**row, **vision, "media_type": "video", "content_hash": inspected.get("content_hash", ""),
@@ -129,6 +129,9 @@ def render(packages: list[dict]) -> str:
             "HTTP_STATUS": vision.get("http_status", ""),
             "PROVIDER_ERROR_TYPE": vision.get("provider_error_type", ""),
             "RESPONSE_SCHEMA_STATUS": vision.get("response_schema_status", "NOT_RUN"),
+            **{key.upper(): vision.get(key, "") for key in (
+                "raw_response_type", "parse_stage", "schema_error", "missing_fields", "empty_fields",
+                "field", "expected_type", "actual_type", "normalizations", "attempt_count")},
             "VISION_STATUS": vision.get("status", "NOT_RUN"), "REPRESENTATIVE_FRAME_HASHES": package["frames"],
             **{key.upper(): vision.get(key, "UNVERIFIED") for key in ("visual_summary", "visible_action", "key_moment", "main_topic")},
             "VISUAL_FACTS": context.get("visual_facts", []),
