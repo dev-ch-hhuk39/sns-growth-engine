@@ -1,3 +1,13 @@
+## 2026-10-01 Static visual facts and relevance evidence (active)
+
+- Base `2457716cd6d1427cb4e5e84275a7003b147b9068`, branch `feat/content-quality-v2`; bounded corrections from run `36785573938` only. No production operations or Smoke execution.
+- `visible_action` remains a required string key but may be empty. Summary/key moment/nonempty facts/schema/HTTP/frame evidence and asset/hash binding remain required; no action is invented for static media.
+- Strict relevance maps every requested fact type to actual verified facts and emits their IDs; action facts are not mandatory. Unknown/missing anchors, mismatched accounts or missing reader/pillar/reason remain unverified. Selected angle evidence uses the actual matched fact text.
+- Preserve relevance review status, reason, audience need, pillar, requested fact types, provider status/HTTP/error and decision class. Provider failure is not semantic rejection; Vision and Relevance attempts are separately reported.
+- Vision and opt-in relevance text requests retry only 429/503 or transient transport failures, at most three total attempts with 5/15-second waits. Default text/caption retry behavior and production workflows remain unchanged.
+- Focused tests PASS: Gemini/static/relevance 23/23, Smoke 8/8, Media-first 16/16, understanding contract 7/7; workflow safety 527/527; Ruff/compile/diff checks PASS. Final full repository suite 936/936 PASS (one run; saved result confirmed on 2026-10-02). No live Smoke or production operations performed.
+- Commit locally only. No push, dispatch, merge, deploy, posting, READY, Sheets write, Cloudinary or acquisition. Preserve `.runtime/` and untracked audit Markdown files.
+
 ## 2026-09-30 Vision response diagnostics (active)
 
 - Base `73e976a4a9348854859710e97a91b65adc5df326`; branch `feat/content-quality-v2`. Previous smoke `36712822605`: Night HTTP 200 with invalid visual evidence, Liver/Beauty HTTP 503; all production jobs skipped, no captions.

@@ -211,7 +211,7 @@ class GeminiHybridClient:
                 break
             except GeminiHttpError as exc:
                 error = GeminiHttpError(exc.status_code, "multimodal_request_rejected")
-                transient = exc.status_code == 503
+                transient = exc.status_code in {429, 503}
             except (GeminiProviderUnavailableError, TimeoutError, ConnectionError) as exc:
                 error = GeminiProviderUnavailableError("TRANSPORT", type(exc).__name__)
                 transient = True
@@ -240,7 +240,12 @@ class GeminiHybridClient:
         operation: str,
         account_id: str,
         cache_context: Mapping[str, Any] | None = None,
+        retry_profile: str = "",
     ) -> dict[str, Any]:
+        if retry_profile not in {"", "vision_relevance"}:
+            raise ValueError("unknown_retry_profile")
+        relevance_retry = retry_profile == "vision_relevance"
+        attempts = 3 if relevance_retry else self.max_attempts
         if not self.api_key:
             raise RuntimeError("missing_GEMINI_API_KEY")
         key_prompt = prompt + "\nCACHE_CONTEXT=" + json.dumps(cache_context or {}, ensure_ascii=False, sort_keys=True)
@@ -260,7 +265,7 @@ class GeminiHybridClient:
             },
         }
         last_error: Exception | None = None
-        for attempt in range(1, self.max_attempts + 1):
+        for attempt in range(1, attempts + 1):
             request_id = f"hybrid_ai_{uuid.uuid4().hex}"
             metadata = {
                 "request_id": request_id,
@@ -283,7 +288,7 @@ class GeminiHybridClient:
                     "request_id": request_id,
                     "cache_key": cache_key,
                     "cache_hit": False,
-                    "actual_requests": 1,
+                    "actual_requests": attempt if relevance_retry else 1,
                 }
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
                 temp = cache_path.with_suffix(".tmp")
@@ -291,27 +296,31 @@ class GeminiHybridClient:
                 os.replace(temp, cache_path)
                 return result
             except GeminiHttpError as exc:
+                exc.attempt_count = attempt
                 exc.operation = operation
                 exc.model = model
                 last_error = exc
-                if not exc.retryable or attempt >= self.max_attempts:
+                if (exc.status_code not in {429, 503} if relevance_retry else not exc.retryable) or attempt >= attempts:
                     raise
             except GeminiProviderUnavailableError as exc:
+                exc.attempt_count = attempt
                 exc.operation = operation
                 exc.model = model
                 last_error = exc
-                if attempt >= self.max_attempts:
+                if attempt >= attempts:
                     raise
             except (TimeoutError, socket.timeout, ConnectionError) as exc:
                 wrapped = GeminiProviderUnavailableError("TIMEOUT", type(exc).__name__)
+                wrapped.attempt_count = attempt
                 wrapped.operation = operation
                 wrapped.model = model
                 last_error = wrapped
-                if attempt >= self.max_attempts:
+                if attempt >= attempts:
                     raise wrapped from exc
-            except RuntimeError:
+            except (RuntimeError, ValueError, TypeError) as exc:
+                exc.attempt_count = attempt
                 # Schema/response failures are not availability failures and
                 # must not be converted into a deterministic PASS.
                 raise
-            time.sleep(2)
+            time.sleep((5, 15)[attempt - 1] if relevance_retry else 2)
         raise RuntimeError(f"gemini_request_failed:{last_error}")

@@ -303,7 +303,8 @@ def understand_media_contract(
         facts = media.get("visual_facts")
         visual_verified = (visual_verified and media.get("http_status") == 200
                            and media.get("response_schema_status") == "PASS"
-                           and all(str(media.get(k) or "").strip() for k in ("visual_summary", "visible_action", "key_moment"))
+                           and isinstance(media.get("visible_action"), str)
+                           and all(isinstance(media.get(k), str) and media[k].strip() for k in ("visual_summary", "key_moment"))
                            and isinstance(facts, list) and bool(facts)
                            and all(isinstance(f, Mapping) and f.get("id") and f.get("type") in {
                                "visible_action", "key_moment", "visible_people_or_objects", "visible_text"}
@@ -413,16 +414,30 @@ def evaluate_media_relevance(context: Mapping[str, Any], account_contract: Mappi
         review = context.get("account_relevance_review") or {}
         if not isinstance(review, Mapping):
             review = {}
-        facts = [fact for fact in context.get("visual_facts", []) if fact["type"] in review.get("anchor_fact_types", [])]
-        relevant = (verified and review.get("status") == "PASS"
-                    and review.get("account_id") == context.get("account_id")
-                    and bool(review.get("audience_need")) and bool(review.get("content_pillar"))
-                    and any(fact["type"] == "visible_action" for fact in facts)
-                    and bool(review.get("reason")))
+        requested_types = review.get("anchor_fact_types", [])
+        valid_types = isinstance(requested_types, list) and bool(requested_types) and all(
+            isinstance(kind, str) for kind in requested_types)
+        facts = [fact for fact in context.get("visual_facts", [])
+                 if valid_types and fact["type"] in requested_types]
+        anchors_valid = bool(facts) and all(any(fact["type"] == kind for fact in facts) for kind in requested_types)
+        provider_failed = review.get("provider_status") in {"UNAVAILABLE", "ERROR", "FAILED", "BLOCKED"}
+        relevant = (verified and not provider_failed and review.get("status") == "PASS"
+                    and review.get("account_id") == context.get("account_id") and anchors_valid
+                    and all(isinstance(review.get(key), str) and review[key].strip()
+                            for key in ("audience_need", "content_pillar", "reason")))
+        decision = ("PASS" if relevant else "VISION_UNVERIFIED" if not verified
+                    else "PROVIDER_UNAVAILABLE" if provider_failed
+                    else "SEMANTIC_UNVERIFIED" if review.get("status") == "RELEVANCE_UNVERIFIED"
+                    else "CONTRACT_UNVERIFIED")
         return {"status": "PASS" if relevant else "RELEVANCE_UNVERIFIED", "score": 80 if relevant else 20,
-                "evidence": action if relevant else "", "key_moment": moment if relevant else "",
+                "evidence": "\n".join(fact["text"] for fact in facts) if relevant else "",
+                "key_moment": moment if relevant else "",
                 "anchor_fact_ids": [fact["id"] for fact in facts] if relevant else [],
-                "why_this_account_should_post_this": review.get("reason", "") if relevant else "RELEVANCE_UNVERIFIED"}
+                "why_this_account_should_post_this": review.get("reason", "") or "RELEVANCE_UNVERIFIED",
+                "decision_class": decision, "review_status": review.get("status", "NOT_RUN"),
+                **{key: review.get(key, "") for key in ("reason", "audience_need", "content_pillar",
+                    "provider_status", "provider_http_status", "provider_error_type")},
+                "anchor_fact_types": requested_types, "attempt_count": review.get("attempt_count", 0)}
     terms = {
         "night_scout": ("接客", "時給", "出勤", "客", "店舗", "キャバ", "移籍"),
         "liver_manager": ("配信", "初見", "コメント", "リスナー", "ライブ", "ギフト"),

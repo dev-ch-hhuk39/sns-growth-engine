@@ -83,7 +83,7 @@ class GeminiVisionTests(unittest.TestCase):
             self.assertNotIn('private body', json.dumps(result))
 
     def test_invalid_schema_empty_and_key_echo_rejected(self):
-        for changes in ({'visual_summary': ''}, {'visible_action': ' '}, {'key_moment': ''},
+        for changes in ({'visual_summary': ''}, {'visible_action': None}, {'key_moment': ''},
                         {'visual_facts': []}, {'visual_facts': [{}]}, {'main_claims': 'wrong'},
                         {'visual_summary': 'SECRET_TEST_KEY'}):
             data = {**observation(), **changes}
@@ -160,7 +160,7 @@ class GeminiVisionTests(unittest.TestCase):
         good = self.transport.return_value
         self.transport.side_effect = [GeminiProviderUnavailableError('TIMEOUT'), good]
         self.assertEqual(self.provider.understand([self.frame], media_type='video')['status'], 'PASS')
-        for status in (400, 401, 403, 404, 429, 500):
+        for status in (400, 401, 403, 404, 500):
             self.transport.reset_mock()
             self.sleep.reset_mock()
             self.transport.side_effect = GeminiHttpError(status, 'PRIVATE')
@@ -169,8 +169,8 @@ class GeminiVisionTests(unittest.TestCase):
             self.sleep.assert_not_called()
 
     def test_empty_field_and_duplicate_fact_diagnostics(self):
-        result = self.respond(json.dumps({**observation(), 'visible_action': ' '}))
-        self.assertEqual(result['empty_fields'], ['visible_action'])
+        result = self.respond(json.dumps({**observation(), 'visual_summary': ' '}))
+        self.assertEqual(result['empty_fields'], ['visual_summary'])
         self.assertEqual(result['parse_stage'], 'visual_evidence')
         data = observation()
         data['visual_facts'] *= 2
@@ -184,6 +184,150 @@ class GeminiVisionTests(unittest.TestCase):
         result = self.respond(json.dumps(data))
         self.assertEqual(result['status'], 'PASS')
         self.assertNotIn('main_topic', result)
+
+    def static_media(self):
+        data = observation()
+        data['visible_action'] = ''
+        data['visual_summary'] = '条件の料金表が表示された静止画面'
+        data['key_moment'] = '料金表の全体が表示されたフレーム'
+        data['visual_facts'] = [{'id': 'VF1', 'type': 'visible_text', 'text': '時給の条件が画面に表示されている'}]
+        vision = self.respond(json.dumps(data))
+        row = {**asset(), **vision, 'vision_status': vision['status'], 'strict_relevance_review': True}
+        row['visual_evidence']['provider'] = 'gemini'
+        return row
+
+    def test_empty_action_valid_at_all_vision_boundaries(self):
+        row = self.static_media()
+        self.assertEqual(row['vision_status'], 'PASS')
+        ctx = quality.prepare_media_context(row, account_id='liver_manager')
+        self.assertEqual(ctx['visual_status'], 'VISUAL_VERIFIED')
+        self.assertEqual(ctx['visible_action'], '')
+        self.assertEqual(ctx['visual_facts'][0]['type'], 'visible_text')
+        for action in (None, [], 1):
+            self.assertEqual(quality.prepare_media_context({**row, 'visible_action': action},
+                account_id='liver_manager')['visual_status'], 'VISUAL_UNVERIFIED')
+
+    def review_data(self):
+        return {'status': 'PASS', 'account_id': 'liver_manager', 'reason': '配信UIのコメント表示を比較できる',
+                'audience_need': 'コメントの読みやすさ', 'content_pillar': '配信環境',
+                'anchor_fact_types': ['visible_text']}
+
+    def evaluate_review(self, row, review):
+        row = {**row, 'account_relevance_review': review}
+        context = quality.prepare_media_context(row, account_id='liver_manager')
+        return quality.evaluate_media_relevance(context, {}), context
+
+    def test_strict_text_fact_anchor_and_unknown_types(self):
+        row = self.static_media()
+        review = self.review_data()
+        result, context = self.evaluate_review(row, review)
+        self.assertEqual(result['status'], 'PASS')
+        self.assertEqual(result['anchor_fact_ids'], [context['visual_facts'][0]['id']])
+        self.assertEqual(result['evidence'], context['visual_facts'][0]['text'])
+        angles = quality.select_media_angles(context, result)
+        self.assertEqual(angles['selected']['anchor_fact_ids'], result['anchor_fact_ids'])
+        for types in (['visible_action'], ['invented'], ['visible_text', 'visible_action'], [], None):
+            result, _ = self.evaluate_review(row, {**review, 'anchor_fact_types': types})
+            self.assertEqual(result['status'], 'RELEVANCE_UNVERIFIED')
+            self.assertEqual(result['anchor_fact_ids'], [])
+        for key in ('reason', 'audience_need', 'content_pillar'):
+            self.assertEqual(self.evaluate_review(row, {**review, key: ' '})[0]['status'], 'RELEVANCE_UNVERIFIED')
+        self.assertEqual(self.evaluate_review(row, {**review, 'account_id': 'beauty_account'})[0]['status'], 'RELEVANCE_UNVERIFIED')
+
+    def test_semantic_relevance_reason_preserved_in_review(self):
+        row = self.static_media()
+        data = {**self.review_data(), 'status': 'RELEVANCE_UNVERIFIED', 'reason': '具体的判断材料が不足'}
+        self.transport.return_value = {'candidates': [{'content': {'parts': [{'text': json.dumps(data)}]}}]}
+        review = relevance_review(row, {}, self.client)
+        result, _ = self.evaluate_review(row, review)
+        self.assertEqual(result['decision_class'], 'SEMANTIC_UNVERIFIED')
+        self.assertEqual(result['reason'], data['reason'])
+        self.assertEqual(result['provider_status'], 'PASS')
+        self.assertEqual(result['provider_http_status'], 200)
+        self.assertEqual(result['attempt_count'], 1)
+        from run_content_quality_v2_vision_smoke import render
+        package = {'account_id': 'liver_manager', 'media_asset_id': 'asset1', 'preview_url': 'fixture',
+                   'vision': {}, 'frames': [], 'style': {}, 'failure_class': '', 'result': {'account_relevance': result}}
+        markdown = render([package])
+        self.assertIn('RELEVANCE_REASON=\n\n具体的判断材料が不足', markdown)
+        self.assertIn('SEMANTIC_UNVERIFIED', markdown)
+        self.assertIn('RELEVANCE_PROVIDER_HTTP_STATUS=\n\n200', markdown)
+
+    def test_vision_429_retries_bounded(self):
+        good = self.transport.return_value
+        for failures in (1, 2, 3):
+            self.transport.reset_mock()
+            self.sleep.reset_mock()
+            self.transport.side_effect = [GeminiHttpError(429, 'SECRET_TEST_KEY')] * failures + [good]
+            result = self.provider.understand([self.frame], media_type='video')
+            self.assertEqual(result['attempt_count'], min(3, failures + 1))
+            self.assertEqual(self.transport.call_count, min(3, failures + 1))
+            self.assertEqual([c.args[0] for c in self.sleep.call_args_list], [5, 15][:failures])
+            self.assertEqual(result['status'], 'PASS' if failures < 3 else 'UNAVAILABLE')
+            if failures == 3:
+                self.assertEqual(result['failure_class'], 'rate_limited')
+            self.assertNotIn('SECRET_TEST_KEY', json.dumps(result))
+
+    def test_relevance_429_retry_and_provider_failure_separation(self):
+        row = self.static_media()
+        good = {'candidates': [{'content': {'parts': [{'text': json.dumps(self.review_data())}]}}]}
+        for failures in (1, 2, 3):
+            self.transport.reset_mock()
+            self.sleep.reset_mock()
+            self.transport.side_effect = [GeminiHttpError(429, 'SECRET_TEST_KEY')] * failures + [good]
+            # Separate successful caches so each scenario exercises transport.
+            self.client.cache_dir = Path(self.temp.name) / str(failures)
+            review = relevance_review(row, {}, self.client)
+            result, _ = self.evaluate_review(row, review)
+            self.assertEqual(review['attempt_count'], min(3, failures + 1))
+            self.assertEqual(self.transport.call_count, min(3, failures + 1))
+            self.assertEqual([c.args[0] for c in self.sleep.call_args_list], [5, 15][:failures])
+            if failures < 3:
+                self.assertEqual(result['status'], 'PASS')
+            else:
+                self.assertEqual(result['decision_class'], 'PROVIDER_UNAVAILABLE')
+                self.assertEqual(result['provider_http_status'], 429)
+                self.assertEqual(result['review_status'], 'NOT_RUN')
+                self.assertEqual(result['reason'], '')
+            self.assertNotIn('SECRET_TEST_KEY', json.dumps(result))
+
+    def test_relevance_503_transport_and_nonretryable_errors(self):
+        row = self.static_media()
+        good = {'candidates': [{'content': {'parts': [{'text': json.dumps(self.review_data())}]}}]}
+        for index, error in enumerate((GeminiHttpError(503, ''), GeminiProviderUnavailableError('TIMEOUT'),
+                                      GeminiHttpError(400, ''), GeminiHttpError(401, ''), GeminiHttpError(403, ''),
+                                      GeminiHttpError(404, ''), GeminiHttpError(500, ''), RuntimeError('schema invalid'))):
+            self.client.cache_dir = Path(self.temp.name) / ('case' + str(index))
+            self.transport.reset_mock()
+            self.sleep.reset_mock()
+            self.transport.side_effect = [error, good]
+            review = relevance_review(row, {}, self.client)
+            self.assertEqual(review['attempt_count'], 2 if index < 2 else 1)
+            self.assertEqual(self.transport.call_count, 2 if index < 2 else 1)
+            if index < 2:
+                self.assertEqual(review['status'], 'PASS')
+            else:
+                self.sleep.assert_not_called()
+
+    def test_smoke_keeps_static_vision_and_semantic_reason(self):
+        from run_content_quality_v2_vision_smoke import build_package, render
+        row = self.static_media()
+        inspected = {'status': 'PREVIEW_READ_OK', 'vision': row, 'content_hash': row['content_hash'],
+                     'frames': [{'sha256': 'b' * 64}]}
+        review = {**self.review_data(), 'status': 'RELEVANCE_UNVERIFIED', 'reason': '用途不明',
+                  'provider_status': 'PASS', 'provider_http_status': 200, 'attempt_count': 1}
+        with patch('run_content_quality_v2_vision_smoke.inspect_preview', return_value=inspected), \
+             patch('run_content_quality_v2_vision_smoke.relevance_review', return_value=review), \
+             patch('run_content_quality_v2_vision_smoke.SourceGroundedCaptionService') as caption:
+            package = build_package({'account_id': 'liver_manager', 'media_asset_id': row['media_asset_id'],
+                                     'preview_url': row['storage_url']}, Path(self.temp.name))
+        self.assertEqual(package['vision']['status'], 'PASS')
+        self.assertEqual(package['result']['media_context']['visual_status'], 'VISUAL_VERIFIED')
+        caption.return_value.generate_media_context.assert_not_called()
+        markdown = render([package])
+        self.assertIn('RELEVANCE_REASON=\n\n用途不明', markdown)
+        self.assertIn('VISION_ATTEMPT_COUNT=\n\n1', markdown)
+        self.assertIn('RELEVANCE_ATTEMPT_COUNT=\n\n1', markdown)
 
     def test_no_frame_no_request(self):
         self.assertEqual(self.provider.understand([], media_type='video')['failure_class'], 'no_frames')
@@ -211,7 +355,7 @@ class GeminiVisionTests(unittest.TestCase):
         client = Mock()
         result = relevance_review({**asset(), 'vision_status': 'UNAVAILABLE'}, {}, client)
         client.generate_json.assert_not_called()
-        self.assertEqual(result['status'], 'RELEVANCE_UNVERIFIED')
+        self.assertEqual(result['status'], 'NOT_RUN')
 
     def test_existing_gemini_caption_receives_fact_ids(self):
         client = Mock(api_key='fixture')

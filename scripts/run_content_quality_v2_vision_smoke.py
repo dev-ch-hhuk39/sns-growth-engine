@@ -36,7 +36,7 @@ def smoke_previews(document: str) -> list[dict]:
 def relevance_review(media: dict, contract: dict, client: GeminiHybridClient) -> dict:
     context = prepare_media_context(media, account_id=media["account_id"])
     if context["visual_status"] != "VISUAL_VERIFIED":
-        return {"status": "RELEVANCE_UNVERIFIED"}
+        return {"status": "NOT_RUN", "provider_status": "NOT_RUN", "attempt_count": 0}
     schema = {"type": "object", "properties": {
         **{key: {"type": "string"} for key in ("account_id", "reason", "audience_need", "content_pillar")},
         "status": {"type": "string", "enum": ["PASS", "RELEVANCE_UNVERIFIED"]},
@@ -51,11 +51,14 @@ def relevance_review(media: dict, contract: dict, client: GeminiHybridClient) ->
         "不明や対象外ならRELEVANCE_UNVERIFIED。無理に関連付けない。JSONのみ。\n"
         + json.dumps({"account_contract": contract, "visual_facts": context["visual_facts"]}, ensure_ascii=False))
     try:
-        return client.generate_json(model=os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
+        response = client.generate_json(model=os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
                                     prompt=prompt, schema=schema, operation="vision_smoke_relevance",
-                                    account_id=media["account_id"])["data"]
-    except RuntimeError as exc:
-        return {"status": "RELEVANCE_UNVERIFIED", **provider_error_evidence(exc)}
+                                    account_id=media["account_id"], retry_profile="vision_relevance")
+        return {**response["data"], "provider_status": "PASS", "provider_http_status": 200,
+                "provider_error_type": "", "attempt_count": response.get("actual_requests", 0)}
+    except (RuntimeError, ValueError, TypeError) as exc:
+        return {"status": "NOT_RUN", **provider_error_evidence(exc),
+                "attempt_count": getattr(exc, "attempt_count", 0)}
 
 
 def build_package(row: dict, directory: Path) -> dict:
@@ -65,8 +68,9 @@ def build_package(row: dict, directory: Path) -> dict:
                 "content_pillars": config.get("content_categories", [])}
     inspected = inspect_preview(row, directory, account_content_contract=contract)
     vision = inspected.get("vision", {})
-    required = ("visual_summary", "visible_action", "key_moment")
-    if vision.get("status") == "PASS" and not all(isinstance(vision.get(key), str) and vision[key].strip() for key in required):
+    required = ("visual_summary", "key_moment")
+    if vision.get("status") == "PASS" and (not isinstance(vision.get("visible_action"), str)
+            or not all(isinstance(vision.get(key), str) and vision[key].strip() for key in required)):
         vision = {**vision, "status": "UNAVAILABLE", "failure_class": "invalid_response"}
     media = {**row, **vision, "media_type": "video", "content_hash": inspected.get("content_hash", ""),
              "vision_status": vision.get("status", "UNAVAILABLE"),
@@ -139,6 +143,10 @@ def render(packages: list[dict]) -> str:
             "EDITORIAL_DRAFT_ELIGIBILITY": result.get("editorial_draft_eligibility", {}),
             "PUBLISH_ELIGIBILITY": result.get("publish_eligibility", {}),
             "RELEVANCE_STATUS": result.get("account_relevance", {}).get("status", "NOT_RUN"),
+            "VISION_ATTEMPT_COUNT": vision.get("attempt_count", 0),
+            **{"RELEVANCE_" + key.upper(): result.get("account_relevance", {}).get(key, "")
+               for key in ("attempt_count", "review_status", "decision_class", "reason", "audience_need",
+                           "content_pillar", "anchor_fact_types", "provider_status", "provider_http_status", "provider_error_type")},
             "WHY_THIS_ACCOUNT_SHOULD_POST_THIS": result.get("account_relevance", {}).get("why_this_account_should_post_this", "UNVERIFIED"),
             "POST_ANGLE_OPTIONS": result.get("post_angles", {}).get("options", []),
             "SELECTED_ANGLE": result.get("post_angles", {}).get("selected", {}),

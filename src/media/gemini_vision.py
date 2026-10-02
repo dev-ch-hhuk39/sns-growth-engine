@@ -60,7 +60,7 @@ class GeminiVisionProvider:
                         attempt_count=result['actual_requests'], normalizations=result.get('normalizations', []))
             data = result['data']
             facts = data['visual_facts']
-            empty = [key for key in ('visual_summary', 'visible_action', 'key_moment') if not data[key].strip()]
+            empty = [key for key in ('visual_summary', 'key_moment') if not data[key].strip()]
             if empty:
                 raise VisionResponseError('visual_evidence', base['raw_response_type'],
                                           schema_error='EMPTY_REQUIRED_FIELDS', empty_fields=empty)
