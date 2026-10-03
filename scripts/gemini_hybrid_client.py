@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from hybrid_ai_budget import reserve as local_reserve
+from gemini_quota_diagnostics import safe_quota_diagnostics, vision_retry_decision
 
 CACHE_DIR = Path(os.environ.get("GEMINI_CACHE_DIR", ".runtime/gemini_cache"))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "60"))
@@ -24,7 +25,8 @@ DEFAULT_MAX_ATTEMPTS = int(os.environ.get("GEMINI_MAX_ATTEMPTS", "2"))
 
 class GeminiHttpError(RuntimeError):
     def __init__(self, status_code: int, detail: str):
-        super().__init__(f"gemini_http_error:{status_code}:{detail[:400]}")
+        super().__init__(f"gemini_http_error:{status_code}")
+        self.quota_diagnostics = safe_quota_diagnostics(status_code, detail)
         self.status_code = status_code
         self.operation = ""
         self.model = ""
@@ -201,6 +203,7 @@ class GeminiHybridClient:
             "responseMimeType": "application/json", "responseJsonSchema": dict(schema),
             "temperature": 0, "maxOutputTokens": 4096}}
         from gemini_vision_response import parse_vision_response, VisionResponseError
+        history = []
         for attempt in range(1, 4):
             self.reserve_request({"operation": operation, "account_id": account_id, "model": model, "attempt": attempt})
             self.actual_request_count += 1
@@ -208,9 +211,11 @@ class GeminiHybridClient:
                 response = self.transport(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}",
                     body, min(self.timeout_seconds, 90))
+                history.append({"attempt": attempt, "http_status": 200})
                 break
             except GeminiHttpError as exc:
                 error = GeminiHttpError(exc.status_code, "multimodal_request_rejected")
+                error.quota_diagnostics = dict(exc.quota_diagnostics)
                 transient = exc.status_code in {429, 503}
             except (GeminiProviderUnavailableError, TimeoutError, ConnectionError) as exc:
                 error = GeminiProviderUnavailableError("TRANSPORT", type(exc).__name__)
@@ -220,16 +225,29 @@ class GeminiHybridClient:
                 error = VisionResponseError("http_json_parse", "unknown", schema_error="JSON_PARSE_FAILURE")
                 transient = False
             error.attempt_count = attempt
+            entry = {"attempt": attempt, "http_status": getattr(error, "status_code", 0)}
+            delay = (5, 15)[min(attempt - 1, 1)]
+            if isinstance(error, GeminiHttpError) and error.status_code == 429:
+                entry.update(error.quota_diagnostics)
+                decision, delay = vision_retry_decision(error.quota_diagnostics, attempt)
+                error.retry_status = decision
+                entry.update(retry_status=decision, retry_delay_seconds=delay if delay is not None else error.quota_diagnostics.get("retry_delay_seconds", ""))
+                transient = decision == "RETRY"
+            elif transient and attempt < 3:
+                entry["retry_delay_seconds"] = delay
+            history.append(entry)
+            error.attempt_history = list(history)
             if not transient or attempt == 3:
                 raise error from None
-            time.sleep((5, 15)[attempt - 1])
+            time.sleep(delay)
         try:
             data, diagnostics = parse_vision_response(response, schema, api_key=self.api_key)
         except VisionResponseError as exc:
             exc.attempt_count = attempt
+            exc.attempt_history = list(history)
             raise
         return {"data": data, "model": model, "http_status": 200,
-                **diagnostics, "frame_hashes": hashes, "actual_requests": attempt}
+                **diagnostics, "frame_hashes": hashes, "actual_requests": attempt, "attempt_history": history}
 
     def generate_json(
         self,

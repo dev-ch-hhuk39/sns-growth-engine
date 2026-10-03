@@ -1,3 +1,13 @@
+## 2026-10-03 Gemini quota diagnostics and selected-account Smoke
+
+- Base `09c6871116924ce164a1e93e2c337d8dabe6b636`, branch `feat/content-quality-v2`. Run `36971863378` hit Vision HTTP 429 after three attempts for each account; relevance/caption never ran, and all production jobs skipped. This change does not establish the live quota cause.
+- Preserve allowlisted structured QuotaFailure/RetryInfo metadata and safe Vision attempt history. Raw error messages/subjects, project/user/billing dimensions and unknown identifiers are omitted. Six evidence-based quota classes; no inference from free-text messages. Unknown field values stay empty.
+- Vision only: daily quota or explicit zero quota stops after one attempt; spend and provider delays over 60 seconds defer. Otherwise use provider retryDelay when available, fallback 5/15 seconds, maximum three total attempts (including unknown 429). Existing text/relevance/caption retry policy and model selection are unchanged. GeminiHttpError retains only safe metadata rather than raw error text.
+- Smoke accepts existing target_account via a quoted environment variable: Night/Liver/Beauty individually or all. Target counts/success are scoped to selected previews; existing relevance/caption fail-closed conditions remain intact. Production job blocks and all content, visual-fact, permission and publish contracts are unchanged; model remains gemini-3.5-flash.
+- Read-only audit: `docs/GEMINI_QUOTA_WORKFLOW_AUDIT.md` inventories 21 workflows and 41 directly referencing scripts/modules. Nominal AUTO_READY cron is 06:07 UTC near the run, but actual overlap is UNKNOWN. API returned two scheduled runs created within +/-15 minutes, both skipped. No quota causality inferred.
+- Validation: focused 78/78 checks PASS (quota 12, Vision 23, Smoke 8, Media-first 16, understanding 7, client 12); full repository suite 937/937 scripts PASS, exactly once (standard 8 external and 3 optional-tool probes excluded). Workflow Safety 527/527 PASS; actionlint, compile, Ruff fatal rules and diff checks PASS.
+- One additional local commit only. No push or Smoke/API execution, code deployment, production data operations or model fallback added. Preserve `.runtime/` and the four pre-existing untracked audit Markdown files; only the new quota audit is included.
+
 ## 2026-10-01 Static visual facts and relevance evidence (active)
 
 - Base `2457716cd6d1427cb4e5e84275a7003b147b9068`, branch `feat/content-quality-v2`; bounded corrections from run `36785573938` only. No production operations or Smoke execution.

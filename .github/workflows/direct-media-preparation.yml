@@ -66,12 +66,14 @@ jobs:
           python3 -m pip install requests==2.34.2
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends ffmpeg
-      - name: Understand exactly three historical previews and draft captions
+      - name: Understand selected historical previews and draft captions
         env:
+          SMOKE_TARGET_ACCOUNT: ${{ github.event.inputs.target_account }}
           GEMINI_CACHE_DIR: ${{ runner.temp }}/cq-v2-gemini-cache
           HYBRID_AI_BUDGET_STATE: ${{ runner.temp }}/cq-v2-gemini-budget.json
         run: |
           python3 scripts/run_content_quality_v2_vision_smoke.py \
+            --target-account "$SMOKE_TARGET_ACCOUNT" \
             --output docs/CONTENT_QUALITY_V2_VISION_SMOKE_REVIEW.md
       - name: Preserve review only, never frames or videos
         if: always()

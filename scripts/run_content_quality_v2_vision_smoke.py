@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exactly three read-only editorial packages; no production clients imported."""
+"""Selected historical read-only editorial packages; no production clients imported."""
 from __future__ import annotations
 
 import argparse
@@ -25,11 +25,14 @@ PRODUCTION_SECRETS = ("SPREADSHEET_ID", "SNS_MASTER_SHEET_ID", "SA_JSON_BASE64",
                       "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "GITHUB_TOKEN", "THREADS_ACCESS_TOKEN")
 
 
-def smoke_previews(document: str) -> list[dict]:
+def smoke_previews(document: str, target_account: str = "all") -> list[dict]:
+    if target_account not in (*ACCOUNTS, "all"):
+        raise ValueError("invalid_target_account")
+    accounts = ACCOUNTS if target_account == "all" else (target_account,)
     previews = selected_previews(document)
-    result = [next(row for row in previews if row["account_id"] == account) for account in ACCOUNTS]
-    if len({row["media_asset_id"] for row in result}) != 3:
-        raise ValueError("three_distinct_previews_required")
+    result = [next(row for row in previews if row["account_id"] == account) for account in accounts]
+    if len({row["media_asset_id"] for row in result}) != len(accounts):
+        raise ValueError("distinct_selected_previews_required")
     return result
 
 
@@ -108,6 +111,8 @@ def summary(packages: list[dict]) -> dict:
         and p["result"].get("fabricated_experience_check", {}).get("status") == "PASS"
         for p in packages)
     return {
+        "TARGET_ACCOUNTS": [p.get("account_id", "") for p in packages],
+        "VISION_TARGET_COUNT": len(packages),
         "VISION_VERIFIED_COUNT": sum(p["result"].get("media_context", {}).get("visual_status") == "VISUAL_VERIFIED" for p in packages),
         "RELEVANCE_PASS_COUNT": sum(p["result"].get("account_relevance", {}).get("status") == "PASS" for p in packages),
         "CAPTION_GENERATED_COUNT": sum(bool(p["result"].get("public_post_text")) for p in packages),
@@ -115,13 +120,13 @@ def summary(packages: list[dict]) -> dict:
         "VERIFIED_MEDIA_PACKAGE_COUNT": verified,
         "FABRICATED_EXPERIENCE_COUNT": sum(p["result"].get("fabricated_experience_check", {}).get("status") == "BLOCKED" for p in packages),
         "GENERIC_CAPTION_SELECTED_COUNT": sum(bool(p["result"].get("public_post_text")) and p["result"].get("remove_media_test", {}).get("generic_caption_risk") == "HIGH" for p in packages),
-        "MEDIA_FIRST_QUALITY_PROVEN": "YES" if verified == 3 else "NO",
+        "MEDIA_FIRST_QUALITY_PROVEN": "YES" if packages and verified == len(packages) else "NO",
     }
 
 
 def render(packages: list[dict]) -> str:
     lines = ["# Content Quality V2 Vision Smoke Review", "", "Internal editorial drafts only. No publish eligibility is granted.", ""]
-    lines += [f"{key}={value}" for key, value in summary(packages).items()] + [""]
+    lines += [f"{key}={json.dumps(value) if isinstance(value, list) else value}" for key, value in summary(packages).items()] + [""]
     for package in packages:
         result, vision = package["result"], package["vision"]
         context = result.get("media_context", {})
@@ -143,6 +148,11 @@ def render(packages: list[dict]) -> str:
             "EDITORIAL_DRAFT_ELIGIBILITY": result.get("editorial_draft_eligibility", {}),
             "PUBLISH_ELIGIBILITY": result.get("publish_eligibility", {}),
             "RELEVANCE_STATUS": result.get("account_relevance", {}).get("status", "NOT_RUN"),
+            **{key.upper(): vision.get(key, "") for key in (
+                "provider_http_status", "provider_error_status", "rate_limit_class", "quota_metric",
+                "quota_id", "quota_model", "quota_location", "quota_limit_value", "retry_delay_seconds", "retry_status")},
+            "QUOTA_VIOLATIONS": vision.get("quota_violations", []),
+            "VISION_ATTEMPT_HISTORY": vision.get("attempt_history", []),
             "VISION_ATTEMPT_COUNT": vision.get("attempt_count", 0),
             **{"RELEVANCE_" + key.upper(): result.get("account_relevance", {}).get(key, "")
                for key in ("attempt_count", "review_status", "decision_class", "reason", "audience_need",
@@ -172,6 +182,7 @@ def render(packages: list[dict]) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--target-account", choices=(*ACCOUNTS, "all"), default="all")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true" or not os.environ.get("RUNNER_TEMP"):
         raise SystemExit("RUNNER_ONLY")
@@ -182,7 +193,7 @@ def main() -> int:
         if os.environ.get(key, "false").lower() != "false":
             raise SystemExit("PRODUCTION_GATE_ENABLED")
     print("GEMINI_API_KEY_PRESENT=" + str(bool(os.environ.get("GEMINI_API_KEY"))).lower())
-    previews = smoke_previews((ROOT / "docs/CONTENT_QUALITY_V2_REVIEW_PACK.md").read_text())
+    previews = smoke_previews((ROOT / "docs/CONTENT_QUALITY_V2_REVIEW_PACK.md").read_text(), args.target_account)
     root = Path(os.environ["RUNNER_TEMP"]) / "cq-v2-vision-smoke"
     packages = [build_package(row, root / row["account_id"]) for row in previews]
     review = render(packages)
@@ -193,7 +204,7 @@ def main() -> int:
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as handle:
             handle.write(review)
     # Irrelevant media is a valid Vision proof, but never a successful media package.
-    vision_pass = summary(packages)["VISION_VERIFIED_COUNT"] == 3
+    vision_pass = bool(packages) and summary(packages)["VISION_VERIFIED_COUNT"] == len(previews)
     relevant_drafts_pass = all(p["result"].get("status") == "PASS" for p in packages
                               if p["result"].get("account_relevance", {}).get("status") == "PASS")
     return 0 if vision_pass and relevant_drafts_pass else 1

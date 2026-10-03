@@ -74,7 +74,7 @@ class GeminiVisionTests(unittest.TestCase):
 
     def test_errors_secret_safe_and_http_observable(self):
         for status, expected in ((400, 'invalid_response'), (401, 'auth_rejected'), (403, 'auth_rejected'),
-                                 (429, 'rate_limited'), (404, 'model_unavailable'), (503, 'provider_internal_error')):
+                                 (429, 'rate_limit_unknown'), (404, 'model_unavailable'), (503, 'provider_internal_error')):
             self.transport.side_effect = GeminiHttpError(status, 'SECRET_TEST_KEY private body')
             result = self.provider.understand([self.frame], media_type='video')
             self.assertEqual(result['http_status'], status)
@@ -265,7 +265,7 @@ class GeminiVisionTests(unittest.TestCase):
             self.assertEqual([c.args[0] for c in self.sleep.call_args_list], [5, 15][:failures])
             self.assertEqual(result['status'], 'PASS' if failures < 3 else 'UNAVAILABLE')
             if failures == 3:
-                self.assertEqual(result['failure_class'], 'rate_limited')
+                self.assertEqual(result['failure_class'], 'rate_limit_unknown')
             self.assertNotIn('SECRET_TEST_KEY', json.dumps(result))
 
     def test_relevance_429_retry_and_provider_failure_separation(self):

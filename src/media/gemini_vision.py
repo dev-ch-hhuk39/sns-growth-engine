@@ -45,7 +45,7 @@ class GeminiVisionProvider:
     def understand(self, paths: list[Path], *, media_type: str) -> dict[str, Any]:
         base = {'provider': 'gemini', 'model': self.model, 'media_type': media_type,
                 'http_status': '', 'response_schema_status': 'NOT_RUN', 'provider_error_type': '',
-                'raw_response_type': 'NOT_RECEIVED', 'parse_stage': 'transport', 'attempt_count': 0,
+                'attempt_history': [], 'raw_response_type': 'NOT_RECEIVED', 'parse_stage': 'transport', 'attempt_count': 0,
                 'failure_class': '', 'status': 'UNAVAILABLE', 'visual_summary': '', 'visible_text': ''}
         if not self.client.api_key:
             return {**base, 'failure_class': 'auth_missing'}
@@ -57,7 +57,7 @@ class GeminiVisionProvider:
                 operation='media_visual_understanding', account_id='')
             base.update(http_status=result['http_status'], response_schema_status='INVALID',
                         raw_response_type=result['raw_response_type'], parse_stage='visual_evidence',
-                        attempt_count=result['actual_requests'], normalizations=result.get('normalizations', []))
+                        attempt_count=result['actual_requests'], attempt_history=result.get('attempt_history', []), normalizations=result.get('normalizations', []))
             data = result['data']
             facts = data['visual_facts']
             empty = [key for key in ('visual_summary', 'key_moment') if not data[key].strip()]
@@ -77,6 +77,8 @@ class GeminiVisionProvider:
             failure = 'invalid_response'
             if isinstance(exc, GeminiHttpError):
                 failure = {401: 'auth_rejected', 403: 'auth_rejected', 429: 'rate_limited', 404: 'model_unavailable'}.get(status, 'invalid_response' if status < 500 else 'provider_internal_error')
+                if status == 429:
+                    failure = exc.quota_diagnostics['rate_limit_class'].lower()
             elif isinstance(exc, GeminiProviderUnavailableError):
                 failure = 'network_error'
             elif isinstance(exc, OSError):
@@ -84,5 +86,8 @@ class GeminiVisionProvider:
             return {**base, 'http_status': status, 'failure_class': failure,
                     'attempt_count': getattr(exc, 'attempt_count', base['attempt_count']),
                     'provider_error_type': type(exc).__name__,
+                    **getattr(exc, 'quota_diagnostics', {}),
+                    'retry_status': getattr(exc, 'retry_status', ''),
+                    'attempt_history': getattr(exc, 'attempt_history', base['attempt_history']),
                     'response_schema_status': 'INVALID' if status == 200 else 'NOT_RUN',
                     **(exc.diagnostics if isinstance(exc, VisionResponseError) else {})}
