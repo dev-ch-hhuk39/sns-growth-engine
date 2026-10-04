@@ -768,7 +768,7 @@ class SourceGroundedCaptionService:
             "media_context": media_context, "selected_post_angle": selected_post_angle,
             "account_content_contract": account_content_contract,
             "instruction": (
-                "Ground a natural caption in selected visual fact IDs; do not copy fact wording. "
+                "Ground a natural caption in selected visual fact IDs; short attributed quotations are allowed, but do not copy a whole caption. "
                 "Metadata and uncertain claims are not visual facts. Attribute creator experiences; "
                 "never claim them as the managed account's own. No historical caption rewriting."
             ),
