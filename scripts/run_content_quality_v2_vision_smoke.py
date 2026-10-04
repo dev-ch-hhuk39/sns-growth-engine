@@ -55,6 +55,28 @@ class SmokeGeminiClient(GeminiHybridClient):
         caption = kwargs.get("operation") == "direct_reference_caption_generation"
         if caption:
             kwargs["retry_profile"] = "vision_relevance"
+            # Keep the existing schema and validators; reduce conflicting source
+            # and marketing instructions for this visual-only editorial test.
+            prompt = kwargs["prompt"]
+            start = prompt.find('{"target_account_id":')
+            if start >= 0:
+                source, _ = json.JSONDecoder().raw_decode(prompt[start:])
+                media = source.get("media_first_input", {})
+                kwargs["prompt"] = (
+                    "日本語の未公開Media投稿候補を作る。指定JSON schemaの全fieldを返す。"
+                    "選ばれたvisual factとangleのみが事実の根拠。画面テキストの主観は主観のまま引用する。"
+                    "public_post_textは100〜220文字、具体的な画面の観察→読者の判断ひとつ。CTAなし。"
+                    "事実観察には『この動画』と短い正確な引用を使う。一般論や追加の原因・成果・体験を捏造しない。"
+                    "Nightは男性スカウトの僕、Liverは女性マネージャーの私、Beautyは女友達で自然な絵文字1〜4。"
+                    "本文を書いてから実在する主張をmain_claimsに正確に転記する。"
+                    "main_claimsの各文をclaim_support.caption_claimにも同じ文で入れる。"
+                    "source_evidenceはvisual fact内の正確な一節、anchor_fact_idsはそのfactのID。"
+                    "要約・別表現をcaption_claimにしない。表現を飾るための実態・頻度・最上級を足さない。"
+                    "自分の使用体験や投稿主の経験の横取りは厳禁。材料不足はblocked_reasonsへ。\n"
+                    + json.dumps({"account_rules": source.get("account_rules", {}),
+                                  "selected_post_angle": media.get("selected_post_angle", {}),
+                                  "visual_facts": media.get("media_context", {}).get("visual_facts", []),
+                                  "generation_attempt": source.get("generation_attempt", 0)}, ensure_ascii=False))
         original_model = kwargs.get("model", "")
         fallback = (caption or kwargs.get("operation") == "vision_smoke_relevance") and self.fallback_allowed(original_model)
         if fallback:
