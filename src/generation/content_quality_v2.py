@@ -512,8 +512,15 @@ def fabricated_media_experience(caption: str) -> dict[str, Any]:
     ownership = re.search(
         r"(?:私|僕|俺|自分|当店|弊社|うち)(?:たち)?(?:が|は|も|の).{0,35}"
         r"(?:使った|使って|使い続け|試した|試して|経験した|売上|売り上げ|収入|稼い|稼げた|痩せた|肌が|所属|担当した|実績)", caption)
-    return {"status": "BLOCKED" if ownership else "PASS",
-            "reasons": ["source_creator_experience_reassigned"] if ownership else []}
+    # Japanese often omits the first-person subject. Reported creator speech
+    # in the same sentence is attribution; an earlier sentence is not permission.
+    implicit_experience = any(
+        re.search(r"試してみたの|使ってみたら|使い続けたら|使い続けて.{0,20}(?:嬉しい|よかった|良かった)", sentence)
+        and not re.search(r"(?:投稿者|動画の人物|本人).{0,120}(?:と話|と述|と説明|と紹介)", sentence)
+        for sentence in re.split(r"[。！？\n]", caption))
+    fabricated = bool(ownership or implicit_experience)
+    return {"status": "BLOCKED" if fabricated else "PASS",
+            "reasons": ["source_creator_experience_reassigned"] if fabricated else []}
 
 
 def generate_media_first_caption(*, media: Mapping[str, Any], account_id: str,

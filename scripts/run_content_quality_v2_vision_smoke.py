@@ -32,6 +32,7 @@ class SmokeGeminiClient(GeminiHybridClient):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.caption_evidence = {}
+        self.caption_candidate = {}
         self.last_evidence = {}
         path = ROOT / "docs/fixtures/content_quality_v2_smoke_evidence.json"
         self.quota_basis = json.loads(path.read_text()).get("model_quota", {}) if path.exists() else {}
@@ -65,6 +66,7 @@ class SmokeGeminiClient(GeminiHybridClient):
             self.last_evidence = {**decision, "attempt_count": result.get("actual_requests", 0),
                                   "attempt_history": result.get("attempt_history", [])}
             if caption:
+                self.caption_candidate = {key: result.get("data", {}).get(key) for key in ("public_post_text", "claim_support", "internal_analysis", "blocked_reasons")}
                 self.caption_evidence = {**decision, "provider_status": "PASS", "provider_http_status": 200,
                     "model": result.get("model", ""), "attempt_count": result.get("actual_requests", 0),
                     "attempt_history": result.get("attempt_history", [])}
@@ -159,7 +161,7 @@ def build_package(row: dict, directory: Path) -> dict:
         editorial_draft=True, caption_generator=lambda **request: service.generate_media_context(bundle, **request))
     text = str(result.get("public_post_text") or "")
     style = voice_persona_validation(text, account) if text else {"status": "NOT_RUN"}
-    return {**row, "caption_provider_evidence": client.caption_evidence,
+    return {**row, "caption_candidate": client.caption_candidate, "caption_provider_evidence": client.caption_evidence,
             "smoke_vision_evidence": {"media_asset_id": row["media_asset_id"], "account_id": account,
                 "content_hash": inspected.get("content_hash", ""), "vision": vision,
                 "frame_hashes": media["visual_evidence"]["frame_hashes"]},
@@ -205,6 +207,7 @@ def render(packages: list[dict]) -> str:
             "MEDIA_FETCH_STATUS": package.get("fetch_status", ""),
             "SMOKE_VISION_EVIDENCE": package.get("smoke_vision_evidence", {}),
             "CAPTION_PROVIDER_EVIDENCE": caption_evidence,
+            "CAPTION_CANDIDATE_FOR_REVIEW": package.get("caption_candidate", {}),
             "RELEVANCE_PROVIDER_EVIDENCE": package.get("relevance_provider_evidence", {}),
             "ACCOUNT": package["account_id"], "MEDIA_ASSET_ID": package["media_asset_id"],
             "MEDIA_PREVIEW": package["preview_url"], "VISION_PROVIDER": vision.get("provider", "gemini"),
