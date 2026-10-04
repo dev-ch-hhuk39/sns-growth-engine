@@ -17,6 +17,7 @@ from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService, account_rules,
 )
 from gemini_hybrid_client import GeminiHybridClient, provider_error_evidence
+from gemini_quota_diagnostics import FIELDS as QUOTA_FIELDS
 from evidence_context_caption import PrivacyBoundedGeminiGroundedProvider
 from public_post_quality import voice_persona_validation  # noqa: E402
 
@@ -39,7 +40,7 @@ def smoke_previews(document: str, target_account: str = "all") -> list[dict]:
 def relevance_review(media: dict, contract: dict, client: GeminiHybridClient) -> dict:
     context = prepare_media_context(media, account_id=media["account_id"])
     if context["visual_status"] != "VISUAL_VERIFIED":
-        return {"status": "NOT_RUN", "provider_status": "NOT_RUN", "attempt_count": 0}
+        return {"status": "NOT_RUN", "provider_status": "NOT_RUN", "attempt_count": 0, "attempt_history": []}
     schema = {"type": "object", "properties": {
         **{key: {"type": "string"} for key in ("account_id", "reason", "audience_need", "content_pillar")},
         "status": {"type": "string", "enum": ["PASS", "RELEVANCE_UNVERIFIED"]},
@@ -58,9 +59,14 @@ def relevance_review(media: dict, contract: dict, client: GeminiHybridClient) ->
                                     prompt=prompt, schema=schema, operation="vision_smoke_relevance",
                                     account_id=media["account_id"], retry_profile="vision_relevance")
         return {**response["data"], "provider_status": "PASS", "provider_http_status": 200,
-                "provider_error_type": "", "attempt_count": response.get("actual_requests", 0)}
+                "provider_error_type": "", "attempt_count": response.get("actual_requests", 0),
+                "attempt_history": response.get("attempt_history", [])}
     except (RuntimeError, ValueError, TypeError) as exc:
-        return {"status": "NOT_RUN", **provider_error_evidence(exc),
+        diagnostics = getattr(exc, "quota_diagnostics", {})
+        safe = {key: diagnostics[key] for key in (*QUOTA_FIELDS, "quota_violations") if key in diagnostics}
+        return {"status": "NOT_RUN", **provider_error_evidence(exc), **safe,
+                "retry_status": getattr(exc, "retry_status", ""),
+                "attempt_history": getattr(exc, "attempt_history", []),
                 "attempt_count": getattr(exc, "attempt_count", 0)}
 
 
@@ -95,7 +101,7 @@ def build_package(row: dict, directory: Path) -> dict:
         editorial_draft=True, caption_generator=lambda **request: service.generate_media_context(bundle, **request))
     text = str(result.get("public_post_text") or "")
     style = voice_persona_validation(text, account) if text else {"status": "NOT_RUN"}
-    return {**row, "vision": vision, "frames": media["visual_evidence"]["frame_hashes"],
+    return {**row, "relevance_provider_evidence": media["account_relevance_review"], "vision": vision, "frames": media["visual_evidence"]["frame_hashes"],
             "result": result, "style": style, "fetch_status": inspected.get("status"),
             "failure_class": str(vision.get("failure_class") or result.get("provider_failure_class") or inspected.get("error_class") or "").upper()}
 
@@ -157,6 +163,10 @@ def render(packages: list[dict]) -> str:
             **{"RELEVANCE_" + key.upper(): result.get("account_relevance", {}).get(key, "")
                for key in ("attempt_count", "review_status", "decision_class", "reason", "audience_need",
                            "content_pillar", "anchor_fact_types", "provider_status", "provider_http_status", "provider_error_type")},
+            **{"RELEVANCE_" + key.upper(): package.get("relevance_provider_evidence", {}).get(key, [] if key in ("quota_violations", "attempt_history") else "")
+               for key in ("provider_error_status", "rate_limit_class", "quota_metric", "quota_id", "quota_model",
+                           "quota_location", "quota_limit_value", "retry_delay_seconds", "retry_status",
+                           "quota_violations", "attempt_history")},
             "WHY_THIS_ACCOUNT_SHOULD_POST_THIS": result.get("account_relevance", {}).get("why_this_account_should_post_this", "UNVERIFIED"),
             "POST_ANGLE_OPTIONS": result.get("post_angles", {}).get("options", []),
             "SELECTED_ANGLE": result.get("post_angles", {}).get("selected", {}),

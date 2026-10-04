@@ -1,3 +1,12 @@
+## 2026-10-04 Smoke relevance quota observability
+
+- Base `4dc2293178f9e1488e1acf9014b6934c3420154e`, branch `feat/content-quality-v2`. Run `37130659799` proved Night Vision (503 -> 200, empty visible_action accepted); relevance ended HTTP 429 after three attempts without quota/history evidence. This patch targets only the Smoke relevance provider path.
+- `generate_json(retry_profile="vision_relevance")` reuses existing safe quota metadata and `vision_retry_decision`: daily/zero stop, spend/>60-second delay defer, provider delay preferred, unknown 429/503 bounded to three total attempts. The default profile keeps its prior retry behavior, cache format and return shape.
+- Success and failed exceptions preserve attempt history; cache hits return zero attempts and an empty current-call history. The Smoke-specific wrapper passes allowlisted diagnostics and history to its review package without modifying business relevance rules or the shared content-quality result contract. Existing relevance decision class remains separate from provider failure evidence.
+- Vision multimodal implementation is AST-identical to base. No changes to Vision schema/prompt/model, media facts/binding, relevance criteria, angles, caption quality, rights, production workflows, scheduler, queues or posting.
+- Validation: focused 87/87 PASS (new relevance tests 9, existing quota/Vision/Smoke/client/media tests 78). Workflow Safety 527/527 PASS (one run), compile and Ruff fatal checks PASS. Full repository suite: 938/938 scripts PASS, exactly one run (standard 8 external probes and 3 optional-tool probes excluded). Diff check PASS.
+- One local commit only; no push, Smoke dispatch, real API request or production data operation. Preserve `.runtime/` and the four pre-existing untracked audit Markdown files.
+
 ## 2026-10-03 Gemini quota diagnostics and selected-account Smoke
 
 - Base `09c6871116924ce164a1e93e2c337d8dabe6b636`, branch `feat/content-quality-v2`. Run `36971863378` hit Vision HTTP 429 after three attempts for each account; relevance/caption never ran, and all production jobs skipped. This change does not establish the live quota cause.

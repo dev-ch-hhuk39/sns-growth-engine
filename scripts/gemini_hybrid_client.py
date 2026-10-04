@@ -272,7 +272,8 @@ class GeminiHybridClient:
         if cache_path.exists():
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
             _validate_schema(cached["data"], schema)
-            return {**cached, "cache_hit": True, "actual_requests": 0}
+            return {**cached, "cache_hit": True, "actual_requests": 0,
+                    **({"attempt_history": []} if relevance_retry else {})}
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         body = {
@@ -283,6 +284,7 @@ class GeminiHybridClient:
             },
         }
         last_error: Exception | None = None
+        attempt_history = []
         for attempt in range(1, attempts + 1):
             request_id = f"hybrid_ai_{uuid.uuid4().hex}"
             metadata = {
@@ -297,6 +299,8 @@ class GeminiHybridClient:
             self.actual_request_count += 1
             try:
                 response = self.transport(url, body, self.timeout_seconds)
+                if relevance_retry:
+                    attempt_history.append({"attempt": attempt, "http_status": 200})
                 data = _extract_json(response)
                 _validate_schema(data, schema)
                 result = {
@@ -312,19 +316,41 @@ class GeminiHybridClient:
                 temp = cache_path.with_suffix(".tmp")
                 temp.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                 os.replace(temp, cache_path)
-                return result
+                return {**result, "attempt_history": list(attempt_history)} if relevance_retry else result
             except GeminiHttpError as exc:
                 exc.attempt_count = attempt
                 exc.operation = operation
                 exc.model = model
                 last_error = exc
-                if (exc.status_code not in {429, 503} if relevance_retry else not exc.retryable) or attempt >= attempts:
+                if relevance_retry:
+                    entry = {"attempt": attempt, "http_status": exc.status_code}
+                    if exc.status_code == 429:
+                        decision, delay = vision_retry_decision(exc.quota_diagnostics, attempt)
+                        exc.retry_status = decision
+                        entry.update(exc.quota_diagnostics)
+                        entry.update(retry_status=decision, retry_delay_seconds=delay if delay is not None else exc.quota_diagnostics.get("retry_delay_seconds", ""))
+                    else:
+                        decision = "RETRY" if exc.status_code == 503 and attempt < attempts else "NO_RETRY"
+                        delay = (5, 15)[min(attempt - 1, 1)] if decision == "RETRY" else None
+                        entry.update(retry_status=decision, retry_delay_seconds=delay)
+                    attempt_history.append(entry)
+                    exc.attempt_history = list(attempt_history)
+                    if decision != "RETRY":
+                        raise
+                    time.sleep(delay)
+                    continue
+                if not exc.retryable or attempt >= attempts:
                     raise
             except GeminiProviderUnavailableError as exc:
                 exc.attempt_count = attempt
                 exc.operation = operation
                 exc.model = model
                 last_error = exc
+                if relevance_retry:
+                    attempt_history.append({"attempt": attempt, "http_status": 0,
+                                            "retry_status": "RETRY" if attempt < attempts else "ATTEMPTS_EXHAUSTED",
+                                            "retry_delay_seconds": (5, 15)[min(attempt - 1, 1)] if attempt < attempts else None})
+                    exc.attempt_history = list(attempt_history)
                 if attempt >= attempts:
                     raise
             except (TimeoutError, socket.timeout, ConnectionError) as exc:
@@ -333,10 +359,19 @@ class GeminiHybridClient:
                 wrapped.operation = operation
                 wrapped.model = model
                 last_error = wrapped
+                if relevance_retry:
+                    attempt_history.append({"attempt": attempt, "http_status": 0,
+                                            "retry_status": "RETRY" if attempt < attempts else "ATTEMPTS_EXHAUSTED",
+                                            "retry_delay_seconds": (5, 15)[min(attempt - 1, 1)] if attempt < attempts else None})
+                    wrapped.attempt_history = list(attempt_history)
                 if attempt >= attempts:
                     raise wrapped from exc
             except (RuntimeError, ValueError, TypeError) as exc:
                 exc.attempt_count = attempt
+                if relevance_retry:
+                    if not attempt_history or attempt_history[-1]["attempt"] != attempt:
+                        attempt_history.append({"attempt": attempt, "http_status": 200})
+                    exc.attempt_history = list(attempt_history)
                 # Schema/response failures are not availability failures and
                 # must not be converted into a deterministic PASS.
                 raise
