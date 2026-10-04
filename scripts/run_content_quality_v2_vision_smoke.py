@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime, timezone, timedelta
 import json
 import os
 import sys
@@ -31,21 +32,47 @@ class SmokeGeminiClient(GeminiHybridClient):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.caption_evidence = {}
+        self.last_evidence = {}
+        path = ROOT / "docs/fixtures/content_quality_v2_smoke_evidence.json"
+        self.quota_basis = json.loads(path.read_text()).get("model_quota", {}) if path.exists() else {}
+
+    def fallback_allowed(self, model):
+        basis = self.quota_basis
+        rows = basis.get("quota_violations", [])
+        if not rows or model != "gemini-3.5-flash":
+            return False
+        try:
+            until = datetime.fromisoformat(basis["observed_at"].replace("Z", "+00:00")) + timedelta(seconds=basis["retry_delay_seconds"])
+        except (KeyError, TypeError, ValueError):
+            return False
+        return datetime.now(timezone.utc) < until and all(
+            row.get("quota_model") == model and "PerProjectPerModel" in row.get("quota_id", "")
+            and row.get("rate_limit_class") in {"DAILY_QUOTA_EXHAUSTED", "MODEL_QUOTA_EXHAUSTED"}
+            for row in rows)
 
     def generate_json(self, **kwargs):
         caption = kwargs.get("operation") == "direct_reference_caption_generation"
         if caption:
             kwargs["retry_profile"] = "vision_relevance"
+        original_model = kwargs.get("model", "")
+        fallback = (caption or kwargs.get("operation") == "vision_smoke_relevance") and self.fallback_allowed(original_model)
+        if fallback:
+            kwargs["model"] = "gemini-3.1-flash-lite"
+        decision = {"requested_model": original_model, "model": kwargs.get("model", ""),
+                    "fallback_used": fallback, "fallback_basis_run": self.quota_basis.get("origin_run_id", "") if fallback else ""}
         try:
             result = super().generate_json(**kwargs)
+            self.last_evidence = {**decision, "attempt_count": result.get("actual_requests", 0),
+                                  "attempt_history": result.get("attempt_history", [])}
             if caption:
-                self.caption_evidence = {"provider_status": "PASS", "provider_http_status": 200,
+                self.caption_evidence = {**decision, "provider_status": "PASS", "provider_http_status": 200,
                     "model": result.get("model", ""), "attempt_count": result.get("actual_requests", 0),
                     "attempt_history": result.get("attempt_history", [])}
             return result
         except (RuntimeError, ValueError, TypeError) as exc:
+            self.last_evidence = decision
             if caption:
-                self.caption_evidence = {**provider_error_evidence(exc),
+                self.caption_evidence = {**decision, **provider_error_evidence(exc),
                     **getattr(exc, "quota_diagnostics", {}), "retry_status": getattr(exc, "retry_status", ""),
                     "attempt_count": getattr(exc, "attempt_count", 0),
                     "attempt_history": getattr(exc, "attempt_history", [])}
@@ -86,12 +113,14 @@ def relevance_review(media: dict, contract: dict, client: GeminiHybridClient) ->
                                     account_id=media["account_id"], retry_profile="vision_relevance")
         return {**response["data"], "provider_status": "PASS", "provider_http_status": 200,
                 "provider_error_type": "", "attempt_count": response.get("actual_requests", 0),
-                "attempt_history": response.get("attempt_history", [])}
+                "attempt_history": response.get("attempt_history", []),
+                **getattr(client, "last_evidence", {})}
     except (RuntimeError, ValueError, TypeError) as exc:
         diagnostics = getattr(exc, "quota_diagnostics", {})
         safe = {key: diagnostics[key] for key in (*QUOTA_FIELDS, "quota_violations") if key in diagnostics}
         return {"status": "NOT_RUN", **provider_error_evidence(exc), **safe,
                 "retry_status": getattr(exc, "retry_status", ""),
+                **getattr(client, "last_evidence", {}),
                 "attempt_history": getattr(exc, "attempt_history", []),
                 "attempt_count": getattr(exc, "attempt_count", 0)}
 
@@ -101,7 +130,10 @@ def build_package(row: dict, directory: Path) -> dict:
     config = json.loads((ROOT / "config/accounts" / f"{account}.json").read_text())
     contract = {**account_rules(account), "account_id": account,
                 "content_pillars": config.get("content_categories", [])}
-    inspected = inspect_preview(row, directory, account_content_contract=contract)
+    evidence_path = ROOT / "docs/fixtures/content_quality_v2_smoke_evidence.json"
+    saved = json.loads(evidence_path.read_text()).get("vision", []) if evidence_path.exists() else []
+    evidence = next((p for p in saved if p.get("media_asset_id") == row["media_asset_id"] and p.get("account_id") == account), None)
+    inspected = inspect_preview(row, directory, account_content_contract=contract, smoke_vision_evidence=evidence)
     vision = inspected.get("vision", {})
     required = ("visual_summary", "key_moment")
     if vision.get("status") == "PASS" and (not isinstance(vision.get("visible_action"), str)
@@ -173,6 +205,7 @@ def render(packages: list[dict]) -> str:
             "MEDIA_FETCH_STATUS": package.get("fetch_status", ""),
             "SMOKE_VISION_EVIDENCE": package.get("smoke_vision_evidence", {}),
             "CAPTION_PROVIDER_EVIDENCE": caption_evidence,
+            "RELEVANCE_PROVIDER_EVIDENCE": package.get("relevance_provider_evidence", {}),
             "ACCOUNT": package["account_id"], "MEDIA_ASSET_ID": package["media_asset_id"],
             "MEDIA_PREVIEW": package["preview_url"], "VISION_PROVIDER": vision.get("provider", "gemini"),
             "VISION_MODEL": vision.get("model", ""),

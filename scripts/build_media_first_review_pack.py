@@ -35,7 +35,7 @@ def selected_previews(document: str) -> list[dict[str, str]]:
     return selected
 
 
-def inspect_preview(row: dict[str, str], directory: Path, *, account_content_contract: dict | None = None) -> dict:
+def inspect_preview(row: dict[str, str], directory: Path, *, account_content_contract: dict | None = None, smoke_vision_evidence: dict | None = None) -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     url = row["preview_url"]
     if urlsplit(url).hostname != "res.cloudinary.com" or urlsplit(url).scheme != "https":
@@ -62,11 +62,26 @@ def inspect_preview(row: dict[str, str], directory: Path, *, account_content_con
         if not any(stream.get("codec_type") == "video" for stream in details.get("streams", [])):
             raise ValueError("video_stream_missing")
         frames = representative_frames(target, float(details["format"]["duration"]), directory)
-        vision = vision_summary([path for _, path in frames], media_type="video",
-                                source_metadata=row, transcript={"status": "UNAVAILABLE"},
-                                account_content_contract=account_content_contract)
         with target.open("rb") as handle:
             digest = hashlib.file_digest(handle, "sha256").hexdigest()
+        hashes = [hashlib.sha256(path.read_bytes()).hexdigest() for _, path in frames]
+        saved = smoke_vision_evidence or {}
+        candidate = saved.get("vision", {})
+        expected_model = os.environ.get("GEMINI_VISION_MODEL") or os.environ.get("GEMINI_GENERATOR_MODEL") or "gemini-3.5-flash"
+        evidence_hash = hashlib.sha256(json.dumps(candidate, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+        reusable = (saved.get("media_asset_id") == row["media_asset_id"]
+            and saved.get("account_id") == row["account_id"] and saved.get("content_hash") == digest
+            and bool(hashes) and saved.get("frame_hashes") == hashes == candidate.get("frame_hashes")
+            and candidate.get("provider") == "gemini" and candidate.get("model") == expected_model
+            and candidate.get("status") == "PASS" and candidate.get("response_schema_status") == "PASS"
+            and bool(candidate.get("visual_facts")) and saved.get("evidence_sha256") == evidence_hash)
+        if reusable:
+            vision = {**candidate, "attempt_count": 0, "attempt_history": [],
+                      "evidence_reused_from_run": saved.get("origin_run_id", "")}
+        else:
+            vision = vision_summary([path for _, path in frames], media_type="video",
+                                    source_metadata=row, transcript={"status": "UNAVAILABLE"},
+                                    account_content_contract=account_content_contract)
         return {**row, "status": "PREVIEW_READ_OK", "content_hash": digest,
                 "frames": [{"timestamp": timestamp, "path": str(path.resolve()),
                             "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for timestamp, path in frames],
