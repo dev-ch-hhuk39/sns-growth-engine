@@ -26,6 +26,32 @@ PRODUCTION_SECRETS = ("SPREADSHEET_ID", "SNS_MASTER_SHEET_ID", "SA_JSON_BASE64",
                       "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "GITHUB_TOKEN", "THREADS_ACCESS_TOKEN")
 
 
+class SmokeGeminiClient(GeminiHybridClient):
+    """Debug-only bounded transport and evidence; no production client changes."""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.caption_evidence = {}
+
+    def generate_json(self, **kwargs):
+        caption = kwargs.get("operation") == "direct_reference_caption_generation"
+        if caption:
+            kwargs["retry_profile"] = "vision_relevance"
+        try:
+            result = super().generate_json(**kwargs)
+            if caption:
+                self.caption_evidence = {"provider_status": "PASS", "provider_http_status": 200,
+                    "model": result.get("model", ""), "attempt_count": result.get("actual_requests", 0),
+                    "attempt_history": result.get("attempt_history", [])}
+            return result
+        except (RuntimeError, ValueError, TypeError) as exc:
+            if caption:
+                self.caption_evidence = {**provider_error_evidence(exc),
+                    **getattr(exc, "quota_diagnostics", {}), "retry_status": getattr(exc, "retry_status", ""),
+                    "attempt_count": getattr(exc, "attempt_count", 0),
+                    "attempt_history": getattr(exc, "attempt_history", [])}
+            raise
+
+
 def smoke_previews(document: str, target_account: str = "all") -> list[dict]:
     if target_account not in (*ACCOUNTS, "all"):
         raise ValueError("invalid_target_account")
@@ -92,7 +118,7 @@ def build_package(row: dict, directory: Path) -> dict:
     bundle = SourcePostBundle(source_post_id="", source_id="", target_account_id=account,
                               platform="", profile_url="", canonical_post_url="", external_post_id="",
                               original_post_text="", published_at="")
-    client = GeminiHybridClient(max_attempts=1)
+    client = SmokeGeminiClient(max_attempts=1)
     media["account_relevance_review"] = relevance_review(media, contract, client)
     service = SourceGroundedCaptionService(PrivacyBoundedGeminiGroundedProvider(client=client),
                                           allow_deterministic_fallback=False, retry_primary_on_alignment_failure=False)
@@ -101,7 +127,11 @@ def build_package(row: dict, directory: Path) -> dict:
         editorial_draft=True, caption_generator=lambda **request: service.generate_media_context(bundle, **request))
     text = str(result.get("public_post_text") or "")
     style = voice_persona_validation(text, account) if text else {"status": "NOT_RUN"}
-    return {**row, "relevance_provider_evidence": media["account_relevance_review"], "vision": vision, "frames": media["visual_evidence"]["frame_hashes"],
+    return {**row, "caption_provider_evidence": client.caption_evidence,
+            "smoke_vision_evidence": {"media_asset_id": row["media_asset_id"], "account_id": account,
+                "content_hash": inspected.get("content_hash", ""), "vision": vision,
+                "frame_hashes": media["visual_evidence"]["frame_hashes"]},
+            "relevance_provider_evidence": media["account_relevance_review"], "vision": vision, "frames": media["visual_evidence"]["frame_hashes"],
             "result": result, "style": style, "fetch_status": inspected.get("status"),
             "failure_class": str(vision.get("failure_class") or result.get("provider_failure_class") or inspected.get("error_class") or "").upper()}
 
@@ -137,7 +167,12 @@ def render(packages: list[dict]) -> str:
         result, vision = package["result"], package["vision"]
         context = result.get("media_context", {})
         anchor = result.get("remove_media_test", {})
+        caption_evidence = package.get("caption_provider_evidence", {})
+        provider_failed = caption_evidence.get("provider_status") in {"UNAVAILABLE", "ERROR"}
         fields = {
+            "MEDIA_FETCH_STATUS": package.get("fetch_status", ""),
+            "SMOKE_VISION_EVIDENCE": package.get("smoke_vision_evidence", {}),
+            "CAPTION_PROVIDER_EVIDENCE": caption_evidence,
             "ACCOUNT": package["account_id"], "MEDIA_ASSET_ID": package["media_asset_id"],
             "MEDIA_PREVIEW": package["preview_url"], "VISION_PROVIDER": vision.get("provider", "gemini"),
             "VISION_MODEL": vision.get("model", ""),
@@ -175,9 +210,9 @@ def render(packages: list[dict]) -> str:
             "CAPTION_PROVIDER": result.get("provider_name", "NOT_RUN"),
             "CAPTION_PROVIDER_STATUS": result.get("provider_status", "NOT_RUN"),
             "MEDIA_ANCHOR_STATUS": anchor.get("media_anchor_status", "NOT_RUN"),
-            "CLAIM_SUPPORT": result.get("claim_support", []), "REMOVE_MEDIA_TEST": anchor.get("status", "NOT_RUN"),
-            "GENERIC_CAPTION_RISK": anchor.get("generic_caption_risk", "UNVERIFIED"),
-            "FABRICATED_EXPERIENCE_CHECK": result.get("fabricated_experience_check", {"status": "NOT_RUN"}),
+            "CLAIM_SUPPORT": result.get("claim_support", []), "REMOVE_MEDIA_TEST": "NOT_RUN" if provider_failed else anchor.get("status", "NOT_RUN"),
+            "GENERIC_CAPTION_RISK": "UNVERIFIED" if provider_failed else anchor.get("generic_caption_risk", "UNVERIFIED"),
+            "FABRICATED_EXPERIENCE_CHECK": {"status": "NOT_RUN"} if provider_failed else result.get("fabricated_experience_check", {"status": "NOT_RUN"}),
             "ACCOUNT_STYLE_CHECK": package["style"],
             "FAILURE_CLASS": package["failure_class"] or "NONE",
             "WARNINGS": [warning for warning in [package["failure_class"], *result.get("blocked_reasons", [])] if warning],
