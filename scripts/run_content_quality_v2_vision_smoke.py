@@ -52,31 +52,32 @@ class SmokeGeminiClient(GeminiHybridClient):
             for row in rows)
 
     def generate_json(self, **kwargs):
+        facts = []
         caption = kwargs.get("operation") == "direct_reference_caption_generation"
         if caption:
             kwargs["retry_profile"] = "vision_relevance"
-            # Keep the existing schema and validators; reduce conflicting source
-            # and marketing instructions for this visual-only editorial test.
             prompt = kwargs["prompt"]
             start = prompt.find('{"target_account_id":')
             if start >= 0:
                 source, _ = json.JSONDecoder().raw_decode(prompt[start:])
                 media = source.get("media_first_input", {})
+                ids = media.get("selected_post_angle", {}).get("anchor_fact_ids", [])
+                facts = [f for f in media.get("media_context", {}).get("visual_facts", []) if f.get("id") in ids]
+                kwargs["schema"] = {"type": "object", "properties": {
+                    "fact_id": {"type": "string", "enum": [f["id"] for f in facts]},
+                    "quoted_text": {"type": "string"}, "reader_takeaway": {"type": "string"}},
+                    "required": ["fact_id", "quoted_text", "reader_takeaway"], "additionalProperties": False}
                 kwargs["prompt"] = (
-                    "日本語の未公開Media投稿候補を作る。指定JSON schemaの全fieldを返す。"
-                    "選ばれたvisual factとangleのみが事実の根拠。画面テキストの主観は主観のまま引用する。"
-                    "public_post_textは100〜220文字、具体的な画面の観察→読者の判断ひとつ。CTAなし。"
-                    "事実観察には『この動画』と短い正確な引用を使う。一般論や追加の原因・成果・体験を捏造しない。"
-                    "Nightは男性スカウトの僕、Liverは女性マネージャーの私、Beautyは女友達で自然な絵文字1〜4。"
-                    "本文を書いてから実在する主張をmain_claimsに正確に転記する。"
-                    "main_claimsの各文をclaim_support.caption_claimにも同じ文で入れる。"
-                    "source_evidenceはvisual fact内の正確な一節、anchor_fact_idsはそのfactのID。"
-                    "要約・別表現をcaption_claimにしない。表現を飾るための実態・頻度・最上級を足さない。"
-                    "自分の使用体験や投稿主の経験の横取りは厳禁。材料不足はblocked_reasonsへ。\n"
-                    + json.dumps({"account_rules": source.get("account_rules", {}),
-                                  "selected_post_angle": media.get("selected_post_angle", {}),
-                                  "visual_facts": media.get("media_context", {}).get("visual_facts", []),
-                                  "generation_attempt": source.get("generation_attempt", 0)}, ensure_ascii=False))
+                    "未公開の日本語Media投稿を二つの部分で作る。fact_idを一つ選び、quoted_textにそのfact内の"
+                    "正確な連続する一節を15〜50文字で転記する。要約・補完不可。"
+                    "reader_takeawayはその引用を読んで読者が考えたいことを80〜140文字で自然に書く。"
+                    "引用の重要な具体語を残す。元投稿者の同伴や使用を自分の体験にしない。"
+                    "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
+                    "Nightは僕の店選びの判断、Liverは女性先輩の次回配信への一行動、Beautyは女友達の美容選びで絵文字1〜4。"
+                    "観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
+                    + json.dumps({"account": kwargs["account_id"], "visual_facts": facts}, ensure_ascii=False))
+        else:
+            facts = []
         original_model = kwargs.get("model", "")
         fallback = (caption or kwargs.get("operation") == "vision_smoke_relevance") and self.fallback_allowed(original_model)
         if fallback:
@@ -85,6 +86,20 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "fallback_used": fallback, "fallback_basis_run": self.quota_basis.get("origin_run_id", "") if fallback else ""}
         try:
             result = super().generate_json(**kwargs)
+            if caption and facts:
+                data = result["data"]
+                fact = next((f for f in facts if f["id"] == data.get("fact_id")), None)
+                quote = str(data.get("quoted_text", ""))
+                takeaway = str(data.get("reader_takeaway", ""))
+                if not fact or not 15 <= len(quote) <= 50 or quote not in fact["text"] or not takeaway:
+                    raise ValueError("caption_quote_not_bound_to_visual_fact")
+                observation = f"この動画の「{quote}」という言葉。"
+                claims = [observation, takeaway]
+                result = {**result, "data": {"public_post_text": observation + "\n" + takeaway,
+                    "internal_analysis": {"core_topic": quote, "intended_audience": kwargs["account_id"],
+                        "main_claims": claims, "factual_constraints": [fact["text"]], "prohibited_inferences": ["no invented experience or efficacy"]},
+                    "claim_support": [{"caption_claim": c, "source_evidence": fact["text"], "anchor_fact_ids": [fact["id"]]} for c in claims],
+                    "safety_notes": "quoted observation; no publish permission", "blocked_reasons": []}}
             self.last_evidence = {**decision, "attempt_count": result.get("actual_requests", 0),
                                   "attempt_history": result.get("attempt_history", [])}
             if caption:
