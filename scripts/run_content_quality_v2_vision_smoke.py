@@ -17,7 +17,7 @@ from generation.content_quality_v2 import generate_media_first_caption, prepare_
 from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService, account_rules,
 )
-from gemini_hybrid_client import GeminiHybridClient, provider_error_evidence
+from gemini_hybrid_client import GeminiHybridClient, GeminiHttpError, provider_error_evidence
 from gemini_quota_diagnostics import FIELDS as QUOTA_FIELDS
 from evidence_context_caption import PrivacyBoundedGeminiGroundedProvider
 from public_post_quality import voice_persona_validation  # noqa: E402
@@ -73,7 +73,8 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "reader_takeawayはその引用を読んで読者が考えたいことを80〜140文字で自然に書く。"
                     "引用の重要な具体語を残す。元投稿者の同伴や使用を自分の体験にしない。"
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
-                    "Nightは僕の店選びの判断、Liverは女性先輩の次回配信への一行動、Beautyは女友達の美容選びで絵文字1〜4。"
+                    "Nightは僕から夜職女性へ話す店選びの判断、Liverは迷いに共感する女性先輩の次回配信への一行動。"
+                    "Beautyは女友達の美容選びで絵文字1〜4、takeawayを空行で二段落にし、やわらかな感想を自然に。定型句の埋め草は禁止。"
                     "観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts}, ensure_ascii=False))
         else:
@@ -85,7 +86,23 @@ class SmokeGeminiClient(GeminiHybridClient):
         decision = {"requested_model": original_model, "model": kwargs.get("model", ""),
                     "fallback_used": fallback, "fallback_basis_run": self.quota_basis.get("origin_run_id", "") if fallback else ""}
         try:
-            result = super().generate_json(**kwargs)
+            try:
+                result = super().generate_json(**kwargs)
+            except GeminiHttpError as primary_error:
+                quota = primary_error.quota_diagnostics
+                violations = quota.get("quota_violations", [])
+                scoped = (not fallback and original_model == "gemini-3.5-flash" and bool(violations)
+                    and primary_error.status_code == 429
+                    and all(row.get("quota_model") == original_model
+                            and "PerProjectPerModel" in row.get("quota_id", "")
+                            and row.get("rate_limit_class") in {"DAILY_QUOTA_EXHAUSTED", "MODEL_QUOTA_EXHAUSTED"}
+                            for row in violations))
+                if not scoped:
+                    raise
+                kwargs["model"] = "gemini-3.1-flash-lite"
+                decision.update(model=kwargs["model"], fallback_used=True, fallback_basis_run="current_request",
+                                primary_attempt_history=getattr(primary_error, "attempt_history", []))
+                result = super().generate_json(**kwargs)
             if caption and facts:
                 data = result["data"]
                 fact = next((f for f in facts if f["id"] == data.get("fact_id")), None)
@@ -93,9 +110,11 @@ class SmokeGeminiClient(GeminiHybridClient):
                 takeaway = str(data.get("reader_takeaway", ""))
                 if not fact or not 15 <= len(quote) <= 50 or quote not in fact["text"] or not takeaway:
                     raise ValueError("caption_quote_not_bound_to_visual_fact")
-                observation = f"この動画の「{quote}」という言葉。"
+                observation = f"この動画の「{quote}」という言葉。" if fact.get("type") == "visible_text" else f"この動画では、{quote}。"
+                if kwargs["account_id"] == "beauty_account":
+                    observation = observation.removesuffix("。")
                 claims = [observation, takeaway]
-                result = {**result, "data": {"public_post_text": observation + "\n" + takeaway,
+                result = {**result, "data": {"public_post_text": observation + "\n\n" + takeaway,
                     "internal_analysis": {"core_topic": quote, "intended_audience": kwargs["account_id"],
                         "main_claims": claims, "factual_constraints": [fact["text"]], "prohibited_inferences": ["no invented experience or efficacy"]},
                     "claim_support": [{"caption_claim": c, "source_evidence": fact["text"], "anchor_fact_ids": [fact["id"]]} for c in claims],
@@ -198,6 +217,8 @@ def build_package(row: dict, directory: Path) -> dict:
         editorial_draft=True, caption_generator=lambda **request: service.generate_media_context(bundle, **request))
     text = str(result.get("public_post_text") or "")
     style = voice_persona_validation(text, account) if text else {"status": "NOT_RUN"}
+    if style.get("status") == "VOICE_PERSONA_PASS":
+        style = {**style, "status": "PASS", "validator_status": "VOICE_PERSONA_PASS"}
     return {**row, "caption_candidate": client.caption_candidate, "caption_provider_evidence": client.caption_evidence,
             "smoke_vision_evidence": {"media_asset_id": row["media_asset_id"], "account_id": account,
                 "content_hash": inspected.get("content_hash", ""), "vision": vision,
@@ -217,7 +238,16 @@ def summary(packages: list[dict]) -> dict:
         and p["result"].get("remove_media_test", {}).get("status") == "PASS"
         and p["result"].get("fabricated_experience_check", {}).get("status") == "PASS"
         for p in packages)
+    e2e = sum(p["vision"].get("status") == "PASS"
+              and p["result"].get("status") == "PASS"
+              and p["result"].get("account_relevance", {}).get("status") == "PASS"
+              and bool(p["result"].get("public_post_text"))
+              and p["result"].get("remove_media_test", {}).get("status") == "PASS"
+              and p["result"].get("remove_media_test", {}).get("media_anchor_status") == "PASS"
+              and p["result"].get("fabricated_experience_check", {}).get("status") == "PASS"
+              and p.get("style", {}).get("status") == "PASS" for p in packages)
     return {
+        "EDITORIAL_E2E_PASS_COUNT": e2e,
         "TARGET_ACCOUNTS": [p.get("account_id", "") for p in packages],
         "VISION_TARGET_COUNT": len(packages),
         "VISION_VERIFIED_COUNT": sum(p["result"].get("media_context", {}).get("visual_status") == "VISUAL_VERIFIED" for p in packages),
@@ -227,7 +257,7 @@ def summary(packages: list[dict]) -> dict:
         "VERIFIED_MEDIA_PACKAGE_COUNT": verified,
         "FABRICATED_EXPERIENCE_COUNT": sum(p["result"].get("fabricated_experience_check", {}).get("status") == "BLOCKED" for p in packages),
         "GENERIC_CAPTION_SELECTED_COUNT": sum(bool(p["result"].get("public_post_text")) and p["result"].get("remove_media_test", {}).get("generic_caption_risk") == "HIGH" for p in packages),
-        "MEDIA_FIRST_QUALITY_PROVEN": "YES" if packages and verified == len(packages) else "NO",
+        "MEDIA_FIRST_QUALITY_PROVEN": "YES" if packages and e2e == len(packages) and verified == len(packages) else "NO",
     }
 
 
@@ -323,9 +353,11 @@ def main() -> int:
             handle.write(review)
     # Irrelevant media is a valid Vision proof, but never a successful media package.
     vision_pass = bool(packages) and summary(packages)["VISION_VERIFIED_COUNT"] == len(previews)
-    relevant_drafts_pass = all(p["result"].get("status") == "PASS" for p in packages
+    relevant_drafts_pass = all(p["result"].get("status") == "PASS" and p.get("style", {}).get("status") == "PASS" for p in packages
                               if p["result"].get("account_relevance", {}).get("status") == "PASS")
-    return 0 if vision_pass and relevant_drafts_pass else 1
+    providers_available = all(p.get("relevance_provider_evidence", {}).get("provider_status")
+                              not in {"UNAVAILABLE", "ERROR", "FAILED", "BLOCKED"} for p in packages)
+    return 0 if vision_pass and relevant_drafts_pass and providers_available else 1
 
 
 if __name__ == "__main__":

@@ -113,7 +113,7 @@ class QuotaTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmp:
                 result = {'media_context': {'visual_status': 'VISUAL_VERIFIED'},
                           'account_relevance': {'status': relevance}, 'status': caption_status}
-                package = {'account_id': 'night_scout', 'vision': {'status': 'PASS'}, 'result': result}
+                package = {'account_id': 'night_scout', 'vision': {'status': 'PASS'}, 'result': result, 'style': {'status': 'PASS'}}
                 with patch.dict('os.environ', {'GITHUB_ACTIONS': 'true', 'RUNNER_TEMP': tmp}, clear=True), \
                      patch.object(sys, 'argv', ['smoke', '--target-account', 'night_scout', '--output', tmp + '/review.md']), \
                      patch.object(smoke, 'build_package', return_value=package) as build, \

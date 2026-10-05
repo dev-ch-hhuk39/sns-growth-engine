@@ -938,7 +938,8 @@ class SourceGroundedCaptionService:
             # Keep model egress privacy-bounded. Beauty voice normalization is
             # performed locally, then the normalized text must pass the same
             # semantic, persona and quality gates as every other candidate.
-            if source_mode == "transform" and account_id == "beauty_account":
+            if (source_mode == "transform" and account_id == "beauty_account"
+                    and not transcript_excerpt.startswith('{"media_context":')):
                 from public_post_quality import apply_account_voice
 
                 public_text = apply_account_voice(public_text, account_id)
