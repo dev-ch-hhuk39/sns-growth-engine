@@ -6,6 +6,7 @@ import argparse
 from datetime import datetime, timezone, timedelta
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -63,20 +64,27 @@ class SmokeGeminiClient(GeminiHybridClient):
                 media = source.get("media_first_input", {})
                 ids = media.get("selected_post_angle", {}).get("anchor_fact_ids", [])
                 facts = [f for f in media.get("media_context", {}).get("visual_facts", []) if f.get("id") in ids]
+                quote_options = []
+                for fact in facts:
+                    texts = re.findall(r"「([^」]+)」", fact["text"]) or [fact["text"]]
+                    for text in texts:
+                        excerpts = [text] if len(text) <= 80 else re.split(r"[\s。]+", text)
+                        quote_options += [{"fact_id": fact["id"], "text": part} for part in excerpts if 8 <= len(part) <= 80]
+                if not quote_options:
+                    raise RuntimeError("no_bound_quote_options")
                 kwargs["schema"] = {"type": "object", "properties": {
-                    "fact_id": {"type": "string", "enum": [f["id"] for f in facts]},
-                    "quoted_text": {"type": "string"}, "reader_takeaway": {"type": "string"}},
-                    "required": ["fact_id", "quoted_text", "reader_takeaway"], "additionalProperties": False}
+                    "quote_choice": {"type": "integer", "enum": list(range(len(quote_options)))},
+                    "reader_takeaway": {"type": "string"}},
+                    "required": ["quote_choice", "reader_takeaway"], "additionalProperties": False}
                 kwargs["prompt"] = (
-                    "未公開の日本語Media投稿を二つの部分で作る。fact_idを一つ選び、quoted_textにそのfact内の"
-                    "正確な連続する一節を15〜50文字で転記する。要約・補完不可。"
+                    "未公開の日本語Media投稿を二つの部分で作る。quote_optionsの番号をquote_choiceで一つ選ぶ。引用本文は変更しない。"
                     "reader_takeawayはその引用を読んで読者が考えたいことを80〜140文字で自然に書く。"
                     "引用の重要な具体語を残す。元投稿者の同伴や使用を自分の体験にしない。"
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
                     "Nightは僕から夜職女性へ話す店選びの判断、Liverは迷いに共感する女性先輩の次回配信への一行動。"
                     "Beautyは女友達の美容選びで絵文字1〜4、takeawayを空行で二段落にし、やわらかな感想を自然に。定型句の埋め草は禁止。"
                     "観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
-                    + json.dumps({"account": kwargs["account_id"], "visual_facts": facts}, ensure_ascii=False))
+                    + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
         else:
             facts = []
         original_model = kwargs.get("model", "")
@@ -105,11 +113,15 @@ class SmokeGeminiClient(GeminiHybridClient):
                 result = super().generate_json(**kwargs)
             if caption and facts:
                 data = result["data"]
-                fact = next((f for f in facts if f["id"] == data.get("fact_id")), None)
-                quote = str(data.get("quoted_text", ""))
+                choice = data.get("quote_choice")
+                if not isinstance(choice, int) or isinstance(choice, bool) or not 0 <= choice < len(quote_options):
+                    raise RuntimeError("caption_quote_choice_invalid")
+                selected_quote = quote_options[choice]
+                fact = next((f for f in facts if f["id"] == selected_quote["fact_id"]), None)
+                quote = selected_quote["text"]
                 takeaway = str(data.get("reader_takeaway", ""))
-                if not fact or not 15 <= len(quote) <= 50 or quote not in fact["text"] or not takeaway:
-                    raise ValueError("caption_quote_not_bound_to_visual_fact")
+                if not fact or not 8 <= len(quote) <= 80 or quote not in fact["text"] or not takeaway:
+                    raise RuntimeError("caption_quote_not_bound_to_visual_fact")
                 observation = f"この動画の「{quote}」という言葉。" if fact.get("type") == "visible_text" else f"この動画では、{quote}。"
                 if kwargs["account_id"] == "beauty_account":
                     observation = observation.removesuffix("。")

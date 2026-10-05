@@ -36,13 +36,13 @@ class SmokeCaptionTests(unittest.TestCase):
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
         quote = "採用基準狙い目、ただ入店後の競争率は高い"
         for candidate_quote in (quote, "存在しない採用条件や給与の保証の文章です"):
-            payload = {"fact_id": "VF1", "quoted_text": candidate_quote, "reader_takeaway": "僕なら採用基準だけでなく、入店後の競争率という視点も分けて考えたい。"}
+            payload = {"quote_choice": 0 if candidate_quote == quote else 99, "reader_takeaway": "僕なら採用基準だけでなく、入店後の競争率という視点も分けて考えたい。"}
             response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}}]}
             with tempfile.TemporaryDirectory() as tmp:
                 client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
                 args = dict(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False), schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
                 if candidate_quote != quote:
-                    with self.assertRaises(ValueError): client.generate_json(**args)
+                    with self.assertRaises(RuntimeError): client.generate_json(**args)
                 else:
                     result = client.generate_json(**args)["data"]
                     for support in result["claim_support"]:

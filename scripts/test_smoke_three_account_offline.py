@@ -25,8 +25,8 @@ class OfflineSmokeTests(unittest.TestCase):
                 row={'account_id':account,'media_asset_id':'offline-'+account,'preview_url':'https://example.invalid/offline.mp4'}
                 def transport(url,body,timeout):
                     schema=body['generationConfig']['responseJsonSchema']
-                    if 'fact_id' in schema['properties']:
-                        result={'fact_id':schema['properties']['fact_id']['enum'][0],'quoted_text':quote,'reader_takeaway':takeaway}
+                    if 'quote_choice' in schema['properties']:
+                        result={'quote_choice':0,'reader_takeaway':takeaway}
                     else:
                         result={'account_id':account,'status':'PASS','reason':'fixtureの具体的な比較・判断が対象読者に有用',
                                 'audience_need':'具体的な行動の比較','content_pillar':'fixture','anchor_fact_types':['visible_text']}
