@@ -107,6 +107,11 @@ class SmokeGeminiClient(GeminiHybridClient):
                             for row in violations))
                 if not scoped:
                     raise
+                retry_delay = quota.get("retry_delay_seconds")
+                if isinstance(retry_delay, (int, float)) and retry_delay > 0:
+                    self.quota_basis = {"observed_at": datetime.now(timezone.utc).isoformat(),
+                        "retry_delay_seconds": retry_delay, "quota_violations": violations,
+                        "origin_run_id": os.environ.get("GITHUB_RUN_ID", "current_request")}
                 kwargs["model"] = "gemini-3.1-flash-lite"
                 decision.update(model=kwargs["model"], fallback_used=True, fallback_basis_run="current_request",
                                 primary_attempt_history=getattr(primary_error, "attempt_history", []))

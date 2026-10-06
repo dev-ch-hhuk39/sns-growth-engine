@@ -51,7 +51,8 @@ class SmokeCaptionTests(unittest.TestCase):
                     self.assertEqual(result["internal_analysis"]["main_claims"], [s["caption_claim"] for s in result["claim_support"]])
 
     def test_current_model_quota_allows_one_explicit_model_fallback(self):
-        transport = Mock(side_effect=[GeminiHttpError(429, quota('GenerateRequestsPerDayPerProjectPerModel-FreeTier')),
+        transport = Mock(side_effect=[GeminiHttpError(429, quota('GenerateRequestsPerDayPerProjectPerModel-FreeTier', delay='3600s')),
+                                     {'candidates':[{'content':{'parts':[{'text':'{}'}]}}]},
                                      {'candidates':[{'content':{'parts':[{'text':'{}'}]}}]}])
         with tempfile.TemporaryDirectory() as tmp:
             client = SmokeGeminiClient(api_key='fixture', transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
@@ -61,6 +62,9 @@ class SmokeCaptionTests(unittest.TestCase):
             self.assertTrue(client.caption_evidence['fallback_used'])
             self.assertEqual(client.caption_evidence['model'], 'gemini-3.1-flash-lite')
             self.assertEqual(client.caption_evidence['primary_attempt_history'][0]['http_status'], 429)
+            client.generate_json(model='gemini-3.5-flash', prompt='another caption', schema={}, operation='direct_reference_caption_generation', account_id='night_scout')
+            self.assertEqual(transport.call_count, 3)
+            self.assertIn('gemini-3.1-flash-lite', transport.call_args.args[0])
 
 if __name__ == '__main__':
     unittest.main()
