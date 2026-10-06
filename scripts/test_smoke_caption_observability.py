@@ -91,7 +91,7 @@ class SmokeCaptionTests(unittest.TestCase):
         self.assertIn("みんなで共有", sent)
 
 
-    def test_liver_rejects_weak_self_directed_action_ending(self):
+    def test_liver_repairs_weak_self_directed_action_ending(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "枠の規模に合った運用が一番いいと思います"}
         source = {"target_account_id": "liver_manager", "media_first_input": {
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
@@ -100,9 +100,10 @@ class SmokeCaptionTests(unittest.TestCase):
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         with tempfile.TemporaryDirectory() as tmp:
             client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
-            with self.assertRaisesRegex(RuntimeError, "liver_actionable_ending_missing"):
-                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
-                                     schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+            result = client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                          schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+        self.assertIn("決めてみてね😊", result["data"]["public_post_text"])
+        self.assertNotIn("決めてみるかも", result["data"]["public_post_text"])
 
     def test_style_repair_rebinds_claim_support_to_final_text(self):
         result = {

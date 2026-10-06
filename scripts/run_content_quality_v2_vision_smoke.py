@@ -146,6 +146,13 @@ class SmokeGeminiClient(GeminiHybridClient):
                     if any(name in takeaway and re.search(rf"{re.escape(name)}.{{0,16}}(?:質問|聞|相談|連絡|DM)", takeaway)
                                for name in source_names):
                         raise RuntimeError("liver_source_person_contact_not_actionable")
+                    # Voice-only repair: keep the same next-stream action while
+                    # converting a weak self-directed ending into reader guidance.
+                    takeaway = re.sub(
+                        r"((?:決め|変え|合わせ|試し)て)みるかも([。！!😊✨🤍🫶🏻😭💭]*)$",
+                        r"\1みてね\2",
+                        takeaway.strip(),
+                    )
                     if not ("次の配信" in takeaway and re.search(
                             r"(?:配信|入室|通知|コメント|初見|枠).{0,40}(?:決め|合わせ|変え|読む|読まない|試)", takeaway)):
                         raise RuntimeError("liver_next_stream_action_not_grounded")
