@@ -1,3 +1,11 @@
+## 2026-10-06 Content Quality V2 autonomous verification — EXTERNAL_BLOCKED
+
+- Implementation head: `5cc8529d142adef4528adf97863a0a6b24d9b6f3`, feature branch `feat/content-quality-v2`; changes pushed under explicit autonomous authorization. See [complete evidence and human review](docs/CONTENT_QUALITY_V2_AUTONOMOUS_REVIEW.md).
+- Night live E2E passed in `37398505799`: bound Vision replay, Relevance, Caption, Claim Support, Remove Media, fabricated-experience check, and style 92 PASS. Publish remains BLOCKED; owner grade not assigned.
+- Liver `37398601690`: Vision HTTP 429, model-specific DAILY_QUOTA_EXHAUSTED for gemini-3.5-flash, limit 20, one attempt, NO_RETRY, retryDelay 81577 seconds. Not evidence of whole-project exhaustion. Beauty and all-target integration were not run. Resume after provider wait around 2026-10-07 00:00 UTC; Liver before Beauty. No automatic retry scheduled.
+- Full suite ran once, 942/942 PASS on the code committed as `1e1b24f`; later Smoke prompt/fixture changes received focused tests and live Night validation, not another full run. Workflow Safety once, 527/527 PASS; definitions unchanged. Final compile/Ruff fatal/diff PASS. Offline three-account/negative/replay checks PASS, not live proof.
+- Safe model-scoped Relevance/Caption fallback and exact Vision replay are Smoke-only. No production jobs ran (all 13 runs verified skipped), production data changes, main/merge/deploy, posting, READY, Sheets, Cloudinary upload, secrets, acquisition or scheduler change. Preserve `.runtime/` and four pre-existing untracked Markdown files.
+
 ## 2026-10-04 Smoke relevance quota observability
 
 - Base `4dc2293178f9e1488e1acf9014b6934c3420154e`, branch `feat/content-quality-v2`. Run `37130659799` proved Night Vision (503 -> 200, empty visible_action accepted); relevance ended HTTP 429 after three attempts without quota/history evidence. This patch targets only the Smoke relevance provider path.
