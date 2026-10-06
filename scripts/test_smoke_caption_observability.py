@@ -50,6 +50,22 @@ class SmokeCaptionTests(unittest.TestCase):
                         self.assertEqual(support["anchor_fact_ids"], ["VF1"])
                     self.assertEqual(result["internal_analysis"]["main_claims"], [s["caption_claim"] for s in result["claim_support"]])
 
+    def test_liver_prompt_requires_next_stream_action(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
+        source = {"target_account_id": "liver_manager", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0, "reader_takeaway": "次の配信では、入室通知を読むかどうかを一つ決めて試してみてね。"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}}]}
+        transport = Mock(return_value=response)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                 schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+        sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
+        self.assertIn("次の配信では", sent)
+        self.assertIn("一つの具体行動", sent)
+        self.assertIn("みんなで共有", sent)
+
     def test_current_model_quota_allows_one_explicit_model_fallback(self):
         transport = Mock(side_effect=[GeminiHttpError(429, quota('GenerateRequestsPerDayPerProjectPerModel-FreeTier', delay='3600s')),
                                      {'candidates':[{'content':{'parts':[{'text':'{}'}]}}]},

@@ -83,7 +83,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
                     "Nightのreader_takeawayは必ず『僕なら』で始め、店選びに迷う子へ話す。visual_facts内の具体語を二つ以上そのまま残して判断を述べる。"
                     "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
-                    "Liverは迷いに共感する女性先輩の次回配信への一行動。"
+                    "Liverは迷いに共感する女性先輩の口調にし、reader_takeawayに必ず「次の配信では」を含める。視覚事実に直接関係する一つの具体行動を示し、最後は自然な「試してみてね」等で締める。一般的なコミュニティ提案や「みんなで共有」は禁止。"
                     "Beautyは女友達の美容選びで絵文字1〜4、takeawayを空行で二段落にし、やわらかな感想を自然に。定型句の埋め草は禁止。"
                     "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
