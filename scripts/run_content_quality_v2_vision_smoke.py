@@ -72,10 +72,17 @@ class SmokeGeminiClient(GeminiHybridClient):
                         quote_options += [{"fact_id": fact["id"], "text": part} for part in excerpts if 8 <= len(part) <= 80]
                 if not quote_options:
                     raise RuntimeError("no_bound_quote_options")
-                kwargs["schema"] = {"type": "object", "properties": {
+                beauty = kwargs["account_id"] == "beauty_account"
+                properties = {
                     "quote_choice": {"type": "integer", "enum": list(range(len(quote_options)))},
-                    "reader_takeaway": {"type": "string"}},
-                    "required": ["quote_choice", "reader_takeaway"], "additionalProperties": False}
+                    "reader_takeaway": {"type": "string"},
+                }
+                required = ["quote_choice", "reader_takeaway"]
+                if beauty:
+                    properties["beauty_followup"] = {"type": "string"}
+                    required.append("beauty_followup")
+                kwargs["schema"] = {"type": "object", "properties": properties,
+                                    "required": required, "additionalProperties": False}
                 kwargs["prompt"] = (
                     "未公開の日本語Media投稿を二つの部分で作る。quote_optionsの番号をquote_choiceで一つ選ぶ。引用本文は変更しない。"
                     "reader_takeawayはその引用に対する具体的な判断を45〜90文字、二文以内で書く。抽象論へ広げない。"
@@ -84,7 +91,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "Nightのreader_takeawayは必ず『僕なら』で始め、店選びに迷う子へ話す。visual_facts内の具体語を二つ以上そのまま残して判断を述べる。"
                     "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
                     "Liverは迷いに共感する女性先輩の口調にし、reader_takeawayに必ず「次の配信では」を含める。視覚事実に直接関係する一つの具体行動を示し、最後は自然な「試してみてね」等で締める。一般的なコミュニティ提案や「みんなで共有」は禁止。"
-                    "Beautyは女友達の美容選びの口調で絵文字1〜4。自分が使用した体験・使用感・肌変化・効能は一切書かず、画面で確認できる商品名・成分表記・塗布動作だけから選び方や確認ポイントを述べる。「気に入ってる」「肌の調子がいい」「肌が整う」「使いやすい」「取り入れている」「効いた」等の自己使用レビューは禁止。takeawayは自然な観察または比較の判断にする。定型句の埋め草は禁止。"
+                    "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字情報だけから比較・確認ポイントを述べる。他のvisual factを追加しない。「気に入ってる」「肌の調子がいい」「肌が整う」「使いやすい」「取り入れている」「効いた」等の自己使用レビューは禁止。reader_takeawayとbeauty_followupは各1段落、句点「。」を使わず、合計で絵文字1〜4個。reader_takeawayには「意外と」とsoft endingの「かも」を自然に入れ、beauty_followupには「結構大事」と「だよね」を自然に入れる。広告・効能・定型句の埋め草は禁止。"
                     "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
         else:
@@ -127,13 +134,17 @@ class SmokeGeminiClient(GeminiHybridClient):
                 fact = next((f for f in facts if f["id"] == selected_quote["fact_id"]), None)
                 quote = selected_quote["text"]
                 takeaway = str(data.get("reader_takeaway", ""))
+                beauty_followup = str(data.get("beauty_followup", "")) if kwargs["account_id"] == "beauty_account" else ""
                 if not fact or not 8 <= len(quote) <= 80 or quote not in fact["text"] or not takeaway:
                     raise RuntimeError("caption_quote_not_bound_to_visual_fact")
+                if kwargs["account_id"] == "beauty_account" and not beauty_followup:
+                    raise RuntimeError("beauty_followup_missing")
                 observation = f"この動画の「{quote}」という言葉。" if fact.get("type") == "visible_text" else f"この動画では、{quote}。"
                 if kwargs["account_id"] == "beauty_account":
                     observation = observation.removesuffix("。")
-                claims = [observation, takeaway]
-                result = {**result, "data": {"public_post_text": observation + "\n\n" + takeaway,
+                claims = [observation, takeaway] + ([beauty_followup] if beauty_followup else [])
+                public_post_text = observation + "\n\n" + takeaway + (("\n\n" + beauty_followup) if beauty_followup else "")
+                result = {**result, "data": {"public_post_text": public_post_text,
                     "internal_analysis": {"core_topic": quote, "intended_audience": kwargs["account_id"],
                         "main_claims": claims, "factual_constraints": [fact["text"]], "prohibited_inferences": ["no invented experience or efficacy"]},
                     "claim_support": [{"caption_claim": c, "source_evidence": fact["text"], "anchor_fact_ids": [fact["id"]]} for c in claims],

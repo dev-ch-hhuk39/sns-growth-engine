@@ -27,6 +27,8 @@ class OfflineSmokeTests(unittest.TestCase):
                     schema=body['generationConfig']['responseJsonSchema']
                     if 'quote_choice' in schema['properties']:
                         result={'quote_choice':0,'reader_takeaway':takeaway}
+                        if account == 'beauty_account':
+                            result['beauty_followup']='同じ照明で見比べるのって結構大事だよね🤍'
                     else:
                         result={'account_id':account,'status':'PASS','reason':'fixtureの具体的な比較・判断が対象読者に有用',
                                 'audience_need':'具体的な行動の比較','content_pillar':'fixture','anchor_fact_types':['visible_text']}

@@ -54,7 +54,9 @@ class SmokeCaptionTests(unittest.TestCase):
         fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}
         source = {"target_account_id": "beauty_account", "media_first_input": {
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
-        payload = {"quote_choice": 0, "reader_takeaway": "グリシルグリシン3.0って表記が見えるから、成分で比べたい時の確認ポイントにしやすそう✨"}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "グリシルグリシン3.0って表記まで見えるの、意外と比較の目印にしやすいかも✨",
+                   "beauty_followup": "成分名を見比べたい時に、この表記を確認するのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
@@ -62,8 +64,13 @@ class SmokeCaptionTests(unittest.TestCase):
             client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
                                  schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
         sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
-        for phrase in ("自分が使用した体験", "肌変化", "気に入ってる", "肌の調子がいい", "使いやすい"):
+        for phrase in ("自分が使用した体験", "肌変化", "気に入ってる", "肌の調子がいい", "使いやすい",
+                       "意外と", "かも", "結構大事", "だよね"):
             self.assertIn(phrase, sent)
+        data = client.caption_candidate["public_post_text"]
+        self.assertEqual(len(data.split("\n\n")), 3)
+        from public_post_quality import voice_persona_validation
+        self.assertEqual(voice_persona_validation(data, "beauty_account")["status"], "VOICE_PERSONA_PASS")
 
     def test_liver_prompt_requires_next_stream_action(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
