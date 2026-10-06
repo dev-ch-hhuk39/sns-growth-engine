@@ -35,7 +35,8 @@ def selected_previews(document: str) -> list[dict[str, str]]:
     return selected
 
 
-def inspect_preview(row: dict[str, str], directory: Path, *, account_content_contract: dict | None = None, smoke_vision_evidence: dict | None = None) -> dict:
+def inspect_preview(row: dict[str, str], directory: Path, *, account_content_contract: dict | None = None,
+                    smoke_vision_evidence: dict | None = None, vision_model_override: str = "") -> dict:
     directory.mkdir(parents=True, exist_ok=True)
     url = row["preview_url"]
     if urlsplit(url).hostname != "res.cloudinary.com" or urlsplit(url).scheme != "https":
@@ -79,9 +80,21 @@ def inspect_preview(row: dict[str, str], directory: Path, *, account_content_con
             vision = {**candidate, "attempt_count": 0, "attempt_history": [],
                       "evidence_reused_from_run": saved.get("origin_run_id", "")}
         else:
-            vision = vision_summary([path for _, path in frames], media_type="video",
-                                    source_metadata=row, transcript={"status": "UNAVAILABLE"},
-                                    account_content_contract=account_content_contract)
+            previous_model = os.environ.get("GEMINI_VISION_MODEL")
+            try:
+                if vision_model_override:
+                    os.environ["GEMINI_VISION_MODEL"] = vision_model_override
+                vision = vision_summary([path for _, path in frames], media_type="video",
+                                        source_metadata=row, transcript={"status": "UNAVAILABLE"},
+                                        account_content_contract=account_content_contract)
+            finally:
+                if vision_model_override:
+                    if previous_model is None:
+                        os.environ.pop("GEMINI_VISION_MODEL", None)
+                    else:
+                        os.environ["GEMINI_VISION_MODEL"] = previous_model
+            if vision_model_override and vision_model_override != expected_model:
+                vision = {**vision, "requested_model": expected_model, "fallback_used": True}
         return {**row, "status": "PREVIEW_READ_OK", "content_hash": digest,
                 "frames": [{"timestamp": timestamp, "path": str(path.resolve()),
                             "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for timestamp, path in frames],

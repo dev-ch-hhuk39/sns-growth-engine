@@ -210,8 +210,15 @@ def build_package(row: dict, directory: Path) -> dict:
     evidence_path = ROOT / "docs/fixtures/content_quality_v2_smoke_evidence.json"
     saved = json.loads(evidence_path.read_text()).get("vision", []) if evidence_path.exists() else []
     evidence = next((p for p in saved if p.get("media_asset_id") == row["media_asset_id"] and p.get("account_id") == account), None)
-    inspected = inspect_preview(row, directory, account_content_contract=contract, smoke_vision_evidence=evidence)
+    client = SmokeGeminiClient(max_attempts=1)
+    primary_vision_model = os.environ.get("GEMINI_VISION_MODEL") or os.environ.get("GEMINI_GENERATOR_MODEL") or "gemini-3.5-flash"
+    vision_model_override = "gemini-3.1-flash-lite" if client.fallback_allowed(primary_vision_model) else ""
+    inspected = inspect_preview(row, directory, account_content_contract=contract, smoke_vision_evidence=evidence,
+                                vision_model_override=vision_model_override)
     vision = inspected.get("vision", {})
+    if vision.get("fallback_used"):
+        vision = {**vision, "fallback_basis_run": client.quota_basis.get("origin_run_id", "")}
+        inspected["vision"] = vision
     required = ("visual_summary", "key_moment")
     if vision.get("status") == "PASS" and (not isinstance(vision.get("visible_action"), str)
             or not all(isinstance(vision.get(key), str) and vision[key].strip() for key in required)):
@@ -227,7 +234,6 @@ def build_package(row: dict, directory: Path) -> dict:
     bundle = SourcePostBundle(source_post_id="", source_id="", target_account_id=account,
                               platform="", profile_url="", canonical_post_url="", external_post_id="",
                               original_post_text="", published_at="")
-    client = SmokeGeminiClient(max_attempts=1)
     media["account_relevance_review"] = relevance_review(media, contract, client)
     service = SourceGroundedCaptionService(PrivacyBoundedGeminiGroundedProvider(client=client),
                                           allow_deterministic_fallback=False, retry_primary_on_alignment_failure=False)
@@ -298,6 +304,9 @@ def render(packages: list[dict]) -> str:
             "ACCOUNT": package["account_id"], "MEDIA_ASSET_ID": package["media_asset_id"],
             "MEDIA_PREVIEW": package["preview_url"], "VISION_PROVIDER": vision.get("provider", "gemini"),
             "VISION_MODEL": vision.get("model", ""),
+            "VISION_REQUESTED_MODEL": vision.get("requested_model", vision.get("model", "")),
+            "VISION_FALLBACK_USED": bool(vision.get("fallback_used")),
+            "VISION_FALLBACK_BASIS_RUN": vision.get("fallback_basis_run", ""),
             "HTTP_STATUS": vision.get("http_status", ""),
             "PROVIDER_ERROR_TYPE": vision.get("provider_error_type", ""),
             "RESPONSE_SCHEMA_STATUS": vision.get("response_schema_status", "NOT_RUN"),

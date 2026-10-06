@@ -2,6 +2,7 @@
 import copy
 import hashlib
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -38,6 +39,34 @@ class EvidenceReuseTests(unittest.TestCase):
                     if field is None:
                         self.assertEqual(result['vision']['attempt_count'],0)
                         self.assertEqual(result['vision']['evidence_reused_from_run'],'fixture')
+
+    def test_vision_model_override_is_smoke_scoped_and_restored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            frame = Path(tmp) / "f.jpg"
+            frame.write_bytes(b"frame")
+            row = {"account_id":"liver_manager","media_asset_id":"asset","preview_url":"https://res.cloudinary.com/fixture"}
+            response = Mock(status_code=200)
+            response.iter_content.return_value=[b"media"]
+            response.__enter__=Mock(return_value=response)
+            response.__exit__=Mock(return_value=False)
+            seen = []
+
+            def fake_vision(*args, **kwargs):
+                model = os.environ.get("GEMINI_VISION_MODEL", "")
+                seen.append(model)
+                return {"provider":"gemini","model":model,"status":"PASS","response_schema_status":"PASS",
+                        "visual_summary":"fixture summary","visible_action":"","key_moment":"fixture moment",
+                        "visual_facts":[{"id":"VF1","type":"visible_text","text":"fixture text"}],
+                        "http_status":200,"frame_hashes":[hashlib.sha256(b"frame").hexdigest()]}
+
+            with patch.dict(os.environ, {"GEMINI_VISION_MODEL":"gemini-3.5-flash"}, clear=False),                  patch.object(preview.requests, "get", return_value=response),                  patch.object(preview.subprocess, "run", return_value=Mock(stdout='{"format":{"duration":1},"streams":[{"codec_type":"video"}]}')),                  patch.object(preview, "representative_frames", return_value=[(0, frame)]),                  patch.object(preview, "vision_summary", side_effect=fake_vision):
+                result = preview.inspect_preview(row, Path(tmp), vision_model_override="gemini-3.1-flash-lite")
+                self.assertEqual(os.environ["GEMINI_VISION_MODEL"], "gemini-3.5-flash")
+
+            self.assertEqual(seen, ["gemini-3.1-flash-lite"])
+            self.assertEqual(result["vision"]["model"], "gemini-3.1-flash-lite")
+            self.assertEqual(result["vision"]["requested_model"], "gemini-3.5-flash")
+            self.assertTrue(result["vision"]["fallback_used"])
 
     def test_fallback_only_on_active_model_scoped_evidence(self):
         client=SmokeGeminiClient(api_key='fixture',reserve_request=Mock())
