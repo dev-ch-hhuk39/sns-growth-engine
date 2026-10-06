@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1] / 'src')]
-from run_content_quality_v2_vision_smoke import SmokeGeminiClient
+from run_content_quality_v2_vision_smoke import SmokeGeminiClient, rebind_style_repair_claims
 from gemini_hybrid_client import GeminiHttpError
 from test_gemini_quota_diagnostics import quota
 
@@ -90,6 +90,32 @@ class SmokeCaptionTests(unittest.TestCase):
         self.assertIn("一つの具体行動", sent)
         self.assertIn("みんなで共有", sent)
 
+
+    def test_liver_rejects_weak_self_directed_action_ending(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "枠の規模に合った運用が一番いいと思います"}
+        source = {"target_account_id": "liver_manager", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "枠の規模に合った運用って迷うよね、次の配信では入室通知を読むか決めてみるかも😊"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "liver_actionable_ending_missing"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+
+    def test_style_repair_rebinds_claim_support_to_final_text(self):
+        result = {
+            "public_post_text": "一段目💄\n\n二段目",
+            "claim_support": [
+                {"caption_claim": "一段目💄", "source_evidence": "一段目", "anchor_fact_ids": ["VF1"]},
+                {"caption_claim": "二段目", "source_evidence": "二段目", "anchor_fact_ids": ["VF2"]},
+            ],
+            "internal_analysis": {"main_claims": ["一段目💄", "二段目"]},
+        }
+        rebound = rebind_style_repair_claims(result, "一段目💭\n\n二段目")
+        self.assertEqual([x["caption_claim"] for x in rebound["claim_support"]], ["一段目💭", "二段目"])
+        self.assertEqual(rebound["internal_analysis"]["main_claims"], ["一段目💭", "二段目"])
 
     def test_liver_rejects_source_person_as_viewer_action(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "一休さんに質問 配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}

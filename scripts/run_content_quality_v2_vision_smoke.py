@@ -14,7 +14,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from acquisition.models import SourcePostBundle  # noqa: E402
 from build_media_first_review_pack import inspect_preview, selected_previews  # noqa: E402
-from generation.content_quality_v2 import generate_media_first_caption, prepare_media_context, repair_style_only  # noqa: E402
+from generation.content_quality_v2 import (  # noqa: E402
+    fabricated_media_experience, generate_media_first_caption, prepare_media_context,
+    remove_media_test, repair_style_only,
+)
 from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService, account_rules,
 )
@@ -90,7 +93,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
                     "Nightのreader_takeawayは必ず『僕なら』で始め、店選びに迷う子へ話す。visual_facts内の具体語を二つ以上そのまま残して判断を述べる。"
                     "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
-                    "Liverは迷いに共感する女性先輩の口調にし、質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。reader_takeawayに必ず「次の配信では」を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。最後は自然な「試してみてね」等で締める。一般的なコミュニティ提案や「みんなで共有」は禁止。"
+                    "Liverは迷いに共感する女性先輩の口調にし、質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。reader_takeawayに必ず「次の配信では」を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。最後は必ず「試してみてね」「決めてみてね」「変えてみてね」など、視聴者へ直接促す自然な行動語尾で締める。「〜してみるかも」のように自分語りで終えない。一般的なコミュニティ提案や「みんなで共有」は禁止。"
                     "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。他のvisual factを追加せず、数字や商品名の意味を推測しない。「濃度」「配合量」「配合されている」「効く」「効果」「肌」「使いやすい」「テクスチャー」「気に入ってる」「肌の調子がいい」「肌が整う」「取り入れている」等、quoteに明記されていない意味・使用レビューは禁止。reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。「文字数が違う」「英語と日本語で長さが違う」など、文字列そのものの形だけを比べる低価値なメタ比較は禁止。各1段落、句点「。」を使わず、合計で絵文字1〜4個。reader_takeawayには「意外と」とsoft endingの「かも」を自然に入れ、beauty_followupには「結構大事」と「だよね」を自然に入れる。広告・効能・定型句の埋め草は禁止。"
                     "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
@@ -146,6 +149,10 @@ class SmokeGeminiClient(GeminiHybridClient):
                     if not ("次の配信" in takeaway and re.search(
                             r"(?:配信|入室|通知|コメント|初見|枠).{0,40}(?:決め|合わせ|変え|読む|読まない|試)", takeaway)):
                         raise RuntimeError("liver_next_stream_action_not_grounded")
+                    if not re.search(
+                            r"(?:試してみてね|決めてみてね|変えてみてね|合わせてみてね)[。！!😊✨🤍🫶🏻😭💭]*$",
+                            takeaway.strip()):
+                        raise RuntimeError("liver_actionable_ending_missing")
                 if kwargs["account_id"] == "beauty_account":
                     if not beauty_followup:
                         raise RuntimeError("beauty_followup_missing")
@@ -180,6 +187,21 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "attempt_count": getattr(exc, "attempt_count", 0),
                     "attempt_history": getattr(exc, "attempt_history", [])}
             raise
+
+
+def rebind_style_repair_claims(result: dict, repaired_text: str) -> dict:
+    """Keep final public text and claim evidence in lock-step after style-only repair."""
+    supports = result.get("claim_support", [])
+    paragraphs = [part.strip() for part in str(repaired_text or "").split("\n\n") if part.strip()]
+    if not isinstance(supports, list) or len(paragraphs) != len(supports):
+        raise RuntimeError("style_repair_claim_support_shape_mismatch")
+    rebound = [{**support, "caption_claim": paragraph}
+               for support, paragraph in zip(supports, paragraphs)]
+    updated = {**result, "public_post_text": repaired_text, "claim_support": rebound}
+    analysis = result.get("internal_analysis")
+    if isinstance(analysis, dict):
+        updated["internal_analysis"] = {**analysis, "main_claims": paragraphs}
+    return updated
 
 
 def smoke_previews(document: str, target_account: str = "all") -> list[dict]:
@@ -272,7 +294,22 @@ def build_package(row: dict, directory: Path) -> dict:
         style_repair = repair_style_only(text, account)
         if style_repair["repair_count"]:
             text = style_repair["public_post_text"]
-            result = {**result, "public_post_text": text, "style_repair": style_repair}
+            result = rebind_style_repair_claims(result, text)
+            anchor = remove_media_test(
+                text, result.get("media_context", {}),
+                result.get("post_angles", {}).get("selected", {}),
+                result.get("claim_support", []))
+            experience = fabricated_media_experience(text)
+            reasons = [reason for reason in result.get("blocked_reasons", [])
+                       if reason not in {"media_specific_anchor_missing", "source_creator_experience_reassigned"}]
+            if anchor.get("status") != "PASS":
+                reasons.append("media_specific_anchor_missing")
+            reasons.extend(experience.get("reasons", []))
+            result = {**result, "style_repair": style_repair, "remove_media_test": anchor,
+                      "fabricated_experience_check": experience, "blocked_reasons": reasons,
+                      "status": "PASS" if not reasons else "REVIEW_REQUIRED",
+                      "public_post_text": text if not reasons else "",
+                      "rejected_caption": "" if not reasons else text}
     style = voice_persona_validation(text, account) if text else {"status": "NOT_RUN"}
     if style.get("status") == "VOICE_PERSONA_PASS":
         style = {**style, "status": "PASS", "validator_status": "VOICE_PERSONA_PASS"}
