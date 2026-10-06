@@ -515,9 +515,19 @@ def fabricated_media_experience(caption: str) -> dict[str, Any]:
     # Japanese often omits the first-person subject. Reported creator speech
     # in the same sentence is attribution; an earlier sentence is not permission.
     implicit_experience = any(
-        re.search(r"試してみたの|使ってみたら|使い続けたら|使い続けて.{0,20}(?:嬉しい|よかった|良かった)", sentence)
-        and not re.search(r"(?:投稿者|動画の人物|本人).{0,120}(?:と話|と述|と説明|と紹介)", sentence)
-        for sentence in re.split(r"[。！？\n]", caption))
+        re.search(
+            r"試してみたの|使ってみたら|使い続けたら|使い続けて.{0,20}(?:嬉しい|よかった|良かった)"
+            r"|気に入って(?:る|いる)"
+            r"|肌(?:の調子)?が.{0,24}(?:いい|良い|整う|落ち着く|変わる).{0,18}(?:気がする|感じ)"
+            r"|(?:使い|塗り)(?:心地)?が?.{0,12}(?:やすい|好き|好み)",
+            sentence,
+        )
+        and not re.search(
+            r"(?:投稿者|発信者|動画の人物|本人).{0,120}(?:と話|と述|と説明|と紹介|という感想)",
+            sentence,
+        )
+        for sentence in re.split(r"[。！？\n]", caption)
+    )
     fabricated = bool(ownership or implicit_experience)
     return {"status": "BLOCKED" if fabricated else "PASS",
             "reasons": ["source_creator_experience_reassigned"] if fabricated else []}

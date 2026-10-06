@@ -58,6 +58,18 @@ def test_fabricated_experience_unsupported_claim_and_broken_japanese_block() -> 
     benign = hard_gate({"public_post_text": "出勤条件は必ず書面で確認したい。"}, account_id="night_scout")
     assert "unsupported_high_risk_factual_claim" not in benign["hard_gate_reasons"]
 
+    from generation.content_quality_v2 import fabricated_media_experience
+    for text in (
+        "朝のスキンケアに取り入れると、肌がキュッと整う感じがして気に入ってるよ。",
+        "アゼライン酸もあわせて使うと肌の調子がいい気がするな。",
+        "この美容液は使いやすいから気に入っている。",
+    ):
+        assert fabricated_media_experience(text)["status"] == "BLOCKED", text
+    safe_observation = "画面に「グリシルグリシン3.0」と表示され、スポイトから透明な液体を手に出している。"
+    assert fabricated_media_experience(safe_observation)["status"] == "PASS"
+    attributed = "動画の人物が「気に入ってる」という感想を紹介している。"
+    assert fabricated_media_experience(attributed)["status"] == "PASS"
+
 
 def test_supported_claim_mapping_is_handled_and_source_experience_is_not_reassigned() -> None:
     evidence = [{"caption_claim": "動画の発信者は1週間使った感想を紹介している", "source_evidence": "1週間使った"}]

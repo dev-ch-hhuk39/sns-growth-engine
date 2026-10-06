@@ -50,6 +50,21 @@ class SmokeCaptionTests(unittest.TestCase):
                         self.assertEqual(support["anchor_fact_ids"], ["VF1"])
                     self.assertEqual(result["internal_analysis"]["main_claims"], [s["caption_claim"] for s in result["claim_support"]])
 
+    def test_beauty_prompt_forbids_self_use_and_effect_claims(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0, "reader_takeaway": "グリシルグリシン3.0って表記が見えるから、成分で比べたい時の確認ポイントにしやすそう✨"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        transport = Mock(return_value=response)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                 schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
+        for phrase in ("自分が使用した体験", "肌変化", "気に入ってる", "肌の調子がいい", "使いやすい"):
+            self.assertIn(phrase, sent)
+
     def test_liver_prompt_requires_next_stream_action(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
         source = {"target_account_id": "liver_manager", "media_first_input": {
