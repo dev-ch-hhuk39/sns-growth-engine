@@ -55,8 +55,8 @@ class SmokeCaptionTests(unittest.TestCase):
         source = {"target_account_id": "beauty_account", "media_first_input": {
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
         payload = {"quote_choice": 0,
-                   "reader_takeaway": "グリシルグリシン3.0って表記まで見えるの、意外と比較の目印にしやすいかも✨",
-                   "beauty_followup": "成分名を見比べたい時に、この表記を確認するのって結構大事だよね🤍"}
+                   "reader_takeaway": "グリシルグリシン3.0って表記まで見えるの、意外と購入前の確認ポイントにしやすいかも✨",
+                   "beauty_followup": "公式の商品ページやパッケージとグリシルグリシン3.0の表記を見比べるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
@@ -66,6 +66,7 @@ class SmokeCaptionTests(unittest.TestCase):
         sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
         for phrase in ("自分が使用した体験", "気に入ってる", "肌の調子がいい", "使いやすい",
                        "濃度", "配合量", "数字や商品名の意味を推測しない",
+                       "文字数が違う", "商品ページ", "パッケージ",
                        "意外と", "かも", "結構大事", "だよね"):
             self.assertIn(phrase, sent)
         data = client.caption_candidate["public_post_text"]
@@ -77,7 +78,7 @@ class SmokeCaptionTests(unittest.TestCase):
         fact = {"id": "VF1", "type": "visible_text", "text": "配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
         source = {"target_account_id": "liver_manager", "media_first_input": {
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
-        payload = {"quote_choice": 0, "reader_takeaway": "次の配信では、入室通知を読むかどうかを一つ決めて試してみてね。"}
+        payload = {"quote_choice": 0, "reader_takeaway": "次の配信では、今の枠の規模に合わせて入室通知を読むか読まないか決めて試してみてね。"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload)}]}}]}
         transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
@@ -88,6 +89,33 @@ class SmokeCaptionTests(unittest.TestCase):
         self.assertIn("次の配信では", sent)
         self.assertIn("一つの具体行動", sent)
         self.assertIn("みんなで共有", sent)
+
+
+    def test_liver_rejects_source_person_as_viewer_action(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "一休さんに質問 配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
+        source = {"target_account_id": "liver_manager", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0, "reader_takeaway": "次の配信では一休さんに質問してから通知を読むか決めて試してみてね。"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "liver_source_person_contact_not_actionable"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+
+    def test_beauty_rejects_low_value_character_count_comparison(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "グリシルグリシン3.0をGlycylglycineと比べると意外と文字数が違うかも✨",
+                   "beauty_followup": "グリシルグリシン3.0の文字数を見比べるのって結構大事だよね🤍"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "beauty_low_value_text_comparison"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
 
     def test_current_model_quota_allows_one_explicit_model_fallback(self):
         transport = Mock(side_effect=[GeminiHttpError(429, quota('GenerateRequestsPerDayPerProjectPerModel-FreeTier', delay='3600s')),

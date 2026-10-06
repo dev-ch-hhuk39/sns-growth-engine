@@ -90,8 +90,8 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
                     "Nightのreader_takeawayは必ず『僕なら』で始め、店選びに迷う子へ話す。visual_facts内の具体語を二つ以上そのまま残して判断を述べる。"
                     "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
-                    "Liverは迷いに共感する女性先輩の口調にし、reader_takeawayに必ず「次の配信では」を含める。視覚事実に直接関係する一つの具体行動を示し、最後は自然な「試してみてね」等で締める。一般的なコミュニティ提案や「みんなで共有」は禁止。"
-                    "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものだけを比較・確認の目印として扱う。他のvisual factを追加せず、数字や商品名の意味を推測しない。「濃度」「配合量」「配合されている」「効く」「効果」「肌」「使いやすい」「テクスチャー」「気に入ってる」「肌の調子がいい」「肌が整う」「取り入れている」等、quoteに明記されていない意味・使用レビューは禁止。reader_takeawayとbeauty_followupの両方に選んだquoteの文字列をそのまま入れ、表記を見比べる・確認するという判断だけを書く。各1段落、句点「。」を使わず、合計で絵文字1〜4個。reader_takeawayには「意外と」とsoft endingの「かも」を自然に入れ、beauty_followupには「結構大事」と「だよね」を自然に入れる。広告・効能・定型句の埋め草は禁止。"
+                    "Liverは迷いに共感する女性先輩の口調にし、質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。reader_takeawayに必ず「次の配信では」を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。最後は自然な「試してみてね」等で締める。一般的なコミュニティ提案や「みんなで共有」は禁止。"
+                    "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。他のvisual factを追加せず、数字や商品名の意味を推測しない。「濃度」「配合量」「配合されている」「効く」「効果」「肌」「使いやすい」「テクスチャー」「気に入ってる」「肌の調子がいい」「肌が整う」「取り入れている」等、quoteに明記されていない意味・使用レビューは禁止。reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。「文字数が違う」「英語と日本語で長さが違う」など、文字列そのものの形だけを比べる低価値なメタ比較は禁止。各1段落、句点「。」を使わず、合計で絵文字1〜4個。reader_takeawayには「意外と」とsoft endingの「かも」を自然に入れ、beauty_followupには「結構大事」と「だよね」を自然に入れる。広告・効能・定型句の埋め草は禁止。"
                     "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
         else:
@@ -137,8 +137,23 @@ class SmokeGeminiClient(GeminiHybridClient):
                 beauty_followup = str(data.get("beauty_followup", "")) if kwargs["account_id"] == "beauty_account" else ""
                 if not fact or not 8 <= len(quote) <= 80 or quote not in fact["text"] or not takeaway:
                     raise RuntimeError("caption_quote_not_bound_to_visual_fact")
-                if kwargs["account_id"] == "beauty_account" and not beauty_followup:
-                    raise RuntimeError("beauty_followup_missing")
+                if kwargs["account_id"] == "liver_manager":
+                    source_text = " ".join(item["text"] for item in facts)
+                    source_names = set(re.findall(r"([一-龯ぁ-んァ-ヶA-Za-z0-9]{2,20}さん)", source_text))
+                    if any(name in takeaway and re.search(rf"{re.escape(name)}.{{0,16}}(?:質問|聞|相談|連絡|DM)", takeaway)
+                               for name in source_names):
+                        raise RuntimeError("liver_source_person_contact_not_actionable")
+                    if not ("次の配信" in takeaway and re.search(
+                            r"(?:配信|入室|通知|コメント|初見|枠).{0,40}(?:決め|合わせ|変え|読む|読まない|試)", takeaway)):
+                        raise RuntimeError("liver_next_stream_action_not_grounded")
+                if kwargs["account_id"] == "beauty_account":
+                    if not beauty_followup:
+                        raise RuntimeError("beauty_followup_missing")
+                    beauty_text = takeaway + "\n" + beauty_followup
+                    if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語", beauty_text):
+                        raise RuntimeError("beauty_low_value_text_comparison")
+                    if not re.search(r"(?:確認|見比べ|商品ページ|パッケージ|ラベル|表記|選ぶ|購入)", beauty_text):
+                        raise RuntimeError("beauty_selection_value_missing")
                 observation = f"この動画の「{quote}」という言葉。" if fact.get("type") == "visible_text" else f"この動画では、{quote}。"
                 if kwargs["account_id"] == "beauty_account":
                     observation = observation.removesuffix("。")
