@@ -1,3 +1,11 @@
+## 2026-10-06 Final-head baseline and quota wait
+
+- New final-completion instruction verified local/remote `1c321ea54e76b391e47bd6771aec08e3c1a44432` match. Baseline full repository suite 942/942 PASS (0 failures; 8 external and 3 optional tool probes excluded), Workflow Safety 527/527 PASS.
+- Clock checked at 2026-10-06 11:18:31 UTC / 20:18:31 JST. The owner explicitly prohibits real API Smoke before 2026-10-07 09:00 JST. No new Smoke/API request, model change, implementation change or production operation was performed. Current quota recovery has not been probed; the last observed model-specific daily quota remains the external blocker until the allowed time.
+- Night previous live E2E remains PASS (37398505799). Assistant OWNER_GRADE draft B, not owner approval: concrete attributed quote and voice are good; blanket avoidance of competitive venues is overly broad. A conditional judgment about one's strengths being buried is an editorial revision candidate, not an API-validated replacement. Keep the accepted caption unchanged for now.
+- Liver previous Vision quota failure (37398601690) and Beauty NOT_RUN remain live blockers. Neither has a real accepted caption to grade. Offline synthetic three-account and negative NS-M03 / LM-M02 / BA-M01 checks are included in the passing full suite; no synthetic caption is claimed as live output.
+- Commit this documentation-only update, then run full suite and Workflow Safety once on that exact final HEAD per the new instruction. Report the observed results in the final response without another documentation commit that would move the validated HEAD. After the time gate, resume Liver, then Beauty, then at most one all-account integration if quota permits. No automatic resume scheduled.
+
 ## 2026-10-06 Content Quality V2 autonomous verification — EXTERNAL_BLOCKED
 
 - Implementation head: `5cc8529d142adef4528adf97863a0a6b24d9b6f3`, feature branch `feat/content-quality-v2`; changes pushed under explicit autonomous authorization. See [complete evidence and human review](docs/CONTENT_QUALITY_V2_AUTONOMOUS_REVIEW.md).
