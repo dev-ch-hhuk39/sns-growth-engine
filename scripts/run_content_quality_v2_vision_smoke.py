@@ -78,14 +78,14 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "required": ["quote_choice", "reader_takeaway"], "additionalProperties": False}
                 kwargs["prompt"] = (
                     "未公開の日本語Media投稿を二つの部分で作る。quote_optionsの番号をquote_choiceで一つ選ぶ。引用本文は変更しない。"
-                    "reader_takeawayはその引用を読んで読者が考えたいことを80〜140文字で自然に書く。"
+                    "reader_takeawayはその引用に対する具体的な判断を45〜90文字、二文以内で書く。抽象論へ広げない。"
                     "引用の重要な具体語を残す。元投稿者の同伴や使用を自分の体験にしない。"
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
-                    "Nightでは一人称を必ず『僕』にして、店選びに迷う子へ一対一で話す。引用の内容に対して僕ならどう見るかを短く伝える。"
+                    "Nightのreader_takeawayは必ず『僕なら』で始め、店選びに迷う子へ話す。visual_facts内の具体語を二つ以上そのまま残して判断を述べる。"
                     "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
                     "Liverは迷いに共感する女性先輩の次回配信への一行動。"
                     "Beautyは女友達の美容選びで絵文字1〜4、takeawayを空行で二段落にし、やわらかな感想を自然に。定型句の埋め草は禁止。"
-                    "観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
+                    "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
         else:
             facts = []
