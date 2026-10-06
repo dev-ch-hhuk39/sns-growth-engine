@@ -68,7 +68,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                 for fact in facts:
                     texts = re.findall(r"「([^」]+)」", fact["text"]) or [fact["text"]]
                     for text in texts:
-                        excerpts = [text] if len(text) <= 80 else re.split(r"[\s。]+", text)
+                        excerpts = re.split(r"[\s。]+", text) if re.search(r"[\s。]", text) else [text]
                         quote_options += [{"fact_id": fact["id"], "text": part} for part in excerpts if 8 <= len(part) <= 80]
                 if not quote_options:
                     raise RuntimeError("no_bound_quote_options")
@@ -81,7 +81,9 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "reader_takeawayはその引用を読んで読者が考えたいことを80〜140文字で自然に書く。"
                     "引用の重要な具体語を残す。元投稿者の同伴や使用を自分の体験にしない。"
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
-                    "Nightは僕から夜職女性へ話す店選びの判断、Liverは迷いに共感する女性先輩の次回配信への一行動。"
+                    "Nightでは一人称を必ず『僕』にして、店選びに迷う子へ一対一で話す。引用の内容に対して僕ならどう見るかを短く伝える。"
+                    "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
+                    "Liverは迷いに共感する女性先輩の次回配信への一行動。"
                     "Beautyは女友達の美容選びで絵文字1〜4、takeawayを空行で二段落にし、やわらかな感想を自然に。定型句の埋め草は禁止。"
                     "観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
