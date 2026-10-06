@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from acquisition.models import SourcePostBundle  # noqa: E402
 from build_media_first_review_pack import inspect_preview, selected_previews  # noqa: E402
-from generation.content_quality_v2 import generate_media_first_caption, prepare_media_context  # noqa: E402
+from generation.content_quality_v2 import generate_media_first_caption, prepare_media_context, repair_style_only  # noqa: E402
 from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService, account_rules,
 )
@@ -252,6 +252,12 @@ def build_package(row: dict, directory: Path) -> dict:
         media=media, account_id=account, account_content_contract=contract, recent_posts=[],
         editorial_draft=True, caption_generator=lambda **request: service.generate_media_context(bundle, **request))
     text = str(result.get("public_post_text") or "")
+    style_repair = {"public_post_text": text, "repair_count": 0, "repairs": []}
+    if text and account == "beauty_account":
+        style_repair = repair_style_only(text, account)
+        if style_repair["repair_count"]:
+            text = style_repair["public_post_text"]
+            result = {**result, "public_post_text": text, "style_repair": style_repair}
     style = voice_persona_validation(text, account) if text else {"status": "NOT_RUN"}
     if style.get("status") == "VOICE_PERSONA_PASS":
         style = {**style, "status": "PASS", "validator_status": "VOICE_PERSONA_PASS"}
@@ -356,6 +362,7 @@ def render(packages: list[dict]) -> str:
             "GENERIC_CAPTION_RISK": "UNVERIFIED" if provider_failed else anchor.get("generic_caption_risk", "UNVERIFIED"),
             "FABRICATED_EXPERIENCE_CHECK": {"status": "NOT_RUN"} if provider_failed else result.get("fabricated_experience_check", {"status": "NOT_RUN"}),
             "ACCOUNT_STYLE_CHECK": package["style"],
+            "STYLE_REPAIR": result.get("style_repair", {"repair_count": 0, "repairs": []}),
             "FAILURE_CLASS": package["failure_class"] or "NONE",
             "WARNINGS": [warning for warning in [package["failure_class"], *result.get("blocked_reasons", [])] if warning],
         }

@@ -85,6 +85,10 @@ def test_beauty_repairs_zero_emoji_once_and_liver_does_not_force_one() -> None:
     liver = repair_style_only("初見がコメントしにくい時は、質問を一つに絞る。", "liver_manager")
     assert beauty["repair_count"] == 1 and any(e in beauty["public_post_text"] for e in load_policy()["accounts"]["beauty_account"]["emoji_allowed"])
     assert liver["repair_count"] == 0 and not any(e in liver["public_post_text"] for e in load_policy()["accounts"]["liver_manager"]["emoji_allowed"])
+    unsupported = repair_style_only("成分表記を見比べるの、意外と大事かも💄", "beauty_account")
+    assert "💄" not in unsupported["public_post_text"]
+    assert any(e in unsupported["public_post_text"] for e in load_policy()["accounts"]["beauty_account"]["emoji_allowed"])
+    assert unsupported["repair_count"] <= 2
     assert "確認することは一つ。" not in repair_style_only("確認することは一つ。\n控除を聞く。", "night_scout")["public_post_text"]
 
 

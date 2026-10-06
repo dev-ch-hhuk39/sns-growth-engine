@@ -171,8 +171,20 @@ def repair_style_only(text: str, account_id: str) -> dict[str, Any]:
     value = re.sub(r"\n{3,}", "\n\n", value).strip()
     if value != original:
         repairs.append("removed_literal_template_boilerplate")
-    elif account_id == "beauty_account":
+    if account_id == "beauty_account":
         allowed = policy["accounts"][account_id]["emoji_allowed"]
+        protected = value
+        markers: dict[str, str] = {}
+        for index, emoji in enumerate(allowed):
+            marker = f"__CQV2_ALLOWED_EMOJI_{index}__"
+            markers[marker] = emoji
+            protected = protected.replace(emoji, marker)
+        normalized = re.sub(r"[🌀-🫿☀-➿️‍]", "", protected)
+        for marker, emoji in markers.items():
+            normalized = normalized.replace(marker, emoji)
+        if normalized != value:
+            value = normalized
+            repairs.append("beauty_unsupported_emoji_removed")
         emoji_count = sum(value.count(emoji) for emoji in allowed)
         if emoji_count == 0:
             if any(term in value for term in ("不安", "迷う", "悩む", "気になる")):
@@ -188,7 +200,7 @@ def repair_style_only(text: str, account_id: str) -> dict[str, Any]:
             at = match.start() if match else len(value)
             value = value[:at].rstrip() + emoji + value[at:]
             repairs.append("beauty_single_semantic_emoji_inserted")
-    return {"public_post_text": value, "repair_count": min(1, len(repairs)), "repairs": repairs[:1]}
+    return {"public_post_text": value, "repair_count": min(2, len(repairs)), "repairs": repairs[:2]}
 
 
 def rank_candidate(candidate: Mapping[str, Any], *, account_id: str) -> dict[str, Any]:
