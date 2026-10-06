@@ -64,7 +64,8 @@ class SmokeCaptionTests(unittest.TestCase):
             client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
                                  schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
         sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
-        for phrase in ("自分が使用した体験", "肌変化", "気に入ってる", "肌の調子がいい", "使いやすい",
+        for phrase in ("自分が使用した体験", "気に入ってる", "肌の調子がいい", "使いやすい",
+                       "濃度", "配合量", "数字や商品名の意味を推測しない",
                        "意外と", "かも", "結構大事", "だよね"):
             self.assertIn(phrase, sent)
         data = client.caption_candidate["public_post_text"]
