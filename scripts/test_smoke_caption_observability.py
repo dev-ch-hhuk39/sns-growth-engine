@@ -129,6 +129,8 @@ class SmokeCaptionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "liver_source_person_contact_not_actionable"):
                 client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
                                      schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+            self.assertEqual(client.caption_evidence.get("validation_error"),
+                             "liver_source_person_contact_not_actionable")
 
     def test_beauty_rejects_low_value_character_count_comparison(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}

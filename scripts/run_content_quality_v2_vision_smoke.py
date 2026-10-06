@@ -29,6 +29,17 @@ from public_post_quality import voice_persona_validation  # noqa: E402
 ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
 PRODUCTION_SECRETS = ("SPREADSHEET_ID", "SNS_MASTER_SHEET_ID", "SA_JSON_BASE64", "GCP_SA_JSON_BASE64",
                       "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "GITHUB_TOKEN", "THREADS_ACCESS_TOKEN")
+SAFE_CAPTION_VALIDATION_ERRORS = {
+    "no_bound_quote_options",
+    "caption_quote_choice_invalid",
+    "caption_quote_not_bound_to_visual_fact",
+    "liver_source_person_contact_not_actionable",
+    "liver_next_stream_action_not_grounded",
+    "liver_actionable_ending_missing",
+    "beauty_followup_missing",
+    "beauty_low_value_text_comparison",
+    "beauty_selection_value_missing",
+}
 
 
 class SmokeGeminiClient(GeminiHybridClient):
@@ -189,10 +200,12 @@ class SmokeGeminiClient(GeminiHybridClient):
         except (RuntimeError, ValueError, TypeError) as exc:
             self.last_evidence = decision
             if caption:
+                validation_error = str(exc) if str(exc) in SAFE_CAPTION_VALIDATION_ERRORS else ""
                 self.caption_evidence = {**decision, **provider_error_evidence(exc),
                     **getattr(exc, "quota_diagnostics", {}), "retry_status": getattr(exc, "retry_status", ""),
                     "attempt_count": getattr(exc, "attempt_count", 0),
-                    "attempt_history": getattr(exc, "attempt_history", [])}
+                    "attempt_history": getattr(exc, "attempt_history", []),
+                    "validation_error": validation_error}
             raise
 
 
