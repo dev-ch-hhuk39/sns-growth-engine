@@ -151,6 +151,12 @@ class SmokeGeminiClient(GeminiHybridClient):
                 beauty_followup = str(data.get("beauty_followup", "")) if kwargs["account_id"] == "beauty_account" else ""
                 if not fact or not 8 <= len(quote) <= 80 or quote not in fact["text"] or not takeaway:
                     raise RuntimeError("caption_quote_not_bound_to_visual_fact")
+                self.caption_candidate = {
+                    "quote_choice": choice,
+                    "selected_quote": quote,
+                    "reader_takeaway": takeaway,
+                    **({"beauty_followup": beauty_followup} if beauty_followup else {}),
+                }
                 if kwargs["account_id"] == "liver_manager":
                     source_text = " ".join(item["text"] for item in facts)
                     source_names = set(re.findall(r"([一-龯ぁ-んァ-ヶA-Za-z0-9]{2,20}さん)", source_text))

@@ -131,6 +131,9 @@ class SmokeCaptionTests(unittest.TestCase):
                                      schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
             self.assertEqual(client.caption_evidence.get("validation_error"),
                              "liver_source_person_contact_not_actionable")
+            self.assertEqual(client.caption_candidate.get("selected_quote"),
+                             "配信中の入室通知は読み上げますか？")
+            self.assertIn("一休さんに質問", client.caption_candidate.get("reader_takeaway", ""))
 
     def test_beauty_rejects_low_value_character_count_comparison(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}
