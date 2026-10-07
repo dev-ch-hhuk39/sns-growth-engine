@@ -224,22 +224,32 @@ class SmokeGeminiClient(GeminiHybridClient):
             except GeminiHttpError as primary_error:
                 quota = primary_error.quota_diagnostics
                 violations = quota.get("quota_violations", [])
-                scoped = (not fallback and original_model == "gemini-3.5-flash" and bool(violations)
+                quota_scoped = (not fallback and original_model == "gemini-3.5-flash" and bool(violations)
                     and primary_error.status_code == 429
                     and all(row.get("quota_model") == original_model
                             and "PerProjectPerModel" in row.get("quota_id", "")
                             and row.get("rate_limit_class") in {"DAILY_QUOTA_EXHAUSTED", "MODEL_QUOTA_EXHAUSTED"}
                             for row in violations))
-                if not scoped:
+                transient_scoped = (
+                    not fallback
+                    and original_model == "gemini-3.5-flash"
+                    and primary_error.status_code in {500, 502, 503, 504}
+                )
+                if not (quota_scoped or transient_scoped):
                     raise
                 retry_delay = quota.get("retry_delay_seconds")
-                if isinstance(retry_delay, (int, float)) and retry_delay > 0:
+                if quota_scoped and isinstance(retry_delay, (int, float)) and retry_delay > 0:
                     self.quota_basis = {"observed_at": datetime.now(timezone.utc).isoformat(),
                         "retry_delay_seconds": retry_delay, "quota_violations": violations,
                         "origin_run_id": os.environ.get("GITHUB_RUN_ID", "current_request")}
                 kwargs["model"] = "gemini-3.1-flash-lite"
-                decision.update(model=kwargs["model"], fallback_used=True, fallback_basis_run="current_request",
-                                primary_attempt_history=getattr(primary_error, "attempt_history", []))
+                decision.update(
+                    model=kwargs["model"],
+                    fallback_used=True,
+                    fallback_basis_run="current_request",
+                    fallback_reason="model_scoped_quota" if quota_scoped else "primary_model_transient_5xx",
+                    primary_attempt_history=getattr(primary_error, "attempt_history", []),
+                )
                 result = super().generate_json(**kwargs)
             if caption and facts:
                 data = result["data"]

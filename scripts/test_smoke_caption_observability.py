@@ -30,6 +30,20 @@ class SmokeCaptionTests(unittest.TestCase):
             sleep.assert_called_once_with(5)
             self.assertEqual([h['http_status'] for h in client.caption_evidence['attempt_history']], [503,200])
 
+    def test_caption_exhausted_primary_503_falls_back_once(self):
+        response = {'candidates':[{'content':{'parts':[{'text':'{}'}]}}]}
+        transport = Mock(side_effect=[GeminiHttpError(503, ''), GeminiHttpError(503, ''),
+                                     GeminiHttpError(503, ''), response])
+        with tempfile.TemporaryDirectory() as tmp, patch('gemini_hybrid_client.time.sleep'):
+            client = SmokeGeminiClient(api_key='fixture', transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            client.generate_json(model='gemini-3.5-flash', prompt='fixture', schema={},
+                                 operation='direct_reference_caption_generation', account_id='night_scout')
+        self.assertEqual(transport.call_count, 4)
+        self.assertTrue(client.caption_evidence['fallback_used'])
+        self.assertEqual(client.caption_evidence['model'], 'gemini-3.1-flash-lite')
+        self.assertEqual(client.caption_evidence['fallback_reason'], 'primary_model_transient_5xx')
+        self.assertEqual([h['http_status'] for h in client.caption_evidence['primary_attempt_history']], [503, 503, 503])
+
     def test_structured_quote_is_bound_and_claims_are_actual_caption(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "採用基準狙い目、ただ入店後の競争率は高いというイメージ"}
         source = {"target_account_id": "night_scout", "media_first_input": {
