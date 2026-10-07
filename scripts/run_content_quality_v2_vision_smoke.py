@@ -50,6 +50,35 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "beauty_low_value_text_comparison",
     "beauty_selection_value_missing",
 }
+BEAUTY_REPAIRABLE_ERRORS = {
+    "beauty_followup_missing",
+    "beauty_semantic_inference_unverified",
+    "beauty_unobserved_physical_property",
+    "beauty_quote_repeated_after_observation",
+    "beauty_low_value_text_comparison",
+    "beauty_selection_value_missing",
+}
+
+
+def validate_beauty_smoke_candidate(quote: str, takeaway: str, followup: str) -> None:
+    if not followup:
+        raise RuntimeError("beauty_followup_missing")
+    beauty_text = takeaway + "\n" + followup
+    semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合", "効く", "効果", "改善")
+    if any(term in beauty_text and term not in quote for term in semantic_terms):
+        raise RuntimeError("beauty_semantic_inference_unverified")
+    physical_terms = (
+        "量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす", "出す時の感覚", "使用感",
+        "距離感", "重み", "質感", "一滴", "とろみ", "さらさら", "色味", "探しやす",
+    )
+    if any(term in beauty_text and term not in quote for term in physical_terms):
+        raise RuntimeError("beauty_unobserved_physical_property")
+    if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
+        raise RuntimeError("beauty_low_value_text_comparison")
+    if quote in takeaway and quote in followup:
+        raise RuntimeError("beauty_quote_repeated_after_observation")
+    if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
+        raise RuntimeError("beauty_selection_value_missing")
 
 
 class SmokeGeminiClient(GeminiHybridClient):
@@ -273,21 +302,79 @@ class SmokeGeminiClient(GeminiHybridClient):
                             takeaway.strip()):
                         raise RuntimeError("liver_actionable_ending_missing")
                 if kwargs["account_id"] == "beauty_account":
-                    if not beauty_followup:
-                        raise RuntimeError("beauty_followup_missing")
-                    beauty_text = takeaway + "\n" + beauty_followup
-                    semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合", "効く", "効果", "改善")
-                    if any(term in beauty_text and term not in quote for term in semantic_terms):
-                        raise RuntimeError("beauty_semantic_inference_unverified")
-                    physical_terms = ("量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす", "出す時の感覚", "使用感", "距離感", "重み", "質感", "一滴", "とろみ", "さらさら")
-                    if any(term in beauty_text and term not in quote for term in physical_terms):
-                        raise RuntimeError("beauty_unobserved_physical_property")
-                    if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
-                        raise RuntimeError("beauty_low_value_text_comparison")
-                    if quote in takeaway and quote in beauty_followup:
-                        raise RuntimeError("beauty_quote_repeated_after_observation")
-                    if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
-                        raise RuntimeError("beauty_selection_value_missing")
+                    try:
+                        validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
+                    except RuntimeError as first_validation_error:
+                        repair_reason = str(first_validation_error)
+                        if repair_reason not in BEAUTY_REPAIRABLE_ERRORS:
+                            raise
+                        decision.update(
+                            validation_repair_used=True,
+                            validation_repair_reason=repair_reason,
+                        )
+                        repair_schema = {
+                            "type": "object",
+                            "properties": {
+                                "quote_choice": {"type": "integer", "enum": [choice]},
+                                "reader_takeaway": {"type": "string"},
+                                "beauty_followup": {"type": "string"},
+                            },
+                            "required": ["quote_choice", "reader_takeaway", "beauty_followup"],
+                            "additionalProperties": False,
+                        }
+                        repair_prompt = (
+                            "Beauty向け未公開Captionを1回だけ修正する。quote_choiceは固定し、選び直さない。"
+                            "selected_quote/selected_factで直接確認できる動作だけを書く。"
+                            "液体や商品の重み・質感・粘度・量・一滴・距離感・効果・使いやすさ・色味・探しやすさの評価を足さない。"
+                            "読者価値は『動画で動作が見える』『出し方/使い方を確認できる』『購入前に見られる』だけに限定する。"
+                            "reader_takeawayとbeauty_followupの両方でselected_quote全文を繰り返さない。"
+                            "少し美容に詳しい女友達の自然な口調、句点なし、絵文字1〜4個。"
+                            "『意外と』『結構大事』『ほんとに』『気がする』から自然に2つ以上使う。JSONのみ。\n"
+                            + json.dumps({
+                                "validation_error": repair_reason,
+                                "selected_quote": quote,
+                                "selected_fact": fact["text"],
+                                "rejected_candidate": {
+                                    "reader_takeaway": takeaway,
+                                    "beauty_followup": beauty_followup,
+                                },
+                            }, ensure_ascii=False)
+                        )
+                        repair_kwargs = {
+                            **kwargs,
+                            "prompt": repair_prompt,
+                            "schema": repair_schema,
+                        }
+                        primary_result = result
+                        repaired_result = super().generate_json(**repair_kwargs)
+                        repaired_data = repaired_result["data"]
+                        repaired_choice = repaired_data.get("quote_choice")
+                        if repaired_choice != choice:
+                            raise RuntimeError("caption_quote_choice_invalid")
+                        takeaway = re.sub(
+                            r"\n\s*\n+", "\n", str(repaired_data.get("reader_takeaway", "")).strip()
+                        )
+                        beauty_followup = re.sub(
+                            r"\n\s*\n+", "\n", str(repaired_data.get("beauty_followup", "")).strip()
+                        )
+                        self.caption_candidate = {
+                            "quote_choice": choice,
+                            "selected_quote": quote,
+                            "reader_takeaway": takeaway,
+                            "beauty_followup": beauty_followup,
+                        }
+                        validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
+                        result = {
+                            **repaired_result,
+                            "actual_requests": (
+                                primary_result.get("actual_requests", 0)
+                                + repaired_result.get("actual_requests", 0)
+                            ),
+                            "attempt_history": [
+                                *primary_result.get("attempt_history", []),
+                                *repaired_result.get("attempt_history", []),
+                            ],
+                        }
                 if fact.get("type") == "visible_text":
                     observation = f"この動画の「{quote}」という言葉。"
                 elif kwargs["account_id"] == "beauty_account":

@@ -244,11 +244,38 @@ class SmokeCaptionTests(unittest.TestCase):
                    "reader_takeaway": "スポイトで液体を手の甲へ垂らす場面を見ると、質感や一滴の重みまで分かる気がするかも✨",
                    "beauty_followup": "購入前に動画で出し方を見られるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
-            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
             with self.assertRaisesRegex(RuntimeError, "beauty_unobserved_physical_property"):
                 client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
                                      schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        self.assertEqual(transport.call_count, 2)
+
+    def test_beauty_uses_one_bounded_validation_repair(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから透明な液体を手の甲に垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        rejected = {"quote_choice": 0,
+                    "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす場面を見ると、質感まで分かる気がするかも✨",
+                    "beauty_followup": "購入前に動画で出し方を見られるのって結構大事だよね🤍"}
+        repaired = {"quote_choice": 0,
+                    "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす動きが動画で見えると、意外と出し方を確認しやすいかも✨",
+                    "beauty_followup": "購入前に手の甲への使い方を見られるのって、ほんとに結構大事だよね🤍"}
+        responses = [
+            {"candidates": [{"content": {"parts": [{"text": json.dumps(rejected, ensure_ascii=False)}]}}]},
+            {"candidates": [{"content": {"parts": [{"text": json.dumps(repaired, ensure_ascii=False)}]}}]},
+        ]
+        transport = Mock(side_effect=responses)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            result = client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                          schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        self.assertEqual(transport.call_count, 2)
+        self.assertTrue(client.caption_evidence.get("validation_repair_used"))
+        self.assertEqual(client.caption_evidence.get("validation_repair_reason"), "beauty_unobserved_physical_property")
+        self.assertIn("購入前", result["data"]["public_post_text"])
+        self.assertNotIn("質感", result["data"]["public_post_text"])
 
     def test_beauty_rejects_repeated_quote_after_observation(self):
         fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから液体を手の甲に垂らす"}
