@@ -36,6 +36,7 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "night_first_person_opening_missing",
     "night_cross_account_live_context",
     "night_cross_account_beauty_emoji",
+    "night_unobserved_context_added",
     "liver_source_person_contact_not_actionable",
     "liver_next_stream_action_not_grounded",
     "liver_next_stream_action_not_source_specific",
@@ -44,6 +45,8 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "liver_actionable_ending_missing",
     "beauty_followup_missing",
     "beauty_semantic_inference_unverified",
+    "beauty_unobserved_physical_property",
+    "beauty_quote_repeated_after_observation",
     "beauty_low_value_text_comparison",
     "beauty_selection_value_missing",
 }
@@ -121,6 +124,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     account_instruction = (
                         "Nightは男性の夜職・キャバクラ専門スカウト。reader_takeawayは必ず『僕なら』で始め、店選びに迷う夜職女性へ一対一で話す。"
                         "visual_facts内の具体語を二つ以上そのまま残し、採用基準・入店後の競争率・本人の強み等を分けて判断する。"
+                        "visual_factsにない新しい判断軸を足さない。『環境に馴染める』『立ち回り』『相性』などを、元映像にないのに勝手に補わない。"
                         "一律に『避ける』『行くべき』と断定しない。『だと思う』『なんだよね』『が大事』等の自然な現場口調。"
                         "絵文字は禁止。配信、LIVE、ライブ、リスナー、コメント、初見、ギフト、『次の配信では』等の配信文脈は禁止。"
                         "『なのですね』『必要不可欠』『感じさせられます』等の講評・コンサル口調は禁止。"
@@ -146,8 +150,8 @@ class SmokeGeminiClient(GeminiHybridClient):
                         "Beautyは少し美容に詳しい女友達の口調。自分が使用した体験・使用感・肌変化・効能は一切書かない。"
                         "quote_choiceでは、visible_actionやkey_moment由来の『手に出す』『スポイトから垂らす』『ボトルを持つ』等の具体的な使用場面が候補にあれば、商品名や成分表記だけの候補より優先する。"
                         "選んだquoteで実際に見える動作・見た目だけを話し、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『使いやすい』『テクスチャー』『肌改善』『毛穴改善』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、観察できない意味ラベル・使用レビューは禁止。『量感』『液垂れ具合』『粘度』『伸び』『なじみ』『使いやすさ』等の物性・使用感も、visual factに明記されていなければ足さない。"
-                        "reader_takeawayとbeauty_followupの各文には、選んだquoteから8文字以上連続する具体表現を最低1つそのまま残す。quoteにない距離・量・手順・重要度・効果を新しく決めつけない。"
-                        "公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
+                        "最初の観察行で選んだquoteをそのまま出すため、reader_takeawayとbeauty_followupの両方でquote全文を繰り返さない。各段落ではquoteやvisual_factsにある具体語を二つ以上使い、同じ長い表現を2段落で反復しない。"
+                        "quoteにない距離・量・手順・重要度・効果を新しく決めつけない。公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
                         "『文字数が違う』『英語と日本語で長さが違う』『公式サイトに同じ表記があるか』等、動画そのものから離れる低価値なメタ比較は禁止。"
                         "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"
                         "自然な女友達口調としてhumanity markerの『意外と』『結構大事』『ほんとに』『気がする』から内容に合うものを最低2つ使い、さらに『だよね』『かも』『〜てみて』等のsoft endingを最低1つ使う。同じ位置に固定せず、不自然な埋め草にしない。広告・効能・定型句の埋め草は禁止。"
@@ -226,6 +230,10 @@ class SmokeGeminiClient(GeminiHybridClient):
                         raise RuntimeError("night_cross_account_live_context")
                     if any(emoji in takeaway for emoji in ("🥺", "✨", "🤍", "🫶🏻", "😭", "💭")):
                         raise RuntimeError("night_cross_account_beauty_emoji")
+                    night_source_text = " ".join(item["text"] for item in facts)
+                    unobserved_night_terms = ("馴染", "立ち回", "相性")
+                    if any(term in takeaway and term not in night_source_text for term in unobserved_night_terms):
+                        raise RuntimeError("night_unobserved_context_added")
                 if kwargs["account_id"] == "liver_manager":
                     source_text = " ".join(item["text"] for item in facts)
                     source_names = set(re.findall(r"([一-龯ぁ-んァ-ヶA-Za-z0-9]{2,20}さん)", source_text))
@@ -276,6 +284,8 @@ class SmokeGeminiClient(GeminiHybridClient):
                         raise RuntimeError("beauty_unobserved_physical_property")
                     if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
                         raise RuntimeError("beauty_low_value_text_comparison")
+                    if quote in takeaway and quote in beauty_followup:
+                        raise RuntimeError("beauty_quote_repeated_after_observation")
                     if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
                         raise RuntimeError("beauty_selection_value_missing")
                 if fact.get("type") == "visible_text":

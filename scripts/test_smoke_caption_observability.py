@@ -87,12 +87,26 @@ class SmokeCaptionTests(unittest.TestCase):
                                              schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
                     self.assertEqual(client.caption_evidence.get("validation_error"), expected)
 
+    def test_night_rejects_unobserved_judgement_axis(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "採用基準狙い目、ただ入店後の競争率は高いというイメージ"}
+        source = {"target_account_id": "night_scout", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "僕なら採用基準と入店後の競争率を分けて見るよ。君が環境に馴染めるかも確認するのが大事だと思う。"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "night_unobserved_context_added"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
+            self.assertEqual(client.caption_evidence.get("validation_error"), "night_unobserved_context_added")
+
     def test_beauty_prompt_prefers_visible_use_scene_without_fake_experience(self):
         fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから透明な液体を手の甲に垂らす"}
         source = {"target_account_id": "beauty_account", "media_first_input": {
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
         payload = {"quote_choice": 0,
-                   "reader_takeaway": "スポイトから透明な液体を手の甲に垂らすところまで見えると、出し方も意外と想像しやすいかも✨",
+                   "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす場面が見えると、出し方も意外と想像しやすいかも✨",
                    "beauty_followup": "購入前にこういう使い方が動画で見えるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         transport = Mock(return_value=response)
@@ -103,7 +117,8 @@ class SmokeCaptionTests(unittest.TestCase):
         sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
         for phrase in ("自分が使用した体験", "気に入ってる", "肌の調子がいい", "使いやすい",
                        "濃度", "配合量", "数字や商品名の意味を推測しない",
-                       "スポイトから垂らす", "公式サイト確認や文字列照合を目的にせず",
+                       "スポイトから垂らす", "両方でquote全文を繰り返さない", "同じ長い表現を2段落で反復しない",
+                       "公式サイト確認や文字列照合を目的にせず",
                        "1行44文字程度", "🥺✨🤍🫶🏻😭💭"):
             self.assertIn(phrase, sent)
         data = client.caption_candidate["public_post_text"]
@@ -220,6 +235,21 @@ class SmokeCaptionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "beauty_unobserved_physical_property"):
                 client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
                                      schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+
+    def test_beauty_rejects_repeated_quote_after_observation(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから液体を手の甲に垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "スポイトから液体を手の甲に垂らすところ、動画だと意外と分かりやすいかも✨",
+                   "beauty_followup": "スポイトから液体を手の甲に垂らすところを購入前に見られるのって結構大事だよね🤍"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "beauty_quote_repeated_after_observation"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+            self.assertEqual(client.caption_evidence.get("validation_error"), "beauty_quote_repeated_after_observation")
 
     def test_liver_rejects_unbound_next_stream_metric(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "だから枠の規模に合った 運用が一番いいと思います!!"}
