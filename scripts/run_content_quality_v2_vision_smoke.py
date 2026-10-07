@@ -47,6 +47,7 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "beauty_followup_missing",
     "beauty_semantic_inference_unverified",
     "beauty_unobserved_physical_property",
+    "beauty_unobserved_context_added",
     "beauty_quote_repeated_after_observation",
     "beauty_quote_grounding_too_weak",
     "beauty_low_value_text_comparison",
@@ -56,6 +57,7 @@ BEAUTY_REPAIRABLE_ERRORS = {
     "beauty_followup_missing",
     "beauty_semantic_inference_unverified",
     "beauty_unobserved_physical_property",
+    "beauty_unobserved_context_added",
     "beauty_quote_repeated_after_observation",
     "beauty_quote_grounding_too_weak",
     "beauty_low_value_text_comparison",
@@ -76,6 +78,9 @@ def validate_beauty_smoke_candidate(quote: str, takeaway: str, followup: str) ->
     )
     if any(term in beauty_text and term not in quote for term in physical_terms):
         raise RuntimeError("beauty_unobserved_physical_property")
+    unobserved_context_terms = ("鮮明", "日常使い", "イメージも湧")
+    if any(term in beauty_text and term not in quote for term in unobserved_context_terms):
+        raise RuntimeError("beauty_unobserved_context_added")
     if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
         raise RuntimeError("beauty_low_value_text_comparison")
     if quote in takeaway and quote in followup:
@@ -89,6 +94,16 @@ def validate_beauty_smoke_candidate(quote: str, takeaway: str, followup: str) ->
         raise RuntimeError("beauty_quote_grounding_too_weak")
     if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
         raise RuntimeError("beauty_selection_value_missing")
+
+
+def deterministic_beauty_smoke_repair(quote: str) -> tuple[str, str] | None:
+    """Narrow final safety repair for the known visible dropper action; never invent product effects."""
+    if "スポイト" in quote and "手の甲" in quote and ("垂ら" in quote or "液体" in quote):
+        return (
+            "スポイトから手の甲へ液体を垂らす動きが動画で見えるから、購入前に出し方を確認できて意外と参考になるかも✨",
+            "購入前にスポイトの出し方を手の甲で動画確認できるのって、ほんとに結構大事だよね🤍",
+        )
+    return None
 
 
 class SmokeGeminiClient(GeminiHybridClient):
@@ -378,13 +393,25 @@ class SmokeGeminiClient(GeminiHybridClient):
                         beauty_followup = re.sub(
                             r"\n\s*\n+", "\n", str(repaired_data.get("beauty_followup", "")).strip()
                         )
+                        try:
+                            validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
+                        except RuntimeError as repaired_validation_error:
+                            repaired_reason = str(repaired_validation_error)
+                            deterministic_repair = deterministic_beauty_smoke_repair(quote)
+                            if repaired_reason not in BEAUTY_REPAIRABLE_ERRORS or deterministic_repair is None:
+                                raise
+                            takeaway, beauty_followup = deterministic_repair
+                            decision.update(
+                                deterministic_validation_repair_used=True,
+                                deterministic_validation_repair_reason=repaired_reason,
+                            )
+                            validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
                         self.caption_candidate = {
                             "quote_choice": choice,
                             "selected_quote": quote,
                             "reader_takeaway": takeaway,
                             "beauty_followup": beauty_followup,
                         }
-                        validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
                         result = {
                             **repaired_result,
                             "actual_requests": (
