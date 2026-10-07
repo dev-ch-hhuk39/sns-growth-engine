@@ -97,7 +97,12 @@ class SmokeGeminiClient(GeminiHybridClient):
                             excerpts = re.split(r"[\s。]+", text) if re.search(r"[\s。]", text) else [text]
                         else:
                             excerpts = re.split(r"[。\n]+", text) if re.search(r"[。\n]", text) else [text]
-                        quote_options += [{"fact_id": fact["id"], "text": part} for part in excerpts if 8 <= len(part) <= 80]
+                        for part in excerpts:
+                            cleaned = part.strip()
+                            if fact.get("type") != "visible_text":
+                                cleaned = re.sub(r"^\s*\d+[.)．]\s*", "", cleaned).strip()
+                            if 8 <= len(cleaned) <= 80 and cleaned in fact["text"]:
+                                quote_options.append({"fact_id": fact["id"], "text": cleaned})
                 if not quote_options:
                     raise RuntimeError("no_bound_quote_options")
                 beauty = kwargs["account_id"] == "beauty_account"
@@ -144,7 +149,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                         "reader_takeawayとbeauty_followupには選んだquoteの具体語を残す。公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
                         "『文字数が違う』『英語と日本語で長さが違う』『公式サイトに同じ表記があるか』等、動画そのものから離れる低価値なメタ比較は禁止。"
                         "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"
-                        "自然な女友達口調として『意外と』『結構』『だよね』『かも』等から内容に合うものを2つ程度使う。同じ位置に固定せず、不自然な埋め草にしない。広告・効能・定型句の埋め草は禁止。"
+                        "自然な女友達口調としてhumanity markerの『意外と』『結構大事』『ほんとに』『気がする』から内容に合うものを最低2つ使い、さらに『だよね』『かも』『〜てみて』等のsoft endingを最低1つ使う。同じ位置に固定せず、不自然な埋め草にしない。広告・効能・定型句の埋め草は禁止。"
                     )
                 else:
                     raise RuntimeError("unsupported_smoke_caption_account")
@@ -253,14 +258,22 @@ class SmokeGeminiClient(GeminiHybridClient):
                     if not beauty_followup:
                         raise RuntimeError("beauty_followup_missing")
                     beauty_text = takeaway + "\n" + beauty_followup
-                    semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合")
+                    semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合", "効く", "効果", "改善")
                     if any(term in beauty_text and term not in quote for term in semantic_terms):
                         raise RuntimeError("beauty_semantic_inference_unverified")
-                    if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語", beauty_text):
+                    physical_terms = ("量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす")
+                    if any(term in beauty_text and term not in quote for term in physical_terms):
+                        raise RuntimeError("beauty_unobserved_physical_property")
+                    if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
                         raise RuntimeError("beauty_low_value_text_comparison")
-                    if not re.search(r"(?:確認|見比べ|商品ページ|パッケージ|ラベル|表記|選ぶ|購入)", beauty_text):
+                    if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
                         raise RuntimeError("beauty_selection_value_missing")
-                observation = f"この動画の「{quote}」という言葉。" if fact.get("type") == "visible_text" else f"この動画では、{quote}。"
+                if fact.get("type") == "visible_text":
+                    observation = f"この動画の「{quote}」という言葉。"
+                elif kwargs["account_id"] == "beauty_account":
+                    observation = f"この動画、{quote}"
+                else:
+                    observation = f"この動画では、{quote}。"
                 if kwargs["account_id"] == "beauty_account":
                     observation = observation.removesuffix("。")
                 claims = [observation, takeaway] + ([beauty_followup] if beauty_followup else [])
