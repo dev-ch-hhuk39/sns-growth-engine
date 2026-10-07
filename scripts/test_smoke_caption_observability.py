@@ -118,7 +118,7 @@ class SmokeCaptionTests(unittest.TestCase):
         for phrase in ("自分が使用した体験", "気に入ってる", "肌の調子がいい", "使いやすい",
                        "濃度", "配合量", "数字や商品名の意味を推測しない",
                        "スポイトから垂らす", "両方でquote全文を繰り返さない", "同じ長い表現を2段落で反復しない",
-                       "公式サイト確認や文字列照合を目的にせず",
+                       "公式サイト確認や文字列照合を目的にしない",
                        "1行44文字程度", "🥺✨🤍🫶🏻😭💭"):
             self.assertIn(phrase, sent)
         data = client.caption_candidate["public_post_text"]
@@ -229,6 +229,20 @@ class SmokeCaptionTests(unittest.TestCase):
         payload = {"quote_choice": 0,
                    "reader_takeaway": "スポイトから液体を手の甲に垂らす場面で、出す時の感覚が意外と分かるかも✨",
                    "beauty_followup": "ほんとに使い方を動画で見られるのって結構大事だよね🤍"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "beauty_unobserved_physical_property"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+
+    def test_beauty_rejects_unobserved_texture_language(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから液体を手の甲に垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "スポイトで液体を手の甲へ垂らす場面を見ると、質感や一滴の重みまで分かる気がするかも✨",
+                   "beauty_followup": "購入前に動画で出し方を見られるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         with tempfile.TemporaryDirectory() as tmp:
             client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
