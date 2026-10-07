@@ -39,6 +39,7 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "liver_source_person_contact_not_actionable",
     "liver_next_stream_action_not_grounded",
     "liver_next_stream_action_not_source_specific",
+    "liver_unobserved_context_added",
     "liver_actionable_ending_missing",
     "beauty_followup_missing",
     "beauty_semantic_inference_unverified",
@@ -121,6 +122,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                         "reader_takeawayに必ず『次の配信では』を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。"
                         "その具体行動はvisual_factsに実際にある対象だけで組み立て、リスナー数・反応速度・配信時間などvisual_factsにない判断指標を足さない。"
                         f"『次の配信では』以降にはallowed_action_terms={liver_action_terms}の語を最低1つ、その表記のまま必ず含める。別の指標へ言い換えない。"
+                        "reader_takeaway全体でもvisual_factsにない主語・心理・指標・機能を足さない。『リスナーが気を使う』『リスナー数』『視聴者数』『反応』『配信時間』『通知の設定』等をvisual_factsにないのに追加するのは禁止。"
                         "元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。"
                         "最後は『試してみてね』『決めてみてね』『変えてみてね』等、視聴者へ直接促す自然な行動語尾で締める。"
                         "『〜してみるかも』のように自分語りで終えない。一般的なコミュニティ提案や『みんなで共有』は禁止。"
@@ -228,6 +230,9 @@ class SmokeGeminiClient(GeminiHybridClient):
                     source_action_terms = [term for term in ("入室通知", "枠の規模", "運用") if term in source_text]
                     if source_action_terms and not any(term in action_tail for term in source_action_terms):
                         raise RuntimeError("liver_next_stream_action_not_source_specific")
+                    unobserved_terms = ("リスナー", "視聴者", "反応", "配信時間", "通知の設定", "入室通知の設定", "気を使う")
+                    if any(term in takeaway and term not in source_text for term in unobserved_terms):
+                        raise RuntimeError("liver_unobserved_context_added")
                     if not re.search(
                             r"(?:試してみてね|決めてみてね|変えてみてね|合わせてみてね)[。！!😊✨🤍🫶🏻😭💭]*$",
                             takeaway.strip()):

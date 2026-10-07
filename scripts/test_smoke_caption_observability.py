@@ -192,6 +192,21 @@ class SmokeCaptionTests(unittest.TestCase):
             self.assertEqual(client.caption_evidence.get("validation_error"),
                              "liver_next_stream_action_not_source_specific")
 
+
+    def test_liver_rejects_unobserved_context(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
+        source = {"target_account_id": "liver_manager", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "リスナーが気を使うよね。次の配信では枠の規模に合う入室通知の設定を決めてみてね。"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "liver_unobserved_context_added"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+            self.assertEqual(client.caption_evidence.get("validation_error"), "liver_unobserved_context_added")
+
     def test_beauty_rejects_unverified_semantic_label(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}
         source = {"target_account_id": "beauty_account", "media_first_input": {
