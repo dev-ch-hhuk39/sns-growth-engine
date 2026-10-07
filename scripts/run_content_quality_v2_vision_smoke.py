@@ -133,7 +133,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     account_instruction = (
                         "Liverは迷いに共感する女性先輩の口調。quote_choiceは『運用』『大事』のような抽象語だけの結論より、入室通知・コメント・初見など次回配信でそのまま操作を変えられる具体対象が書かれた視覚事実を優先する。"
                         "reader_takeawayに必ず『次の配信では』を含め、選んだ具体対象について視聴者自身が次回配信で行う一つの具体行動へ落とす。"
-                        "その具体行動はvisual_factsに実際にある対象だけで組み立て、リスナー数・反応速度・配信時間などvisual_factsにない判断指標を足さない。"
+                        "その具体行動はvisual_factsに実際にある対象だけで組み立てる。元動画が『読む』『読まない』『やめる』の方向を明示していない場合は、その方向を勝手に決めず『枠の規模に合わせて読み上げルールを決める』等の判断行動にする。リスナー数・反応速度・配信時間などvisual_factsにない判断指標を足さない。"
                         f"『次の配信では』以降にはallowed_action_terms={liver_action_terms}の語を最低1つ、その表記のまま必ず含める。別の指標へ言い換えない。"
                         "reader_takeaway全体でもvisual_factsにない主語・心理・指標・機能を足さない。『リスナーが気を使う』『リスナー数』『視聴者数』『反応』『配信時間』『通知の設定』等をvisual_factsにないのに追加するのは禁止。"
                         "引用本文は原文のままでよいが、reader_takeaway自体では『です』『ます』調を使わない。『迷うよね』『〜かも』『〜だよ』『〜てね』のような自然な先輩口調にする。"
@@ -245,6 +245,15 @@ class SmokeGeminiClient(GeminiHybridClient):
                     source_action_terms = [term for term in ("入室通知", "枠の規模", "運用") if term in source_text]
                     if source_action_terms and not any(term in action_tail for term in source_action_terms):
                         raise RuntimeError("liver_next_stream_action_not_source_specific")
+                    unsupported_direction = (
+                        re.search(r"(?:読み上げ|通知).{0,8}(?:を)?やめ", takeaway)
+                        or re.search(r"(?:読み上げ|通知).{0,8}(?:ない|なくする)", takeaway)
+                        or re.search(r"(?:必ず|毎回).{0,8}(?:読む|読み上げ)", takeaway)
+                    )
+                    decision_phrase = re.search(r"(?:読むか読まないか|読み上げるか読み上げないか).{0,12}(?:決め|選)", takeaway)
+                    if unsupported_direction and not decision_phrase and not any(
+                            phrase in source_text for phrase in ("読み上げをやめ", "読み上げない", "必ず読む", "毎回読む")):
+                        raise RuntimeError("liver_unobserved_direction_added")
                     unobserved_terms = ("リスナー", "視聴者", "反応", "配信時間", "通知の設定", "入室通知の設定", "気を使う")
                     if any(term in takeaway and term not in source_text for term in unobserved_terms):
                         raise RuntimeError("liver_unobserved_context_added")
@@ -261,7 +270,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合", "効く", "効果", "改善")
                     if any(term in beauty_text and term not in quote for term in semantic_terms):
                         raise RuntimeError("beauty_semantic_inference_unverified")
-                    physical_terms = ("量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす")
+                    physical_terms = ("量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす", "出す時の感覚", "使用感")
                     if any(term in beauty_text and term not in quote for term in physical_terms):
                         raise RuntimeError("beauty_unobserved_physical_property")
                     if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):

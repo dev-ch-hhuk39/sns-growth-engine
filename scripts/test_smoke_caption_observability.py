@@ -194,6 +194,33 @@ class SmokeCaptionTests(unittest.TestCase):
             self.assertIn("一休さんに質問", client.caption_candidate.get("reader_takeaway", ""))
 
 
+    def test_liver_rejects_unobserved_reading_direction(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
+        source = {"target_account_id": "liver_manager", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "入室通知を読むか迷うよね。次の配信では入室通知の読み上げをやめて枠の規模に合わせて変えてみてね。"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "liver_unobserved_direction_added"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="liver_manager")
+
+    def test_beauty_rejects_unobserved_application_feel(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから液体を手の甲に垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "スポイトから液体を手の甲に垂らす場面で、出す時の感覚が意外と分かるかも✨",
+                   "beauty_followup": "ほんとに使い方を動画で見られるのって結構大事だよね🤍"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "beauty_unobserved_physical_property"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+
     def test_liver_rejects_unbound_next_stream_metric(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "だから枠の規模に合った 運用が一番いいと思います!!"}
         source = {"target_account_id": "liver_manager", "media_first_input": {
