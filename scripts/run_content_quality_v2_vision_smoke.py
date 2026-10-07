@@ -33,6 +33,9 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "no_bound_quote_options",
     "caption_quote_choice_invalid",
     "caption_quote_not_bound_to_visual_fact",
+    "night_first_person_opening_missing",
+    "night_cross_account_live_context",
+    "night_cross_account_beauty_emoji",
     "liver_source_person_contact_not_actionable",
     "liver_next_stream_action_not_grounded",
     "liver_actionable_ending_missing",
@@ -97,17 +100,42 @@ class SmokeGeminiClient(GeminiHybridClient):
                     required.append("beauty_followup")
                 kwargs["schema"] = {"type": "object", "properties": properties,
                                     "required": required, "additionalProperties": False}
+                account_id = kwargs["account_id"]
+                if account_id == "night_scout":
+                    account_instruction = (
+                        "Nightは男性の夜職・キャバクラ専門スカウト。reader_takeawayは必ず『僕なら』で始め、店選びに迷う夜職女性へ一対一で話す。"
+                        "visual_facts内の具体語を二つ以上そのまま残し、採用基準・入店後の競争率・本人の強み等を分けて判断する。"
+                        "一律に『避ける』『行くべき』と断定しない。『だと思う』『なんだよね』『が大事』等の自然な現場口調。"
+                        "絵文字は禁止。配信、LIVE、ライブ、リスナー、コメント、初見、ギフト、『次の配信では』等の配信文脈は禁止。"
+                        "『なのですね』『必要不可欠』『感じさせられます』等の講評・コンサル口調は禁止。"
+                    )
+                elif account_id == "liver_manager":
+                    account_instruction = (
+                        "Liverは迷いに共感する女性先輩の口調。質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。"
+                        "reader_takeawayに必ず『次の配信では』を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。"
+                        "元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。"
+                        "最後は『試してみてね』『決めてみてね』『変えてみてね』等、視聴者へ直接促す自然な行動語尾で締める。"
+                        "『〜してみるかも』のように自分語りで終えない。一般的なコミュニティ提案や『みんなで共有』は禁止。"
+                    )
+                elif account_id == "beauty_account":
+                    account_instruction = (
+                        "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。"
+                        "他のvisual factを追加せず、数字や商品名の意味を推測しない。『濃度』『配合量』『配合されている』『効く』『効果』『肌』『使いやすい』『テクスチャー』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、quoteに明記されていない意味・使用レビューは禁止。"
+                        "reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。"
+                        "『文字数が違う』『英語と日本語で長さが違う』等、文字列そのものの形だけを比べる低価値なメタ比較は禁止。"
+                        "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"
+                        "reader_takeawayには『意外と』とsoft endingの『かも』を自然に入れ、beauty_followupには『結構大事』と『だよね』を自然に入れる。広告・効能・定型句の埋め草は禁止。"
+                    )
+                else:
+                    raise RuntimeError("unsupported_smoke_caption_account")
                 kwargs["prompt"] = (
                     "未公開の日本語Media投稿を二つの部分で作る。quote_optionsの番号をquote_choiceで一つ選ぶ。引用本文は変更しない。"
                     "reader_takeawayはその引用に対する具体的な判断を45〜90文字、二文以内で書く。抽象論へ広げない。"
                     "引用の重要な具体語を残す。元投稿者の同伴や使用を自分の体験にしない。"
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
-                    "Nightのreader_takeawayは必ず『僕なら』で始め、店選びに迷う子へ話す。visual_facts内の具体語を二つ以上そのまま残して判断を述べる。"
-                    "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
-                    "Liverは迷いに共感する女性先輩の口調にし、質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。reader_takeawayに必ず「次の配信では」を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。最後は必ず「試してみてね」「決めてみてね」「変えてみてね」など、視聴者へ直接促す自然な行動語尾で締める。「〜してみるかも」のように自分語りで終えない。一般的なコミュニティ提案や「みんなで共有」は禁止。"
-                    "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。他のvisual factを追加せず、数字や商品名の意味を推測しない。「濃度」「配合量」「配合されている」「効く」「効果」「肌」「使いやすい」「テクスチャー」「気に入ってる」「肌の調子がいい」「肌が整う」「取り入れている」等、quoteに明記されていない意味・使用レビューは禁止。reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。「文字数が違う」「英語と日本語で長さが違う」など、文字列そのものの形だけを比べる低価値なメタ比較は禁止。各1段落、句点「。」を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。reader_takeawayには「意外と」とsoft endingの「かも」を自然に入れ、beauty_followupには「結構大事」と「だよね」を自然に入れる。広告・効能・定型句の埋め草は禁止。"
-                    "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
-                    + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
+                    + account_instruction
+                    + "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
+                    + json.dumps({"account": account_id, "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
         else:
             facts = []
         original_model = kwargs.get("model", "")
@@ -160,6 +188,13 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "reader_takeaway": takeaway,
                     **({"beauty_followup": beauty_followup} if beauty_followup else {}),
                 }
+                if kwargs["account_id"] == "night_scout":
+                    if not takeaway.strip().startswith("僕なら"):
+                        raise RuntimeError("night_first_person_opening_missing")
+                    if re.search(r"(?:次の配信|配信|LIVE|ライブ|リスナー|コメント|初見|ギフト)", takeaway):
+                        raise RuntimeError("night_cross_account_live_context")
+                    if any(emoji in takeaway for emoji in ("🥺", "✨", "🤍", "🫶🏻", "😭", "💭")):
+                        raise RuntimeError("night_cross_account_beauty_emoji")
                 if kwargs["account_id"] == "liver_manager":
                     source_text = " ".join(item["text"] for item in facts)
                     source_names = set(re.findall(r"([一-龯ぁ-んァ-ヶA-Za-z0-9]{2,20}さん)", source_text))

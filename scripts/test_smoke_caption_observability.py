@@ -50,6 +50,43 @@ class SmokeCaptionTests(unittest.TestCase):
                         self.assertEqual(support["anchor_fact_ids"], ["VF1"])
                     self.assertEqual(result["internal_analysis"]["main_claims"], [s["caption_claim"] for s in result["claim_support"]])
 
+    def test_night_prompt_is_account_isolated(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "採用基準狙い目、ただ入店後の競争率は高いというイメージ"}
+        source = {"target_account_id": "night_scout", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0, "reader_takeaway": "僕なら採用基準と入店後の競争率を分けて、自分の強みも一緒に見るのが大事だと思う。"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        transport = Mock(return_value=response)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                 schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
+        sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
+        self.assertIn("男性の夜職・キャバクラ専門スカウト", sent)
+        self.assertIn("配信文脈は禁止", sent)
+        self.assertNotIn("Liverは", sent)
+        self.assertNotIn("Beautyは", sent)
+        self.assertNotIn("🥺", sent)
+
+    def test_night_rejects_cross_account_live_context_and_beauty_emoji(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "採用基準狙い目、ただ入店後の競争率は高いというイメージ"}
+        source = {"target_account_id": "night_scout", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        cases = [
+            ("僕なら採用基準と競争率を分けて見るよ。次の配信では強みを整理してみてね。", "night_cross_account_live_context"),
+            ("僕なら採用基準と入店後の競争率を分けて、自分の強みも一緒に見るのが大事だと思う🥺", "night_cross_account_beauty_emoji"),
+        ]
+        for takeaway, expected in cases:
+            with self.subTest(expected=expected):
+                payload = {"quote_choice": 0, "reader_takeaway": takeaway}
+                response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+                with tempfile.TemporaryDirectory() as tmp:
+                    client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+                    with self.assertRaisesRegex(RuntimeError, expected):
+                        client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                             schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
+                    self.assertEqual(client.caption_evidence.get("validation_error"), expected)
+
     def test_beauty_prompt_forbids_self_use_and_effect_claims(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}
         source = {"target_account_id": "beauty_account", "media_first_input": {
