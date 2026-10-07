@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 sys.path[:0] = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1] / 'src')]
 import build_media_first_review_pack as preview
-from run_content_quality_v2_vision_smoke import SmokeGeminiClient
+from run_content_quality_v2_vision_smoke import SmokeGeminiClient, current_model_scoped_vision_fallback_allowed
 
 class EvidenceReuseTests(unittest.TestCase):
     def test_exact_binding_required(self):
@@ -67,6 +67,20 @@ class EvidenceReuseTests(unittest.TestCase):
             self.assertEqual(result["vision"]["model"], "gemini-3.1-flash-lite")
             self.assertEqual(result["vision"]["requested_model"], "gemini-3.5-flash")
             self.assertTrue(result["vision"]["fallback_used"])
+
+    def test_current_run_model_scoped_quota_allows_smoke_vision_fallback(self):
+        vision = {
+            "http_status": 429,
+            "quota_violations": [{
+                "quota_model": "gemini-3.5-flash",
+                "quota_id": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+                "rate_limit_class": "DAILY_QUOTA_EXHAUSTED",
+            }],
+        }
+        self.assertTrue(current_model_scoped_vision_fallback_allowed(vision, "gemini-3.5-flash"))
+        self.assertFalse(current_model_scoped_vision_fallback_allowed(vision, "gemini-3.1-flash-lite"))
+        vision["quota_violations"][0]["quota_id"] = "GenerateRequestsPerDayPerProject"
+        self.assertFalse(current_model_scoped_vision_fallback_allowed(vision, "gemini-3.5-flash"))
 
     def test_fallback_only_on_active_model_scoped_evidence(self):
         client=SmokeGeminiClient(api_key='fixture',reserve_request=Mock())

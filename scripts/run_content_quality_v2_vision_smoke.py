@@ -230,6 +230,22 @@ def rebind_style_repair_claims(result: dict, repaired_text: str) -> dict:
     return updated
 
 
+def current_model_scoped_vision_fallback_allowed(vision: dict, primary_model: str) -> bool:
+    """Allow one Smoke-only Vision fallback only for explicit model-scoped quota evidence."""
+    violations = vision.get("quota_violations", [])
+    return (
+        primary_model == "gemini-3.5-flash"
+        and vision.get("http_status") == 429
+        and bool(violations)
+        and all(
+            row.get("quota_model") == primary_model
+            and "PerProjectPerModel" in str(row.get("quota_id", ""))
+            and row.get("rate_limit_class") in {"DAILY_QUOTA_EXHAUSTED", "MODEL_QUOTA_EXHAUSTED"}
+            for row in violations
+        )
+    )
+
+
 def smoke_previews(document: str, target_account: str = "all") -> list[dict]:
     if target_account not in (*ACCOUNTS, "all"):
         raise ValueError("invalid_target_account")
@@ -290,7 +306,32 @@ def build_package(row: dict, directory: Path) -> dict:
     inspected = inspect_preview(row, directory, account_content_contract=contract, smoke_vision_evidence=evidence,
                                 vision_model_override=vision_model_override)
     vision = inspected.get("vision", {})
-    if vision.get("fallback_used"):
+    if not vision_model_override and current_model_scoped_vision_fallback_allowed(vision, primary_vision_model):
+        primary_vision = dict(vision)
+        retry_delay = vision.get("retry_delay_seconds")
+        client.quota_basis = {
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "retry_delay_seconds": retry_delay if isinstance(retry_delay, (int, float)) and retry_delay > 0 else 60,
+            "quota_violations": vision.get("quota_violations", []),
+            "origin_run_id": os.environ.get("GITHUB_RUN_ID", "current_request"),
+        }
+        inspected = inspect_preview(
+            row,
+            directory,
+            account_content_contract=contract,
+            smoke_vision_evidence=evidence,
+            vision_model_override="gemini-3.1-flash-lite",
+        )
+        vision = inspected.get("vision", {})
+        if vision.get("fallback_used"):
+            vision = {
+                **vision,
+                "fallback_basis_run": client.quota_basis["origin_run_id"],
+                "primary_attempt_history": primary_vision.get("attempt_history", []),
+                "primary_failure_class": primary_vision.get("failure_class", ""),
+            }
+            inspected["vision"] = vision
+    elif vision.get("fallback_used"):
         vision = {**vision, "fallback_basis_run": client.quota_basis.get("origin_run_id", "")}
         inspected["vision"] = vision
     required = ("visual_summary", "key_moment")
