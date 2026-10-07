@@ -19,12 +19,12 @@ response = Mock(status_code=429)
 assert provider_failure_class(requests.HTTPError(response=response)) == "rate_limited"
 assert provider_failure_class(requests.Timeout()) == "timeout"
 
-before = os.environ.pop("GITHUB_TOKEN", None)
+before = os.environ.pop("GEMINI_API_KEY", None)
 try:
     vision = vision_summary([], media_type="video")
 finally:
     if before is not None:
-        os.environ["GITHUB_TOKEN"] = before
+        os.environ["GEMINI_API_KEY"] = before
 assert vision["status"] == "UNAVAILABLE"
 assert vision["failure_class"] == "auth_missing"
 

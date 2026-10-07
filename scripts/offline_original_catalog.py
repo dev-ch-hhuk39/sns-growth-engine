@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from difflib import SequenceMatcher
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping
@@ -86,7 +87,15 @@ def offline_original_reasons(queue: Mapping[str, Any]) -> list[str]:
         policy = {}
     if not isinstance(policy, dict):
         policy = {}
-    if policy.get("offline_original") != evidence(account, text) or text not in catalog(account):
+    offline_evidence = policy.get("offline_original", {})
+    source_text = str(policy.get("offline_original_source_text") or text)
+    source_matches = (
+        offline_evidence == evidence(account, source_text)
+        and source_text in catalog(account)
+        and hashlib.sha256(text.encode("utf-8")).hexdigest()
+        == str(policy.get("offline_original_output_hash") or offline_evidence.get("content_hash", ""))
+    )
+    if not source_matches:
         reasons.append("offline_catalog_evidence_mismatch")
     previous = policy.get("hybrid_ai_gate", {})
     if isinstance(previous, dict) and previous.get("provider_mode") == "gemini" and previous.get("status") == "BLOCKED":
@@ -94,11 +103,63 @@ def offline_original_reasons(queue: Mapping[str, Any]) -> list[str]:
     return reasons
 
 
+@lru_cache(maxsize=3)
+def _prepared_candidates(account_id: str) -> tuple[dict[str, Any], ...]:
+    """Validate and rank immutable catalog items once per account/process."""
+    from generation_quality_gates import evaluate_generation_quality
+    from generation.content_quality_v2 import hard_gate, rank_candidate, repair_style_only
+    from public_post_quality import final_public_post_validator
+
+    prepared: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for source_text in catalog(account_id):
+        repaired = repair_style_only(source_text, account_id)
+        text = repaired["public_post_text"]
+        key = re.sub(r"\s+", "", text).lower()
+        if not key or key in seen:
+            continue
+        public = final_public_post_validator(text, account_id)
+        gate = hard_gate({"account_id": account_id, "target_account_id": account_id,
+                          "platform": "threads", "public_post_text": text},
+                         account_id=account_id, public_validation=public)
+        if gate["status"] != "PASS":
+            continue
+        quality = evaluate_generation_quality(account_id, text, [], batch_compared=[])
+        rank = rank_candidate({
+            "candidate_id": evidence(account_id, text)["content_hash"],
+            "quality_components": {
+                "reader_value": public.get("reader_value_score", 45),
+                "account_relevance": public.get("account_fit_score", 45),
+                "naturalness": public.get("naturalness_score", 45),
+                "persona_evidence": public.get("account_fit_score", 45),
+                "topic_coherence": quality.get("topic_coherence_score", 45),
+                "media_caption_relevance": 45,
+                "concrete_evidence": 45,
+                "novelty": 100,
+                "cta_fit": max(0, 100 - public.get("cta_pressure_score", 0)),
+                "style_diversity": 100 if quality.get("batch_diversity_status") == "PASS" else 55,
+            },
+            "warnings": quality.get("diversity_blocked_reasons", [])
+                + quality.get("topic_blocked_reasons", []),
+        }, account_id=account_id)
+        prepared.append({
+            "source_text": source_text,
+            "text": text,
+            "repair": repaired,
+            "public": public,
+            "gate": gate,
+            "quality": quality,
+            **rank,
+        })
+        seen.add(key)
+    prepared.sort(key=lambda row: (-float(row["quality_rank"]), evidence(account_id, row["text"])["content_hash"]))
+    return tuple(prepared)
+
+
 def select_original(account_id: str, history: list[Any], *, batch_compared: list[Any] | None = None,
                     used_texts: list[Any] | None = None) -> dict[str, Any]:
-    from generation_quality_gates import evaluate_generation_quality
-    from public_post_quality import final_public_post_validator
     from auto_approve_queue import near_duplicate, normalize_text
+    from generation.content_quality_v2 import rank_candidate
 
     history = [row for row in history if not isinstance(row, dict)
                or str(row.get("account_id") or row.get("target_account_id") or account_id) == account_id]
@@ -108,16 +169,34 @@ def select_original(account_id: str, history: list[Any], *, batch_compared: list
                 if isinstance(row, dict) else str(row)
                 for row in (used_texts or [])]
     used = {normalize_text(text) for text in old_texts + all_used if text}
-    for text in catalog(account_id):
+    ranked: list[tuple[float, dict[str, Any]]] = []
+    for candidate in _prepared_candidates(account_id):
+        source_text = candidate["source_text"]
+        text = candidate["text"]
         if normalize_text(text) in used:
             continue
-        public = final_public_post_validator(text, account_id)
-        if public["status"] != "PASS":
+        if near_duplicate(text, old_texts):
             continue
-        quality = evaluate_generation_quality(account_id, text, history, batch_compared=batch_compared or [])
-        if quality["status"] != "PASS" or near_duplicate(text, old_texts):
-            continue
-        return {"public_post_text": text, "generation_provider": CATALOG_VERSION,
-                "generation_policy": {"offline_original": evidence(account_id, text)},
-                "post_design": {}, "grounding_summary": {}, "quality": quality}
-    return {}
+        similarity = max((SequenceMatcher(None, normalize_text(text), normalize_text(previous)).ratio()
+                          for previous in old_texts[-40:] if previous), default=0.0)
+        dynamic_rank = dict(candidate["quality_rank_components"])
+        dynamic_rank["novelty"] = max(0, 100 - similarity * 100)
+        validation = rank_candidate({"quality_components": dynamic_rank,
+                                     "warnings": candidate["warnings"]}, account_id=account_id)
+        ranked.append((float(validation["quality_rank"]), {
+            "public_post_text": text,
+            "generation_provider": CATALOG_VERSION,
+            "generation_policy": {
+                "offline_original": evidence(account_id, source_text),
+                "offline_original_source_text": source_text,
+                "offline_original_output_hash": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "content_quality_v2_repair_count": candidate["repair"]["repair_count"],
+            },
+            "post_design": {}, "grounding_summary": {}, "quality": candidate["quality"],
+            "content_quality_v2_version": "content_quality_v2",
+            "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+            "repair_count": candidate["repair"]["repair_count"],
+            "hard_gate_reasons": candidate["gate"]["hard_gate_reasons"],
+            **validation,
+        }))
+    return max(ranked, key=lambda pair: (pair[0], pair[1]["generation_policy"]["offline_original"]["content_hash"]))[1] if ranked else {}

@@ -7,6 +7,10 @@ on:
     - cron: "45 1 * * *"
   workflow_dispatch:
     inputs:
+      content_quality_v2_vision_smoke:
+        description: "Read-only Content Quality V2 vision smoke"
+        required: false
+        default: "false"
       confirm_preparation:
         description: "Type true to ingest and READY one approved direct-media item per account"
         required: true
@@ -33,7 +37,55 @@ env:
   ALLOW_LOCAL_TRANSCRIPTION: "false"
 
 jobs:
+  content-quality-v2-vision-smoke:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.content_quality_v2_vision_smoke == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_VISION_MODEL: gemini-3.5-flash
+      GEMINI_GENERATOR_MODEL: gemini-3.5-flash
+      GEMINI_MAX_ATTEMPTS: "1"
+      BUFFERED_POSTING_ENABLED: "false"
+      PUBLISH_ENABLED: "false"
+      ALLOW_REAL_THREADS_POST: "false"
+      ALLOW_REAL_X_POST: "false"
+      ALLOW_MEDIA_POSTS: "false"
+      ALLOW_CLOUDINARY_UPLOAD: "false"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.11"
+      - name: Install read-only smoke dependencies
+        run: |
+          python3 -m pip install requests==2.34.2
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends ffmpeg
+      - name: Understand selected historical previews and draft captions
+        env:
+          SMOKE_TARGET_ACCOUNT: ${{ github.event.inputs.target_account }}
+          GEMINI_CACHE_DIR: ${{ runner.temp }}/cq-v2-gemini-cache
+          HYBRID_AI_BUDGET_STATE: ${{ runner.temp }}/cq-v2-gemini-budget.json
+        run: |
+          python3 scripts/run_content_quality_v2_vision_smoke.py \
+            --target-account "$SMOKE_TARGET_ACCOUNT" \
+            --output docs/CONTENT_QUALITY_V2_VISION_SMOKE_REVIEW.md
+      - name: Preserve review only, never frames or videos
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: content-quality-v2-vision-smoke-${{ github.run_id }}
+          path: docs/CONTENT_QUALITY_V2_VISION_SMOKE_REVIEW.md
+          if-no-files-found: warn
+          retention-days: 14
+
   resolve-accounts:
+    if: github.event.inputs.content_quality_v2_vision_smoke != 'true'
     runs-on: ubuntu-latest
     environment: production
     outputs:
@@ -70,6 +122,7 @@ jobs:
           PY
 
   prepare-direct-media:
+    if: github.event.inputs.content_quality_v2_vision_smoke != 'true'
     needs: resolve-accounts
     runs-on: ubuntu-latest
     environment: production
@@ -262,7 +315,8 @@ jobs:
   refill-existing-approved-clips:
     needs: [resolve-accounts, prepare-direct-media]
     if: >-
-      always() && needs.resolve-accounts.result == 'success' &&
+      always() && github.event.inputs.content_quality_v2_vision_smoke != 'true' &&
+      needs.resolve-accounts.result == 'success' &&
       needs.prepare-direct-media.result != 'cancelled' &&
       (github.event_name == 'schedule' || github.event.inputs.confirm_preparation == 'true') &&
       needs.resolve-accounts.outputs.clip_account_ids != '[]'

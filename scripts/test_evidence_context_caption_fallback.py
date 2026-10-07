@@ -10,11 +10,10 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-from evidence_context_caption import (
-    PROVIDER_NAME,
+from evidence_context_caption import (  # noqa: E402
     generate_evidence_context_caption,
 )
-from run_media_production_pipeline import (
+from run_media_production_pipeline import (  # noqa: E402
     _generate_final_media_caption,
 )
 
@@ -137,14 +136,14 @@ checks = [
         unrelated["status"] == "BLOCKED",
     ),
     (
-        "final caption uses evidence fallback as third attempt",
-        final_caption["status"] == "PASS"
-        and final_caption["caption_attempt_count"] == 3
-        and blocked_service.calls == 2,
+        "transcript-only fallback cannot bypass visual understanding",
+        final_caption["status"] == "REVIEW_REQUIRED"
+        and final_caption["caption_attempt_count"] == 0
+        and blocked_service.calls == 0,
     ),
     (
-        "final caption provider is auditable",
-        final_caption["caption_provider"] == PROVIDER_NAME,
+        "missing visual evidence is auditable",
+        "visual_understanding_required" in final_caption["blocked_reasons"],
     ),
 ]
 

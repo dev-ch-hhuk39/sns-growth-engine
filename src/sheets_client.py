@@ -257,6 +257,10 @@ TAB_DEFINITIONS: dict[str, list[str]] = {
         "validator_status", "internal_leak_status", "account_fit_status",
         "public_post_quality_score", "reader_value_score", "naturalness_score",
         "cta_pressure_score",
+        "content_quality_v2_version", "content_quality_v2_status", "selected_candidate_id",
+        "candidate_count", "repair_count", "hard_gate_reasons", "quality_rank",
+        "quality_rank_components_json", "content_quality_warnings_json", "media_understanding_status",
+        "generic_caption_risk", "route_status",
         # Canonical persona/voice evidence. Topic fit alone is insufficient.
         "voice_persona_status", "voice_persona_score", "polite_ending_ratio",
         "first_person_status", "formal_consultant_penalty",

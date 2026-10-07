@@ -1,0 +1,101 @@
+{
+  "vision": [
+    {
+      "media_asset_id": "ma_395a948147c699033d0a5b28",
+      "account_id": "night_scout",
+      "content_hash": "395a948147c699033d0a5b2896c2bdd91011ef87b8f6999a6586ecc3ee3d24dc",
+      "vision": {
+        "provider": "gemini",
+        "model": "gemini-3.5-flash",
+        "media_type": "video",
+        "http_status": 200,
+        "response_schema_status": "PASS",
+        "provider_error_type": "",
+        "attempt_history": [
+          {
+            "attempt": 1,
+            "http_status": 200
+          }
+        ],
+        "raw_response_type": "string",
+        "parse_stage": "complete",
+        "attempt_count": 1,
+        "failure_class": "",
+        "status": "PASS",
+        "visual_summary": "室内のテーブルの上に複数のペットボトルやグラスが置かれており、手前にテキストが重ねて表示されている様子が写っています。右側には人物の手元が一部見えています。",
+        "visible_text": "ジャンセカ 周年イベント 同伴してます〜 中洲からの上京の子は売れやすい(多分) 実は採用基準狙い目 ただ入店後の競争率は高いので 強い子と埋もれる子と二極化してるイメージ 戦っていける強みがあるかどうか この部分も考えて案内しております",
+        "normalizations": [],
+        "visible_people_or_objects": "ペットボトル、グラス、テーブル、ソファ、空気清浄機、スタンドライト、人物の手、ブレスレット",
+        "visible_action": "",
+        "key_moment": "テーブルの上にペットボトルやグラスが並び、採用や同伴に関するテキストが表示されている場面",
+        "main_topic": "店舗のイベントと同伴、採用基準に関するテキスト表示",
+        "main_claims": [
+          "ジャンセカの周年イベントに同伴していること",
+          "中洲から上京した子は売れやすい（多分）ということ",
+          "採用基準が狙い目であること",
+          "入店後の競争率が高く、強い子と埋もれる子に二極化するイメージがあること",
+          "戦っていける強みがあるかどうかを考えて案内していること"
+        ],
+        "uncertain_claims": [
+          "中洲から上京した子が実際に売れやすいかどうか",
+          "採用基準や入店後の競争率に関する記述の正確性"
+        ],
+        "safety_flags": [],
+        "visual_facts": [
+          {
+            "id": "VF1",
+            "type": "visible_people_or_objects",
+            "text": "テーブルの上に複数のペットボトルの水とグラスが置かれている"
+          },
+          {
+            "id": "VF2",
+            "type": "visible_people_or_objects",
+            "text": "画面右側にブレスレットを身につけた人物の手元が写っている"
+          },
+          {
+            "id": "VF3",
+            "type": "visible_people_or_objects",
+            "text": "背景に空気清浄機とスタンドライトが設置されている"
+          },
+          {
+            "id": "VF4",
+            "type": "visible_text",
+            "text": "画面中央に「ジャンセカ 周年イベント 同伴してます〜 中洲からの上京の子は売れやすい(多分)」というテキストが表示されている"
+          },
+          {
+            "id": "VF5",
+            "type": "visible_text",
+            "text": "画面下部に「実は採用基準狙い目 ただ入店後の競争率は高いので 強い子と埋もれる子と二極化してるイメージ 戦っていける強みがあるかどうか この部分も考えて案内しております」というテキストが表示されている"
+          }
+        ],
+        "frame_hashes": [
+          "df06f75845cdd57a6a88fa588ef67904e24f4a4977400b21fa1f545405689e80",
+          "d234163dff6bd8c618726eed8f058630b61ac726fe02dbddc550d499ab0d73e3",
+          "b05e647518a0df44d7e526e45bc3251eb11cc9e22c56fdf3785f04aa658c9891"
+        ]
+      },
+      "frame_hashes": [
+        "df06f75845cdd57a6a88fa588ef67904e24f4a4977400b21fa1f545405689e80",
+        "d234163dff6bd8c618726eed8f058630b61ac726fe02dbddc550d499ab0d73e3",
+        "b05e647518a0df44d7e526e45bc3251eb11cc9e22c56fdf3785f04aa658c9891"
+      ],
+      "origin_run_id": "37207794998",
+      "evidence_sha256": "a68f663a486c5914f149bba93de4ade5e7d41df3b4caa0dac780b97d603699ca"
+    }
+  ],
+  "model_quota": {
+    "origin_run_id": "37398124619",
+    "observed_at": "2026-10-06T01:14:49Z",
+    "retry_delay_seconds": 81916.0,
+    "quota_violations": [
+      {
+        "quota_metric": "generativelanguage.googleapis.com/generate_content_free_tier_requests",
+        "quota_id": "GenerateRequestsPerDayPerProjectPerModel-FreeTier",
+        "quota_model": "gemini-3.5-flash",
+        "quota_location": "global",
+        "quota_limit_value": 20,
+        "rate_limit_class": "DAILY_QUOTA_EXHAUSTED"
+      }
+    ]
+  }
+}

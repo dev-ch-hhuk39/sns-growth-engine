@@ -12,12 +12,14 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-from run_media_production_pipeline import (
+from run_media_production_pipeline import (  # noqa: E402
     _generate_final_media_caption,
 )
+from test_media_first_pipeline import asset as verified_media_fixture  # noqa: E402
 
 
 GOOD_TEXT = (
+    "この動画では開始直後に青いカードを持ち上げた場面で、配信者が初見の名前を呼んでコメント欄を指している。"
     "配信で初見がすぐ抜けると、話題を増やさなきゃって焦るよね。\n\n"
     "入室に気づいたら、今話している内容を一言伝えて、"
     "答えやすい質問を置くと、コメントのきっかけを作りやすい。\n\n"
@@ -45,7 +47,7 @@ class SequenceService:
     def __init__(self) -> None:
         self.calls = 0
 
-    def generate(self, *_args, **_kwargs):
+    def generate_media_context(self, *_args, **_kwargs):
         self.calls += 1
 
         if self.calls == 1:
@@ -92,7 +94,7 @@ class AlwaysBlockedService:
     def __init__(self) -> None:
         self.calls = 0
 
-    def generate(self, *_args, **_kwargs):
+    def generate_media_context(self, *_args, **_kwargs):
         self.calls += 1
 
         return {
@@ -144,6 +146,7 @@ source_video = {
 }
 
 asset = {
+    **verified_media_fixture(),
     "media_asset_id": "asset_contract",
     "storage_url": (
         "https://media.example.invalid/clip.mp4"
@@ -152,6 +155,7 @@ asset = {
     "duration_seconds": "12",
     "aspect_ratio": "9:16",
 }
+asset["visual_evidence"]["media_asset_id"] = "asset_contract"
 
 
 sequence = SequenceService()

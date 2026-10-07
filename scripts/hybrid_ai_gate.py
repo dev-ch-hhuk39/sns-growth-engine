@@ -69,6 +69,15 @@ def _scheduled_text_contract_reasons(
     return sorted(set(reasons))
 
 
+def _candidate_scheduled_text_contract_reasons(
+    queue: Mapping[str, Any], text: str,
+) -> list[str]:
+    reasons = _scheduled_text_contract_reasons(queue, text)
+    if _is_content_quality_v2_draft(queue):
+        reasons = [reason for reason in reasons if reason != "night_scout_first_person_boku_missing"]
+    return reasons
+
+
 def _scheduled_text_contract_instruction(queue: Mapping[str, Any]) -> str:
     instructions: list[str] = []
     content_type = _scheduled_text_type(queue)
@@ -370,6 +379,43 @@ def _hygiene_reasons(text: str) -> list[str]:
     return reasons
 
 
+def _is_content_quality_v2_draft(queue: Mapping[str, Any]) -> bool:
+    return (
+        _text(queue.get("content_quality_v2_version")) == "content_quality_v2"
+        and _text(queue.get("content_quality_v2_status")).upper().startswith("DRAFT_ONLY")
+    )
+
+
+def _candidate_hygiene_reasons(queue: Mapping[str, Any], text: str) -> list[str]:
+    reasons = _hygiene_reasons(text)
+    if _is_content_quality_v2_draft(queue):
+        reasons = [reason for reason in reasons if reason != "generic_template_phrase_present"]
+    return reasons
+
+
+def _public_validation_hard_reasons(
+    queue: Mapping[str, Any], validation: Mapping[str, Any],
+) -> list[str]:
+    blocked = [str(item) for item in validation.get("blocked_reasons", [])]
+    if not _is_content_quality_v2_draft(queue):
+        return blocked
+    from media_v1_policy import split_public_validation
+
+    hard, _warnings = split_public_validation(validation)
+    return hard
+
+
+def _exact_text_duplicate(text: str, compared: list[Any]) -> bool:
+    normalized = re.sub(r"\s+", "", text).casefold()
+    if not normalized:
+        return False
+    for item in compared:
+        value = item.get("public_post_text", "") if isinstance(item, Mapping) else item
+        if re.sub(r"\s+", "", _text(value)).casefold() == normalized:
+            return True
+    return False
+
+
 def _is_true(value: Any) -> bool:
     return _text(value).lower() in {"true", "1", "yes", "y"}
 
@@ -546,6 +592,13 @@ def _review_prompt(
     policy: Mapping[str, Any],
 ) -> str:
     pdca_instruction = ""
+    content_quality_instruction = ""
+    if _is_content_quality_v2_draft(queue):
+        content_quality_instruction = (
+            "この候補はContent Quality V2の下書きです。編集上の自然さ、文体、絵文字、"
+            "構成、話題の一貫性はランキング用の所見として返し、単独では拒否理由にしないでください。"
+            "アカウント違い、危険な主張、本人経験の捏造、内部情報、権利・出典の問題は拒否してください。"
+        )
     if (
         _scheduled_text_type(queue) in {"pdca_text", "metrics_driven_pdca_text"}
         and _text(queue.get("generation_mode")).lower() == "metrics_driven_pdca_text"
@@ -556,11 +609,11 @@ def _review_prompt(
             "独立した通常の新規コンテンツでなければREJECTしてください。"
         )
     return (
-        "公開直前のSNS投稿を厳格に審査してください。自然な日本語、参照根拠への忠実性、"
-        "対象読者・アカウント適合、公開安全性を確認してください。誤字、重複助詞、[音楽]等、"
-        "定型句、根拠不明の収益額、他社宣伝、BtoB/BtoC不一致はREJECTしてください。"
+        "SNS投稿候補を審査してください。対象読者・アカウント適合、公開安全性、根拠への忠実性を確認してください。"
+        "根拠不明の収益額、他社宣伝、BtoB/BtoC不一致は拒否対象です。"
         "参照元投稿者の経験・担当数・実績・商品使用を、対象アカウント自身の一人称の事実として"
-        "語る候補はREJECTしてください。"
+        "語る候補は拒否してください。"
+        f"{(' ' + content_quality_instruction) if content_quality_instruction else ''}"
         f"{(' ' + pdca_instruction) if pdca_instruction else ''}\n\n"
         f"ACCOUNT_POLICY={json.dumps(policy, ensure_ascii=False, sort_keys=True)}\n"
         f"CANONICAL_VOICE_PROFILE={json.dumps(canonical_voice_profile(_text(queue.get('account_id'))), ensure_ascii=False, sort_keys=True)}\n"
@@ -686,16 +739,15 @@ class HybridAiGate:
         initial_hash = hybrid_ai_input_hash(queue)
         source_hash = hybrid_ai_source_context_hash(source_context)
         reasons = _preflight(queue, source_context)
-        reasons.extend(_scheduled_text_contract_reasons(queue, current_text))
-        reasons.extend(_hygiene_reasons(current_text))
+        reasons.extend(_candidate_scheduled_text_contract_reasons(queue, current_text))
+        reasons.extend(_candidate_hygiene_reasons(queue, current_text))
 
         public_validation = (
             validate_source_preserving_public_post(current_text, account_id)
             if route.route == "external_direct_source_copyedit"
             else final_public_post_validator(current_text, account_id)
         )
-        if public_validation.get("status") != "PASS":
-            reasons.extend(str(item) for item in public_validation.get("blocked_reasons", []))
+        reasons.extend(_public_validation_hard_reasons(queue, public_validation))
 
         offline_quality: dict[str, Any] = {}
         if offline_original:
@@ -705,8 +757,12 @@ class HybridAiGate:
             reasons.extend(offline_original_reasons(queue))
             if recent_posts is None:
                 reasons.append("offline_recent_history_required")
+            elif _is_content_quality_v2_draft(queue) and _exact_text_duplicate(
+                current_text, recent_posts,
+            ):
+                reasons.append("offline_exact_duplicate")
             offline_quality = evaluate_generation_quality(account_id, current_text, recent_posts or [])
-            if offline_quality.get("status") != "PASS":
+            if offline_quality.get("status") != "PASS" and not _is_content_quality_v2_draft(queue):
                 reasons.extend(offline_quality.get("diversity_blocked_reasons", []))
                 reasons.extend(offline_quality.get("topic_blocked_reasons", []))
                 reasons.append("offline_quality_not_pass")
@@ -729,7 +785,10 @@ class HybridAiGate:
             for field in ("validator_status", "internal_leak_status", "account_fit_status")
         }
         for field, status in persisted_statuses.items():
-            if status and status != "PASS":
+            if status and status != "PASS" and (
+                not _is_content_quality_v2_draft(queue)
+                or field == "internal_leak_status"
+            ):
                 reasons.append(f"persisted_{field}_not_pass")
 
         media_validation: dict[str, Any] = {}
@@ -794,7 +853,8 @@ class HybridAiGate:
             "conversational_naturalness": "PASS" if status == "PASS" else "FAIL",
             "risk_flags": reasons,
             "reasons": reasons,
-            "review_provider": "offline_original_strict" if offline_original else "deterministic_local_strict",
+            "review_provider": "offline_original_v2_hard_safety" if offline_original and _is_content_quality_v2_draft(queue)
+            else "offline_original_strict" if offline_original else "deterministic_local_strict",
         }
         deterministic = {
             "status": status,
@@ -806,6 +866,15 @@ class HybridAiGate:
             "source_identity": identity_evidence,
             "media_validation": media_validation,
             "offline_quality": offline_quality,
+            "content_quality_v2": {
+                "draft_only": _is_content_quality_v2_draft(queue),
+                "editorial_quality_status": offline_quality.get("status", "NOT_EVALUATED"),
+                "editorial_quality_warnings": (
+                    offline_quality.get("diversity_blocked_reasons", [])
+                    + offline_quality.get("topic_blocked_reasons", [])
+                    if _is_content_quality_v2_draft(queue) else []
+                ),
+            },
         }
         error_type = _text(evidence.get("provider_error_type"))
         http_status = _text(evidence.get("provider_http_status"))
@@ -917,7 +986,7 @@ class HybridAiGate:
             candidate_text = _text(generation.get("public_post_text"))
 
         if route.route in {"new_text_generation", "owned_media_transform", "external_direct_transform"}:
-            generated_contract_reasons = _scheduled_text_contract_reasons(
+            generated_contract_reasons = _candidate_scheduled_text_contract_reasons(
                 queue,
                 candidate_text,
             )
@@ -925,14 +994,14 @@ class HybridAiGate:
                 repaired_text = _repair_night_scout_first_person(candidate_text)
                 repaired_validation = final_public_post_validator(repaired_text, account_id)
                 repaired_reasons = (
-                    _scheduled_text_contract_reasons(queue, repaired_text)
-                    + _hygiene_reasons(repaired_text)
+                    _candidate_scheduled_text_contract_reasons(queue, repaired_text)
+                    + _candidate_hygiene_reasons(queue, repaired_text)
                     + (
                         []
                         if repaired_validation.get("status") == "PASS"
                         else [
                             str(reason)
-                            for reason in repaired_validation.get("blocked_reasons", [])
+                            for reason in _public_validation_hard_reasons(queue, repaired_validation)
                         ]
                     )
                 )
@@ -949,14 +1018,14 @@ class HybridAiGate:
                 fallback_text = current_text
                 fallback_validation = final_public_post_validator(fallback_text, account_id)
                 fallback_reasons = (
-                    _scheduled_text_contract_reasons(queue, fallback_text)
-                    + _hygiene_reasons(fallback_text)
+                    _candidate_scheduled_text_contract_reasons(queue, fallback_text)
+                    + _candidate_hygiene_reasons(queue, fallback_text)
                     + (
                         []
                         if fallback_validation.get("status") == "PASS"
                         else [
                             str(reason)
-                            for reason in fallback_validation.get("blocked_reasons", [])
+                            for reason in _public_validation_hard_reasons(queue, fallback_validation)
                         ]
                     )
                 )
@@ -992,14 +1061,13 @@ class HybridAiGate:
                         actual_requests=used,
                     )
 
-        deterministic_reasons = _hygiene_reasons(candidate_text)
+        deterministic_reasons = _candidate_hygiene_reasons(queue, candidate_text)
         public_validation = (
             validate_source_preserving_public_post(candidate_text, account_id)
             if route.route == "external_direct_source_copyedit"
             else final_public_post_validator(candidate_text, account_id)
         )
-        if public_validation["status"] != "PASS":
-            deterministic_reasons.extend(str(reason) for reason in public_validation.get("blocked_reasons", []))
+        deterministic_reasons.extend(_public_validation_hard_reasons(queue, public_validation))
 
         source_contract: dict[str, Any] = {}
         if route.route == "external_direct_source_copyedit":
@@ -1012,11 +1080,24 @@ class HybridAiGate:
             if source_contract.get("status") != "PASS":
                 deterministic_reasons.extend(str(reason) for reason in source_contract.get("blocked_reasons", []))
 
+        public_warnings: list[str] = []
+        if _is_content_quality_v2_draft(queue):
+            from media_v1_policy import split_public_validation
+
+            _public_hard, public_warnings = split_public_validation(public_validation)
         deterministic = {
             "status": "PASS" if not deterministic_reasons else "BLOCKED",
             "blocked_reasons": sorted(set(deterministic_reasons)),
             "public_validation": public_validation,
             "source_copyedit_contract": source_contract,
+            "content_quality_v2": {
+                "draft_only": _is_content_quality_v2_draft(queue),
+                "public_quality_warnings": public_warnings,
+                "review_fields_are_ranking_only": [
+                    "natural_japanese", "voice_persona", "interpersonal_distance",
+                    "register_fit", "conversational_naturalness", "voice_persona_score",
+                ] if _is_content_quality_v2_draft(queue) else [],
+            },
         }
         final_queue = dict(queue)
         final_queue["public_post_text"] = candidate_text
@@ -1051,16 +1132,21 @@ class HybridAiGate:
         )
         review = dict(review_response["data"])
         review_failures: list[str] = []
-        if review.get("decision") != "PASS":
+        if review.get("decision") != "PASS" and not _is_content_quality_v2_draft(queue):
             review_failures.append("ai_final_review_rejected")
-        for field in (
-            "natural_japanese", "source_grounding", "account_fit", "public_safety",
-            "voice_persona", "identity_fit", "interpersonal_distance", "register_fit",
+        hard_review_fields = ("source_grounding", "account_fit", "public_safety", "identity_fit")
+        ranking_review_fields = (
+            "natural_japanese", "voice_persona", "interpersonal_distance", "register_fit",
             "conversational_naturalness",
-        ):
+        )
+        checked_review_fields = hard_review_fields + (
+            () if _is_content_quality_v2_draft(queue) else ranking_review_fields
+        )
+        for field in checked_review_fields:
             if review.get(field) != "PASS":
                 review_failures.append(f"ai_{field}_failed")
-        if int(review.get("voice_persona_score", 0)) < 85:
+        if (not _is_content_quality_v2_draft(queue)
+                and int(review.get("voice_persona_score", 0)) < 85):
             review_failures.append("ai_voice_persona_score_below_threshold")
         review_failures.extend(str(flag) for flag in review.get("risk_flags", []))
         used = int(getattr(self.client, "actual_request_count", 0)) - before_requests
@@ -1074,7 +1160,18 @@ class HybridAiGate:
             classification=classification,
             generation=generation,
             review=review,
-            deterministic_validation=deterministic,
+            deterministic_validation={
+                **deterministic,
+                "content_quality_v2": {
+                    **deterministic.get("content_quality_v2", {}),
+                    "editorial_review_warnings": [
+                        field for field in ranking_review_fields
+                        if review.get(field) != "PASS"
+                    ] + (["voice_persona_score_below_85"]
+                         if int(review.get("voice_persona_score", 0)) < 85 else []),
+                    "review_decision": review.get("decision", ""),
+                },
+            },
             actual_requests=used,
         )
 

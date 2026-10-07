@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sys
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -83,9 +82,9 @@ finally:
     pipeline._records = original_records
     pipeline.select_direct_candidates = original_candidates
 
-warnings = json.loads(plan.get("soft_warning_codes", "[]"))
+warnings = plan.get("skipped_candidate_attempts", [{}])[0].get("soft_warning_codes", [])
 checks = [
-    ("off-topic source remains plan-only", plan.get("status") == "PLAN_ONLY"),
+    ("unverified off-topic media does not generate a caption", plan.get("route_status") == "DEGRADED_TO_TEXT"),
     (
         "source evidence warning is retained",
         "direct_source_account_evidence_insufficient" in warnings,

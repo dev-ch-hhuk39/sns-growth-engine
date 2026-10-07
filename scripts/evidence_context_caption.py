@@ -13,6 +13,11 @@ from acquisition.models import SourcePostBundle
 from generation.semantic_alignment import LocalSemanticAlignmentProvider
 from generation.source_grounded_caption import GitHubModelsGroundedProvider, account_rules
 from generation_quality_gates import evaluate_generation_quality
+from generation.content_quality_v2 import (
+    hard_gate as content_v2_hard_gate,
+    rank_candidate as rank_v2_candidate,
+    sanitize_transcript_excerpt,
+)
 from gemini_hybrid_client import GeminiHybridClient, provider_error_evidence, retryable_provider_error
 from media_activation_source_suitability import clip_source_suitability
 from public_post_quality import apply_account_voice, final_public_post_validator
@@ -168,7 +173,8 @@ class PrivacyBoundedGeminiGroundedProvider:
         transcript_excerpt: str = "",
         source_mode: str = "transform",
     ) -> ProviderResult[dict[str, Any]]:
-        del recent_posts, transcript_excerpt
+        del recent_posts
+        media_request = json.loads(transcript_excerpt) if transcript_excerpt.startswith('{"media_context":') else None
         if not self.available:
             return ProviderResult(
                 self.provider_name,
@@ -233,6 +239,11 @@ class PrivacyBoundedGeminiGroundedProvider:
                 for item in post.media_items
             ],
         }
+        if media_request:
+            safe_input["media_first_input"] = media_request
+            claim_schema = schema["properties"]["claim_support"]["items"]
+            claim_schema["properties"]["anchor_fact_ids"] = {"type": "array", "items": {"type": "string"}}
+            claim_schema["required"].append("anchor_fact_ids")
         prompt = (
             "日本語Threadsの公開本文をJSONで作成する。"
             "source、reference、metadata、transcript、AIなどの内部語を公開文に出さない。"
@@ -246,10 +257,30 @@ class PrivacyBoundedGeminiGroundedProvider:
             "internal_analysisにmain_claims、core_topic、intended_audience、factual_constraints、prohibited_inferencesを入れる。\n"
             + json.dumps(safe_input, ensure_ascii=False)
         )
+        if media_request:
+            prompt += (
+                "\n選択Angleに属するVisual Factsを根拠に自然な本文を作る。逐語コピーは不要。"
+                "claim_supportのanchor_fact_idsに選択されたfact IDを指定し、caption_claimは本文の主張、"
+                "source_evidenceは対応するfactの原文。観察できない発言・効果・体験を補完しない。"
+                "caption_claimは要約ではなくpublic_post_text中に実際に存在する文または連続した一節を正確に転記する。"
+                "画面の文章が主観（多分、イメージ等）なら現実・事実と断定せず、動画にそう書かれている観察として扱う。"
+                "店の人気・有名さ・実績を補完しない。元の人の同伴や案内を自分の経験にしない。"
+                "本文には画面にある具体的な対比や言葉を少なくとも一つ短く引用し、その観察に沿う判断を添える。"
+                "main_claimsは本文中にある検証対象の文をそのまま列挙し、各文をclaim_supportでも必ず裏付ける。"
+                "内部分析だけの別の主張をmain_claimsに追加しない。根拠がない文は本文に入れない。"
+                "『どこの店でも』『少なくない』『実際は』など根拠のない一般化は禁止。"
+                "元の文が『イメージ』なら、本文でも画面の表現を引用して書き手の見方だと明示する。"
+                "今回はCTAは不要。相談誘導で埋めず、画面の具体的な対比について読者への判断を一つに絞る。"
+
+                "Nightは現行口調、絵文字必須でない。Liverは女性マネージャー、自然な！や？、適切な絵文字は任意。"
+                "Beautyは意味に合う絵文字1〜4個。個人的には・これ結構大事を固定テンプレートにしない。"
+            )
         models = list(dict.fromkeys((
             os.environ.get("GEMINI_GENERATOR_MODEL", "gemini-3.5-flash"),
             "gemini-3.1-flash-lite",
         )))
+        if media_request:
+            models = models[:1]  # Single existing Gemini provider; no retired-provider fallback.
         for index, model in enumerate(models):
             try:
                 result = self.client.generate_json(
@@ -415,7 +446,8 @@ def generate_evidence_context_caption(
     transcript_excerpt: str,
     recent_posts: list[str] | None = None,
 ) -> dict[str, Any]:
-    source = _text(transcript_excerpt)
+    transcript_cleanup = sanitize_transcript_excerpt(_text(transcript_excerpt))
+    source = _text(transcript_cleanup["text"])
     recent = [str(item) for item in (recent_posts or []) if _text(item)]
     suitability, source_blockers = clip_source_suitability(
         account_id=account_id,
@@ -435,6 +467,7 @@ def generate_evidence_context_caption(
         }
 
     rejections: set[str] = set()
+    ranked_candidates: list[dict[str, Any]] = []
     alignment_provider = LocalSemanticAlignmentProvider()
     ranked_topics = _topic_scores(account_id, source)
     seed = int(hashlib.sha256(source.encode("utf-8")).hexdigest()[:8], 16)
@@ -454,10 +487,17 @@ def generate_evidence_context_caption(
                     account_id,
                 )
                 validation = final_public_post_validator(public_text, account_id)
-                if validation.get("status") != "PASS":
-                    rejections.update(str(item) for item in validation.get("blocked_reasons", []) if str(item))
-                    continue
                 support = [{"caption_claim": claim, "source_evidence": evidence}]
+                hard = content_v2_hard_gate(
+                    {"account_id": account_id, "target_account_id": account_id,
+                     "platform": "threads", "public_post_text": public_text,
+                     "source_creator_context": source, "supported_claims": support},
+                    account_id=account_id,
+                    public_validation=validation,
+                )
+                if hard.get("status") != "PASS":
+                    rejections.update(str(item) for item in hard.get("hard_gate_reasons", []))
+                    continue
                 alignment = alignment_provider.evaluate(
                     source_text=source,
                     public_post_text=public_text,
@@ -467,8 +507,10 @@ def generate_evidence_context_caption(
                     alignment_mode="transform",
                 )
                 semantic = alignment.data if isinstance(alignment.data, dict) else {}
-                if alignment.status != "PASS":
-                    rejections.update(str(item) for item in semantic.get("blocked_reasons", []) if str(item))
+                semantic_reasons = [str(item) for item in semantic.get("blocked_reasons", []) if str(item)]
+                if any("source_copy" in item or "unsupported_claim" in item or "claim_support" in item
+                       for item in semantic_reasons):
+                    rejections.update(semantic_reasons)
                     continue
                 quality = evaluate_generation_quality(
                     account_id,
@@ -479,10 +521,25 @@ def generate_evidence_context_caption(
                     visual_text=source,
                     primary_topic=topic,
                 )
-                if quality.get("status") != "PASS":
-                    rejections.update(str(item) for item in quality.get("diversity_blocked_reasons", []) if str(item))
-                    rejections.update(str(item) for item in quality.get("topic_blocked_reasons", []) if str(item))
-                    continue
+                warnings = semantic_reasons + [
+                    str(item) for item in quality.get("diversity_blocked_reasons", [])
+                    + quality.get("topic_blocked_reasons", []) if str(item)
+                ]
+                rank = rank_v2_candidate({
+                    "quality_components": {
+                        "reader_value": validation.get("reader_value_score", 45),
+                        "account_relevance": validation.get("account_fit_score", 45),
+                        "naturalness": validation.get("naturalness_score", 45),
+                        "persona_evidence": validation.get("account_fit_score", 45),
+                        "topic_coherence": quality.get("topic_coherence_score", 45),
+                        "media_caption_relevance": float(semantic.get("final_alignment_score", 0) or 0) * 100,
+                        "concrete_evidence": float(semantic.get("main_claim_coverage", 0) or 0) * 100,
+                        "novelty": max(0, 100 - float(semantic.get("recent_post_similarity", 0) or 0) * 100),
+                        "cta_fit": max(0, 100 - float(validation.get("cta_pressure_score", 0) or 0)),
+                        "style_diversity": 100 if quality.get("batch_diversity_status") == "PASS" else 55,
+                    },
+                    "warnings": warnings,
+                }, account_id=account_id)
                 internal = {
                     "main_claims": [claim],
                     "topic": topic,
@@ -498,7 +555,7 @@ def generate_evidence_context_caption(
                     "factual_constraints": [evidence],
                     "prohibited_inferences": ["字幕にない数値・経験・結果を追加しない"],
                 }
-                return {
+                ranked_candidates.append({
                     "status": "PASS",
                     "source_mode": "transform",
                     "public_post_text": public_text,
@@ -509,9 +566,20 @@ def generate_evidence_context_caption(
                     "claim_support": support,
                     "internal_analysis": internal,
                     "generation_quality": quality,
+                    "content_quality_v2_version": "content_quality_v2",
+                    "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+                    "quality_rank": rank["quality_rank"],
+                    "quality_rank_components": rank["quality_rank_components"],
+                    "content_quality_warnings": rank["warnings"],
+                    "transcript_cleanup": transcript_cleanup,
+                    "hard_gate_reasons": [],
+                    "route_status": "DRAFT_ONLY",
                     "source_suitability": suitability,
                     "blocked_reasons": [],
-                }
+                })
+
+    if ranked_candidates:
+        return max(ranked_candidates, key=lambda item: (item["quality_rank"], item["public_post_text"]))
 
     return {
         "status": "BLOCKED",

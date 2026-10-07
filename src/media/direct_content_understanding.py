@@ -1,7 +1,6 @@
 """Bounded local/vision understanding for an approved direct-media asset."""
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -21,6 +20,14 @@ def _hash(text: str) -> str:
     return hashlib.sha256(str(text or "").encode("utf-8")).hexdigest() if text else ""
 
 
+def _file_hash(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def provider_failure_class(exc: BaseException) -> str:
     """Classify a vision-provider failure without retaining response bodies."""
     if isinstance(exc, requests.Timeout):
@@ -33,6 +40,8 @@ def provider_failure_class(exc: BaseException) -> str:
             return "auth_rejected"
         if status == 429:
             return "rate_limited"
+        if status == 404:
+            return "model_unavailable"
         if 500 <= status <= 599:
             return "provider_internal_error"
         return "invalid_response"
@@ -110,70 +119,17 @@ def transcribe_video(path: Path, *, max_seconds: int = 300) -> dict[str, Any]:
         return {"status": "UNAVAILABLE", "text": "", "provider": "faster_whisper_small", "reason": type(exc).__name__}
 
 
-def vision_summary(paths: list[Path], *, media_type: str) -> dict[str, Any]:
-    token = os.environ.get("GITHUB_TOKEN", "")
-    enabled = os.environ.get("GITHUB_MODELS_ENABLED", "").lower() in {"1", "true", "yes"}
-    if not token or not enabled:
-        return {"status": "UNAVAILABLE", "visual_summary": "", "visible_text": "", "provider": "github_models_vision", "failure_class": "auth_missing"}
-    if not paths:
-        return {"status": "UNAVAILABLE", "visual_summary": "", "visible_text": "", "provider": "github_models_vision", "failure_class": "no_frames"}
-    content: list[dict[str, Any]] = [{
-        "type": "text",
-        "text": (
-            "許可済みSNSメディアの内容を日本語で客観的に分析してください。"
-            "人物・場面・表示文字・主要テーマだけを記述し、見えない事実や効果を推測しないでください。"
-            "JSON keys: visual_summary, visible_text, main_claims, safety_flags。"
-        ),
-    }]
-    for path in paths[:4]:
-        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{encoded}", "detail": "low"}})
-    payload = {
-        "model": os.environ.get("GITHUB_MODELS_VISION_MODEL", "openai/gpt-4.1"),
-        "temperature": 0,
-        "max_tokens": 700,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "user", "content": content}],
-    }
-    try:
-        response = requests.post(
-            os.environ.get("GITHUB_MODELS_ENDPOINT", "https://models.github.ai/inference/chat/completions"),
-            headers={
-                "Accept": "application/vnd.github+json",
-                "Authorization": f"Bearer {token}",
-                "X-GitHub-Api-Version": "2026-03-10",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=75,
-        )
-        response.raise_for_status()
-        raw = str(response.json()["choices"][0]["message"]["content"]).strip()
-        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        parsed = json.loads(raw)
-        if not isinstance(parsed, dict):
-            raise ValueError("vision_result_not_object")
-        return {
-            "status": "PASS",
-            "visual_summary": _compact(parsed.get("visual_summary", ""), 4000),
-            "visible_text": _compact(parsed.get("visible_text", ""), 4000),
-            "main_claims": [str(value)[:500] for value in parsed.get("main_claims", [])[:20]],
-            "safety_flags": [str(value)[:200] for value in parsed.get("safety_flags", [])[:20]],
-            "provider": "github_models_vision",
-            "media_type": media_type,
-        }
-    except (requests.RequestException, KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
-        return {
-            "status": "UNAVAILABLE",
-            "visual_summary": "",
-            "visible_text": "",
-            "provider": "github_models_vision",
-            "reason": type(exc).__name__,
-            "failure_class": provider_failure_class(exc),
-        }
+def vision_summary(paths: list[Path], *, media_type: str,
+                   source_metadata: dict[str, Any] | None = None,
+                   transcript: dict[str, Any] | None = None,
+                   account_content_contract: dict[str, Any] | None = None) -> dict[str, Any]:
+    # Keep call compatibility, but metadata, transcripts and strategy never enter Vision.
+    from media.gemini_vision import GeminiVisionProvider
+    return GeminiVisionProvider().understand(paths, media_type=media_type)
 
 
-def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float = 0) -> dict[str, Any]:
+def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float = 0,
+                        media_asset_id: str = "") -> dict[str, Any]:
     workdir = path.parent / f".understanding_{path.stem}"
     workdir.mkdir(parents=True, exist_ok=True)
     try:
@@ -187,10 +143,11 @@ def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float 
             images = [image]
             transcript = {"status": "NOT_APPLICABLE", "text": "", "provider": "none"}
         ocr = ocr_images(images)
-        vision = vision_summary(images, media_type=media_type)
+        vision = vision_summary(images, media_type=media_type, transcript=transcript)
         has_asr = bool(transcript.get("text"))
         has_ocr = bool(ocr)
-        has_vision = bool(vision.get("visual_summary") or vision.get("visible_text"))
+        has_vision = (vision.get("status") == "PASS" and bool(vision.get("visual_facts")))
+        content_hash = _file_hash(path)
         evidence_available = bool(has_ocr or has_asr or has_vision)
         if has_vision:
             aggregate = "PASS_VISION"
@@ -206,8 +163,21 @@ def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float 
             "provider": vision.get("provider", "local_media_understanding"),
             "vision_status": vision.get("status", "UNAVAILABLE"),
             "vision_failure_class": vision.get("failure_class", ""),
+            "visual_facts": vision.get("visual_facts", []),
+            **{key: vision.get(key, "") for key in ("http_status", "model", "response_schema_status", "provider_error_type",
+                "raw_response_type", "parse_stage", "schema_error", "missing_fields", "empty_fields",
+                "field", "expected_type", "actual_type", "normalizations", "attempt_count")},
             "vision_summary_hash": _hash(str(vision.get("visual_summary", ""))),
             "visual_summary": vision.get("visual_summary", ""),
+            **{key: vision.get(key, "") for key in (
+                "visible_people_or_objects", "visible_action", "key_moment", "main_topic")},
+            "visual_evidence": {
+                "status": "UNDERSTOOD" if has_vision else "EXTRACTED_ONLY",
+                "provider": vision.get("provider", ""),
+                "media_asset_id": media_asset_id or f"ma_{content_hash[:24]}",
+                "content_hash": content_hash,
+                "frame_hashes": [hashlib.sha256(image.read_bytes()).hexdigest() for image in images],
+            },
             "visible_text": vision.get("visible_text", ""),
             "main_claims_json": json.dumps(vision.get("main_claims", []), ensure_ascii=False),
             "safety_flags_json": json.dumps(vision.get("safety_flags", []), ensure_ascii=False),

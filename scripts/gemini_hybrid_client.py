@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import base64
+import re
 import json
 import os
 import socket
@@ -14,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from hybrid_ai_budget import reserve as local_reserve
+from gemini_quota_diagnostics import safe_quota_diagnostics, vision_retry_decision
 
 CACHE_DIR = Path(os.environ.get("GEMINI_CACHE_DIR", ".runtime/gemini_cache"))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "60"))
@@ -22,7 +25,8 @@ DEFAULT_MAX_ATTEMPTS = int(os.environ.get("GEMINI_MAX_ATTEMPTS", "2"))
 
 class GeminiHttpError(RuntimeError):
     def __init__(self, status_code: int, detail: str):
-        super().__init__(f"gemini_http_error:{status_code}:{detail[:400]}")
+        super().__init__(f"gemini_http_error:{status_code}")
+        self.quota_diagnostics = safe_quota_diagnostics(status_code, detail)
         self.status_code = status_code
         self.operation = ""
         self.model = ""
@@ -176,6 +180,75 @@ class GeminiHybridClient:
         self.max_attempts = max(1, min(max_attempts, 2))
         self.actual_request_count = 0
 
+    def generate_multimodal_json(
+        self, *, model: str, prompt: str, image_paths: list[Path],
+        schema: Mapping[str, Any], operation: str, account_id: str,
+    ) -> dict[str, Any]:
+        """Bounded multimodal transport: at most two transient retries, no raw errors."""
+        if not self.api_key:
+            raise RuntimeError("missing_GEMINI_API_KEY")
+        if not re.fullmatch(r"gemini-[a-zA-Z0-9.-]+", model):
+            raise RuntimeError("invalid_gemini_model")
+        if not 1 <= len(image_paths) <= 3:
+            raise RuntimeError("vision_frame_count_invalid")
+        parts = [{"text": prompt}]
+        hashes = []
+        for path in image_paths:
+            if not 0 < path.stat().st_size <= 4 * 1024 * 1024:
+                raise RuntimeError("vision_frame_size_invalid")
+            image = path.read_bytes()
+            hashes.append(hashlib.sha256(image).hexdigest())
+            parts.append({"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(image).decode("ascii")}})
+        body = {"contents": [{"parts": parts}], "generationConfig": {
+            "responseMimeType": "application/json", "responseJsonSchema": dict(schema),
+            "temperature": 0, "maxOutputTokens": 4096}}
+        from gemini_vision_response import parse_vision_response, VisionResponseError
+        history = []
+        for attempt in range(1, 4):
+            self.reserve_request({"operation": operation, "account_id": account_id, "model": model, "attempt": attempt})
+            self.actual_request_count += 1
+            try:
+                response = self.transport(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}",
+                    body, min(self.timeout_seconds, 90))
+                history.append({"attempt": attempt, "http_status": 200})
+                break
+            except GeminiHttpError as exc:
+                error = GeminiHttpError(exc.status_code, "multimodal_request_rejected")
+                error.quota_diagnostics = dict(exc.quota_diagnostics)
+                transient = exc.status_code in {429, 503}
+            except (GeminiProviderUnavailableError, TimeoutError, ConnectionError) as exc:
+                error = GeminiProviderUnavailableError("TRANSPORT", type(exc).__name__)
+                transient = True
+            except (ValueError, TypeError):
+                # Invalid HTTP response JSON must not lose its HTTP-success evidence.
+                error = VisionResponseError("http_json_parse", "unknown", schema_error="JSON_PARSE_FAILURE")
+                transient = False
+            error.attempt_count = attempt
+            entry = {"attempt": attempt, "http_status": getattr(error, "status_code", 0)}
+            delay = (5, 15)[min(attempt - 1, 1)]
+            if isinstance(error, GeminiHttpError) and error.status_code == 429:
+                entry.update(error.quota_diagnostics)
+                decision, delay = vision_retry_decision(error.quota_diagnostics, attempt)
+                error.retry_status = decision
+                entry.update(retry_status=decision, retry_delay_seconds=delay if delay is not None else error.quota_diagnostics.get("retry_delay_seconds", ""))
+                transient = decision == "RETRY"
+            elif transient and attempt < 3:
+                entry["retry_delay_seconds"] = delay
+            history.append(entry)
+            error.attempt_history = list(history)
+            if not transient or attempt == 3:
+                raise error from None
+            time.sleep(delay)
+        try:
+            data, diagnostics = parse_vision_response(response, schema, api_key=self.api_key)
+        except VisionResponseError as exc:
+            exc.attempt_count = attempt
+            exc.attempt_history = list(history)
+            raise
+        return {"data": data, "model": model, "http_status": 200,
+                **diagnostics, "frame_hashes": hashes, "actual_requests": attempt, "attempt_history": history}
+
     def generate_json(
         self,
         *,
@@ -185,7 +258,12 @@ class GeminiHybridClient:
         operation: str,
         account_id: str,
         cache_context: Mapping[str, Any] | None = None,
+        retry_profile: str = "",
     ) -> dict[str, Any]:
+        if retry_profile not in {"", "vision_relevance"}:
+            raise ValueError("unknown_retry_profile")
+        relevance_retry = retry_profile == "vision_relevance"
+        attempts = 3 if relevance_retry else self.max_attempts
         if not self.api_key:
             raise RuntimeError("missing_GEMINI_API_KEY")
         key_prompt = prompt + "\nCACHE_CONTEXT=" + json.dumps(cache_context or {}, ensure_ascii=False, sort_keys=True)
@@ -194,7 +272,8 @@ class GeminiHybridClient:
         if cache_path.exists():
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
             _validate_schema(cached["data"], schema)
-            return {**cached, "cache_hit": True, "actual_requests": 0}
+            return {**cached, "cache_hit": True, "actual_requests": 0,
+                    **({"attempt_history": []} if relevance_retry else {})}
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.api_key}"
         body = {
@@ -205,7 +284,8 @@ class GeminiHybridClient:
             },
         }
         last_error: Exception | None = None
-        for attempt in range(1, self.max_attempts + 1):
+        attempt_history = []
+        for attempt in range(1, attempts + 1):
             request_id = f"hybrid_ai_{uuid.uuid4().hex}"
             metadata = {
                 "request_id": request_id,
@@ -219,6 +299,8 @@ class GeminiHybridClient:
             self.actual_request_count += 1
             try:
                 response = self.transport(url, body, self.timeout_seconds)
+                if relevance_retry:
+                    attempt_history.append({"attempt": attempt, "http_status": 200})
                 data = _extract_json(response)
                 _validate_schema(data, schema)
                 result = {
@@ -228,35 +310,70 @@ class GeminiHybridClient:
                     "request_id": request_id,
                     "cache_key": cache_key,
                     "cache_hit": False,
-                    "actual_requests": 1,
+                    "actual_requests": attempt if relevance_retry else 1,
                 }
                 self.cache_dir.mkdir(parents=True, exist_ok=True)
                 temp = cache_path.with_suffix(".tmp")
                 temp.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                 os.replace(temp, cache_path)
-                return result
+                return {**result, "attempt_history": list(attempt_history)} if relevance_retry else result
             except GeminiHttpError as exc:
+                exc.attempt_count = attempt
                 exc.operation = operation
                 exc.model = model
                 last_error = exc
-                if not exc.retryable or attempt >= self.max_attempts:
+                if relevance_retry:
+                    entry = {"attempt": attempt, "http_status": exc.status_code}
+                    if exc.status_code == 429:
+                        decision, delay = vision_retry_decision(exc.quota_diagnostics, attempt)
+                        exc.retry_status = decision
+                        entry.update(exc.quota_diagnostics)
+                        entry.update(retry_status=decision, retry_delay_seconds=delay if delay is not None else exc.quota_diagnostics.get("retry_delay_seconds", ""))
+                    else:
+                        decision = "RETRY" if exc.status_code == 503 and attempt < attempts else "NO_RETRY"
+                        delay = (5, 15)[min(attempt - 1, 1)] if decision == "RETRY" else None
+                        entry.update(retry_status=decision, retry_delay_seconds=delay)
+                    attempt_history.append(entry)
+                    exc.attempt_history = list(attempt_history)
+                    if decision != "RETRY":
+                        raise
+                    time.sleep(delay)
+                    continue
+                if not exc.retryable or attempt >= attempts:
                     raise
             except GeminiProviderUnavailableError as exc:
+                exc.attempt_count = attempt
                 exc.operation = operation
                 exc.model = model
                 last_error = exc
-                if attempt >= self.max_attempts:
+                if relevance_retry:
+                    attempt_history.append({"attempt": attempt, "http_status": 0,
+                                            "retry_status": "RETRY" if attempt < attempts else "ATTEMPTS_EXHAUSTED",
+                                            "retry_delay_seconds": (5, 15)[min(attempt - 1, 1)] if attempt < attempts else None})
+                    exc.attempt_history = list(attempt_history)
+                if attempt >= attempts:
                     raise
             except (TimeoutError, socket.timeout, ConnectionError) as exc:
                 wrapped = GeminiProviderUnavailableError("TIMEOUT", type(exc).__name__)
+                wrapped.attempt_count = attempt
                 wrapped.operation = operation
                 wrapped.model = model
                 last_error = wrapped
-                if attempt >= self.max_attempts:
+                if relevance_retry:
+                    attempt_history.append({"attempt": attempt, "http_status": 0,
+                                            "retry_status": "RETRY" if attempt < attempts else "ATTEMPTS_EXHAUSTED",
+                                            "retry_delay_seconds": (5, 15)[min(attempt - 1, 1)] if attempt < attempts else None})
+                    wrapped.attempt_history = list(attempt_history)
+                if attempt >= attempts:
                     raise wrapped from exc
-            except RuntimeError:
+            except (RuntimeError, ValueError, TypeError) as exc:
+                exc.attempt_count = attempt
+                if relevance_retry:
+                    if not attempt_history or attempt_history[-1]["attempt"] != attempt:
+                        attempt_history.append({"attempt": attempt, "http_status": 200})
+                    exc.attempt_history = list(attempt_history)
                 # Schema/response failures are not availability failures and
                 # must not be converted into a deterministic PASS.
                 raise
-            time.sleep(2)
+            time.sleep((5, 15)[attempt - 1] if relevance_retry else 2)
         raise RuntimeError(f"gemini_request_failed:{last_error}")

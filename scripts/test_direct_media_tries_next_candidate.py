@@ -8,10 +8,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / "scripts"), str(ROOT / "src")]
 
-import run_direct_reference_media_pipeline as pipeline
+import run_direct_reference_media_pipeline as pipeline  # noqa: E402
+from test_media_first_pipeline import asset as verified_media_fixture  # noqa: E402
 
 
-GOOD_TEXT = """夜職の店選びで迷ってる子は、条件だけで決めない方がいい。
+GOOD_TEXT = """この動画では開始直後に青いカードを持ち上げた場面で、接客中に注文を復唱してからグラスを並べている。
+夜職の店選びで迷ってる子は、条件だけで決めない方がいい。
 
 相性と相談しやすさまで確認しないと、入ってから続けにくいことって結構ある。
 
@@ -36,7 +38,10 @@ def post(post_id: str) -> dict:
 
 
 def media(post_id: str) -> dict:
+    verified = verified_media_fixture("night_scout")
+    verified["visual_evidence"]["media_asset_id"] = f"asset_{post_id}"
     return {
+        **verified,
         "source_post_media_id": f"spm_{post_id}",
         "source_post_id": post_id,
         "media_asset_id": f"asset_{post_id}",
@@ -48,6 +53,7 @@ def media(post_id: str) -> dict:
         "rights_status": "approved_creator_clip",
         "permission_status": "approved",
         "media_understanding": {
+            **{key: verified[key] for key in ("vision_status", "visual_evidence", "visible_action", "key_moment")},
             "status": "PASS",
             "visual_summary": "店選びの判断項目をまとめた画像",
             "visible_text": "客層 出勤ペース ノルマ 相談しやすさ",
@@ -56,7 +62,7 @@ def media(post_id: str) -> dict:
 
 
 class CaptionService:
-    def generate(self, bundle, **_kwargs):
+    def generate_media_context(self, bundle, **_kwargs):
         if bundle.source_post_id == "bad":
             return {
                 "status": "BLOCKED",
@@ -68,7 +74,10 @@ class CaptionService:
             "status": "PASS",
             "public_post_text": GOOD_TEXT,
             "internal_analysis": {"topic": "店選び"},
-            "claim_support": [{"claim": "店選び", "evidence": "source"}],
+            "claim_support": [{"caption_claim": _kwargs["media_context"]["visible_action"],
+                               "source_evidence": _kwargs["media_context"]["visible_action"],
+                               "anchor_fact_ids": [fact["id"] for fact in _kwargs["media_context"]["visual_facts"]
+                                                   if fact["type"] == "visible_action"]}],
             "blocked_reasons": [],
             "provider_name": "fixture",
             "provider_version": "1",

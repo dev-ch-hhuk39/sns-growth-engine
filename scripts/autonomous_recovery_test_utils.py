@@ -482,7 +482,7 @@ def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
 
         ungated = build_plan(client, account_id, 1, load_rules())
         assert ungated["approvable_count"] == 0, ungated
-        assert ungated["rejected_reasons"].get("hybrid_ai_gate_missing") == len(rows["queue"]), ungated
+        assert all(result["status"] == "DRAFT_ONLY" for result in ungated["results"]), ungated
 
         for queue in rows["queue"]:
             fields = _mock_hybrid_ai_pass_fields(client, queue,
@@ -491,8 +491,9 @@ def test_safe_fallback_candidates_are_auto_ready_approvable() -> None:
             client.update_queue_item(queue["queue_id"], **fields)
 
         gated = build_plan(client, account_id, 1, load_rules())
-        assert gated["approvable_count"] == 1, gated
-        assert gated["selected_queue_ids"], gated
+        assert gated["approvable_count"] == 0, gated
+        assert all(result["status"] == "DRAFT_ONLY" for result in gated["results"]), gated
+        assert gated["selected_queue_ids"] == [], gated
 
 
 
@@ -541,7 +542,7 @@ def test_no_ready_queue_not_expected_after_safe_fallback() -> None:
 
     ungated = build_plan(client, "liver_manager", 1, load_rules())
     assert ungated["approvable_count"] == 0, ungated
-    assert ungated["rejected_reasons"].get("hybrid_ai_gate_missing") == 3, ungated
+    assert all(result["status"] == "DRAFT_ONLY" for result in ungated["results"]), ungated
 
     for queue in rows["queue"]:
         fields = _mock_hybrid_ai_pass_fields(client, queue,
@@ -550,8 +551,9 @@ def test_no_ready_queue_not_expected_after_safe_fallback() -> None:
         client.update_queue_item(queue["queue_id"], **fields)
 
     gated = build_plan(client, "liver_manager", 1, load_rules())
-    assert gated["approvable_count"] >= 1, gated
-    assert gated["ready_count"] >= 1, gated
+    assert gated["approvable_count"] == 0, gated
+    assert gated["ready_count"] == 0, gated
+    assert all(result["status"] == "DRAFT_ONLY" for result in gated["results"]), gated
 
 
 
@@ -619,7 +621,7 @@ def test_queue_waiting_review_to_ready_flow() -> None:
 
     ungated = build_plan(client, "night_scout", 1, load_rules())
     assert ungated["approvable_count"] == 0, ungated
-    assert "hybrid_ai_gate_missing" in ungated["rejected_reasons"], ungated
+    assert ungated["results"][0]["status"] == "DRAFT_ONLY", ungated
 
     queue = rows["queue"][0]
     fields = _mock_hybrid_ai_pass_fields(client, queue, derivative_text)
@@ -627,8 +629,8 @@ def test_queue_waiting_review_to_ready_flow() -> None:
 
     gated = build_plan(client, "night_scout", 1, load_rules())
     result = apply_ready(client, gated)
-    assert result["updated_count"] == 1, result
-    assert client.get_queue_item(queue["queue_id"])["status"] == "READY"
+    assert result["updated_count"] == 0, result
+    assert client.get_queue_item(queue["queue_id"])["status"] == "WAITING_REVIEW"
 
 
 

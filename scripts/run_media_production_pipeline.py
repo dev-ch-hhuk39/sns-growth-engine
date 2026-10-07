@@ -23,6 +23,12 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from generation.reference_first_router import choose_reference_first_route  # noqa: E402
+from generation.content_quality_v2 import (  # noqa: E402
+    generate_media_first_caption,
+    build_post_package as build_v2_post_package,
+    hard_gate as v2_hard_gate,
+    load_policy as load_content_quality_v2_policy,
+)
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, posts_used_in_business_date, upsert_slot_run  # noqa: E402
 from cut_approved_clips import build_plan as build_cut_plan, execute_cut  # noqa: E402
@@ -580,6 +586,50 @@ def _finalize_generated_caption(text: Any) -> str:
 
 
 def _generate_final_media_caption(
+    *, clip: dict[str, Any], source_video: dict[str, Any], media_asset: dict[str, Any],
+    account_id: str, recent_posts: list[str], caption_service: Any | None = None,
+    max_attempts: int = 3, allow_source_copyedit_fallback: bool | None = None,
+    allow_evidence_context_fallback: bool | None = None,
+) -> dict[str, Any]:
+    from generation.source_grounded_caption import account_rules
+
+    if any(row.get(key) and row[key] != account_id
+           for row in (clip, source_video, media_asset)
+           for key in ("account_id", "target_account_id")):
+        return {"status": "REVIEW_REQUIRED", "public_post_text": "", "caption_attempt_count": 0,
+                "route_status": "DEGRADED_TO_TEXT", "MEDIA_SUCCESS": False,
+                "blocked_reasons": ["account_isolation"]}
+
+    service = caption_service or _default_final_caption_service()
+
+    def generate(**request):
+        class ContextBoundService:
+            def generate(self, bundle, **_legacy_arguments):
+                return service.generate_media_context(bundle, **request)
+
+        # Every retry uses the same verified final-asset context. Transcript-only
+        # legacy fallbacks cannot silently bypass the media-first boundary.
+        return _generate_context_bound_caption(
+            clip=clip, source_video=source_video, media_asset=media_asset,
+            account_id=account_id, recent_posts=recent_posts,
+            caption_service=ContextBoundService(), max_attempts=max_attempts,
+            allow_source_copyedit_fallback=False, allow_evidence_context_fallback=False,
+        )
+
+    media = {**media_asset,
+             "account_id": media_asset.get("account_id") or clip.get("account_id", ""),
+             "source_id": source_video.get("source_id", ""),
+             "source_post_id": media_asset.get("source_post_id") or source_video.get("source_post_id", ""),
+             "rights_status": media_asset.get("rights_status") or source_video.get("rights_status", ""),
+             "permission_status": media_asset.get("permission_status") or source_video.get("permission_status", "")}
+    return generate_media_first_caption(
+        media=media, account_id=account_id, account_content_contract=account_rules(account_id),
+        recent_posts=recent_posts, caption_generator=generate,
+        source_creator_context=str(source_video.get("title") or ""),
+    )
+
+
+def _generate_context_bound_caption(
     *,
     clip: dict[str, Any],
     source_video: dict[str, Any],
@@ -1253,6 +1303,19 @@ def _caption_clip_fields(
         "claim_support_json": (
             caption.get("claim_support_json", "[]")
         ),
+        "content_quality_v2_version": caption.get("content_quality_v2_version", "content_quality_v2"),
+        "content_quality_v2_status": caption.get("content_quality_v2_status", "DRAFT_ONLY_RANKED"),
+        "selected_candidate_id": caption.get("selected_candidate_id", ""),
+        "candidate_count": caption.get("candidate_count", 1),
+        "repair_count": caption.get("repair_count", 0),
+        "hard_gate_reasons": json.dumps(caption.get("hard_gate_reasons", []), ensure_ascii=False),
+        "quality_rank": caption.get("quality_rank", ""),
+        "quality_rank_components_json": json.dumps(caption.get("quality_rank_components", {}), ensure_ascii=False),
+        "content_quality_warnings_json": json.dumps(caption.get("content_quality_warnings", []), ensure_ascii=False),
+        "media_understanding_status": caption.get("media_understanding_status", "VISUAL_UNVERIFIED"),
+        "generic_caption_risk": caption.get("generic_caption_risk", "UNKNOWN"),
+        "fallback_reason": caption.get("fallback_reason", ""),
+        "route_status": caption.get("route_status", "DRAFT_ONLY"),
         "text_generation_status": (
             "done"
             if caption.get("status") == "PASS"
@@ -1269,6 +1332,103 @@ def _caption_clip_fields(
                 separators=(",", ":"),
             )[:4500]
         ),
+    }
+
+
+def _attach_v2_media_package(
+    caption: dict[str, Any], *, clip: dict[str, Any], source_video: dict[str, Any],
+    media_asset: dict[str, Any], account_id: str, media_validation: dict[str, Any],
+) -> dict[str, Any]:
+    """Attach an evidence-honest ranked PostPackage without turning rank into a gate."""
+    understanding: dict[str, Any] = {}
+    for owner, key in ((media_asset, "media_understanding_json"), (clip, "media_understanding_json")):
+        value = owner.get(key)
+        if isinstance(value, dict):
+            understanding = value
+            break
+        if value:
+            try:
+                parsed = json.loads(str(value))
+                if isinstance(parsed, dict):
+                    understanding = parsed
+                    break
+            except (TypeError, ValueError):
+                pass
+    transcript = str(
+        understanding.get("transcript_text") or clip.get("transcript_excerpt")
+        or clip.get("transcript_text") or ""
+    )
+    claim_support = caption.get("claim_support", [])
+    if not claim_support and caption.get("claim_support_json"):
+        try:
+            claim_support = json.loads(str(caption["claim_support_json"]))
+        except (TypeError, ValueError):
+            claim_support = []
+    media = {
+        **understanding,
+        **{key: value for key, value in media_asset.items() if value not in (None, "")},
+        "media_asset_id": media_asset.get("media_asset_id") or media_asset.get("media_id"),
+        "media_type": media_asset.get("media_type") or "video",
+        "transcript_text": transcript,
+        "transcript_status": understanding.get("transcript_status") or clip.get("transcript_status") or ("PASS" if transcript else "UNAVAILABLE"),
+        "vision_status": understanding.get("vision_status") or media_asset.get("vision_status") or clip.get("vision_status") or "UNAVAILABLE",
+        "source_creator_context": source_video.get("title", ""),
+        "main_topic": understanding.get("main_topic") or clip.get("primary_topic") or "",
+        "claim_support": claim_support,
+    }
+    package = build_v2_post_package(
+        account_id=account_id,
+        media=media,
+        public_caption=str(caption.get("public_post_text") or ""),
+        prepared_context=caption.get("media_context"),
+        prepared_relevance=caption.get("account_relevance"),
+        prepared_angles=caption.get("post_angles"),
+        source_creator_context=str(source_video.get("title") or ""),
+        why_account=str(understanding.get("why_this_account_should_post_this") or ""),
+        hard_gate_result={"status": "UNVERIFIED", "hard_gate_reasons": []},
+        quality_components={
+            "reader_value": caption.get("reader_value_score", 45),
+            "account_relevance": caption.get("account_fit_score", 45),
+            "naturalness": caption.get("naturalness_score", 45),
+            "persona_evidence": caption.get("persona_score", 45),
+            "topic_coherence": caption.get("topic_coherence_score", 45),
+            "media_caption_relevance": float(caption.get("final_alignment_score", 0) or 0) * 100,
+            "concrete_evidence": float(caption.get("main_claim_coverage", 0) or 0) * 100,
+            "novelty": max(0, 100 - float(caption.get("recent_post_similarity", 1) or 1) * 100),
+            "cta_fit": 45,
+            "style_diversity": 45,
+        },
+    )
+    gate = v2_hard_gate(
+        {"account_id": account_id, "target_account_id": account_id, "platform": "threads",
+         "public_post_text": caption.get("public_post_text", ""), "media_required": True,
+         "rights_status": media_asset.get("rights_status") or clip.get("rights_status", ""),
+         "permission_status": media_asset.get("permission_status") or clip.get("permission_status", ""),
+         "media_asset_id": media_asset.get("media_asset_id") or media_asset.get("media_id", ""),
+         "media_url": media_asset.get("storage_url") or media_asset.get("cloudinary_url", ""),
+         "source_creator_context": source_video.get("title", ""),
+         "supported_claims": claim_support},
+        account_id=account_id,
+        public_validation=caption.get("final_validation", {}),
+        media_validation=media_validation,
+    )
+    warnings = sorted(set(package.get("warnings", []) + caption.get("soft_warning_codes", [])))
+    return {
+        **caption,
+        "content_quality_v2_version": "content_quality_v2",
+        "content_quality_v2_status": "DRAFT_ONLY_RANKED",
+        "selected_candidate_id": str(clip.get("clip_candidate_id") or clip.get("clip_id") or ""),
+        "candidate_count": max(1, int(caption.get("caption_attempt_count", 1) or 1)),
+        "repair_count": int(caption.get("repair_count", 0) or 0),
+        "hard_gate_reasons": gate["hard_gate_reasons"],
+        "quality_rank": package["quality_rank"],
+        "quality_rank_components": package["quality_rank_components"],
+        "content_quality_warnings": warnings,
+        "media_understanding_status": package["media_understanding"]["visual_status"],
+        "generic_caption_risk": package["generic_caption_risk"],
+        "route_status": "DRAFT_ONLY",
+        "post_package": package,
+        "hard_gate_result": gate,
     }
 
 
@@ -2085,6 +2245,17 @@ def prepare_saved_media_queue(plan: dict[str, Any], client: SheetsClient) -> dic
             "would_post_video": False,
         }
 
+    caption = _attach_v2_media_package(
+        caption, clip=clip, source_video=source_video, media_asset=asset,
+        account_id=account_id, media_validation=validation,
+    )
+    if caption["hard_gate_reasons"]:
+        return {**plan, "status": "REVIEW_REQUIRED", "queue_id": "",
+                "caption_result": caption, "blocked_reasons": caption["hard_gate_reasons"],
+                "would_post_video": False}
+    caption_fields = _caption_clip_fields(caption)
+    clip.update(caption_fields)
+
     queue_row = {
         "queue_id": queue_id,
         "account_id": account_id,
@@ -2115,6 +2286,10 @@ def prepare_saved_media_queue(plan: dict[str, Any], client: SheetsClient) -> dic
         "caption_provider_version": clip.get("caption_provider_version", ""),
         **_alignment_fields(clip),
         "claim_support_json": clip.get("claim_support_json", ""),
+        **{key: value for key, value in caption_fields.items() if key.startswith("content_quality_v2_") or key in {
+            "selected_candidate_id", "candidate_count", "repair_count", "hard_gate_reasons", "quality_rank",
+            "quality_rank_components_json", "content_quality_warnings_json", "media_understanding_status",
+            "generic_caption_risk", "fallback_reason", "route_status"}},
         "media_url": media_url,
         "media_status": "UPLOADED",
         "media_required": "true",
@@ -2285,6 +2460,16 @@ def execute_saved_media_post(plan: dict[str, Any], client: SheetsClient) -> dict
             "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
         }
+    caption = _attach_v2_media_package(
+        caption, clip=clip, source_video=source_video, media_asset=asset,
+        account_id=account_id, media_validation=validation,
+    )
+    if caption["hard_gate_reasons"]:
+        return {**plan, "status": "REVIEW_REQUIRED", "selected_clip": clip,
+                "caption_result": caption, "blocked_reasons": caption["hard_gate_reasons"],
+                "retryable_candidate_failure": False, "would_post_video": False}
+    caption_fields = _caption_clip_fields(caption)
+    clip.update(caption_fields)
     slot_id = str(plan.get("slot_id", ""))
     if slot_id:
         claim = claim_slot_run(client, account_id, slot_id)
@@ -2811,6 +2996,17 @@ def execute(plan: dict[str, Any], client: SheetsClient) -> dict[str, Any]:
             "retryable_candidate_failure": True,
             "candidate_quarantined": is_quarantined(failure),
         }
+
+    caption = _attach_v2_media_package(
+        caption, clip=clip, source_video=source_video, media_asset=asset,
+        account_id=account_id, media_validation=validation,
+    )
+    if caption["hard_gate_reasons"]:
+        return {**plan, "status": "REVIEW_REQUIRED", "selected_clip": clip,
+                "caption_result": caption, "blocked_reasons": caption["hard_gate_reasons"],
+                "retryable_candidate_failure": False, "would_post_video": False}
+    caption_fields = _caption_clip_fields(caption)
+    clip.update(caption_fields)
 
     queue_id = f"media_q_{clip_id}"
     queue_row = {
@@ -3546,6 +3742,9 @@ def main() -> int:
         parser.error("--reuse-uploaded-only and --stored-source-only are mutually exclusive")
     if sum(bool(value) for value in (args.prepare_only, args.post_saved_media, args.prepare_saved_media_queue)) > 1:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["media_modes_are_mutually_exclusive"]}, ensure_ascii=False))
+        return 1
+    if args.apply and not load_content_quality_v2_policy().get("publishing_enabled", False):
+        print(json.dumps({"status": "DRAFT_ONLY", "blocked_reasons": ["content_quality_v2_owner_review_required"], "would_post": False}, ensure_ascii=False))
         return 1
 
     client = None

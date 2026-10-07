@@ -10,7 +10,7 @@ sys.path[:0] = [
     str(ROOT / "src"),
 ]
 
-import run_media_production_pipeline as production
+import run_media_production_pipeline as production  # noqa: E402
 
 
 class BlockedCaptionService:
@@ -138,21 +138,17 @@ checks = [
         == "clip_1",
     ),
     (
-        "final caption copyedit fallback passes",
-        caption["status"] == "PASS",
+        "copyedit cannot bypass media understanding",
+        caption["status"] == "REVIEW_REQUIRED",
     ),
     (
-        "final caption provider is source copyedit",
-        caption["caption_provider"]
-        == "deterministic_source_copyedit",
+        "no caption provider invoked without visual evidence",
+        caption["caption_attempt_count"] == 0,
     ),
     (
-        "final caption remains source grounded",
-        caption["alignment_status"] == "PASS"
-        and caption[
-            "unsupported_claim_count"
-        ]
-        == 0,
+        "final caption remains empty and explicitly unverified",
+        caption["public_post_text"] == ""
+        and "visual_understanding_required" in caption["blocked_reasons"],
     ),
 ]
 
