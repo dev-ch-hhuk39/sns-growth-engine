@@ -146,7 +146,8 @@ class SmokeGeminiClient(GeminiHybridClient):
                         "Beautyは少し美容に詳しい女友達の口調。自分が使用した体験・使用感・肌変化・効能は一切書かない。"
                         "quote_choiceでは、visible_actionやkey_moment由来の『手に出す』『スポイトから垂らす』『ボトルを持つ』等の具体的な使用場面が候補にあれば、商品名や成分表記だけの候補より優先する。"
                         "選んだquoteで実際に見える動作・見た目だけを話し、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『使いやすい』『テクスチャー』『肌改善』『毛穴改善』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、観察できない意味ラベル・使用レビューは禁止。『量感』『液垂れ具合』『粘度』『伸び』『なじみ』『使いやすさ』等の物性・使用感も、visual factに明記されていなければ足さない。"
-                        "reader_takeawayとbeauty_followupには選んだquoteの具体語を残す。公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
+                        "reader_takeawayとbeauty_followupの各文には、選んだquoteから8文字以上連続する具体表現を最低1つそのまま残す。quoteにない距離・量・手順・重要度・効果を新しく決めつけない。"
+                        "公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
                         "『文字数が違う』『英語と日本語で長さが違う』『公式サイトに同じ表記があるか』等、動画そのものから離れる低価値なメタ比較は禁止。"
                         "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"
                         "自然な女友達口調としてhumanity markerの『意外と』『結構大事』『ほんとに』『気がする』から内容に合うものを最低2つ使い、さらに『だよね』『かも』『〜てみて』等のsoft endingを最低1つ使う。同じ位置に固定せず、不自然な埋め草にしない。広告・効能・定型句の埋め草は禁止。"
@@ -270,7 +271,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合", "効く", "効果", "改善")
                     if any(term in beauty_text and term not in quote for term in semantic_terms):
                         raise RuntimeError("beauty_semantic_inference_unverified")
-                    physical_terms = ("量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす", "出す時の感覚", "使用感")
+                    physical_terms = ("量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす", "出す時の感覚", "使用感", "距離感")
                     if any(term in beauty_text and term not in quote for term in physical_terms):
                         raise RuntimeError("beauty_unobserved_physical_property")
                     if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
