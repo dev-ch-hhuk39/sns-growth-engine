@@ -26,7 +26,7 @@ VISION_SCHEMA = {
     'additionalProperties': False,
 }
 VISION_PROMPT = (
-    '時系列順の画像フレームに実際に見える内容だけを日本語で記述してください。'
+    '時系列順の画像フレームに実際に見える内容だけを日本語で記述してください。visible_action、key_moment、visible_people_or_objects、およびvisible_text以外のvisual_facts.textは必ず日本語で書く。'
     '見えない事実を補完しない。音声・発言・人物属性・職業・収益・商品効果を推測しない。'
     'アカウント戦略や読者向け助言を生成しない。複数フレームで変化があれば順序を説明。'
     'key_momentは具体的な場面。visual_factsは画像で確認できる独立した事実で、固有ID VF1等を付与。'

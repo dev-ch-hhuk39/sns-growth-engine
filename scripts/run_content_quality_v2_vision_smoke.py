@@ -89,7 +89,14 @@ class SmokeGeminiClient(GeminiHybridClient):
                 for fact in facts:
                     texts = re.findall(r"「([^」]+)」", fact["text"]) or [fact["text"]]
                     for text in texts:
-                        excerpts = re.split(r"[\s。]+", text) if re.search(r"[\s。]", text) else [text]
+                        # Embedded visible text can contain separate overlay lines, but
+                        # action/key-moment prose must never be split into English words.
+                        # Otherwise a token such as "dispenses" can become the entire
+                        # media anchor and produce an incoherent public caption.
+                        if fact.get("type") == "visible_text":
+                            excerpts = re.split(r"[\s。]+", text) if re.search(r"[\s。]", text) else [text]
+                        else:
+                            excerpts = re.split(r"[。\n]+", text) if re.search(r"[。\n]", text) else [text]
                         quote_options += [{"fact_id": fact["id"], "text": part} for part in excerpts if 8 <= len(part) <= 80]
                 if not quote_options:
                     raise RuntimeError("no_bound_quote_options")
@@ -133,7 +140,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     account_instruction = (
                         "Beautyは少し美容に詳しい女友達の口調。自分が使用した体験・使用感・肌変化・効能は一切書かない。"
                         "quote_choiceでは、visible_actionやkey_moment由来の『手に出す』『スポイトから垂らす』『ボトルを持つ』等の具体的な使用場面が候補にあれば、商品名や成分表記だけの候補より優先する。"
-                        "選んだquoteで実際に見える動作・見た目だけを話し、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『使いやすい』『テクスチャー』『肌改善』『毛穴改善』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、観察できない意味ラベル・使用レビューは禁止。"
+                        "選んだquoteで実際に見える動作・見た目だけを話し、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『使いやすい』『テクスチャー』『肌改善』『毛穴改善』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、観察できない意味ラベル・使用レビューは禁止。『量感』『液垂れ具合』『粘度』『伸び』『なじみ』『使いやすさ』等の物性・使用感も、visual factに明記されていなければ足さない。"
                         "reader_takeawayとbeauty_followupには選んだquoteの具体語を残す。公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
                         "『文字数が違う』『英語と日本語で長さが違う』『公式サイトに同じ表記があるか』等、動画そのものから離れる低価値なメタ比較は禁止。"
                         "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"

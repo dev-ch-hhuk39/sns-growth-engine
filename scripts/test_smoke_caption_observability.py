@@ -113,6 +113,22 @@ class SmokeCaptionTests(unittest.TestCase):
         from public_post_quality import voice_persona_validation
         self.assertEqual(voice_persona_validation(data, "beauty_account")["status"], "VOICE_PERSONA_PASS")
 
+    def test_non_text_visual_fact_is_not_split_into_english_words(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "A dropper dispenses a clear liquid onto skin."}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "スポイトから透明な液体を肌へ垂らす場面が見えると、使う流れも意外と想像しやすいかも✨",
+                   "beauty_followup": "購入前にこういう使い方が動画で見えるのって結構大事だよね🤍"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                 schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        public = client.caption_candidate["public_post_text"]
+        self.assertIn(fact["text"], public)
+        self.assertNotIn("この動画では、dispenses\n", public)
+
     def test_liver_prompt_requires_next_stream_action(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "配信中の入室通知は読み上げますか？ 枠の規模に合った運用が一番いいと思います"}
         source = {"target_account_id": "liver_manager", "media_first_input": {
