@@ -21,6 +21,7 @@ from generation.content_quality_v2 import (  # noqa: E402
 from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService, account_rules,
 )
+from generation.semantic_alignment import ALIGNMENT_THRESHOLDS, lexical_similarity  # noqa: E402
 from gemini_hybrid_client import GeminiHybridClient, GeminiHttpError, provider_error_evidence
 from gemini_quota_diagnostics import FIELDS as QUOTA_FIELDS
 from evidence_context_caption import PrivacyBoundedGeminiGroundedProvider
@@ -36,6 +37,7 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "night_first_person_opening_missing",
     "night_cross_account_live_context",
     "night_cross_account_beauty_emoji",
+    "night_unobserved_context_added",
     "liver_source_person_contact_not_actionable",
     "liver_next_stream_action_not_grounded",
     "liver_next_stream_action_not_source_specific",
@@ -44,9 +46,64 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "liver_actionable_ending_missing",
     "beauty_followup_missing",
     "beauty_semantic_inference_unverified",
+    "beauty_unobserved_physical_property",
+    "beauty_unobserved_context_added",
+    "beauty_quote_repeated_after_observation",
+    "beauty_quote_grounding_too_weak",
     "beauty_low_value_text_comparison",
     "beauty_selection_value_missing",
 }
+BEAUTY_REPAIRABLE_ERRORS = {
+    "beauty_followup_missing",
+    "beauty_semantic_inference_unverified",
+    "beauty_unobserved_physical_property",
+    "beauty_unobserved_context_added",
+    "beauty_quote_repeated_after_observation",
+    "beauty_quote_grounding_too_weak",
+    "beauty_low_value_text_comparison",
+    "beauty_selection_value_missing",
+}
+
+
+def validate_beauty_smoke_candidate(quote: str, takeaway: str, followup: str) -> None:
+    if not followup:
+        raise RuntimeError("beauty_followup_missing")
+    beauty_text = takeaway + "\n" + followup
+    semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合", "効く", "効果", "改善")
+    if any(term in beauty_text and term not in quote for term in semantic_terms):
+        raise RuntimeError("beauty_semantic_inference_unverified")
+    physical_terms = (
+        "量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす", "出す時の感覚", "使用感",
+        "距離感", "重み", "質感", "一滴", "とろみ", "さらさら", "色味", "探しやす",
+    )
+    if any(term in beauty_text and term not in quote for term in physical_terms):
+        raise RuntimeError("beauty_unobserved_physical_property")
+    unobserved_context_terms = ("鮮明", "日常使い", "イメージも湧")
+    if any(term in beauty_text and term not in quote for term in unobserved_context_terms):
+        raise RuntimeError("beauty_unobserved_context_added")
+    if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
+        raise RuntimeError("beauty_low_value_text_comparison")
+    if quote in takeaway and quote in followup:
+        raise RuntimeError("beauty_quote_repeated_after_observation")
+    minimum_grounding = ALIGNMENT_THRESHOLDS["claim_evidence_similarity"]
+    japanese_quote = bool(re.search(r"[ぁ-んァ-ヶ一-龯]", quote))
+    if japanese_quote and any(
+        lexical_similarity(paragraph, quote) < minimum_grounding
+        for paragraph in (takeaway, followup)
+    ):
+        raise RuntimeError("beauty_quote_grounding_too_weak")
+    if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
+        raise RuntimeError("beauty_selection_value_missing")
+
+
+def deterministic_beauty_smoke_repair(quote: str) -> tuple[str, str] | None:
+    """Narrow final safety repair for the known visible dropper action; never invent product effects."""
+    if "スポイト" in quote and "手の甲" in quote and ("垂ら" in quote or "液体" in quote):
+        return (
+            "スポイトから手の甲へ液体を垂らす動きが動画で見えるから、購入前に出し方を確認できて意外と参考になるかも✨",
+            "購入前にスポイトの出し方を手の甲で動画確認できるのって、ほんとに結構大事だよね🤍",
+        )
+    return None
 
 
 class SmokeGeminiClient(GeminiHybridClient):
@@ -121,6 +178,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     account_instruction = (
                         "Nightは男性の夜職・キャバクラ専門スカウト。reader_takeawayは必ず『僕なら』で始め、店選びに迷う夜職女性へ一対一で話す。"
                         "visual_facts内の具体語を二つ以上そのまま残し、採用基準・入店後の競争率・本人の強み等を分けて判断する。"
+                        "visual_factsにない新しい判断軸を足さない。『環境に馴染める』『立ち回り』『相性』などを、元映像にないのに勝手に補わない。"
                         "一律に『避ける』『行くべき』と断定しない。『だと思う』『なんだよね』『が大事』等の自然な現場口調。"
                         "絵文字は禁止。配信、LIVE、ライブ、リスナー、コメント、初見、ギフト、『次の配信では』等の配信文脈は禁止。"
                         "『なのですね』『必要不可欠』『感じさせられます』等の講評・コンサル口調は禁止。"
@@ -145,9 +203,9 @@ class SmokeGeminiClient(GeminiHybridClient):
                     account_instruction = (
                         "Beautyは少し美容に詳しい女友達の口調。自分が使用した体験・使用感・肌変化・効能は一切書かない。"
                         "quote_choiceでは、visible_actionやkey_moment由来の『手に出す』『スポイトから垂らす』『ボトルを持つ』等の具体的な使用場面が候補にあれば、商品名や成分表記だけの候補より優先する。"
-                        "選んだquoteで実際に見える動作・見た目だけを話し、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『使いやすい』『テクスチャー』『肌改善』『毛穴改善』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、観察できない意味ラベル・使用レビューは禁止。『量感』『液垂れ具合』『粘度』『伸び』『なじみ』『使いやすさ』等の物性・使用感も、visual factに明記されていなければ足さない。"
-                        "reader_takeawayとbeauty_followupの各文には、選んだquoteから8文字以上連続する具体表現を最低1つそのまま残す。quoteにない距離・量・手順・重要度・効果を新しく決めつけない。"
-                        "公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
+                        "選んだquoteで実際に見える動作・見た目だけを話し、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『使いやすい』『テクスチャー』『肌改善』『毛穴改善』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、観察できない意味ラベル・使用レビューは禁止。『量感』『液垂れ具合』『粘度』『伸び』『なじみ』『使いやすさ』『重み』『質感』『一滴』『距離感』『量』『とろみ』『さらさら』等の物性・使用感も、visual factに明記されていなければ足さない。"
+                        "最初の観察行で選んだquoteをそのまま出すため、reader_takeawayとbeauty_followupの両方でquote全文を繰り返さない。各段落ではquoteやvisual_factsにある具体語を二つ以上使い、同じ長い表現を2段落で反復しない。"
+                        "quoteにない距離・量・手順・重要度・効果を新しく決めつけない。判断は『動画で見える』『出し方や使い方を確認できる』『購入前に見られる』の範囲に限定し、液体の性質や感触を評価しない。公式サイト確認や文字列照合を目的にしない。"
                         "『文字数が違う』『英語と日本語で長さが違う』『公式サイトに同じ表記があるか』等、動画そのものから離れる低価値なメタ比較は禁止。"
                         "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"
                         "自然な女友達口調としてhumanity markerの『意外と』『結構大事』『ほんとに』『気がする』から内容に合うものを最低2つ使い、さらに『だよね』『かも』『〜てみて』等のsoft endingを最低1つ使う。同じ位置に固定せず、不自然な埋め草にしない。広告・効能・定型句の埋め草は禁止。"
@@ -181,22 +239,32 @@ class SmokeGeminiClient(GeminiHybridClient):
             except GeminiHttpError as primary_error:
                 quota = primary_error.quota_diagnostics
                 violations = quota.get("quota_violations", [])
-                scoped = (not fallback and original_model == "gemini-3.5-flash" and bool(violations)
+                quota_scoped = (not fallback and original_model == "gemini-3.5-flash" and bool(violations)
                     and primary_error.status_code == 429
                     and all(row.get("quota_model") == original_model
                             and "PerProjectPerModel" in row.get("quota_id", "")
                             and row.get("rate_limit_class") in {"DAILY_QUOTA_EXHAUSTED", "MODEL_QUOTA_EXHAUSTED"}
                             for row in violations))
-                if not scoped:
+                transient_scoped = (
+                    not fallback
+                    and original_model == "gemini-3.5-flash"
+                    and primary_error.status_code in {500, 502, 503, 504}
+                )
+                if not (quota_scoped or transient_scoped):
                     raise
                 retry_delay = quota.get("retry_delay_seconds")
-                if isinstance(retry_delay, (int, float)) and retry_delay > 0:
+                if quota_scoped and isinstance(retry_delay, (int, float)) and retry_delay > 0:
                     self.quota_basis = {"observed_at": datetime.now(timezone.utc).isoformat(),
                         "retry_delay_seconds": retry_delay, "quota_violations": violations,
                         "origin_run_id": os.environ.get("GITHUB_RUN_ID", "current_request")}
                 kwargs["model"] = "gemini-3.1-flash-lite"
-                decision.update(model=kwargs["model"], fallback_used=True, fallback_basis_run="current_request",
-                                primary_attempt_history=getattr(primary_error, "attempt_history", []))
+                decision.update(
+                    model=kwargs["model"],
+                    fallback_used=True,
+                    fallback_basis_run="current_request",
+                    fallback_reason="model_scoped_quota" if quota_scoped else "primary_model_transient_5xx",
+                    primary_attempt_history=getattr(primary_error, "attempt_history", []),
+                )
                 result = super().generate_json(**kwargs)
             if caption and facts:
                 data = result["data"]
@@ -226,6 +294,10 @@ class SmokeGeminiClient(GeminiHybridClient):
                         raise RuntimeError("night_cross_account_live_context")
                     if any(emoji in takeaway for emoji in ("🥺", "✨", "🤍", "🫶🏻", "😭", "💭")):
                         raise RuntimeError("night_cross_account_beauty_emoji")
+                    night_source_text = " ".join(item["text"] for item in facts)
+                    unobserved_night_terms = ("馴染", "立ち回", "相性")
+                    if any(term in takeaway and term not in night_source_text for term in unobserved_night_terms):
+                        raise RuntimeError("night_unobserved_context_added")
                 if kwargs["account_id"] == "liver_manager":
                     source_text = " ".join(item["text"] for item in facts)
                     source_names = set(re.findall(r"([一-龯ぁ-んァ-ヶA-Za-z0-9]{2,20}さん)", source_text))
@@ -265,19 +337,92 @@ class SmokeGeminiClient(GeminiHybridClient):
                             takeaway.strip()):
                         raise RuntimeError("liver_actionable_ending_missing")
                 if kwargs["account_id"] == "beauty_account":
-                    if not beauty_followup:
-                        raise RuntimeError("beauty_followup_missing")
-                    beauty_text = takeaway + "\n" + beauty_followup
-                    semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合", "効く", "効果", "改善")
-                    if any(term in beauty_text and term not in quote for term in semantic_terms):
-                        raise RuntimeError("beauty_semantic_inference_unverified")
-                    physical_terms = ("量感", "液垂れ具合", "粘度", "伸び", "なじみ", "使いやす", "出す時の感覚", "使用感", "距離感")
-                    if any(term in beauty_text and term not in quote for term in physical_terms):
-                        raise RuntimeError("beauty_unobserved_physical_property")
-                    if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語|公式(?:サイト|ページ).{0,24}(?:表記|記載|同じ)", beauty_text):
-                        raise RuntimeError("beauty_low_value_text_comparison")
-                    if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
-                        raise RuntimeError("beauty_selection_value_missing")
+                    try:
+                        validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
+                    except RuntimeError as first_validation_error:
+                        repair_reason = str(first_validation_error)
+                        if repair_reason not in BEAUTY_REPAIRABLE_ERRORS:
+                            raise
+                        decision.update(
+                            validation_repair_used=True,
+                            validation_repair_reason=repair_reason,
+                        )
+                        repair_schema = {
+                            "type": "object",
+                            "properties": {
+                                "quote_choice": {"type": "integer", "enum": [choice]},
+                                "reader_takeaway": {"type": "string"},
+                                "beauty_followup": {"type": "string"},
+                            },
+                            "required": ["quote_choice", "reader_takeaway", "beauty_followup"],
+                            "additionalProperties": False,
+                        }
+                        repair_prompt = (
+                            "Beauty向け未公開Captionを1回だけ修正する。quote_choiceは固定し、選び直さない。"
+                            "selected_quote/selected_factで直接確認できる動作だけを書く。"
+                            "液体や商品の重み・質感・粘度・量・一滴・距離感・効果・使いやすさ・色味・探しやすさの評価を足さない。"
+                            "読者価値は『動画で動作が見える』『出し方/使い方を確認できる』『購入前に見られる』だけに限定する。"
+                            "reader_takeawayとbeauty_followupの両方でselected_quote全文を繰り返さない。"
+                            "ただし各段落にselected_quoteの具体語を複数そのまま残し、どちらの段落も映像事実との語彙的な結び付きを保つ。"
+                            "少し美容に詳しい女友達の自然な口調、句点なし、絵文字1〜4個。"
+                            "『意外と』『結構大事』『ほんとに』『気がする』から自然に2つ以上使う。JSONのみ。\n"
+                            + json.dumps({
+                                "validation_error": repair_reason,
+                                "selected_quote": quote,
+                                "selected_fact": fact["text"],
+                                "rejected_candidate": {
+                                    "reader_takeaway": takeaway,
+                                    "beauty_followup": beauty_followup,
+                                },
+                            }, ensure_ascii=False)
+                        )
+                        repair_kwargs = {
+                            **kwargs,
+                            "prompt": repair_prompt,
+                            "schema": repair_schema,
+                        }
+                        primary_result = result
+                        repaired_result = super().generate_json(**repair_kwargs)
+                        repaired_data = repaired_result["data"]
+                        repaired_choice = repaired_data.get("quote_choice")
+                        if repaired_choice != choice:
+                            raise RuntimeError("caption_quote_choice_invalid")
+                        takeaway = re.sub(
+                            r"\n\s*\n+", "\n", str(repaired_data.get("reader_takeaway", "")).strip()
+                        )
+                        beauty_followup = re.sub(
+                            r"\n\s*\n+", "\n", str(repaired_data.get("beauty_followup", "")).strip()
+                        )
+                        try:
+                            validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
+                        except RuntimeError as repaired_validation_error:
+                            repaired_reason = str(repaired_validation_error)
+                            deterministic_repair = deterministic_beauty_smoke_repair(quote)
+                            if repaired_reason not in BEAUTY_REPAIRABLE_ERRORS or deterministic_repair is None:
+                                raise
+                            takeaway, beauty_followup = deterministic_repair
+                            decision.update(
+                                deterministic_validation_repair_used=True,
+                                deterministic_validation_repair_reason=repaired_reason,
+                            )
+                            validate_beauty_smoke_candidate(quote, takeaway, beauty_followup)
+                        self.caption_candidate = {
+                            "quote_choice": choice,
+                            "selected_quote": quote,
+                            "reader_takeaway": takeaway,
+                            "beauty_followup": beauty_followup,
+                        }
+                        result = {
+                            **repaired_result,
+                            "actual_requests": (
+                                primary_result.get("actual_requests", 0)
+                                + repaired_result.get("actual_requests", 0)
+                            ),
+                            "attempt_history": [
+                                *primary_result.get("attempt_history", []),
+                                *repaired_result.get("attempt_history", []),
+                            ],
+                        }
                 if fact.get("type") == "visible_text":
                     observation = f"この動画の「{quote}」という言葉。"
                 elif kwargs["account_id"] == "beauty_account":

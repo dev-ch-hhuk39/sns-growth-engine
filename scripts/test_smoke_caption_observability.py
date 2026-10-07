@@ -30,6 +30,20 @@ class SmokeCaptionTests(unittest.TestCase):
             sleep.assert_called_once_with(5)
             self.assertEqual([h['http_status'] for h in client.caption_evidence['attempt_history']], [503,200])
 
+    def test_caption_exhausted_primary_503_falls_back_once(self):
+        response = {'candidates':[{'content':{'parts':[{'text':'{}'}]}}]}
+        transport = Mock(side_effect=[GeminiHttpError(503, ''), GeminiHttpError(503, ''),
+                                     GeminiHttpError(503, ''), response])
+        with tempfile.TemporaryDirectory() as tmp, patch('gemini_hybrid_client.time.sleep'):
+            client = SmokeGeminiClient(api_key='fixture', transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            client.generate_json(model='gemini-3.5-flash', prompt='fixture', schema={},
+                                 operation='direct_reference_caption_generation', account_id='night_scout')
+        self.assertEqual(transport.call_count, 4)
+        self.assertTrue(client.caption_evidence['fallback_used'])
+        self.assertEqual(client.caption_evidence['model'], 'gemini-3.1-flash-lite')
+        self.assertEqual(client.caption_evidence['fallback_reason'], 'primary_model_transient_5xx')
+        self.assertEqual([h['http_status'] for h in client.caption_evidence['primary_attempt_history']], [503, 503, 503])
+
     def test_structured_quote_is_bound_and_claims_are_actual_caption(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "採用基準狙い目、ただ入店後の競争率は高いというイメージ"}
         source = {"target_account_id": "night_scout", "media_first_input": {
@@ -87,13 +101,27 @@ class SmokeCaptionTests(unittest.TestCase):
                                              schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
                     self.assertEqual(client.caption_evidence.get("validation_error"), expected)
 
+    def test_night_rejects_unobserved_judgement_axis(self):
+        fact = {"id": "VF1", "type": "visible_text", "text": "採用基準狙い目、ただ入店後の競争率は高いというイメージ"}
+        source = {"target_account_id": "night_scout", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "僕なら採用基準と入店後の競争率を分けて見るよ。君が環境に馴染めるかも確認するのが大事だと思う。"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
+            with self.assertRaisesRegex(RuntimeError, "night_unobserved_context_added"):
+                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                     schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
+            self.assertEqual(client.caption_evidence.get("validation_error"), "night_unobserved_context_added")
+
     def test_beauty_prompt_prefers_visible_use_scene_without_fake_experience(self):
         fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから透明な液体を手の甲に垂らす"}
         source = {"target_account_id": "beauty_account", "media_first_input": {
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
         payload = {"quote_choice": 0,
-                   "reader_takeaway": "スポイトから透明な液体を手の甲に垂らすところまで見えると、出し方も意外と想像しやすいかも✨",
-                   "beauty_followup": "購入前にこういう使い方が動画で見えるのって結構大事だよね🤍"}
+                   "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす場面が見えると、出し方も意外と想像しやすいかも✨",
+                   "beauty_followup": "購入前にスポイトの出し方を手の甲で動画確認できるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,7 +131,8 @@ class SmokeCaptionTests(unittest.TestCase):
         sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
         for phrase in ("自分が使用した体験", "気に入ってる", "肌の調子がいい", "使いやすい",
                        "濃度", "配合量", "数字や商品名の意味を推測しない",
-                       "スポイトから垂らす", "公式サイト確認や文字列照合を目的にせず",
+                       "スポイトから垂らす", "両方でquote全文を繰り返さない", "同じ長い表現を2段落で反復しない",
+                       "公式サイト確認や文字列照合を目的にしない",
                        "1行44文字程度", "🥺✨🤍🫶🏻😭💭"):
             self.assertIn(phrase, sent)
         data = client.caption_candidate["public_post_text"]
@@ -215,11 +244,100 @@ class SmokeCaptionTests(unittest.TestCase):
                    "reader_takeaway": "スポイトから液体を手の甲に垂らす場面で、出す時の感覚が意外と分かるかも✨",
                    "beauty_followup": "ほんとに使い方を動画で見られるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
-            client = SmokeGeminiClient(api_key="fixture", transport=Mock(return_value=response), reserve_request=Mock(), cache_dir=Path(tmp))
-            with self.assertRaisesRegex(RuntimeError, "beauty_unobserved_physical_property"):
-                client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
-                                     schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            result = client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                          schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        self.assertEqual(transport.call_count, 2)
+        self.assertTrue(client.caption_evidence.get("deterministic_validation_repair_used"))
+        self.assertNotIn("出す時の感覚", result["data"]["public_post_text"])
+
+    def test_beauty_rejects_unobserved_texture_language(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから液体を手の甲に垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "スポイトで液体を手の甲へ垂らす場面を見ると、質感や一滴の重みまで分かる気がするかも✨",
+                   "beauty_followup": "購入前に動画で出し方を見られるのって結構大事だよね🤍"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        transport = Mock(return_value=response)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            result = client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                          schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        self.assertEqual(transport.call_count, 2)
+        self.assertTrue(client.caption_evidence.get("deterministic_validation_repair_used"))
+        self.assertNotIn("質感", result["data"]["public_post_text"])
+        self.assertNotIn("一滴", result["data"]["public_post_text"])
+        self.assertNotIn("重み", result["data"]["public_post_text"])
+
+    def test_beauty_uses_one_bounded_validation_repair(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから透明な液体を手の甲に垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        rejected = {"quote_choice": 0,
+                    "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす場面を見ると、質感まで分かる気がするかも✨",
+                    "beauty_followup": "購入前に動画で出し方を見られるのって結構大事だよね🤍"}
+        repaired = {"quote_choice": 0,
+                    "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす動きが動画で見えると、意外と出し方を確認しやすいかも✨",
+                    "beauty_followup": "購入前にスポイトから手の甲へ液体を垂らす出し方を動画で確認できるのって、ほんとに結構大事だよね🤍"}
+        responses = [
+            {"candidates": [{"content": {"parts": [{"text": json.dumps(rejected, ensure_ascii=False)}]}}]},
+            {"candidates": [{"content": {"parts": [{"text": json.dumps(repaired, ensure_ascii=False)}]}}]},
+        ]
+        transport = Mock(side_effect=responses)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            result = client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                          schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        self.assertEqual(transport.call_count, 2)
+        self.assertTrue(client.caption_evidence.get("validation_repair_used"))
+        self.assertEqual(client.caption_evidence.get("validation_repair_reason"), "beauty_unobserved_physical_property")
+        self.assertIn("購入前", result["data"]["public_post_text"])
+        self.assertNotIn("質感", result["data"]["public_post_text"])
+
+    def test_beauty_uses_deterministic_final_repair_after_bad_provider_repair(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから手の甲へ液体を垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        rejected = {"quote_choice": 0,
+                    "reader_takeaway": "スポイトから手の甲へ液体を垂らすと一滴の重みまで分かる気がする✨",
+                    "beauty_followup": "購入前に動画で見られるのって結構大事だよね🤍"}
+        bad_repair = {"quote_choice": 0,
+                      "reader_takeaway": "スポイトから手の甲へ液体を垂らす動作が鮮明でほんとに分かりやすいかも✨",
+                      "beauty_followup": "スポイトから手の甲へ液体を垂らす様子で日常使いのイメージも湧くよね🤍"}
+        responses = [
+            {"candidates": [{"content": {"parts": [{"text": json.dumps(rejected, ensure_ascii=False)}]}}]},
+            {"candidates": [{"content": {"parts": [{"text": json.dumps(bad_repair, ensure_ascii=False)}]}}]},
+        ]
+        transport = Mock(side_effect=responses)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            result = client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                          schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        self.assertEqual(transport.call_count, 2)
+        self.assertTrue(client.caption_evidence.get("deterministic_validation_repair_used"))
+        self.assertIn("スポイトの出し方を手の甲で動画確認", result["data"]["public_post_text"])
+        self.assertNotIn("鮮明", result["data"]["public_post_text"])
+        self.assertNotIn("日常使い", result["data"]["public_post_text"])
+
+    def test_beauty_rejects_repeated_quote_after_observation(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから液体を手の甲に垂らす"}
+        source = {"target_account_id": "beauty_account", "media_first_input": {
+            "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
+        payload = {"quote_choice": 0,
+                   "reader_takeaway": "スポイトから液体を手の甲に垂らすところ、動画だと意外と分かりやすいかも✨",
+                   "beauty_followup": "スポイトから液体を手の甲に垂らすところを購入前に見られるのって結構大事だよね🤍"}
+        response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
+        transport = Mock(return_value=response)
+        with tempfile.TemporaryDirectory() as tmp:
+            client = SmokeGeminiClient(api_key="fixture", transport=transport, reserve_request=Mock(), cache_dir=Path(tmp))
+            result = client.generate_json(model="gemini-3.5-flash", prompt=json.dumps(source, ensure_ascii=False),
+                                          schema={}, operation="direct_reference_caption_generation", account_id="beauty_account")
+        self.assertEqual(transport.call_count, 2)
+        self.assertTrue(client.caption_evidence.get("deterministic_validation_repair_used"))
+        self.assertEqual(result["data"]["public_post_text"].count("スポイトから液体を手の甲に垂らす"), 1)
 
     def test_liver_rejects_unbound_next_stream_metric(self):
         fact = {"id": "VF1", "type": "visible_text", "text": "だから枠の規模に合った 運用が一番いいと思います!!"}
