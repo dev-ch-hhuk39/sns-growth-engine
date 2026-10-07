@@ -87,13 +87,13 @@ class SmokeCaptionTests(unittest.TestCase):
                                              schema={}, operation="direct_reference_caption_generation", account_id="night_scout")
                     self.assertEqual(client.caption_evidence.get("validation_error"), expected)
 
-    def test_beauty_prompt_forbids_self_use_and_effect_claims(self):
-        fact = {"id": "VF1", "type": "visible_text", "text": "グリシルグリシン3.0"}
+    def test_beauty_prompt_prefers_visible_use_scene_without_fake_experience(self):
+        fact = {"id": "VF1", "type": "visible_action", "text": "スポイトから透明な液体を手の甲に垂らす"}
         source = {"target_account_id": "beauty_account", "media_first_input": {
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
         payload = {"quote_choice": 0,
-                   "reader_takeaway": "グリシルグリシン3.0って表記まで見えるの、意外と購入前の確認ポイントにしやすいかも✨",
-                   "beauty_followup": "公式の商品ページやパッケージとグリシルグリシン3.0の表記を見比べるのって結構大事だよね🤍"}
+                   "reader_takeaway": "スポイトから透明な液体を手の甲に垂らすところまで見えると、出し方も意外と想像しやすいかも✨",
+                   "beauty_followup": "購入前にこういう使い方が動画で見えるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,12 +103,13 @@ class SmokeCaptionTests(unittest.TestCase):
         sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
         for phrase in ("自分が使用した体験", "気に入ってる", "肌の調子がいい", "使いやすい",
                        "濃度", "配合量", "数字や商品名の意味を推測しない",
-                       "文字数が違う", "商品ページ", "パッケージ",
-                       "1行44文字程度", "🥺✨🤍🫶🏻😭💭",
-                       "意外と", "かも", "結構大事", "だよね"):
+                       "スポイトから垂らす", "公式サイト確認や文字列照合を目的にせず",
+                       "1行44文字程度", "🥺✨🤍🫶🏻😭💭"):
             self.assertIn(phrase, sent)
         data = client.caption_candidate["public_post_text"]
         self.assertEqual(len(data.split("\n\n")), 3)
+        self.assertIn("スポイト", data)
+        self.assertNotIn("公式", data)
         from public_post_quality import voice_persona_validation
         self.assertEqual(voice_persona_validation(data, "beauty_account")["status"], "VOICE_PERSONA_PASS")
 

@@ -45,6 +45,21 @@ class VisionSmokeTests(unittest.TestCase):
         support = [{"caption_claim": generic, "source_evidence": ctx["visible_action"], "anchor_fact_ids": ["VF_FAKE"]}]
         self.assertEqual(quality.remove_media_test(generic, ctx, angle, support)["status"], "GENERIC_CAPTION_RISK_HIGH")
 
+    def test_gemini_top_level_action_and_key_moment_are_preserved_as_facts(self):
+        row = asset()
+        row["visible_action"] = "スポイトから透明な液体を手の甲に垂らす"
+        row["key_moment"] = "透明な液体が手の甲に落ちる瞬間"
+        row["visible_text"] = "商品名"
+        row["visual_facts"] = [{"id": "VF_TEXT", "type": "visible_text", "text": "商品名"}]
+        row["visual_evidence"] = {**row["visual_evidence"], "provider": "gemini"}
+        row["http_status"] = 200
+        row["response_schema_status"] = "PASS"
+        ctx = quality.prepare_media_context(row, account_id="liver_manager")
+        by_type = {fact["type"]: fact["text"] for fact in ctx["visual_facts"]}
+        self.assertEqual(by_type["visible_action"], row["visible_action"])
+        self.assertEqual(by_type["key_moment"], row["key_moment"])
+        self.assertEqual(by_type["visible_text"], "商品名")
+
     def test_fact_ids_stable_and_asset_bound(self):
         ctx, _ = self.context()
         again, _ = self.context()

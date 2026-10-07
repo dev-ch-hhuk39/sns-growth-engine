@@ -441,10 +441,27 @@ def prepare_media_context(media: Mapping[str, Any], *, account_id: str,
         "status": "BLOCKED" if editorial_reasons else "PASS", "hard_reasons": editorial_reasons}
     context["visual_facts"] = []
     if context["visual_status"] == "VISUAL_VERIFIED":
-        source_facts = merged.get("visual_facts", []) if context.get("visual_evidence", {}).get("provider") == "gemini" else [
-            {"id": kind, "type": kind, "text": str(context.get(kind) or "").strip()}
-            for kind in ("visible_action", "key_moment", "visible_people_or_objects", "visible_text")
-            if str(context.get(kind) or "").strip()]
+        if context.get("visual_evidence", {}).get("provider") == "gemini":
+            source_facts = [dict(fact) for fact in merged.get("visual_facts", [])]
+            # Gemini returns top-level visible_action/key_moment in the same
+            # schema as visual_facts. Preserve those verified observations when
+            # the model omitted the duplicate fact entry; otherwise downstream
+            # relevance/captioning loses the most media-specific evidence.
+            existing = {
+                (str(fact.get("type") or ""), _normalized(str(fact.get("text") or "")))
+                for fact in source_facts if isinstance(fact, Mapping)
+            }
+            for kind in ("visible_action", "key_moment", "visible_people_or_objects", "visible_text"):
+                text = str(context.get(kind) or "").strip()
+                key = (kind, _normalized(text))
+                if text and key not in existing:
+                    source_facts.append({"id": f"TOP_LEVEL_{kind}", "type": kind, "text": text})
+                    existing.add(key)
+        else:
+            source_facts = [
+                {"id": kind, "type": kind, "text": str(context.get(kind) or "").strip()}
+                for kind in ("visible_action", "key_moment", "visible_people_or_objects", "visible_text")
+                if str(context.get(kind) or "").strip()]
         for fact in source_facts:
             identity_parts = [context["media_asset_id"], context["content_hash"], fact["type"], fact["text"]]
             if context.get("visual_evidence", {}).get("provider") == "gemini":

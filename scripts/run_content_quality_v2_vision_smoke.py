@@ -119,8 +119,8 @@ class SmokeGeminiClient(GeminiHybridClient):
                         if any(term in str(fact.get("text", "")) for fact in facts)
                     ]
                     account_instruction = (
-                        "Liverは迷いに共感する女性先輩の口調。質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。"
-                        "reader_takeawayに必ず『次の配信では』を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。"
+                        "Liverは迷いに共感する女性先輩の口調。quote_choiceは『運用』『大事』のような抽象語だけの結論より、入室通知・コメント・初見など次回配信でそのまま操作を変えられる具体対象が書かれた視覚事実を優先する。"
+                        "reader_takeawayに必ず『次の配信では』を含め、選んだ具体対象について視聴者自身が次回配信で行う一つの具体行動へ落とす。"
                         "その具体行動はvisual_factsに実際にある対象だけで組み立て、リスナー数・反応速度・配信時間などvisual_factsにない判断指標を足さない。"
                         f"『次の配信では』以降にはallowed_action_terms={liver_action_terms}の語を最低1つ、その表記のまま必ず含める。別の指標へ言い換えない。"
                         "reader_takeaway全体でもvisual_factsにない主語・心理・指標・機能を足さない。『リスナーが気を使う』『リスナー数』『視聴者数』『反応』『配信時間』『通知の設定』等をvisual_factsにないのに追加するのは禁止。"
@@ -131,12 +131,13 @@ class SmokeGeminiClient(GeminiHybridClient):
                     )
                 elif account_id == "beauty_account":
                     account_instruction = (
-                        "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。"
-                        "他のvisual factを追加せず、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『肌』『使いやすい』『テクスチャー』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、quoteに明記されていない意味ラベル・使用レビューは禁止。"
-                        "reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。"
-                        "『文字数が違う』『英語と日本語で長さが違う』等、文字列そのものの形だけを比べる低価値なメタ比較は禁止。"
+                        "Beautyは少し美容に詳しい女友達の口調。自分が使用した体験・使用感・肌変化・効能は一切書かない。"
+                        "quote_choiceでは、visible_actionやkey_moment由来の『手に出す』『スポイトから垂らす』『ボトルを持つ』等の具体的な使用場面が候補にあれば、商品名や成分表記だけの候補より優先する。"
+                        "選んだquoteで実際に見える動作・見た目だけを話し、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『使いやすい』『テクスチャー』『肌改善』『毛穴改善』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、観察できない意味ラベル・使用レビューは禁止。"
+                        "reader_takeawayとbeauty_followupには選んだquoteの具体語を残す。公式サイト確認や文字列照合を目的にせず、動画で見える使い方・出し方・見た目を購入前に確認できるという読者価値へつなげる。"
+                        "『文字数が違う』『英語と日本語で長さが違う』『公式サイトに同じ表記があるか』等、動画そのものから離れる低価値なメタ比較は禁止。"
                         "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"
-                        "reader_takeawayには『意外と』とsoft endingの『かも』を自然に入れ、beauty_followupには『結構大事』と『だよね』を自然に入れる。広告・効能・定型句の埋め草は禁止。"
+                        "自然な女友達口調として『意外と』『結構』『だよね』『かも』等から内容に合うものを2つ程度使う。同じ位置に固定せず、不自然な埋め草にしない。広告・効能・定型句の埋め草は禁止。"
                     )
                 else:
                     raise RuntimeError("unsupported_smoke_caption_account")
@@ -339,6 +340,7 @@ def relevance_review(media: dict, contract: dict, client: GeminiHybridClient) ->
         "事実や音声、発言、効果を補完しない。ジャンルや人物の見た目だけではPASS不可。"
         "Nightは夜職女性の店・接客・条件・働き方の具体的な判断材料、"
         "Liverは次回配信で変えられる具体的な配信行動、Beautyは20〜30代女性の美容判断に役立つこと。"
+        "visible_actionやkey_momentに対象アカウント固有の具体場面がある場合は、単なる商品名・人物・カテゴリ文字より優先してanchor_fact_typesへ含める。"
         "不明や対象外ならRELEVANCE_UNVERIFIED。無理に関連付けない。JSONのみ。\n"
         + json.dumps({"account_contract": contract, "visual_facts": context["visual_facts"]}, ensure_ascii=False))
     try:
