@@ -67,6 +67,7 @@ class SmokeCaptionTests(unittest.TestCase):
         for phrase in ("自分が使用した体験", "気に入ってる", "肌の調子がいい", "使いやすい",
                        "濃度", "配合量", "数字や商品名の意味を推測しない",
                        "文字数が違う", "商品ページ", "パッケージ",
+                       "1行44文字程度", "🥺✨🤍🫶🏻😭💭",
                        "意外と", "かも", "結構大事", "だよね"):
             self.assertIn(phrase, sent)
         data = client.caption_candidate["public_post_text"]

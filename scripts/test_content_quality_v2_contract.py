@@ -89,6 +89,11 @@ def test_beauty_repairs_zero_emoji_once_and_liver_does_not_force_one() -> None:
     assert "💄" not in unsupported["public_post_text"]
     assert any(e in unsupported["public_post_text"] for e in load_policy()["accounts"]["beauty_account"]["emoji_allowed"])
     assert unsupported["repair_count"] <= 2
+    dense = "グリシルグリシン3.0という表記を公式の商品ページとパッケージで見比べながら気になるところだけ確認しておくと選ぶ時に迷いにくいかも💭"
+    dense_repair = repair_style_only(dense, "beauty_account")
+    assert "beauty_dense_lines_wrapped" in dense_repair["repairs"]
+    assert dense_repair["public_post_text"].replace("\n", "") == dense
+    assert max(len(line) for line in dense_repair["public_post_text"].splitlines() if line) <= 48
     assert "確認することは一つ。" not in repair_style_only("確認することは一つ。\n控除を聞く。", "night_scout")["public_post_text"]
 
 

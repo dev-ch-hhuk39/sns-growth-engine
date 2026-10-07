@@ -172,6 +172,48 @@ def repair_style_only(text: str, account_id: str) -> dict[str, Any]:
     if value != original:
         repairs.append("removed_literal_template_boilerplate")
     if account_id == "beauty_account":
+        # Line breaks are style-only: preserve every character and claim while
+        # preventing dense social copy from failing the Beauty voice fingerprint.
+        wrapped_lines = []
+        line_wrapped = False
+        for line in value.splitlines():
+            remaining = line
+            if len(remaining) <= 48:
+                wrapped_lines.append(remaining)
+                continue
+            parts = []
+            while len(remaining) > 48:
+                max_cut = min(48, len(remaining) - 1)
+                min_cut = min(24, max_cut)
+                preferred_suffixes = ("、", "！", "!", "？", "?", "から", "ので", "なら", "けど", "か", "ね", "よ", "と", "は", "が", "を", "に", "で", "へ", "も")
+                blocked_line_starts = set("、。，．・！？!?)）]」』】〉》のとがをにではもへ")
+                candidates = []
+                for position in range(min_cut, max_cut + 1):
+                    if (
+                        remaining[position - 1].isascii()
+                        and remaining[position].isascii()
+                        and (remaining[position - 1].isalnum() or remaining[position - 1] in ".-_")
+                        and (remaining[position].isalnum() or remaining[position] in ".-_")
+                    ):
+                        continue
+                    prefix = remaining[:position]
+                    score = -abs(position - 42)
+                    if any(prefix.endswith(suffix) for suffix in preferred_suffixes):
+                        score += 20
+                    if remaining[position - 1].isspace():
+                        score += 12
+                    if remaining[position] in blocked_line_starts:
+                        score -= 16
+                    candidates.append((score, position))
+                cut = max(candidates)[1] if candidates else min(44, len(remaining) - 1)
+                parts.append(remaining[:cut])
+                remaining = remaining[cut:]
+            parts.append(remaining)
+            wrapped_lines.extend(parts)
+            line_wrapped = True
+        if line_wrapped:
+            value = "\n".join(wrapped_lines)
+            repairs.append("beauty_dense_lines_wrapped")
         allowed = policy["accounts"][account_id]["emoji_allowed"]
         protected = value
         markers: dict[str, str] = {}

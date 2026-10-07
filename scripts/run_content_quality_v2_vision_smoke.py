@@ -105,7 +105,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "Nightのreader_takeawayは必ず『僕なら』で始め、店選びに迷う子へ話す。visual_facts内の具体語を二つ以上そのまま残して判断を述べる。"
                     "Nightは『だと思う』『なんだよね』など自然な話し言葉。『なのですね』『必要不可欠』『感じさせられます』等の講評口調は禁止。"
                     "Liverは迷いに共感する女性先輩の口調にし、質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。reader_takeawayに必ず「次の配信では」を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。最後は必ず「試してみてね」「決めてみてね」「変えてみてね」など、視聴者へ直接促す自然な行動語尾で締める。「〜してみるかも」のように自分語りで終えない。一般的なコミュニティ提案や「みんなで共有」は禁止。"
-                    "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。他のvisual factを追加せず、数字や商品名の意味を推測しない。「濃度」「配合量」「配合されている」「効く」「効果」「肌」「使いやすい」「テクスチャー」「気に入ってる」「肌の調子がいい」「肌が整う」「取り入れている」等、quoteに明記されていない意味・使用レビューは禁止。reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。「文字数が違う」「英語と日本語で長さが違う」など、文字列そのものの形だけを比べる低価値なメタ比較は禁止。各1段落、句点「。」を使わず、合計で絵文字1〜4個。reader_takeawayには「意外と」とsoft endingの「かも」を自然に入れ、beauty_followupには「結構大事」と「だよね」を自然に入れる。広告・効能・定型句の埋め草は禁止。"
+                    "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。他のvisual factを追加せず、数字や商品名の意味を推測しない。「濃度」「配合量」「配合されている」「効く」「効果」「肌」「使いやすい」「テクスチャー」「気に入ってる」「肌の調子がいい」「肌が整う」「取り入れている」等、quoteに明記されていない意味・使用レビューは禁止。reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。「文字数が違う」「英語と日本語で長さが違う」など、文字列そのものの形だけを比べる低価値なメタ比較は禁止。各1段落、句点「。」を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。reader_takeawayには「意外と」とsoft endingの「かも」を自然に入れ、beauty_followupには「結構大事」と「だよね」を自然に入れる。広告・効能・定型句の埋め草は禁止。"
                     "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
                     + json.dumps({"account": kwargs["account_id"], "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
         else:
@@ -149,6 +149,9 @@ class SmokeGeminiClient(GeminiHybridClient):
                 quote = selected_quote["text"]
                 takeaway = str(data.get("reader_takeaway", ""))
                 beauty_followup = str(data.get("beauty_followup", "")) if kwargs["account_id"] == "beauty_account" else ""
+                if kwargs["account_id"] == "beauty_account":
+                    takeaway = re.sub(r"\n\s*\n+", "\n", takeaway.strip())
+                    beauty_followup = re.sub(r"\n\s*\n+", "\n", beauty_followup.strip())
                 if not fact or not 8 <= len(quote) <= 80 or quote not in fact["text"] or not takeaway:
                     raise RuntimeError("caption_quote_not_bound_to_visual_fact")
                 self.caption_candidate = {
