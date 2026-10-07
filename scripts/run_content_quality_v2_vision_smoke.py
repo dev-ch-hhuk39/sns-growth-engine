@@ -38,8 +38,10 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "night_cross_account_beauty_emoji",
     "liver_source_person_contact_not_actionable",
     "liver_next_stream_action_not_grounded",
+    "liver_next_stream_action_not_source_specific",
     "liver_actionable_ending_missing",
     "beauty_followup_missing",
+    "beauty_semantic_inference_unverified",
     "beauty_low_value_text_comparison",
     "beauty_selection_value_missing",
 }
@@ -113,6 +115,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                     account_instruction = (
                         "Liverは迷いに共感する女性先輩の口調。質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。"
                         "reader_takeawayに必ず『次の配信では』を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。"
+                        "その具体行動はvisual_factsに実際にある対象（例：入室通知、枠の規模、運用）だけで組み立て、リスナー数・反応速度・配信時間などvisual_factsにない判断指標を足さない。"
                         "元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。"
                         "最後は『試してみてね』『決めてみてね』『変えてみてね』等、視聴者へ直接促す自然な行動語尾で締める。"
                         "『〜してみるかも』のように自分語りで終えない。一般的なコミュニティ提案や『みんなで共有』は禁止。"
@@ -120,7 +123,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                 elif account_id == "beauty_account":
                     account_instruction = (
                         "Beautyは女友達の美容選びの口調。自分が使用した体験・使用感・肌変化・効能は一切書かず、選んだquoteの文字そのものを購入前の確認材料として扱う。"
-                        "他のvisual factを追加せず、数字や商品名の意味を推測しない。『濃度』『配合量』『配合されている』『効く』『効果』『肌』『使いやすい』『テクスチャー』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、quoteに明記されていない意味・使用レビューは禁止。"
+                        "他のvisual factを追加せず、数字や商品名の意味を推測しない。『成分名』『成分』『数値』『名称』『濃度』『配合量』『配合されている』『効く』『効果』『肌』『使いやすい』『テクスチャー』『気に入ってる』『肌の調子がいい』『肌が整う』『取り入れている』等、quoteに明記されていない意味ラベル・使用レビューは禁止。"
                         "reader_takeawayとbeauty_followupには選んだquoteの文字列を残し、公式の商品ページやパッケージ上の同じ表記を見比べる・確認する等の安全な選び方だけを書く。"
                         "『文字数が違う』『英語と日本語で長さが違う』等、文字列そのものの形だけを比べる低価値なメタ比較は禁止。"
                         "各1段落、句点『。』を使わず、1行44文字程度まで。長い場合は意味を変えず段落内で改行する。絵文字は🥺✨🤍🫶🏻😭💭のみ合計1〜4個。"
@@ -211,6 +214,10 @@ class SmokeGeminiClient(GeminiHybridClient):
                     if not ("次の配信" in takeaway and re.search(
                             r"(?:配信|入室|通知|コメント|初見|枠).{0,40}(?:決め|合わせ|変え|読む|読まない|試)", takeaway)):
                         raise RuntimeError("liver_next_stream_action_not_grounded")
+                    action_tail = takeaway.split("次の配信", 1)[1] if "次の配信" in takeaway else ""
+                    source_action_terms = [term for term in ("入室通知", "枠の規模", "運用") if term in source_text]
+                    if source_action_terms and not any(term in action_tail for term in source_action_terms):
+                        raise RuntimeError("liver_next_stream_action_not_source_specific")
                     if not re.search(
                             r"(?:試してみてね|決めてみてね|変えてみてね|合わせてみてね)[。！!😊✨🤍🫶🏻😭💭]*$",
                             takeaway.strip()):
@@ -219,6 +226,9 @@ class SmokeGeminiClient(GeminiHybridClient):
                     if not beauty_followup:
                         raise RuntimeError("beauty_followup_missing")
                     beauty_text = takeaway + "\n" + beauty_followup
+                    semantic_terms = ("成分名", "成分", "数値", "名称", "濃度", "配合量", "配合")
+                    if any(term in beauty_text and term not in quote for term in semantic_terms):
+                        raise RuntimeError("beauty_semantic_inference_unverified")
                     if re.search(r"文字数|文字の長さ|英語.{0,20}日本語|日本語.{0,20}英語", beauty_text):
                         raise RuntimeError("beauty_low_value_text_comparison")
                     if not re.search(r"(?:確認|見比べ|商品ページ|パッケージ|ラベル|表記|選ぶ|購入)", beauty_text):
