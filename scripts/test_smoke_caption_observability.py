@@ -126,6 +126,9 @@ class SmokeCaptionTests(unittest.TestCase):
         sent = transport.call_args.args[1]["contents"][0]["parts"][0]["text"]
         self.assertIn("次の配信では", sent)
         self.assertIn("一つの具体行動", sent)
+        self.assertIn("allowed_action_terms", sent)
+        self.assertIn("入室通知", sent)
+        self.assertIn("枠の規模", sent)
         self.assertIn("みんなで共有", sent)
 
 

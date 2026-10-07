@@ -112,10 +112,15 @@ class SmokeGeminiClient(GeminiHybridClient):
                         "『なのですね』『必要不可欠』『感じさせられます』等の講評・コンサル口調は禁止。"
                     )
                 elif account_id == "liver_manager":
+                    liver_action_terms = [
+                        term for term in ("入室通知", "枠の規模", "運用")
+                        if any(term in str(fact.get("text", "")) for fact in facts)
+                    ]
                     account_instruction = (
                         "Liverは迷いに共感する女性先輩の口調。質問文や人物名つきの質問より、視覚事実に回答・結論・運用方針が見える場合はそちらをquote_choiceで優先する。"
                         "reader_takeawayに必ず『次の配信では』を含め、視聴者自身が次回配信で行う一つの具体行動へ落とす。"
-                        "その具体行動はvisual_factsに実際にある対象（例：入室通知、枠の規模、運用）だけで組み立て、リスナー数・反応速度・配信時間などvisual_factsにない判断指標を足さない。"
+                        "その具体行動はvisual_factsに実際にある対象だけで組み立て、リスナー数・反応速度・配信時間などvisual_factsにない判断指標を足さない。"
+                        f"『次の配信では』以降にはallowed_action_terms={liver_action_terms}の語を最低1つ、その表記のまま必ず含める。別の指標へ言い換えない。"
                         "元動画の出演者・質問先の固有名詞へ質問、相談、連絡、DMすることを行動案にしない。"
                         "最後は『試してみてね』『決めてみてね』『変えてみてね』等、視聴者へ直接促す自然な行動語尾で締める。"
                         "『〜してみるかも』のように自分語りで終えない。一般的なコミュニティ提案や『みんなで共有』は禁止。"
@@ -138,7 +143,12 @@ class SmokeGeminiClient(GeminiHybridClient):
                     "一般化、独自の実績、医学的効能、成果保証、CTAは禁止。"
                     + account_instruction
                     + "『どこでも自分次第』『生き残るためには』『一緒に探そう』等の一般論や勧誘を加えない。観察できない因果・頻度を足さず、主観は主観のまま。JSONのみ。\n"
-                    + json.dumps({"account": account_id, "visual_facts": facts, "quote_options": quote_options}, ensure_ascii=False))
+                    + json.dumps({
+                        "account": account_id,
+                        "visual_facts": facts,
+                        "quote_options": quote_options,
+                        **({"allowed_action_terms": liver_action_terms} if account_id == "liver_manager" else {}),
+                    }, ensure_ascii=False))
         else:
             facts = []
         original_model = kwargs.get("model", "")
