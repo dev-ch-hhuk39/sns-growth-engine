@@ -107,7 +107,7 @@ class SmokeCaptionTests(unittest.TestCase):
             "selected_post_angle": {"anchor_fact_ids": ["VF1"]}, "media_context": {"visual_facts": [fact]}}}
         payload = {"quote_choice": 0,
                    "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす場面が見えると、出し方も意外と想像しやすいかも✨",
-                   "beauty_followup": "購入前にこういう使い方が動画で見えるのって結構大事だよね🤍"}
+                   "beauty_followup": "購入前にスポイトの出し方を手の甲で動画確認できるのって結構大事だよね🤍"}
         response = {"candidates": [{"content": {"parts": [{"text": json.dumps(payload, ensure_ascii=False)}]}}]}
         transport = Mock(return_value=response)
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,7 +261,7 @@ class SmokeCaptionTests(unittest.TestCase):
                     "beauty_followup": "購入前に動画で出し方を見られるのって結構大事だよね🤍"}
         repaired = {"quote_choice": 0,
                     "reader_takeaway": "スポイトで透明な液体を手の甲へ垂らす動きが動画で見えると、意外と出し方を確認しやすいかも✨",
-                    "beauty_followup": "購入前に手の甲への使い方を見られるのって、ほんとに結構大事だよね🤍"}
+                    "beauty_followup": "購入前にスポイトから手の甲へ液体を垂らす出し方を動画で確認できるのって、ほんとに結構大事だよね🤍"}
         responses = [
             {"candidates": [{"content": {"parts": [{"text": json.dumps(rejected, ensure_ascii=False)}]}}]},
             {"candidates": [{"content": {"parts": [{"text": json.dumps(repaired, ensure_ascii=False)}]}}]},

@@ -21,6 +21,7 @@ from generation.content_quality_v2 import (  # noqa: E402
 from generation.source_grounded_caption import (  # noqa: E402
     SourceGroundedCaptionService, account_rules,
 )
+from generation.semantic_alignment import ALIGNMENT_THRESHOLDS, lexical_similarity  # noqa: E402
 from gemini_hybrid_client import GeminiHybridClient, GeminiHttpError, provider_error_evidence
 from gemini_quota_diagnostics import FIELDS as QUOTA_FIELDS
 from evidence_context_caption import PrivacyBoundedGeminiGroundedProvider
@@ -47,6 +48,7 @@ SAFE_CAPTION_VALIDATION_ERRORS = {
     "beauty_semantic_inference_unverified",
     "beauty_unobserved_physical_property",
     "beauty_quote_repeated_after_observation",
+    "beauty_quote_grounding_too_weak",
     "beauty_low_value_text_comparison",
     "beauty_selection_value_missing",
 }
@@ -55,6 +57,7 @@ BEAUTY_REPAIRABLE_ERRORS = {
     "beauty_semantic_inference_unverified",
     "beauty_unobserved_physical_property",
     "beauty_quote_repeated_after_observation",
+    "beauty_quote_grounding_too_weak",
     "beauty_low_value_text_comparison",
     "beauty_selection_value_missing",
 }
@@ -77,6 +80,13 @@ def validate_beauty_smoke_candidate(quote: str, takeaway: str, followup: str) ->
         raise RuntimeError("beauty_low_value_text_comparison")
     if quote in takeaway and quote in followup:
         raise RuntimeError("beauty_quote_repeated_after_observation")
+    minimum_grounding = ALIGNMENT_THRESHOLDS["claim_evidence_similarity"]
+    japanese_quote = bool(re.search(r"[ぁ-んァ-ヶ一-龯]", quote))
+    if japanese_quote and any(
+        lexical_similarity(paragraph, quote) < minimum_grounding
+        for paragraph in (takeaway, followup)
+    ):
+        raise RuntimeError("beauty_quote_grounding_too_weak")
     if not re.search(r"(?:動画|見える|映って|出す|垂ら|スポイト|手の甲|ボトル|使い方|出し方|見た目|確認|選ぶ|購入)", beauty_text):
         raise RuntimeError("beauty_selection_value_missing")
 
@@ -328,6 +338,7 @@ class SmokeGeminiClient(GeminiHybridClient):
                             "液体や商品の重み・質感・粘度・量・一滴・距離感・効果・使いやすさ・色味・探しやすさの評価を足さない。"
                             "読者価値は『動画で動作が見える』『出し方/使い方を確認できる』『購入前に見られる』だけに限定する。"
                             "reader_takeawayとbeauty_followupの両方でselected_quote全文を繰り返さない。"
+                            "ただし各段落にselected_quoteの具体語を複数そのまま残し、どちらの段落も映像事実との語彙的な結び付きを保つ。"
                             "少し美容に詳しい女友達の自然な口調、句点なし、絵文字1〜4個。"
                             "『意外と』『結構大事』『ほんとに』『気がする』から自然に2つ以上使う。JSONのみ。\n"
                             + json.dumps({
