@@ -15,6 +15,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "content-slot-recovery.yml",
     "deploy-buffered-production-runtime.yml",
     "refresh-threads-tokens.yml",
+    "production-storage-readonly-audit.yml",
 }
 
 checks: list[tuple[str, bool]] = []
