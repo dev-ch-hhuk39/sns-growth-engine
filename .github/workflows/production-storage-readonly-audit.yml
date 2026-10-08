@@ -33,6 +33,26 @@ jobs:
               du -x -B1 --max-depth=1 "$path" 2>/dev/null | sort -nr | head -n 30 || true
             fi
           done
+          echo "--- detailed large service usage ---"
+          for path in /srv/live-hyakka /opt/chadult-renewal-hp /var/lib; do
+            if [ -e "$path" ]; then
+              echo "PATH=$path"
+              du -x -B1 --max-depth=2 "$path" 2>/dev/null | sort -nr | head -n 100 || true
+            fi
+          done
+          echo "--- large files in scoped heavy paths (>200 MiB) ---"
+          for path in /srv/live-hyakka /opt/chadult-renewal-hp /var/lib; do
+            if [ -e "$path" ]; then
+              find "$path" -xdev -type f -size +200M \
+                -printf '%s\t%TY-%Tm-%TdT%TH:%TM:%TS\t%p\n' 2>/dev/null | sort -nr | head -n 80 || true
+            fi
+          done
+          echo "--- deleted but open files ---"
+          if command -v lsof >/dev/null 2>&1; then
+            lsof -nP +L1 2>/dev/null | head -n 120 || true
+          else
+            echo LSOF_UNAVAILABLE
+          fi
           echo "--- sns-growth runner usage ---"
           for path in \
             /opt/github-runners/sns-growth-engine \
