@@ -3743,7 +3743,9 @@ def main() -> int:
     if sum(bool(value) for value in (args.prepare_only, args.post_saved_media, args.prepare_saved_media_queue)) > 1:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["media_modes_are_mutually_exclusive"]}, ensure_ascii=False))
         return 1
-    if args.apply and not load_content_quality_v2_policy().get("publishing_enabled", False):
+    safe_preparation_mode = bool(args.prepare_only or args.prepare_saved_media_queue)
+    if (args.apply and not safe_preparation_mode
+            and not load_content_quality_v2_policy().get("publishing_enabled", False)):
         print(json.dumps({"status": "DRAFT_ONLY", "blocked_reasons": ["content_quality_v2_owner_review_required"], "would_post": False}, ensure_ascii=False))
         return 1
 

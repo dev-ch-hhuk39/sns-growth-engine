@@ -142,9 +142,19 @@ class ClipQueueExitTests(unittest.TestCase):
 
     def test_verified_preparation_can_continue_to_hybrid_review(self):
         self.assertEqual(self.invoke({'status': 'QUEUED_WAITING_REVIEW', 'queue_id': 'q',
-            'read_after_write': True, 'would_post_video': False}), 1)
-        self.assertIn('"status": "DRAFT_ONLY"', self.stdout)
-        self.assertIn('content_quality_v2_owner_review_required', self.stdout)
+            'read_after_write': True, 'would_post_video': False}), 0)
+        self.assertIn('"status": "QUEUED_WAITING_REVIEW"', self.stdout)
+        self.assertNotIn('content_quality_v2_owner_review_required', self.stdout)
+
+    def test_actual_publication_stays_draft_only(self):
+        output = io.StringIO()
+        with patch('sys.argv', ['runner', '--account-id', 'liver_manager',
+                               '--apply', '--confirm-production-media']), \
+             contextlib.redirect_stdout(output):
+            code = pipeline.main()
+        self.assertEqual(code, 1)
+        self.assertIn('"status": "DRAFT_ONLY"', output.getvalue())
+        self.assertIn('content_quality_v2_owner_review_required', output.getvalue())
 
     def test_missing_readback_is_failure(self):
         self.assertEqual(self.invoke({'status': 'QUEUED_WAITING_REVIEW', 'queue_id': 'q',
