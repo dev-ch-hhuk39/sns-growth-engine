@@ -48,6 +48,9 @@ assert "source_result_id" in source_context
 assert "media_permissions" in source_context
 assert "permission_evidence_status" in source_context
 assert "Preview all scheduled candidates with Gemini" in workflow
+assert 'GEMINI_TIMEOUT_SECONDS: "20"' in workflow
+assert 'GEMINI_MAX_ATTEMPTS: "2"' in workflow
+assert "timeout --signal=TERM --kill-after=15s 8m" in workflow
 assert "if: always()" in workflow
 assert 'PUBLISH_ENABLED: "false"' in workflow
 assert 'ALLOW_REAL_THREADS_POST: "false"' in workflow

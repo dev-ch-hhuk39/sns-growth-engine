@@ -1801,14 +1801,15 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--json-output", default="")
     args = parser.parse_args()
-    if args.apply and not load_content_quality_v2_policy().get("publishing_enabled", False):
+    publish_mode = not args.prepare_only
+    if (args.apply and publish_mode
+            and not load_content_quality_v2_policy().get("publishing_enabled", False)):
         print(json.dumps({"status": "DRAFT_ONLY", "blocked_reasons": ["content_quality_v2_owner_review_required"], "would_post": False}, ensure_ascii=False))
         return 1
     client = None
     if args.use_sheets:
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    publish_mode = not args.prepare_only
     if args.apply and not args.confirm_direct_media:
         print(json.dumps({"status": "BLOCKED", "blocked_reasons": ["apply requires --confirm-direct-media"]}, ensure_ascii=False))
         return 1
