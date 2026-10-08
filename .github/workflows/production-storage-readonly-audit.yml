@@ -24,8 +24,10 @@ jobs:
           date --iso-8601=seconds
           echo "--- df root ---"
           df -B1 /
+          echo "--- root top-level usage ---"
+          du -x -B1 --max-depth=1 / 2>/dev/null | sort -nr | head -n 40 || true
           echo "--- top-level scoped usage ---"
-          for path in /opt/github-runners /var/lib/docker /var/log /tmp /home; do
+          for path in /opt /var /usr /root /srv /tmp /home; do
             if [ -e "$path" ]; then
               echo "PATH=$path"
               du -x -B1 --max-depth=1 "$path" 2>/dev/null | sort -nr | head -n 30 || true
