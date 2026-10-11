@@ -156,7 +156,13 @@ class TrustedReviewPrecommitTests(unittest.TestCase):
         with self.assertRaisesRegex(PrecommitBlocked, "session_verification_failed") as cm:
             evaluate(verifier=FakeIdentityVerifier(error=True), canonical=reader)
         self.assertNotIn("fake_secret", str(cm.exception))
+        self.assertIsNone(cm.exception.__cause__)
+        self.assertTrue(cm.exception.__suppress_context__)
         self.assertEqual(reader.calls, 0)
+        with self.assertRaisesRegex(PrecommitBlocked, "canonical_review_unavailable") as cm2:
+            evaluate(canonical=FakeCanonicalReader(error=True))
+        self.assertIsNone(cm2.exception.__cause__)
+        self.assertTrue(cm2.exception.__suppress_context__)
 
     def test_rbac_account_scope_role_expiry_and_mfa_fail_closed(self):
         principal = good_principal()
