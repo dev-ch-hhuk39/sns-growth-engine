@@ -9,6 +9,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -201,6 +202,21 @@ class TransactionalReviewLedgerTests(unittest.TestCase):
         self.assertNotIn("PRIVATE_DATABASE_ERROR", str(caught.exception))
         self.assertEqual(rows(self.db), (0, 0))
         self.db.execute("DROP TRIGGER test_inject_head_update_failure")
+        submit(self.db)
+        self.assertEqual(rows(self.db), (1, 1))
+
+    def test_unexpected_precommit_failure_does_not_leave_open_transaction(self):
+        with patch(
+            "media_review_transactional_ledger.evaluate_precommit",
+            side_effect=ValueError("PRIVATE_CANONICAL_BACKEND_PAYLOAD"),
+        ):
+            with self.assertRaisesRegex(
+                ReviewLedgerBlocked, "review_storage_failed"
+            ) as blocked:
+                submit(self.db)
+        self.assertNotIn("PRIVATE_CANONICAL_BACKEND_PAYLOAD", str(blocked.exception))
+        self.assertFalse(self.db.in_transaction)
+        self.assertEqual(rows(self.db), (0, 0))
         submit(self.db)
         self.assertEqual(rows(self.db), (1, 1))
 
