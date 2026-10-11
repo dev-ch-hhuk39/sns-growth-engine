@@ -301,6 +301,26 @@ class ReceiptContractTests(unittest.TestCase):
                 "decision": "REQUEST_EVIDENCE", "reason_code": "evidence_missing",
             }, previous=forged)
 
+    def test_unhashable_untrusted_json_values_fail_as_contract_errors(self):
+        plan = sample_plan()
+        bad_action = clip_action()
+        bad_action["decision"] = []
+        with self.assertRaisesRegex(ReviewContractError, "review_decision_invalid"):
+            validate(plan, bad_action)
+        for field in ("priority", "review_state"):
+            changed = copy.deepcopy(plan)
+            changed["items"][0][field] = []
+            with self.subTest(field=field), self.assertRaises(ReviewContractError):
+                validate(changed, clip_action())
+        reject = {
+            "account_id": "liver_manager", "slot_id": "lm_1800_clip_media",
+            "queue_id": "clip_001", "reviewer_id": "reviewer_0001",
+            "reviewed_at": "2026-10-11T11:59:00+00:00",
+            "decision": "REJECT", "reason_code": {},
+        }
+        with self.assertRaisesRegex(ReviewContractError, "review_reason_invalid"):
+            validate(plan, reject)
+
     def test_cli_immutable_output_and_no_overwrite(self):
         plan = sample_plan()
         action = clip_action()
