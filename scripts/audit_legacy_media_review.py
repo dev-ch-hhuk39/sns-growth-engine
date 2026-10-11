@@ -12,6 +12,7 @@ import json
 import os
 import re
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -43,8 +44,16 @@ def build_legacy_media_audit(source: Any) -> dict[str, Any]:
     if (not isinstance(rows, list) or len(rows) > MAX_ROWS
             or any(not isinstance(row, dict) for row in rows)):
         raise LegacyAuditBlocked("invalid_snapshot_rows")
-    if not isinstance(source.get("captured_at"), str) or not source["captured_at"]:
+    raw_time = source.get("captured_at")
+    if not isinstance(raw_time, str) or not raw_time or len(raw_time) > 40:
         raise LegacyAuditBlocked("missing_snapshot_time")
+    try:
+        parsed = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+    except ValueError:
+        raise LegacyAuditBlocked("invalid_snapshot_time") from None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise LegacyAuditBlocked("invalid_snapshot_time")
+    safe_capture_time = parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
 
     identities: set[tuple[str, str]] = set()
     flagged: list[dict[str, Any]] = []
@@ -92,7 +101,7 @@ def build_legacy_media_audit(source: Any) -> dict[str, Any]:
     return {
         "schema_version": REPORT_SCHEMA,
         "status": "READ_ONLY_MIGRATION_AUDIT",
-        "source_snapshot_time": source["captured_at"],
+        "source_snapshot_time": safe_capture_time,
         "source_row_count": len(rows),
         "protected_media_rows": len(flagged),
         "other_rows": ignored,
