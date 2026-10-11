@@ -279,6 +279,28 @@ class ReceiptContractTests(unittest.TestCase):
         for token in ("SECRET_SOURCE_URL", "SECRET_POST_TEXT", "SECRET_PRIVATE_KEY"):
             self.assertNotIn(token, result)
 
+    def test_history_rejects_extra_payload_and_forged_state(self):
+        plan = sample_plan()
+        prior = validate(plan, clip_action())
+        extra = copy.deepcopy(prior)
+        extra["events"][0]["private_source_url"] = "SENSITIVE_URL"
+        with self.assertRaisesRegex(ReviewContractError, "record_fields_invalid"):
+            validate(plan, {
+                "account_id": "liver_manager", "slot_id": "lm_1800_clip_media",
+                "queue_id": "clip_001", "reviewer_id": "reviewer_0001",
+                "reviewed_at": "2026-10-11T11:59:00+00:00",
+                "decision": "REQUEST_EVIDENCE", "reason_code": "evidence_missing",
+            }, previous=extra)
+        forged = copy.deepcopy(prior)
+        forged["events"][0]["review_state"] = "REJECTION_DRAFT_AWAITING_AUTHENTICATED_REVIEW"
+        with self.assertRaisesRegex(ReviewContractError, "history_event_invariants_invalid"):
+            validate(plan, {
+                "account_id": "liver_manager", "slot_id": "lm_1800_clip_media",
+                "queue_id": "clip_001", "reviewer_id": "reviewer_0001",
+                "reviewed_at": "2026-10-11T11:59:00+00:00",
+                "decision": "REQUEST_EVIDENCE", "reason_code": "evidence_missing",
+            }, previous=forged)
+
     def test_cli_immutable_output_and_no_overwrite(self):
         plan = sample_plan()
         action = clip_action()
