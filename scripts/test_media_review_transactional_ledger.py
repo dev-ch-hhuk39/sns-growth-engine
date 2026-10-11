@@ -224,6 +224,26 @@ class TransactionalReviewLedgerTests(unittest.TestCase):
         with self.assertRaisesRegex(ReviewLedgerBlocked, "review_history_head_invalid"):
             verify_ledger_integrity(self.db, *KEY)
 
+    def test_chain_detects_tampered_draft_binding_and_queue_revision(self):
+        for field, replacement in (
+            ("last_draft_event_sha256", "f" * 64),
+            ("last_queue_revision", "rev_unauthorized"),
+        ):
+            with self.subTest(field=field):
+                db = new_db()
+                try:
+                    submit(db)
+                    db.execute(
+                        "UPDATE sns_media_review_heads SET " + field + "=? WHERE queue_id=?",
+                        (replacement, "clip_001"),
+                    )
+                    with self.assertRaisesRegex(
+                        ReviewLedgerBlocked, "review_history_head_invalid"
+                    ):
+                        verify_ledger_integrity(db, *KEY)
+                finally:
+                    db.close()
+
     def test_review_ledger_requires_foreign_key_integrity_and_schema(self):
         no_fks = sqlite3.connect(":memory:", isolation_level=None)
         try:
