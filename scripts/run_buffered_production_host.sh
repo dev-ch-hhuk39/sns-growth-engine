@@ -77,6 +77,15 @@ case "$posting_enabled" in
   *) echo "[BLOCKED] BUFFERED_POSTING_ENABLED must be an explicit boolean" >&2; exit 64 ;;
 esac
 
+# Protect each cron/recovery read of current release from an atomic deploy.
+# The global lock is provisioned and managed exclusively by VPS Ops.
+common_lock=/run/lock/chadult-production-deploy.lock
+[[ -f "$common_lock" && ! -L "$common_lock" && -w "$common_lock" ]] || {
+  echo '[BLOCKED] shared deployment lock unavailable' >&2; exit 78;
+}
+exec 8<>"$common_lock"
+flock -s -w 120 8 || { echo '[SKIPPED] deployment in progress; slot remains in READY' >&2; exit 75; }
+
 run_account() {
   local account="$1"
   local lock_file="${LOCK_DIR}/${account}.lock"
@@ -84,6 +93,12 @@ run_account() {
   local invocation_id
   invocation_id="${TRIGGER}_$(date -u +%Y%m%dT%H%M%SZ)_$$"
   export PRODUCTION_HOST_EXECUTION_ID="$invocation_id"
+  local available_kib
+  available_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null)"
+  if [[ ! "$available_kib" =~ ^[0-9]+$ || "$available_kib" -lt 524288 ]]; then
+    echo "[SKIPPED] ${account}: insufficient host memory for safe reconciliation" >&2
+    return 0
+  fi
   set +e
   # The accounts remain independently scheduled and claimed, but all three
   # share one Google service-account quota. Serialize only the Sheets-heavy

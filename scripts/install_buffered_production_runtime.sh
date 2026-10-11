@@ -13,9 +13,11 @@ APPLY="false"
 CONFIRMED="false"
 ENABLE_SCHEDULER="false"
 SCHEDULER_CONFIRMED="false"
+STAGE_ONLY="false"
+SCHEDULER_ONLY="false"
 
 usage() {
-  echo "usage: $0 --source-root <checkout> --revision <git-sha> [--dry-run | --apply --confirm-install [--enable-scheduler --confirm-enable]]" >&2
+  echo "usage: $0 --source-root <checkout> --revision <git-sha> [--dry-run | --apply --confirm-install --stage-only | --apply --confirm-install --scheduler-only --enable-scheduler --confirm-enable]" >&2
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -26,6 +28,8 @@ while [[ $# -gt 0 ]]; do
     --confirm-install) CONFIRMED="true"; shift ;;
     --enable-scheduler) ENABLE_SCHEDULER="true"; shift ;;
     --confirm-enable) SCHEDULER_CONFIRMED="true"; shift ;;
+    --stage-only) STAGE_ONLY="true"; shift ;;
+    --scheduler-only) SCHEDULER_ONLY="true"; shift ;;
     *) usage; exit 64 ;;
   esac
 done
@@ -39,6 +43,18 @@ fi
 [[ "$CONFIRMED" == "true" ]] || { echo "[BLOCKED] explicit --confirm-install is required" >&2; exit 64; }
 # Direct invocations have the same fail-closed gate as GitHub deployments.
 "$(dirname "$0")/check_chadult_vps_deploy_preflight.sh" --min-free-gib 8
+if [[ "$STAGE_ONLY" == "$SCHEDULER_ONLY" ]]; then
+  echo '[BLOCKED] specify exactly one of --stage-only or --scheduler-only; implicit activation is disabled' >&2
+  exit 64
+fi
+if [[ "$STAGE_ONLY" == "true" && "$ENABLE_SCHEDULER" == "true" ]]; then
+  echo '[BLOCKED] scheduler installation is not allowed before health-verified promotion' >&2
+  exit 64
+fi
+if [[ "$SCHEDULER_ONLY" == "true" && "$ENABLE_SCHEDULER" != "true" ]]; then
+  echo '[BLOCKED] scheduler-only requires explicitly confirmed scheduler installation' >&2
+  exit 64
+fi
 if [[ "$ENABLE_SCHEDULER" == "true" && "$SCHEDULER_CONFIRMED" != "true" ]]; then
   echo "[BLOCKED] explicit --confirm-enable is required to install cron" >&2
   exit 64
@@ -46,6 +62,13 @@ fi
 
 mkdir -p "$RUNTIME_ROOT/releases" "$RUNTIME_ROOT/shared/locks" "$RUNTIME_ROOT/shared/threads_tokens"
 target="$RUNTIME_ROOT/releases/$REVISION"
+if [[ "$SCHEDULER_ONLY" == "true" ]]; then
+  if [[ ! -f "$target/.production-release" || "$(cat "$target/.production-release")" != "$REVISION" ||
+        ! -x "$target/.venv/bin/python" || "$(readlink -f "$RUNTIME_ROOT/current")" != "$target" ]]; then
+    echo '[BLOCKED] scheduler-only requires the exact health-verified current release' >&2
+    exit 78
+  fi
+fi
 stage=""
 cleanup_owned_stage() {
   # Never remove a release, rollback, next candidate or another job's stage.
@@ -58,22 +81,34 @@ cleanup_owned_stage() {
 trap cleanup_owned_stage EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-if [[ ! -d "$target" ]]; then
+if [[ "$STAGE_ONLY" == "true" && ! -d "$target" ]]; then
   stage="$(mktemp -d "$RUNTIME_ROOT/releases/.stage-${REVISION}.XXXXXX")"
   rsync -a --delete --exclude .git --exclude .runtime --exclude data --exclude output --exclude .ai-tmp "$SOURCE_ROOT/" "$stage/"
+  printf '%s\n' "$REVISION" > "$stage/.sns-deploy-stage-owned"
   printf '%s\n' "$REVISION" > "$stage/.production-release"
   python3 -m venv "$stage/.venv"
   "$stage/.venv/bin/pip" install --quiet --upgrade "pip==26.2.1"
-  "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements.txt"
-  "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements-media-runtime.txt"
+  # Never compile native dependencies or accumulate a second pip wheel cache
+  # on this 1.9 GiB multi-service host. Missing binary wheels fail closed.
+  PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
+    "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --no-compile -r "$stage/requirements.txt"
+  PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
+    "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --no-compile -r "$stage/requirements-media-runtime.txt"
   mv "$stage" "$target"
   stage=""
 fi
-ln -sfn "$target" "$RUNTIME_ROOT/current"
-echo "[OK] production runtime release installed: $REVISION"
+if [[ "$STAGE_ONLY" == "true" ]]; then
+  [[ -f "$target/.production-release" && "$(cat "$target/.production-release")" == "$REVISION" && -x "$target/.venv/bin/python" ]] || {
+    echo '[BLOCKED] candidate integrity check failed' >&2; exit 78;
+  }
+  echo "[OK] immutable candidate staged without activation: $REVISION"
+  exit 0
+fi
+echo "[OK] installing scheduler for already promoted release: $REVISION"
 
 if [[ "$ENABLE_SCHEDULER" == "true" ]]; then
   command -v crontab >/dev/null || { echo "[BLOCKED] crontab is unavailable" >&2; exit 78; }
+  command -v logrotate >/dev/null || { echo '[BLOCKED] logrotate is required for bounded SNS logs' >&2; exit 78; }
   mkdir -p "$RUNTIME_ROOT/shared/logs"
   current_crontab="$(mktemp)"
   updated_crontab="$(mktemp)"
@@ -84,6 +119,18 @@ if [[ "$ENABLE_SCHEDULER" == "true" ]]; then
     /^# END SNS-GROWTH-BUFFERED$/ { skip=0; next }
     !skip { print }
   ' "$current_crontab" > "$updated_crontab"
+  # Rotate only SNS-owned cron logs; the shared host's log settings are untouched.
+  rotation_config="$RUNTIME_ROOT/shared/sns-cron-logrotate.conf"
+  cat > "$rotation_config" <<ROTATION
+${RUNTIME_ROOT}/shared/logs/*.cron.log {
+    size 20M
+    rotate 5
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+ROTATION
   cat >> "$updated_crontab" <<EOF
 # BEGIN SNS-GROWTH-BUFFERED
 */5 * * * * /usr/bin/timeout 10m ${RUNTIME_ROOT}/current/scripts/run_buffered_production_host.sh --account-id night_scout --apply --confirm-reconcile --trigger xserver_cron >> ${RUNTIME_ROOT}/shared/logs/night_scout.cron.log 2>&1
@@ -93,6 +140,7 @@ if [[ "$ENABLE_SCHEDULER" == "true" ]]; then
 # before the next 10:00 JST post slot. The scheduled GitHub-hosted preparation
 # fallback starts after the full bounded Xserver window plus a 60-minute margin.
 15 5 * * * /usr/bin/timeout 270m ${RUNTIME_ROOT}/current/scripts/run_buffered_media_preparation_host.sh >> ${RUNTIME_ROOT}/shared/logs/media-preparation.cron.log 2>&1
+10 4 * * * /usr/bin/timeout 2m /usr/bin/flock -n ${RUNTIME_ROOT}/shared/locks/sns-logrotate.lock /usr/sbin/logrotate -s ${RUNTIME_ROOT}/shared/logrotate.status ${RUNTIME_ROOT}/shared/sns-cron-logrotate.conf
 # END SNS-GROWTH-BUFFERED
 EOF
   crontab "$updated_crontab"

@@ -42,9 +42,24 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
     require(any(x.name == expected for x in entries), "current_release_not_installed")
     require(len(entries) >= 3, "not_enough_installed_releases_for_retention")
     ordered = sorted(entries, key=lambda item: item.stat().st_mtime, reverse=True)
-    rollback = next((item for item in ordered if item.name != expected), None)
-    require(rollback is not None, "rollback_release_missing")
-    keep = {expected, rollback.name}
+    previous_pointer = root / "previous"
+    require(previous_pointer.is_symlink(), "explicit_previous_release_pointer_required")
+    rollback_path = previous_pointer.resolve(strict=True)
+    require(rollback_path.parent == releases.resolve(strict=True), "previous_release_outside_root")
+    require(SHA.fullmatch(rollback_path.name) is not None and rollback_path.name != expected,
+            "invalid_previous_release")
+    require(rollback_path.is_dir() and not rollback_path.is_symlink(), "previous_release_missing")
+    pending_pointer = root / "pending"
+    pending = None
+    if pending_pointer.exists() or pending_pointer.is_symlink():
+        require(pending_pointer.is_symlink(), "pending_candidate_must_be_symlink")
+        candidate_path = pending_pointer.resolve(strict=True)
+        require(candidate_path.parent == releases.resolve(strict=True), "pending_candidate_outside_root")
+        require(SHA.fullmatch(candidate_path.name) is not None, "invalid_pending_candidate")
+        pending = candidate_path.name
+    keep = {expected, rollback_path.name}
+    if pending is not None:
+        keep.add(pending)
     chosen = []
     for sha in targets:
         path = releases / sha
@@ -55,7 +70,8 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
         chosen.append(str(path))
     remaining = {p.name for p in entries} - set(targets)
     require(keep.issubset(remaining) and len(remaining) >= 2, "rollback_retention_violation")
-    return {"current": expected, "rollback": rollback.name, "targets": chosen, "kept_count": len(remaining)}
+    return {"current": expected, "rollback": rollback_path.name, "pending": pending,
+            "targets": chosen, "kept_count": len(remaining)}
 
 
 def assert_not_in_use(paths: list[Path]) -> None:
@@ -85,6 +101,16 @@ def run(root: Path, expected: str, targets: list[str], *, confirm: bool) -> dict
         return result
     lockdir = root / "shared" / "locks"
     require(lockdir.is_dir() and not lockdir.is_symlink(), "runtime_lock_directory_missing")
+    global_lock = Path("/run/lock/chadult-production-deploy.lock")
+    require(global_lock.is_file() and not global_lock.is_symlink() and os.access(global_lock, os.W_OK),
+            "shared_deploy_lock_unavailable")
+    with global_lock.open("r+") as common:
+        fcntl.flock(common, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return _apply_under_shared_lock(root, expected, targets, state, before, result, lockdir)
+
+
+def _apply_under_shared_lock(root: Path, expected: str, targets: list[str],
+                             state: dict, before, result: dict, lockdir: Path) -> dict:
     with (lockdir / "capacity-recovery.lock").open("a+") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         candidate_state(root, expected, targets)

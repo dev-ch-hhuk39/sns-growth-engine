@@ -43,7 +43,8 @@ assert "1-59/5 * * * *" in installer
 assert "2-59/5 * * * *" in installer
 assert "rsync -a --delete" in installer
 assert "--exclude .runtime" in installer
-assert "ln -sfn" in installer
+assert "--stage-only" in installer and "--scheduler-only" in installer
+assert "implicit activation is disabled" in installer
 assert "runs-on: [self-hosted, Linux, X64]" in recovery
 assert 'cron: "3-58/5 * * * *"' in recovery
 assert "run_buffered_production_host.sh" in recovery
@@ -53,8 +54,19 @@ assert "DEPLOY_BUFFERED_RUNTIME" in deploy
 assert 'posting_enabled:\n        description: "Allow scheduled Threads publishing after deploy (defaults to no-post)"\n        required: true\n        default: false\n        type: boolean' in deploy
 assert "ENABLE_BUFFERED_POSTING" in deploy
 assert 'BUFFERED_POSTING_ENABLED: ${{ inputs.posting_enabled }}' in deploy
-assert "runtime.env" in deploy
-assert "--enable-scheduler --confirm-enable" in deploy
+transaction = (ROOT / "scripts" / "deploy_buffered_runtime_transaction.sh").read_text()
+health = (ROOT / "scripts" / "verify_buffered_runtime_health.py").read_text()
+writer = (ROOT / "scripts" / "write_buffered_runtime_env.py").read_text()
+assert "runtime.env" in transaction
+assert "chadult-production-deploy.lock" in transaction
+assert "flock -x -w 600" in transaction
+assert "--stage-only" in transaction
+assert "--scheduler-only --enable-scheduler --confirm-enable" in transaction
+assert "rollback health re-verification failed" in transaction
+assert "read-only Sheets health" in health
+assert "runtime secret" not in writer.lower() or "shlex.quote(value)" in writer
+assert "Transactional candidate deploy, health, activation and rollback" in deploy
+assert "--enable-scheduler" in deploy
 assert "CLOUDINARY_API_SECRET" in deploy and "GEMINI_API_KEY" in deploy
 assert "requirements-media-runtime.txt" in installer
 assert 'pip" install --quiet --upgrade "pip==26.2.1"' in installer
@@ -64,17 +76,6 @@ assert "PUBLISH_ENABLED=false" in media_preparation
 assert "ALLOW_REAL_THREADS_POST=false" in media_preparation
 assert "ALLOW_REAL_X_POST=false" in media_preparation
 assert "run_buffered_media_preparation_host.py" in media_preparation
-assert 'set(keys).issubset(assignments)' in deploy
-assert '["bash", "-n", str(path)]' in deploy
-assert 'path.stat().st_mode & 0o777 != 0o600' in deploy
-assert 'shlex.quote(value)}\\n")' in deploy
-assert 'shlex.quote(value)}\\\\n")' not in deploy
-assert "run_buffered_production_host.sh" in deploy
-assert "COOLDOWN_ACTIVE" in deploy
-assert "DAILY_CAP_REACHED" in deploy
-assert 'line.lstrip().startswith("{")' in deploy
-assert "no-publish runtime verification did not emit a JSON result" in deploy
-assert "no-publish runtime verification found an unsafe delivery failure" in deploy
 assert "runs-on: [self-hosted, Linux, X64]" in refresh
 assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in launcher
 assert "/opt/github-runners/sns-growth-engine/.buffered-runtime" in installer

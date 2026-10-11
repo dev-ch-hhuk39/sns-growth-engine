@@ -1,36 +1,47 @@
-# SNS Growth Engine / Chadult VPS stability handoff (2026-10-11 JST)
+# SNS Growth Engine — VPS stability / deployment handoff
 
-## Verified operating boundary
+Date: 2026-10-11 JST. Scope: `dev-ch-hhuk39/sns-growth-engine` only.
 
-- The shared host is `x85-131-249-42`. At 14:02 JST: root filesystem 73% full, roughly 14 GiB free, MemAvailable 524 MiB, and 949 MiB swap used.
-- The GitHub Actions self-hosted SNS runner is `snsrunner`; its runtime is rooted under `/opt/github-runners/sns-growth-engine/.buffered-runtime`.
-- `current` points to release `994553dfc1faf644784c72bf97201b2cee927c9d`; previous release `9ec1deee6848fad68f754d241ce6ca9792d269af` is retained. Do not delete either or any staged candidate without renewed verification.
-- The three account production cron jobs run every five minutes with offsets of 0, 1 and 2 minutes. Media preparation starts at 05:15 JST daily with a 270-minute outer timeout.
-- September 30 to October 2 kernel OOM entries killed `snsrunner` Python children in the cron service (roughly 1.1 GiB RSS) while also killing unrelated Next.js services. No new OOM kills after October 3 were reported by shared VPS operations. The command line of the killed historical processes remains unconfirmed.
-- Media preparation already has a dedicated lock, bounded child timeouts, temporary-workspace cleanup on normal exit and provider cleanup in `finally`. The account publisher has separate account locks plus a Sheets I/O lock. These do not implement a cross-service deployment lock.
-- The October 7 buffered runtime deploy failed at the post-switch no-publish verification step. The installer currently changes `current` before that verification, and does not roll back automatically. Fix before any production switch.
+## Confirmed facts and owner boundaries
 
-## Phase 2A source-only changes
+- Shared VPS `x85-131-249-42` at 14:13 JST: approximately 14 GiB free (73% usage), 1.9 GiB total RAM, 600 MiB MemAvailable, ~933 MiB Swap used.
+- The production SNS pointer remains `994553dfc1faf644784c72bf97201b2cee927c9d`. Repository main at inspection was `e92a67daa2c39d64b5271cc944e410bbd012f533`. They are not synchronized.
+- October 1–2: SNS `snsrunner` cron Python was OOM-killed at approximately 1.1 GiB RSS, while unrelated Renewal HP Next.js also experienced OOM. No later OOM kills were reported by shared VPS operations after October 3.
+- Three SNS accounts have independent five-minute schedules. Heavy media acquisition/transcription begins at 05:15 JST on VPS; a GitHub-hosted media fallback is scheduled at 10:45 JST. Both preserve rights, quality gates and READY identity; hosted replenishment is not itself evidence of live-ready media.
+- The shared host's Docker, databases, other services, backups, log controls and global resource limits are owned by the cross-service VPS Ops function, not SNS.
 
-- `scripts/check_chadult_vps_deploy_preflight.sh`: fail-closed call to the root-owned shared resource gate; requires at least 8 GiB free, shared MemAvailable >=384 MiB, and filesystem use below 88%.
-- `deploy-buffered-production-runtime.yml`: gate runs before the secret environment is written and before release installation.
-- `install_buffered_production_runtime.sh`: direct installer cannot bypass the gate; its own incomplete `.stage-${REVISION}.XXXXXX` is cleaned on ordinary exit, INT or TERM without touching installed releases.
-- Offline unit tests cover resource denied, argument validation, stage failure, protected current/rollback, and workflow ordering.
+## Source changes staged in draft PR (NOT deployed)
 
-## Required shared VPS administrator work — NOT performed by SNS team
+1. `scripts/check_chadult_vps_deploy_preflight.sh`: fail closed through `sudo -n /usr/local/sbin/chadult-vps-resource-check --preflight 8`. Uses the shared 8 GiB minimum, 384 MiB available RAM and below-88% disk policy. Does not reduce shared thresholds.
+2. `scripts/install_buffered_production_runtime.sh`: stage-only immutable release construction with no implicit activation; a separate scheduler-only mode after verified promotion. Builds only binary wheels, no pip cache or bytecode compilation; an owned `.stage-*` is removed on catchable failures/signals. The unbounded venv build on VPS is reduced but not fully moved off-host.
+3. `scripts/deploy_buffered_runtime_transaction.sh`: requires a pre-existing globally owned `/run/lock/chadult-production-deploy.lock`, acquires exclusive lock, rechecks resources, stages 0600 candidate secrets, installs release and checksum-pinned CLI, verifies candidate dependencies and read-only Google Sheets connectivity with bounded retries, atomically updates `current`, rechecks health, installs 3-account cron, and records `previous`. On failure after activation, restores old `current`, environment and cron and re-verifies prior health; failed rollback verification is reported CRITICAL.
+4. `scripts/run_buffered_production_host.sh`: retains independent account locks and serialized Sheets I/O, plus shared lock participation and a minimum 512 MiB available host RAM gate. Never posts when the runtime's posting switch is disabled; X remains OFF.
+5. `scripts/run_buffered_media_preparation_host.sh`: on hosts below 4 GiB total RAM or 1.5 GiB MemAvailable, defers heavyweight media acquisition/transcription to existing GitHub-hosted fallback rather than risking cross-service OOM. No fake READY records or text substitution. Takes the shared lock when media processing actually runs.
+6. `scripts/prune_obsolete_runtime_releases.py`: recognizes explicit `current`, `previous`, and `pending` pointers rather than guessing rollback from latest modification time. Retention requires ≥7-day age, explicit approval, and scoped paths; uses shared lock and in-use detection. No VPS release was removed.
+7. `scripts/cleanup_owned_sns_deploy_stages.py`: after a successful deploy, may remove at most two ≥7-day-old interrupted install stages containing the exact SNS-owned marker and not referenced by protected pointers; cannot delete other directories/releases.
+8. SNS-only cron logrotate configuration caps each `.cron.log` at 20 MiB with five compressed rotations; shared host logging is not altered.
+9. Offline normal/abnormal simulations cover preflight refusal, timeout, failed health before/after switch, cron failure, missing/busy lock, old runtime restoration, rollback-health failure escalation, scoped stage cleanup, secrets file mode and candidate retention.
 
-1. Allow only `snsrunner` to invoke `sudo -n /usr/local/sbin/chadult-vps-resource-check --preflight 8` without a password. The executable is currently `root:root` mode 0750 and runner sudo fails. Use a narrow, audited sudoers entry rather than unrestricted sudo. If a future deployment needs more than 8 GiB, coordinate a correspondingly narrow allowance.
-2. Specify the ownership/mode/creation mechanism and acquire/release protocol for `/run/lock/chadult-production-deploy.lock`. The path was absent during inspection. The global lock must wrap resource preflight, release construction, activation, health verification and rollback across all tools. Do not create an independently owned lock in SNS.
-3. Align peak-memory and build scheduling: `snsrunner` media preparation was involved in past global OOM events. Heavy video/model work and dependency builds should move to an isolated runner/host. The global minimum MemAvailable 384 MiB is not proof that a heavy job fits on this 1.9 GiB shared host.
+## VPS administrator prerequisites (not authorized for SNS to alter)
 
-## Remaining SNS implementation before a production deploy
+- Grant only `snsrunner` narrowly scoped passwordless invocation of the exact shared command `sudo -n /usr/local/sbin/chadult-vps-resource-check --preflight 8`. At inspection it was `root:root` mode 0750 and `snsrunner` invocation requested a password. Verify the actual sudoers rule before activation.
+- Create and govern `/run/lock/chadult-production-deploy.lock`, including permissions/group, cross-tool convention and restart behavior. At inspection this path did not exist. Other services must participate in the same lock; SNS will not create another global lock.
+- Ensure `/usr/sbin/logrotate`, `flock`, `ffmpeg`, `xvfb-run` and package binary-wheel prerequisites are installed on the host. Check version compatibility rather than replacing shared binaries.
+- Move any remaining large dependency build/model work to a separate runner or container with enforced memory limits. A shared 1.9 GiB host is not sufficient for simultaneous heavy Python and Next.js workloads; pip binary-wheel restriction is a partial mitigation, not a completed off-host build migration.
+- Preserve all shared backups/DB, Docker layers, media caches and other services. SNS source changes must never run `docker system prune`.
 
-- Move expensive clip acquisition/transcription/media preparation off the shared VPS without bypassing rights gates, idempotency, or READY verification.
-- Install an immutable candidate without switching; validate dependencies and dry-run health against the candidate; atomically switch with a recorded previous pointer; on failure restore the previous release and verify health again.
-- Add conservative SNS-only retention for current, previous and pending release, plus expired `.stage-*` cleanup only after checking age, ownership and active processes.
-- Add bounded memory/parallel execution and workload-scoped locks for heavy media work, and verify failures including disk/RAM shortfall, delayed health, rollback failure and SIGKILL after-stage artifacts.
-- Keep all cross-service Docker, DB, backup, host log, service-resource and lock administration outside SNS source control.
+## Production promotion runbook (only after Ops prerequisites and CI)
 
-## Production safety gate
+1. Confirm full CI PASS, independent live backups and recovery ownership, and latest current/previous/pending pointers. Restrict input ref to main and default `posting_enabled=false`.
+2. Verify shared `sudo -n` preflight from `snsrunner` and shared lock mode; remeasure host memory and disk immediately before deploy.
+3. Dispatch `Deploy Buffered Production Runtime` on main with explicit confirmation. It performs a single lock-protected transaction, checks Sheets read-only and dependency metadata twice, and atomically promotes. Avoid a second concurrent service deploy.
+4. Verify the installed SHA, cron entry uniqueness, three-account no-post dry-run evidence, resource dashboard and logrotate. The pure health check is infrastructure readiness, not proof of commercial READY inventory or Threads actual posting.
+5. On post-promotion error, expect automatic pointer/env/cron rollback and health verification of the prior release. Exit status 90 denotes rollback verification failure and demands immediate human investigation; do not retry blindly.
+6. Dry-run SNS-only release retention with explicit current SHA, manually review any candidates (especially unfinished/pending), then use the protected confirm path only when eligible.
 
-This source branch is NOT deployable while the shared gate runner permission, common lock, post-switch rollback and no-post health evidence remain unresolved. Do not disable validation, auto-post X, broaden permissions, or delete shared resources to bypass them.
+## Test and rollout boundaries
+
+- Unit/simulation tests can verify transaction ordering and fail-closed behavior without production posting; GitHub CI and the real self-hosted runner still need confirmation.
+- Real failure drills (disk pressure, memory pressure, Sheets failures, late health, interrupted build, unsuccessful rollback) must not be injected into the shared production host. Run them on an isolated disposable Linux fixture or throwaway VPS.
+- No live posting, no rollback operation on production, no shared Docker change and no deletion of operational assets were performed while authoring this branch.
+- The finished code remains in a Draft PR until shared VPS access and cross-service lock prerequisites are met. A verified production deploy is a separate gated acceptance step.

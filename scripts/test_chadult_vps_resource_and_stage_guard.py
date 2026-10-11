@@ -85,8 +85,9 @@ if [ "${TEST_VENV_FAIL:-0}" = "1" ]; then exit 23; fi
 mkdir -p "$3/bin"
 printf '#!/bin/sh\\nexit 0\\n' > "$3/bin/pip"
 chmod +x "$3/bin/pip"
+cp "$3/bin/pip" "$3/bin/python"
 ''')
-        args = ["--source-root", str(source), "--revision", new_sha, "--apply", "--confirm-install"]
+        args = ["--source-root", str(source), "--revision", new_sha, "--apply", "--confirm-install", "--stage-only"]
         return release_root, old, releases / new_sha, args
 
     def test_denied_preflight_has_no_install_mutation(self):
@@ -110,8 +111,16 @@ chmod +x "$3/bin/pip"
         result = self._call(INSTALLER, *args, BUFFERED_RUNTIME_ROOT=str(release_root))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(old.exists())
-        self.assertEqual((release_root / "current").resolve(), target.resolve())
+        self.assertEqual((release_root / "current").resolve(), old.resolve())
+        self.assertTrue((target / ".production-release").is_file())
         self.assertFalse(list((release_root / "releases").glob(".stage-*")))
+
+    def test_legacy_implicit_activate_is_blocked(self):
+        release_root, old, target, args = self._install_fixture()
+        result = self._call(INSTALLER, *args[:-1], BUFFERED_RUNTIME_ROOT=str(release_root))
+        self.assertEqual(result.returncode, 64, result.stderr)
+        self.assertEqual((release_root / "current").resolve(), old.resolve())
+        self.assertFalse(target.exists())
 
     def test_deploy_has_preflight_before_secret_write_or_switch(self):
         from yaml import safe_load
@@ -119,7 +128,7 @@ chmod +x "$3/bin/pip"
         steps = workflow["jobs"]["deploy"]["steps"]
         names = [step.get("name", "") for step in steps]
         self.assertLess(names.index("Fail closed on shared VPS disk and RAM preflight"),
-                        names.index("Install immutable runtime and secret environment"))
+                        names.index("Transactional candidate deploy, health, activation and rollback"))
         self.assertIn("--min-free-gib 8", steps[names.index(
             "Fail closed on shared VPS disk and RAM preflight")]["run"])
 

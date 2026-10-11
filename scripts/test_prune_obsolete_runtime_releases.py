@@ -9,7 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prune_obsolete_runtime_releases import candidate_state, run  # noqa: E402
+from prune_obsolete_runtime_releases import candidate_state, run, _apply_under_shared_lock  # noqa: E402
+import shutil
 
 CURRENT = "a" * 40
 ROLLBACK = "b" * 40
@@ -32,6 +33,7 @@ class PruneReleaseTests(unittest.TestCase):
             (directory / "smoke.txt").write_text("immutable")
             os.utime(directory, (now - days * 86400, now - days * 86400))
         (self.root / "current").symlink_to(releases / CURRENT)
+        (self.root / "previous").symlink_to(releases / ROLLBACK)
 
     def test_dry_run_is_read_only_and_keeps_current_and_rollback(self):
         result = run(self.root, CURRENT, [OLD, OLDER], confirm=False)
@@ -39,13 +41,23 @@ class PruneReleaseTests(unittest.TestCase):
         self.assertEqual(result["kept_count"], 2)
         self.assertTrue((self.root / "releases" / OLD).is_dir())
 
-    def test_confirm_removes_only_requested_stale_releases(self):
+    def test_locked_retention_removes_only_requested_stale_releases(self):
+        # This helper is called by the shared-lock-protected public runner.
+        state = candidate_state(self.root, CURRENT, [OLD, OLDER])
+        before = shutil.disk_usage("/")
+        result = {"mode": "APPLY", **state}
         with patch("prune_obsolete_runtime_releases.assert_not_in_use"):
-            result = run(self.root, CURRENT, [OLD, OLDER], confirm=True)
+            result = _apply_under_shared_lock(self.root, CURRENT, [OLD, OLDER], state, before, result,
+                                              self.root / "shared" / "locks")
         self.assertEqual(set(result["removed_releases"]), {OLD, OLDER})
         self.assertFalse((self.root / "releases" / OLD).exists())
         self.assertTrue((self.root / "releases" / CURRENT).exists())
         self.assertTrue((self.root / "releases" / ROLLBACK).exists())
+
+    def test_confirm_without_shared_deploy_lock_blocks(self):
+        with self.assertRaisesRegex(RuntimeError, "shared_deploy_lock_unavailable"):
+            run(self.root, CURRENT, [OLD], confirm=True)
+        self.assertTrue((self.root / "releases" / OLD).exists())
 
     def test_protected_current_or_rollback_blocked(self):
         for sha in (CURRENT, ROLLBACK):
