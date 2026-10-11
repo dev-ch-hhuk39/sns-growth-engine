@@ -194,6 +194,8 @@ class LegacyMediaReviewSafetyTests(unittest.TestCase):
             {"schema_version": "untrusted"},
             {"rows": "malformed"},
             {"captured_at": None},
+            {"captured_at": "PRIVATE_ACCESS_TOKEN"},
+            {"captured_at": "2026-10-11T00:00:00"},
         ):
             source = sample_snapshot()
             source.update(update)
