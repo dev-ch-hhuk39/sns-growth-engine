@@ -22,6 +22,7 @@ RECEIPT_SCHEMA = "sns_media_review_receipts_v1"
 ZERO_SHA256 = "0" * 64
 SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 SAFE_ID_RE = re.compile(r"[A-Za-z0-9_.:-]{3,128}\Z")
+QUEUE_ID_RE = re.compile(r"[A-Za-z0-9_.:-]{1,128}\Z")
 EVIDENCE_RE = re.compile(r"ev_[A-Za-z0-9_.:-]{6,120}\Z")
 APPROVAL_EVIDENCE = (
     "rights_grant", "publisher_permission", "source_identity",
@@ -116,7 +117,7 @@ def _validate_plan(plan: Any) -> dict[tuple[str, str, str], dict[str, Any]]:
         queue_id = item.get("queue_id")
         if not isinstance(queue_id, str):
             raise ReviewContractError("plan_queue_id_invalid")
-        if queue_id and not SAFE_ID_RE.fullmatch(queue_id):
+        if queue_id and not QUEUE_ID_RE.fullmatch(queue_id):
             raise ReviewContractError("plan_queue_id_invalid")
         blockers = item.get("blockers")
         if (not isinstance(blockers, list)
@@ -234,7 +235,7 @@ def build_receipts(
         if not isinstance(account, str) or not isinstance(slot, str):
             raise ReviewContractError("candidate_identity_invalid")
         queue = action["queue_id"]
-        if not isinstance(queue, str) or (queue and not SAFE_ID_RE.fullmatch(queue)):
+        if not isinstance(queue, str) or (queue and not QUEUE_ID_RE.fullmatch(queue)):
             raise ReviewContractError("candidate_identity_invalid")
         key = (account, slot, queue)
         candidate = choices.get(key)
