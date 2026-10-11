@@ -15,20 +15,20 @@ from publication_review_board import decision_for_row, now_iso, text  # noqa: E4
 from sheets_client import TAB_DEFINITIONS, _col_letter, make_client  # noqa: E402
 
 
-def build_decisions(review_rows: list[dict], queue_rows: list[dict], *, allow_media_posts: bool) -> list[tuple[dict, dict, str, dict[str, str]]]:
+def build_decisions(review_rows: list[dict], queue_rows: list[dict], *, allow_media_posts: bool, strict_trusted_media_review: bool = False) -> list[tuple[dict, dict, str, dict[str, str]]]:
     queues = {text(row.get("queue_id")): row for row in queue_rows}
     result = []
     for review in review_rows:
         queue = queues.get(text(review.get("queue_id")))
         if not queue:
             continue
-        outcome, fields = decision_for_row(review, queue, allow_media_posts=allow_media_posts)
+        outcome, fields = decision_for_row(review, queue, allow_media_posts=allow_media_posts, strict_trusted_media_review=strict_trusted_media_review)
         if outcome != "SKIP":
             result.append((review, queue, outcome, fields))
     return result
 
 
-def apply(client, *, do_apply: bool, allow_media_posts: bool) -> dict:
+def apply(client, *, do_apply: bool, allow_media_posts: bool, strict_trusted_media_review: bool = False) -> dict:
     if not hasattr(client, "_ensure_tab") or not hasattr(client, "_ws"):
         return {"status": "MOCK_PLAN", "decision_count": 0}
     client._ensure_tab("queue", TAB_DEFINITIONS["queue"])
@@ -36,7 +36,7 @@ def apply(client, *, do_apply: bool, allow_media_posts: bool) -> dict:
         client._ensure_tab("publication_review", TAB_DEFINITIONS["publication_review"])
     queue_rows = [dict(row) for row in client._ws("queue").get_all_records()]
     review_rows = [dict(row) for row in client._ws("publication_review").get_all_records()]
-    plans = build_decisions(review_rows, queue_rows, allow_media_posts=allow_media_posts)
+    plans = build_decisions(review_rows, queue_rows, allow_media_posts=allow_media_posts, strict_trusted_media_review=strict_trusted_media_review)
     report = {"status": "APPLIED" if do_apply else "PLAN_ONLY", "decision_count": len(plans), "outcomes": [outcome for _, _, outcome, _ in plans]}
     if not do_apply:
         return report
@@ -67,6 +67,11 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-review-decisions", action="store_true")
     parser.add_argument("--use-sheets", action="store_true")
+    parser.add_argument(
+        "--require-trusted-media-review",
+        action="store_true",
+        help="Fail closed on legacy media READY transitions (requires future authenticated service)",
+    )
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.apply and not args.confirm_review_decisions:
@@ -74,7 +79,7 @@ def main() -> int:
     cfg = get_config()
     autonomous = __import__("json").loads((ROOT / "config" / "autonomous_mode.json").read_text(encoding="utf-8"))
     client = make_client(cfg, dry_run=not args.apply, force_mock=not args.use_sheets)
-    result = apply(client, do_apply=args.apply, allow_media_posts=bool(autonomous.get("allow_media_posts", False)))
+    result = apply(client, do_apply=args.apply, allow_media_posts=bool(autonomous.get("allow_media_posts", False)), strict_trusted_media_review=args.require_trusted_media_review)
     if args.output:
         args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False))
