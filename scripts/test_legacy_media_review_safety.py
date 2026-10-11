@@ -19,7 +19,7 @@ from media_review_legacy_guard import (  # noqa: E402
     is_protected_media_candidate, requires_strict_review_block,
 )
 from publication_review_board import decision_for_row  # noqa: E402
-from apply_publication_review_decisions import build_decisions  # noqa: E402
+from apply_publication_review_decisions import apply, build_decisions  # noqa: E402
 from scripts.approve_queue import cmd_approve  # noqa: E402
 
 
@@ -136,6 +136,37 @@ class LegacyMediaReviewSafetyTests(unittest.TestCase):
         self.assertEqual(len(plan), 1)
         self.assertEqual(plan[0][2], "BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED")
         self.assertEqual(plan[0][3], {})
+
+    def test_batch_apply_strict_only_records_block_and_never_updates_queue(self):
+        class Worksheet:
+            def __init__(self, rows):
+                self.rows = rows
+                self.updates = []
+            def get_all_records(self):
+                return [dict(item) for item in self.rows]
+            def row_values(self, index):
+                return ["queue_id", "decision_result", "decision_applied_at", "review_status"]
+            def batch_update(self, updates, **kwargs):
+                self.updates.extend(updates)
+        class FakeClient:
+            def __init__(self):
+                self.queue = Worksheet([media_queue()])
+                self.review = Worksheet([{"queue_id": "media_001", "review_decision": "OK"}])
+                self.queue_updates = []
+            def _ensure_tab(self, *args):
+                return None
+            def _ws(self, tab):
+                return self.queue if tab == "queue" else self.review
+            def update_queue_item(self, *args, **kwargs):
+                self.queue_updates.append((args, kwargs))
+        client = FakeClient()
+        result = apply(client, do_apply=True, allow_media_posts=False,
+                       strict_trusted_media_review=True)
+        self.assertEqual(result["status"], "APPLIED")
+        self.assertEqual(result["outcomes"], ["BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED"])
+        self.assertEqual(result["updated_queue_ids"], [])
+        self.assertEqual(client.queue_updates, [])
+        self.assertTrue(client.review.updates)
 
     def test_legacy_default_behavior_preserved_for_compatibility(self):
         review = {"queue_id": "media_001", "review_decision": "OK"}
