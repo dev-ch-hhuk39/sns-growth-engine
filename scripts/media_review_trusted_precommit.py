@@ -85,6 +85,7 @@ class ReviewRequest:
     expected_receipts_head_sha256: str
     draft_event_sha256: str
     confirm_human_review: bool
+    expected_queue_sha256: str | None = None
 
 
 class SessionVerifier(Protocol):
@@ -133,6 +134,9 @@ def _check_request(request: ReviewRequest) -> None:
                 request.expected_receipts_head_sha256,
                 request.draft_event_sha256,
             ))
+            or (request.expected_queue_sha256 is not None
+                and (not isinstance(request.expected_queue_sha256, str)
+                     or not SHA256_RE.fullmatch(request.expected_queue_sha256)))
             or request.confirm_human_review is not True):
         raise PrecommitBlocked("review_request_incomplete")
 
@@ -190,6 +194,12 @@ def _verify_queue(queue: Any, request: ReviewRequest) -> dict[str, Any]:
             or not isinstance(queue.get("source_id"), str)
             or not SAFE_ID_RE.fullmatch(queue["source_id"])):
         raise PrecommitBlocked("canonical_asset_lineage_missing")
+    if request.expected_queue_sha256 is not None:
+        try:
+            if _sha256(queue) != request.expected_queue_sha256:
+                raise PrecommitBlocked("canonical_queue_changed")
+        except (TypeError, ValueError, OverflowError):
+            raise PrecommitBlocked("canonical_queue_invalid") from None
     return queue
 
 
@@ -336,6 +346,11 @@ def evaluate_precommit(
         "slot_id": request.slot_id,
         "queue_id": request.queue_id,
         "queue_revision": request.expected_queue_revision,
+        "canonical_queue_sha256": _sha256(queue),
+        "canonical_context_sha256": _sha256({
+            "plan": context.plan, "receipts": context.receipts,
+            "evidence": dict(context.evidence_by_id),
+        }),
         "draft_event_sha256": request.draft_event_sha256,
         "source_plan_sha256": plan_sha,
         "receipts_head_sha256": ledger_head,

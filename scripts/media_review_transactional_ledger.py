@@ -237,6 +237,7 @@ def record_review(
     trusted_issuer: str,
     operation_id: str,
     expected_ledger_version: int,
+    queue_authority: Any | None = None,
     as_of: datetime | None = None,
 ) -> dict[str, Any]:
     """Append a review decision in one DB transaction, never promote READY.
@@ -289,6 +290,16 @@ def record_review(
         version, digest = _append(
             connection, key, head, payload, "REVIEW_RECORDED_ONLY",
         )
+        if queue_authority is not None:
+            from media_review_queue_reconciliation import ReviewQueueReconciliation
+            if (not isinstance(queue_authority, ReviewQueueReconciliation)
+                    or queue_authority.db is not connection):
+                raise ReviewLedgerBlocked("queue_authority_database_mismatch")
+            queue_authority.bind_recorded_review(
+                key=key, operation_id=operation_id, preflight=preflight,
+                expected_queue_sha256=request.expected_queue_sha256,
+                ledger_version=version, ledger_event_sha256=digest, now=now,
+            )
         connection.commit()
     except (ReviewLedgerBlocked, PrecommitBlocked) as exc:
         connection.rollback()
@@ -315,6 +326,7 @@ def revoke_review(
     operation_id: str,
     expected_ledger_version: int,
     reason_code: str,
+    queue_authority: Any | None = None,
     as_of: datetime | None = None,
 ) -> dict[str, Any]:
     """Audited revocation does not need currently valid rights or an OK draft."""
@@ -372,6 +384,15 @@ def revoke_review(
             rights_expire_at=previous_payload["rights_expire_at"],
         )
         version, digest = _append(connection, key, head, payload, "REVOKED")
+        if queue_authority is not None:
+            from media_review_queue_reconciliation import ReviewQueueReconciliation
+            if (not isinstance(queue_authority, ReviewQueueReconciliation)
+                    or queue_authority.db is not connection):
+                raise ReviewLedgerBlocked("queue_authority_database_mismatch")
+            queue_authority.bind_revocation(
+                key=key, operation_id=operation_id, queue_revision=head["queue_revision"],
+                ledger_version=version, ledger_event_sha256=digest, now=now,
+            )
         connection.commit()
     except ReviewLedgerBlocked as exc:
         connection.rollback()
