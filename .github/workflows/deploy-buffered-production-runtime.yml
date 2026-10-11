@@ -65,6 +65,9 @@ jobs:
           if [ "${{ inputs.posting_enabled }}" = "true" ]; then
             test "${{ inputs.confirm_posting }}" = "ENABLE_BUFFERED_POSTING"
           fi
+      - name: Fail closed on shared VPS disk and RAM preflight
+        shell: bash
+        run: bash scripts/check_chadult_vps_deploy_preflight.sh --min-free-gib 8
       - name: Install immutable runtime and secret environment
         env:
           RUNTIME_ENV_FILE: /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env

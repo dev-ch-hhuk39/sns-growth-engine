@@ -37,6 +37,8 @@ if [[ "$APPLY" != "true" ]]; then
   exit 0
 fi
 [[ "$CONFIRMED" == "true" ]] || { echo "[BLOCKED] explicit --confirm-install is required" >&2; exit 64; }
+# Direct invocations have the same fail-closed gate as GitHub deployments.
+"$(dirname "$0")/check_chadult_vps_deploy_preflight.sh" --min-free-gib 8
 if [[ "$ENABLE_SCHEDULER" == "true" && "$SCHEDULER_CONFIRMED" != "true" ]]; then
   echo "[BLOCKED] explicit --confirm-enable is required to install cron" >&2
   exit 64
@@ -44,6 +46,18 @@ fi
 
 mkdir -p "$RUNTIME_ROOT/releases" "$RUNTIME_ROOT/shared/locks" "$RUNTIME_ROOT/shared/threads_tokens"
 target="$RUNTIME_ROOT/releases/$REVISION"
+stage=""
+cleanup_owned_stage() {
+  # Never remove a release, rollback, next candidate or another job's stage.
+  if [[ -n "$stage" && -d "$stage" && ! -L "$stage" &&
+        "$(dirname "$stage")" == "$RUNTIME_ROOT/releases" &&
+        "$(basename "$stage")" == ".stage-${REVISION}."* ]]; then
+    rm -rf -- "$stage"
+  fi
+}
+trap cleanup_owned_stage EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 if [[ ! -d "$target" ]]; then
   stage="$(mktemp -d "$RUNTIME_ROOT/releases/.stage-${REVISION}.XXXXXX")"
   rsync -a --delete --exclude .git --exclude .runtime --exclude data --exclude output --exclude .ai-tmp "$SOURCE_ROOT/" "$stage/"
@@ -53,6 +67,7 @@ if [[ ! -d "$target" ]]; then
   "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements.txt"
   "$stage/.venv/bin/pip" install --quiet -r "$stage/requirements-media-runtime.txt"
   mv "$stage" "$target"
+  stage=""
 fi
 ln -sfn "$target" "$RUNTIME_ROOT/current"
 echo "[OK] production runtime release installed: $REVISION"
