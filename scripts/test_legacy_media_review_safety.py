@@ -103,7 +103,8 @@ class LegacyMediaReviewSafetyTests(unittest.TestCase):
             {"slot_id": "", "media_required": "false", "generation_mode": "approved_source_clip"},
         ):
             row = media_queue(media_asset_id="", media_url="", media_type="",
-                              generation_mode="", **change)
+                              generation_mode="")
+            row.update(change)
             with self.subTest(change=change):
                 self.assertTrue(is_protected_media_candidate(row))
 
