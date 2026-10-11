@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -216,12 +217,12 @@ def _validate_history(
                 or event.get("reviewer_identity_verified") is not False
                 or event.get("effective_approval") is not False
                 or event.get("publish_authorized") is not False
-                or event.get("review_state") not in {
-                    "APPROVAL_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
-                    "REVOCATION_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
-                    "REJECTION_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
-                    "EVIDENCE_REQUEST_DRAFT",
-                }):
+                or event.get("review_state") != {
+                    "APPROVE": "APPROVAL_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
+                    "REVOKE": "REVOCATION_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
+                    "REJECT": "REJECTION_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
+                    "REQUEST_EVIDENCE": "EVIDENCE_REQUEST_DRAFT",
+                }[event["decision"]]):
             raise ReviewContractError("history_event_invariants_invalid")
         expected = _sha256({k: v for k, v in event.items() if k != "event_sha256"})
         if event.get("event_sha256") != expected:
@@ -414,7 +415,9 @@ def main() -> int:
         receipts = build_receipts(plan, intake, previous=history)
         output = json.dumps(receipts, sort_keys=True, indent=2, ensure_ascii=False) + "\n"
         if args.output_json:
-            with args.output_json.open("x", encoding="utf-8") as stream:
+            # New local snapshots are private by default and never overwritten.
+            fd = os.open(args.output_json, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
                 stream.write(output)
         else:
             print(output, end="")
