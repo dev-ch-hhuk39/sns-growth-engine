@@ -312,15 +312,17 @@ def evaluate_precommit(
     token = bearer_token[7:]
     try:
         principal = verifier.verify(token, now=now)
-    except Exception as exc:
-        raise PrecommitBlocked("session_verification_failed") from exc
+    except Exception:
+        # Do not chain provider errors; some identity SDKs embed secrets in them.
+        raise PrecommitBlocked("session_verification_failed") from None
     principal = _check_principal(principal, request, now, trusted_issuer)
     try:
         context = canonical.load_current(
             request.account_id, request.slot_id, request.queue_id,
         )
-    except Exception as exc:
-        raise PrecommitBlocked("canonical_review_unavailable") from exc
+    except Exception:
+        # Suppress private storage paths, evidence and backend error bodies.
+        raise PrecommitBlocked("canonical_review_unavailable") from None
     if not isinstance(context, CanonicalReviewContext):
         raise PrecommitBlocked("canonical_review_unavailable")
     queue = _verify_queue(context.queue, request)
