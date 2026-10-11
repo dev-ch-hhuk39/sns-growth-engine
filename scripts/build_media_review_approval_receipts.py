@@ -147,7 +147,11 @@ def _validate_plan(plan: Any) -> dict[tuple[str, str, str], dict[str, Any]]:
     return lookup
 
 
-def _validate_history(previous: Any, source_plan_sha256: str) -> tuple[list[dict[str, Any]], str]:
+def _validate_history(
+    previous: Any,
+    source_plan_sha256: str,
+    candidates: dict[tuple[str, str, str], dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str]:
     if previous is None:
         return [], ZERO_SHA256
     if not isinstance(previous, dict):
@@ -157,10 +161,13 @@ def _validate_history(previous: Any, source_plan_sha256: str) -> tuple[list[dict
             or previous.get("publish_authorized") is not False
             or previous.get("ready_transitions_performed") is not False
             or previous.get("writes_performed") is not False
-            or previous.get("authenticated_approval") is not False):
+            or previous.get("authenticated_approval") is not False
+            or previous.get("reviewer_identity_verified") is not False
+            or previous.get("status") != "DRAFT_REVIEW_EVENTS_NOT_AUTHORIZED"):
         raise ReviewContractError("history_safety_invariants_invalid")
     events = previous.get("events")
-    if not isinstance(events, list) or len(events) > MAX_LEDGER_EVENTS:
+    if (not isinstance(events, list) or len(events) > MAX_LEDGER_EVENTS
+            or previous.get("event_count") != len(events)):
         raise ReviewContractError("history_events_invalid")
     head = ZERO_SHA256
     for index, event in enumerate(events, start=1):
@@ -210,7 +217,7 @@ def build_receipts(
     actions = intake["events"]
     if not isinstance(actions, list) or not 1 <= len(actions) <= MAX_EVENTS_PER_BATCH:
         raise ReviewContractError("review_batch_size_invalid")
-    history, head = _validate_history(previous, digest)
+    history, head = _validate_history(previous, digest, choices)
     if len(history) + len(actions) > MAX_LEDGER_EVENTS:
         raise ReviewContractError("history_capacity_exceeded")
     events = [dict(item) for item in history]
