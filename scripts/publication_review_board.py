@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from accounts.managed_accounts import managed_account_ids
+from media_review_legacy_guard import requires_strict_review_block
 
 ACTIVE_QUEUE_STATUSES = {"WAITING_REVIEW", "READY", "POSTED"}
 ALLOWED_ACCOUNTS = set(managed_account_ids())
@@ -123,7 +124,13 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
     }
 
 
-def decision_for_row(review: Mapping[str, Any], queue: Mapping[str, Any], *, allow_media_posts: bool) -> tuple[str, dict[str, str]]:
+def decision_for_row(
+    review: Mapping[str, Any],
+    queue: Mapping[str, Any],
+    *,
+    allow_media_posts: bool,
+    strict_trusted_media_review: bool = False,
+) -> tuple[str, dict[str, str]]:
     """Return a bounded queue transition; never publish from a review decision."""
     decision = text(review.get("review_decision")).upper()
     if decision not in {"OK", "NG", "HOLD"}:
@@ -150,6 +157,14 @@ def decision_for_row(review: Mapping[str, Any], queue: Mapping[str, Any], *, all
         }
     if decision == "HOLD":
         return "HOLD", {"human_review_decision": "HOLD", "human_review_note": text(review.get("reviewer_note")), "human_reviewed_at": now_iso()}
+
+    # Opt-in strict rollout: an editable Sheets "OK" is NOT authenticated
+    # approval. Never promote protected media through the legacy workflow.
+    if requires_strict_review_block(
+        queue, desired_status="READY",
+        strict_trusted_media_review=strict_trusted_media_review,
+    ):
+        return "BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED", {}
 
     if text(queue.get("validator_status")).upper() != "PASS" or text(queue.get("internal_leak_status")).upper() not in {"", "PASS"}:
         return "BLOCKED_VALIDATION", {}
