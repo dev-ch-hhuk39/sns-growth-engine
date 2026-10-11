@@ -298,6 +298,10 @@ def record_review(
     except sqlite3.Error:
         connection.rollback()
         raise ReviewLedgerBlocked("review_storage_failed") from None
+    except Exception:
+        # Malformed trusted-store data must not strand an open transaction.
+        connection.rollback()
+        raise ReviewLedgerBlocked("review_storage_failed") from None
     return _result("REVIEW_RECORD", key, version, digest)
 
 
@@ -372,7 +376,7 @@ def revoke_review(
     except ReviewLedgerBlocked as exc:
         connection.rollback()
         raise ReviewLedgerBlocked(str(exc)) from None
-    except (sqlite3.Error, ValueError, KeyError, TypeError):
+    except Exception:
         connection.rollback()
         raise ReviewLedgerBlocked("review_storage_failed") from None
     return _result("REVOKE", key, version, digest)
