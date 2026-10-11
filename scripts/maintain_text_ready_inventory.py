@@ -240,7 +240,14 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
         payload.setdefault("status", candidate.get("status", ""))
     # Preserve a safe error category, never the provider response or credentials.
     error = completed.stderr
-    if "hybrid_ai_budget_blocked:" in error or approval_budget_exhausted(payload):
+    # Repeating generation/fallback on an exhausted Sheets read quota amplifies
+    # the incident and cannot produce a verifiable READY row. Do not log body.
+    sheets_rate_limited = "[SHEETS_RETRY]" in error and any(
+        marker in error.lower() for marker in ("rate_limit", "quota", "429", "resource_exhausted")
+    )
+    if sheets_rate_limited:
+        payload["failure_category"] = "SHEETS_QUOTA_EXHAUSTED"
+    elif "hybrid_ai_budget_blocked:" in error or approval_budget_exhausted(payload):
         payload["failure_category"] = "AI_APPROVAL_BUDGET_EXHAUSTED"
     elif "RESOURCE_EXHAUSTED" in error or "HTTP 429" in error:
         payload["failure_category"] = "PROVIDER_RATE_LIMITED"
@@ -333,6 +340,7 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
     approved: list[str] = []
     last_payload: dict[str, Any] = {}
     budget_blocked = False
+    sheets_quota_blocked = False
     for generation_route, generation in _generation_commands(account_id, slot, offline_only=offline_only):
         if budget_blocked and generation_route != "offline_original_bank":
             continue
@@ -351,6 +359,9 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
             "reason": str(payload.get("failure_category") or payload.get("reason") or ""),
         })
         if rc != 0:
+            if str(payload.get("failure_category", "")) == "SHEETS_QUOTA_EXHAUSTED":
+                sheets_quota_blocked = True
+                break
             continue
         for queue_id in queue_ids[:3]:
             if queue_id in approved:
@@ -378,8 +389,11 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
                 str(ready_output),
             ]
             review_rc, review = _run(command)
+            subprocess_failure_category = str(review.get("failure_category", ""))
             if ready_output.exists():
                 review = json.loads(ready_output.read_text(encoding="utf-8"))
+                if subprocess_failure_category == "SHEETS_QUOTA_EXHAUSTED":
+                    review["failure_category"] = subprocess_failure_category
             budget_blocked = approval_budget_exhausted(review)
             if budget_blocked:
                 review["failure_category"] = "AI_APPROVAL_BUDGET_EXHAUSTED"
@@ -389,6 +403,9 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
                 "status": str(review.get("status", "")),
                 "reason": str(review.get("failure_category") or review.get("reason") or ""),
             })
+            if str(review.get("failure_category", "")) == "SHEETS_QUOTA_EXHAUSTED":
+                sheets_quota_blocked = True
+                break
             if budget_blocked:
                 break
             if review_rc == 0 and review.get("status") == "READY":
@@ -402,14 +419,17 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
                         "generation_route": generation_route,
                         "attempts": attempts,
                     }
+        if sheets_quota_blocked:
+            break
     return {
         **result,
         "status": "QUALITY_EXHAUSTED",
         "queue_ids": approved,
         "missing": required - len(approved),
         "generation_status": str(last_payload.get("status", "")),
-        "failure_category": str(last_payload.get("failure_category") or
-                                ("AI_APPROVAL_BUDGET_EXHAUSTED" if budget_blocked else "QUALITY_EXHAUSTED")),
+        "failure_category": ("SHEETS_QUOTA_EXHAUSTED" if sheets_quota_blocked else
+                             str(last_payload.get("failure_category") or
+                                 ("AI_APPROVAL_BUDGET_EXHAUSTED" if budget_blocked else "QUALITY_EXHAUSTED"))),
         "attempts": attempts,
     }
 
@@ -552,6 +572,7 @@ def main() -> int:
             continue
         now = datetime.now(JST)
         budget_blocked = False
+        sheets_quota_blocked = False
         snapshot = copy.copy(client) if args.use_sheets else None
         if snapshot is not None:
             enable_readonly_record_cache(snapshot)
@@ -598,7 +619,7 @@ def main() -> int:
                     recovered.append(allocated["queue_id"])
                 return recovered
 
-            if delivery_missing and args.apply:
+            if delivery_missing and args.apply and not sheets_quota_blocked:
                 # Reuse an already validated bank candidate before spending an
                 # AI request; it still has to pass the exact-slot publisher check.
                 bank_ids = allocate_bank(1, len(ready_rows))
@@ -608,12 +629,18 @@ def main() -> int:
                     queue_rows = refresh_queue_snapshot()
                     ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
 
-            if delivery_missing and len(ready_rows) == 0:
+            if delivery_missing and sheets_quota_blocked:
+                result["delivery_generation_status"] = "SKIPPED_SHEETS_QUOTA"
+                result["delivery_generation_failure_category"] = "SHEETS_QUOTA_EXHAUSTED"
+            if delivery_missing and len(ready_rows) == 0 and not sheets_quota_blocked:
                 generated = replenish(
                     account_id, slot, apply=args.apply, required=1, offline_only=budget_blocked,
                 )
                 result["delivery_generation_status"] = generated.get("status", "")
                 result["delivery_generation_failure_category"] = generated.get("failure_category", "")
+                sheets_quota_blocked = sheets_quota_blocked or (
+                    generated.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
+                )
                 result["delivery_generation_attempts"] = generated.get("attempts", [])
                 result["delivery_recovery_queue_ids"] = list(
                     result.get("delivery_recovery_queue_ids", [])
@@ -628,13 +655,16 @@ def main() -> int:
             # A delivery-safe row is the hard requirement. Additional reserve
             # candidates are attempted only after that row is durably visible.
             reserve_missing = reserve_generation_required(len(ready_rows), reserve_target)
-            if reserve_missing:
+            if reserve_missing and not sheets_quota_blocked:
                 reserve_result = replenish(
                     account_id, slot, apply=args.apply,
                     required=reserve_missing, offline_only=budget_blocked,
                 )
                 result["reserve_generation_status"] = reserve_result.get("status", "")
                 result["reserve_generation_failure_category"] = reserve_result.get("failure_category", "")
+                sheets_quota_blocked = sheets_quota_blocked or (
+                    reserve_result.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
+                )
                 result["reserve_generation_attempts"] = reserve_result.get("attempts", [])
                 result["reserve_queue_ids"] = list(reserve_result.get("queue_ids", []))
                 budget_blocked = budget_blocked or any(

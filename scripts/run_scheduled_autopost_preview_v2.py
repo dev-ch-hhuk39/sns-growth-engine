@@ -7,6 +7,7 @@ never invokes a publisher or a Sheets mutation method.
 """
 from __future__ import annotations
 
+import argparse
 import base64
 import hashlib
 import json
@@ -14,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -101,10 +103,11 @@ def _safe(value: Any, depth: int = 0) -> Any:
 
 
 def _records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
+    # A Sheets rate limit must not masquerade as an empty queue/source pool.
     try:
         return read_records_safely(client, logical)
-    except Exception:
-        return []
+    except Exception as exc:
+        raise RuntimeError(f"READONLY_SOURCE_READ_FAILED:{logical}") from exc
 
 
 def _queue_fingerprint(rows: list[dict[str, Any]]) -> str:
@@ -360,23 +363,81 @@ def _diversity(items: list[dict[str, Any]]) -> dict[str, Any]:
     return {"status": "PASS" if not issues else "BLOCKED", "threshold": 0.68, "issues": issues}
 
 
-def main() -> int:
+def _selected_slots(account_id: str, slot_id: str) -> list[tuple[str, str, str]]:
+    candidates = [row for row in (*TEXT_SLOTS, *MEDIA_SLOTS)
+                  if account_id == "all" or row[0] == account_id]
+    if slot_id:
+        candidates = [row for row in candidates if row[1] == slot_id]
+        if not candidates:
+            raise ValueError("preview_slot_not_in_account_scope")
+    return candidates
+
+
+def _checkpoint(slots: list[dict[str, Any]], total: int, current: str,
+                *, progress_output: str = "") -> None:
+    # Persistent diagnostics contain no posts, source text, or credential values.
+    payload = {
+        "schema_version": "scheduled_autopost_preview_progress_v1",
+        "completed_slots": len(slots),
+        "requested_slots": total,
+        "current_slot": current,
+        "slot_results": [{"account_id": slot["account_id"], "slot_id": slot["slot_id"],
+                          "status": slot.get("status", "UNKNOWN")}
+                         for slot in slots],
+        "would_post": False,
+        "writes_performed": False,
+    }
+    print("PREVIEW_PROGRESS=" + json.dumps(payload, ensure_ascii=False, sort_keys=True), flush=True)
+    if progress_output:
+        path = Path(progress_output)
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        temporary.replace(path)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--account-id", default="all", choices=("all", "night_scout", "liver_manager"))
+    parser.add_argument("--slot-id", default="")
+    parser.add_argument("--deadline-seconds", type=int, default=420)
+    args = parser.parse_args(argv)
+    if not 60 <= args.deadline_seconds <= 450:
+        parser.error("preview_deadline_must_be_60_to_450_seconds")
+    selected = _selected_slots(args.account_id, args.slot_id)
+    started = time.monotonic()
+    progress_output = os.environ.get("SCHEDULED_AUTOPOST_PREVIEW_V2_PROGRESS_OUTPUT", "").strip()
+    _checkpoint([], len(selected), "STARTING", progress_output=progress_output)
     flags = _action_flags()
     cfg = get_config()
     client = SheetsClient(sheet_id=cfg["sheet_id"], sa_dict=cfg["sa_dict"], dry_run=True)
     enable_readonly_record_cache(client)
     queue_before = _records(client, "queue")
     protected_before = {str(row.get("queue_id", "")): dict(row) for row in queue_before if str(row.get("queue_id", "")) in PROTECTED_QUEUE_IDS}
-    runtimes = {account: _runtime() for account in ("night_scout", "liver_manager")}
+    runtimes = {account: _runtime() for account in sorted({row[0] for row in selected})}
 
     slots: list[dict[str, Any]] = []
-    for account_id, slot_id, post_type in TEXT_SLOTS:
-        slots.append(_text_preview(client, runtimes[account_id], account_id, slot_id, post_type))
-    for account_id, slot_id, post_type in MEDIA_SLOTS:
-        if post_type == "direct_reference_media":
-            slots.append(_direct_preview(client, runtimes[account_id], account_id, slot_id))
+    for account_id, slot_id, post_type in selected:
+        remaining = args.deadline_seconds - (time.monotonic() - started)
+        if remaining < 60:
+            slot = {"account_id": account_id, "slot_id": slot_id, "post_type": post_type,
+                    "status": "PREVIEW_BUDGET_EXHAUSTED",
+                    "gemini": {"status": "NOT_RUN", "actual_requests": 0},
+                    "blocked_reasons": ["preview_deadline_budget_exhausted"]}
         else:
-            slots.append(_clip_preview(client, runtimes[account_id], account_id, slot_id))
+            _checkpoint(slots, len(selected), slot_id, progress_output=progress_output)
+            try:
+                if post_type in {"reference_text", "original_text", "pdca_text"}:
+                    slot = _text_preview(client, runtimes[account_id], account_id, slot_id, post_type)
+                elif post_type == "direct_reference_media":
+                    slot = _direct_preview(client, runtimes[account_id], account_id, slot_id)
+                else:
+                    slot = _clip_preview(client, runtimes[account_id], account_id, slot_id)
+            except Exception as exc:
+                slot = {"account_id": account_id, "slot_id": slot_id, "post_type": post_type,
+                        "status": "RUNTIME_ERROR", "gemini": {"status": "NOT_RUN", "actual_requests": 0},
+                        "blocked_reasons": [f"{type(exc).__name__}:preview_slot_failed"]}
+        slots.append(slot)
+        _checkpoint(slots, len(selected), "", progress_output=progress_output)
 
     slot_status_counts: dict[str, int] = {}
     for slot in slots:
@@ -411,6 +472,9 @@ def main() -> int:
         "slot_status_counts": slot_status_counts,
         "generated_at_jst": datetime.now(JST).isoformat(),
         "slot_count": len(slots),
+        "scope_account_id": args.account_id,
+        "scope_slot_id": args.slot_id,
+        "preview_deadline_seconds": args.deadline_seconds,
         "would_post": False,
         "writes_performed": False,
         "real_action_flags": flags,

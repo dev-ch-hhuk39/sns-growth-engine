@@ -2,6 +2,21 @@ name: CI WP3 Production Read-Only Verification
 
 on:
   workflow_dispatch:
+    inputs:
+      account_id:
+        description: "Preview account scope (read-only)"
+        type: choice
+        required: true
+        default: "all"
+        options:
+          - "all"
+          - "night_scout"
+          - "liver_manager"
+      slot_id:
+        description: "Optional slot ID within the selected account"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -100,8 +115,20 @@ jobs:
         env:
           GEMINI_TIMEOUT_SECONDS: "20"
           GEMINI_MAX_ATTEMPTS: "2"
+          PREVIEW_ACCOUNT_ID: ${{ inputs.account_id || 'all' }}
+          PREVIEW_SLOT_ID: ${{ inputs.slot_id || '' }}
+          SCHEDULED_AUTOPOST_PREVIEW_V2_PROGRESS_OUTPUT: "/tmp/scheduled-preview-progress.json"
         run: |
-          timeout --signal=TERM --kill-after=15s 8m python3 scripts/run_scheduled_autopost_preview_v2.py
+          exit_code=0
+          timeout --signal=TERM --kill-after=15s 8m python3 -u scripts/run_scheduled_autopost_preview_v2.py \
+            --account-id "$PREVIEW_ACCOUNT_ID" --slot-id "$PREVIEW_SLOT_ID" \
+            --deadline-seconds 420 || exit_code=$?
+          if [ -f "$SCHEDULED_AUTOPOST_PREVIEW_V2_PROGRESS_OUTPUT" ]; then
+            echo '#### Read-only preview checkpoint (metadata only)' >> "$GITHUB_STEP_SUMMARY"
+            cat "$SCHEDULED_AUTOPOST_PREVIEW_V2_PROGRESS_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "preview_exit_code=$exit_code" >> "$GITHUB_STEP_SUMMARY"
+          exit "$exit_code"
 
       - name: Preserve WP3 evidence failure after audit
         if: always() && steps.collector.outcome == 'failure'
