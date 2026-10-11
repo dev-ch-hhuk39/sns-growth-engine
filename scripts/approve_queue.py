@@ -50,6 +50,7 @@ from sheets_client import SheetsClient, MockSheetsClient, make_client
 from publishers.dry_run import DryRunPublisher, X_CHAR_WARN, X_CHAR_LIMIT
 from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate
 from hybrid_ai_source_context import build_source_context
+from media_review_legacy_guard import requires_strict_review_block
 
 ALLOWED_NEW_STATUSES = {"READY", "REJECTED"}
 
@@ -228,7 +229,7 @@ def cmd_list(sheets, account_id: str | None, status: str, platform: str | None) 
     print(f"  python scripts/approve_queue.py --queue-id <queue_id> --reject  --reason \"理由\"")
 
 
-def cmd_approve(sheets, queue_id: str, new_status: str, reason: str, dry_run: bool) -> int:
+def cmd_approve(sheets, queue_id: str, new_status: str, reason: str, dry_run: bool, *, strict_trusted_media_review: bool = False) -> int:
     """--approve / --reject / --status: 1件の status を変更する。"""
     q = sheets.get_queue_item(queue_id)
     if q is None:
@@ -238,6 +239,15 @@ def cmd_approve(sheets, queue_id: str, new_status: str, reason: str, dry_run: bo
     old_status = str(q.get("status", ""))
     account_id = q.get("account_id", "")
     platform = str(q.get("platform", ""))
+
+    # Staged strict mode: legacy CLI has no verified identity/evidence source.
+    # Never trust a typed reason, self-reported approval or local receipt.
+    if requires_strict_review_block(
+        q, desired_status=new_status,
+        strict_trusted_media_review=strict_trusted_media_review,
+    ):
+        print("[BLOCKED] protected media requires an authenticated review service")
+        return 1
 
     display_queue_detail(sheets, q)
 
@@ -336,6 +346,8 @@ def main() -> None:
                         help="実 SheetsClient を使用（認証情報必須）")
     parser.add_argument("--mock", action="store_true",
                         help="MockSheetsClient を使用")
+    parser.add_argument("--require-trusted-media-review", action="store_true",
+                        help="対象メディアの旧方式READY昇格を拒否する厳格モード")
     args = parser.parse_args()
 
     print("=" * 60)
@@ -408,7 +420,7 @@ def main() -> None:
         sys.exit(0)
 
     if is_change_action:
-        rc = cmd_approve(sheets, args.queue_id, new_status, args.reason, args.dry_run)
+        rc = cmd_approve(sheets, args.queue_id, new_status, args.reason, args.dry_run, strict_trusted_media_review=args.require_trusted_media_review)
         sys.exit(rc)
 
     # どのフラグも指定されていない場合はヘルプ表示
