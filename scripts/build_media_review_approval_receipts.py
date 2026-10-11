@@ -180,7 +180,12 @@ def _validate_history(
             "reviewer_identity_verified", "effective_approval",
             "publish_authorized", "event_sha256",
         })
-        if (event["schema_version"] != RECEIPT_SCHEMA
+        if (not isinstance(event["decision"], str)
+                or not isinstance(event["account_id"], str)
+                or not isinstance(event["slot_id"], str)
+                or not isinstance(event["reason_code"], str)
+                or not isinstance(event["usage_scope"], str)
+                or event["schema_version"] != RECEIPT_SCHEMA
                 or event["decision"] not in DECISIONS
                 or not isinstance(event["queue_id"], str)
                 or (event["queue_id"] and not QUEUE_ID_RE.fullmatch(event["queue_id"]))
@@ -189,7 +194,15 @@ def _validate_history(
                 or event["usage_scope"] not in {"", "THREADS_ORGANIC_ONLY"}
                 or not isinstance(event["evidence_ids"], dict)
                 or not all(isinstance(x, str) and EVIDENCE_RE.fullmatch(x)
-                           for x in event["evidence_ids"].values())):
+                           for x in event["evidence_ids"].values())
+                or (
+                    set(event["evidence_ids"]) != (
+                        set(APPROVAL_EVIDENCE)
+                        | (set(CLIP_EVIDENCE)
+                           if MEDIA_SLOTS.get((event["account_id"], event["slot_id"]))
+                           == "approved_source_clip" else set())
+                    ) if event["decision"] == "APPROVE" else bool(event["evidence_ids"])
+                )):
             raise ReviewContractError("history_event_invalid")
         _safe_id(event["reviewer_id"])
         _parse_instant(event["reviewed_at"])
@@ -202,7 +215,13 @@ def _validate_history(
                 or event.get("source_plan_sha256") != source_plan_sha256
                 or event.get("reviewer_identity_verified") is not False
                 or event.get("effective_approval") is not False
-                or event.get("publish_authorized") is not False):
+                or event.get("publish_authorized") is not False
+                or event.get("review_state") not in {
+                    "APPROVAL_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
+                    "REVOCATION_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
+                    "REJECTION_DRAFT_AWAITING_AUTHENTICATED_REVIEW",
+                    "EVIDENCE_REQUEST_DRAFT",
+                }):
             raise ReviewContractError("history_event_invariants_invalid")
         expected = _sha256({k: v for k, v in event.items() if k != "event_sha256"})
         if event.get("event_sha256") != expected:
