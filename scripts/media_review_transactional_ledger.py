@@ -19,7 +19,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from build_media_review_approval_receipts import REASON_CODES
 from media_review_trusted_precommit import (
     CanonicalReviewReader,
     PrecommitBlocked,
@@ -114,6 +113,8 @@ def _validate_event_history(
         raise ReviewLedgerBlocked("review_history_version_invalid")
     last_hash = ZERO
     state = "NONE"
+    last_draft = ""
+    last_queue_revision = ""
     for index, (sequence, action, op, previous, digest, raw) in enumerate(rows, 1):
         try:
             event = json.loads(raw)
@@ -137,7 +138,11 @@ def _validate_event_history(
         else:
             raise ReviewLedgerBlocked("review_history_state_invalid")
         last_hash = digest
-    if head["hash"] != last_hash or head["state"] != state:
+        last_draft = event["draft_event_sha256"]
+        last_queue_revision = event["queue_revision"]
+    if (head["hash"] != last_hash or head["state"] != state
+            or head["draft"] != last_draft
+            or head["queue_revision"] != last_queue_revision):
         raise ReviewLedgerBlocked("review_history_head_invalid")
 
 
