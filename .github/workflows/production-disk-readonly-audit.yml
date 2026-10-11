@@ -1,0 +1,49 @@
+name: Production Disk Read-Only Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-production-disk-readonly-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - name: Read-only filesystem capacity audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== DISK_AUDIT_BEGIN ==="
+          date --iso-8601=seconds
+          echo "--- df root ---"
+          df -B1 /
+          echo "--- top-level scoped usage ---"
+          for path in /opt/github-runners /var/lib/docker /var/log /tmp /home; do
+            if [ -e "$path" ]; then
+              echo "PATH=$path"
+              du -x -B1 --max-depth=1 "$path" 2>/dev/null | sort -nr | head -n 30 || true
+            fi
+          done
+          echo "--- sns-growth runner usage ---"
+          for path in             /opt/github-runners/sns-growth-engine             /opt/github-runners/sns-growth-engine/_work             /opt/github-runners/sns-growth-engine/_tool             /opt/github-runners/sns-growth-engine/.buffered-runtime; do
+            if [ -e "$path" ]; then
+              echo "PATH=$path"
+              du -x -B1 --max-depth=2 "$path" 2>/dev/null | sort -nr | head -n 60 || true
+            fi
+          done
+          echo "--- large files under sns-growth runner (>200 MiB) ---"
+          find /opt/github-runners/sns-growth-engine -xdev -type f -size +200M             -printf '%s\t%p\n' 2>/dev/null | sort -nr | head -n 50 || true
+          echo "--- buffered runtime release pointers ---"
+          runtime=/opt/github-runners/sns-growth-engine/.buffered-runtime
+          if [ -d "$runtime" ]; then
+            readlink -f "$runtime/current" 2>/dev/null || true
+            find "$runtime" -maxdepth 2 -type f -name .production-release -print -exec cat {} \; 2>/dev/null || true
+          fi
+          echo "=== DISK_AUDIT_END ==="
