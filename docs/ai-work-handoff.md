@@ -1,3 +1,11 @@
+## 2026-10-11 Phase 5B-5C queue/approval local reconciliation (development only)
+
+- Phase 5B-5B PR #377 CI PASS and MERGED into main at `a4c5d07982e5c88dcd0886a86c1d170eea226556`.
+- Worktree/branch: `chatgpt/phase5b5c-authoritative-queue-20261011` from that exact main.
+- New 0003 SQLite migration, immutable reconciliation events, guarded ledger transaction, exact queue/content and context fingerprints, bounded rechecks, quarantine and divergence checks. Full original-rights evidence is revalidated at reconciliation. See `docs/PHASE5B5C_QUEUE_RECONCILIATION.md`.
+- **Still no Google Sheets/SQLite cross-system atomicity**, no canonical backend production connection, no effective approval, READY mutation, publisher change, VPS operation or real post. Publication authorization migration and old-path blocking remain required.
+- Focused tests passed; full repository CI and production acceptance tracked separately. Next: Phase 5B-5D protected reviewer UI/API; Phase 5B-6 publisher and legacy approval-path enforcement. Complete single-store rollout before claiming authoritative approval.
+
 ## 2026-10-11 Phase 5B-5B verified reviewer/evidence adapter (source only)
 
 - Based on main `94ffa698dfaaeb899f618a4eb5858819aea38577`; isolated worktree `chatgpt/phase5b5b-trusted-adapters-20261011`.
