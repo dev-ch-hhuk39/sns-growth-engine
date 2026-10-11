@@ -20,6 +20,22 @@ if [[ "$mode" != '600' ]]; then
   exit 77
 fi
 
+# A 1.9 GiB shared host previously OOM-killed SNS Python and unrelated
+# Next.js services. Offload large acquisition/transcription to the existing
+# GitHub-hosted 10:45 fallback; never lower media rights/READY gates.
+mem_total_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null)"
+mem_available_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null)"
+if [[ ! "$mem_total_kib" =~ ^[0-9]+$ || ! "$mem_available_kib" =~ ^[0-9]+$ ||
+      "$mem_total_kib" -lt 4194304 || "$mem_available_kib" -lt 1572864 ]]; then
+  echo '[DEFERRED] VPS media preparation requires >=4 GiB RAM and >=1.5 GiB MemAvailable; GitHub-hosted fallback remains responsible' >&2
+  exit 0
+fi
+common_lock=/run/lock/chadult-production-deploy.lock
+[[ -f "$common_lock" && ! -L "$common_lock" && -w "$common_lock" ]] || {
+  echo '[BLOCKED] common deployment lock unavailable for heavy media preparation' >&2; exit 78;
+}
+exec 8<>"$common_lock"
+flock -s -w 120 8 || { echo '[BLOCKED] deployment in progress; defer media preparation' >&2; exit 75; }
 set -a
 # shellcheck disable=SC1090
 source "$RUNTIME_ENV_FILE"
