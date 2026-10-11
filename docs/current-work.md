@@ -1,3 +1,10 @@
+## 2026-10-11 Phase 5B-5B verified reviewer/evidence adapter (source only)
+
+- Based on main `94ffa698dfaaeb899f618a4eb5858819aea38577`; isolated worktree `chatgpt/phase5b5b-trusted-adapters-20261011`.
+- Added pinned RS256 JWT identity verification, server-provisioned active-session binding and account RBAC, append-only original-proof vault and canonical adapter contract. No production identity backend or Sheets authority is connected.
+- No READY modification, publish, true authenticated approval integration or production DB migration. See `docs/PHASE5B5B_TRUSTED_IDENTITY_PROOF_ADAPTERS.md`.
+- Next: Phase 5B-5C authoritative queue transaction/reconciliation and live IdP/vault provisioning (VPS management only).
+
 ## 2026-10-06 Final-head baseline and quota wait
 
 - New final-completion instruction verified local/remote `1c321ea54e76b391e47bd6771aec08e3c1a44432` match. Baseline full repository suite 942/942 PASS (0 failures; 8 external and 3 optional tool probes excluded), Workflow Safety 527/527 PASS.
