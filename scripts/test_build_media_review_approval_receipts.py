@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -281,7 +281,12 @@ class ReceiptContractTests(unittest.TestCase):
 
     def test_cli_immutable_output_and_no_overwrite(self):
         plan = sample_plan()
-        intake = request_for(plan, clip_action())
+        action = clip_action()
+        live_now = datetime.now(timezone.utc)
+        action["reviewed_at"] = (live_now - timedelta(minutes=1)).isoformat()
+        action["rights_valid_from"] = (live_now - timedelta(days=2)).isoformat()
+        action["rights_expires_at"] = (live_now + timedelta(days=30)).isoformat()
+        intake = request_for(plan, action)
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             plan_path, intake_path, output_path = (
