@@ -30,6 +30,7 @@ concurrency:
 
 jobs:
   recover:
+    if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, Linux, X64]
     environment: production
     timeout-minutes: 10
