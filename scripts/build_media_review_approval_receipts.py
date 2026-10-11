@@ -127,7 +127,7 @@ def _validate_plan(plan: Any) -> dict[tuple[str, str, str], dict[str, Any]]:
                 or item.get("publish_authorized") is not False):
             raise ReviewContractError("plan_item_safety_invalid")
         state = item.get("review_state")
-        if state not in {"MISSING_EXACT_CANDIDATE", "ACTION_REQUIRED",
+        if not isinstance(state, str) or state not in {"MISSING_EXACT_CANDIDATE", "ACTION_REQUIRED",
                          "FINAL_HUMAN_REVIEW_REQUIRED"}:
             raise ReviewContractError("plan_item_state_invalid")
         if (not queue_id) != (state == "MISSING_EXACT_CANDIDATE"):
@@ -137,7 +137,7 @@ def _validate_plan(plan: Any) -> dict[tuple[str, str, str], dict[str, Any]]:
                 pass
             else:
                 raise ReviewContractError("plan_queue_binding_invalid")
-        if item.get("priority") not in {"P1", "P2", "P3"}:
+        if not isinstance(item.get("priority"), str) or item["priority"] not in {"P1", "P2", "P3"}:
             raise ReviewContractError("plan_item_priority_invalid")
         key = (account, slot, queue_id)
         if key in lookup:
@@ -267,7 +267,8 @@ def build_receipts(
     events = [dict(item) for item in history]
     seen: set[tuple[str, str, str]] = set()
     for action in actions:
-        if not isinstance(action, dict) or action.get("decision") not in DECISIONS:
+        if (not isinstance(action, dict) or not isinstance(action.get("decision"), str)
+                or action["decision"] not in DECISIONS):
             raise ReviewContractError("review_decision_invalid")
         decision = action["decision"]
         base_keys = {
@@ -339,14 +340,14 @@ def build_receipts(
                     or action["revokes_event_sha256"] != latest["event_sha256"]):
                 raise ReviewContractError("revocation_target_invalid")
             revokes_hash = latest["event_sha256"]
-            if action["reason_code"] not in REASON_CODES:
+            if not isinstance(action["reason_code"], str) or action["reason_code"] not in REASON_CODES:
                 raise ReviewContractError("review_reason_invalid")
             reason = action["reason_code"]
             state = "REVOCATION_DRAFT_AWAITING_AUTHENTICATED_REVIEW"
         else:
             if not queue and decision != "REQUEST_EVIDENCE":
                 raise ReviewContractError("missing_candidate_not_rejectable")
-            if action["reason_code"] not in REASON_CODES:
+            if not isinstance(action["reason_code"], str) or action["reason_code"] not in REASON_CODES:
                 raise ReviewContractError("review_reason_invalid")
             reason = action["reason_code"]
             state = ("REJECTION_DRAFT_AWAITING_AUTHENTICATED_REVIEW"
