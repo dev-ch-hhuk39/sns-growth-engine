@@ -94,6 +94,19 @@ jobs:
           print(f"XSERVER_MEDIA_CRON={' | '.join(cron_rows) if cron_rows else 'NOT_FOUND'}")
           print(f"XSERVER_CRON_TZ={cron_tz or 'SYSTEM_TIMEZONE'}")
           PY
+      - name: Guard heavy media worker memory before preparing dependencies
+        if: github.event.inputs.confirm_preparation == 'true' && github.event.inputs.dry_run_only != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          total_kib="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo)"
+          available_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+          if [[ ! "$total_kib" =~ ^[0-9]+$ || ! "$available_kib" =~ ^[0-9]+$ ||
+                "$total_kib" -lt 4194304 || "$available_kib" -lt 1572864 ]]; then
+            echo '[BLOCKED] heavy physical media needs >=4GiB total and >=1.5GiB available RAM; shared VPS work is not allowed' >&2
+            exit 78
+          fi
+          echo '[OK] heavy media worker capacity verified'
       - name: Create this run's owned media workspace
         run: |
           python3 - <<'PY'
