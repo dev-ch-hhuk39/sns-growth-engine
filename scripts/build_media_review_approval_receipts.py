@@ -171,8 +171,32 @@ def _validate_history(
         raise ReviewContractError("history_events_invalid")
     head = ZERO_SHA256
     for index, event in enumerate(events, start=1):
-        if not isinstance(event, dict):
+        _require_keys(event, {
+            "schema_version", "sequence", "previous_event_sha256",
+            "source_plan_sha256", "account_id", "slot_id", "queue_id",
+            "decision", "reviewer_id", "reviewed_at", "reason_code",
+            "evidence_ids", "usage_scope", "rights_valid_from",
+            "rights_expires_at", "revokes_event_sha256", "review_state",
+            "reviewer_identity_verified", "effective_approval",
+            "publish_authorized", "event_sha256",
+        })
+        if (event["schema_version"] != RECEIPT_SCHEMA
+                or event["decision"] not in DECISIONS
+                or not isinstance(event["queue_id"], str)
+                or (event["queue_id"] and not QUEUE_ID_RE.fullmatch(event["queue_id"]))
+                or (event["account_id"], event["slot_id"], event["queue_id"]) not in candidates
+                or event["reason_code"] not in REASON_CODES | {""}
+                or event["usage_scope"] not in {"", "THREADS_ORGANIC_ONLY"}
+                or not isinstance(event["evidence_ids"], dict)
+                or not all(isinstance(x, str) and EVIDENCE_RE.fullmatch(x)
+                           for x in event["evidence_ids"].values())):
             raise ReviewContractError("history_event_invalid")
+        _safe_id(event["reviewer_id"])
+        _parse_instant(event["reviewed_at"])
+        if event["rights_valid_from"]:
+            _parse_instant(event["rights_valid_from"])
+        if event["rights_expires_at"]:
+            _parse_instant(event["rights_expires_at"])
         if (event.get("sequence") != index
                 or event.get("previous_event_sha256") != head
                 or event.get("source_plan_sha256") != source_plan_sha256
