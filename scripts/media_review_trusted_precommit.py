@@ -121,7 +121,9 @@ def _valid_window(start: Any, expires: Any, now: datetime, code: str) -> datetim
 def _check_request(request: ReviewRequest) -> None:
     if not isinstance(request, ReviewRequest):
         raise PrecommitBlocked("review_request_invalid")
-    if (MEDIA_SLOTS.get((request.account_id, request.slot_id)) is None
+    if (not isinstance(request.account_id, str)
+            or not isinstance(request.slot_id, str)
+            or MEDIA_SLOTS.get((request.account_id, request.slot_id)) is None
             or not isinstance(request.queue_id, str)
             or not QUEUE_ID_RE.fullmatch(request.queue_id)
             or not isinstance(request.expected_queue_revision, str)
@@ -244,9 +246,9 @@ def _verify_evidence(
         needed.update(CLIP_EVIDENCE)
     refs = event.get("evidence_ids")
     if (not isinstance(refs, dict) or set(refs) != needed
-            or len(set(refs.values())) != len(refs)
             or any(not isinstance(v, str) or not EVIDENCE_RE.fullmatch(v)
-                   for v in refs.values())):
+                   for v in refs.values())
+            or len(set(refs.values())) != len(refs)):
         raise PrecommitBlocked("evidence_references_invalid")
     expiry = _valid_window(
         event.get("rights_valid_from"), event.get("rights_expires_at"),
