@@ -1,0 +1,61 @@
+name: Production Capacity Recovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_current:
+        description: Expected installed runtime revision (40-character SHA)
+        required: true
+        type: string
+      obsolete_release_one:
+        description: Explicit release SHA to remove, never current or rollback
+        required: true
+        type: string
+      obsolete_release_two:
+        description: Second obsolete release SHA
+        required: true
+        type: string
+      confirm_cleanup:
+        description: False performs read-only preflight; true applies exact bounded cleanup
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-production-capacity-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Restrict cleanup to two obsolete SNS runtime releases
+        shell: bash
+        env:
+          EXPECTED_CURRENT: ${{ inputs.expected_current }}
+          OBSOLETE_ONE: ${{ inputs.obsolete_release_one }}
+          OBSOLETE_TWO: ${{ inputs.obsolete_release_two }}
+          CONFIRM_CLEANUP: ${{ inputs.confirm_cleanup }}
+        run: |
+          set -euo pipefail
+          export PUBLISH_ENABLED=false
+          export ALLOW_REAL_THREADS_POST=false
+          export ALLOW_REAL_X_POST=false
+          args=(
+            --expected-current "$EXPECTED_CURRENT"
+            --target "$OBSOLETE_ONE"
+            --target "$OBSOLETE_TWO"
+          )
+          if [ "$CONFIRM_CLEANUP" = "true" ]; then
+            args+=(--confirm-cleanup)
+          fi
+          python3 scripts/prune_obsolete_runtime_releases.py "${args[@]}"

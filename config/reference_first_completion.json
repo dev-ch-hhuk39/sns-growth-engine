@@ -52,6 +52,7 @@
       "media-preparation-scheduler.yml",
       "publication-review-sync.yml",
       "production-storage-readonly-audit.yml",
+      "production-capacity-recovery.yml",
       "source-research.yml",
       "threads-video-reference-preparation.yml"
     ],
