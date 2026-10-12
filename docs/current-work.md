@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6K + 6L — read-only provider ACL preflight and no-write canary classification
+
+- Base main `cb7d2be858c4615c658fe6dbb6c3bd63fdfa4c0f` (PR #387), branch `chatgpt/phase5b6kl-readonly-preflight-canary-20261012`.
+- Phase 6K: `ReadOnlyGoogleMirrorMetadata` provides only bounded Google Drive `files.get` (operational + reporting) and Sheets `spreadsheets.get` (reporting tab). It checks the **same explicitly supplied principal** cannot edit or modify the operational file, can edit and modify reporting, and reporting tab ID/shape/identity match the pinned server-owned target. Denial, missing capabilities and stale/malformed metadata fail closed. All checks are **read only** and results explicitly do NOT authorize writes or SNS posts. Never auto-discover credentials.
+- Phase 6L: `MirrorReadOnlyCanary` requires reviewer CLAIM, current managed preview, 6J scoped service JWT and the exact **same Google credential object** for metadata client and gspread worksheet client. It classifies exact mirror readback, empty, older same candidate and conflict; unresolved previous delivery blocks. Default `allow_provider_reads=False`; performs only three provider metadata GETs and one exact row read, never a PUT or DB mutation.
+- The `GspreadReportingFixedRow.from_trusted_client` factory now binds its supplied credential object, while direct worksheet constructors remain **unbound** and unable to claim 6L ACL assurance. Existing 6J delivery behavior and its default write-disabled setting are unchanged.
+- Offline fake Google GET and worksheet tests `scripts/test_media_mirror_readonly_canary.py` include inherited 6J/6I/queue/rights tests and run in CI. No real Drive/Sheets API, live service account, secrets, VPS or SNS posting.
+- Detailed design and operational boundary: `docs/PHASE5B6K_6L_READONLY_PREFLIGHT_AND_CANARY.md`.
+- Next *approval-dependent/heavier phase*: separately provision real isolated Google principal/destination, verify provider ACL on live account using dedicated VPS operations, approved reporting-only canary and immutable rollback evidence; subsequently migrate legacy operational writers. This code alone is **NOT live provider evidence or a write permit**.
+
 ## 2026-10-12 Phase 5B-6J — guarded fixed-row reporting Google Sheets transport (code-only)
 
 - Base: main `c896760966f91e22ef1013116110b8efbf2d50fe` (PR #386), worktree `chatgpt/phase5b6j-isolated-sheets-mirror-20261012`.
