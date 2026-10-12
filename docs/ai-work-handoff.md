@@ -1,3 +1,11 @@
+## 2026-10-12 Phase 5B-5D authenticated reviewer console (development only)
+
+- Base main `f05b8dd031b851464812b3d00771bd3543477fc7` (merged Phase 5B-5C PR #378). Isolated worktree/branch `chatgpt/phase5b5d-protected-review-console-20261012`.
+- Injection-only protected WSGI reviewer UI: server-pinned RS256 JWT/IdP-backed session and account RBAC, session-bound CSRF, strict HTTPS origin/host, no-store CSP, server-owned inbox, secure caption text, exact asset-bound original proof download, immutable review recording and revocation within the existing guarded SQLite ledger. See `docs/PHASE5B5D_AUTHENTICATED_REVIEW_CONSOLE.md`.
+- New offline tests use ephemeral keys and temporary SQLite. Focused review-console tests 23/23 PASS; full CI acceptance is separate.
+- No live IdP/cookie provisioning, no real trusted backend, no production WSGI server, no cross-store Sheets atomicity, no effective approval, READY, publishing, VPS or external mutation.
+- Next: 5B-6 publication authority, all legacy READY/publish paths gate, cross-store consistency, publish-time rights revalidation and genuine production canaries after VPS management authorization.
+
 ## 2026-10-11 Phase 5B-5C queue/approval local reconciliation (development only)
 
 - Phase 5B-5B PR #377 CI PASS and MERGED into main at `a4c5d07982e5c88dcd0886a86c1d170eea226556`.

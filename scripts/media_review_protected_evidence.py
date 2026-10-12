@@ -20,7 +20,9 @@ from build_media_review_approval_receipts import (
     APPROVAL_EVIDENCE, CLIP_EVIDENCE, EVIDENCE_RE, QUEUE_ID_RE,
 )
 from media_review_trusted_precommit import (
-    PrecommitBlocked, ReviewRequest, SessionVerifier, _check_principal, _utc,
+    MAX_CLOCK_SKEW, MAX_EVIDENCE_VERIFICATION_AGE,
+    ReviewRequest, SessionVerifier,
+    _check_principal, _time, _utc,
 )
 
 MIGRATION = Path(__file__).resolve().parents[1] / "db" / "migrations" / "0002_sns_media_review_trust_store.sql"
@@ -269,3 +271,39 @@ class ProtectedEvidenceVault:
             "original_reference_verified": True,
             "verified_at": rows[0][9],
         }
+
+    def read_original_scoped(
+        self, *, evidence_id: str, account_id: str, slot_id: str,
+        queue_id: str, bearer_token: str, verifier: SessionVerifier,
+        trusted_issuer: str, as_of: datetime | None = None,
+    ) -> bytes:
+        """Fetch original bytes for a verified, in-scope human-review session.
+
+        Only call after checking evidence_id belongs to the *current* draft.
+        The caller must serve a no-store, attachment-only, no-sniff response.
+        The method never emits a source URL, token, or raw proof in logs.
+        """
+        now = _utc(as_of or datetime.now(timezone.utc), "proof_clock_invalid")
+        _authorize(
+            bearer_token, verifier=verifier, issuer=trusted_issuer,
+            account_id=account_id, slot_id=slot_id, queue_id=queue_id, now=now,
+        )
+        record = self.get_current(evidence_id)
+        if (record["account_id"], record["slot_id"], record["queue_id"]) != (
+            account_id, slot_id, queue_id,
+        ) or record.get("revoked") is not False:
+            raise EvidenceBlocked("proof_scope_or_revocation_invalid")
+        try:
+            start = _time(record["rights_valid_from"], "proof_rights_invalid")
+            expiry = _time(record["rights_expires_at"], "proof_rights_invalid")
+            checked = _time(record["verified_at"], "proof_verification_invalid")
+            if (not start <= now < expiry
+                    or checked > now + MAX_CLOCK_SKEW
+                    or now - checked > MAX_EVIDENCE_VERIFICATION_AGE):
+                raise EvidenceBlocked("proof_expired_or_unverified")
+        except (TypeError, ValueError):
+            raise EvidenceBlocked("proof_expired_or_unverified") from None
+        original = self._events(evidence_id)[0][4]
+        if not isinstance(original, bytes) or not 1 <= len(original) <= PROOF_MAX_BYTES:
+            raise EvidenceBlocked("proof_bytes_invalid")
+        return original
