@@ -354,10 +354,19 @@ def _validate_expected(
 def _may_refresh(db: sqlite3.Connection, key: tuple[str, str, str]) -> bool:
     # Any review in history freezes this candidate permanently. A revoked
     # review is still a review; no silent refreshing to shed its identity.
-    for table in (
+    tables = [
         "sns_media_review_events", "sns_media_review_queue_bindings",
         "sns_media_publish_intent_heads", "sns_media_dispatch_heads",
-    ):
+    ]
+    # Managed queue boundary is introduced by migration 0007. Older
+    # deployments and existing review tests work without that migration,
+    # but once bound no shadow refresh may rewrite an audited candidate.
+    if db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' "
+        "AND name='sns_media_managed_queue_heads'"
+    ).fetchone():
+        tables.append("sns_media_managed_queue_heads")
+    for table in tables:
         row = db.execute(
             f"""SELECT 1 FROM {table}
                 WHERE account_id=? AND slot_id=? AND queue_id=? LIMIT 1""",

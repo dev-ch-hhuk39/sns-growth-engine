@@ -1,3 +1,14 @@
+## 2026-10-12 Phase 5B-6F — authenticated managed SQLite queue commands + Sheets mirror preview
+
+- Base merged main `934fcfff31378c0d4bf25155043581027d0359c3` (PR #383); worktree `chatgpt/phase5b6f-shadow-queue-writer-20261012`.
+- Added private explicit DB migration 0007 with CAS-managed queue heads, append-only hash-linked command events and immutable sanitized per-event *mirror previews*. No actual Sheets writer or production migration.
+- `scripts/media_managed_queue_writer.py` introduces `MediaManagedQueueWriter.bind`, protective `HOLD/ARCHIVE/QUARANTINE`, explicit same-content `reconcile_observation`, and the opt-in `SQLiteManagedOperationalSnapshot` backed by the existing protected SQLite shadow/vault. All operations require scoped pinned-RS256 MFA reviewer and reject stale/forged account/source, duplicate commands, changed captions and revoked proof.
+- 6E shadow refreshes are frozen after any managed binding; new identical source observations need an authenticated CAS reconciliation before reads resume. No data or old approvals silently change.
+- Mirror output contains only hash/status identifiers and `view_only=true`; no actual Sheets synchronization, sent ACK, caption/media payload, READY promotion or SNS network call. All states remain `*_BLOCKED` and `publish_authorized=false`.
+- Focused `scripts/test_media_managed_queue_writer.py` validates 70 inherited/new offline tests and runs in PR CI; full regression/workflow checks required before merge.
+- Operational limitations and future work: `docs/PHASE5B6F_MANAGED_QUEUE_AND_MIRROR_PREVIEW.md`. **Next:** audited legacy read/write cutover, independent service identity, actual read-only mirror transport with idempotent ACK, atomic posting claims, production canary and restoration.
+- Common VPS operations remain isolated to the dedicated VPS chat; do not deploy/migrate/enable posting here.
+
 ## 2026-10-12 Phase 5B-6E SQLite shadow queue source (code-only)
 
 - Base main `67d0ebc961bd01bfabc192b91b1118b3c3d008fe` (PR #382). Feature branch `chatgpt/phase5b6e-canonical-queue-authority-20261012`.
