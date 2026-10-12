@@ -35,6 +35,11 @@ from media_mirror_canary_approval import (  # noqa: E402
 from media_mirror_operator_grants import (  # noqa: E402
     initialize_operator_grant_schema,
 )
+from media_mirror_operator_idp import (  # noqa: E402
+    AUDIENCE as IDP_AUDIENCE, SCOPE as IDP_SCOPE,
+    TOKEN_USE as IDP_TOKEN_USE, ACR as IDP_ACR, PROFILE as IDP_PROFILE,
+    PinnedOperatorIdpSessionVerifier, initialize_operator_idp_schema,
+)
 from media_mirror_reporting_delivery import _hash as delivery_hash  # noqa: E402
 from media_mirror_reporting_delivery import IsolatedSheetsMirrorDelivery  # noqa: E402
 from media_mirror_sheets_adapter import (  # noqa: E402
@@ -54,6 +59,8 @@ REPORT = "reporting_sheet_00001"
 ORIGINAL = "operational_sheet_00001"
 TAB = "mirror_preview_internal"
 ROW = 7
+IDP_ISSUER = ISSUER.rstrip("/") + "/human-identity"
+IDP_KID = "canary_human_idp_signer_20261012"
 
 
 def b64(obj):
@@ -214,6 +221,34 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
         cls.operator_subjects = (
             "canary_review_human_01", "canary_review_human_02",
         )
+        cls.idp_private = rsa.generate_private_key(
+            public_exponent=65537,key_size=2048,
+        )
+        cls.idp_public = cls.idp_private.public_key().public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+
+    @classmethod
+    def idp_token(cls, slot, overrides=None, header_overrides=None):
+        claims={
+            "iss":IDP_ISSUER,"aud":IDP_AUDIENCE,
+            "token_use":IDP_TOKEN_USE,"scope":IDP_SCOPE,
+            "sub":cls.operator_subjects[slot],
+            "sid":f"canary_idp_session_{slot}_20261012",
+            "jti":f"canary_idp_token_{slot}_20261012",
+            "acr":IDP_ACR,"amr":["mfa","webauthn"],
+            "auth_time":T-90,"mfa_at":T-65,
+            "iat":T-60,"nbf":T-60,"exp":T+180,
+        }
+        claims.update(overrides or {})
+        header={"alg":"RS256","typ":"JWT","kid":IDP_KID}
+        header.update(header_overrides or {})
+        raw=b64(header)+"."+b64(claims)
+        signed=cls.idp_private.sign(
+            raw.encode("ascii"),padding.PKCS1v15(),hashes.SHA256(),
+        )
+        return raw+"."+base64.urlsafe_b64encode(signed).decode().rstrip("=")
 
     @classmethod
     def live_token(cls,overrides=None,header_overrides=None):
@@ -236,6 +271,29 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
         initialize_mirror_delivery_schema(self.db)
         initialize_canary_approval_schema(self.db)
         initialize_operator_grant_schema(self.db)
+        initialize_operator_idp_schema(self.db)
+        self.idp_tokens=tuple(self.idp_token(slot) for slot in range(2))
+        for slot,token in enumerate(self.idp_tokens):
+            self.db.execute(
+                """INSERT INTO sns_mirror_canary_idp_sessions(
+                   session_id,subject,issuer,signer_kid,token_jti,
+                   assertion_sha256,authenticated_at,mfa_at,issued_at,
+                   expires_at,authentication_profile,enabled,revoked_at,
+                   provisioned_by
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    f"canary_idp_session_{slot}_20261012",
+                    self.operator_subjects[slot],IDP_ISSUER,IDP_KID,
+                    f"canary_idp_token_{slot}_20261012",
+                    hashlib.sha256(token.encode("ascii")).hexdigest(),
+                    T-90,T-65,T-60,T+180,IDP_PROFILE,1,None,
+                    "offline_test_idp_bridge",
+                ),
+            )
+        self.identity_verifier=PinnedOperatorIdpSessionVerifier(
+            db=self.db,issuer=IDP_ISSUER,
+            public_keys_by_kid={IDP_KID:self.idp_public},
+        )
         self.operator_gate = PinnedTwoOperatorCanaryVerifier(
             db=self.db, issuer=ISSUER,
             operators_by_kid={
@@ -243,6 +301,7 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
                     self.operator_subjects[i], self.operator_public_keys[i],
                 ) for i in range(2)
             },
+            identity_verifier=self.identity_verifier,
         )
         self.token_live = self.live_token()
         self.db.execute(
@@ -303,9 +362,10 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
 
     def operator_signoffs(
         self, *, event=None, operation_id="delivery_run_20261012_000001",
-        overrides=None, which=(0, 1),
+        overrides=None, which=(0, 1), identity_tokens=None,
     ):
         event = event or self.ident()
+        identity_tokens = self.idp_tokens if identity_tokens is None else identity_tokens
         preview = self.writer.mirror_previews()[0]
         claims = {
             "iss": ISSUER, "aud": CANARY_AUDIENCE,
@@ -323,6 +383,10 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
             fields = dict(claims)
             fields["sub"] = self.operator_subjects[slot]
             fields["approval_slot"] = slot + 1
+            fields["idp_session_id"] = f"canary_idp_session_{slot}_20261012"
+            fields["idp_assertion_sha256"] = hashlib.sha256(
+                identity_tokens[slot].encode("ascii"),
+            ).hexdigest()
             fields["jti"] = f"canary_operator_{slot}_{operation_id}"
             header = {"typ": "JWT", "alg": "RS256", "kid": self.operator_kids[slot]}
             signed = b64(header) + "." + b64(fields)
@@ -352,6 +416,8 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
                 event=args["event_sha256"],
                 operation_id=args["operation_id"],
             )
+        if "identity_assertion_tokens" not in args:
+            args["identity_assertion_tokens"]=self.idp_tokens
         return self.engine.deliver_once(**args)
 
     def recover(self,event=None,**changes):
@@ -658,6 +724,10 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
                 db=other,issuer=ISSUER,
                 public_keys_by_kid={KID:self.live_public},
             )
+            external_idp=PinnedOperatorIdpSessionVerifier(
+                db=other,issuer=IDP_ISSUER,
+                public_keys_by_kid={IDP_KID:self.idp_public},
+            )
             gate=PinnedTwoOperatorCanaryVerifier(
                 db=other, issuer=ISSUER,
                 operators_by_kid={
@@ -665,6 +735,7 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
                         self.operator_subjects[i], self.operator_public_keys[i],
                     ) for i in range(2)
                 },
+                identity_verifier=external_idp,
             )
             second=IsolatedSheetsMirrorDelivery(
                 db=other,verifier=verifier,adapter=self.sheet_adapter,
@@ -682,6 +753,7 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
                     canary_approval_tokens=self.operator_signoffs(
                         event=event,operation_id=operation,
                     ),
+                    identity_assertion_tokens=self.idp_tokens,
                 )
             self.assertEqual(self.ws.writes,1)
         finally:

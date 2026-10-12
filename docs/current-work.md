@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6P — independent operator IdP session and phishing-resistant MFA proof (code only)
+
+- Base verified main `030355dd6caa3253dea24ca571730f4815388d20` (PR #392), isolated branch `chatgpt/phase5b6p-operator-identity-enrollment-20261012`.
+- Added explicit migration `0013_sns_canary_idp_sessions.sql` for separately authenticated, default-disabled, revocable, immutable IdP operator sessions with fixed identity/issuer/signing key/JTI/token fingerprint/authentication and phishing-resistant MFA timestamps; **NOT applied to production**.
+- New `PinnedOperatorIdpSessionVerifier`: independent RS256 issuer and pinned key, distinct from service and operator-approval keys, 5-minute tokens, custom audience/scope/ACR and both `mfa`/`webauthn` methods. Verify signed session/subject and exact token hash against the protected active IdP session row. No login, credential discovery, IdP HTTP call or ability to issue/provision real sessions.
+- 6N signed operator approval now cryptographically binds IdP session ID and IdP token SHA-256. Opt-in delivery refuses to initialize without separate identity verifier and **two** independently signed active human identity proofs in addition to operator signatures and 6O current role grants. The *original pair* is reverified immediately before the sole reporting-only PUT. Revocation after PREPARED denies PUT and is not auto retried; read-only recovery remains possible.
+- New `scripts/test_media_mirror_operator_idp.py` inherits all previous 6O/6N/6M tests and adds offline adversarial cases: bad signing key/profile/MFA, forged identity, wrong human, session expiry/revocation, post-PREPARED revocation, no signoff replay and zero publication. Added to CI.
+- Detailed limitations / ops handoff: `docs/PHASE5B6P_INDEPENDENT_IDP_SESSION_PROOFS.md`.
+- **No real staff MFA, IdP integration, Google OAuth/ACL or Sheets write, shared VPS operation, SNS media publication, or production migration.** Real staff enrollment, signing/provisioning and an approved reporting-only canary are separate heavy security/operations phases.
+
 ## 2026-10-12 Phase 5B-6O — current operator grants and immediate pre-PUT revocation validation
 
 - Base verified main `5074328a792e08e3178a982d2304d6de0fd01af1` (PR #391), independent worktree `chatgpt/phase5b6o-operator-auth-readiness-20261012`.

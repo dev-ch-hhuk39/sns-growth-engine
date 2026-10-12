@@ -22,6 +22,7 @@ from media_mirror_delivery_identity import (
 from media_mirror_canary_approval import (
     CanaryApprovalBlocked, PinnedTwoOperatorCanaryVerifier,
 )
+from media_mirror_operator_idp import PinnedOperatorIdpSessionVerifier
 from media_mirror_outbox import (
     SHA, ZERO, _audit as _outbox_audit, _head as _outbox_head,
     _projection_for as _verified_preview,
@@ -247,6 +248,14 @@ class IsolatedSheetsMirrorDelivery:
             }
             if service_keys.intersection(operator_keys):
                 raise MirrorDeliveryBlocked("mirror_canary_service_key_reused")
+            idp = canary_approver.identity_verifier
+            if (type(idp) is not PinnedOperatorIdpSessionVerifier
+                    or idp.db is not db
+                    or idp.issuer in (verifier.issuer,canary_approver.issuer)):
+                raise MirrorDeliveryBlocked("mirror_canary_independent_idp_required")
+            idp_keys = {k.public_numbers() for k in idp.keys.values()}
+            if idp_keys.intersection(service_keys | operator_keys):
+                raise MirrorDeliveryBlocked("mirror_canary_idp_signing_key_reused")
         self.db,self.verifier,self.adapter = db,verifier,adapter
         self.canary_approver = canary_approver
         self.allow_reporting_write = allow_reporting_write
@@ -324,6 +333,7 @@ class IsolatedSheetsMirrorDelivery:
         self,*,event_sha256: str,destination_id: str,service_token: str,
         operation_id: str,as_of: datetime | None = None,
         canary_approval_tokens: tuple[str,str] | None = None,
+        identity_assertion_tokens: tuple[str,str] | None = None,
     ) -> dict[str, Any]:
         """One fixed-row write after TWO independent signed approvals.
 
@@ -341,6 +351,10 @@ class IsolatedSheetsMirrorDelivery:
                 or len(canary_approval_tokens) != 2
                 or any(type(x) is not str for x in canary_approval_tokens)):
             raise MirrorDeliveryBlocked("mirror_canary_two_operator_approval_required")
+        if (not isinstance(identity_assertion_tokens, tuple)
+                or len(identity_assertion_tokens) != 2
+                or any(type(x) is not str for x in identity_assertion_tokens)):
+            raise MirrorDeliveryBlocked("mirror_canary_independent_identity_required")
         now = _utc(as_of or datetime.now(timezone.utc),"mirror_delivery_clock_invalid")
         try:
             self.db.execute("BEGIN IMMEDIATE")
@@ -367,6 +381,7 @@ class IsolatedSheetsMirrorDelivery:
                 row_number=self.adapter.target.row_number,
                 projection_sha256=_hash(preview),
                 service_subject=actor, as_of=now,
+                identity_tokens=identity_assertion_tokens,
             )
             prepared = _record(
                 self.db,event_id=event_sha256,dest=destination_id,
@@ -443,6 +458,7 @@ class IsolatedSheetsMirrorDelivery:
                         row_number=self.adapter.target.row_number,
                         projection_sha256=_hash(put_preview),
                         service_subject=put_actor,as_of=put_now,
+                        identity_tokens=identity_assertion_tokens,
                     )
                     self.db.commit()
                 except Exception:

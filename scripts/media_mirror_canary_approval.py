@@ -29,6 +29,9 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from media_mirror_operator_grants import (
     OperatorGrantBlocked, require_current_operator_grant,
 )
+from media_mirror_operator_idp import (
+    OperatorIdentityBlocked, PinnedOperatorIdpSessionVerifier,
+)
 from media_review_trusted_precommit import _utc
 from media_review_verified_identity import SAFE_NAME, _epoch, _json_object, _unbase
 
@@ -88,6 +91,7 @@ class PinnedTwoOperatorCanaryVerifier:
     def __init__(
         self, *, db: sqlite3.Connection, issuer: str,
         operators_by_kid: Mapping[str, tuple[str, bytes]],
+        identity_verifier: PinnedOperatorIdpSessionVerifier | None = None,
     ) -> None:
         if (not isinstance(db, sqlite3.Connection)
                 or not isinstance(issuer, str)
@@ -125,13 +129,18 @@ class PinnedTwoOperatorCanaryVerifier:
         }
         if len(fingerprints) != len(pairs):
             raise CanaryApprovalBlocked("canary_operator_key_material_reused")
+        if identity_verifier is not None and (
+                type(identity_verifier) is not PinnedOperatorIdpSessionVerifier
+                or identity_verifier.db is not db):
+            raise CanaryApprovalBlocked("canary_idp_binding_invalid")
         self.db, self.issuer, self.operators = db, issuer, pairs
+        self.identity_verifier = identity_verifier
 
     def _verify_one(
         self, *, token: str, event_sha256: str, operation_id: str,
         destination_id: str, account_id: str, slot_id: str, queue_id: str,
         row_number: int, projection_sha256: str, service_subject: str,
-        now: datetime, approval_slot: int,
+        now: datetime, approval_slot: int, identity_token: str,
     ) -> _OperatorProof:
         if not isinstance(token, str) or not 16 <= len(token) <= 4096:
             raise CanaryApprovalBlocked("canary_operator_jwt_invalid")
@@ -209,6 +218,18 @@ class PinnedTwoOperatorCanaryVerifier:
             )
         except OperatorGrantBlocked:
             raise CanaryApprovalBlocked("canary_operator_grant_denied") from None
+        if self.identity_verifier is None:
+            raise CanaryApprovalBlocked("canary_idp_identity_required")
+        idp_session_id = claims.get("idp_session_id")
+        idp_assertion_sha256 = claims.get("idp_assertion_sha256")
+        try:
+            self.identity_verifier.verify_active(
+                token=identity_token, subject=pinned_subject,
+                expected_session_id=idp_session_id,
+                expected_sha256=idp_assertion_sha256, now=now,
+            )
+        except OperatorIdentityBlocked:
+            raise CanaryApprovalBlocked("canary_idp_identity_denied") from None
         return _OperatorProof(
             subject=pinned_subject, kid=kid, jti=jti,
             token_sha256=hashlib.sha256(token.encode("ascii")).hexdigest(),
@@ -220,6 +241,7 @@ class PinnedTwoOperatorCanaryVerifier:
         account_id: str, slot_id: str, queue_id: str,
         row_number: int, projection_sha256: str,
         service_subject: str, as_of: datetime,
+        identity_tokens: tuple[str,str],
     ) -> None:
         """JIT verification before PUT; never consumes or signs a new token.
 
@@ -231,8 +253,11 @@ class PinnedTwoOperatorCanaryVerifier:
         if not self.db.in_transaction:
             raise CanaryApprovalBlocked("canary_atomic_read_required")
         if (not isinstance(tokens, tuple) or len(tokens) != 2
-                or any(type(v) is not str for v in tokens)):
-            raise CanaryApprovalBlocked("canary_operator_approval_missing")
+                or any(type(v) is not str for v in tokens)
+                or not isinstance(identity_tokens, tuple)
+                or len(identity_tokens) != 2
+                or any(type(v) is not str for v in identity_tokens)):
+            raise CanaryApprovalBlocked("canary_operator_identity_missing")
         now = _utc(as_of, "canary_operator_clock_invalid")
         proofs = [
             self._verify_one(
@@ -245,6 +270,7 @@ class PinnedTwoOperatorCanaryVerifier:
                 projection_sha256=projection_sha256,
                 service_subject=service_subject, now=now,
                 approval_slot=index,
+                identity_token=identity_tokens[index-1],
             )
             for index, t in enumerate(tokens, 1)
         ]
@@ -276,12 +302,16 @@ class PinnedTwoOperatorCanaryVerifier:
         account_id: str, slot_id: str, queue_id: str,
         row_number: int, projection_sha256: str,
         service_subject: str, as_of: datetime,
+        identity_tokens: tuple[str,str],
     ) -> None:
         """Called only WITHIN the same BEGIN IMMEDIATE as delivery PREPARE."""
         if not self.db.in_transaction:
             raise CanaryApprovalBlocked("canary_atomic_transaction_required")
         if (not isinstance(tokens, tuple) or len(tokens) != 2
                 or type(tokens[0]) is not str or type(tokens[1]) is not str
+                or not isinstance(identity_tokens, tuple)
+                or len(identity_tokens) != 2
+                or any(type(v) is not str for v in identity_tokens)
                 or not isinstance(event_sha256, str)
                 or SHA.fullmatch(event_sha256) is None
                 or not isinstance(projection_sha256, str)
@@ -300,6 +330,7 @@ class PinnedTwoOperatorCanaryVerifier:
                 row_number=row_number, projection_sha256=projection_sha256,
                 service_subject=service_subject, now=now,
                 approval_slot=index,
+                identity_token=identity_tokens[index-1],
             )
             for index, token in enumerate(tokens, 1)
         ]
