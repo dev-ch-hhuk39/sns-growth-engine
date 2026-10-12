@@ -122,12 +122,12 @@ python3 -m compileall -q src scripts
 git diff --check
 ```
 
-Fixtures contain only ephemeral RSA keys, temp SQLite, isolated gspread
-mocks and synthetic provider GET responses. They exercise wrong current
-user capabilities, missing Drive fields, expired/revoked sessions,
-different credential objects, empty/older/foreign data, unknown prior
-delivery, malformed formulas, provider outage and non-mutation. No
-Google app connector, live API, real Sheet, VPS or secret was used.
+Fixtures use temporary cryptographic test identities, private SQLite,
+isolated gspread mocks and synthetic provider GET responses. They check
+ACL mismatches, missing Drive fields, expired sessions, distinct fake
+principals, absent rows, stale revisions, unrelated candidates, unclear
+results, malformed formulas, provider outages and local non-mutation.
+All exercises remain offline; no actual Google account was accessed.
 
 ## Next work (heavy approval-dependent stage)
 
