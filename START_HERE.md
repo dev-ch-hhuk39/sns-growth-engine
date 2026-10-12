@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6B: transactional nonauthorizing media publication intents
+
+- Source branch `chatgpt/phase5b6b-transactional-publish-claims-20261012` based on main `c35057268787bdae538b8712c4dd7aefc40002d7` (PR #380).
+- Added explicit fourth review DB migration (`db/migrations/0004_sns_media_publish_intents.sql`): append-only intent events + immutable history with unique per-account media ID and public content SHA-256 reservations.
+- Added `scripts/media_publish_intent_authority.py`: requires server-pinned RS256 reviewer, active scoped DB session, verified original evidence, a fresh canonical trusted queue, current matching review/queue bindings, rights freshness and CAS. HOLD/recheck/cancel state changes are local SQLite-only and always permanently nonauthorizing.
+- No developer-supplied `publish_authorized` field, environment flag, Sheet approval, or local HOLD can enable a media network request. Existing Phase 5B-6A mandatory publisher interlock remains unchanged.
+- Tests use ephemeral RSA keys and synthetic trusted reads only. No Sheets, external publish API, real credential, production migration, VPS, READY or deployment.
+- Reference: `docs/PHASE5B6B_TRANSACTIONAL_PUBLISH_INTENT.md`.
+- Next development: a genuine single transaction for canonical queue + reviewer + one-use publisher action and external delivery outcomes, full direct publisher/Sheets writer inventory. Common VPS operations belong to the separate VPS management chat.
+
 ## 2026-10-12 Phase 5B-6A mandatory media publication safety interlock (source only)
 
 - Base merged Phase 5B-5D PR #379 at `eee16528714a01e1c440bd7cd680e1eb69f46f62`. Worktree: `chatgpt/phase5b6a-publish-boundary-20261012`.
