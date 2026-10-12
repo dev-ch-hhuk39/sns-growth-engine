@@ -26,6 +26,9 @@ from media_mirror_outbox import (
 from media_mirror_sheets_adapter import (
     GspreadReportingFixedRow,
 )
+from media_mirror_readonly_acl_preflight import (
+    ReadOnlyGoogleMirrorMetadata, read_only_acl_preflight,
+)
 from media_publish_intent_authority import _database
 from media_review_trusted_precommit import _time, _utc
 
@@ -204,6 +207,8 @@ class IsolatedSheetsMirrorDelivery:
         verifier: PinnedLiveMirrorServiceVerifier,
         adapter: GspreadReportingFixedRow,
         allow_reporting_write: bool = False,
+        acl_metadata: ReadOnlyGoogleMirrorMetadata | None = None,
+        expected_principal_email: str | None = None,
     ) -> None:
         if (not isinstance(db,sqlite3.Connection)
                 or type(verifier) is not PinnedLiveMirrorServiceVerifier
@@ -211,8 +216,44 @@ class IsolatedSheetsMirrorDelivery:
                 or type(adapter) is not GspreadReportingFixedRow
                 or type(allow_reporting_write) is not bool):
             raise MirrorDeliveryBlocked("mirror_delivery_configuration_invalid")
+        # The old 6J writer could be enabled without checking actual Google
+        # Drive ACLs. From 6M onward even explicitly enabled writes must be
+        # bound to the *same credential object* used for the readonly ACL
+        # probe and the gspread worksheet factory. No bypass for test clients.
+        if allow_reporting_write and (
+                type(acl_metadata) is not ReadOnlyGoogleMirrorMetadata
+                or adapter.factory_credential_bound is not True
+                or adapter.auth_credentials is not acl_metadata.credentials
+                or not isinstance(expected_principal_email, str)
+                or expected_principal_email != acl_metadata.principal_email):
+            raise MirrorDeliveryBlocked("mirror_delivery_acl_binding_required")
         self.db,self.verifier,self.adapter = db,verifier,adapter
         self.allow_reporting_write = allow_reporting_write
+        self.acl_metadata = acl_metadata
+        self.expected_principal_email = expected_principal_email
+
+    def _current_acl(self, *, now: datetime) -> None:
+        """Re-observe both permissions and reporting tab using writer creds.
+
+        Every invocation issues exactly three provider GETs; there is no
+        persisted allow-to-write flag or reusable attestation token. These
+        checks mitigate but do not eliminate external TOCTOU/ACL changes.
+        """
+        if not self.allow_reporting_write:
+            raise MirrorDeliveryBlocked("mirror_reporting_write_disabled")
+        try:
+            evidence = read_only_acl_preflight(
+                client=self.acl_metadata,
+                target=self.adapter.target,
+                expected_principal_email=self.expected_principal_email,
+                observed_at=now,
+            )
+            if evidence["status"] != "READ_ONLY_ACL_PASSED_NOT_ACTIVATED":
+                raise MirrorDeliveryBlocked("mirror_delivery_acl_unverified")
+            if self.adapter.auth_credentials is not self.acl_metadata.credentials:
+                raise MirrorDeliveryBlocked("mirror_delivery_acl_binding_changed")
+        except Exception:
+            raise MirrorDeliveryBlocked("mirror_delivery_acl_unverified") from None
 
     def _permit(
         self,*,event_id: str,dest: str,token: str,now: datetime,
@@ -304,6 +345,9 @@ class IsolatedSheetsMirrorDelivery:
             "OUTCOME_UNKNOWN","response_unverified",False
         )
         try:
+            # PREPARED is already committed. ACL uncertainty must never
+            # become a no-record/no-claim retry loophole.
+            self._current_acl(now=now)
             # A second read-only guard reduces but cannot eliminate external
             # cross-store races. A successful Sheets PUT is not a CAS.
             self._permit(
@@ -319,6 +363,13 @@ class IsolatedSheetsMirrorDelivery:
                 and observed["queue_id"] == preview["queue_id"]
                 and observed["writer_version"] < preview["writer_version"]
             ):
+                # Mandatory just-in-time recheck *after* the initial
+                # provider read and immediately before the sole PUT.
+                self._current_acl(now=now)
+                self._permit(
+                    event_id=event_sha256,dest=destination_id,
+                    token=service_token,now=now,live_lease=True,
+                )
                 attempted = True
                 self.adapter.write_once(preview)
                 after = self.adapter.read()
@@ -386,6 +437,10 @@ class IsolatedSheetsMirrorDelivery:
                     or old["row_number"] != self.adapter.target.row_number):
                 raise MirrorDeliveryBlocked("mirror_delivery_reconcile_conflict")
             try:
+                # Read-only recovery also uses the same scoped credential;
+                # a principal that gains operational edit privilege cannot
+                # mark a formerly unknown delivery as reconciled.
+                self._current_acl(now=now)
                 observed = self.adapter.read()
             except Exception:
                 raise MirrorDeliveryBlocked("mirror_delivery_readback_unavailable") from None

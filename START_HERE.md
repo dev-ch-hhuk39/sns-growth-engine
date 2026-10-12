@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6M — mandatory live-reporting writer ACL recheck (code only)
+
+- Base main `41a8afb245e3efcd64641778a6828e0b8dc6241e` (PR #389), isolated branch `chatgpt/phase5b6mn-preflight-write-gate-20261012`.
+- Fixed a material safety gap: the 6K read-only Google ACL probe was not enforced by the 6J reporting-only writer. A 6J writer with `allow_reporting_write=True` now refuses initialization unless its gspread adapter is from `from_trusted_client`, its 6K metadata reader holds the **same credential object**, and the expected service principal email is pinned.
+- After durable SQLite PREPARED, the engine runs the full operational-deny/reporting-allow/unique-tab 6K provider inspection before reading the reporting row, then again **immediately before any one-time reporting PUT**; revocation and latest approved projection are also rechecked. Read-only reconciliation now rechecks ACLs.
+- Permissions change/Google outage never cause a retry; delivery remains blocked as `OUTCOME_UNKNOWN_BLOCKED` pending independent read-only reconciliation. No production credential lookup, Google calls, VPS commands, SNS posting, live migration or operational queue changes performed.
+- Existing 6J fake fixtures upgraded to factory-bound mock credentials, preserving all prior tests; 6L direct-worksheet rejection retained as a separate negative fixture. New focused test suite `scripts/test_media_mirror_write_acl_gate.py` added to PR CI.
+- Detailed design, limitations and operational acceptance gates: `docs/PHASE5B6M_MANDATORY_WRITE_TIME_ACL_GUARD.md`.
+- Next heavy phase requires separately approved **real** Google service ACL inspection + disposable reporting workbook canary. Keep production Sheets/VPS operations in their dedicated approved chat. A Sheets reporting mirror never authorizes SNS publishing.
+
 ## 2026-10-12 Phase 5B-6K + 6L — read-only provider ACL preflight and no-write canary classification
 
 - Base main `cb7d2be858c4615c658fe6dbb6c3bd63fdfa4c0f` (PR #387), branch `chatgpt/phase5b6kl-readonly-preflight-canary-20261012`.
