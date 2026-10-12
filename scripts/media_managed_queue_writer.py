@@ -251,6 +251,14 @@ def _append(db: sqlite3.Connection, key: tuple[str, str, str], *,
            VALUES(?,?,?,?,?,?,?)""",
         (digest, *key, version, _hash(projection), _canon(projection)),
     )
+    # Migration 0008's outbox (if provisioned) must be created inside this
+    # SAME transaction. Otherwise a crash after commit could silently leave
+    # an untracked mirror event. Older schemas remain backwards-compatible.
+    from media_mirror_outbox import enqueue_in_managed_write
+    enqueue_in_managed_write(
+        db, event_id=digest, key=key,
+        writer_version=version, projection_sha256=_hash(projection), now=now,
+    )
     return {
         "status": state, "writer_version": version,
         "writer_event_sha256": digest,
