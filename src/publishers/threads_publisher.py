@@ -71,7 +71,11 @@ def _create_container(
     media_type: str = "TEXT",
     media_url: str | None = None,
 ) -> str:
-    """投稿コンテナを作成し、container_id を返す。"""
+    """Create TEXT only; media containers cannot bypass the publisher gate."""
+    # No caller-side boolean/env/header can substitute for a trusted,
+    # same-store publication permit. Keep direct media helper calls blocked.
+    if media_type != "TEXT" or media_url is not None:
+        raise PermissionError("MEDIA_AUTHORITY_NOT_CONNECTED")
     import requests
 
     url = f"{THREADS_API_BASE}/{user_id}/threads"
@@ -98,7 +102,10 @@ def _create_carousel_container(
     media_urls: list[str],
     media_types: list[str],
 ) -> str:
-    """Create official Threads carousel children, then their parent container."""
+    """No direct carousel helper allowed before a trusted media authority."""
+    # The helper is importable outside ThreadsPublisher.publish(). Never
+    # allow it to issue child/container HTTP requests in this rollout.
+    raise PermissionError("MEDIA_AUTHORITY_NOT_CONNECTED")
     import requests
 
     children: list[str] = []
