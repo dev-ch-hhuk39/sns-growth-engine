@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6C + 6D local media dispatch guard and network sink inventory
+
+- Base: main `f5d1628f6de4c7623f9c8bedd99e9460438d69ca` (PR #381); feature worktree `chatgpt/phase5b6c-canonical-delivery-barrier-20261012`.
+- Added migration 0005 and `scripts/media_dispatch_guard.py`: exact local intent+queue+review+rights checks under SQLite `BEGIN IMMEDIATE` before 60-second `STAGED_BLOCKED`; cancellation, drift quarantine and unverified-outcome terminal states with append-only CAS journal.
+- Added `scripts/test_media_dispatch_guard.py` (42 tests including 22 inherited prior intent checks) with ephemeral RS256 and private SQLite; no SNS network.
+- Added 6D source-based HTTP POST sink inventory and regression test, plus protection against direct low-level Threads IMAGE/VIDEO/carousel container helper calls; both security tests run in PR CI.
+- Every result remains `publish_authorized=false`, `dispatch_allowed=false`; **no real media publish unlock, no Sheets or VPS mutation, no actual IdP**.
+- Detailed assessment: `docs/PHASE5B6C_6D_DISPATCH_GUARD_AND_NETWORK_INVENTORY.md`.
+- Next: a **real** server-owned canonical queue+review+dispatch backend and service identity with verified end-to-end atomicity; current Sheets+SQLite are not atomically linked. Preserve 5B-6A media stop until acceptance and separately approved production rollout.
+
 ## 2026-10-12 Phase 5B-6B: transactional nonauthorizing media publication intents
 
 - Source branch `chatgpt/phase5b6b-transactional-publish-claims-20261012` based on main `c35057268787bdae538b8712c4dd7aefc40002d7` (PR #380).
