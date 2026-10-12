@@ -1,3 +1,14 @@
+## 2026-10-12 Phase 5B-6I — isolated mirror service auth and offline readback trial
+
+- Base: merged main `9f6e696b772421c6b91bafb354737c92f047861b` (PR #385), development worktree `chatgpt/phase5b6i-mirror-identity-and-receipt-20261012`.
+- Added explicit private DB migration `0009_sns_media_mirror_rehearsal.sql` for a distinct signed service session, destination allowlist, and append-only rehearsal result audit. No credentials, policies or migrations were provisioned in production.
+- Added `PinnedMirrorServiceVerifier`: independent pinned RS256 keys with audience `sns-growth-mirror-rehearsal`, active/revocable DB service session, account-specific isolated reporting destination, distinct operational/reporting spreadsheet IDs and restricted mirror-only tab names. Reviewer JWTs are rejected.
+- Added `MirrorServiceRehearsal`: accepts **only concrete in-memory replica**. An authenticated 6G CLAIM + current managed queue is needed. PREPARED is persisted **before** synthetic in-memory CAS, followed by independent readback and terminal simulated success/conflict/unknown; any crash or unknown does not permit automatic retry. Read-only reconciliation may happen after claim lease expiry with current valid service identity and source.
+- All results: `real_sheets_write_performed=false`, `external_delivery_confirmed=false`, `publish_authorized=false`, `sheets_write_allowed=false`. No actual Google Sheets transport/ACK or media post unlock.
+- Tests `scripts/test_media_mirror_rehearsal.py` include inherited earlier phases plus isolated signature/issuer/account, cross-destination, expiry, tampering, unknown after simulated write, crash journal rollback, no replay, read-only recovery, fake-only adapter. Included in PR CI.
+- Doc: `docs/PHASE5B6I_ISOLATED_MIRROR_SERVICE_REHEARSAL.md`.
+- Next: review and implement isolated real Sheets destination service and read-before-retry/verified ACK under explicit operator-accepted sandbox approval; 6H legacy writer cutover and independent publisher authority remain separate. Shared VPS operations only in dedicated common VPS chat.
+
 ## 2026-10-12 Phase 5B-6G + 6H — local mirror outbox and legacy Sheets mutation inventory
 
 - Based on merged main `9cda4012fc95d304829874075aad57b37d05ec8c` (PR #384), feature branch `chatgpt/phase5b6g-mirror-outbox-20261012`.
