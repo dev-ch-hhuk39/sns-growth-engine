@@ -413,11 +413,43 @@ class IsolatedSheetsMirrorDelivery:
             ):
                 # Mandatory just-in-time recheck *after* the initial
                 # provider read and immediately before the sole PUT.
-                self._current_acl(now=now)
-                self._permit(
-                    event_id=event_sha256,dest=destination_id,
-                    token=service_token,now=now,live_lease=True,
+                # Do not reuse the time sampled before network GETs.
+                # In production this fresh clock is sampled immediately
+                # before PUT; as_of remains internal offline-test injection.
+                put_now = _utc(
+                    as_of or datetime.now(timezone.utc),
+                    "mirror_delivery_clock_invalid",
                 )
+                self._current_acl(now=put_now)
+                put_actor, put_outbox, put_preview = self._permit(
+                    event_id=event_sha256,dest=destination_id,
+                    token=service_token,now=put_now,live_lease=True,
+                )
+                if put_preview != preview:
+                    raise MirrorDeliveryBlocked("mirror_delivery_source_changed")
+                # A revoked human grant after PREPARED is a hard stop.
+                # Check both originally consumed signatures and their
+                # current server-granted roles in a consistent DB snapshot.
+                try:
+                    self.db.execute("BEGIN")
+                    self.canary_approver.require_current_consumed(
+                        tokens=canary_approval_tokens,
+                        event_sha256=event_sha256,
+                        operation_id=operation_id,
+                        destination_id=destination_id,
+                        account_id=put_outbox["account_id"],
+                        slot_id=put_outbox["slot_id"],
+                        queue_id=put_outbox["queue_id"],
+                        row_number=self.adapter.target.row_number,
+                        projection_sha256=_hash(put_preview),
+                        service_subject=put_actor,as_of=put_now,
+                    )
+                    self.db.commit()
+                except Exception:
+                    self.db.rollback()
+                    raise MirrorDeliveryBlocked(
+                        "mirror_delivery_operator_grant_revoked"
+                    ) from None
                 attempted = True
                 self.adapter.write_once(preview)
                 after = self.adapter.read()
