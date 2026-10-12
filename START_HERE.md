@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6E SQLite shadow queue source (code-only)
+
+- Base main `67d0ebc961bd01bfabc192b91b1118b3c3d008fe` (PR #382). Feature branch `chatgpt/phase5b6e-canonical-queue-authority-20261012`.
+- Added `db/migrations/0006_sns_media_shadow_queue.sql` and `scripts/media_shadow_queue_authority.py`: explicitly authenticated server-owned snapshots of plan/receipt/queue stored in the same SQLite as review/intent/dispatch. All heads/events are versioned, CAS-protected, audited and nonauthorizing.
+- `capture` accepts only a session-scoped pinned-RS256 reviewer and canonical protected proof source, with one exact source read and precommit verification. Refresh is forbidden after any review/intent/dispatch history.
+- `observe` compares with independently fetched source; source drift or outage quarantines permanently. `SQLiteShadowOperationalSnapshot` reads private DB, verifies immutable history, strict queue/proof fingerprint and 90-second observation freshness. Existing review+intent+dispatch modules can use that SAME SQLite reader.
+- This is **a shadow foundation only**, not a live migration or actual Sheets transaction. Source can drift before the next observation. Existing Phase 5B-6A real-media posting interlock remains mandatory; `publish_authorized=false`.
+- Documentation: `docs/PHASE5B6E_SHADOW_CANONICAL_QUEUE.md`. Production IdP, server-owned write authority, Sheets read-only replication, live publisher service identity, egress control, and deploy/rollback remain unimplemented.
+- Common VPS operations must stay in the dedicated VPS management chat; none performed here.
+
 ## 2026-10-12 Phase 5B-6C + 6D local media dispatch guard and network sink inventory
 
 - Base: main `f5d1628f6de4c7623f9c8bedd99e9460438d69ca` (PR #381); feature worktree `chatgpt/phase5b6c-canonical-delivery-barrier-20261012`.

@@ -40,6 +40,7 @@ jobs:
       - name: Source registry validation and focused contracts
         run: |
           python3 scripts/validate_source_registry.py
+          python3 scripts/test_media_shadow_queue_authority.py
           python3 scripts/test_media_dispatch_guard.py
           python3 scripts/test_phase5b6d_network_sink_inventory.py
           python3 scripts/test_scheduled_runtime_blockers.py
