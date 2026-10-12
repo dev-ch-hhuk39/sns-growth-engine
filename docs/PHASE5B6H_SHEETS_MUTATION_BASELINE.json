@@ -1,0 +1,238 @@
+{
+  "purpose": "Review-only code inventory, not authorization or source-of-truth cutover",
+  "routes": {
+    "scripts/acquire_approved_source_posts.py": {
+      "append_row": 1,
+      "append_rows": 2,
+      "batch_update": 1
+    },
+    "scripts/acquire_approved_source_posts_failsoft.py": {
+      "append_rows": 1,
+      "clear": 1
+    },
+    "scripts/activate_learning_rule.py": {
+      "append_row": 1,
+      "update_cell": 2
+    },
+    "scripts/apply_publication_review_decisions.py": {
+      "batch_update": 1,
+      "update_queue_item": 1
+    },
+    "scripts/apply_source_identity_repairs.py": {
+      "delete_rows": 1,
+      "insert_row": 1,
+      "update_cell": 2
+    },
+    "scripts/apply_v29_voice_correction.py": {
+      "append_row": 1
+    },
+    "scripts/approve_learning_rule.py": {
+      "update_cell": 4
+    },
+    "scripts/approve_queue.py": {
+      "update_queue_item": 1
+    },
+    "scripts/approve_self_generated_media.py": {
+      "update_cell": 1
+    },
+    "scripts/archive_pre_activation_queue.py": {
+      "update_queue_item": 1
+    },
+    "scripts/attach_media_to_queue.py": {
+      "update_cell": 1
+    },
+    "scripts/auto_approve_queue.py": {
+      "bulk_update_queue_items": 1,
+      "update_queue_item": 1
+    },
+    "scripts/autonomous_recovery_test_utils.py": {
+      "append_queue_item": 6,
+      "update_queue_item": 3
+    },
+    "scripts/check_autonomous_health.py": {
+      "sheet_like.update": 1
+    },
+    "scripts/check_media_resource_budget.py": {
+      "append_row": 1
+    },
+    "scripts/collect_source_account_posts.py": {
+      "append_row": 1
+    },
+    "scripts/collect_source_posts.py": {
+      "append_rows": 3
+    },
+    "scripts/collect_threads_metrics.py": {
+      "append_row": 1,
+      "update_cell": 5
+    },
+    "scripts/collect_video_references.py": {
+      "append_rows": 1
+    },
+    "scripts/content_slot_runs.py": {
+      "append_row": 1,
+      "batch_update": 1
+    },
+    "scripts/create_missing_text_canaries.py": {
+      "append_rows": 1
+    },
+    "scripts/discover_approved_source_posts.py": {
+      "append_row": 2
+    },
+    "scripts/discover_approved_source_videos.py": {
+      "append_rows": 2
+    },
+    "scripts/ensure_route_provenance_schema.py": {
+      "resize": 1,
+      "sheet_like.update": 1
+    },
+    "scripts/evergreen_inventory.py": {
+      "append_rows": 1,
+      "batch_update": 2
+    },
+    "scripts/fetch_youtube_transcripts_for_media_growth.py": {
+      "append_row": 1,
+      "batch_update": 1
+    },
+    "scripts/generate_learning_from_results.py": {
+      "append_row": 1
+    },
+    "scripts/generate_local_trend_signals.py": {
+      "append_row": 1
+    },
+    "scripts/generate_next_queue_from_metrics.py": {
+      "append_rows": 1
+    },
+    "scripts/generate_threads_ideas_from_references.py": {
+      "append_rows": 1,
+      "dynamic_getattr.batch_update": 1,
+      "update_cell": 1
+    },
+    "scripts/import_improvement_suggestions.py": {
+      "append_row": 1
+    },
+    "scripts/import_owned_canary_assets.py": {
+      "append_rows": 1
+    },
+    "scripts/import_post_results.py": {
+      "append_row": 1
+    },
+    "scripts/import_threads_metrics_manual.py": {
+      "append_row": 1,
+      "update_cell": 1
+    },
+    "scripts/ingest_direct_reference_media.py": {
+      "append_row": 2,
+      "batch_update": 3
+    },
+    "scripts/ingest_media_asset.py": {
+      "append_row": 1
+    },
+    "scripts/ingest_media_assets.py": {
+      "append_rows": 1
+    },
+    "scripts/normalize_scheduled_media_caption.py": {
+      "update_queue_item": 2
+    },
+    "scripts/normalize_unreviewed_slot_candidates.py": {
+      "update_queue_item": 1
+    },
+    "scripts/plan_content_mix.py": {
+      "append_row": 1
+    },
+    "scripts/prepare_beauty_review_candidates.py": {
+      "append_queue_item": 1,
+      "update_queue_item": 1
+    },
+    "scripts/process_threads_metric_jobs.py": {
+      "append_rows": 1,
+      "dynamic_getattr.batch_update": 1
+    },
+    "scripts/process_threads_queue.py": {
+      "append_row": 1,
+      "batch_update": 1
+    },
+    "scripts/promote_hybrid_approved_media.py": {
+      "update_queue_item": 1
+    },
+    "scripts/publish_queue.py": {
+      "update_queue_item": 2
+    },
+    "scripts/reconcile_production_integrity.py": {
+      "batch_update": 1
+    },
+    "scripts/recover_orphan_threads_post.py": {
+      "append_row": 1
+    },
+    "scripts/recover_production_sheets_threads_first.py": {
+      "append_rows": 1,
+      "resize": 1,
+      "sheet_like.update": 2,
+      "update_cell": 1
+    },
+    "scripts/refill_threads_queue.py": {
+      "append_rows": 1
+    },
+    "scripts/repair_posted_results_integrity.py": {
+      "append_row": 1,
+      "batch_update": 1
+    },
+    "scripts/run_autonomous_loop.py": {
+      "append_row": 1
+    },
+    "scripts/run_growth_attribution_cycle.py": {
+      "append_rows": 1,
+      "batch_update": 1
+    },
+    "scripts/run_hybrid_ai_queue_gate.py": {
+      "update_queue_item": 3
+    },
+    "scripts/run_media_growth_engine.py": {
+      "append_row": 1,
+      "append_rows": 1,
+      "batch_update": 1
+    },
+    "scripts/run_media_production_pipeline.py": {
+      "append_row": 1
+    },
+    "scripts/run_pdca_cycle.py": {
+      "append_row": 1
+    },
+    "scripts/run_source_research.py": {
+      "append_row": 1
+    },
+    "scripts/score_reference_posts.py": {
+      "append_rows": 1
+    },
+    "scripts/seed_owner_attested_media_permissions.py": {
+      "append_row": 2,
+      "sheet_like.update": 1
+    },
+    "scripts/seed_reference_posts_from_sources.py": {
+      "append_row": 1
+    },
+    "scripts/setup_sheets.py": {
+      "sheet_like.update": 1
+    },
+    "scripts/sync_publication_review.py": {
+      "append_rows": 1,
+      "batch_update": 1
+    },
+    "src/generation/generation_planner.py": {
+      "append_row": 1
+    },
+    "src/generation/video_clip_generator.py": {
+      "append_queue_item": 1
+    },
+    "src/queue_builder.py": {
+      "append_queue_item": 1
+    },
+    "src/sheets_client.py": {
+      "append_row": 16,
+      "batch_update": 2,
+      "resize": 1,
+      "sheet_like.update": 10,
+      "update_cell": 8
+    }
+  },
+  "schema": "sns_growth_legacy_sheet_mutation_inventory_v1"
+}

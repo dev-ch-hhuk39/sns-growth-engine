@@ -1,3 +1,14 @@
+## 2026-10-12 Phase 5B-6G + 6H — local mirror outbox and legacy Sheets mutation inventory
+
+- Based on merged main `9cda4012fc95d304829874075aad57b37d05ec8c` (PR #384), feature branch `chatgpt/phase5b6g-mirror-outbox-20261012`.
+- 6G: Added explicit migration 0008, same-SQLite mirror outbox heads and hash-chained events. When 0008 is installed, managed-writer command, preview and outbox ENQUEUE commit together or all roll back; older 0007 databases remain backwards-compatible.
+- `MirrorOutbox.claim_preview` requires signed account-scoped reviewer and CAS, returns only the exact latest sanitized view-only projection. Old versions are terminally superseded; CANCEL and UNCERTAIN prevent unsafe retry. External delivery ACK is explicitly **not implemented**; neither Sheets transport nor live publisher credentials exist.
+- 6H: Added JSON baseline plus CI AST test for **66 files / 163 existing Sheets-related mutation call sites**. It detects new/changed paths for review, does not certify existing writers safe or magically remove old Sheets writes.
+- Tests are offline with temp SQLite and fake original-proof sources. All outbox return values remain `sync_executed=false`, `mirror_confirmed=false`, `sheets_write_allowed=false`, `publish_authorized=false`.
+- Reference: `docs/PHASE5B6G_6H_MIRROR_OUTBOX_AND_LEGACY_WRITERS.md`.
+- Next: provision separate mirror service identity; approved reporting-only destination; idempotent Google Sheets transport with real readback; then migrate legacy operational writer, independent publisher rights/outcome protocol. Preserve 5B-6A media publish stop until production gates are proven.
+- No common VPS deploy, actual Sheets updates, live migration, SNS post or secrets were used.
+
 ## 2026-10-12 Phase 5B-6F — authenticated managed SQLite queue commands + Sheets mirror preview
 
 - Base merged main `934fcfff31378c0d4bf25155043581027d0359c3` (PR #383); worktree `chatgpt/phase5b6f-shadow-queue-writer-20261012`.
