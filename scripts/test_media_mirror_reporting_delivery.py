@@ -24,6 +24,9 @@ from media_mirror_delivery_identity import (  # noqa: E402
     AUDIENCE, SCOPE, TOKEN_USE, MirrorDeliveryBlocked,
     PinnedLiveMirrorServiceVerifier, initialize_mirror_delivery_schema,
 )
+from media_mirror_readonly_acl_preflight import (  # noqa: E402
+    ReadOnlyGoogleMirrorMetadata,
+)
 from media_mirror_reporting_delivery import IsolatedSheetsMirrorDelivery  # noqa: E402
 from media_mirror_sheets_adapter import (  # noqa: E402
     FixedRowMirrorBlocked, GspreadReportingFixedRow,
@@ -92,6 +95,86 @@ class FakeGspreadWorksheet:
         return {"updatedCells":12}
 
 
+class FixtureDeliveryCredentials:
+    service_account_email = "reporting-mirror-fixture@example.test"
+
+
+class FixtureDriveReadResponse:
+    def __init__(self, body):
+        self.status_code = 200
+        self.content = json.dumps(body, sort_keys=True).encode("utf-8")
+
+
+class FixtureDriveReadSession:
+    """Exactly the 6K read-only capability API; never contacts Google."""
+
+    def __init__(self):
+        self.calls = []
+        self.fail = False
+        self.before_return = None
+        self.operational_can_edit = False
+        self.operational_can_modify_content = False
+        self.reporting_can_edit = True
+        self.reporting_can_modify_content = True
+
+    def get(self, url, *, params, timeout, allow_redirects):
+        self.calls.append(url)
+        if self.before_return is not None:
+            self.before_return(url)
+        if self.fail:
+            raise ConnectionError("offline_fixture_credential_unavailable")
+        if url == f"https://www.googleapis.com/drive/v3/files/{ORIGINAL}":
+            return FixtureDriveReadResponse({
+                "id": ORIGINAL, "mimeType": "application/vnd.google-apps.spreadsheet",
+                "trashed": False,
+                "capabilities": {
+                    "canEdit": self.operational_can_edit,
+                    "canModifyContent": self.operational_can_modify_content,
+                },
+            })
+        if url == f"https://www.googleapis.com/drive/v3/files/{REPORT}":
+            return FixtureDriveReadResponse({
+                "id": REPORT, "mimeType": "application/vnd.google-apps.spreadsheet",
+                "trashed": False,
+                "capabilities": {
+                    "canEdit": self.reporting_can_edit,
+                    "canModifyContent": self.reporting_can_modify_content,
+                },
+            })
+        if url == f"https://sheets.googleapis.com/v4/spreadsheets/{REPORT}":
+            return FixtureDriveReadResponse({
+                "spreadsheetId": REPORT,
+                "sheets": [{
+                    "properties": {
+                        "sheetId": 10, "title": TAB, "sheetType": "GRID",
+                        "gridProperties": {"rowCount": 200, "columnCount": 12},
+                    }
+                }],
+            })
+        raise AssertionError("fixture_unknown_file_id")
+
+
+class FixtureBoundSpreadsheet:
+    def __init__(self, worksheet):
+        self.worksheet_object = worksheet
+
+    def worksheet(self, tab):
+        if tab != TAB:
+            raise AssertionError("fixture_unpinned_tab")
+        return self.worksheet_object
+
+
+class FixtureBoundGspreadClient:
+    def __init__(self, credentials, worksheet):
+        self.auth = credentials
+        self.ws = worksheet
+
+    def open_by_key(self, identifier):
+        if identifier != REPORT:
+            raise AssertionError("fixture_unpinned_workbook")
+        return FixtureBoundSpreadsheet(self.ws)
+
+
 class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
     """Inherited 6I tests and new code-only delivery tests."""
 
@@ -150,8 +233,14 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
         )
         self.ws=FakeGspreadWorksheet()
         self.target=ReportingRowTarget(REPORT,ORIGINAL,TAB,ROW)
-        self.sheet_adapter=GspreadReportingFixedRow(
-            worksheet=self.ws,target=self.target,
+        self.acl_credentials=FixtureDeliveryCredentials()
+        self.acl_session=FixtureDriveReadSession()
+        self.acl_metadata=ReadOnlyGoogleMirrorMetadata(
+            credentials=self.acl_credentials,session=self.acl_session,
+        )
+        self.sheet_adapter=GspreadReportingFixedRow.from_trusted_client(
+            client=FixtureBoundGspreadClient(self.acl_credentials,self.ws),
+            target=self.target,
         )
         self.live_verifier=PinnedLiveMirrorServiceVerifier(
             db=self.db,issuer=ISSUER,
@@ -160,6 +249,8 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
         self.engine=IsolatedSheetsMirrorDelivery(
             db=self.db,verifier=self.live_verifier,
             adapter=self.sheet_adapter,allow_reporting_write=True,
+            acl_metadata=self.acl_metadata,
+            expected_principal_email=self.acl_credentials.service_account_email,
         )
 
     def claimed(self):
@@ -483,7 +574,8 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
             )
             second=IsolatedSheetsMirrorDelivery(
                 db=other,verifier=verifier,adapter=self.sheet_adapter,
-                allow_reporting_write=True,
+                allow_reporting_write=True,acl_metadata=self.acl_metadata,
+                expected_principal_email=self.acl_credentials.service_account_email,
             )
             with self.assertRaises(MirrorDeliveryBlocked):
                 second.deliver_once(

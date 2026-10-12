@@ -137,6 +137,7 @@ class GspreadReportingFixedRow:
         # a separate Drive ACL probe. Keep it unbound until constructed
         # from an authenticated client by the trusted server.
         self.auth_credentials = None
+        self.factory_credential_bound = False
 
     @classmethod
     def from_trusted_client(
@@ -157,6 +158,7 @@ class GspreadReportingFixedRow:
         )
         adapter = cls(worksheet=worksheet, target=target)
         adapter.auth_credentials = credentials
+        adapter.factory_credential_bound = True
         return adapter
 
     def _metadata(self) -> None:

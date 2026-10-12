@@ -269,13 +269,21 @@ class ReadOnlyCanaryTests(prior.MirrorReportingDeliveryTests):
     def test_fake_client_factory_returns_same_credentials(self):
         self.assertIs(self.bound_adapter.auth_credentials, self.creds)
         self.assertEqual(self.gspread_client.opened, [REPORT])
-        self.assertIsNone(self.sheet_adapter.auth_credentials)
+        # The 6M writer fixture now also uses an explicitly bound
+        # credential; the direct-constructor negative case remains separate.
+        self.assertIs(
+            self.sheet_adapter.auth_credentials, self.acl_credentials,
+        )
+        self.assertTrue(self.sheet_adapter.factory_credential_bound)
 
     def test_unbound_worksheet_cannot_claim_preflight_safety(self):
+        direct = GspreadReportingFixedRow(
+            worksheet=self.ws, target=self.target,
+        )
         with self.assertRaises(MirrorReadOnlyCanaryBlocked):
             MirrorReadOnlyCanary(
                 db=self.db, verifier=self.live_verifier,
-                metadata=self.metadata, adapter=self.sheet_adapter,
+                metadata=self.metadata, adapter=direct,
                 expected_principal_email=EMAIL, allow_provider_reads=True,
             )
 
