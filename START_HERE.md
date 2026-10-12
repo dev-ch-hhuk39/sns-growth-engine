@@ -1,3 +1,15 @@
+## 2026-10-12 Phase 5B-6J — guarded fixed-row reporting Google Sheets transport (code-only)
+
+- Base: main `c896760966f91e22ef1013116110b8efbf2d50fe` (PR #386), worktree `chatgpt/phase5b6j-isolated-sheets-mirror-20261012`.
+- Added explicit migration `0010_sns_mirror_reporting_delivery.sql` for a separate scoped live-mirror service session (default disabled), account/destination ACL policy (default disabled), immutable fixed row mapping, and append-only event audit. No production migrations or credentials applied.
+- Added `PinnedLiveMirrorServiceVerifier` with independent RS256 audience `sns-growth-mirror-reporting-write`, short JWT expiry, active server-side session hash, and account-specific, distinct operational/reporting spreadsheet IDs; reviewer and rehearsal tokens cannot authorize a reporting write.
+- Added `GspreadReportingFixedRow` for one pinned, reporting-only A:L range with exact header, formula-safe, hash-checked sanitized projection and `value_input_option=RAW`. It never appends/creates/scans an arbitrary row and does not access operational Sheets. Network-capable code exists but is **not wired/executed**.
+- Added `IsolatedSheetsMirrorDelivery`: disabled by default. With explicit trusted provisioning, persists PREPARED before any possible update, performs at most one bounded reporting write, readback-verifies result, refuses stale/foreign versions, and never blindly retries after an unknown outcome. Read-only reconciliation and cross-connection replay gates included. All states remain `*_BLOCKED`; SNS publishing/operational queue untouched. **Google Sheets PUT is NOT SQLite cross-store CAS.**
+- New tests `test_media_mirror_reporting_delivery.py` use temp SQLite, fake gspread-like worksheet and ephemeral keys; added to CI.
+- Reviewed Phase 6H AST inventory: **67 files / 164 callsites**, exactly one new guarded `worksheet.update` in `media_mirror_sheets_adapter.py`; baseline intentionally updated.
+- Detailed limitations and handoff: `docs/PHASE5B6J_ISOLATED_REPORTING_SHEETS_TRANSPORT.md`.
+- Next: independent Google ACL and credential provisioning, isolated reporting canary with separately approved write, legacy operational queue writer cutover, independent SNS publisher permit and uncertain-outcome checks. NO production Sheets, VPS, SNS post or token access in this development chat.
+
 ## 2026-10-12 Phase 5B-6I — isolated mirror service auth and offline readback trial
 
 - Base: merged main `9f6e696b772421c6b91bafb354737c92f047861b` (PR #385), development worktree `chatgpt/phase5b6i-mirror-identity-and-receipt-20261012`.
