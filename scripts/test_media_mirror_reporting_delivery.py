@@ -27,6 +27,12 @@ from media_mirror_delivery_identity import (  # noqa: E402
 from media_mirror_readonly_acl_preflight import (  # noqa: E402
     ReadOnlyGoogleMirrorMetadata,
 )
+from media_mirror_canary_approval import (  # noqa: E402
+    AUDIENCE as CANARY_AUDIENCE, SCOPE as CANARY_SCOPE,
+    TOKEN_USE as CANARY_TOKEN_USE,
+    PinnedTwoOperatorCanaryVerifier, initialize_canary_approval_schema,
+)
+from media_mirror_reporting_delivery import _hash as delivery_hash  # noqa: E402
 from media_mirror_reporting_delivery import IsolatedSheetsMirrorDelivery  # noqa: E402
 from media_mirror_sheets_adapter import (  # noqa: E402
     FixedRowMirrorBlocked, GspreadReportingFixedRow,
@@ -188,6 +194,23 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
             serialization.Encoding.PEM,
             serialization.PublicFormat.SubjectPublicKeyInfo,
         )
+        cls.operator_private_keys = [
+            rsa.generate_private_key(public_exponent=65537, key_size=2048)
+            for _ in range(2)
+        ]
+        cls.operator_public_keys = [
+            key.public_key().public_bytes(
+                serialization.Encoding.PEM,
+                serialization.PublicFormat.SubjectPublicKeyInfo,
+            )
+            for key in cls.operator_private_keys
+        ]
+        cls.operator_kids = (
+            "canary_review_operator_key_01", "canary_review_operator_key_02",
+        )
+        cls.operator_subjects = (
+            "canary_review_human_01", "canary_review_human_02",
+        )
 
     @classmethod
     def live_token(cls,overrides=None,header_overrides=None):
@@ -208,6 +231,15 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
     def setUp(self):
         super().setUp()
         initialize_mirror_delivery_schema(self.db)
+        initialize_canary_approval_schema(self.db)
+        self.operator_gate = PinnedTwoOperatorCanaryVerifier(
+            db=self.db, issuer=ISSUER,
+            operators_by_kid={
+                self.operator_kids[i]: (
+                    self.operator_subjects[i], self.operator_public_keys[i],
+                ) for i in range(2)
+            },
+        )
         self.token_live = self.live_token()
         self.db.execute(
             """INSERT INTO sns_mirror_delivery_sessions (
@@ -251,7 +283,39 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
             adapter=self.sheet_adapter,allow_reporting_write=True,
             acl_metadata=self.acl_metadata,
             expected_principal_email=self.acl_credentials.service_account_email,
+            canary_approver=self.operator_gate,
         )
+
+    def operator_signoffs(
+        self, *, event=None, operation_id="delivery_run_20261012_000001",
+        overrides=None, which=(0, 1),
+    ):
+        event = event or self.ident()
+        preview = self.writer.mirror_previews()[0]
+        claims = {
+            "iss": ISSUER, "aud": CANARY_AUDIENCE,
+            "token_use": CANARY_TOKEN_USE, "scope": CANARY_SCOPE,
+            "iat": T-60, "nbf": T-60, "exp": T+180,
+            "event_sha256": event, "operation_id": operation_id,
+            "destination_id": DEST, "account_id": KEY[0],
+            "slot_id": KEY[1], "queue_id": KEY[2],
+            "row_number": ROW, "projection_sha256": delivery_hash(preview),
+        }
+        claims.update(overrides or {})
+        result = []
+        for slot in which:
+            fields = dict(claims)
+            fields["sub"] = self.operator_subjects[slot]
+            fields["jti"] = f"canary_operator_{slot}_{operation_id}"
+            header = {"typ": "JWT", "alg": "RS256", "kid": self.operator_kids[slot]}
+            signed = b64(header) + "." + b64(fields)
+            signature = self.operator_private_keys[slot].sign(
+                signed.encode("ascii"), padding.PKCS1v15(), hashes.SHA256(),
+            )
+            result.append(
+                signed + "." + base64.urlsafe_b64encode(signature).decode().rstrip("=")
+            )
+        return tuple(result)
 
     def claimed(self):
         self.prepare()
@@ -266,6 +330,11 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
             "as_of":NOW,
         }
         args.update(changes)
+        if "canary_approval_tokens" not in args:
+            args["canary_approval_tokens"] = self.operator_signoffs(
+                event=args["event_sha256"],
+                operation_id=args["operation_id"],
+            )
         return self.engine.deliver_once(**args)
 
     def recover(self,event=None,**changes):
@@ -572,17 +641,30 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
                 db=other,issuer=ISSUER,
                 public_keys_by_kid={KID:self.live_public},
             )
+            gate=PinnedTwoOperatorCanaryVerifier(
+                db=other, issuer=ISSUER,
+                operators_by_kid={
+                    self.operator_kids[i]: (
+                        self.operator_subjects[i], self.operator_public_keys[i],
+                    ) for i in range(2)
+                },
+            )
             second=IsolatedSheetsMirrorDelivery(
                 db=other,verifier=verifier,adapter=self.sheet_adapter,
                 allow_reporting_write=True,acl_metadata=self.acl_metadata,
                 expected_principal_email=self.acl_credentials.service_account_email,
+                canary_approver=gate,
             )
+            operation="delivery_second_connection_20261012"
             with self.assertRaises(MirrorDeliveryBlocked):
                 second.deliver_once(
                     event_sha256=event,destination_id=DEST,
                     service_token=self.token_live,
-                    operation_id="delivery_second_connection_20261012",
+                    operation_id=operation,
                     as_of=NOW,
+                    canary_approval_tokens=self.operator_signoffs(
+                        event=event,operation_id=operation,
+                    ),
                 )
             self.assertEqual(self.ws.writes,1)
         finally:

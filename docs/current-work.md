@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6N — Two independent signed operator approvals per reporting-only PUT
+
+- Base merged main `d733db714121d51ffa5b915c140035678e54a7c8` (PR #390), isolated branch `chatgpt/phase5b6n-operator-readonly-preflight-20261012`.
+- Adds explicit private DB migration `0011_sns_reporting_canary_two_operator_signoff.sql` for immutable, unique one-use canary JWT replay records. No production migration or credential provisioning performed.
+- Adds `PinnedTwoOperatorCanaryVerifier` that requires **two different, server-pinned RS256 operator signers** for the exact account, source event/projection, operation, destination and preassigned reporting row. Different KIDs alone are insufficient: RSA public key material and pinned human subject must both differ; the reporting service key cannot be reused as an operator key.
+- An explicitly enabled 6J/6M `IsolatedSheetsMirrorDelivery` now refuses to run unless the separate operator verifier is bound to the same protected DB. Both short-lived approvals are validated and consumed in the **same SQLite BEGIN IMMEDIATE** as the one-time reporting PREPARED event. Failure anywhere rolls back all local authorization uses and PREPARED. Unknown Google outcome leaves approvals consumed and **never retries**.
+- Existing 6M just-in-time operational noneditability + reporting write capability checks remain enforced. Live Sheets, VPS, SNS posts, issuer signing and actual human authorization workflows were **NOT touched or activated**; defaults still disallow writes.
+- Focused tests `scripts/test_media_mirror_canary_approval.py` include inherited review/rights/queue/6M contracts plus independent operator signers, target version drift, signature replay, malformed/expired JWTs, service-key misuse, SQLite rollback and unknown response. Added to PR CI, kept legacy 6M and 6L tests.
+- Details/ops blockers: `docs/PHASE5B6N_SIGNED_TWO_OPERATOR_CANARY_GATE.md`. Real operator IdP and a disposable Google reporting-only canary need separate security/ops approval and belong to the dedicated common VPS management process.
+
 ## 2026-10-12 Phase 5B-6M — mandatory live-reporting writer ACL recheck (code only)
 
 - Base main `41a8afb245e3efcd64641778a6828e0b8dc6241e` (PR #389), isolated branch `chatgpt/phase5b6mn-preflight-write-gate-20261012`.
