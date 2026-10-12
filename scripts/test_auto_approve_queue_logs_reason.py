@@ -6,7 +6,9 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location("auto_approve_queue", ROOT/"scripts/auto_approve_queue.py")
 mod=importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 class F:
-    def __init__(self): self.logs=[]; self.updated=[]
+    def __init__(self):
+        self.logs=[]; self.updated=[]
+        self._queue=[{"queue_id":"q", "account_id":"night_scout", "platform":"threads", "status":"WAITING_REVIEW"}]
     def update_queue_item(self,qid,**fields): self.updated.append(fields)
     def log(self,**kw): self.logs.append(kw)
 def main()->int:

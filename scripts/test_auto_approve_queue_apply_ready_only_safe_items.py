@@ -7,7 +7,10 @@ spec = importlib.util.spec_from_file_location("auto_approve_queue", ROOT / "scri
 mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
 
 class Fake:
-    def __init__(self): self.updated=[]; self.bulk_calls=[]; self.logs=[]
+    def __init__(self):
+        self.updated=[]; self.bulk_calls=[]; self.logs=[]
+        self._queue=[{"queue_id":"q_safe","account_id":"night_scout",
+                      "platform":"threads","status":"WAITING_REVIEW"}]
     def update_queue_item(self, qid, **fields): self.updated.append((qid, fields))
     def bulk_update_queue_items(self, updates): self.bulk_calls.append(updates); return len(updates)
     def log(self, **kw): self.logs.append(kw)

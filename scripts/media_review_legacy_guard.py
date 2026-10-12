@@ -1,8 +1,8 @@
 """Fail-closed scoping rules for a staged trusted-review rollout.
 
 Do not mistake a Sheets cell like "OK", "APPROVED" or "reviewer_id" for an
-authenticated human decision. The strict policy is intentionally opt-in until
-an authoritative reviewer identity + evidence backend exists.
+authenticated human decision. Phase 5B-6A makes the strict block mandatory
+for protected media, regardless of legacy opt-in switches.
 """
 from __future__ import annotations
 
@@ -62,14 +62,13 @@ def requires_strict_review_block(
     desired_status: str,
     strict_trusted_media_review: bool,
 ) -> bool:
-    """Block a legacy READY transition when strict rollout is enabled.
+    """Always block protected-media READY promotion in a legacy writer.
 
-    The old Sheets/CLI paths cannot safely accept local JSON receipts or
-    self-reported reviewer fields as authorization, so strict mode denies
-    protected media READY promotions rather than attempting a bypass.
+    The optional strict parameter is retained only for old call signatures;
+    disabling it does not bypass mandatory protection. There is no trusted
+    publication authority in a legacy Sheets/CLI path.
     """
     return (
-        strict_trusted_media_review is True
-        and str(desired_status).strip().upper() == "READY"
+        str(desired_status).strip().upper() == "READY"
         and is_protected_media_candidate(row)
     )

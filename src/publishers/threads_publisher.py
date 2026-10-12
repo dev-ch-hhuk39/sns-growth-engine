@@ -24,6 +24,7 @@ from typing import Any
 
 from .base import BasePublisher, PublishResult
 from .dry_run import _check_threads
+from .media_publish_interlock import media_publish_interlock_reason
 from .threads_credentials import resolve_credentials
 
 THREADS_API_BASE = "https://graph.threads.net/v1.0"
@@ -262,6 +263,19 @@ class ThreadsPublisher(BasePublisher):
                         f" (account={account_id} queue_id={queue_id})"
                     ),
                 )
+
+        # Phase 5B-6A: no trusted, atomic media publish authority is live.
+        # Environment flags, READY, self-reported approval and local ledger
+        # records can never bypass this low-level network boundary.
+        interlock = media_publish_interlock_reason(
+            account=account, queue_item=queue_item, derivative=derivative,
+            has_media=has_media,
+        )
+        if interlock is not None:
+            return PublishResult(
+                platform="threads", success=False, dry_run=False,
+                message=f"SAFETY_STOP: {interlock}",
+            )
 
         # ---- dry_run=False: 安全ガードチェック ----
         publish_enabled = os.environ.get("PUBLISH_ENABLED", "false").strip().lower()

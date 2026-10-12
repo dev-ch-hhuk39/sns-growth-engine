@@ -40,6 +40,9 @@ from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import SheetsClient, _sheets_retry_reason  # noqa: E402
 from accounts.managed_accounts import account_choices, account_status, require_account_match  # noqa: E402
 from media_v1_policy import is_media_candidate, split_public_validation  # noqa: E402
+from publishers.media_publish_interlock import (  # noqa: E402
+    block_legacy_ready_transition, media_publish_interlock_reason,
+)
 
 # 投稿対象として選ばれるのは READY のみ。
 # WAITING_REVIEW はレビュー待ち（人間が approve_queue.py で READY に昇格させるまで投稿不可）、
@@ -156,6 +159,8 @@ def _call_with_rate_limit_retry(label: str, fn):
 
 
 def append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
+    if logical == "queue" and block_legacy_ready_transition(row, row):
+        raise PermissionError("trusted_media_review_authority_not_connected")
     ws = get_ws(client, logical)
     headers = _get_headers(ws)
     values = [str(row.get(h, "")) for h in headers]
@@ -181,6 +186,16 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
     )
     if cell is None:
         return False
+    if logical == "queue" and str(fields.get("status") or "").upper() == "READY":
+        current_values = _call_with_rate_limit_retry(
+            f"row_values:queue:{key_value}",
+            lambda: ws.row_values(cell.row),
+        )
+        current = dict(zip(headers, current_values))
+        if str(current.get("queue_id") or "") != str(key_value):
+            raise PermissionError("queue_ready_identity_unavailable")
+        if block_legacy_ready_transition(current, fields):
+            raise PermissionError("trusted_media_review_authority_not_connected")
     update_ranges = []
     for field, value in fields.items():
         if field in headers:
@@ -758,6 +773,23 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     text = text_for_queue(queue_row, social, draft)
     media_candidate = is_media_candidate(queue_row)
 
+    # Mandatory 5B-6A preflight BEFORE changing READY -> PROCESSING,
+    # logging a failed attempt, or consuming any external publish API.
+    # A media flag can be missing in the queue while the draft/derivative
+    # retains physical-media metadata.
+    if not dry_run:
+        for associated in (social, draft):
+            reason = media_publish_interlock_reason(
+                account={"account_id": account_id},
+                queue_item=queue_row, derivative=associated,
+            )
+            if reason:
+                return {
+                    "status": "SAFETY_STOP_TRUSTED_MEDIA_REVIEW_REQUIRED",
+                    "reason": reason, "queue_id": queue_id,
+                    "publish_attempted": False, "writes_performed": False,
+                }
+
     if account_id == BEAUTY_ACCOUNT:
         allowed, reason = beauty_publish_gate(dry_run=dry_run)
         if not allowed:
@@ -1045,7 +1077,9 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         text,
         account={"account_id": account_id},
         derivative={"derivative_id": social.get("derivative_id", "") if social else "", "platform": "threads"},
-        queue_item={"queue_id": queue_id, "platform": "threads"},
+        # Preserve authoritative row media markers; omitting them lets a
+        # media queue accidentally masquerade as plain text at the publisher.
+        queue_item={**queue_row, "queue_id": queue_id, "platform": "threads"},
         dry_run=False,
         media_url=media["effective_media_url"] or None,
         media_type=publisher_media_type(

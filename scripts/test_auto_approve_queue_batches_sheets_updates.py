@@ -16,6 +16,8 @@ class FakeClient:
         self.bulk_calls: list[list[tuple[str, dict]]] = []
         self.single_calls: list[tuple[str, dict]] = []
         self.logs: list[dict] = []
+        self._queue = [{"queue_id":"q-safe", "account_id":"night_scout",
+                        "platform":"threads", "status":"WAITING_REVIEW"}]
 
     def bulk_update_queue_items(self, updates: list[tuple[str, dict]]) -> int:
         self.bulk_calls.append(updates)
