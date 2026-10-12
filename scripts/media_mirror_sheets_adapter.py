@@ -133,6 +133,10 @@ class GspreadReportingFixedRow:
             raise FixedRowMirrorBlocked("mirror_fixed_target_invalid")
         target.validate()
         self.worksheet, self.target = worksheet, target
+        # A direct worksheet cannot claim that its Google credentials match
+        # a separate Drive ACL probe. Keep it unbound until constructed
+        # from an authenticated client by the trusted server.
+        self.auth_credentials = None
 
     @classmethod
     def from_trusted_client(
@@ -142,11 +146,18 @@ class GspreadReportingFixedRow:
         if not isinstance(target, ReportingRowTarget):
             raise FixedRowMirrorBlocked("mirror_fixed_target_invalid")
         target.validate()
-        # The caller must provide a dedicated least-privilege gspread client.
+        # Bind the *same credential object* for an independently verified
+        # Drive/Sheets metadata probe. A caller-supplied worksheet alone does
+        # not prove principal identity, and cannot satisfy Phase 6L preflight.
+        credentials = getattr(client, "auth", None)
+        if credentials is None:
+            raise FixedRowMirrorBlocked("mirror_client_credentials_missing")
         worksheet = client.open_by_key(target.reporting_spreadsheet_id).worksheet(
             target.reporting_tab
         )
-        return cls(worksheet=worksheet, target=target)
+        adapter = cls(worksheet=worksheet, target=target)
+        adapter.auth_credentials = credentials
+        return adapter
 
     def _metadata(self) -> None:
         w = self.worksheet
