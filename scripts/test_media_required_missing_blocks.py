@@ -83,7 +83,12 @@ def main() -> int:
 
     # process_one: real モードでも投稿に到達せずブロックされる
     out_real = mod.process_one(client, row, dry_run=False, confirm_real_post=True)
-    checks.append(("real: status=DRY_RUN_BLOCKED", out_real["status"] == "DRY_RUN_BLOCKED"))
+    checks.append((
+        "real: stopped before publish and queue mutation",
+        out_real["status"] == "SAFETY_STOP_TRUSTED_MEDIA_REVIEW_REQUIRED"
+        and out_real.get("publish_attempted") is False
+        and out_real.get("writes_performed") is False,
+    ))
 
     # 後方互換: media_required 無しの通常行はブロックされない（DRY_RUN になる）
     row_plain = {"queue_id": "q2", "draft_id": "d1", "account_id": "night_scout", "platform": "threads"}

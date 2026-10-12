@@ -24,6 +24,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from seeds import ACCOUNT_SEEDS_V2, CATEGORY_SEEDS, PROMPT_TEMPLATE_SEEDS
+from publishers.media_publish_interlock import block_legacy_ready_transition
 
 # ------------------------------------------------------------------ #
 # タブ定義（ヘッダー列の順序が正式仕様）
@@ -1983,6 +1984,16 @@ class SheetsClient:
         )
         if cell is None:
             raise KeyError(f"queue_id={queue_id!r} が queue タブに見つかりません")
+        if str(fields.get("status") or "").upper() == "READY":
+            values = self._call_with_rate_limit_retry(
+                f"row_values:queue:{queue_id}",
+                lambda: ws.row_values(cell.row),
+            )
+            current = dict(zip(headers, values))
+            if str(current.get("queue_id") or "") != str(queue_id):
+                raise PermissionError("queue_ready_identity_unavailable")
+            if block_legacy_ready_transition(current, fields):
+                raise PermissionError("trusted_media_review_authority_not_connected")
         self._batch_update_fields(ws, headers, cell.row, fields, label=f"queue:{queue_id}")
 
     def bulk_update_queue_items(self, updates: list[tuple[str, dict[str, Any]]]) -> int:
@@ -2012,6 +2023,22 @@ class SheetsClient:
             for index, row in enumerate(values[1:], start=2)
             if len(row) > queue_id_column and str(row[queue_id_column]).strip()
         }
+        # PRE-FLIGHT entire batch before any write; mixed text+media must
+        # not partially promote when one item lacks trusted media review.
+        if any(str(fields.get("status") or "").upper() == "READY" for _, fields in updates):
+            for queue_id, fields in updates:
+                if str(fields.get("status") or "").upper() != "READY":
+                    continue
+                matches = [
+                    row for row in values[1:]
+                    if len(row) > queue_id_column
+                    and str(row[queue_id_column]).strip() == str(queue_id)
+                ]
+                if len(matches) != 1:
+                    raise PermissionError("queue_ready_identity_unavailable")
+                current = dict(zip(headers, matches[0]))
+                if block_legacy_ready_transition(current, fields):
+                    raise PermissionError("trusted_media_review_authority_not_connected")
         ranges: list[dict[str, Any]] = []
         updated = 0
         for queue_id, fields in updates:
@@ -2150,6 +2177,8 @@ class SheetsClient:
             "created_at": _now(),
             **item,
         }
+        if block_legacy_ready_transition(data, data):
+            raise PermissionError("trusted_media_review_authority_not_connected")
         row = [str(data.get(h, "")) for h in headers]
         ws.append_row(row, value_input_option="USER_ENTERED")
         return queue_id
@@ -2585,10 +2614,12 @@ class MockSheetsClient:
         return None
 
     def update_queue_item(self, queue_id: str, **fields: Any) -> None:
-        print(f"[mock-sheets] update_queue_item: queue_id={queue_id} fields={fields}")
         for r in self._queue:
             if r.get("queue_id") == queue_id:
+                if block_legacy_ready_transition(r, fields):
+                    raise PermissionError("trusted_media_review_authority_not_connected")
                 r.update(fields)
+                print(f"[mock-sheets] update_queue_item: queue_id={queue_id} fields={fields}")
                 return
 
     def get_prompt_templates(
@@ -2645,6 +2676,8 @@ class MockSheetsClient:
     def append_queue_item(self, item: dict) -> str:
         queue_id = item.get("queue_id") or f"q-{_short_uuid()}"
         data = {"queue_id": queue_id, "created_at": _now(), **item}
+        if block_legacy_ready_transition(data, data):
+            raise PermissionError("trusted_media_review_authority_not_connected")
         self._queue.append(data)
         print(
             f"[mock-sheets] append_queue_item: "

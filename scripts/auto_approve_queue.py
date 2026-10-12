@@ -25,6 +25,7 @@ from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate  # noq
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from accounts.managed_accounts import account_choices, auto_ready_account_ids  # noqa: E402
 from accounts.managed_accounts import managed_account  # noqa: E402
+from media_review_legacy_guard import is_protected_media_candidate  # noqa: E402
 
 RULES_FILE = ROOT / "config/auto_approval_rules.json"
 ALLOWED_ACCOUNTS = set(auto_ready_account_ids())
@@ -282,6 +283,10 @@ def evaluate_item(
         reasons.append("kill_switch")
     if not is_true(rules.get("auto_ready_enabled", False)):
         reasons.append("auto_ready_disabled")
+    if is_protected_media_candidate(queue):
+        # Always block, even if a custom rules file disables the legacy
+        # require_no_media setting or the queue has missing media fields.
+        reasons.append("trusted_media_review_authority_unavailable")
     if rules.get("require_no_media_for_auto_ready", True) and not media_is_text_only(queue, draft, derivative):
         reasons.append("media_not_allowed_for_auto_ready")
     if not rules.get("allow_third_party_media", False) and str(queue.get("media_reuse_risk", "")).lower() in {"high", "unknown"} and not media_is_text_only(queue, draft, derivative):
@@ -567,6 +572,49 @@ def build_plan(client: Any, account_id: str, max_ready: int, rules: dict[str, An
 
 def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
     ready = [r for r in plan["results"] if r["status"] == "APPROVABLE"]
+    # Re-read current server-side queue, draft and derivative before any
+    # READY write or success log. Do not trust a previously computed/forged
+    # plan if a media-bearing source is now eligible or the source is absent.
+    if ready:
+        try:
+            queue_rows = records(client, "queue")
+            drafts = {
+                str(r.get("draft_id", "")): r for r in records(client, "drafts")
+            }
+            derivatives = {
+                (str(r.get("draft_id", "")), str(r.get("platform", "")).lower()): r
+                for r in records(client, "social_derivatives")
+            }
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for row in queue_rows:
+                groups.setdefault(str(row.get("queue_id", "")), []).append(row)
+            unsafe: list[str] = []
+            for item in ready:
+                qid = str(item.get("queue_id", ""))
+                matches = groups.get(qid, [])
+                if not qid or len(matches) != 1:
+                    unsafe.append(qid)
+                    continue
+                row = matches[0]
+                account = str(row.get("account_id", ""))
+                platform = str(row.get("platform", "")).lower()
+                draft_id = str(row.get("draft_id", ""))
+                draft = drafts.get(draft_id) if draft_id else None
+                derivative = derivatives.get((draft_id, platform)) if draft_id else None
+                if (account != item.get("account_id")
+                        or platform != "threads"
+                        or str(row.get("status", "")).upper() != ELIGIBLE_STATUS
+                        or is_protected_media_candidate(row)
+                        or not media_is_text_only(row, draft, derivative)):
+                    unsafe.append(qid)
+        except Exception:
+            unsafe = [str(item.get("queue_id", "")) for item in ready]
+        if unsafe:
+            return {
+                "status": "BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED",
+                "updated_count": 0, "updated_queue_ids": [],
+                "blocked_queue_ids": sorted(set(unsafe)),
+            }
     updated: list[str] = []
     at = now_iso()
     bulk_updates: list[tuple[str, dict[str, Any]]] = []

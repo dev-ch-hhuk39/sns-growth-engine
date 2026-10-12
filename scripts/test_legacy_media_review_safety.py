@@ -91,7 +91,8 @@ class LegacyMediaReviewSafetyTests(unittest.TestCase):
             row, desired_status="READY", strict_trusted_media_review=True))
         self.assertFalse(requires_strict_review_block(
             row, desired_status="REJECTED", strict_trusted_media_review=True))
-        self.assertFalse(requires_strict_review_block(
+        # Phase 5B-6A: old opt-out flag must no longer permit protected READY.
+        self.assertTrue(requires_strict_review_block(
             row, desired_status="READY", strict_trusted_media_review=False))
 
     def test_missing_slot_id_with_media_markers_still_protected(self):
@@ -168,13 +169,16 @@ class LegacyMediaReviewSafetyTests(unittest.TestCase):
         self.assertEqual(client.queue_updates, [])
         self.assertTrue(client.review.updates)
 
-    def test_legacy_default_behavior_preserved_for_compatibility(self):
+    def test_legacy_default_now_mandatorily_blocks_media(self):
         review = {"queue_id": "media_001", "review_decision": "OK"}
         queue = media_queue()
-        self.assertEqual(
-            decision_for_row(review, queue, allow_media_posts=False)[0], "READY")
-        self.assertEqual(
-            build_decisions([review], [queue], allow_media_posts=False)[0][2], "READY")
+        for allow_media in (False, True):
+            self.assertEqual(
+                decision_for_row(review, queue, allow_media_posts=allow_media)[0],
+                "BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED")
+            self.assertEqual(
+                build_decisions([review], [queue], allow_media_posts=allow_media)[0][2],
+                "BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED")
 
     def test_strict_mode_does_not_block_rejections_holds_or_posthoc_feedback(self):
         queue = media_queue()

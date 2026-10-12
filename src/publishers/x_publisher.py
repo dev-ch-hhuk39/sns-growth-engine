@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 
 from .base import BasePublisher, PublishResult
 from .dry_run import _check_x
+from .media_publish_interlock import media_publish_interlock_reason
 
 X_CHAR_LIMIT = 140
 X_CHAR_WARN = 120
@@ -122,6 +123,17 @@ class XPublisher(BasePublisher):
                     " 現在の本番運用はThreads専用です。"
                     f" (queue_id={queue_id})"
                 ),
+            )
+
+        # An X text endpoint must not be a fallback route for metadata
+        # describing protected media. The active media authority is absent.
+        interlock = media_publish_interlock_reason(
+            account=account, queue_item=queue_item, derivative=derivative,
+        )
+        if interlock is not None:
+            return PublishResult(
+                platform="x", success=False, dry_run=False,
+                message=f"SAFETY_STOP: {interlock}",
             )
 
         # ---- テキスト検証 ----

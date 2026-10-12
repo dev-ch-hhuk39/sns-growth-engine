@@ -1,3 +1,13 @@
+## 2026-10-12 Phase 5B-6A mandatory media publication safety interlock (source only)
+
+- Base merged Phase 5B-5D PR #379 at `eee16528714a01e1c440bd7cd680e1eb69f46f62`. Worktree: `chatgpt/phase5b6a-publish-boundary-20261012`.
+- Critical finding: old trusted-review strict flag remained opt-in, and media publishing gates were env-based, not an authenticated atomic publish right.
+- Implemented non-configurable publisher-level media network stop in Threads/X; no environment flag/Sheets READY/mock receipt can enable live media while authority is absent.
+- Old READY writers now refuse protected media unconditionally: manual review, publication board, auto-READY evaluation/apply, SheetsClient single/batch/append/mock and raw Threads queue worker paths.
+- Source worker blocks before modifying READY -> PROCESSING or reaching the real publisher. Text-only existing paths remain available subject to prior gates.
+- Documentation and limitations: `docs/PHASE5B6A_MEDIA_PUBLISH_INTERLOCK.md`. This is **only phase 6A**: no authoritative approved media, no complete direct-API inventory, no production DB integration and no real posting.
+- Next phase: 5B-6B cohesive identity+queue+publisher authority, rights/duplicate checks, full legacy write/API path audit. VPS operations remain in the common VPS management chat.
+
 ## 2026-10-12 Phase 5B-5D authenticated reviewer console (development only)
 
 - Base main `f05b8dd031b851464812b3d00771bd3543477fc7` (merged Phase 5B-5C PR #378). Isolated worktree/branch `chatgpt/phase5b5d-protected-review-console-20261012`.

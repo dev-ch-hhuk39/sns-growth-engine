@@ -40,8 +40,8 @@ checks = [
     ("explicit OK promotes beauty to READY", decision_for_row({"review_decision": "OK"}, beauty_queue, allow_media_posts=False)[0] == "READY"),
     ("Beauty without semantic voice cannot become READY", decision_for_row({"review_decision": "OK"}, {**beauty_queue, "semantic_voice_status": "BLOCKED"}, allow_media_posts=False)[0] == "BLOCKED_BEAUTY_VOICE"),
     ("OK text becomes READY only after validation", decision_for_row({"review_decision": "OK"}, text_queue, allow_media_posts=False)[0] == "READY"),
-    ("OK prepared media becomes READY without publishing", decision_for_row({"review_decision": "OK"}, media_queue, allow_media_posts=False)[0] == "READY"),
-    ("missing media stays pending", decision_for_row({"review_decision": "OK"}, {**media_queue, "media_url": ""}, allow_media_posts=True)[0] == "APPROVED_PENDING_MEDIA_GATE"),
+    ("OK media cannot bypass authenticated publisher authority", decision_for_row({"review_decision": "OK"}, media_queue, allow_media_posts=False)[0] == "BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED"),
+    ("missing media remains blocked even with allow_media_posts", decision_for_row({"review_decision": "OK"}, {**media_queue, "media_url": ""}, allow_media_posts=True)[0] == "BLOCKED_TRUSTED_MEDIA_REVIEW_REQUIRED"),
     ("invalid text cannot be approved", decision_for_row({"review_decision": "OK"}, {**text_queue, "validator_status": "BLOCKED"}, allow_media_posts=False)[0] == "BLOCKED_VALIDATION"),
     ("NG rejects without publishing", decision_for_row({"review_decision": "NG"}, text_queue, allow_media_posts=False)[0] == "REJECTED"),
 ]
