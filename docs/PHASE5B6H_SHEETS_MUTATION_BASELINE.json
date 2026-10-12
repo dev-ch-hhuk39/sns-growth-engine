@@ -130,6 +130,9 @@
     "scripts/ingest_media_assets.py": {
       "append_rows": 1
     },
+    "scripts/media_mirror_sheets_adapter.py": {
+      "sheet_like.update": 1
+    },
     "scripts/normalize_scheduled_media_caption.py": {
       "update_queue_item": 2
     },
