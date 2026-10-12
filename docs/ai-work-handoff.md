@@ -1,3 +1,14 @@
+## 2026-10-12 Phase 5B-6O — current operator grants and immediate pre-PUT revocation validation
+
+- Base verified main `5074328a792e08e3178a982d2304d6de0fd01af1` (PR #391), independent worktree `chatgpt/phase5b6o-operator-auth-readiness-20261012`.
+- Added explicit 0012 SQLite migration for default-disabled, separately provisioned per-account + per-reporting-destination **two-role operator grants**, bounded validity and revocation. Locked scope cannot silently change. A disabled or revoked grant requires an increased generation to reenable; old signed approvals cannot be replayed on reactivation. **Not migrated/provisioned on production.**
+- Added `require_current_operator_grant` in `scripts/media_mirror_operator_grants.py`; each of the two pinned 6N signed operator approvals must contain the correct stage/role and grant generation, with a currently enabled, unrevoked server-side grant valid for the JWT issue and expiry times.
+- Enhanced 6N verifier to also authenticate the **original consumed pair and current grants just before the actual one-time reporting PUT**, after the existing 6M just-in-time Google ACL and source checks. A disabled/revoked signatory, old generation or missing signoff journal stops the PUT and preserves fail-closed unknown outcome; read-only reconciliation needs no new operator approval.
+- New offline tests `scripts/test_media_mirror_operator_grants.py` with inherited prior phases and focused grant denial, privilege/role scope, expiration, epoch bump, SQLite scope immutability, revocation after PREPARE, original-JWT matching and no-write recovery. CI expanded.
+- No actual Google/Drive access, signing issuance, human authentication, production DB changes, VPS, SNS posting, or external Sheets write performed. Source-of-truth and SNS publisher authority remain unchanged.
+- Document: `docs/PHASE5B6O_OPERATOR_GRANT_REVOCATION.md`.
+- Next heavy stage requires independently approved Google/service-account and true staff/operator sign-in, isolated reporting-only canary, operational migrations and per-source legacy writer cutover. All shared VPS operations belong to separate dedicated chat.
+
 ## 2026-10-12 Phase 5B-6N — Two independent signed operator approvals per reporting-only PUT
 
 - Base merged main `d733db714121d51ffa5b915c140035678e54a7c8` (PR #390), isolated branch `chatgpt/phase5b6n-operator-readonly-preflight-20261012`.

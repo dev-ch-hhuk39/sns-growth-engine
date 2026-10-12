@@ -26,6 +26,9 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
+from media_mirror_operator_grants import (
+    OperatorGrantBlocked, require_current_operator_grant,
+)
 from media_review_trusted_precommit import _utc
 from media_review_verified_identity import SAFE_NAME, _epoch, _json_object, _unbase
 
@@ -128,7 +131,7 @@ class PinnedTwoOperatorCanaryVerifier:
         self, *, token: str, event_sha256: str, operation_id: str,
         destination_id: str, account_id: str, slot_id: str, queue_id: str,
         row_number: int, projection_sha256: str, service_subject: str,
-        now: datetime,
+        now: datetime, approval_slot: int,
     ) -> _OperatorProof:
         if not isinstance(token, str) or not 16 <= len(token) <= 4096:
             raise CanaryApprovalBlocked("canary_operator_jwt_invalid")
@@ -173,6 +176,7 @@ class PinnedTwoOperatorCanaryVerifier:
             "queue_id": queue_id,
             "row_number": row_number,
             "projection_sha256": projection_sha256,
+            "approval_slot": approval_slot,
         }
         if any(
             type(claims.get(k)) is not type(v) or claims.get(k) != v
@@ -193,10 +197,78 @@ class PinnedTwoOperatorCanaryVerifier:
                 or expiry <= issued or expiry - issued > 300
                 or issued < now_seconds - 300):
             raise CanaryApprovalBlocked("canary_operator_time_invalid")
+        grant_generation = claims.get("grant_generation")
+        try:
+            require_current_operator_grant(
+                self.db, kid=kid, subject=pinned_subject,
+                account_id=account_id, destination_id=destination_id,
+                approval_slot=approval_slot,
+                grant_generation=grant_generation,
+                issued_at=issued, expires_at=expiry,
+                now_seconds=int(now_seconds),
+            )
+        except OperatorGrantBlocked:
+            raise CanaryApprovalBlocked("canary_operator_grant_denied") from None
         return _OperatorProof(
             subject=pinned_subject, kid=kid, jti=jti,
             token_sha256=hashlib.sha256(token.encode("ascii")).hexdigest(),
         )
+
+    def require_current_consumed(
+        self, *, tokens: tuple[str, str], event_sha256: str,
+        operation_id: str, destination_id: str,
+        account_id: str, slot_id: str, queue_id: str,
+        row_number: int, projection_sha256: str,
+        service_subject: str, as_of: datetime,
+    ) -> None:
+        """JIT verification before PUT; never consumes or signs a new token.
+
+        The caller holds a SQLite read transaction. Refuse a revoked,
+        disabled or generation-mismatched operator *even after PREPARED*.
+        The signoff rows must still match the exact originally consumed
+        signatures, event and operation, not merely two new valid JWTs.
+        """
+        if not self.db.in_transaction:
+            raise CanaryApprovalBlocked("canary_atomic_read_required")
+        if (not isinstance(tokens, tuple) or len(tokens) != 2
+                or any(type(v) is not str for v in tokens)):
+            raise CanaryApprovalBlocked("canary_operator_approval_missing")
+        now = _utc(as_of, "canary_operator_clock_invalid")
+        proofs = [
+            self._verify_one(
+                token=t, event_sha256=event_sha256,
+                operation_id=operation_id,
+                destination_id=destination_id,
+                account_id=account_id,
+                slot_id=slot_id, queue_id=queue_id,
+                row_number=row_number,
+                projection_sha256=projection_sha256,
+                service_subject=service_subject, now=now,
+                approval_slot=index,
+            )
+            for index, t in enumerate(tokens, 1)
+        ]
+        if proofs[0].kid == proofs[1].kid or proofs[0].subject == proofs[1].subject:
+            raise CanaryApprovalBlocked("canary_two_distinct_operators_required")
+        try:
+            rows = self.db.execute(
+                """SELECT operator_slot,signer_kid,signer_subject,signer_jti,
+                          signed_token_sha256,account_id,row_number,
+                          projection_sha256
+                   FROM sns_mirror_canary_signoff_uses
+                   WHERE event_sha256=? AND destination_id=?
+                     AND operation_id=? ORDER BY operator_slot""",
+                (event_sha256,destination_id,operation_id),
+            ).fetchall()
+        except sqlite3.Error:
+            raise CanaryApprovalBlocked("canary_signoff_journal_unavailable") from None
+        expected = [
+            (index,p.kid,p.subject,p.jti,p.token_sha256,account_id,
+             row_number,projection_sha256)
+            for index,p in enumerate(proofs,1)
+        ]
+        if rows != expected:
+            raise CanaryApprovalBlocked("canary_signoff_journal_mismatch")
 
     def verify_and_consume(
         self, *, tokens: tuple[str, str], event_sha256: str,
@@ -227,8 +299,9 @@ class PinnedTwoOperatorCanaryVerifier:
                 account_id=account_id, slot_id=slot_id, queue_id=queue_id,
                 row_number=row_number, projection_sha256=projection_sha256,
                 service_subject=service_subject, now=now,
+                approval_slot=index,
             )
-            for token in tokens
+            for index, token in enumerate(tokens, 1)
         ]
         if (proofs[0].subject == proofs[1].subject
                 or proofs[0].kid == proofs[1].kid

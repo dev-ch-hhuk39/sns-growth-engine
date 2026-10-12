@@ -32,6 +32,9 @@ from media_mirror_canary_approval import (  # noqa: E402
     TOKEN_USE as CANARY_TOKEN_USE,
     PinnedTwoOperatorCanaryVerifier, initialize_canary_approval_schema,
 )
+from media_mirror_operator_grants import (  # noqa: E402
+    initialize_operator_grant_schema,
+)
 from media_mirror_reporting_delivery import _hash as delivery_hash  # noqa: E402
 from media_mirror_reporting_delivery import IsolatedSheetsMirrorDelivery  # noqa: E402
 from media_mirror_sheets_adapter import (  # noqa: E402
@@ -232,6 +235,7 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
         super().setUp()
         initialize_mirror_delivery_schema(self.db)
         initialize_canary_approval_schema(self.db)
+        initialize_operator_grant_schema(self.db)
         self.operator_gate = PinnedTwoOperatorCanaryVerifier(
             db=self.db, issuer=ISSUER,
             operators_by_kid={
@@ -258,6 +262,17 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
             (DEST,KEY[0],SUB,REPORT,ORIGINAL,TAB,
              "ISOLATED_REPORTING_ONLY",1),
         )
+        for index in range(2):
+            self.db.execute(
+                """INSERT INTO sns_mirror_canary_operator_grants(
+                   signer_kid,signer_subject,account_id,destination_id,
+                   approval_slot,grant_generation,valid_from,valid_until,
+                   enabled,revoked_at,provisioned_by
+                   ) VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                (self.operator_kids[index], self.operator_subjects[index],
+                 KEY[0], DEST, index+1, 1, T-120, T+240, 1, None,
+                 "synthetic_test_operator"),
+            )
         self.db.execute(
             """INSERT INTO sns_mirror_delivery_row_map (
                destination_id,account_id,slot_id,queue_id,row_number
@@ -300,12 +315,14 @@ class MirrorReportingDeliveryTests(fixtures.MirrorRehearsalTests):
             "destination_id": DEST, "account_id": KEY[0],
             "slot_id": KEY[1], "queue_id": KEY[2],
             "row_number": ROW, "projection_sha256": delivery_hash(preview),
+            "grant_generation": 1,
         }
         claims.update(overrides or {})
         result = []
         for slot in which:
             fields = dict(claims)
             fields["sub"] = self.operator_subjects[slot]
+            fields["approval_slot"] = slot + 1
             fields["jti"] = f"canary_operator_{slot}_{operation_id}"
             header = {"typ": "JWT", "alg": "RS256", "kid": self.operator_kids[slot]}
             signed = b64(header) + "." + b64(fields)
