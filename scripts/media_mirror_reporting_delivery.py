@@ -19,6 +19,9 @@ from typing import Any
 from media_mirror_delivery_identity import (
     MirrorDeliveryBlocked, PinnedLiveMirrorServiceVerifier,
 )
+from media_mirror_canary_approval import (
+    CanaryApprovalBlocked, PinnedTwoOperatorCanaryVerifier,
+)
 from media_mirror_outbox import (
     SHA, ZERO, _audit as _outbox_audit, _head as _outbox_head,
     _projection_for as _verified_preview,
@@ -209,6 +212,7 @@ class IsolatedSheetsMirrorDelivery:
         allow_reporting_write: bool = False,
         acl_metadata: ReadOnlyGoogleMirrorMetadata | None = None,
         expected_principal_email: str | None = None,
+        canary_approver: PinnedTwoOperatorCanaryVerifier | None = None,
     ) -> None:
         if (not isinstance(db,sqlite3.Connection)
                 or type(verifier) is not PinnedLiveMirrorServiceVerifier
@@ -227,7 +231,24 @@ class IsolatedSheetsMirrorDelivery:
                 or not isinstance(expected_principal_email, str)
                 or expected_principal_email != acl_metadata.principal_email):
             raise MirrorDeliveryBlocked("mirror_delivery_acl_binding_required")
+        if allow_reporting_write and (
+                type(canary_approver) is not PinnedTwoOperatorCanaryVerifier
+                or canary_approver.db is not db):
+            raise MirrorDeliveryBlocked("mirror_canary_operator_gate_required")
+        if allow_reporting_write:
+            # The service must not be able to sign an operator approval.
+            # Distinct pin IDs alone do not prove distinct private keys.
+            service_keys = {
+                k.public_numbers() for k in verifier.keys.values()
+            }
+            operator_keys = {
+                key.public_numbers()
+                for _subject, key in canary_approver.operators.values()
+            }
+            if service_keys.intersection(operator_keys):
+                raise MirrorDeliveryBlocked("mirror_canary_service_key_reused")
         self.db,self.verifier,self.adapter = db,verifier,adapter
+        self.canary_approver = canary_approver
         self.allow_reporting_write = allow_reporting_write
         self.acl_metadata = acl_metadata
         self.expected_principal_email = expected_principal_email
@@ -302,14 +323,24 @@ class IsolatedSheetsMirrorDelivery:
     def deliver_once(
         self,*,event_sha256: str,destination_id: str,service_token: str,
         operation_id: str,as_of: datetime | None = None,
+        canary_approval_tokens: tuple[str,str] | None = None,
     ) -> dict[str, Any]:
-        """One fixed-row write after durable PREPARE; no automatic retry."""
+        """One fixed-row write after TWO independent signed approvals.
+
+        Approval signoff consumption and delivery PREPARE commit atomically
+        in SQLite. Neither a missing nor replayed approval can reach a
+        provider read/PUT. No background auto retry is allowed.
+        """
         _database(self.db)
         if not self.allow_reporting_write:
             raise MirrorDeliveryBlocked("mirror_reporting_write_disabled")
         if (not isinstance(operation_id,str) or OP.fullmatch(operation_id) is None
                 or len(operation_id) > 90):
             raise MirrorDeliveryBlocked("mirror_delivery_operation_invalid")
+        if (not isinstance(canary_approval_tokens, tuple)
+                or len(canary_approval_tokens) != 2
+                or any(type(x) is not str for x in canary_approval_tokens)):
+            raise MirrorDeliveryBlocked("mirror_canary_two_operator_approval_required")
         now = _utc(as_of or datetime.now(timezone.utc),"mirror_delivery_clock_invalid")
         try:
             self.db.execute("BEGIN IMMEDIATE")
@@ -323,6 +354,20 @@ class IsolatedSheetsMirrorDelivery:
                 event_id=event_sha256,dest=destination_id,
                 row=self.adapter.target.row_number,
             )
+            # Both pinned human signatures are bound to this exact
+            # event, queue, operation, destination, row and projection.
+            # Replay journal inserts and PREPARE must commit together.
+            self.canary_approver.verify_and_consume(
+                tokens=canary_approval_tokens,
+                event_sha256=event_sha256,
+                operation_id=operation_id,
+                destination_id=destination_id,
+                account_id=outbox["account_id"],
+                slot_id=outbox["slot_id"], queue_id=outbox["queue_id"],
+                row_number=self.adapter.target.row_number,
+                projection_sha256=_hash(preview),
+                service_subject=actor, as_of=now,
+            )
             prepared = _record(
                 self.db,event_id=event_sha256,dest=destination_id,
                 account=outbox["account_id"],row=self.adapter.target.row_number,
@@ -334,6 +379,9 @@ class IsolatedSheetsMirrorDelivery:
         except MirrorDeliveryBlocked:
             self.db.rollback()
             raise
+        except CanaryApprovalBlocked:
+            self.db.rollback()
+            raise MirrorDeliveryBlocked("mirror_canary_operator_approval_denied") from None
         except sqlite3.IntegrityError:
             self.db.rollback()
             raise MirrorDeliveryBlocked("mirror_delivery_duplicate_or_replay") from None
