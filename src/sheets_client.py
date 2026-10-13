@@ -26,6 +26,25 @@ from google.oauth2.service_account import Credentials
 from seeds import ACCOUNT_SEEDS_V2, CATEGORY_SEEDS, PROMPT_TEMPLATE_SEEDS
 from publishers.media_publish_interlock import block_legacy_ready_transition
 
+
+class SheetsMutationOutcomeUnknown(RuntimeError):
+    """The provider may have accepted a mutation before an exception."""
+
+
+def sheets_write_once(operation: str, callback: Any) -> Any:
+    """Never retry a potentially acknowledged Sheets mutation.
+
+    Keep provider exception details and cell contents out of logs. A caller
+    must independently reconcile the affected identifiers before writing again.
+    """
+    try:
+        return callback()
+    except Exception:
+        raise SheetsMutationOutcomeUnknown(
+            f"{operation}_outcome_unknown_manual_reconciliation"
+        ) from None
+
+
 # ------------------------------------------------------------------ #
 # タブ定義（ヘッダー列の順序が正式仕様）
 # ------------------------------------------------------------------ #
@@ -1044,12 +1063,20 @@ class SheetsClient:
                     {"range": item["range"], "values": [list(row) for row in item["values"]]}
                     for item in update_ranges
                 ]
-                return ws.batch_update(fresh_ranges, value_input_option="USER_ENTERED")
+                return ws.batch_update(
+                    fresh_ranges,
+                    value_input_option="RAW" if label.startswith("queue:") else "USER_ENTERED",
+                )
 
-            self._call_with_rate_limit_retry(
-                f"batch_update:{label}",
-                _batch_update_once,
-            )
+            if label.startswith("queue:"):
+                # Old queue operational writers are not yet transacted with
+                # SQLite. An unknown Sheets response must NOT cause replay.
+                sheets_write_once("queue_field_update", _batch_update_once)
+            else:
+                self._call_with_rate_limit_retry(
+                    f"batch_update:{label}",
+                    _batch_update_once,
+                )
 
     def _ensure_tab(self, name: str, headers: list[str]) -> gspread.Worksheet:
         """タブがなければ作成し、ヘッダー不足列を右端に追記する（冪等）。"""
@@ -1994,7 +2021,27 @@ class SheetsClient:
                 raise PermissionError("queue_ready_identity_unavailable")
             if block_legacy_ready_transition(current, fields):
                 raise PermissionError("trusted_media_review_authority_not_connected")
+        if not set(fields).intersection(headers):
+            raise PermissionError("queue_update_no_writable_columns")
         self._batch_update_fields(ws, headers, cell.row, fields, label=f"queue:{queue_id}")
+        try:
+            fresh = self._call_with_rate_limit_retry(
+                "row_values:queue:postwrite",
+                lambda: ws.row_values(cell.row),
+            )
+            observed = dict(zip(headers, fresh))
+            if (str(observed.get("queue_id", "")) != str(queue_id)
+                    or any(str(observed.get(field, "")) != str(value)
+                           for field, value in fields.items() if field in headers)):
+                raise SheetsMutationOutcomeUnknown(
+                    "queue_field_update_readback_mismatch_manual_reconciliation"
+                )
+        except SheetsMutationOutcomeUnknown:
+            raise
+        except Exception:
+            raise SheetsMutationOutcomeUnknown(
+                "queue_field_update_readback_unknown_manual_reconciliation"
+            ) from None
 
     def bulk_update_queue_items(self, updates: list[tuple[str, dict[str, Any]]]) -> int:
         """Update many queue rows with bounded Sheets calls.
@@ -2010,6 +2057,9 @@ class SheetsClient:
             return len(updates)
         if not updates:
             return 0
+        requested_ids = [str(queue_id) for queue_id, _ in updates]
+        if any(not queue_id.strip() for queue_id in requested_ids) or len(set(requested_ids)) != len(requested_ids):
+            raise PermissionError("queue_bulk_duplicate_or_blank_target")
         ws = self._ws("queue")
         values = self._call_with_rate_limit_retry("get_all_values:queue", ws.get_all_values)
         if not values:
@@ -2018,11 +2068,20 @@ class SheetsClient:
         if "queue_id" not in headers:
             raise KeyError("queue タブに queue_id 列がありません")
         queue_id_column = headers.index("queue_id")
-        row_by_queue_id = {
-            str(row[queue_id_column]).strip(): index
-            for index, row in enumerate(values[1:], start=2)
-            if len(row) > queue_id_column and str(row[queue_id_column]).strip()
-        }
+        row_by_queue_id: dict[str, int] = {}
+        duplicate_ids: set[str] = set()
+        for index, row in enumerate(values[1:], start=2):
+            if len(row) <= queue_id_column:
+                continue
+            qid = str(row[queue_id_column]).strip()
+            if not qid:
+                continue
+            if qid in row_by_queue_id:
+                duplicate_ids.add(qid)
+            else:
+                row_by_queue_id[qid] = index
+        if duplicate_ids.intersection(requested_ids):
+            raise PermissionError("queue_bulk_ambiguous_target")
         # PRE-FLIGHT entire batch before any write; mixed text+media must
         # not partially promote when one item lacks trusted media review.
         if any(str(fields.get("status") or "").upper() == "READY" for _, fields in updates):
@@ -2037,6 +2096,8 @@ class SheetsClient:
                 if len(matches) != 1:
                     raise PermissionError("queue_ready_identity_unavailable")
                 current = dict(zip(headers, matches[0]))
+                if str(current.get("status", "")).upper() != "WAITING_REVIEW":
+                    raise PermissionError("queue_ready_source_status_changed")
                 if block_legacy_ready_transition(current, fields):
                     raise PermissionError("trusted_media_review_authority_not_connected")
         ranges: list[dict[str, Any]] = []
@@ -2054,13 +2115,46 @@ class SheetsClient:
                     "range": f"{self._col_letter(col)}{row}",
                     "values": [[str(value)]],
                 })
-        # Keep each request comfortably below the Sheets batch payload limit.
+        # Never replay a write on timeout/quota failure: even a response
+        # failure may mean the previous chunk was applied by Sheets.
         for offset in range(0, len(ranges), 400):
             chunk = ranges[offset:offset + 400]
-            self._call_with_rate_limit_retry(
-                f"batch_update:queue:auto_ready:{offset // 400 + 1}",
-                lambda chunk=chunk: ws.batch_update(chunk, value_input_option="USER_ENTERED"),
+            sheets_write_once(
+                "queue_bulk_update",
+                lambda chunk=chunk: ws.batch_update(chunk, value_input_option="RAW"),
             )
+        if ranges:
+            try:
+                fresh = self._call_with_rate_limit_retry(
+                    "get_all_values:queue:postwrite", ws.get_all_values,
+                )
+                if not fresh or fresh[0] != headers:
+                    raise SheetsMutationOutcomeUnknown(
+                        "queue_bulk_schema_changed_manual_reconciliation"
+                    )
+                new_by_id: dict[str, list[dict[str, str]]] = {}
+                for row in fresh[1:]:
+                    values_by_header = dict(zip(headers, row))
+                    qid = str(values_by_header.get("queue_id", "")).strip()
+                    if qid:
+                        new_by_id.setdefault(qid, []).append(values_by_header)
+                for queue_id, fields in updates:
+                    if queue_id not in row_by_queue_id:
+                        continue
+                    observed = new_by_id.get(str(queue_id), [])
+                    if len(observed) != 1 or any(
+                        str(observed[0].get(field, "")) != str(value)
+                        for field, value in fields.items() if field in headers
+                    ):
+                        raise SheetsMutationOutcomeUnknown(
+                            "queue_bulk_readback_mismatch_manual_reconciliation"
+                        )
+            except SheetsMutationOutcomeUnknown:
+                raise
+            except Exception:
+                raise SheetsMutationOutcomeUnknown(
+                    "queue_bulk_readback_unknown_manual_reconciliation"
+                ) from None
         return updated
 
     def get_prompt_templates(

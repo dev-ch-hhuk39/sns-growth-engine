@@ -180,7 +180,7 @@ class BufferedReconcilerTests(unittest.TestCase):
             gate.return_value.returncode = 0
             result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"], now=self.now,
                                       slot_id=self.slot["slot_id"], apply=True)
-        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "FAILED")
         self.assertEqual(result["results"][0]["status"], "PRE_PUBLISH_FAILED")
         self.assertFalse(release.call_args.args[2]["publish_attempted"])
         save.assert_not_called()
@@ -201,7 +201,7 @@ class BufferedReconcilerTests(unittest.TestCase):
             gate.return_value.returncode = 0
             result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"], now=self.now,
                                       slot_id=self.slot["slot_id"], apply=True)
-        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "FAILED")
         self.assertEqual(result["results"][0]["status"], "DELIVERY_FAILED_CONFIRMED")
         self.assertEqual(release.call_args.args[2], confirmed)
         save.assert_not_called()

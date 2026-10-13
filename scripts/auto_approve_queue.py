@@ -616,6 +616,7 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
                 "blocked_queue_ids": sorted(set(unsafe)),
             }
     updated: list[str] = []
+    approval_events: list[dict[str, Any]] = []
     at = now_iso()
     bulk_updates: list[tuple[str, dict[str, Any]]] = []
     for r in ready:
@@ -657,14 +658,16 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
             "updated_at": at,
         }
         bulk_updates.append((qid, fields))
-        client.log(
-            operation="queue_approved",
-            status="OK",
-            message=f"queue_approved: queue_id={qid} WAITING_REVIEW→READY auto_ready=true",
-            account_id=str(r["account_id"]),
-            details=f"queue_id={qid} auto_ready=true reason={reason}",
-            level="INFO",
-        )
+        # An earlier transport success log would falsely certify READY if
+        # Sheets rejects or only partially applies the subsequent mutation.
+        approval_events.append({
+            "operation": "queue_approved",
+            "status": "OK",
+            "message": f"queue_approved: queue_id={qid} WAITING_REVIEW→READY auto_ready=true",
+            "account_id": str(r["account_id"]),
+            "details": f"queue_id={qid} auto_ready=true reason={reason}",
+            "level": "INFO",
+        })
         updated.append(qid)
     for r in plan["results"]:
         if r["status"] == "APPROVABLE":
@@ -689,10 +692,17 @@ def apply_ready(client: Any, plan: dict[str, Any]) -> dict[str, Any]:
         }
         bulk_updates.append((qid, fields))
     if hasattr(client, "bulk_update_queue_items"):
-        client.bulk_update_queue_items(bulk_updates)
+        written = client.bulk_update_queue_items(bulk_updates)
+        if written is not None and written < len(updated):
+            raise RuntimeError("queue_auto_ready_write_incomplete_manual_reconciliation")
     else:
         for queue_id, fields in bulk_updates:
             client.update_queue_item(queue_id, **fields)
+    # SheetsClient verifies queue state via readback before returning.
+    # Log only after the writer reports success; no success audit on a
+    # write failure or unknown outcome.
+    for event in approval_events:
+        client.log(**event)
     return {"updated_count": len(updated), "updated_queue_ids": updated}
 
 

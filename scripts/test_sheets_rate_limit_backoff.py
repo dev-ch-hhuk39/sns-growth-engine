@@ -130,6 +130,7 @@ ws_append.append_row.return_value = None
 clear_cache()
 
 client_mock = MagicMock()
+client_mock.dry_run = False  # write-capable fixture; dry-run mutations are forbidden
 client_mock._ws.return_value = ws_append
 
 ptq.append_row(client_mock, "queue", {"queue_id": "q1", "status": "WAITING_REVIEW"})
@@ -144,6 +145,7 @@ ws_update.batch_update.return_value = None
 clear_cache()
 
 client_mock2 = MagicMock()
+client_mock2.dry_run = False  # write-capable fixture; dry-run mutations are forbidden
 client_mock2._ws.return_value = ws_update
 
 ptq.update_row(client_mock2, "queue", "queue_id", "q1", {"status": "POSTED"})

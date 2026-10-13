@@ -70,6 +70,12 @@ class FakeWorksheet:
         ]
 
     def batch_update(self, data, **kwargs):
+        # Fake the committed grid as Sheets actually does. A mocked ACK
+        # without updated cells can no longer satisfy real write readback.
+        from gspread.utils import a1_to_rowcol
+        for item in data:
+            row, col = a1_to_rowcol(item["range"])
+            self.rows[row - 2][self.headers[col - 1]] = str(item["values"][0][0])
         self.writes.append(("batch", data, kwargs))
 
     def append_row(self, data, **kwargs):
@@ -297,9 +303,10 @@ class TestPhase5B6AMediaRuntimeInterlock(unittest.TestCase):
         client.dry_run = False
         client._ws = lambda name: ws
         client._call_with_rate_limit_retry = lambda label, fn: fn()
-        client._batch_update_fields = lambda *args, **kwargs: ws.writes.append(
-            ("fields", args, kwargs)
-        )
+        def write_fields(_ws, _headers, index, fields, **kwargs):
+            _ws.rows[index - 2].update(fields)
+            _ws.writes.append(("fields", fields, kwargs))
+        client._batch_update_fields = write_fields
         with self.assertRaises(PermissionError):
             client.update_queue_item("q_media_001", status="READY")
         with self.assertRaises(PermissionError):

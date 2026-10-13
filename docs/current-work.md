@@ -1,3 +1,12 @@
+## 2026-10-13 — operational Sheets write-once/readback and isolated scheduled READY (Mac local-only)
+
+- High-priority source changes: publisher and AUTO_READY queue updates/posted-result appends now avoid automatic mutation retry after uncertain Google outcomes; single/bulk queue updates are verified against fresh server-side values and preserve RAW IDs/strings. AUTO_READY approval success logs are emitted only after the writer succeeds.
+- Bulk queue READY migration safety: exact identity, no duplicate request IDs or duplicated physical queue rows, current WAITING_REVIEW source required, post-write field readback. Multiple chunks are not atomic; unknown outcomes must be reconciled manually. Unreviewed legacy writers and protected SQLite source of truth **remain separate**.
+- Isolated temporary JSON output for each exact scheduled hybrid READY invocation; missing, corrupt, mismatched account/slot/queue output fails closed. Intended slots with confirmed no post or a pre-publish failure now produce overall FAILED, not false PASS.
+- Added adversarial tests and the changed reconciler/6A tests to the Mac-only focused quality gate; full offline suite evidence and new local SHA should be read from the latest Git history/report, not assumed from this entry.
+- **Final local offline QA:** 982/982 repository scripts PASS; static workflows, Ruff, compile, diff and gitleaks PASS. An initial MagicMock fixture mismatch was corrected without relaxing production guards. No external probe or live publishing was run.
+- Detailed contract, limits, read-only Ops reconciliation and incomplete true database cutover: `docs/OPERATIONAL_QUEUE_WRITE_SAFETY_AND_READY_ISOLATION_20261013.md`. No provider/API, public GitHub, Actions, deployment or production mutation executed here.
+
 ## 2026-10-13 — bounded reconciler freshness and metrics identity (Mac local-only)
 
 - Updated `scripts/reconcile_due_production_slots.py`: on apply, re-read same-account queue, persisted posts and slot-run status immediately before each due-slot decision; a slot closed by another actor is skipped rather than re-published. This closes stale in-invocation daily-cap/cooldown checks. Existing publisher and actual posting approval gates remain unchanged.

@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -255,6 +256,39 @@ def run_bounded_text_recovery(
     }
 
 
+def run_isolated_hybrid_ready(
+    account_id: str, slot_id: str, queue_id: str, safe_env: dict[str, str],
+) -> tuple[int, dict[str, Any]]:
+    """Fresh, private result file for one exact candidate; no stale /tmp replay."""
+    with tempfile.TemporaryDirectory(prefix="sns-ready-") as temp:
+        result_file = Path(temp) / "result.json"
+        command = [
+            sys.executable, "scripts/run_hybrid_ready_pipeline.py",
+            "--account-id", account_id,
+            "--slot-id", slot_id,
+            "--queue-id", queue_id,
+            "--max-candidates", "1",
+            "--approval-mode", "text", "--autonomous-low-risk",
+            "--apply", "--use-sheets", "--json-output", str(result_file),
+        ]
+        rc, payload = run_stage("hybrid_review_and_auto_ready", command, safe_env)
+        if not result_file.exists():
+            return (2, {"status": "FAILED", "reason": "READY_RESULT_NOT_PERSISTED"}
+                    ) if rc == 0 else (rc, payload)
+        try:
+            saved = json.loads(result_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return 2, {"status": "FAILED", "reason": "READY_RESULT_UNREADABLE"}
+        if not isinstance(saved, dict):
+            return 2, {"status": "FAILED", "reason": "READY_RESULT_INVALID"}
+        if str(saved.get("account_id", "")) != account_id or str(saved.get("slot_id", "")) != slot_id:
+            return 2, {"status": "FAILED", "reason": "READY_RESULT_IDENTITY_MISMATCH"}
+        if (str(saved.get("status", "")).upper() == "READY"
+                and str(saved.get("selected_queue_id", "")) != queue_id):
+            return 2, {"status": "FAILED", "reason": "READY_RESULT_QUEUE_MISMATCH"}
+        return rc, saved
+
+
 def generation_failure_reason(payload: dict[str, Any]) -> str:
     for result in payload.get("results", []):
         if "generate_threads_ideas_from_references.py" not in str(result.get("cmd", "")):
@@ -379,29 +413,9 @@ def main() -> int:
         return recovery_rc
     generated_queue_id = queue_ids[0]
 
-    ready_output = Path(f"/tmp/hybrid-ready-text-{args.account_id}-{args.slot_id}.json")
-    ready_command = [
-        sys.executable,
-        "scripts/run_hybrid_ready_pipeline.py",
-        "--account-id",
-        args.account_id,
-        "--slot-id",
-        args.slot_id,
-        "--queue-id",
-        generated_queue_id,
-        "--max-candidates",
-        "1",
-        "--approval-mode",
-        "text",
-        "--autonomous-low-risk",
-        "--apply",
-        "--use-sheets",
-        "--json-output",
-        str(ready_output),
-    ]
-    rc, ready_payload = run_stage("hybrid_review_and_auto_ready", ready_command, safe_env)
-    if ready_output.exists():
-        ready_payload = json.loads(ready_output.read_text(encoding="utf-8"))
+    rc, ready_payload = run_isolated_hybrid_ready(
+        args.account_id, args.slot_id, generated_queue_id, safe_env,
+    )
     if rc != 0:
         ready_status = str(ready_payload.get("status", ""))
         ready_reason = str(ready_payload.get("reason", ""))

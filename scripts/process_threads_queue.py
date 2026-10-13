@@ -37,7 +37,7 @@ from hybrid_ai_source_context import build_source_context  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from metrics_reservations import ReservationBlocked, read_table, reserve_metrics  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
-from sheets_client import SheetsClient, _sheets_retry_reason  # noqa: E402
+from sheets_client import SheetsClient, _sheets_retry_reason, sheets_write_once  # noqa: E402
 from accounts.managed_accounts import account_choices, account_status, require_account_match  # noqa: E402
 from media_v1_policy import is_media_candidate, split_public_validation  # noqa: E402
 from publishers.media_publish_interlock import (  # noqa: E402
@@ -159,20 +159,24 @@ def _call_with_rate_limit_retry(label: str, fn):
 
 
 def append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
+    if getattr(client, "dry_run", False):
+        raise PermissionError("legacy_sheet_mutation_forbidden_in_dry_run")
     if logical == "queue" and block_legacy_ready_transition(row, row):
         raise PermissionError("trusted_media_review_authority_not_connected")
     ws = get_ws(client, logical)
     headers = _get_headers(ws)
     values = [str(row.get(h, "")) for h in headers]
-    _call_with_rate_limit_retry(
-        f"append_row:{logical}",
-        # Platform IDs exceed spreadsheet numeric precision. Keep literal
-        # strings (and public text beginning with "=") out of formula parsing.
+    # Append is non-idempotent. An API error may occur after a committed
+    # append: do not retry or create a second result/queue identity.
+    sheets_write_once(
+        "legacy_sheet_append",
         lambda: ws.append_row(values, value_input_option="RAW"),
     )
 
 
 def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fields: dict[str, Any]) -> bool:
+    if getattr(client, "dry_run", False):
+        raise PermissionError("legacy_sheet_mutation_forbidden_in_dry_run")
     ws = get_ws(client, logical)
     headers = _get_headers(ws)
     if key not in headers:
@@ -205,8 +209,9 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
                 "values": [[str(value)]],
             })
     if update_ranges:
-        _call_with_rate_limit_retry(
-            f"batch_update:{logical}:{key_value}",
+        # A timeout can follow a committed update. No blind retry.
+        sheets_write_once(
+            "legacy_sheet_update",
             lambda: ws.batch_update(update_ranges, value_input_option="RAW"),
         )
     return True

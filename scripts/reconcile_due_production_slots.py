@@ -294,7 +294,13 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                 break
         except Exception as exc:
             outcomes.append({"account_id": account, "status": "FAILED", "reason": type(exc).__name__})
-    failed = any(r["status"] in {"BLOCKED", "FAILED", "RECOVERY_REQUIRED"} for r in outcomes)
+    # A released slot claim proves only that a retry is not duplicate-risk.
+    # It does not mean the intended post was delivered. Preserve failing
+    # exit status for operators, cron health checks and aftercare alerts.
+    failed = any(r["status"] in {
+        "BLOCKED", "FAILED", "RECOVERY_REQUIRED",
+        "PRE_PUBLISH_FAILED", "DELIVERY_FAILED_CONFIRMED",
+    } for r in outcomes)
     return {"status": "FAILED" if failed else "PASS", "results": outcomes, "dry_run": not apply}
 
 
