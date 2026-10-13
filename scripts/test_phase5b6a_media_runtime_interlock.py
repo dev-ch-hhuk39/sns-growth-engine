@@ -229,7 +229,7 @@ class TestPhase5B6AMediaRuntimeInterlock(unittest.TestCase):
                 }, dry_run=False,
             )
             self.assertFalse(result.success)
-            self.assertIn("MEDIA_AUTHORITY_NOT_CONNECTED", result.message)
+            self.assertIn("X_REAL_POST_DISABLED_BY_PRODUCT_POLICY", result.message)
 
     def test_interlock_does_not_allow_manual_json_to_override(self):
         base = media_row()

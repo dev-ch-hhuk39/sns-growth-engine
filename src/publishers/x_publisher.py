@@ -1,5 +1,5 @@
 """
-publishers/x_publisher.py - X（旧 Twitter）Publisher（Phase 3-D）
+publishers/x_publisher.py - X 旧Publisher（現行Goalでは送信停止、dry-runのみ）
 
 本番投稿の有効化条件（すべて必要）:
   1. PUBLISH_ENABLED=true
@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from .base import BasePublisher, PublishResult
 from .dry_run import _check_x
 from .media_publish_interlock import media_publish_interlock_reason
+from .active_platform_policy import allowed_for_real_post
 
 X_CHAR_LIMIT = 140
 X_CHAR_WARN = 120
@@ -79,6 +80,15 @@ class XPublisher(BasePublisher):
                 posted_url=None,
                 external_post_id=None,
                 message=message,
+            )
+
+        # Product-level stop is intentionally stronger than environment
+        # toggles or credentials. No X real publishing in the active Goal.
+        if not allowed_for_real_post("x"):
+            return PublishResult(
+                platform="x", success=False, dry_run=False,
+                posted_url=None, external_post_id=None,
+                message="SAFETY_STOP: X_REAL_POST_DISABLED_BY_PRODUCT_POLICY",
             )
 
         # ---- dry_run=False: 安全ガード 1: PUBLISH_ENABLED ----
@@ -202,6 +212,15 @@ class XPublisher(BasePublisher):
         旧repo X_autopost_yoru の auto_post.py と同一方式。
         tweepy.Client は 402 が出るため使用しない。
         """
+        # Direct callers must not bypass XPublisher.publish's scope gate.
+        # The historical network logic below is retained for comparison
+        # only, but is unreachable while X is not part of the product Goal.
+        if not allowed_for_real_post("x"):
+            return PublishResult(
+                platform="x", success=False, dry_run=False,
+                posted_url=None, external_post_id=None,
+                message="SAFETY_STOP: X_HTTP_SINK_DISABLED_BY_PRODUCT_POLICY",
+            )
         try:
             import requests
             from requests_oauthlib import OAuth1

@@ -1,3 +1,12 @@
+## 2026-10-13 — Phase 5B-6AA/AB: permanent X outbound stop and legacy writer workstreams (Mac-only)
+
+- Product scope mismatch closed: GOAL.md forbids live X publication, but legacy X publish/factory/HTTP sink remained env-enableable. New immutable source-level platform policy refuses real X at the CLI, factory, public publisher and low-level HTTP sink even when all old flags and OAuth variables are present; X dry-run/reference research remains available.
+- The historic Phase 3D success simulation now enforces a stronger **zero-X-network and zero-result-write** contract; no disabled publishing path is incorrectly represented as deployed. Offline X safety and 6A interlock tests verify fail-closed operation.
+- New read-only and never-authorizing Sheets migration workstream plan: scripts/plan_legacy_writer_cutover.py categorizes the frozen 6H AST writer inventory into P0/P1/P2, tracks every observed route as NOT_MIGRATED, rejects baseline drift, and always exits CUTOVER_BLOCKED. It cannot import a production approval or alter SQLite/Sheets.
+- Source/code/limitations and exact offline invocation: docs/PHASE5B6AA_AB_X_SCOPE_AND_WRITER_CUTOVER_PLAN_20261013.md. Tests included in the local focused gate; the full gate and current SHA are recorded separately after verification.
+- **Final Mac offline QA:** 987/987 repository scripts PASS; local workflow static checks, Ruff, Python compile, Git diff and gitleaks PASS. The initial Phase3C mock expectation was corrected to enforce disabled X; final full rerun PASS. Current 6H inventory: 68 files / 165 method callsites, all NOT_MIGRATED.
+- Real Sheets/SQLite cutover, legacy writer disablement, one-use publishing lease, authenticated service identities, canaries, rights and 24h/72h/168h observations remain **unimplemented/not verified**. No Codex, Actions CI, production Google/SNS calls, shared VPS operations, public pushes, or deployments.
+
 ## 2026-10-13 — Phase 5B-6Y/Z: queue identity and stale-review authorization stop (Mac local-only)
 
 - Hardened real and mock Sheets queue identity: global unique reader semantics, immutable account/route/draft/slot keys, no terminal-to-READY reopening; bulk changes now preflight every target and nonempty writable fields before mutation. No provider-call retry or publish gate was weakened.

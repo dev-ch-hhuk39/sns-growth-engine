@@ -1,5 +1,5 @@
 """
-publish_queue.py - キュー投稿処理（Phase 3-D: dry-run + X 実投稿対応）
+publish_queue.py - 旧キュー投稿ツール（現在はdry-run検証のみ）
 
 queue に積まれた投稿候補を検証・投稿する。
 
@@ -7,7 +7,7 @@ queue に積まれた投稿候補を検証・投稿する。
   --dry-run モード（デフォルト・推奨）:
     DryRunPublisher でテキスト検証のみ。実 SNS 投稿なし。
 
-  --confirm-real-post モード（Phase 3-D: X のみ）:
+  --confirm-real-post モード（Phase 3-D の旧設計、現在は恒久停止）:
     XPublisher で実際に X に投稿する。以下の条件がすべて必要:
       1. --confirm-real-post フラグ
       2. --max-real-posts N (N ≥ 1)
@@ -54,6 +54,7 @@ except ImportError:
 from config_loader import get_config, get_config_partial
 from sheets_client import SheetsClient, MockSheetsClient, make_client
 from publishers.factory import get_publisher
+from publishers.active_platform_policy import allowed_for_real_post
 
 
 def _fetch_queue(sheets, account_id: str | None, platforms: list[str],
@@ -293,6 +294,12 @@ def _run_real_post_mode(args) -> None:
     print("=" * 60)
     print("  publish_queue.py - Phase 3-D 実投稿モード（X）")
     print("=" * 60)
+
+    # This historical X publishing entrypoint is inactive in the current
+    # Threads-first Goal. Reject BEFORE opening Sheets or credentials.
+    if not allowed_for_real_post("x"):
+        print("[BLOCKED] X_REAL_POST_DISABLED_BY_PRODUCT_POLICY")
+        raise SystemExit(2)
 
     # ---- 安全ガード: PUBLISH_ENABLED ----
     publish_enabled = os.environ.get("PUBLISH_ENABLED", "false").strip().lower()

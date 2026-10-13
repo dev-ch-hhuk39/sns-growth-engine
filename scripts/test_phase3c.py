@@ -189,15 +189,16 @@ _assert(isinstance(pub_factory_dry, DryRunPublisher),
         "factory.py dry_run=True → DryRunPublisher", type(pub_factory_dry).__name__)
 
 pub_factory_live = get_publisher("x", dry_run=False)
-# Phase 3-D: factory は XPublisher を返す（安全ガードは XPublisher 内で処理）
-_assert(type(pub_factory_live).__name__ == "XPublisher",
-        "factory.py x dry_run=False → XPublisher（Phase 3-D 実装済み）",
+# Current Goal: legacy X posting must never be selected by the factory,
+# even when every historical environment/credential flag is enabled.
+_assert(type(pub_factory_live).__name__ == "_SafetyStopPublisher",
+        "factory.py x dry_run=False → permanent _SafetyStopPublisher",
         type(pub_factory_live).__name__)
 
-# PUBLISH_ENABLED=false のまま → XPublisher の SAFETY_STOP が返る
 r_factory = pub_factory_live.publish(_TEXT_NORMAL, account=_ACCOUNT, derivative=_DERIV_X, queue_item=_QUEUE, dry_run=False)
-_assert(r_factory.success is False, "factory.py XPublisher.publish() PUBLISH_ENABLED=false → success=False")
-_assert("SAFETY_STOP" in r_factory.message, "factory.py XPublisher: SAFETY_STOP メッセージ")
+_assert(r_factory.success is False, "factory.py legacy X publisher is disabled")
+_assert("X_REAL_POST_DISABLED_BY_PRODUCT_POLICY" in r_factory.message,
+        "factory.py X product scope cannot be enabled by PUBLISH_ENABLED")
 
 # Threads は引き続き _SafetyStopPublisher（Phase 3-E まで）
 pub_factory_threads = get_publisher("threads", dry_run=False)
