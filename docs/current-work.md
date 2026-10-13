@@ -1,3 +1,12 @@
+## 2026-10-13 — Phase 5B-6Y/Z: queue identity and stale-review authorization stop (Mac local-only)
+
+- Hardened real and mock Sheets queue identity: global unique reader semantics, immutable account/route/draft/slot keys, no terminal-to-READY reopening; bulk changes now preflight every target and nonempty writable fields before mutation. No provider-call retry or publish gate was weakened.
+- Review sync and decision apply now reject ambiguous queue/review identities and cross-account conflicts; plans cannot mutate schema, and apply requires both --confirm-* and --use-sheets. Non-idempotent Sheets review writes are single attempt with exact post-write row verification and sanitized unknown-outcome stop.
+- A decision on older public text/source/media cannot be carried into newly modified material. Human decision and note are retained, with STALE_REVIEW_RECHECK_REQUIRED requiring explicit clear, fresh sync and new decision. Protected-media READY remains blocked.
+- Offline adversarial tests added; full-run outcomes must be independently verified before claiming release acceptance. Detailed contract: docs/PHASE5B6Y_Z_QUEUE_REVIEW_CONSISTENCY_20261013.md.
+- **Final Mac local QA Phase 6Y/Z:** 986/986 offline repository scripts PASS; workflow static safety, Ruff, Python compile, staged/unstaged diff and gitleaks PASS. No real provider probe, source-of-truth cutover or deployment.
+- **Still missing:** actual Sheets/SQLite one-authority migration, provider IdP/ACL/backup, approved canaries, media publication and measured production feedback. No GitHub Actions, Codex, public push, shared VPS, Google production writes or SNS posts in this batch.
+
 ## 2026-10-13 — Phase 5B-6W/X: queue writer unique identity and offline cutover audit
 
 - Operational queue append is now one RAW attempt with strict unique queue identity and verified readback; lost ACKs and mismatches fail closed without automatic replay. Both real/mock queue lookups are account-scoped in the queue builder, and single-row updates reject duplicate global queue IDs.

@@ -25,6 +25,7 @@ from google.oauth2.service_account import Credentials
 
 from seeds import ACCOUNT_SEEDS_V2, CATEGORY_SEEDS, PROMPT_TEMPLATE_SEEDS
 from publishers.media_publish_interlock import block_legacy_ready_transition
+from publishers.queue_identity_policy import assert_safe_queue_patch
 
 
 class SheetsMutationOutcomeUnknown(RuntimeError):
@@ -1962,12 +1963,15 @@ class SheetsClient:
     ) -> dict | None:
         """Return a matching queue row, optionally within one account only."""
         ws = self._ws("queue")
-        for row in ws.get_all_records():
+        matches = [
+            dict(row) for row in ws.get_all_records()
             if (str(row.get("draft_id", "")) == str(draft_id)
-                    and str(row.get("platform", "")).lower() == platform.lower()
-                    and (account_id is None or str(row.get("account_id", "")) == account_id)):
-                return dict(row)
-        return None
+                and str(row.get("platform", "")).lower() == platform.lower()
+                and (account_id is None or str(row.get("account_id", "")) == account_id))
+        ]
+        if len(matches) > 1:
+            raise PermissionError("queue_draft_identity_ambiguous")
+        return matches[0] if matches else None
 
     def get_queue_items(
         self,
@@ -1992,10 +1996,11 @@ class SheetsClient:
     def get_queue_item(self, queue_id: str) -> dict | None:
         """queue_id に一致する queue 行を返す。なければ None。"""
         ws = self._ws("queue")
-        for row in ws.get_all_records():
-            if row.get("queue_id") == queue_id:
-                return dict(row)
-        return None
+        matches = [dict(row) for row in ws.get_all_records()
+                   if str(row.get("queue_id", "")) == str(queue_id)]
+        if len(matches) > 1:
+            raise PermissionError("queue_lookup_ambiguous_identity")
+        return matches[0] if matches else None
 
     def update_queue_item(self, queue_id: str, **fields: Any) -> None:
         """queue タブの指定行を更新する。"""
@@ -2018,16 +2023,14 @@ class SheetsClient:
         if len(exact) != 1:
             raise PermissionError("queue_update_missing_or_ambiguous_identity")
         cell = exact[0]
-        if str(fields.get("status") or "").upper() == "READY":
-            values = self._call_with_rate_limit_retry(
-                f"row_values:queue:{queue_id}",
-                lambda: ws.row_values(cell.row),
-            )
-            current = dict(zip(headers, values))
-            if str(current.get("queue_id") or "") != str(queue_id):
-                raise PermissionError("queue_ready_identity_unavailable")
-            if block_legacy_ready_transition(current, fields):
-                raise PermissionError("trusted_media_review_authority_not_connected")
+        values = self._call_with_rate_limit_retry(
+            "row_values:queue:identity_preflight",
+            lambda: ws.row_values(cell.row),
+        )
+        current = dict(zip(headers, values))
+        assert_safe_queue_patch(current, fields, queue_id=queue_id)
+        if block_legacy_ready_transition(current, fields):
+            raise PermissionError("trusted_media_review_authority_not_connected")
         if not set(fields).intersection(headers):
             raise PermissionError("queue_update_no_writable_columns")
         self._batch_update_fields(ws, headers, cell.row, fields, label=f"queue:{queue_id}")
@@ -2056,8 +2059,8 @@ class SheetsClient:
         AUTO_READY evaluates a whole WAITING_REVIEW batch. Looking up each
         queue_id with ``ws.find`` exhausts the per-user Sheets read quota under
         scheduled concurrent account runs, so read the grid once and batch the
-        field updates. Unknown queue ids are ignored deliberately: a queue can
-        legitimately be deleted by an operator between planning and apply.
+        field updates. Missing/ambiguous queue IDs must block the full batch
+        before writing: otherwise a partial approval could be misleading.
         """
         if self.dry_run:
             print(f"[dry-run] bulk_update_queue_items: count={len(updates)}")
@@ -2072,8 +2075,10 @@ class SheetsClient:
         if not values:
             return 0
         headers = values[0]
-        if "queue_id" not in headers:
-            raise KeyError("queue タブに queue_id 列がありません")
+        if ("queue_id" not in headers or len(headers) != len(set(headers))):
+            raise PermissionError("queue_bulk_header_missing_or_ambiguous")
+        if any(not set(fields).intersection(headers) for _, fields in updates):
+            raise PermissionError("queue_bulk_no_writable_columns")
         queue_id_column = headers.index("queue_id")
         row_by_queue_id: dict[str, int] = {}
         duplicate_ids: set[str] = set()
@@ -2089,20 +2094,15 @@ class SheetsClient:
                 row_by_queue_id[qid] = index
         if duplicate_ids.intersection(requested_ids):
             raise PermissionError("queue_bulk_ambiguous_target")
-        # PRE-FLIGHT entire batch before any write; mixed text+media must
-        # not partially promote when one item lacks trusted media review.
-        if any(str(fields.get("status") or "").upper() == "READY" for _, fields in updates):
-            for queue_id, fields in updates:
-                if str(fields.get("status") or "").upper() != "READY":
-                    continue
-                matches = [
-                    row for row in values[1:]
-                    if len(row) > queue_id_column
-                    and str(row[queue_id_column]).strip() == str(queue_id)
-                ]
-                if len(matches) != 1:
-                    raise PermissionError("queue_ready_identity_unavailable")
-                current = dict(zip(headers, matches[0]))
+        # Preflight the ENTIRE batch before the first write. Missing or
+        # ambiguous IDs cannot cause a partially approved set of records.
+        for queue_id, fields in updates:
+            source_row = row_by_queue_id.get(str(queue_id))
+            if source_row is None:
+                raise PermissionError("queue_bulk_missing_target")
+            current = dict(zip(headers, values[source_row - 1]))
+            assert_safe_queue_patch(current, fields, queue_id=str(queue_id))
+            if str(fields.get("status") or "").upper() == "READY":
                 if str(current.get("status", "")).upper() != "WAITING_REVIEW":
                     raise PermissionError("queue_ready_source_status_changed")
                 if block_legacy_ready_transition(current, fields):
@@ -2735,12 +2735,15 @@ class MockSheetsClient:
     def find_queue_item(
         self, draft_id: str, platform: str, account_id: str | None = None,
     ) -> dict | None:
-        for r in self._queue:
+        matches = [
+            dict(r) for r in self._queue
             if (str(r.get("draft_id", "")) == str(draft_id)
-                    and str(r.get("platform", "")).lower() == platform.lower()
-                    and (account_id is None or str(r.get("account_id", "")) == account_id)):
-                return dict(r)
-        return None
+                and str(r.get("platform", "")).lower() == platform.lower()
+                and (account_id is None or str(r.get("account_id", "")) == account_id))
+        ]
+        if len(matches) > 1:
+            raise PermissionError("queue_draft_identity_ambiguous")
+        return matches[0] if matches else None
 
     def get_queue_items(
         self,
@@ -2761,10 +2764,11 @@ class MockSheetsClient:
         return [dict(r) for r in rows]
 
     def get_queue_item(self, queue_id: str) -> dict | None:
-        for r in self._queue:
-            if r.get("queue_id") == queue_id:
-                return dict(r)
-        return None
+        matches = [dict(r) for r in self._queue
+                   if str(r.get("queue_id", "")) == str(queue_id)]
+        if len(matches) > 1:
+            raise PermissionError("queue_lookup_ambiguous_identity")
+        return matches[0] if matches else None
 
     def update_queue_item(self, queue_id: str, **fields: Any) -> None:
         matches = [r for r in self._queue if str(r.get("queue_id", "")) == str(queue_id)]
@@ -2772,6 +2776,7 @@ class MockSheetsClient:
             raise PermissionError("queue_update_missing_or_ambiguous_identity")
         if matches:
             row = matches[0]
+            assert_safe_queue_patch(row, fields, queue_id=queue_id)
             if block_legacy_ready_transition(row, fields):
                 raise PermissionError("trusted_media_review_authority_not_connected")
             row.update(fields)

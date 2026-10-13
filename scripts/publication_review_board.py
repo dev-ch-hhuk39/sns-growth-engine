@@ -6,6 +6,7 @@ from typing import Any, Mapping
 
 from accounts.managed_accounts import managed_account_ids
 from media_review_legacy_guard import requires_strict_review_block
+from review_board_integrity import REVIEW_MATERIAL_FIELDS
 
 ACTIVE_QUEUE_STATUSES = {"WAITING_REVIEW", "READY", "POSTED"}
 ALLOWED_ACCOUNTS = set(managed_account_ids())
@@ -51,7 +52,7 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
     existing = existing or {}
     queue_id = text(queue.get("queue_id"))
     media_url = text(queue.get("media_url"))
-    return {
+    projected = {
         "review_id": text(existing.get("review_id")) or f"review_{queue_id}",
         "queue_id": queue_id,
         "account_id": text(queue.get("account_id")),
@@ -122,6 +123,23 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
         "decision_result": text(existing.get("decision_result")),
         "last_sync_at": now_iso(),
     }
+    # Preserve human notes/decision but NEVER silently carry an old OK/NG
+    # forward after the candidate body, origin or media identity changes.
+    # A stale decision cannot be "renewed" by editing OK again: the reviewer
+    # must clear the decision, sync the new evidence, then decide anew.
+    material_fields = REVIEW_MATERIAL_FIELDS
+    decision = text(existing.get("review_decision")).upper()
+    stale_before = text(existing.get("review_status")).upper() in {
+        "STALE_REVIEW_RECHECK_REQUIRED", "BLOCKED_STALE_REVIEW",
+    }
+    if decision in {"OK", "NG", "HOLD"} and (
+        stale_before or any(
+            text(existing.get(field)) != text(projected.get(field))
+            for field in material_fields
+        )
+    ):
+        projected["review_status"] = "STALE_REVIEW_RECHECK_REQUIRED"
+    return projected
 
 
 def decision_for_row(
@@ -135,6 +153,10 @@ def decision_for_row(
     decision = text(review.get("review_decision")).upper()
     if decision not in {"OK", "NG", "HOLD"}:
         return "SKIP", {}
+    if text(review.get("review_status")).upper() in {
+        "STALE_REVIEW_RECHECK_REQUIRED", "BLOCKED_STALE_REVIEW",
+    }:
+        return "BLOCKED_STALE_REVIEW", {}
     queue_status = text(queue.get("status")).upper()
     if queue_status in {"READY", "POSTED"}:
         # Media V1 review is post-hoc feedback. It must never retract a READY

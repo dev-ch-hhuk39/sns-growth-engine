@@ -31,6 +31,11 @@ SENSITIVE_PARTS = (
     "API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENAI_API_KEY",
 )
 FOCUSED = (
+    "test_publication_review_write_safety.py",
+    "test_queue_identity_transition_policy.py",
+    "test_legacy_media_review_safety.py",
+    "test_publication_review_sync_retries.py",
+    "test_publication_review_board.py",
     "test_operational_queue_append_boundary.py",
     "test_queue_cutover_readonly_audit.py",
     "test_sheets_rate_limit_backoff.py",
