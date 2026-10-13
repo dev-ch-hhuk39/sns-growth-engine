@@ -17,6 +17,7 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 from content_schedule import MEDIA_POST_TYPES, slot_by_id  # noqa: E402
 from content_slot_runs import build_slot_run, claim_slot_run, posts_used_in_business_date, release_confirmed_no_post_claim, release_unpublished_claim, upsert_slot_run  # noqa: E402
 from process_threads_queue import process_one, records, update_row  # noqa: E402
+from metrics_reservations import ReservationBlocked, plan_reservations  # noqa: E402
 from production_inventory import JST, due_slots, eligible_ready, has_media, media_asset_ids, media_route, policy, recently_used_media_asset_ids, select_evergreen, timestamp, true  # noqa: E402
 from sheets_record_reader import enable_readonly_record_cache  # noqa: E402
 
@@ -121,13 +122,23 @@ def verify_delivery(client, queue: dict, result: dict) -> dict:
         raise RuntimeError("DELIVERY_IDENTITY_UNVERIFIED")
     post = saved[0]
     if (stored[0].get("status") != "POSTED" or post.get("account_id") != queue["account_id"]
+            or post.get("queue_id") != queue["queue_id"]
             or post.get("posted_text") != queue["public_post_text"] or not true(post.get("real_post"))
             or post.get("verification_status") != "READ_AFTER_WRITE_PASS"
             or not str(post.get("external_post_id", "")).isdigit() or not post.get("post_url")
             or (result.get("result_id") and result["result_id"] != post.get("result_id"))):
         raise RuntimeError("DELIVERY_READ_AFTER_WRITE_FAILED")
-    jobs = [r for r in records(client, "metrics_collection_jobs") if r.get("result_id") == post.get("result_id")]
-    if len(jobs) != 3 or {str(r.get("window_hours")) for r in jobs} != {"24", "72", "168"} or any(r.get("account_id") != queue["account_id"] for r in jobs):
+    # Reuse the reservation contract: three rows alone do not prove that
+    # IDs, permalinks, due times and account boundaries match this post.
+    # Pass ALL jobs to detect collisions outside the requested account.
+    try:
+        plan = plan_reservations(
+            [post], records(client, "metrics_collection_jobs"),
+            account_id=queue["account_id"], result_id=post["result_id"],
+        )
+    except (ReservationBlocked, KeyError):
+        raise RuntimeError("DELIVERY_METRICS_UNVERIFIED") from None
+    if plan["verified_count"] != 3 or plan["missing_count"] != 0:
         raise RuntimeError("DELIVERY_METRICS_UNVERIFIED")
     if has_media(queue):
         media_results = [
@@ -160,6 +171,24 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
             for slot in due:
                 if slot_id and slot["slot_id"] != slot_id:
                     continue
+                if apply:
+                    # A prior slot in THIS invocation may have just posted.
+                    # Re-read before every publish decision: cached posts
+                    # would bypass same-account cooldown/daily-cap checks.
+                    queues, posts = records(client, "queue"), records(client, "posted_results")
+                    current_slots = due_slots(
+                        account, now=now, slot_runs=records(client, "content_slot_runs"),
+                        posted=enrich_posts(posts, queues),
+                        recovery_minutes=cfg["recovery_window_minutes"],
+                    )
+                    exact = [item for item in current_slots
+                             if (item["slot_id"], item["business_date_jst"])
+                             == (slot["slot_id"], slot["business_date_jst"])]
+                    if len(exact) != 1:
+                        outcomes.append({**slot, "status": "SKIPPED",
+                                         "reason": "SLOT_CLOSED_DURING_RECONCILIATION"})
+                        continue
+                    slot = exact[0]
                 reason = delivery_limit(account, posts, now)
                 if not slot["publishable"] or reason:
                     outcomes.append({**slot, "status": "BLOCKED", "reason": reason or slot["reason"]})
@@ -282,7 +311,7 @@ def main() -> int:
     from config_loader import get_config
     from sheets_client import SheetsClient
     cfg = get_config()
-    result = reconcile(SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False),
+    result = reconcile(SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=not args.apply),
         accounts=policy()["accounts"] if args.account_id == "all" else [args.account_id], apply=args.apply,
         slot_id=args.slot_id)
     print(json.dumps(result, ensure_ascii=False, indent=2))

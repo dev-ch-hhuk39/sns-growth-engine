@@ -1,3 +1,11 @@
+## 2026-10-13 — bounded reconciler freshness and metrics identity (Mac local-only)
+
+- Updated `scripts/reconcile_due_production_slots.py`: on apply, re-read same-account queue, persisted posts and slot-run status immediately before each due-slot decision; a slot closed by another actor is skipped rather than re-published. This closes stale in-invocation daily-cap/cooldown checks. Existing publisher and actual posting approval gates remain unchanged.
+- Reused `metrics_reservations.plan_reservations` at posted-result reconciliation. Three reservation rows are not enough: each 24/72/168-hour reservation must match the exact account, result, job ID, permalink, due time, and allowed status; duplicate/foreign identities fail closed.
+- The reconciler CLI now constructs a read-only SheetsClient on `--dry-run`, and existing `--apply --confirm-reconcile` behavior is maintained. No live provider access, new scheduler, AI generation, or media interlock change.
+- Expanded `scripts/test_buffered_reconciler.py` with duplicate/mismatched job evidence and successive-slot freshness regression. Focused test: 24/24 PASS. Full offline QA recorded separately if successful.
+- **Status: source code/local tests only.** GitHub public push remains blocked pending independent approval; no deployment, production Google/Threads call, or timed observation occurred. Remaining: the actual SQLite/Sheets cutover, signed IdP and Google access, allowed media publishing, and real Night/Liver posting/metric/PDCA evidence via Ops.
+
 ## 2026-10-13 Phase 5B-6T/U/V — bundled measured-strategy persistence and zero-paid-AI READY reuse (local source only)
 
 - Extended the existing Action-free `scripts/run_buffered_metrics_aftercare_host.sh` rather than creating another scheduler: opt-in **`--with-strategy-apply`** and **`--with-ready-bank-reuse`**, with `--max-bank-allocations 0..6` (default 2), on exact Night/Liver accounts **only under `--apply --confirm-metrics --trigger manual`**. Separate operator-managed private `runtime.env` flags `AFTERCARE_STRATEGY_WRITE_APPROVED` and `AFTERCARE_READY_BANK_REUSE_APPROVED` plus the prior protected metrics and disabled-Actions attestations are mandatory. Cron cannot silently enable either optional write path.
