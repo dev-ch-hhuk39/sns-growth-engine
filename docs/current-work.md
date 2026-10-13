@@ -1,3 +1,12 @@
+## 2026-10-13 owner directive — Mac-local QA only, ChatGPT takeover (no Codex, no GitHub Actions)
+
+- ChatGPT took over Codex's **local committed** metrics/reservation improvement `9b9891ee7c20dccb8af3ea17b8ead0d7e32aee01`, based on verified main `57ef785118ca9c34679723d94151435ce2f30dca`. Codex's 4 uncommitted docs remain untouched. This is NOT a merged PR or deployed change.
+- New isolated worktree: `v2-chatgpt-local-noactions-20261013`, branch `chatgpt/sns-completion-local-noactions-20261013`. Existing root worktree stays untouched.
+- **Do not run GitHub Actions CI or GitHub Actions dispatch, and do not use Codex.** Use `python3 scripts/run_local_quality_gate.py --mode focused` for iteration and `--mode full` for local offline release checks. Static workflow lint is not an Actions run.
+- Public GitHub repository: prior public code export from Codex was stopped by an explicit approval check. Do not bypass that safeguard through an alternative remote write; no PR/remote merge or deploy is claimed by this takeover. Existing GitHub Actions workflows were **not** changed.
+- No shared VPS access or production cron/deploy/Sheets/API/SNS writes. User performs/coordinates deployment separately. Historical `docs/goal-status.json` (July 2026) is stale and not a valid current progress percentage.
+- Policy, exact local commands, code-release restrictions and remaining critical path: `docs/LOCAL_NO_ACTIONS_DEVELOPMENT_20261013.md`.
+
 ## 2026-10-13 Codex — verified metrics reservations and account-safe collection
 
 - Branch `codex/sns-growth-engine-completion-20261012`, base `57ef785` / PR #393. Dedicated worktree only.

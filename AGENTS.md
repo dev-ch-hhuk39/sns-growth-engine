@@ -64,3 +64,11 @@
 - 機械受入条件は実production証拠が必要な項目をdry-run/mockでPASSにしない。
 - 作業終了時は`START_HERE.md`、`docs/current-work.md`、`docs/ai-work-handoff.md`を同期する。
 - `docs/goal-status.json`は正式なevidence collector/evaluator実行時だけ更新する。
+
+## 8. 最新オーナー方針 (2026-10-13)
+
+- 機能開発はChatGPTのこの会話で継続し、Codexは使用しない。
+- GitHub Actions CI/ワークフローを実行しない。代わりにMac上で `scripts/run_local_quality_gate.py` のfocused/full検証を行う。
+- 公開リポジトリへのpushは独立した公開先・内容の承認チェックを回避せず、チェックが拒否したら止める。GitHub上の保護設定や既存Actionsワークフローも無断変更しない。
+- 共通VPS・本番デプロイ・本番cron・SNS実投稿・本番Sheets更新は、この開発チャットでは実行しない。
+- 具体的な引き継ぎは `docs/LOCAL_NO_ACTIONS_DEVELOPMENT_20261013.md` を参照する。
