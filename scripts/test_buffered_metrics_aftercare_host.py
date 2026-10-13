@@ -166,11 +166,73 @@ class MetricsAftercareNoActionsTests(unittest.TestCase):
         )
         self.assertIn("run_growth_attribution_cycle.py", source)
         self.assertIn("maintain_text_ready_inventory.py", source)
-        self.assertNotIn("--confirm-attribution", source)
-        self.assertNotIn("--confirm-ready-maintenance", source)
+        # Read-only preview section must never gain an apply confirmation.
+        readonly_tail = source.split(
+            'if [[ "$feedback_preview" == true ]]', 1,
+        )[1]
+        self.assertNotIn("--confirm-attribution", readonly_tail)
+        self.assertNotIn("--confirm-ready-maintenance", readonly_tail)
         self.assertIn("export GEMINI_API_KEY=", source)
         self.assertNotIn("run_pdca_cycle.py", source)
         self.assertNotIn("prepare_beauty_review_candidates.py", source)
+
+    def test_feedback_write_modes_refuse_non_manual_or_non_apply_invocations(self):
+        bad_cases = (
+            ("--with-strategy-apply",),
+            ("--with-ready-bank-reuse",),
+            ("--dry-run", "--confirm-readonly", "--with-strategy-apply"),
+            ("--dry-run", "--confirm-readonly", "--with-ready-bank-reuse"),
+            ("--apply", "--confirm-metrics", "--trigger", "xserver_cron",
+             "--with-strategy-apply"),
+            ("--apply", "--confirm-metrics", "--trigger", "xserver_cron",
+             "--with-ready-bank-reuse"),
+            ("--max-bank-allocations", "7"),
+            ("--max-bank-allocations", "-1"),
+            ("--max-bank-allocations", "2; echo injection"),
+        )
+        for args in bad_cases:
+            with self.subTest(args=args):
+                result = execute("--account-id", "night_scout", *args)
+                self.assertEqual(result.returncode, 64, result.stderr)
+                self.assertEqual(result.stdout, "")
+
+    def test_feedback_write_activation_requires_ops_private_env(self):
+        for stage in ("--with-strategy-apply", "--with-ready-bank-reuse"):
+            with self.subTest(stage=stage):
+                result = execute(
+                    "--account-id", "night_scout", "--apply",
+                    "--confirm-metrics", "--trigger", "manual", stage,
+                    extra_env={
+                        "AFTERCARE_METRICS_WRITE_APPROVED": "true",
+                        "AFTERCARE_ACTIONS_DISABLED_ATTESTED": "true",
+                        "AFTERCARE_STRATEGY_WRITE_APPROVED": "true",
+                        "AFTERCARE_READY_BANK_REUSE_APPROVED": "true",
+                    },
+                )
+                # The untrusted process env is never a grant; no immutable
+                # ops provisioned runtime exists in this offline test.
+                self.assertEqual(result.returncode, 78)
+                self.assertEqual(result.stdout, "")
+
+    def test_strategy_and_ready_approval_are_separate_and_zero_ai(self):
+        host = HOST.read_text(encoding="utf-8")
+        for name in (
+            "AFTERCARE_STRATEGY_WRITE_APPROVED",
+            "AFTERCARE_READY_BANK_REUSE_APPROVED",
+        ):
+            self.assertIn(f"unset {name}", host)
+            self.assertIn(f'${{{name}:-false}}', host)
+        self.assertIn("--apply --confirm-attribution --use-sheets", host)
+        self.assertIn("--max-write-rows 120", host)
+        self.assertIn("--apply --confirm-ready-maintenance", host)
+        self.assertIn("--use-sheets --reuse-only", host)
+        self.assertIn('--max-bank-allocations "$bank_allocations"', host)
+        self.assertIn("export GEMINI_API_KEY=", host)
+        self.assertLess(
+            host.index("process_threads_metric_jobs.py"),
+            host.index("run_growth_attribution_cycle.py"),
+        )
+        self.assertNotIn("workflow_dispatch", host)
 
     def test_no_actions_scheduler_install_or_media_publisher_calls(self):
         host = HOST.read_text(encoding="utf-8")

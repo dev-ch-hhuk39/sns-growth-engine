@@ -28,40 +28,124 @@ def _read_tab(client: Any, logical: str) -> tuple[list[dict[str, Any]], str]:
         return [], f"{logical}_READ_FAILED:{type(exc).__name__}"
 
 
-def _upsert_rows(client: Any, logical: str, key: str, rows: list[dict[str, Any]]) -> dict[str, int]:
+class AttributionWriteBlocked(RuntimeError):
+    """A sanitized write failure; ambiguous external results are never retried."""
+
+
+def _upsert_rows(
+    client: Any, logical: str, key: str, rows: list[dict[str, Any]],
+    *, account_id: str, max_changes: int,
+) -> dict[str, int | bool]:
+    """Strict, bounded RAW-value upsert with a read-after-write confirmation.
+
+    The caller holds the account+Sheets lock and owns approval. A Google
+    write is not atomic with the local state or with the second tab: any
+    provider error/quota/partial write becomes an unknown outcome, never
+    an automatic retry. Refuse unexpected tab schema, key collisions,
+    cross-account rows, and formula interpretation.
+    """
     from gspread.utils import rowcol_to_a1
     from sheets_client import TAB_DEFINITIONS
 
-    ws = client._ensure_tab(logical, TAB_DEFINITIONS[logical])
-    headers = ws.row_values(1)
-    existing = {
-        str(row.get(key, "")): (index, dict(row))
-        for index, row in enumerate(ws.get_all_records(), start=2)
-        if str(row.get(key, ""))
-    }
-    updates: list[dict[str, Any]] = []
-    appends: list[list[str]] = []
-    created = updated = 0
-    for row in rows:
-        identity = str(row.get(key, ""))
-        if not identity:
+    if not 1 <= max_changes <= 500 or logical not in (
+        "post_attributions", "strategy_state",
+    ) or key not in ("attribution_id", "strategy_id"):
+        raise AttributionWriteBlocked("attribution_write_scope_invalid")
+    try:
+        # Do not auto-create or silently extend production tabs here.
+        ws = client._ws(logical)
+        headers = ws.row_values(1)
+        existing_records = ws.get_all_records()
+    except Exception:
+        raise AttributionWriteBlocked("attribution_output_tab_unavailable") from None
+    if (not headers or len(headers) != len(set(headers))
+            or not set(TAB_DEFINITIONS[logical]).issubset(headers)
+            or key not in headers or "account_id" not in headers):
+        raise AttributionWriteBlocked("attribution_output_schema_unverified")
+    if len(rows) > max_changes:
+        raise AttributionWriteBlocked("attribution_write_budget_exceeded")
+    existing: dict[str, tuple[int, dict[str, Any]]] = {}
+    for index, source in enumerate(existing_records, start=2):
+        row_id = str(source.get(key, ""))
+        if not row_id:
             continue
+        if row_id in existing:
+            raise AttributionWriteBlocked("attribution_existing_duplicate_key")
+        existing[row_id] = (index, dict(source))
+
+    updates: list[dict[str, Any]] = []
+    appends: list[list[Any]] = []
+    expected: dict[str, dict[str, Any]] = {}
+    skipped = 0
+    seen: set[str] = set()
+    for source in rows:
+        identity = str(source.get(key, ""))
+        if (not identity or identity in seen
+                or str(source.get("account_id", "")) != account_id):
+            raise AttributionWriteBlocked("attribution_account_or_key_invalid")
+        seen.add(identity)
+        merged = dict(source)
         if identity in existing:
             row_number, old = existing[identity]
-            merged = {**old, **row}
+            if str(old.get("account_id", "")) != account_id:
+                raise AttributionWriteBlocked("attribution_existing_account_mismatch")
+            merged = {**old, **merged}
+            # A stable result/window ID must not be restamped on each rerun.
+            if logical == "post_attributions" and old.get("created_at"):
+                merged["created_at"] = old["created_at"]
+            if logical == "strategy_state" and old.get("updated_at"):
+                # Do not rewrite identical learning evidence solely because
+                # this invocation sampled a later wall-clock timestamp.
+                if all(
+                    str(old.get(header, "")) == str(merged.get(header, ""))
+                    for header in headers if header != "updated_at"
+                ):
+                    merged["updated_at"] = old["updated_at"]
+            if all(str(old.get(header, "")) == str(merged.get(header, "")) for header in headers):
+                skipped += 1
+                continue
             updates.append({
-                "range": f"{rowcol_to_a1(row_number, 1)}:{rowcol_to_a1(row_number, len(headers))}",
-                "values": [[str(merged.get(header, "")) for header in headers]],
+                "range": (
+                    f"{rowcol_to_a1(row_number, 1)}:"
+                    f"{rowcol_to_a1(row_number, len(headers))}"
+                ),
+                "values": [[merged.get(header, "") for header in headers]],
             })
-            updated += 1
         else:
-            appends.append([str(row.get(header, "")) for header in headers])
-            created += 1
-    if updates:
-        ws.batch_update(updates, value_input_option="USER_ENTERED")
-    if appends:
-        ws.append_rows(appends, value_input_option="USER_ENTERED")
-    return {"created": created, "updated": updated}
+            appends.append([merged.get(header, "") for header in headers])
+        expected[identity] = merged
+
+    if len(updates) + len(appends) > max_changes:
+        raise AttributionWriteBlocked("attribution_write_budget_exceeded")
+    if not expected:
+        return {"created": 0, "updated": 0, "skipped": skipped, "readback_verified": True}
+    try:
+        # RAW ensures untrusted descriptions beginning '=' are not formulas.
+        if updates:
+            ws.batch_update(updates, value_input_option="RAW")
+        if appends:
+            ws.append_rows(appends, value_input_option="RAW")
+        # One readback after both writes; verify exactly one identical row.
+        verified = ws.get_all_records()
+        found: dict[str, list[dict[str, Any]]] = {}
+        for row in verified:
+            row_id = str(row.get(key, ""))
+            if row_id in expected:
+                found.setdefault(row_id, []).append(dict(row))
+        for identity, wanted in expected.items():
+            if len(found.get(identity, [])) != 1:
+                raise AttributionWriteBlocked("attribution_readback_mismatch")
+            observed = found[identity][0]
+            if any(str(observed.get(header, "")) != str(wanted.get(header, "")) for header in headers):
+                raise AttributionWriteBlocked("attribution_readback_mismatch")
+    except Exception:
+        # A partial success or lost acknowledgment MUST NOT trigger blind
+        # re-append. Return an unknown outcome requiring read-only inspection.
+        raise AttributionWriteBlocked("attribution_external_outcome_unknown") from None
+    return {
+        "created": len(appends), "updated": len(updates),
+        "skipped": skipped, "readback_verified": True,
+    }
 
 
 def _load_input(path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -81,6 +165,10 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-attribution", action="store_true")
+    parser.add_argument(
+        "--max-write-rows", type=int, default=120,
+        help="Maximum combined attribution/strategy rows in one approved run (1..500)",
+    )
     parser.add_argument("--output", default="")
     args = parser.parse_args()
 
@@ -88,7 +176,9 @@ def main() -> int:
     # rejecting missing approval or an unsafe multi-account write.
     # Offline JSON input must never be treated as a production apply source.
     blocked_reason = ""
-    if args.apply and args.dry_run:
+    if not 1 <= args.max_write_rows <= 500:
+        blocked_reason = "attribution_write_budget_must_be_1_to_500"
+    elif args.apply and args.dry_run:
         blocked_reason = "dry_run_and_apply_are_mutually_exclusive"
     elif args.input_json and args.use_sheets:
         blocked_reason = "choose_exactly_one_input_source"
@@ -137,24 +227,54 @@ def main() -> int:
     result["would_rewrite_prompts"] = False
 
     if args.apply:
-        if not args.confirm_attribution:
-            result = {"status": "BLOCKED", "reason": "--apply requires --confirm-attribution", "would_post": False}
-        elif client is None:
-            result = {"status": "BLOCKED", "reason": "--apply requires --use-sheets", "would_post": False}
-        else:
-            from sheets_client import TAB_DEFINITIONS
-            # Keep queue/result feature columns current before the next posting
-            # window so measured attribution never loses provenance.
-            client._ensure_tab("queue", TAB_DEFINITIONS["queue"])
-            client._ensure_tab("posted_results", TAB_DEFINITIONS["posted_results"])
-            attribution_ops = _upsert_rows(client, "post_attributions", "attribution_id", result["attributions"])
-            strategy_ops = _upsert_rows(client, "strategy_state", "strategy_id", result["strategy_state"])
+        planned_rows = len(result["attributions"]) + len(result["strategy_state"])
+        if result["observation_count"] < 1:
             result.update({
-                "status": "APPLIED",
-                "would_write": True,
-                "attribution_operations": attribution_ops,
-                "strategy_operations": strategy_ops,
+                "status": "NO_MEASURED_OBSERVATIONS", "would_write": False,
+                "reason": "no_verified_metrics_for_account",
             })
+        elif planned_rows > args.max_write_rows:
+            result.update({
+                "status": "BLOCKED", "would_write": False,
+                "reason": "attribution_write_budget_exceeded",
+                "planned_rows": planned_rows,
+                "write_row_limit": args.max_write_rows,
+            })
+        else:
+            try:
+                # Never mutate the operational queue/posted_results tabs in a
+                # measurement-only update. Only pre-provisioned reporting
+                # evidence/strategy tabs may be changed with this approval.
+                attribution_ops = _upsert_rows(
+                    client, "post_attributions", "attribution_id",
+                    result["attributions"], account_id=args.account_id,
+                    max_changes=args.max_write_rows,
+                )
+                strategy_ops = _upsert_rows(
+                    client, "strategy_state", "strategy_id",
+                    result["strategy_state"], account_id=args.account_id,
+                    max_changes=args.max_write_rows,
+                )
+            except AttributionWriteBlocked as exc:
+                result.update({
+                    "status": "OUTCOME_UNKNOWN_BLOCKED",
+                    "reason": str(exc),
+                    "would_write": False,
+                    "external_write_outcome_uncertain": True,
+                    "external_write_may_have_occurred": True,
+                    "requires_readonly_reconciliation": True,
+                })
+            else:
+                result.update({
+                    "status": "APPLIED",
+                    "would_write": bool(
+                        attribution_ops["created"] or attribution_ops["updated"]
+                        or strategy_ops["created"] or strategy_ops["updated"]
+                    ),
+                    "attribution_operations": attribution_ops,
+                    "strategy_operations": strategy_ops,
+                    "readback_verified": True,
+                })
 
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)

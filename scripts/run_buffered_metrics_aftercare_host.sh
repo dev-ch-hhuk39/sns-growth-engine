@@ -11,10 +11,13 @@ mode="plan"
 confirmed_readonly="false"
 confirmed_metrics="false"
 feedback_preview="false"
+strategy_apply="false"
+ready_bank_reuse="false"
+bank_allocations=2
 trigger="manual"
 
 usage() {
-  echo "usage: $0 --account-id <night_scout|liver_manager> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--with-feedback-preview] [--trigger manual|xserver_cron]" >&2
+  echo "usage: $0 --account-id <night_scout|liver_manager> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--with-feedback-preview] [--with-strategy-apply] [--with-ready-bank-reuse] [--max-bank-allocations 0..6] [--trigger manual|xserver_cron]" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -34,6 +37,11 @@ while [[ $# -gt 0 ]]; do
     --confirm-readonly) confirmed_readonly=true; shift ;;
     --confirm-metrics) confirmed_metrics=true; shift ;;
     --with-feedback-preview) feedback_preview=true; shift ;;
+    --with-strategy-apply) strategy_apply=true; shift ;;
+    --with-ready-bank-reuse) ready_bank_reuse=true; shift ;;
+    --max-bank-allocations)
+      [[ $# -ge 2 ]] || { usage; exit 64; }
+      bank_allocations="$2"; shift 2 ;;
     --trigger)
       [[ $# -ge 2 ]] || { usage; exit 64; }
       trigger="$2"; shift 2 ;;
@@ -51,6 +59,20 @@ case "$trigger" in
   manual|xserver_cron) ;;
   *) usage; exit 64 ;;
 esac
+[[ "$bank_allocations" =~ ^[0-6]$ ]] || {
+  echo "[BLOCKED] bank reuse limit must be 0..6" >&2
+  exit 64
+}
+# Persisting strategy or allocating existing READY candidates is
+# owner-authorized, one-account manual canary work. Cron cannot silently
+# start these two write paths even if a stale private env flag remains set.
+if [[ "$strategy_apply" == true || "$ready_bank_reuse" == true ]]; then
+  [[ "$mode" == "apply" && "$trigger" == "manual" &&
+     "$confirmed_metrics" == true ]] || {
+    echo "[BLOCKED] feedback writes require explicit manual apply mode" >&2
+    exit 64
+  }
+fi
 if [[ "$mode" == "plan" ]]; then
   [[ "$confirmed_readonly" == false && "$confirmed_metrics" == false ]] || {
     echo "[BLOCKED] confirmations require an explicit execution mode" >&2
@@ -132,6 +154,8 @@ permissions="$(stat -c '%a' "$runtime_env" 2>/dev/null || stat -f '%Lp' "$runtim
 # process environment. No credential contents are emitted.
 unset AFTERCARE_METRICS_WRITE_APPROVED
 unset AFTERCARE_ACTIONS_DISABLED_ATTESTED
+unset AFTERCARE_STRATEGY_WRITE_APPROVED
+unset AFTERCARE_READY_BANK_REUSE_APPROVED
 set -a
 # shellcheck disable=SC1090
 source "$runtime_env"
@@ -142,6 +166,14 @@ if [[ "$mode" == "apply" && "${AFTERCARE_METRICS_WRITE_APPROVED:-false}" != true
 fi
 if [[ "$mode" == "apply" && "${AFTERCARE_ACTIONS_DISABLED_ATTESTED:-false}" != true ]]; then
   echo "[BLOCKED] competing Actions aftercare scheduling is not attested disabled" >&2
+  exit 77
+fi
+if [[ "$strategy_apply" == true && "${AFTERCARE_STRATEGY_WRITE_APPROVED:-false}" != true ]]; then
+  echo "[BLOCKED] separate measured-strategy write approval is missing" >&2
+  exit 77
+fi
+if [[ "$ready_bank_reuse" == true && "${AFTERCARE_READY_BANK_REUSE_APPROVED:-false}" != true ]]; then
+  echo "[BLOCKED] separate zero-AI READY bank reuse approval is missing" >&2
   exit 77
 fi
 
@@ -202,6 +234,42 @@ if [[ "$mode" == "apply" ]]; then
     "$release/scripts/process_threads_metric_jobs.py" \
     --account-id "$account" --max-jobs 20 --apply --confirm-metrics --use-sheets
   echo "[OK] bounded metrics write attempt completed; no blind retry"
+fi
+
+# The two optional downstream write stages are manual canaries only.
+# They share the *same locks and pinned immutable release*. Each stage
+# performs strict account/scope/row/receipt verification of its own.
+# There is NO automatic retry or rollback across Google operations.
+if [[ "$strategy_apply" == true ]]; then
+  [[ -f "$release/scripts/run_growth_attribution_cycle.py" ]] || {
+    echo "[BLOCKED] attribution writer absent from pinned release" >&2
+    exit 78
+  }
+  timeout 35m "$release/.venv/bin/python" \
+    "$release/scripts/run_growth_attribution_cycle.py" \
+    --account-id "$account" --apply --confirm-attribution --use-sheets \
+    --max-write-rows 120 || {
+    echo "[BLOCKED] strategy delivery unknown/failed; do not retry blindly" >&2
+    exit 1
+  }
+  echo "[OK] measured strategy apply returned verified outcome"
+fi
+if [[ "$ready_bank_reuse" == true ]]; then
+  [[ -f "$release/scripts/maintain_text_ready_inventory.py" ]] || {
+    echo "[BLOCKED] READY bank writer absent from pinned release" >&2
+    exit 78
+  }
+  # This code path CANNOT call replenish()/Gemini or create new content.
+  # Only previously approved evergreen candidates are eligible.
+  timeout 35m "$release/.venv/bin/python" \
+    "$release/scripts/maintain_text_ready_inventory.py" \
+    --account-id "$account" --apply --confirm-ready-maintenance \
+    --use-sheets --reuse-only \
+    --max-bank-allocations "$bank_allocations" || {
+    echo "[BLOCKED] READY bank reuse incomplete/unknown; do not retry blindly" >&2
+    exit 1
+  }
+  echo "[OK] bounded zero-AI READY bank reuse completed"
 fi
 
 # Continue the existing data->insights->next-inventory loop in *preview*

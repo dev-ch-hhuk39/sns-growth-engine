@@ -89,6 +89,20 @@ and its runtime requirements should be audited and managed in the common-VPS
 operations chat rather than rebuilt as a new scheduler. Do not treat the
 presence of an entrypoint as evidence that cron is presently deployed.
 
+## New source-only manual measured-feedback write stages
+
+Phase 5B-6T/U/V extends the Action-free metrics aftercare script with two
+separately approved **manual-only** stages: measured-strategy persistence
+on existing Google reporting tabs with a maximum row budget and readback,
+and up to two (maximum six) previously approved bank READY allocations
+with **no paid AI or new generation**. Neither stage is active by default;
+neither is permitted from cron; no provider or VPS was accessed in this
+development. See
+`docs/PHASE5B6TUV_APPROVED_MEASURED_FEEDBACK_AND_BANK_REUSE.md` for exact
+contract, limitations, private runtime flags, manual operations and
+reconciliation. The older Google Sheets writer is **not** the final
+SQLite source-of-truth cutover.
+
 ## Release/pull-request constraint
 
 **Never run GitHub Actions, even for testing a PR.** Historic
