@@ -74,7 +74,7 @@ def build_queue(
         acct_id = der.get("account_id", "")
 
         # 重複チェック
-        existing = sheets.find_queue_item(draft_id, platform)
+        existing = sheets.find_queue_item(draft_id, platform, account_id=acct_id)
         if existing is not None:
             print(f"  [skip] 重複 draft_id={draft_id} platform={platform}")
             continue

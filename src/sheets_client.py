@@ -1957,12 +1957,15 @@ class SheetsClient:
                 return dict(row)
         return None
 
-    def find_queue_item(self, draft_id: str, platform: str) -> dict | None:
-        """指定 draft_id + platform の queue 行を返す。なければ None。"""
+    def find_queue_item(
+        self, draft_id: str, platform: str, account_id: str | None = None,
+    ) -> dict | None:
+        """Return a matching queue row, optionally within one account only."""
         ws = self._ws("queue")
         for row in ws.get_all_records():
-            if (row.get("draft_id") == draft_id
-                    and str(row.get("platform", "")).lower() == platform.lower()):
+            if (str(row.get("draft_id", "")) == str(draft_id)
+                    and str(row.get("platform", "")).lower() == platform.lower()
+                    and (account_id is None or str(row.get("account_id", "")) == account_id)):
                 return dict(row)
         return None
 
@@ -2005,12 +2008,16 @@ class SheetsClient:
             lambda: ws.row_values(1),
         )
         col_qid = headers.index("queue_id") + 1
-        cell = self._call_with_rate_limit_retry(
-            f"find:queue:{queue_id}",
-            lambda: ws.find(queue_id, in_column=col_qid),
+        candidates = self._call_with_rate_limit_retry(
+            "findall:queue:unique_identity",
+            lambda: ws.findall(queue_id, in_column=col_qid),
         )
-        if cell is None:
-            raise KeyError(f"queue_id={queue_id!r} が queue タブに見つかりません")
+        # Worksheet.find returns the first row, even if the same queue ID
+        # exists twice under different accounts. Never mutate that ambiguity.
+        exact = [cell for cell in candidates if str(cell.value) == str(queue_id)]
+        if len(exact) != 1:
+            raise PermissionError("queue_update_missing_or_ambiguous_identity")
+        cell = exact[0]
         if str(fields.get("status") or "").upper() == "READY":
             values = self._call_with_rate_limit_retry(
                 f"row_values:queue:{queue_id}",
@@ -2252,8 +2259,12 @@ class SheetsClient:
         return derivative_id
 
     def append_queue_item(self, item: dict) -> str:
-        """queue タブに1行追加する。queue_id を返す。"""
-        queue_id = item.get("queue_id") or f"q-{_short_uuid()}"
+        """Append one queue identity once and verify its persisted projection.
+
+        This is a protective legacy Sheets writer, not an atomic CAS. A
+        lost acknowledgement remains uncertain and MUST NOT be retried.
+        """
+        queue_id = str(item.get("queue_id") or f"q-{_short_uuid()}")
         if self.dry_run:
             print(
                 f"[dry-run] append_queue_item: "
@@ -2264,17 +2275,62 @@ class SheetsClient:
             )
             return queue_id
 
-        ws = self._ws("queue")
-        headers = ws.row_values(1)
-        data = {
-            "queue_id": queue_id,
-            "created_at": _now(),
-            **item,
-        }
+        data = {"queue_id": queue_id, "created_at": _now(), **item}
+        if str(data.get("queue_id") or "") != queue_id:
+            raise PermissionError("queue_append_identity_invalid")
         if block_legacy_ready_transition(data, data):
             raise PermissionError("trusted_media_review_authority_not_connected")
-        row = [str(data.get(h, "")) for h in headers]
-        ws.append_row(row, value_input_option="USER_ENTERED")
+        if not str(data.get("account_id", "")).strip() or not str(data.get("platform", "")).strip():
+            raise PermissionError("queue_append_account_or_platform_missing")
+        ws = self._ws("queue")
+        try:
+            before = self._call_with_rate_limit_retry(
+                "get_all_values:queue:preappend", ws.get_all_values,
+            )
+        except Exception:
+            raise SheetsMutationOutcomeUnknown(
+                "queue_append_preflight_unavailable_manual_reconciliation"
+            ) from None
+        if not before or not before[0] or len(before[0]) != len(set(before[0])):
+            raise PermissionError("queue_append_schema_invalid")
+        headers = before[0]
+        if not {"queue_id", "account_id", "platform", "status"}.issubset(headers):
+            raise PermissionError("queue_append_schema_incomplete")
+        qcol = headers.index("queue_id")
+        if any(
+            len(row) > qcol and str(row[qcol]) == queue_id
+            for row in before[1:]
+        ):
+            raise PermissionError("queue_append_identity_exists")
+        projected = [str(data.get(field, "")) for field in headers]
+        sheets_write_once(
+            "queue_append",
+            lambda: ws.append_row(projected, value_input_option="RAW"),
+        )
+        try:
+            after = self._call_with_rate_limit_retry(
+                "get_all_values:queue:postappend", ws.get_all_values,
+            )
+        except Exception:
+            raise SheetsMutationOutcomeUnknown(
+                "queue_append_readback_unavailable_manual_reconciliation"
+            ) from None
+        if not after or after[0] != headers:
+            raise SheetsMutationOutcomeUnknown(
+                "queue_append_schema_changed_manual_reconciliation"
+            )
+        matches = [
+            dict(zip(headers, row))
+            for row in after[1:]
+            if len(row) > qcol and str(row[qcol]) == queue_id
+        ]
+        if len(matches) != 1 or any(
+            str(matches[0].get(field, "")) != expected
+            for field, expected in zip(headers, projected)
+        ):
+            raise SheetsMutationOutcomeUnknown(
+                "queue_append_readback_mismatch_manual_reconciliation"
+            )
         return queue_id
 
     def mark_posted(self, draft_id: str, note_url: str, posted_at: str | None = None) -> None:
@@ -2676,10 +2732,13 @@ class MockSheetsClient:
                 return dict(r)
         return None
 
-    def find_queue_item(self, draft_id: str, platform: str) -> dict | None:
+    def find_queue_item(
+        self, draft_id: str, platform: str, account_id: str | None = None,
+    ) -> dict | None:
         for r in self._queue:
-            if (r.get("draft_id") == draft_id
-                    and str(r.get("platform", "")).lower() == platform.lower()):
+            if (str(r.get("draft_id", "")) == str(draft_id)
+                    and str(r.get("platform", "")).lower() == platform.lower()
+                    and (account_id is None or str(r.get("account_id", "")) == account_id)):
                 return dict(r)
         return None
 
@@ -2708,13 +2767,15 @@ class MockSheetsClient:
         return None
 
     def update_queue_item(self, queue_id: str, **fields: Any) -> None:
-        for r in self._queue:
-            if r.get("queue_id") == queue_id:
-                if block_legacy_ready_transition(r, fields):
-                    raise PermissionError("trusted_media_review_authority_not_connected")
-                r.update(fields)
-                print(f"[mock-sheets] update_queue_item: queue_id={queue_id} fields={fields}")
-                return
+        matches = [r for r in self._queue if str(r.get("queue_id", "")) == str(queue_id)]
+        if len(matches) > 1:
+            raise PermissionError("queue_update_missing_or_ambiguous_identity")
+        if matches:
+            row = matches[0]
+            if block_legacy_ready_transition(row, fields):
+                raise PermissionError("trusted_media_review_authority_not_connected")
+            row.update(fields)
+            print(f"[mock-sheets] update_queue_item: queue_id={queue_id} fields={fields}")
 
     def get_prompt_templates(
         self,
@@ -2768,8 +2829,10 @@ class MockSheetsClient:
         return derivative_id
 
     def append_queue_item(self, item: dict) -> str:
-        queue_id = item.get("queue_id") or f"q-{_short_uuid()}"
+        queue_id = str(item.get("queue_id") or f"q-{_short_uuid()}")
         data = {"queue_id": queue_id, "created_at": _now(), **item}
+        if any(str(row.get("queue_id", "")) == queue_id for row in self._queue):
+            raise PermissionError("queue_append_identity_exists")
         if block_legacy_ready_transition(data, data):
             raise PermissionError("trusted_media_review_authority_not_connected")
         self._queue.append(data)

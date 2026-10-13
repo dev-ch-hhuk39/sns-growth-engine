@@ -57,6 +57,13 @@ class Worksheet:
                 return SimpleNamespace(row=number)
         return None
 
+    def findall(self, key, *, in_column):
+        return [
+            SimpleNamespace(row=number, value=str(row.get(self.headers[in_column - 1], "")))
+            for number, row in enumerate(self.rows, start=2)
+            if str(row.get(self.headers[in_column - 1], "")) == str(key)
+        ]
+
     def batch_update(self, ranges, *, value_input_option):
         self.calls += 1
         self.write_modes.append(value_input_option)
@@ -125,6 +132,16 @@ class OperationalQueueWriteSafety(unittest.TestCase):
                 client_for(ws).bulk_update_queue_items(updates)
             self.assertEqual(ws.calls, 0)
 
+    def test_single_update_rejects_duplicate_identity_across_accounts(self):
+        base = Worksheet().rows[0]
+        ws = Worksheet(rows=[
+            base,
+            {**base, "account_id": "liver_manager"},
+        ])
+        with self.assertRaisesRegex(PermissionError, "ambiguous_identity"):
+            client_for(ws).update_queue_item("q1", status="READY")
+        self.assertEqual(ws.calls, 0)
+
     def test_single_queue_update_is_one_raw_write_with_verified_readback(self):
         ws = Worksheet()
         client_for(ws).update_queue_item("q1", status="READY")
@@ -152,7 +169,7 @@ class OperationalQueueWriteSafety(unittest.TestCase):
         self.assertEqual(ws.write_modes, ["RAW"])
 
     def test_publisher_queue_mutation_no_retry_and_dry_run_denied(self):
-        ws = Worksheet()
+        ws = Worksheet(status="READY")
         ws.fail_after_write = True
         with self.assertRaises(SheetsMutationOutcomeUnknown):
             publisher_queue.update_row(
@@ -168,6 +185,42 @@ class OperationalQueueWriteSafety(unittest.TestCase):
             )
         self.assertEqual(ws.calls, 1)
         self.assertEqual(ws.append_calls, 0)
+
+    def test_publisher_queue_update_rejects_duplicate_id(self):
+        base = {**Worksheet().rows[0], "status": "READY"}
+        ws = Worksheet(rows=[base, {**base, "account_id": "liver_manager"}])
+        with self.assertRaisesRegex(PermissionError, "ambiguous"):
+            publisher_queue.update_row(
+                client_for(ws), "queue", "queue_id", "q1", {"status": "PROCESSING"},
+            )
+        self.assertEqual(ws.calls, 0)
+
+    def test_publisher_processing_requires_ready_and_readback(self):
+        ws = Worksheet(status="WAITING_REVIEW")
+        with self.assertRaisesRegex(PermissionError, "requires_ready"):
+            publisher_queue.update_row(
+                client_for(ws), "queue", "queue_id", "q1", {"status": "PROCESSING"},
+            )
+        self.assertEqual(ws.calls, 0)
+        for cause in ("ignore_write", "fail_readback"):
+            ws = Worksheet(status="READY")
+            setattr(ws, cause, True)
+            with self.subTest(cause=cause), self.assertRaisesRegex(
+                SheetsMutationOutcomeUnknown, "manual_reconciliation",
+            ):
+                publisher_queue.update_row(
+                    client_for(ws), "queue", "queue_id", "q1", {"status": "PROCESSING"},
+                )
+            self.assertEqual(ws.calls, 1)
+
+    def test_publisher_processing_succeeds_with_exact_verified_row(self):
+        ws = Worksheet(status="READY")
+        self.assertTrue(publisher_queue.update_row(
+            client_for(ws), "queue", "queue_id", "q1", {"status": "PROCESSING"},
+        ))
+        self.assertEqual(ws.rows[0]["status"], "PROCESSING")
+        self.assertEqual(ws.calls, 1)
+        self.assertEqual(ws.write_modes, ["RAW"])
 
     def test_failed_auto_ready_never_logs_false_success(self):
         class Fake:

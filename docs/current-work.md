@@ -1,3 +1,16 @@
+## 2026-10-13 — Phase 5B-6W/X: queue writer unique identity and offline cutover audit
+
+- Operational queue append is now one RAW attempt with strict unique queue identity and verified readback; lost ACKs and mismatches fail closed without automatic replay. Both real/mock queue lookups are account-scoped in the queue builder, and single-row updates reject duplicate global queue IDs.
+- The Threads publisher Sheets updater also verifies exact unique target, requires READY before PROCESSING, and confirms persisted mutation fields after one RAW write. Existing media interlocks, account identity, publisher no-retry and metrics reservations remain intact.
+- Introduced read-only cutover audit comparing a strict untrusted, minimal metadata snapshot against existing protected SQLite shadow/managed/outbox event chains, with legacy AST inventory validation. Reports contain hashed identities and static codes only; cutover remains unconditionally unauthorized. No live source, ACL, MFA, migration or posting claim.
+- New synthetic/adversarial regressions added to focused local QA; scope, commands and remaining real operational requirements: docs/PHASE5B6W_X_QUEUE_AUTHORITY_AND_OFFLINE_CUTOVER_AUDIT.md.
+- **Mac-local final Phase 6W/X QA:** 984/984 offline repository scripts PASS;
+  workflow static safety, Ruff, compile, diff and gitleaks PASS. The initial
+  identifier test mock was corrected to support unique lookup/readback;
+  final full rerun passed without relaxing source or media safety gates.
+  Source-of-truth production cutover remains unauthorized and unperformed.
+- Complete authoritative migration remains blocked on verified identity/ACL, source evidence, writer ownership, backup/restore, operator canary and signed rights. Do not infer production acceptance from offline parity.
+
 ## 2026-10-13 — operational Sheets write-once/readback and isolated scheduled READY (Mac local-only)
 
 - High-priority source changes: publisher and AUTO_READY queue updates/posted-result appends now avoid automatic mutation retry after uncertain Google outcomes; single/bulk queue updates are verified against fresh server-side values and preserve RAW IDs/strings. AUTO_READY approval success logs are emitted only after the writer succeeds.

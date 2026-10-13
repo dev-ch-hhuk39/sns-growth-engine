@@ -37,7 +37,10 @@ from hybrid_ai_source_context import build_source_context  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
 from metrics_reservations import ReservationBlocked, read_table, reserve_metrics  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
-from sheets_client import SheetsClient, _sheets_retry_reason, sheets_write_once  # noqa: E402
+from sheets_client import (  # noqa: E402
+    SheetsClient, SheetsMutationOutcomeUnknown, _sheets_retry_reason,
+    sheets_write_once,
+)
 from accounts.managed_accounts import account_choices, account_status, require_account_match  # noqa: E402
 from media_v1_policy import is_media_candidate, split_public_validation  # noqa: E402
 from publishers.media_publish_interlock import (  # noqa: E402
@@ -184,21 +187,30 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
         # legacy or partially provisioned sheet must not turn that safe block
         # into an uncaught exception; schema health reports the missing column.
         return False
-    cell = _call_with_rate_limit_retry(
-        f"find:{logical}:{key}",
-        lambda: ws.find(key_value, in_column=headers.index(key) + 1),
+    # A first-match search can update the wrong account when IDs collide.
+    # findall costs the same order of provider reads and requires one exact ID.
+    found = _call_with_rate_limit_retry(
+        f"findall:{logical}:{key}",
+        lambda: ws.findall(key_value, in_column=headers.index(key) + 1),
     )
-    if cell is None:
+    exact = [item for item in found if str(item.value) == str(key_value)]
+    if not exact:
         return False
-    if logical == "queue" and str(fields.get("status") or "").upper() == "READY":
+    if len(exact) != 1:
+        raise PermissionError("legacy_sheet_identity_ambiguous")
+    cell = exact[0]
+    desired_status = str(fields.get("status") or "").upper()
+    if logical == "queue" and desired_status in {"READY", "PROCESSING"}:
         current_values = _call_with_rate_limit_retry(
-            f"row_values:queue:{key_value}",
+            "row_values:queue:prewrite",
             lambda: ws.row_values(cell.row),
         )
         current = dict(zip(headers, current_values))
         if str(current.get("queue_id") or "") != str(key_value):
-            raise PermissionError("queue_ready_identity_unavailable")
-        if block_legacy_ready_transition(current, fields):
+            raise PermissionError("legacy_queue_identity_changed")
+        if desired_status == "PROCESSING" and str(current.get("status", "")).upper() != "READY":
+            raise PermissionError("queue_processing_requires_ready")
+        if desired_status == "READY" and block_legacy_ready_transition(current, fields):
             raise PermissionError("trusted_media_review_authority_not_connected")
     update_ranges = []
     for field, value in fields.items():
@@ -208,11 +220,26 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
                 "range": f"{_col_letter(col)}{cell.row}",
                 "values": [[str(value)]],
             })
-    if update_ranges:
-        # A timeout can follow a committed update. No blind retry.
-        sheets_write_once(
-            "legacy_sheet_update",
-            lambda: ws.batch_update(update_ranges, value_input_option="RAW"),
+    if not update_ranges:
+        return False
+    sheets_write_once(
+        "legacy_sheet_update",
+        lambda: ws.batch_update(update_ranges, value_input_option="RAW"),
+    )
+    try:
+        persisted = _call_with_rate_limit_retry(
+            "row_values:legacy:postwrite", lambda: ws.row_values(cell.row),
+        )
+    except Exception:
+        raise SheetsMutationOutcomeUnknown(
+            "legacy_sheet_readback_unavailable_manual_reconciliation"
+        ) from None
+    observed = dict(zip(headers, persisted))
+    if (str(observed.get(key, "")) != str(key_value)
+            or any(str(observed.get(field, "")) != str(value)
+                   for field, value in fields.items() if field in headers)):
+        raise SheetsMutationOutcomeUnknown(
+            "legacy_sheet_readback_mismatch_manual_reconciliation"
         )
     return True
 

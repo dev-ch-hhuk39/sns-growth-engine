@@ -64,6 +64,13 @@ class FakeWorksheet:
                 return type("Cell", (), {"row": idx})()
         return None
 
+    def findall(self, text, in_column):
+        return [
+            type("Cell", (), {"row": idx, "value": str(row.get(self.headers[in_column - 1], ""))})()
+            for idx, row in enumerate(self.rows, 2)
+            if str(row.get(self.headers[in_column - 1], "")) == str(text)
+        ]
+
     def get_all_values(self):
         return [list(self.headers)] + [
             [str(row.get(h, "")) for h in self.headers] for row in self.rows
