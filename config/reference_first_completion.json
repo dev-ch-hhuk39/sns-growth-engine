@@ -132,6 +132,7 @@
       "scripts/cut_approved_clips.py",
       "scripts/upload_media_assets.py",
       "scripts/process_threads_queue.py",
+      "scripts/metrics_reservations.py",
       "scripts/scheduled_publish_activation_gate.py"
     ]
   },

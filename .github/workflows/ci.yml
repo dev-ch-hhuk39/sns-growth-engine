@@ -40,6 +40,7 @@ jobs:
       - name: Source registry validation and focused contracts
         run: |
           python3 scripts/validate_source_registry.py
+          python3 scripts/test_metrics_reservation_recovery.py
           python3 scripts/test_media_mirror_operator_idp.py
           python3 scripts/test_media_mirror_operator_grants.py
           python3 scripts/test_media_mirror_canary_approval.py

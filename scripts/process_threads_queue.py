@@ -35,7 +35,7 @@ from direct_caption_policy import queue_caption_mode  # noqa: E402
 from hybrid_ai_gate import hybrid_ai_gate_passed, requires_hybrid_ai_gate  # noqa: E402
 from hybrid_ai_source_context import build_source_context  # noqa: E402
 from publisher_delivery_contract import delivery_idempotency_key, retry_disposition, verify_posted_result_persistence  # noqa: E402
-from metrics_collection_schedule import build_metric_collection_jobs  # noqa: E402
+from metrics_reservations import ReservationBlocked, read_table, reserve_metrics  # noqa: E402
 from sheets_record_reader import read_records_safely  # noqa: E402
 from sheets_client import SheetsClient, _sheets_retry_reason  # noqa: E402
 from accounts.managed_accounts import account_choices, account_status, require_account_match  # noqa: E402
@@ -540,12 +540,15 @@ def schedule_metrics_after_post(client: SheetsClient, result_id: str) -> int:
     The call is deliberately after read-after-write verification: an ambiguous
     publisher outcome must never create a second observation lifecycle.
     """
-    posted = records(client, "posted_results")
-    existing = records(client, "metrics_collection_jobs")
-    jobs = [job for job in build_metric_collection_jobs(posted, existing) if job["result_id"] == result_id]
-    for job in jobs:
-        append_row(client, "metrics_collection_jobs", job)
-    return len(jobs)
+    _, posted = read_table(client, "posted_results")
+    matches = [row for row in posted if str(row.get("result_id", "")) == result_id]
+    if len(matches) != 1:
+        raise ReservationBlocked("posted_result_missing_or_ambiguous")
+    result = reserve_metrics(
+        client, account_id=str(matches[0].get("account_id", "")),
+        result_id=result_id, apply=True,
+    )
+    return int(result["verified_count"])
 
 
 def save_media_post_result(

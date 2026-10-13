@@ -66,6 +66,8 @@ FATAL_PREFLIGHT_ERRORS = {
     "posted_result_missing",
     "posted_result_platform_invalid",
     "posted_result_not_posted",
+    "posted_result_account_mismatch",
+    "posted_result_ambiguous",
 }
 
 RETRYABLE_PREFLIGHT_ERRORS = {
@@ -129,6 +131,8 @@ def classify_due_work(
     now: datetime | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Classify due jobs into collect, cancel, or deferred work."""
+
+    result_counts = Counter(str(row.get("result_id", "")) for row in posted_results)
 
     posted_by_result = {
         str(
@@ -206,6 +210,13 @@ def classify_due_work(
                 result
             )
         )
+
+        if result_counts[job_result_id] > 1:
+            preflight_error = "posted_result_ambiguous"
+        elif result is not None and (
+            not job_account or job_account != str(result.get("account_id", ""))
+        ):
+            preflight_error = "posted_result_account_mismatch"
 
         lifecycle_row = {
             "job_id": str(

@@ -1,3 +1,14 @@
+## 2026-10-13 Codex — verified metrics reservations and account-safe collection
+
+- Branch `codex/sns-growth-engine-completion-20261012`, base `57ef785` / PR #393. Dedicated worktree only.
+- Implemented one-result 24h/72h/168h reservation inspection and gated repair in the existing scheduling CLI; post-success worker now returns all three readback-verified reservations, including preexisting rows. A bounded RAW append has no in-call retry; unknown outcomes require manual reconciliation. Sheets has no cross-process CAS and the repair CLI is not an automatic retry service.
+- Collector rejects foreign-account/ambiguous result bindings before Insights collection. Completed/failed reservations are preserved; cancelled/conflicting/duplicate rows are not silently reset. No SNS, queue, account activation, media authorization or production configuration changes.
+- Fixed a date-selected Liver first-viewer fallback body that lacked explicit reasoning/audience context; nine framing combinations now pass the unchanged persona/public-text validator. Added 18 offline lifecycle/CLI tests and a CI focused entry. Reviewed one new metrics-only Sheets append callsite. Completion evaluator now follows the shared reservation writer and checks its readback contract; acceptance thresholds/assertions unchanged.
+- Baseline: 973/973 repository scripts PASS; first post-change run 973/974 (stale evaluator file marker); second run exposed the preexisting date-dependent fallback failure. Both focused regressions now PASS; **final full rerun 975/975 PASS**. Workflow safety 527/527, IdP suite 241, focused tests 18, Ruff fatal rules, compileall and diff checks PASS.
+- Audit, four-way feature classification, critical path, scope conflicts, operations prerequisites/commands/rollback: `docs/COMPLETION_AUDIT_20261012.md`.
+- No production access/migration/deployment/Sheets write/post/paid API. `docs/goal-status.json` unchanged. Real IdP, ACL evidence, source-authority cutover and media publication acceptance remain external/integration work.
+- GitHub access restored on continuation via approved CLI escalation; remote main still `57ef785`. Local verification complete; PR, remote CI and merge pending.
+
 ## 2026-10-12 Phase 5B-6P — independent operator IdP session and phishing-resistant MFA proof (code only)
 
 - Base verified main `030355dd6caa3253dea24ca571730f4815388d20` (PR #392), isolated branch `chatgpt/phase5b6p-operator-identity-enrollment-20261012`.
