@@ -1,3 +1,13 @@
+## 2026-10-13 — Phase 5B-6AC/AD/AE: P0 publisher identity and durable POSTED boundary (Mac local-only)
+
+- P0 process_threads_queue.py now rejects global queue ID collisions before candidate selection; draft and social derivative lookups use account-owned unique identities, permitting explicit distinct Night/Liver records with the same draft ID but refusing conflicting/unowned matches. Duplicate checks no longer conflate separately owned draft/derivative posts.
+- Per-publish Sheets mutation checks all queue identity fields, refuses terminal-state regression, requires PROCESSING before POSTED, verifies fresh current headers and all submitted operational fields. PROCESSING lock readback compares source/media/slot/content identity in addition to text; no stale media can be substituted after approval.
+- publisher_delivery_contract.py rejects duplicate result IDs, queue IDs and external post IDs, including across accounts; the result verification marker is re-read with the same unique evidence. A successful provider result without both post ID and permalink is PUBLISH_OUTCOME_UNVERIFIED, not POSTED; an unknown/missing queue POSTED finalization is POSTED_SAVE_UNVERIFIED, not a successful run or a replay.
+- --dry-run now constructs a write-disabled Sheets client at transport initialization. All new tests use synthetic data and patched provider objects; no live publishing, real Sheets mutation, SQLite authority migration or credential access.
+- New offline adversarial test suite and expanded delivery contract checks added to Mac focused QA. Detailed design, operator recovery and limitations: docs/PHASE5B6AC_AE_P0_PUBLISHER_IDENTITY_AND_DURABLE_FINALIZATION_20261013.md.
+- **Final Mac local QA Phase 6AC/AD/AE:** 988/988 offline repository scripts PASS, workflow static checks, Ruff, Python compile, diff checks and gitleaks PASS. Initial old cache assertion updated to require fresh headers; final full rerun passed. No real posting, Sheets mutation or SQLite operational migration.
+- Production source of truth is still Sheets; no distributed CAS or one-use claim was added. Protected SQLite is NOT promoted to production. Do not claim genuine canary/rights/24h/72h/168h acceptance or bypass manual reconciliation.
+
 ## 2026-10-13 — Phase 5B-6AA/AB: permanent X outbound stop and legacy writer workstreams (Mac-only)
 
 - Product scope mismatch closed: GOAL.md forbids live X publication, but legacy X publish/factory/HTTP sink remained env-enableable. New immutable source-level platform policy refuses real X at the CLI, factory, public publisher and low-level HTTP sink even when all old flags and OAuth variables are present; X dry-run/reference research remains available.

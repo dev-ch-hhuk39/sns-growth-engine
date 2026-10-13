@@ -46,6 +46,7 @@ from media_v1_policy import is_media_candidate, split_public_validation  # noqa:
 from publishers.media_publish_interlock import (  # noqa: E402
     block_legacy_ready_transition, media_publish_interlock_reason,
 )
+from publishers.queue_identity_policy import assert_safe_queue_patch  # noqa: E402
 
 # 投稿対象として選ばれるのは READY のみ。
 # WAITING_REVIEW はレビュー待ち（人間が approve_queue.py で READY に昇格させるまで投稿不可）、
@@ -62,14 +63,20 @@ FINAL_OR_LOCKED_STATUSES = {
     "PUBLISH_OUTCOME_UNVERIFIED",
     "DUPLICATE_BLOCKED",
 }
+PUBLISH_MATERIAL_FIELDS = (
+    "queue_id", "account_id", "platform", "slot_id", "draft_id",
+    "business_date_jst", "schedule_date_jst", "public_post_text",
+    "source_id", "source_post_id", "source_video_id", "generation_mode",
+    "content_type", "content_route", "media_asset_id", "media_asset_ids_json",
+    "media_url", "media_urls_json", "media_status", "media_type",
+    "media_types_json", "media_required", "publisher_media_type",
+    "caption_mode", "source_content_hash", "content_hash",
+)
 BEAUTY_ACCOUNT = "beauty_account"
 BEAUTY_PIPELINE_CONFIG = ROOT / "config" / "beauty_account_pipeline.json"
 
 # media_status がこれらのときだけ「投稿に使える media」とみなす
 MEDIA_OK_STATUSES = {"ATTACHED", "UPLOADED"}
-
-# Sheets ヘッダー行のキャッシュ（ws オブジェクトの id をキーにする）
-_headers_cache: dict[int, list[str]] = {}
 
 FALLBACK_DIR = ROOT / "output" / "posted_results_fallback"
 
@@ -114,29 +121,57 @@ def records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
     )
 
 
-def row_by_key(rows: list[dict[str, Any]], key: str) -> dict[str, dict[str, Any]]:
-    return {str(r.get(key, "")): r for r in rows if str(r.get(key, ""))}
+class PublisherIdentityBlocked(PermissionError):
+    """Public static refusal code without account, queue text or identifiers."""
+
+
+def _unique_account_reference(
+    rows: list[dict[str, Any]], *,
+    key: str, value: str, account_id: str, scope: str,
+) -> dict[str, Any] | None:
+    """Resolve same draft IDs across accounts without first-match confusion.
+
+    Explicit account ownership wins when unique. A legacy ownerless record
+    can only be reused if it is the single possible match in the entire set.
+    No account-specific identifier or public text appears in exceptions.
+    """
+    if not value:
+        return None
+    candidates = [
+        row for row in rows if str(row.get(key, "")).strip() == value
+    ]
+    scoped = [
+        row for row in candidates
+        if str(row.get("account_id", "")).strip() == account_id
+    ]
+    unowned = [
+        row for row in candidates
+        if not str(row.get("account_id", "")).strip()
+    ]
+    if scoped:
+        if len(scoped) != 1 or unowned:
+            raise PublisherIdentityBlocked(f"PUBLISH_{scope}_IDENTITY_AMBIGUOUS")
+        return scoped[0]
+    if not candidates:
+        return None
+    if len(unowned) == 1 and len(candidates) == 1:
+        return unowned[0]
+    if unowned:
+        raise PublisherIdentityBlocked(f"PUBLISH_{scope}_IDENTITY_AMBIGUOUS")
+    raise PublisherIdentityBlocked(f"PUBLISH_{scope}_ACCOUNT_MISMATCH")
 
 
 def _get_headers(ws) -> list[str]:
-    """ヘッダー行を取得する。セッション内でキャッシュし、429 発生時は指数バックオフでリトライする。"""
-    ws_id = id(ws)
-    if ws_id in _headers_cache:
-        return _headers_cache[ws_id]
-    delays = [0, 10, 30, 60]
-    for attempt, delay in enumerate(delays):
-        if delay > 0:
-            print(f"[SHEETS_RETRY] transient failure; waiting {delay}s (attempt {attempt + 1}/{len(delays)})")
-            time.sleep(delay)
-        try:
-            headers = ws.row_values(1)
-            _headers_cache[ws_id] = headers
-            return headers
-        except Exception as exc:
-            if _sheets_retry_reason(exc) and attempt < len(delays) - 1:
-                continue
-            raise
-    return []
+    """Fresh headers for EACH mutation; never trust object-id cached schema.
+
+    The old id(ws) cache can accidentally match a different worksheet after
+    Python reuses an object ID and cannot detect provider schema changes.
+    One bounded read per mutation is safer than a stale header write.
+    """
+    return _call_with_rate_limit_retry(
+        "row_values:publisher:current_headers",
+        lambda: ws.row_values(1),
+    )
 
 
 def _col_letter(col: int) -> str:
@@ -182,11 +217,15 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
         raise PermissionError("legacy_sheet_mutation_forbidden_in_dry_run")
     ws = get_ws(client, logical)
     headers = _get_headers(ws)
+    if len(headers) != len(set(headers)):
+        raise PermissionError("legacy_sheet_header_identity_ambiguous")
     if key not in headers:
-        # The caller has already made the fail-closed posting decision. A
-        # legacy or partially provisioned sheet must not turn that safe block
-        # into an uncaught exception; schema health reports the missing column.
+        # Missing key is not an affirmative write and cannot claim success.
         return False
+    if logical in {"queue", "posted_results"} and set(fields) - set(headers):
+        # A partial status/verification row write is NOT durable proof. In
+        # particular, do not claim POSTED without result_id/post_url columns.
+        raise PermissionError("legacy_publisher_required_column_missing")
     # A first-match search can update the wrong account when IDs collide.
     # findall costs the same order of provider reads and requires one exact ID.
     found = _call_with_rate_limit_retry(
@@ -200,16 +239,25 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
         raise PermissionError("legacy_sheet_identity_ambiguous")
     cell = exact[0]
     desired_status = str(fields.get("status") or "").upper()
-    if logical == "queue" and desired_status in {"READY", "PROCESSING"}:
+    if logical == "queue":
         current_values = _call_with_rate_limit_retry(
             "row_values:queue:prewrite",
             lambda: ws.row_values(cell.row),
         )
         current = dict(zip(headers, current_values))
-        if str(current.get("queue_id") or "") != str(key_value):
-            raise PermissionError("legacy_queue_identity_changed")
+        assert_safe_queue_patch(current, fields, queue_id=str(key_value))
         if desired_status == "PROCESSING" and str(current.get("status", "")).upper() != "READY":
             raise PermissionError("queue_processing_requires_ready")
+        current_status = str(current.get("status", "")).upper()
+        if current_status in FINAL_OR_LOCKED_STATUSES - {"PROCESSING"}:
+            raise PermissionError("legacy_queue_final_state_immutable")
+        if current_status == "PROCESSING" and desired_status not in {
+            "POSTED", "POSTED_SAVE_FAILED", "POSTED_SAVE_UNVERIFIED",
+            "PUBLISH_OUTCOME_UNVERIFIED", "FAILED",
+        }:
+            raise PermissionError("legacy_queue_processing_transition_denied")
+        if desired_status == "POSTED" and current_status != "PROCESSING":
+            raise PermissionError("queue_posted_requires_processing")
         if desired_status == "READY" and block_legacy_ready_transition(current, fields):
             raise PermissionError("trusted_media_review_authority_not_connected")
     update_ranges = []
@@ -245,15 +293,24 @@ def update_row(client: SheetsClient, logical: str, key: str, key_value: str, fie
 
 
 def find_social_for_queue(client: SheetsClient, queue_row: dict[str, Any], social_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
-    draft_id = str(queue_row.get("draft_id", ""))
-    for row in social_rows:
-        if row.get("draft_id") == draft_id and str(row.get("platform", "")).lower() == "threads":
-            return row
-    return None
+    social = [
+        row for row in social_rows
+        if str(row.get("platform", "")).strip().lower() == "threads"
+    ]
+    return _unique_account_reference(
+        social, key="draft_id", value=str(queue_row.get("draft_id", "")).strip(),
+        account_id=str(queue_row.get("account_id", "")).strip(),
+        scope="DERIVATIVE",
+    )
 
 
-def find_draft_for_queue(queue_row: dict[str, Any], drafts_by_id: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
-    return drafts_by_id.get(str(queue_row.get("draft_id", "")))
+def find_draft_for_queue(queue_row: dict[str, Any], draft_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    return _unique_account_reference(
+        draft_rows, key="draft_id",
+        value=str(queue_row.get("draft_id", "")).strip(),
+        account_id=str(queue_row.get("account_id", "")).strip(),
+        scope="DRAFT",
+    )
 
 
 def text_for_queue(queue_row: dict[str, Any], social: dict[str, Any] | None, draft: dict[str, Any] | None) -> str:
@@ -332,9 +389,15 @@ def duplicate_reason(
             continue
         if queue_id and str(posted.get("queue_id", "")) == queue_id:
             return f"queue_id already in posted_results: {queue_id}"
-        if derivative_id and str(posted.get("derivative_id", "")) == derivative_id:
+        # Draft/derivative identifiers can legitimately recur in separate
+        # accounts. Queue IDs are global; content and draft comparisons
+        # must not silently reuse unrelated account publication evidence.
+        linked_account = str(posted.get("account_id", "")).strip()
+        same_or_unknown_account = linked_account in {account_id, ""}
+        if same_or_unknown_account and derivative_id and str(posted.get("derivative_id", "")) == derivative_id:
             return f"derivative_id already in posted_results: {derivative_id}"
-        if draft_id and str(posted.get("draft_id", "")) == draft_id and status in {"POSTED", "RECOVERED"}:
+        if (same_or_unknown_account and draft_id and
+                str(posted.get("draft_id", "")) == draft_id and status in {"POSTED", "RECOVERED"}):
             return f"draft_id already posted/recovered: {draft_id}"
         same_text = (
             status == "POSTED"
@@ -358,6 +421,16 @@ def select_candidates(
     business_date_jst: str = "",
 ) -> list[dict[str, Any]]:
     rows = records(client, "queue")
+    # Account-scoped list filtering must not hide a global queue ID
+    # collision. A duplicate ID on any account can make the legacy
+    # Sheets mutation target ambiguous and must stop before a real post.
+    global_ids: set[str] = set()
+    for row in rows:
+        qid = str(row.get("queue_id", "")).strip()
+        if qid:
+            if qid in global_ids:
+                raise PublisherIdentityBlocked("PUBLISH_GLOBAL_QUEUE_ID_COLLISION")
+            global_ids.add(qid)
     candidates: list[dict[str, Any]] = []
     for row in rows:
         row_account = str(row.get("account_id", ""))
@@ -377,6 +450,8 @@ def select_candidates(
             continue
         if status not in ELIGIBLE_STATUSES:
             continue
+        if not str(row.get("queue_id", "")).strip() or not row_account:
+            raise PublisherIdentityBlocked("PUBLISH_READY_IDENTITY_MISSING")
         candidates.append(row)
     def sort_key(row: dict[str, Any]) -> tuple[int, int, str]:
         # A historical fallback row may have been written before the Sheet
@@ -803,8 +878,16 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
     social_rows = records(client, "social_derivatives")
     draft_rows = records(client, "drafts")
     posted_rows = records(client, "posted_results")
-    social = find_social_for_queue(client, queue_row, social_rows)
-    draft = find_draft_for_queue(queue_row, row_by_key(draft_rows, "draft_id"))
+    try:
+        social = find_social_for_queue(client, queue_row, social_rows)
+        draft = find_draft_for_queue(queue_row, draft_rows)
+    except PublisherIdentityBlocked as exc:
+        # An unverified join must never be published, including if a queue
+        # row itself contains otherwise valid public text.
+        return {
+            "status": "BLOCKED", "reason": str(exc), "queue_id": queue_id,
+            "publish_attempted": False, "writes_performed": False,
+        }
     text = text_for_queue(queue_row, social, draft)
     media_candidate = is_media_candidate(queue_row)
 
@@ -1098,8 +1181,13 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             return {"status": "PRE_PUBLISH_SHEETS_FAILED", "reason": "QUEUE_PROCESSING_LOCK_NOT_FOUND",
                     "queue_id": queue_id, "publish_attempted": False}
         locked_rows = [row for row in records(client, "queue") if str(row.get("queue_id", "")) == queue_id]
-        if (len(locked_rows) != 1 or locked_rows[0].get("status") != "PROCESSING"
+        if (len(locked_rows) != 1
+                or str(locked_rows[0].get("status", "")).upper() != "PROCESSING"
                 or locked_rows[0].get("account_id") != account_id
+                or any(
+                    str(locked_rows[0].get(field, "")) != str(queue_row.get(field, ""))
+                    for field in PUBLISH_MATERIAL_FIELDS
+                )
                 or text_for_queue(locked_rows[0], social, draft) != text):
             return {"status": "PRE_PUBLISH_SHEETS_FAILED", "reason": "QUEUE_PROCESSING_LOCK_READBACK_FAILED",
                     "queue_id": queue_id, "publish_attempted": False}
@@ -1146,6 +1234,25 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             "queue_id": queue_id,
             "publish_attempted": True,
             "delivery_state": result.delivery_state,
+        }
+
+    # A successful transport flag without a stable provider post identity
+    # and permalink is not durable publication evidence. Quarantine the
+    # outcome: never fabricate a POSTED row or schedule metrics.
+    if (not str(result.external_post_id or "").strip()
+            or not str(result.posted_url or "").strip()):
+        try:
+            update_row(client, "queue", "queue_id", queue_id, {
+                "status": "PUBLISH_OUTCOME_UNVERIFIED",
+                "error": "EXTERNAL_POST_ID_OR_URL_MISSING",
+                "processed_at": now_iso(),
+            })
+        except Exception:
+            pass  # remote may already have accepted; never retry publish
+        return {
+            "status": "PUBLISH_OUTCOME_UNVERIFIED",
+            "reason": "EXTERNAL_POST_PROOF_MISSING_MANUAL_RECONCILIATION",
+            "queue_id": queue_id, "publish_attempted": True,
         }
 
     try:
@@ -1195,17 +1302,25 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
             },
         )
 
-        verified_result = next(
-            (
-                row
-                for row in records(client, "posted_results")
-                if str(row.get("result_id", "")) == result_id
-            ),
-            {},
+        verified_rows = records(client, "posted_results")
+        verified_again = verify_posted_result_persistence(
+            verified_rows,
+            result_id=result_id,
+            queue_id=queue_id,
+            account_id=account_id,
+            external_post_id=result.external_post_id or "",
         )
-
+        verified_matches = [
+            row for row in verified_rows
+            if str(row.get("result_id", "")) == result_id
+        ]
+        verified_result = verified_matches[0] if len(verified_matches) == 1 else {}
         if (
             not verification_saved
+            or verified_again["status"] != "PASS"
+            or len(verified_matches) != 1
+            or str(verified_result.get("queue_id", "")) != queue_id
+            or str(verified_result.get("account_id", "")) != account_id
             or str(
                 verified_result.get("verification_status", "")
             ).upper() != "READ_AFTER_WRITE_PASS"
@@ -1238,14 +1353,32 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
                 "reason": "READ_AFTER_WRITE_STATUS_NOT_PERSISTED",
             }
 
-        update_row(client, "queue", "queue_id", queue_id, {
-            "status": "POSTED",
-            "error": "",
-            "processed_at": now_iso(),
-            "posted_at": now_iso(),
-            "post_url": result.posted_url or "",
-            "result_id": result_id,
-        })
+        # A confirmed posted_results row alone is NOT a completed queue
+        # transition. A missing/mismatched/unknown queue POSTED write must
+        # return reconciliation-required, never a false POSTED success.
+        try:
+            queue_saved = update_row(client, "queue", "queue_id", queue_id, {
+                "status": "POSTED",
+                "error": "",
+                "processed_at": now_iso(),
+                "posted_at": now_iso(),
+                "post_url": result.posted_url or "",
+                "result_id": result_id,
+            })
+        except Exception:
+            return {
+                "status": "POSTED_SAVE_UNVERIFIED",
+                "reason": "QUEUE_POSTED_FINALIZATION_UNKNOWN_MANUAL_RECONCILIATION",
+                "queue_id": queue_id, "publish_attempted": True,
+                "result_id": result_id,
+            }
+        if not queue_saved:
+            return {
+                "status": "POSTED_SAVE_UNVERIFIED",
+                "reason": "QUEUE_POSTED_FINALIZATION_NOT_VERIFIED",
+                "queue_id": queue_id, "publish_attempted": True,
+                "result_id": result_id,
+            }
         if media["effective_media_url"]:
             save_media_post_result(
                 client,
@@ -1357,7 +1490,9 @@ def main() -> int:
         return 1
 
     cfg = get_config()
-    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+    # A preview client must be write-disabled at the transport boundary,
+    # not merely protected by process_one branching.
+    client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=args.dry_run)
     if args.dry_run:
         print("[READ_ONLY] --dry-run: setup_all/update/append/post/fallback are disabled")
     else:
@@ -1368,14 +1503,21 @@ def main() -> int:
     requested_queue_ids = {item.strip() for item in args.queue_id if item.strip()}
     if requested_queue_ids and args.max_posts != len(requested_queue_ids):
         args.max_posts = len(requested_queue_ids)
-    candidates = select_candidates(
-        client,
-        args.account_id,
-        args.max_posts,
-        requested_queue_ids or None,
-        slot_id=args.slot_id,
-        business_date_jst=args.business_date_jst,
-    )
+    try:
+        candidates = select_candidates(
+            client,
+            args.account_id,
+            args.max_posts,
+            requested_queue_ids or None,
+            slot_id=args.slot_id,
+            business_date_jst=args.business_date_jst,
+        )
+    except PublisherIdentityBlocked as exc:
+        print(json.dumps({
+            "status": "BLOCKED", "reason": str(exc),
+            "publish_attempted": False,
+        }, ensure_ascii=False))
+        return 1
     if requested_queue_ids and {str(row.get("queue_id", "")) for row in candidates} != requested_queue_ids:
         missing = sorted(requested_queue_ids - {str(row.get("queue_id", "")) for row in candidates})
         print(json.dumps({"status": "NO_POST", "reason": "REQUESTED_QUEUE_NOT_READY", "missing_queue_ids": missing}, ensure_ascii=False))

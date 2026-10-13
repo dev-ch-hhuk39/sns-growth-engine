@@ -41,8 +41,10 @@ check("main() に setup_all() の実呼び出しが存在しない", len(setup_a
 # 2. _get_headers 関数が定義されていること
 check("_get_headers 関数が定義されている", "def _get_headers(" in source)
 
-# 3. _headers_cache が定義されていること
-check("_headers_cache が定義されている", "_headers_cache" in source)
+# 3. Mutable schema is now read fresh; object-id header cache is unsafe.
+check("mutation headers are never cached by id(worksheet)",
+      not hasattr(ptq, "_headers_cache")
+      and "row_values:publisher:current_headers" in source)
 
 # 4. time.sleep が _get_headers 内で使われている（バックオフ実装の証拠）
 check("time.sleep がソース内で使われている", "time.sleep" in source)
