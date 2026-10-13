@@ -84,6 +84,27 @@ def main() -> int:
     parser.add_argument("--output", default="")
     args = parser.parse_args()
 
+    # Prevent constructing a write-capable Google Sheets client before
+    # rejecting missing approval or an unsafe multi-account write.
+    # Offline JSON input must never be treated as a production apply source.
+    blocked_reason = ""
+    if args.apply and args.dry_run:
+        blocked_reason = "dry_run_and_apply_are_mutually_exclusive"
+    elif args.input_json and args.use_sheets:
+        blocked_reason = "choose_exactly_one_input_source"
+    elif args.apply and not args.confirm_attribution:
+        blocked_reason = "apply_requires_confirm_attribution"
+    elif args.apply and args.account_id == "all":
+        blocked_reason = "apply_requires_one_account"
+    elif args.apply and (not args.use_sheets or args.input_json):
+        blocked_reason = "apply_requires_live_sheets_source"
+    if blocked_reason:
+        print(json.dumps({
+            "status": "BLOCKED", "reason": blocked_reason,
+            "would_write": False, "would_post": False,
+        }, ensure_ascii=False))
+        return 1
+
     client = None
     if args.input_json:
         posted, snapshots = _load_input(args.input_json)

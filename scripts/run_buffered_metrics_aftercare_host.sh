@@ -10,10 +10,11 @@ account=""
 mode="plan"
 confirmed_readonly="false"
 confirmed_metrics="false"
+feedback_preview="false"
 trigger="manual"
 
 usage() {
-  echo "usage: $0 --account-id <night_scout|liver_manager> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--trigger manual|xserver_cron]" >&2
+  echo "usage: $0 --account-id <night_scout|liver_manager> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--with-feedback-preview] [--trigger manual|xserver_cron]" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
       mode="apply"; shift ;;
     --confirm-readonly) confirmed_readonly=true; shift ;;
     --confirm-metrics) confirmed_metrics=true; shift ;;
+    --with-feedback-preview) feedback_preview=true; shift ;;
     --trigger)
       [[ $# -ge 2 ]] || { usage; exit 64; }
       trigger="$2"; shift 2 ;;
@@ -54,7 +56,7 @@ if [[ "$mode" == "plan" ]]; then
     echo "[BLOCKED] confirmations require an explicit execution mode" >&2
     exit 64
   }
-  printf '{"status":"PLAN_ONLY","account_id":"%s","trigger":"%s","stage":"metrics_24_72_168","would_connect":false,"would_write":false,"would_post":false,"github_actions_used":false}\n' "$account" "$trigger"
+  printf '{"status":"PLAN_ONLY","account_id":"%s","trigger":"%s","stage":"metrics_24_72_168","feedback_preview":%s,"feedback_stages":["measured_attribution","next_text_ready_coverage"],"would_connect":false,"would_write":false,"would_post":false,"github_actions_used":false}\n' "$account" "$trigger" "$feedback_preview"
   exit 0
 fi
 
@@ -167,23 +169,64 @@ export CODE_REVISION="$revision"
 }
 sheet_lock="$locks/sheets-io.lock"
 account_lock="$locks/$account.lock"
+[[ ! -L "$sheet_lock" && ! -L "$account_lock" ]] || {
+  echo "[BLOCKED] Sheets or account lock is a symlink" >&2
+  exit 78
+}
+# Keep BOTH locks over the entire plan/apply/feedback lifecycle. This
+# prevents a publisher or another account job from mutating the shared
+# operational workbook between a read-only plan and its write decision.
+# The previous wrapper reacquired each lock separately for every step,
+# leaving a race window.
+exec 9>"$sheet_lock"
+flock -w 240 9 || {
+  echo "[BLOCKED] shared Sheets quota lock is busy" >&2
+  exit 75
+}
+exec 7>"$account_lock"
+flock -n -E 75 7 || {
+  echo "[BLOCKED] account aftercare lock is busy" >&2
+  exit 75
+}
 
 # A read-only plan touches the provider only AFTER acquiring shared locks.
 # An apply first produces a read-only plan, then performs at most one bounded
 # metric-job invocation. All IDs and results come from the trusted workbooks.
 # A non-zero plan/collector exit aborts, never auto-retries unknown writes.
-flock -w 240 "$sheet_lock" flock -n -E 75 "$account_lock" \
-  timeout 35m "$release/.venv/bin/python" \
-    "$release/scripts/process_threads_metric_jobs.py" \
-    --account-id "$account" --max-jobs 20 --dry-run --use-sheets
+timeout 35m "$release/.venv/bin/python" \
+  "$release/scripts/process_threads_metric_jobs.py" \
+  --account-id "$account" --max-jobs 20 --dry-run --use-sheets
 
-if [[ "$mode" == "dry-run" ]]; then
-  echo "[OK] read-only aftercare plan; no metrics apply was attempted"
-  exit 0
-fi
-
-flock -w 240 "$sheet_lock" flock -n -E 75 "$account_lock" \
+if [[ "$mode" == "apply" ]]; then
   timeout 35m "$release/.venv/bin/python" \
     "$release/scripts/process_threads_metric_jobs.py" \
     --account-id "$account" --max-jobs 20 --apply --confirm-metrics --use-sheets
-echo "[OK] bounded metrics worker completed; follow with independent result checks"
+  echo "[OK] bounded metrics write attempt completed; no blind retry"
+fi
+
+# Continue the existing data->insights->next-inventory loop in *preview*
+# mode ONLY. Attribution remains strictly read-only, no strategy_state
+# persistence or prompt mutation; READY inspection cannot generate posts,
+# consume AI/Gemini budget, allocate evergreen, or promote queue status.
+# A failed preview after applied metrics means PARTIAL aftercare, NOT rollback.
+if [[ "$feedback_preview" == true ]]; then
+  [[ -f "$release/scripts/run_growth_attribution_cycle.py" &&
+     -f "$release/scripts/maintain_text_ready_inventory.py" ]] || {
+    echo "[BLOCKED] feedback-preview scripts missing from release" >&2
+    exit 78
+  }
+  timeout 35m "$release/.venv/bin/python" \
+    "$release/scripts/run_growth_attribution_cycle.py" \
+    --account-id "$account" --dry-run --use-sheets || {
+    echo "[BLOCKED] measured attribution preview failed; no auto retry" >&2
+    exit 1
+  }
+  timeout 35m "$release/.venv/bin/python" \
+    "$release/scripts/maintain_text_ready_inventory.py" \
+    --account-id "$account" --dry-run --use-sheets || {
+    echo "[BLOCKED] next text-READY coverage degraded; no generation started" >&2
+    exit 1
+  }
+  echo "[OK] read-only attribution + next-text inventory previews complete"
+fi
+echo "[OK] aftercare mode=$mode account=$account; no SNS publish attempted"

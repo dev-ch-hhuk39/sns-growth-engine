@@ -126,8 +126,14 @@ class MetricsAftercareNoActionsTests(unittest.TestCase):
         self.assertIn("AFTERCARE_ACTIONS_DISABLED_ATTESTED", host)
         self.assertIn("CODE_REVISION", host)
         self.assertIn('flock -s -w 120 8', host)
-        self.assertIn('flock -w 240 "$sheet_lock"', host)
-        self.assertIn('flock -n -E 75 "$account_lock"', host)
+        self.assertIn('exec 9>"$sheet_lock"', host)
+        self.assertIn('flock -w 240 9', host)
+        self.assertIn('exec 7>"$account_lock"', host)
+        self.assertIn('flock -n -E 75 7', host)
+        self.assertLess(
+            host.index('flock -w 240 9'),
+            host.index('--max-jobs 20 --dry-run --use-sheets'),
+        )
         self.assertIn("chadult-production-deploy.lock", host)
         self.assertIn("sheets-io.lock", host)
         self.assertIn("--trigger xserver_cron", poster.replace(
@@ -138,6 +144,34 @@ class MetricsAftercareNoActionsTests(unittest.TestCase):
             host.index('resolved="$(readlink -f "$release")"'),
         )
 
+    def test_feedback_plan_is_still_offline(self):
+        result = execute(
+            "--account-id", "night_scout", "--with-feedback-preview",
+        )
+        self.assertEqual(result.returncode, 0)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["feedback_preview"])
+        self.assertEqual(payload["feedback_stages"], [
+            "measured_attribution", "next_text_ready_coverage",
+        ])
+        self.assertFalse(payload["would_connect"])
+        self.assertFalse(payload["would_write"])
+
+    def test_feedback_stages_are_strictly_read_only_and_after_metrics(self):
+        source = HOST.read_text(encoding="utf-8")
+        self.assertEqual(source.count('if [[ "$feedback_preview" == true ]]'), 1)
+        self.assertLess(
+            source.index("--apply --confirm-metrics --use-sheets"),
+            source.rindex("run_growth_attribution_cycle.py"),
+        )
+        self.assertIn("run_growth_attribution_cycle.py", source)
+        self.assertIn("maintain_text_ready_inventory.py", source)
+        self.assertNotIn("--confirm-attribution", source)
+        self.assertNotIn("--confirm-ready-maintenance", source)
+        self.assertIn("export GEMINI_API_KEY=", source)
+        self.assertNotIn("run_pdca_cycle.py", source)
+        self.assertNotIn("prepare_beauty_review_candidates.py", source)
+
     def test_no_actions_scheduler_install_or_media_publisher_calls(self):
         host = HOST.read_text(encoding="utf-8")
         for forbidden in (
@@ -145,7 +179,7 @@ class MetricsAftercareNoActionsTests(unittest.TestCase):
             "crontab -", "install_buffered_production_runtime.sh",
             "reconcile_due_production_slots.py",
             "collect_video_references.py", "run_media_production_pipeline.py",
-            "run_pdca_cycle.py", "maintain_text_ready_inventory.py",
+             "run_pdca_cycle.py",
         ):
             self.assertNotIn(forbidden, host)
         for key in (

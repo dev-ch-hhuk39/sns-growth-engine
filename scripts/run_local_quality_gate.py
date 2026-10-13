@@ -33,6 +33,9 @@ SENSITIVE_PARTS = (
 FOCUSED = (
     "test_buffered_metrics_aftercare_host.py",
     "test_metrics_aftercare_apply_preflight.py",
+    "test_action_free_feedback_cli_gates.py",
+    "test_feature_attribution_cycle.py",
+    "test_ready_inventory_maintenance_contract.py",
     "test_metrics_reservation_recovery.py",
     "test_media_mirror_operator_idp.py",
     "test_phase5b6h_legacy_sheets_mutation_inventory.py",

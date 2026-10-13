@@ -554,12 +554,18 @@ def main() -> int:
     if args.apply == args.dry_run:
         print(json.dumps({"status": "BLOCKED", "reason": "choose exactly one of --dry-run or --apply"}))
         return 1
+    if args.apply and args.account_id == "all":
+        print(json.dumps({"status": "BLOCKED", "reason": "apply_requires_one_account", "would_post": False}))
+        return 1
+    if not 1 <= args.horizon_hours <= 168:
+        print(json.dumps({"status": "BLOCKED", "reason": "inventory_horizon_must_be_1_to_168_hours", "would_post": False}))
+        return 1
     requested = PREPARED_ACCOUNTS if args.account_id == "all" else (args.account_id,)
     accounts = [account for account in requested if account in PREPARED_ACCOUNTS]
     queue_rows: list[dict[str, Any]] = []
     if args.use_sheets:
         cfg = get_config()
-        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=not args.apply)
         queue_rows = [dict(row) for row in read_records_safely(client, "queue")]
         if args.apply:
             from sheets_client import TAB_DEFINITIONS

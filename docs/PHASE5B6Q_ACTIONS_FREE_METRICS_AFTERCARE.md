@@ -76,6 +76,64 @@ apply could write. All tests here invoke the offline `--plan` branch or
 validate early-fail behavior with a non-existent fake runtime; they do not
 touch production.
 
+## Phase 5B-6R/6S bundled: same-run PDCA + inventory previews
+
+The original 6Q metrics host is extended in place; there is **no new
+daemon, scheduler, cloud deployment path or database**.
+
+- `--with-feedback-preview` is optional. In an offline `--plan`, it
+  only adds two stage names to the JSON, without opening credentials.
+  In an authorized read-only `--dry-run` (or **after** one approved
+  metrics `--apply`), it then invokes the *existing* measured-attribution
+  runner and text-READY inventory runner with
+  `--account-id <exact account> --dry-run --use-sheets`.
+- The shared Sheets lock and exact account lock are now held on file
+  descriptors across **all stages** of one invocation, including
+  the first metrics plan and any approved write. No release or
+  account-switch race can occur between these phases. The immutable
+  release remains pinned under the common deployment lock.
+- Attribution preview makes **no** `post_attributions` or
+  `strategy_state` writes; READY preview makes **no** AI/Gemini
+  requests, candidate generation, queue promotion or posting, and
+  never changes another account. Both are bounded and sequential.
+- `run_growth_attribution_cycle.py` now denies unconfirmed,
+  ambiguous-source, broad-account and contradictory apply requests
+  **before opening Google credentials/Sheets**.
+- `maintain_text_ready_inventory.py` now rejects broad-account
+  apply and invalid horizon before provider I/O. Read-only
+  `--dry-run --use-sheets` constructs a `SheetsClient(dry_run=True)`
+  instead of a write-capable one.
+- **Partial completion is not atomic:** if the approved metrics worker
+  writes results and then an attribution or inventory preview fails,
+  previously written metrics remain valid; the host fails without
+  auto-retrying any Sheets or Threads API call. This needs an
+  independent operations review, not a blanket retry.
+
+Examples that are safe on a developer Mac (offline only):
+
+```bash
+bash scripts/run_buffered_metrics_aftercare_host.sh   --account-id night_scout --plan --with-feedback-preview
+python3 scripts/test_action_free_feedback_cli_gates.py
+python3 scripts/test_buffered_metrics_aftercare_host.py
+```
+
+Once separately approved and installed by VPS Ops, the intended
+**read-only** account inspection syntax is:
+
+```bash
+/opt/github-runners/sns-growth-engine/.buffered-runtime/current/scripts/run_buffered_metrics_aftercare_host.sh   --account-id night_scout --dry-run --confirm-readonly   --with-feedback-preview --trigger manual
+```
+
+This is **not** permission to invoke that command from a development
+session; unlike `--plan`, `--dry-run` accesses the real workbook.
+
+The next remaining **write** integration is a separately authorized,
+revision-safe and cost-bounded way to persist `strategy_state` and
+replenish READY for measured outcomes. Existing legacy workflow writers
+are not promoted to production automatically. Currently the continuous
+metrics → attribution-preview → inventory-preview pipeline is implemented
+in source and verified only by synthetic/offline tests.
+
 ## Production/VPS Operations handoff — DO NOT run from this chat
 
 Prerequisites to be separately executed and evidenced by the common-VPS

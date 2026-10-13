@@ -1,3 +1,10 @@
+## 2026-10-13 Phase 5B-6R/6S — bundled Action-free post-metrics feedback (local only)
+
+- Extended the existing `run_buffered_metrics_aftercare_host.sh` with optional `--with-feedback-preview`: after the bounded 24/72/168-hour metrics job, run the **existing** measured-attribution and next-text READY-inventory CLIs strictly in `--dry-run --use-sheets` mode, under continuous shared Sheets and per-account locks. The pure `--plan` branch stays completely offline; Beauty remains blocked in this host. No new cron/worker/GitHub Actions.
+- Hardened `run_growth_attribution_cycle.py`: missing `--confirm-attribution`, `--apply --dry-run`, `--account-id all` apply, or inconsistent JSON/Sheet sources refuse access **before** a write-capable Sheets client is opened. `maintain_text_ready_inventory.py` blocks all-account apply and invalid horizon before I/O, and uses read-only `SheetsClient(dry_run=True)` on preview.
+- Added `test_action_free_feedback_cli_gates.py`, expanded host offline tests, and added feature attribution/READY contract checks to the focused local QA command. See `docs/PHASE5B6Q_ACTIONS_FREE_METRICS_AFTERCARE.md` for the bundled usage, guarantees and important caveat: strategy persistence, queue mutation, paid generation and real production metrics are **not** enabled by this preview.
+- GitHub Actions CI/Codex **not used**; no public GitHub push, real provider calls, common VPS changes, credential bootstrap, paid AI or actual SNS posting. Private/local Git validation and Ops-only deployment policy remain.
+
 ## 2026-10-13 Phase 5B-6Q — Action-free bounded Threads metrics aftercare (development only)
 
 - Added `scripts/run_buffered_metrics_aftercare_host.sh`, an isolated **VPS cron/manual code entrypoint** invoking the existing 24/72/168-hour Threads metric worker without GitHub Actions. Default `--plan` is 100% offline and read-only; real `--dry-run --confirm-readonly` requires a protected VPS runtime and can read Sheets. No VPS schedule installed and no provider API invoked in development.
