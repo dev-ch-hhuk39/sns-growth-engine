@@ -1,3 +1,11 @@
+## 2026-10-13 Phase 5B-6Q — Action-free bounded Threads metrics aftercare (development only)
+
+- Added `scripts/run_buffered_metrics_aftercare_host.sh`, an isolated **VPS cron/manual code entrypoint** invoking the existing 24/72/168-hour Threads metric worker without GitHub Actions. Default `--plan` is 100% offline and read-only; real `--dry-run --confirm-readonly` requires a protected VPS runtime and can read Sheets. No VPS schedule installed and no provider API invoked in development.
+- A possible later `--apply --confirm-metrics` requires both `AFTERCARE_METRICS_WRITE_APPROVED=true` and `AFTERCARE_ACTIONS_DISABLED_ATTESTED=true` from protected 0600 `runtime.env`, exact immutable current release, common deploy lock, shared Sheets quota lock and per-account lock. Only `night_scout` and `liver_manager`; Beauty remains blocked. The script cannot post, create media or use Gemini. Production activation requires separate owner/VPS Ops approval and disabling the old scheduled Actions aftercare worker to prevent duplicate writes.
+- Hardened existing `scripts/process_threads_metric_jobs.py` CLI: `--apply` lacking explicit confirmation, conflicting dry-run/apply flags, and broad `--account-id all` apply now fail **before write-capable SheetsClient initialization**. Read-only all-account planning remains available.
+- New offline tests `scripts/test_buffered_metrics_aftercare_host.py` and `scripts/test_metrics_aftercare_apply_preflight.py`, and both added to the Mac-only focused quality gate. Review `docs/PHASE5B6Q_ACTIONS_FREE_METRICS_AFTERCARE.md` for precise operations handoff, prerequisites, rollback and remaining PDCA integration.
+- **No GitHub Actions CI, GitHub push, common VPS access, cron change, real Sheets write, Insights call, SNS post or production deployment performed.** Local-only PR gate and source-of-truth restrictions remain in force.
+
 ## 2026-10-13 owner directive — Mac-local QA only, ChatGPT takeover (no Codex, no GitHub Actions)
 
 - ChatGPT took over Codex's **local committed** metrics/reservation improvement `9b9891ee7c20dccb8af3ea17b8ead0d7e32aee01`, based on verified main `57ef785118ca9c34679723d94151435ce2f30dca`. Codex's 4 uncommitted docs remain untouched. This is NOT a merged PR or deployed change.

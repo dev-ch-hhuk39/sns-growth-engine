@@ -1285,6 +1285,34 @@ def main() -> int:
 
         return 1
 
+    if args.apply and args.dry_run:
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "dry_run_and_apply_are_mutually_exclusive",
+            "would_write": False,
+        }))
+        return 1
+
+    # Validate ALL write authorizations before loading Google credentials.
+    # load_state(apply=True) constructs a write-capable Sheets client.
+    if args.apply and not args.confirm_metrics:
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "apply_requires_confirm_metrics",
+            "would_write": False,
+        }))
+        return 1
+
+    # One account at a time; the host entrypoint shares the Sheets lock.
+    # An all-accounts read-only plan is still supported.
+    if args.apply and args.account_id == "all":
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "apply_requires_one_account",
+            "would_write": False,
+        }))
+        return 1
+
     if not args.use_sheets:
         print(
             json.dumps(

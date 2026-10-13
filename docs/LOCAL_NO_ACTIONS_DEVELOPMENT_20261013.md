@@ -115,9 +115,16 @@ Do not represent a local commit as a merged PR or live deployment.
 
 The repository has rich local code and tests for text generation, persona
 filters, READY/replenishment, gated publisher/result persistence, and
-post-success metrics reservations/PDCA. The newly inherited Codex commit
+post-success metrics reservations/PDCA. The inherited Codex commit
 closes a real 24/72/168-hour **reservation planning/recovery** gap;
 it does **not** create actual measurements.
+
+Phase 5B-6Q now provides the **code for an Action-free VPS cron/manual
+metrics-aftercare entrypoint** that calls the existing measurement worker.
+It is not installed on the host; a protected operations-only write gate,
+elimination of the historical GitHub Actions aftercare schedule, read-only
+provider checks and a separately approved manual canary are required.
+See `docs/PHASE5B6Q_ACTIONS_FREE_METRICS_AFTERCARE.md`.
 
 The principal remaining work is not another layer of simulated
 approval checks. It is **integration and real acceptance evidence**:
