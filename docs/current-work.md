@@ -1,3 +1,12 @@
+## 2026-10-13 - Phase 5B-6AF/AG: blocked SQLite one-use CAS rehearsal for P0
+
+- Built explicit migration 0014 and scripts/p0_queue_cas_rehearsal.py: SQLite BEGIN IMMEDIATE, global queue IDs, exact revision/event SHA comparison, append-only hash-chain audit, strict account/Threads scope and finite observation freshness. An observed candidate can be claimed once, then quarantined forever after unknown outcome; neither claimed nor expired observations can enable real publishing.
+- Added scripts/rehearse_p0_queue_cas.py --demo, which creates only a temporary synthetic DB, verifies replay refusal, reports the untouched current legacy Sheets P0 callsite count and always returns CUTOVER_BLOCKED (exit 2). It has no production apply or network path. Report output is owner-only and never overwrites existing files.
+- New adversarial 16-test local suite checks two independent competing connections, stale digest/version, account crossing, journal tamper, event immutability, crash rollback and forbidden authorization; included in local focused QA.
+- This is an OFFLINE foundation, not a production cutover, durable authenticated source truth, actual shared-process publisher lease or real Google/SNS posting. All existing live producer, media-rights and VPS restrictions remain in force.
+- Details and outstanding owner/ops stages: docs/PHASE5B6AF_AG_P0_SQLITE_CAS_REHEARSAL_20261013.md. Final QA count and Git SHA to be appended after verified full run.
+- **Verified local Phase 6AF/AG QA:** 989/989 offline repository scripts PASS; focused checks, workflow static, Ruff, compile, diff and gitleaks PASS. Synthetic SQLite claims do NOT authorize publishing or migrate the legacy operational P0 writers.
+
 ## 2026-10-13 — Phase 5B-6AC/AD/AE: P0 publisher identity and durable POSTED boundary (Mac local-only)
 
 - P0 process_threads_queue.py now rejects global queue ID collisions before candidate selection; draft and social derivative lookups use account-owned unique identities, permitting explicit distinct Night/Liver records with the same draft ID but refusing conflicting/unowned matches. Duplicate checks no longer conflate separately owned draft/derivative posts.
