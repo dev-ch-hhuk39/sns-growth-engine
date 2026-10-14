@@ -1,3 +1,10 @@
+## Phase 5B-6AK/AL — P0 one-command release rehearsal (2026-10-14 JST)
+
+- Combines existing Phase 6AH metadata preflight, 6AI/AJ two independently timestamped captures and SQLite memory-only shadow parity with the existing **blocked** P0 SQLite CAS rehearsal. A stale or changed capture cannot proceed to a temporary import or synthetic claim.
+- Every READY text candidate is only synthetically observed/claimed/quarantined, with retry refusal. All operational capabilities remain false. A local rehearsal PASS means source-unattested metadata was stable, **not** actual production cutover, media authorization or a posting canary.
+- Legacy P0/all Sheets writer call counts are read from the frozen live-repo AST inventory. Real legacy writers, external schedulers, OAuth/ACL and signed source evidence remain unverified and not migrated.
+- Acceptance criteria, operational blockers and one-command offline verification: docs/PHASE5B6AK_AL_P0_RELEASE_ACCEPTANCE.md. No GitHub Actions, Codex, public push, VPS/Google/SNS writes or deployment.
+
 ## 2026-10-13 - Phase 5B-6AF/AG: blocked SQLite one-use CAS rehearsal for P0
 
 - Built explicit migration 0014 and scripts/p0_queue_cas_rehearsal.py: SQLite BEGIN IMMEDIATE, global queue IDs, exact revision/event SHA comparison, append-only hash-chain audit, strict account/Threads scope and finite observation freshness. An observed candidate can be claimed once, then quarantined forever after unknown outcome; neither claimed nor expired observations can enable real publishing.
