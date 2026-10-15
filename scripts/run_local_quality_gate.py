@@ -34,6 +34,8 @@ FOCUSED = (
     "test_p0_snapshot_cutover_preflight.py",
     "test_p0_pair_shadow_parity.py",
     "test_p0_release_readiness.py",
+    "test_p0_real_delivery_once.py",
+    "test_p0_once_worker_contract.py",
     "test_p0_queue_cas_rehearsal.py",
     "test_threads_publisher_identity_finalization.py",
     "test_publisher_delivery_contract.py",

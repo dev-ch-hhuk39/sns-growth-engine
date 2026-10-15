@@ -1175,6 +1175,27 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
 
     # This boundary is strictly before the real publisher call. Never label an
     # exception from publish/persistence as safe to retry.
+    # SNS_P0_ONCE_BARRIER: optional single-host provider one-use boundary.
+    # Defaults OFF; this is an additional safety gate, never release approval.
+    p0_once = None
+    p0_once_source = ""
+    if os.environ.get("SNS_P0_ONCE_GATE_ENABLED", "false").strip().lower() == "true":
+        from p0_real_delivery_once import P0OnceBlocked, P0OnceGuard, source_fingerprint
+        try:
+            # Preflight BEFORE a Sheets mutation; missing/lost DB must block.
+            p0_once = P0OnceGuard.from_env()
+            p0_once_source = source_fingerprint(
+                account_id=account_id, queue_id=queue_id, text=text,
+                media_used=(bool(media.get("effective_media_url"))
+                            or bool(media.get("media_required"))
+                            or bool(media.get("media_asset_id"))
+                            or bool(media.get("media_urls"))),
+            )
+        except P0OnceBlocked:
+            return {"status": "P0_ONCE_PREPUBLISH_BLOCKED",
+                    "reason": "OPERATOR_LEDGER_OR_TEXT_SCOPE_INVALID",
+                    "queue_id": queue_id, "publish_attempted": False}
+
     try:
         locked = update_row(client, "queue", "queue_id", queue_id, {"status": "PROCESSING", "error": "", "processed_at": ""})
         if not locked:
@@ -1196,6 +1217,17 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         return {"status": "PRE_PUBLISH_SHEETS_FAILED", "reason": "QUEUE_PROCESSING_LOCK_FAILED",
                 "queue_id": queue_id, "publish_attempted": False, "error_type": type(exc).__name__}
 
+    # SNS_P0_ONCE_BARRIER: the claim is durable BEFORE a real provider call.
+    # No expiry/release/retry; if the process crashes here, reconcile manually.
+    if p0_once is not None:
+        try:
+            p0_once.claim(account_id=account_id, queue_id=queue_id,
+                          source_sha256=p0_once_source)
+        except P0OnceBlocked:
+            return {"status": "P0_ONCE_CLAIM_BLOCKED",
+                    "reason": "ALREADY_CLAIMED_OR_UNVERIFIABLE_NO_RETRY",
+                    "queue_id": queue_id, "publish_attempted": False}
+
     result = publisher.publish(
         text,
         account={"account_id": account_id},
@@ -1213,6 +1245,24 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         media_urls=media["effective_media_urls"],
         media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
     )
+    # SNS_P0_ONCE_BARRIER: persist the provider ACK before any Sheets writes.
+    # Missing external ID or ambiguous outcome remains a terminal no-retry hold.
+    if p0_once is not None:
+        try:
+            if result.success:
+                p0_once.provider_accepted(
+                    account_id=account_id, queue_id=queue_id,
+                    source_sha256=p0_once_source,
+                    provider_post_id=str(result.external_post_id or ""),
+                )
+            else:
+                p0_once.quarantine(account_id=account_id, queue_id=queue_id,
+                                   source_sha256=p0_once_source)
+        except P0OnceBlocked:
+            return {"status": "P0_ONCE_PROVIDER_OUTCOME_UNVERIFIED",
+                    "reason": "LEDGER_PROVIDER_ACK_UNVERIFIED_NO_RETRY",
+                    "queue_id": queue_id, "publish_attempted": True}
+
     if not result.success:
         if result.delivery_state == "CONTAINER_CREATED_PUBLISH_UNVERIFIED":
             update_row(client, "queue", "queue_id", queue_id, {
@@ -1400,6 +1450,49 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
         except Exception:
             pass
         return {"status": "POSTED_SAVE_FAILED", "queue_id": queue_id, "fallback": str(fallback)}
+
+    # SNS_P0_ONCE_BARRIER: independent final queue+result readbacks.
+    # The publisher must not announce a verified POSTED if its one-use ledger
+    # is missing or the final account-bound persistence cannot be confirmed.
+    if p0_once is not None:
+        try:
+            p0_qrows = [r for r in records(client, "queue")
+                        if str(r.get("queue_id", "")) == queue_id]
+            p0_rrows = [r for r in records(client, "posted_results")
+                        if str(r.get("result_id", "")) == str(result_id)]
+            p0_queue_ok = (
+                len(p0_qrows) == 1
+                and str(p0_qrows[0].get("account_id", "")) == account_id
+                and str(p0_qrows[0].get("platform", "")).lower() == "threads"
+                and str(p0_qrows[0].get("status", "")).upper() == "POSTED"
+                and str(p0_qrows[0].get("result_id", "")) == str(result_id)
+                and text_for_queue(p0_qrows[0], social, draft) == text
+            )
+            p0_result_ok = (
+                len(p0_rrows) == 1
+                and str(p0_rrows[0].get("queue_id", "")) == queue_id
+                and str(p0_rrows[0].get("account_id", "")) == account_id
+                and str(p0_rrows[0].get("status", "")).upper() == "POSTED"
+                and str(p0_rrows[0].get("platform", "")).lower() == "threads"
+                and str(p0_rrows[0].get("real_post", "")).lower() == "true"
+                and str(p0_rrows[0].get("posted_text", "")) == text
+                and str(p0_rrows[0].get("verification_status", "")).upper()
+                    == "READ_AFTER_WRITE_PASS"
+                and str(p0_rrows[0].get("external_post_id", ""))
+                    == str(result.external_post_id or "")
+            )
+            p0_once.verify_posted(
+                account_id=account_id, queue_id=queue_id,
+                source_sha256=p0_once_source,
+                provider_post_id=str(result.external_post_id or ""),
+                queue_readback_pass=p0_queue_ok,
+                result_readback_pass=p0_result_ok,
+            )
+        except Exception:
+            # The provider may have posted. Never repeat; manual repair only.
+            return {"status": "P0_ONCE_POSTED_UNVERIFIED",
+                    "reason": "QUEUE_RESULT_LEDGER_RECONCILIATION_REQUIRED",
+                    "queue_id": queue_id, "publish_attempted": True}
 
     slot_warning = ""
     slot_id = str(queue_row.get("slot_id", "")).strip()

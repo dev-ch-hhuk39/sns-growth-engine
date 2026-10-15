@@ -1,3 +1,16 @@
+## P0 operational publisher one-use ledger (local code only, 2026-10-14)
+
+- Optional disabled-by-default one-use SQLite barrier is integrated into
+  scripts/process_threads_queue.py around a real Threads TEXT provider call.
+- Claims precede the provider call; provider ACK is journaled before Sheets
+  post-result writes; final VERIFICATION requires a matching persisted queue
+  and posted result. Ambiguous outcomes never permit blind resends.
+- This is NOT a canonical queue migration, external writer freeze, release
+  permit, or automatic live posting. Do NOT set SNS_P0_ONCE_GATE_ENABLED in
+  production until an operator has proved single-host, sole-writer custody,
+  rights and backup/restore readiness. Existing disabled flags stay OFF.
+- Docs: docs/P0_ACTUAL_PROVIDER_ONCE_BARRIER_20261014.md
+
 ## Phase 5B-6AK/AL — P0 one-command release rehearsal (2026-10-14 JST)
 
 - Combines existing Phase 6AH metadata preflight, 6AI/AJ two independently timestamped captures and SQLite memory-only shadow parity with the existing **blocked** P0 SQLite CAS rehearsal. A stale or changed capture cannot proceed to a temporary import or synthetic claim.
