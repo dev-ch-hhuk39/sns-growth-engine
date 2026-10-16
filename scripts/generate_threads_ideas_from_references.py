@@ -859,7 +859,11 @@ def build_fallback_generation_rows(
                 account_id=account_id,
                 public_validation=validation,
             )
-            if body and hard["status"] == "PASS" and not exact_duplicate:
+            # The content-v2 gate is not a substitute for the final public
+            # validator. Never promote a candidate that its real publisher
+            # would reject for account fit, voice or decision support.
+            if (body and validation["status"] == "PASS"
+                    and hard["status"] == "PASS" and not exact_duplicate):
                 voice = validation.get("voice_persona_check", {})
                 full_similarity = float(quality.get("full_text_similarity_score", 0) or 0)
                 candidate = {

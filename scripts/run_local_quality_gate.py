@@ -36,6 +36,7 @@ FOCUSED = (
     "test_p0_release_readiness.py",
     "test_p0_real_delivery_once.py",
     "test_p0_once_worker_contract.py",
+    "test_legacy_direct_threads_publish_gate.py",
     "test_p0_queue_cas_rehearsal.py",
     "test_threads_publisher_identity_finalization.py",
     "test_publisher_delivery_contract.py",
