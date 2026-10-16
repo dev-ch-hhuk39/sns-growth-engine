@@ -16,6 +16,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "deploy-buffered-production-runtime.yml",
     "refresh-threads-tokens.yml",
     "production-storage-readonly-audit.yml",
+    "provision-p0-once-host-authority.yml",
     "production-capacity-recovery.yml",
 }
 

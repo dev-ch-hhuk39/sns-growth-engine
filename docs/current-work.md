@@ -1,3 +1,14 @@
+## 2026-10-16 - Prepared protected VPS P0 bootstrap without activation
+
+- Added a manually confirmed, protected-main, single-host private SQLite/HMAC
+  initialization workflow with verified 0600 database/initial backup and
+  atomic 0600 host-only runtime env handoff. It ALWAYS leaves posting OFF.
+- Explicit no-auto-reinitialization, busy global deploy lock, owner permissions
+  and corruption/partial-run fail-closed paths, covered by offline tests.
+- The live protected runner audit confirms runtime/cron exist and posting OFF,
+  but P0 authority not yet provisioned. This change is not permission for
+  live migration or posting. See docs/P0_PRIVATE_HOST_AUTHORITY_RUNBOOK_20261016.md.
+
 ## 2026-10-16 - Runtime activation and safe deploy continuity (Mac code)
 
 - The existing VPS text-launcher defaults to no-post, refuses live apply

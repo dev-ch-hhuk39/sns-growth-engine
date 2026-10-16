@@ -1,0 +1,54 @@
+name: Bootstrap Private Threads One-Use Authority (No Posting)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_initialize:
+        description: 'Type INITIALIZE_PRIVATE_P0_NO_POST (once, after backing up Sheets)'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-p0-private-authority-initialization
+  cancel-in-progress: false
+
+jobs:
+  initialize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Confirm operator-only no-post bootstrap
+        shell: bash
+        env:
+          CONFIRM_NO_POST: ${{ inputs.confirm_initialize }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$CONFIRM_NO_POST" = "INITIALIZE_PRIVATE_P0_NO_POST"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          runtime=/opt/github-runners/sns-growth-engine/.buffered-runtime
+          test -L "$runtime/current"
+          test -d "$runtime/shared"
+          test -f "$runtime/shared/runtime.env"
+          test "$(stat -c '%a' "$runtime/shared/runtime.env")" = 600
+          grep -qx 'BUFFERED_POSTING_ENABLED=false' "$runtime/shared/runtime.env"
+          echo "P0_PRIVATE_AUTHORITY_BOOTSTRAP_NO_POST_CONFIRMED"
+      - name: Create and verify private one-use ledger, backup and disabled key config
+        shell: bash
+        env:
+          CONFIRM_NO_POST: ${{ inputs.confirm_initialize }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -B scripts/provision_p0_once_host_authority.py \
+            --runtime-root /opt/github-runners/sns-growth-engine/.buffered-runtime \
+            --confirm "$CONFIRM_NO_POST"
+          echo "P0_PRIVATE_AUTHORITY_INITIALIZED_POSTING_OFF"

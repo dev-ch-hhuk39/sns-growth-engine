@@ -1,12 +1,38 @@
 {
   "schema_version": 1,
-  "managed_accounts": ["night_scout", "liver_manager", "beauty_account", "tiktok_shop"],
-  "production_accounts": ["night_scout", "liver_manager", "beauty_account"],
-  "credential_pending_accounts": ["tiktok_shop"],
-  "active_acquisition_platforms": ["threads", "x", "youtube", "tiktok"],
-  "reference_priority": ["threads", "tiktok", "x", "youtube"],
+  "managed_accounts": [
+    "night_scout",
+    "liver_manager",
+    "beauty_account",
+    "tiktok_shop"
+  ],
+  "production_accounts": [
+    "night_scout",
+    "liver_manager",
+    "beauty_account"
+  ],
+  "credential_pending_accounts": [
+    "tiktok_shop"
+  ],
+  "active_acquisition_platforms": [
+    "threads",
+    "x",
+    "youtube",
+    "tiktok"
+  ],
+  "reference_priority": [
+    "threads",
+    "tiktok",
+    "x",
+    "youtube"
+  ],
   "deferred_reference_acquisition": {},
-  "physical_media_providers": {"threads": "public_og_direct_http", "x": "yt_dlp", "youtube": "yt_dlp", "tiktok": "public_embed_direct_http"},
+  "physical_media_providers": {
+    "threads": "public_og_direct_http",
+    "x": "yt_dlp",
+    "youtube": "yt_dlp",
+    "tiktok": "public_embed_direct_http"
+  },
   "physical_media_evidence": {
     "youtube": {
       "night_scout": "PASS_AV",
@@ -32,10 +58,34 @@
     "approved_source_clip": 5
   },
   "content_mix_by_account": {
-    "night_scout": {"new_text_generation": 5, "reference_text_generation": 30, "pdca_text_generation": 10, "direct_reference_media": 50, "approved_source_clip": 5},
-    "liver_manager": {"new_text_generation": 5, "reference_text_generation": 30, "pdca_text_generation": 10, "direct_reference_media": 50, "approved_source_clip": 5},
-    "beauty_account": {"new_text_generation": 25, "reference_text_generation": 35, "pdca_text_generation": 20, "direct_reference_media": 15, "approved_source_clip": 5},
-    "tiktok_shop": {"new_text_generation": 30, "reference_text_generation": 45, "pdca_text_generation": 15, "direct_reference_media": 5, "approved_source_clip": 5}
+    "night_scout": {
+      "new_text_generation": 5,
+      "reference_text_generation": 30,
+      "pdca_text_generation": 10,
+      "direct_reference_media": 50,
+      "approved_source_clip": 5
+    },
+    "liver_manager": {
+      "new_text_generation": 5,
+      "reference_text_generation": 30,
+      "pdca_text_generation": 10,
+      "direct_reference_media": 50,
+      "approved_source_clip": 5
+    },
+    "beauty_account": {
+      "new_text_generation": 25,
+      "reference_text_generation": 35,
+      "pdca_text_generation": 20,
+      "direct_reference_media": 15,
+      "approved_source_clip": 5
+    },
+    "tiktok_shop": {
+      "new_text_generation": 30,
+      "reference_text_generation": 45,
+      "pdca_text_generation": 15,
+      "direct_reference_media": 5,
+      "approved_source_clip": 5
+    }
   },
   "aspect_ratio_policy": "preserve_source",
   "workflow_classification": {
@@ -94,7 +144,8 @@
       "beauty-threads-production.yml",
       "seed-approved-media-permissions.yml",
       "threads-queue-worker.yml",
-      "tiktok-shop-threads-onboarding.yml"
+      "tiktok-shop-threads-onboarding.yml",
+      "provision-p0-once-host-authority.yml"
     ]
   },
   "entrypoint_classification": {
