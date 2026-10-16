@@ -102,7 +102,8 @@ trap finish EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 BUFFERED_POSTING_ENABLED=false python3 "$source_root/scripts/write_buffered_runtime_env.py" \
-  --runtime-root "$runtime_root" --out "$staged_env"
+  --runtime-root "$runtime_root" --out "$staged_env" \
+  --inherit-local-p0 "$live_env"
 cp -p "$live_env" "$backup_env"
 (crontab -l 2>/dev/null || true) > "$backup_cron"
 "$source_root/scripts/install_buffered_production_runtime.sh" \
@@ -132,7 +133,8 @@ fi
 atomic_pointer "$runtime_root/previous" "$old_release"
 if [[ "$requested_posting" == true ]]; then
   BUFFERED_POSTING_ENABLED=true python3 "$source_root/scripts/write_buffered_runtime_env.py" \
-    --runtime-root "$runtime_root" --out "$posting_env"
+    --runtime-root "$runtime_root" --out "$posting_env" \
+    --inherit-local-p0 "$backup_env"
   mv -Tf "$posting_env" "$live_env"
 fi
 if [[ -L "$pending" && "$(readlink -f "$pending")" == "$new_release" ]]; then

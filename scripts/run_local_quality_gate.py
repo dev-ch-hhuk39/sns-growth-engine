@@ -36,6 +36,8 @@ FOCUSED = (
     "test_p0_release_readiness.py",
     "test_p0_real_delivery_once.py",
     "test_threads_outbound_once_scope.py",
+    "test_p0_once_runtime_preflight.py",
+    "test_buffered_host_p0_activation.py",
     "test_p0_once_worker_contract.py",
     "test_legacy_direct_threads_publish_gate.py",
     "test_p0_queue_cas_rehearsal.py",

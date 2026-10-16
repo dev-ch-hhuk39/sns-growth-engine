@@ -1,3 +1,29 @@
+## 2026-10-16: host launcher/deploy integration (local code only)
+
+The immutable VPS text launcher now defaults posting OFF when its runtime
+posting switch is absent. Even with BUFFERED_POSTING_ENABLED=true, real apply
+is restricted to night_scout/liver_manager and requires
+SNS_P0_ONCE_GATE_ENABLED=true plus a successful read-only
+scripts/validate_p0_once_runtime.py check BEFORE Sheets, scheduling or
+provider invocation. It verifies the private SQLite file, all signed event
+chains and every immutable send-attempt MAC. Protected media and Beauty
+cannot use this text-only send authority.
+
+The transactional deploy candidate writer now inherits ONLY the host-local
+P0 gate, private SQLite path and HMAC key from an existing owner-only 0600
+runtime.env/backup under the VPS global lock. Inbound CI/GitHub variables
+CANNOT overwrite these values. An attempted posting-enabled deployment
+without a locally configured P0 authority fails/rolls back. A deploy with
+posting disabled may stage code without enabling traffic.
+
+Release operations NOT performed here: host/owner-attested sole-writer
+custody, authoritative Google Sheets writer inventory shutdown and snapshot,
+verified backup+restore, production HMAC/DB provisioning, protected account
+credentials, real Night/Liver canaries, Sheets readback, timed 24h/72h/168h
+metrics, feedback and media rights. No VPS operations, public pushes,
+provider calls or real Sheets mutation were executed. A green Mac test suite
+is only CODE ACCEPTANCE; it is not a GO decision for production.
+
 ## 2026-10-16 implementation update: one-use enforced at HTTP sink
 
 The code-level text-only Threads sender now requires an authenticated existing

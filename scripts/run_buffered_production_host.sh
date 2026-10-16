@@ -65,7 +65,7 @@ export PRODUCTION_TRIGGER="$TRIGGER"
 export PRODUCTION_RUNTIME_RELEASE="$CURRENT_RELEASE"
 export THREADS_TOKEN_STORE_DIR="${THREADS_TOKEN_STORE_DIR:-${RUNTIME_ROOT}/shared/threads_tokens}"
 
-posting_enabled="${BUFFERED_POSTING_ENABLED:-true}"
+posting_enabled="${BUFFERED_POSTING_ENABLED:-false}"
 case "$posting_enabled" in
   1|true|TRUE|yes|YES) ;;
   0|false|FALSE|no|NO)
@@ -76,6 +76,26 @@ case "$posting_enabled" in
     ;;
   *) echo "[BLOCKED] BUFFERED_POSTING_ENABLED must be an explicit boolean" >&2; exit 64 ;;
 esac
+
+# Apply is strictly text-only for the two authorized P0 accounts. Do not
+# silently submit Beauty or media operations through a text-only ledger.
+# The separate rights-verified media/Beauty routes require their own release.
+if [[ "$MODE" == "apply" ]]; then
+  case "$ACCOUNT_ID" in
+    night_scout|liver_manager) ;;
+    *) echo '[BLOCKED] P0_ONCE_TEXT_ONLY_ACCOUNT_SCOPE' >&2; exit 78 ;;
+  esac
+  case "${SNS_P0_ONCE_GATE_ENABLED:-false}" in
+    true) ;;
+    *) echo '[BLOCKED] P0_ONCE_RUNTIME_GATE_DISABLED' >&2; exit 78 ;;
+  esac
+  runtime_python="$CURRENT_RELEASE/.venv/bin/python"
+  [[ -x "$runtime_python" ]] || runtime_python=python3
+  "$runtime_python" -B "$CURRENT_RELEASE/scripts/validate_p0_once_runtime.py"     --account-id "$ACCOUNT_ID" || {
+    echo '[BLOCKED] P0_ONCE_RUNTIME_PREFLIGHT_FAILED' >&2
+    exit 78
+  }
+fi
 
 # Protect each cron/recovery read of current release from an atomic deploy.
 # The global lock is provisioned and managed exclusively by VPS Ops.
@@ -118,8 +138,8 @@ run_account() {
       fi
       if [[ "$mode" == "apply" ]]; then
         export PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true
-        export ALLOW_MEDIA_POSTS=true ALLOW_REAL_THREADS_VIDEO_POST=true
-        export ALLOW_THREADS_CAROUSEL=true ALLOW_THREADS_MIXED_CAROUSEL=false
+        export ALLOW_MEDIA_POSTS=false ALLOW_REAL_THREADS_VIDEO_POST=false
+        export ALLOW_THREADS_CAROUSEL=false ALLOW_THREADS_MIXED_CAROUSEL=false
         export ALLOW_REAL_X_POST=false
         exec "$python_bin" "$root/scripts/reconcile_due_production_slots.py" --account-id "$account" --apply --confirm-reconcile
       fi

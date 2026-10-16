@@ -53,6 +53,67 @@ class DeploymentLifecycleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             write_candidate_env(self.env_path, self.root, self.env)
 
+    def test_host_hmac_remains_local_and_survives_env_candidate_rewrite(self):
+        live = self.shared / 'runtime.env'
+        live.write_text(
+            'BUFFERED_POSTING_ENABLED=false\n'
+            'SNS_P0_ONCE_GATE_ENABLED=true\n'
+            'SNS_P0_ONCE_DB_PATH=/opt/sns-private/ledger.sqlite3\n'
+            'SNS_P0_ONCE_HMAC_KEY_HEX=' + 'ab' * 32 + '\n')
+        live.chmod(0o600)
+        supplied = {
+            **self.env,
+            'SNS_P0_ONCE_DB_PATH': '/malicious/github/path.sqlite3',
+            'SNS_P0_ONCE_HMAC_KEY_HEX': 'ee' * 32,
+            'SNS_P0_ONCE_GATE_ENABLED': 'false',
+        }
+        write_candidate_env(self.env_path, self.root, supplied,
+                            inherit_local_p0=live)
+        content = self.env_path.read_text()
+        self.assertIn('SNS_P0_ONCE_DB_PATH=/opt/sns-private/ledger.sqlite3', content)
+        self.assertIn('SNS_P0_ONCE_HMAC_KEY_HEX=' + 'ab'*32, content)
+        self.assertNotIn('/malicious/github', content)
+        self.assertNotIn('ee'*32, content)
+        self.assertIn('SNS_P0_ONCE_GATE_ENABLED=true', content)
+        self.assertIn('BUFFERED_POSTING_ENABLED=false', content)
+
+    def test_posting_enable_requires_preexisting_local_authority(self):
+        attempted = {**self.env, 'BUFFERED_POSTING_ENABLED': 'true',
+                     'SNS_P0_ONCE_GATE_ENABLED': 'true',
+                     'SNS_P0_ONCE_DB_PATH': '/fake/not/trusted.sqlite3',
+                     'SNS_P0_ONCE_HMAC_KEY_HEX': 'ff'*32}
+        with self.assertRaisesRegex(ValueError, 'host_p0_authority_not_configured'):
+            write_candidate_env(self.env_path, self.root, attempted)
+        self.assertFalse(self.env_path.exists())
+
+    def test_local_inheritance_must_be_owner_private_and_not_symlink(self):
+        live = self.shared / 'runtime.env'
+        live.write_text('SNS_P0_ONCE_GATE_ENABLED=false\n')
+        live.chmod(0o644)
+        with self.assertRaisesRegex(ValueError, 'permissions'):
+            write_candidate_env(self.env_path, self.root, self.env,
+                                inherit_local_p0=live)
+        live.chmod(0o600)
+        symlink = self.shared / '.copied-env'
+        symlink.symlink_to(live)
+        with self.assertRaisesRegex(ValueError, 'untrusted_host_env_source'):
+            write_candidate_env(self.env_path, self.root, self.env,
+                                inherit_local_p0=symlink)
+        self.assertFalse(self.env_path.exists())
+
+    def test_duplicate_or_shell_expression_host_env_is_rejected(self):
+        live = self.shared / 'runtime.env'
+        for text in (
+            'SNS_P0_ONCE_GATE_ENABLED=true\nSNS_P0_ONCE_GATE_ENABLED=false\n',
+            'SNS_P0_ONCE_GATE_ENABLED=true; printf BAD\n',
+        ):
+            live.write_text(text)
+            live.chmod(0o600)
+            with self.assertRaises(ValueError):
+                write_candidate_env(self.env_path, self.root, self.env,
+                                    inherit_local_p0=live)
+            self.assertFalse(self.env_path.exists())
+
     def test_missing_secrets_block_without_files(self):
         with self.assertRaises(ValueError):
             write_candidate_env(self.env_path, self.root, {'BUFFERED_POSTING_ENABLED': 'false'})

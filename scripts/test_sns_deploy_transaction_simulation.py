@@ -122,7 +122,23 @@ exit 0
         self.assertEqual(self.counter.read_text().strip(), '2')
         self.assertEqual((self.shared / 'runtime.env').stat().st_mode & 0o777, 0o600)
 
+    def add_only_local_p0_fixture(self):
+        # Synthetic activation metadata; this test only verifies secret
+        # transport/rollback, never the real provider or actual DB readiness.
+        with (self.shared / 'runtime.env').open('a') as out:
+            out.write('SNS_P0_ONCE_GATE_ENABLED=true\n')
+            out.write('SNS_P0_ONCE_DB_PATH=/private/sns-fixture.sqlite3\n')
+            out.write('SNS_P0_ONCE_HMAC_KEY_HEX=' + 'ab' * 32 + '\n')
+
+    def test_missing_local_authority_never_activates_posting(self):
+        res = self.run_transaction(BUFFERED_POSTING_ENABLED='true')
+        self.assertNotEqual(res.returncode, 0)
+        self.assertEqual(self.current(), self.old)
+        self.assertIn('BUFFERED_POSTING_ENABLED=false',
+                      (self.shared / 'runtime.env').read_text())
+
     def test_posting_mode_activates_only_after_healthy_promotion(self):
+        self.add_only_local_p0_fixture()
         res = self.run_transaction(BUFFERED_POSTING_ENABLED='true')
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertEqual(self.counter.read_text().strip(), '2')

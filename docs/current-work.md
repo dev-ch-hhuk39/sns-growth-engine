@@ -1,3 +1,17 @@
+## 2026-10-16 - Runtime activation and safe deploy continuity (Mac code)
+
+- The existing VPS text-launcher defaults to no-post, refuses live apply
+  for Beauty or all-account broad scope, disables media outbound in its
+  text-only worker and requires a green read-only P0 SQLite/HMAC preflight.
+- A private 0600 runtime.env is the only permitted source for inheriting the
+  three P0 operational settings during an immutable runtime deployment.
+  CI-supplied P0 settings are discarded. Enabled staging without a local
+  authority fails and rolls back.
+- This closes an operator-readiness/secret-loss code gap, NOT the real
+  Sheets writer migration, external source attestation, single-host proof,
+  actual production canary or approval to deploy. No real operations done.
+- See docs/P0_ACTUAL_PROVIDER_ONCE_BARRIER_20261014.md.
+
 ## 2026-10-16 - Mandatory provider-level text send one-use authority (Mac code)
 
 - Real Threads text HTTP requests now require an authenticated pre-existing
