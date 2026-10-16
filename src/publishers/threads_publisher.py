@@ -25,6 +25,7 @@ from typing import Any
 from .base import BasePublisher, PublishResult
 from .dry_run import _check_threads
 from .media_publish_interlock import media_publish_interlock_reason
+from .threads_outbound_scope import before_container_create, before_container_publish
 from .threads_credentials import resolve_credentials
 
 THREADS_API_BASE = "https://graph.threads.net/v1.0"
@@ -70,12 +71,16 @@ def _create_container(
     text: str,
     media_type: str = "TEXT",
     media_url: str | None = None,
+    *, account_id: str = "", queue_id: str = "",
 ) -> str:
-    """Create TEXT only; media containers cannot bypass the publisher gate."""
+    """Create TEXT only; require a durable one-use send scope before HTTP."""
     # No caller-side boolean/env/header can substitute for a trusted,
     # same-store publication permit. Keep direct media helper calls blocked.
     if media_type != "TEXT" or media_url is not None:
         raise PermissionError("MEDIA_AUTHORITY_NOT_CONNECTED")
+    before_container_create(
+        account_id=account_id, queue_id=queue_id, user_id=user_id, text=text,
+    )
     import requests
 
     url = f"{THREADS_API_BASE}/{user_id}/threads"
@@ -91,7 +96,7 @@ def _create_container(
     data = resp.json()
     container_id = data.get("id")
     if not container_id:
-        raise RuntimeError(f"コンテナ作成失敗: レスポンスに id がありません: {data}")
+        raise RuntimeError("THREADS_CONTAINER_ID_MISSING")
     return container_id
 
 
@@ -141,8 +146,12 @@ def _publish_container(
     user_id: str,
     access_token: str,
     container_id: str,
+    *, account_id: str = "", queue_id: str = "",
 ) -> dict:
-    """コンテナを公開し、レスポンスを返す（post_id を含む）。"""
+    """Publish once, after the corresponding authorized container creation."""
+    before_container_publish(
+        account_id=account_id, queue_id=queue_id, user_id=user_id,
+    )
     import requests
 
     url = f"{THREADS_API_BASE}/{user_id}/threads_publish"
@@ -356,17 +365,37 @@ class ThreadsPublisher(BasePublisher):
                 ),
             )
 
+        # A caller-supplied queue/account mismatch is never valid for real
+        # posting. Dry-runs remain independent of runtime authorization.
+        if queue_item.get("account_id") and queue_item["account_id"] != account_id:
+            return PublishResult(
+                platform="threads", success=False, dry_run=False,
+                message="SAFETY_STOP: THREADS_QUEUE_ACCOUNT_MISMATCH",
+            )
+
         # ---- 実投稿: 2ステップ ----
         container_id = ""
         try:
             if carousel:
                 container_id = _create_carousel_container(user_id, access_token, text, urls, types)
             else:
-                container_id = _create_container(user_id, access_token, text, media_type=types[0] if has_media else "TEXT", media_url=urls[0] if has_media else None)
+                container_id = _create_container(
+                    user_id, access_token, text,
+                    media_type=types[0] if has_media else "TEXT",
+                    media_url=urls[0] if has_media else None,
+                    account_id=account_id, queue_id=queue_id,
+                )
             if has_media and not carousel and types[0] == "VIDEO":
                 _wait_for_media_container(container_id, access_token)
             else:
                 time.sleep(1)
+        except PermissionError:
+            # No network was attempted without the claimed send scope.
+            return PublishResult(
+                platform="threads", success=False, dry_run=False,
+                message="SAFETY_STOP: P0_ONCE_OUTBOUND_SCOPE_REQUIRED",
+                delivery_state="NO_PROVIDER_CALL",
+            )
         except Exception as exc:
             # requests exceptions may include a URL containing query credentials.
             # Never serialize the exception string into queue/log output.
@@ -384,7 +413,10 @@ class ThreadsPublisher(BasePublisher):
                 container_id=container_id or None,
             )
         try:
-            result = _publish_container(user_id, access_token, container_id)
+            result = _publish_container(
+                user_id, access_token, container_id,
+                account_id=account_id, queue_id=queue_id,
+            )
         except Exception as exc:
             return PublishResult(
                 platform="threads",

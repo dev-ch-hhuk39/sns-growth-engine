@@ -76,6 +76,21 @@ CREATE TABLE IF NOT EXISTS sns_p0_once_events (
 );
 CREATE INDEX IF NOT EXISTS idx_sns_p0_once_event_queue
     ON sns_p0_once_events(queue_id,revision);
+CREATE TABLE IF NOT EXISTS sns_p0_once_send_attempts (
+    queue_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    source_sha256 TEXT NOT NULL CHECK(length(source_sha256)=64),
+    claim_event_mac TEXT NOT NULL CHECK(length(claim_event_mac)=64),
+    payload_json TEXT NOT NULL,
+    send_mac TEXT NOT NULL CHECK(length(send_mac)=64),
+    FOREIGN KEY(queue_id) REFERENCES sns_p0_once_heads(queue_id) ON DELETE RESTRICT
+);
+CREATE TRIGGER IF NOT EXISTS sns_p0_once_send_no_update
+    BEFORE UPDATE ON sns_p0_once_send_attempts
+    BEGIN SELECT RAISE(ABORT,'p0_once_send_immutable'); END;
+CREATE TRIGGER IF NOT EXISTS sns_p0_once_send_no_delete
+    BEFORE DELETE ON sns_p0_once_send_attempts
+    BEGIN SELECT RAISE(ABORT,'p0_once_send_immutable'); END;
 CREATE TRIGGER IF NOT EXISTS sns_p0_once_events_no_update
     BEFORE UPDATE ON sns_p0_once_events
     BEGIN SELECT RAISE(ABORT,'p0_once_journal_immutable'); END;
@@ -241,7 +256,12 @@ def _verify_schema(db: sqlite3.Connection) -> None:
             "SELECT name FROM sqlite_master WHERE type='trigger'")}
         required = {"sns_p0_once_events_no_update",
                     "sns_p0_once_events_no_delete",
-                    "sns_p0_once_heads_no_delete"}
+                    "sns_p0_once_heads_no_delete",
+                    "sns_p0_once_send_no_update",
+                    "sns_p0_once_send_no_delete"}
+        if db.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' "
+                      "AND name='sns_p0_once_send_attempts'").fetchone()[0] != 1:
+            raise P0OnceBlocked("P0_ONCE_SEND_ATTEMPT_TABLE_MISSING")
         if not required.issubset(trigger_names):
             raise P0OnceBlocked("P0_ONCE_IMMUTABLE_JOURNAL_GUARD_MISSING")
         indexes = {row[0] for row in db.execute(
@@ -444,6 +464,100 @@ class P0OnceGuard:
         return self._transition(account_id=account_id, queue_id=queue_id,
                                 source_sha256=source_sha256, action="VERIFY",
                                 state="POSTED_VERIFIED", provider_post_id=provider_post_id)
+
+    def _checked_claim_receipt(self, db: sqlite3.Connection, *,
+                               account_id: str, queue_id: str, text: str,
+                               source_sha256: str, event_mac: str) -> None:
+        if (type(account_id) is not str or account_id not in ACCOUNTS
+                or type(queue_id) is not str or not QUEUES.fullmatch(queue_id)
+                or type(text) is not str
+                or type(source_sha256) is not str or not SHA.fullmatch(source_sha256)
+                or type(event_mac) is not str or not SHA.fullmatch(event_mac)):
+            raise P0OnceBlocked("P0_ONCE_SEND_RECEIPT_INVALID")
+        if source_fingerprint(account_id=account_id, queue_id=queue_id,
+                              text=text) != source_sha256:
+            raise P0OnceBlocked("P0_ONCE_SEND_SOURCE_CHANGED")
+        head = _head(db, queue_id)
+        _audit(db, queue_id, head, self.secret_key)
+        if (head is None or head["account_id"] != account_id
+                or head["source_sha256"] != source_sha256
+                or head["state"] != "CLAIMED_UNCERTAIN"
+                or head["revision"] != 1
+                or not hmac.compare_digest(head["last_event_mac"], event_mac)):
+            raise P0OnceBlocked("P0_ONCE_SEND_RECEIPT_NOT_CURRENT")
+
+    def validate_claim_receipt(
+        self, *, account_id: str, queue_id: str, text: str,
+        source_sha256: str, event_mac: str,
+    ) -> None:
+        """Check claim authenticity without reserving/renewing a send."""
+        with _db(self.db_path, allow_test_path=self.allow_test_path) as db:
+            _verify_schema(db)
+            self._checked_claim_receipt(
+                db, account_id=account_id, queue_id=queue_id, text=text,
+                source_sha256=source_sha256, event_mac=event_mac,
+            )
+            if db.execute("SELECT 1 FROM sns_p0_once_send_attempts WHERE queue_id=?",
+                          (queue_id,)).fetchone():
+                raise P0OnceBlocked("P0_ONCE_SEND_ALREADY_STARTED_NO_RETRY")
+
+    def consume_send_receipt(
+        self, *, account_id: str, queue_id: str, text: str,
+        source_sha256: str, event_mac: str,
+    ) -> None:
+        """Durably reserve the sole HTTP attempt before making a network call.
+
+        This record is immutable; uncertain/failed requests never free it.
+        Concurrent processes racing the same claim can only insert one row.
+        """
+        with _db(self.db_path, allow_test_path=self.allow_test_path) as db:
+            _verify_schema(db)
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                self._checked_claim_receipt(
+                    db, account_id=account_id, queue_id=queue_id, text=text,
+                    source_sha256=source_sha256, event_mac=event_mac,
+                )
+                payload = {"schema": DB_SCHEMA, "queue_id": queue_id,
+                           "account_id": account_id, "source_sha256": source_sha256,
+                           "claim_event_mac": event_mac,
+                           "operation_id": "p0_send_" + secrets.token_hex(16),
+                           "started_at": _now()}
+                signature = _mac(self.secret_key, payload)
+                db.execute(
+                    "INSERT INTO sns_p0_once_send_attempts "
+                    "(queue_id,account_id,source_sha256,claim_event_mac,payload_json,send_mac) "
+                    "VALUES(?,?,?,?,?,?)",
+                    (queue_id, account_id, source_sha256, event_mac,
+                     _canonical(payload).decode("ascii"), signature),
+                )
+                db.execute("COMMIT")
+            except P0OnceBlocked:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise
+            except sqlite3.IntegrityError:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise P0OnceBlocked("P0_ONCE_SEND_ALREADY_STARTED_NO_RETRY") from None
+            except sqlite3.Error:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise P0OnceBlocked("P0_ONCE_SEND_RESERVATION_UNKNOWN_NO_RETRY") from None
+            row = db.execute(
+                "SELECT payload_json,send_mac FROM sns_p0_once_send_attempts WHERE queue_id=?",
+                (queue_id,),
+            ).fetchone()
+            try:
+                verified = (row is not None
+                            and row["send_mac"] == signature
+                            and hmac.compare_digest(
+                                _mac(self.secret_key, json.loads(row["payload_json"])),
+                                row["send_mac"]))
+            except (TypeError, ValueError):
+                verified = False
+            if not verified:
+                raise P0OnceBlocked("P0_ONCE_SEND_READBACK_UNKNOWN_NO_RETRY")
 
     def inspect(self, *, queue_id: str) -> dict[str, Any]:
         if type(queue_id) is not str or not QUEUES.fullmatch(queue_id):

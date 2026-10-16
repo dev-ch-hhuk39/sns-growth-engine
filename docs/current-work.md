@@ -1,3 +1,17 @@
+## 2026-10-16 - Mandatory provider-level text send one-use authority (Mac code)
+
+- Real Threads text HTTP requests now require an authenticated pre-existing
+  one-use SQLite claim, source/account binding and an immutable durable HTTP
+  send-attempt reservation. Alternate direct callers, fake permits, concurrent
+  calls, repeats and crash-retries are refused before outbound HTTP.
+- SNS_P0_ONCE_GATE_ENABLED defaults false. A real queue attempt without it
+  is stopped before mutating Sheets PROCESSING; previews remain read-only.
+- Protected media and Beauty remain outside scope. Existing operational
+  Sheets are still canonical; no writer migration, real post, secret/host
+  change or production authorization was performed. Full local QA must pass
+  before this batch is considered locally complete.
+- See docs/P0_ACTUAL_PROVIDER_ONCE_BARRIER_20261014.md.
+
 ## P0 operational publisher one-use ledger (local code only, 2026-10-14)
 
 - Optional disabled-by-default one-use SQLite barrier is integrated into

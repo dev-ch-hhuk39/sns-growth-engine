@@ -24,6 +24,8 @@ def main() -> int:
     ]
     assert src.count("SNS_P0_ONCE_BARRIER") == 4, "one-use guard missing or duplicated"
     assert "SNS_P0_ONCE_GATE_ENABLED" in src, "explicit off-by-default flag missing"
+    assert "P0_ONCE_GATE_NOT_ACTIVATED" in src, "unprotected real write not refused"
+    assert src.index("P0_ONCE_GATE_NOT_ACTIVATED") < src.index('locked = update_row(client, "queue"')
     assert src.count("    result = publisher.publish(") == 1, "real call count changed"
     assert src.count('    if not confirm_real_post:') == 1, "real-post opt-in changed"
     assert "ALLOW_REAL_THREADS_POST" in src and "PUBLISH_ENABLED" in src

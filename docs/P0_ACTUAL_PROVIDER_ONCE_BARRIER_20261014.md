@@ -1,3 +1,32 @@
+## 2026-10-16 implementation update: one-use enforced at HTTP sink
+
+The code-level text-only Threads sender now requires an authenticated existing
+SQLite CLAIM before making either actual Threads HTTP POST. The permit is scoped
+to the exact account, queue, public text and an immutable HMAC-chain event.
+The first container request atomically inserts a signed, immutable one-use
+send-attempt record (same local SQLite DB) before network I/O; a second attempt
+cannot reuse that row even across processes or after a crash. This is NOT a
+remote platform idempotency key.
+
+When SNS_P0_ONCE_GATE_ENABLED is OFF (the default), real processing refuses
+BEFORE writing PROCESSING to Sheets; dry-run and local generation remain
+available. All previously separate direct Threads CLI outbound is blocked.
+The real HTTP sender requires a real P0OnceGuard class, not arbitrary fake
+objects or boolean flags. Source code, not local environment flags alone,
+enforces this precondition.
+
+New databases contain sns_p0_once_send_attempts and immutable triggers.
+An older existing database missing these protections will FAIL CLOSED rather
+than being silently migrated/recreated. Do not replace an operational ledger.
+No live account, queue migration, host/IdP custody, signing-key deployment,
+media publication, production Sheets write, GitHub push or canary was executed.
+
+These are local engineering changes only. Approval of the single operational
+host, external writer disconnection, backups/restore, authenticated sources,
+account canaries and metric/PDCA production proof remain mandatory.
+
+---
+
 # SNS Growth Engine | One-use barrier in the actual Threads TEXT provider path
 
 Date: 2026-10-14 JST. Intended Mac code base: `e36c0b89636477ff8415ee14116d3a7887289efd`, branch `chatgpt/sns-completion-local-noactions-20261013`.

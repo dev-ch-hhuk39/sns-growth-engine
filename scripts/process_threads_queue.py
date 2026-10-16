@@ -1175,26 +1175,29 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
 
     # This boundary is strictly before the real publisher call. Never label an
     # exception from publish/persistence as safe to retry.
-    # SNS_P0_ONCE_BARRIER: optional single-host provider one-use boundary.
-    # Defaults OFF; this is an additional safety gate, never release approval.
+    # SNS_P0_ONCE_BARRIER: mandatory one-use boundary for real text delivery.
+    # Defaults OFF (real publishing is blocked until owner-approved activation).
     p0_once = None
     p0_once_source = ""
-    if os.environ.get("SNS_P0_ONCE_GATE_ENABLED", "false").strip().lower() == "true":
-        from p0_real_delivery_once import P0OnceBlocked, P0OnceGuard, source_fingerprint
-        try:
-            # Preflight BEFORE a Sheets mutation; missing/lost DB must block.
-            p0_once = P0OnceGuard.from_env()
-            p0_once_source = source_fingerprint(
-                account_id=account_id, queue_id=queue_id, text=text,
-                media_used=(bool(media.get("effective_media_url"))
-                            or bool(media.get("media_required"))
-                            or bool(media.get("media_asset_id"))
-                            or bool(media.get("media_urls"))),
-            )
-        except P0OnceBlocked:
-            return {"status": "P0_ONCE_PREPUBLISH_BLOCKED",
-                    "reason": "OPERATOR_LEDGER_OR_TEXT_SCOPE_INVALID",
-                    "queue_id": queue_id, "publish_attempted": False}
+    if not is_true(os.environ.get("SNS_P0_ONCE_GATE_ENABLED", "false")):
+        return {"status": "P0_ONCE_PREPUBLISH_BLOCKED",
+                "reason": "P0_ONCE_GATE_NOT_ACTIVATED",
+                "queue_id": queue_id, "publish_attempted": False}
+    from p0_real_delivery_once import P0OnceBlocked, P0OnceGuard, source_fingerprint
+    try:
+        # Preflight BEFORE a Sheets mutation; missing/lost DB must block.
+        p0_once = P0OnceGuard.from_env()
+        p0_once_source = source_fingerprint(
+            account_id=account_id, queue_id=queue_id, text=text,
+            media_used=(bool(media.get("effective_media_url"))
+                        or bool(media.get("media_required"))
+                        or bool(media.get("media_asset_id"))
+                        or bool(media.get("media_urls"))),
+        )
+    except P0OnceBlocked:
+        return {"status": "P0_ONCE_PREPUBLISH_BLOCKED",
+                "reason": "OPERATOR_LEDGER_OR_TEXT_SCOPE_INVALID",
+                "queue_id": queue_id, "publish_attempted": False}
 
     try:
         locked = update_row(client, "queue", "queue_id", queue_id, {"status": "PROCESSING", "error": "", "processed_at": ""})
@@ -1219,32 +1222,57 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
 
     # SNS_P0_ONCE_BARRIER: the claim is durable BEFORE a real provider call.
     # No expiry/release/retry; if the process crashes here, reconcile manually.
+    p0_once_receipt = None
     if p0_once is not None:
         try:
-            p0_once.claim(account_id=account_id, queue_id=queue_id,
-                          source_sha256=p0_once_source)
+            p0_once_receipt = p0_once.claim(
+                account_id=account_id, queue_id=queue_id,
+                source_sha256=p0_once_source,
+            )
         except P0OnceBlocked:
             return {"status": "P0_ONCE_CLAIM_BLOCKED",
                     "reason": "ALREADY_CLAIMED_OR_UNVERIFIABLE_NO_RETRY",
                     "queue_id": queue_id, "publish_attempted": False}
 
-    result = publisher.publish(
-        text,
-        account={"account_id": account_id},
-        derivative={"derivative_id": social.get("derivative_id", "") if social else "", "platform": "threads"},
-        # Preserve authoritative row media markers; omitting them lets a
-        # media queue accidentally masquerade as plain text at the publisher.
-        queue_item={**queue_row, "queue_id": queue_id, "platform": "threads"},
-        dry_run=False,
-        media_url=media["effective_media_url"] or None,
-        media_type=publisher_media_type(
-            str(queue_row.get("content_type", "")),
-            media["effective_media_urls"],
-            media["media_type"],
-        ) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
-        media_urls=media["effective_media_urls"],
-        media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
-    )
+    # Only the authenticated, durable one-use CLAIM may open a real network
+    # scope. The low-level HTTP helpers refuse calls without this context.
+    from contextlib import nullcontext
+    send_scope = nullcontext()
+    if p0_once is not None:
+        from publishers.threads_outbound_scope import claimed_text_delivery
+        send_scope = claimed_text_delivery(
+            ledger=p0_once, receipt=p0_once_receipt,
+            account_id=account_id, queue_id=queue_id, text=text,
+            source_sha256=p0_once_source,
+        )
+    try:
+        with send_scope:
+            result = publisher.publish(
+                text,
+                account={"account_id": account_id},
+                derivative={"derivative_id": social.get("derivative_id", "") if social else "", "platform": "threads"},
+                # Preserve authoritative row media markers; omitting them lets a
+                # media queue accidentally masquerade as plain text at the publisher.
+                queue_item={**queue_row, "queue_id": queue_id, "platform": "threads"},
+                dry_run=False,
+                media_url=media["effective_media_url"] or None,
+                media_type=publisher_media_type(
+                    str(queue_row.get("content_type", "")),
+                    media["effective_media_urls"],
+                    media["media_type"],
+                ) or ("IMAGE" if media["media_type"] == "image" else "VIDEO"),
+                media_urls=media["effective_media_urls"],
+                media_types=["IMAGE" if item == "image" else "VIDEO" for item in media["media_types"]],
+            )
+    except Exception:
+        if p0_once is None:
+            raise
+        # Any error after the durable claim may conceal a provider attempt.
+        # Keep the irrevocable claim; never retry or fabricate POSTED.
+        return {"status": "P0_ONCE_PROVIDER_OUTCOME_UNVERIFIED",
+                "reason": "OUTBOUND_SCOPE_OR_PROVIDER_OUTCOME_UNKNOWN_NO_RETRY",
+                "queue_id": queue_id, "publish_attempted": True}
+
     # SNS_P0_ONCE_BARRIER: persist the provider ACK before any Sheets writes.
     # Missing external ID or ambiguous outcome remains a terminal no-retry hold.
     if p0_once is not None:
@@ -1580,6 +1608,11 @@ def main() -> int:
         return 1
     if not args.dry_run and not args.confirm_real_post:
         print("[BLOCKED] real post mode requires --confirm-real-post")
+        return 1
+
+    if not args.dry_run and not is_true(
+            os.environ.get("SNS_P0_ONCE_GATE_ENABLED", "false")):
+        print("[BLOCKED] P0_ONCE_GATE_NOT_ACTIVATED; Sheets not opened")
         return 1
 
     cfg = get_config()

@@ -1,11 +1,32 @@
 #!/usr/bin/env python3
 """Pre-publisher failures are terminal; ambiguous publication is never retried."""
 import unittest
+from contextlib import contextmanager
+from tempfile import TemporaryDirectory
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import process_threads_queue as worker
 from content_slot_runs import release_confirmed_no_post_claim, release_unpublished_claim
+
+
+@contextmanager
+def mocked_real_once_ledger():
+    """Real private temp SQLite authority, with all HTTP and Sheets mocked."""
+    from p0_real_delivery_once import (
+        P0OnceGuard, initialize_local_db,
+    )
+    with TemporaryDirectory(prefix="sns-unit-once-") as directory:
+        file_path = str(Path(directory) / "once.sqlite3")
+        initialize_local_db(
+            file_path, explicit_operator_init=True, allow_test_path=True,
+        )
+        ledger = P0OnceGuard(file_path, bytes.fromhex("bb" * 32),
+                             allow_test_path=True)
+        with patch("p0_real_delivery_once.P0OnceGuard.from_env",
+                   return_value=ledger):
+            yield ledger
 
 
 class PrePublishTests(unittest.TestCase):
@@ -26,7 +47,11 @@ class PrePublishTests(unittest.TestCase):
                 raise publish_error
             return SimpleNamespace(success=kwargs['dry_run'], message="test transport",
                                    delivery_state=delivery_state)
-        with patch.dict(worker.os.environ, {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true"}), \
+        with patch.dict(worker.os.environ, {
+                 "PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
+                 "SNS_P0_ONCE_GATE_ENABLED": "true",
+             }), \
+             mocked_real_once_ledger(), \
              patch.object(worker, 'records', side_effect=lambda _, tab: locked if tab == 'queue' else []), \
              patch.object(worker, 'update_row', side_effect=update if isinstance(update, Exception) else None, return_value=update), \
              patch.object(worker, 'log_event', side_effect=log_error), \
@@ -55,9 +80,12 @@ class PrePublishTests(unittest.TestCase):
         self.assertIs(result['publish_attempted'], False)
         self.assertEqual(calls, [True])
 
-    def test_publisher_exception_is_not_classified_unpublished(self):
-        with self.assertRaisesRegex(RuntimeError, 'ambiguous'):
-            self.process(publish_error=RuntimeError('ambiguous outcome'))
+    def test_publisher_exception_is_never_safely_retriable(self):
+        outcome, calls = self.process(publish_error=RuntimeError('ambiguous outcome'))
+        self.assertEqual(outcome["status"], "P0_ONCE_PROVIDER_OUTCOME_UNVERIFIED")
+        self.assertTrue(outcome["publish_attempted"])
+        self.assertEqual(calls, [True, False])
+        self.assertNotIn("ambiguous outcome", str(outcome))
 
     def test_confirmed_api_failure_has_no_unpublished_claim_proof(self):
         result, calls = self.process()

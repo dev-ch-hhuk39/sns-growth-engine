@@ -286,8 +286,9 @@ class PublisherIsolationTests(unittest.TestCase):
                 return True
             with self.subTest(missing=missing), patch.dict(
                 worker.os.environ,
-                {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true"},
-            ), patch.object(
+                {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
+                 "SNS_P0_ONCE_GATE_ENABLED": "true"},
+            ), prior_tests.mocked_real_once_ledger(), patch.object(
                 worker, "records",
                 side_effect=lambda _client, logical: (
                     [locked] if logical == "queue" else []
@@ -308,12 +309,17 @@ class PublisherIsolationTests(unittest.TestCase):
                     SimpleNamespace(), runner.row,
                     dry_run=False, confirm_real_post=True,
                 )
-            self.assertEqual(result["status"], "PUBLISH_OUTCOME_UNVERIFIED")
+            # Missing post identity cannot be ACKed; a missing permalink
+            # AFTER a valid provider ACK stays a separate reconciliation state.
+            expected = ("P0_ONCE_PROVIDER_OUTCOME_UNVERIFIED"
+                        if missing == "external_post_id"
+                        else "PUBLISH_OUTCOME_UNVERIFIED")
+            self.assertEqual(result["status"], expected)
             self.assertTrue(result["publish_attempted"])
-            self.assertEqual(
-                status_updates,
-                [("queue", "PROCESSING"), ("queue", "PUBLISH_OUTCOME_UNVERIFIED")],
-            )
+            expected_updates = [("queue", "PROCESSING")]
+            if missing == "posted_url":
+                expected_updates.append(("queue", "PUBLISH_OUTCOME_UNVERIFIED"))
+            self.assertEqual(status_updates, expected_updates)
 
     def test_verified_external_publish_but_final_queue_not_saved_never_success(self):
         runner = prior_tests.PrePublishTests(methodName="test_missing_lock_and_429_never_publish")
@@ -358,8 +364,9 @@ class PublisherIsolationTests(unittest.TestCase):
                 return True
             with self.subTest(final_result=str(final_result)), patch.dict(
                 worker.os.environ,
-                {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true"},
-            ), patch.object(worker, "records", side_effect=records), patch.object(
+                {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
+                 "SNS_P0_ONCE_GATE_ENABLED": "true"},
+            ), prior_tests.mocked_real_once_ledger(), patch.object(worker, "records", side_effect=records), patch.object(
                 worker, "update_row", side_effect=save_update,
             ), patch.object(worker, "log_event"), patch.object(
                 worker, "ThreadsPublisher",
