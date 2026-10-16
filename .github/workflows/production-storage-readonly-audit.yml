@@ -94,3 +94,66 @@ jobs:
             echo "ROOT_READONLY_AUDIT=UNAVAILABLE"
           fi
           echo "=== DISK_AUDIT_END ==="
+          echo "=== SNS_RUNTIME_READONLY_BEGIN ==="
+          runner=/opt/github-runners/sns-growth-engine
+          runtime="$runner/.buffered-runtime"
+          current="$runtime/current"
+          if [ -L "$current" ]; then
+            echo "SNS_RUNTIME_CURRENT_PRESENT=true"
+            if [ -x "$current/.venv/bin/python" ]; then
+              echo "SNS_RUNTIME_VENV_READY=true"
+            else
+              echo "SNS_RUNTIME_VENV_READY=false"
+            fi
+            if [ -f "$current/scripts/run_buffered_production_host.sh" ]; then
+              echo "SNS_RUNTIME_LAUNCHER_PRESENT=true"
+            else
+              echo "SNS_RUNTIME_LAUNCHER_PRESENT=false"
+            fi
+          else
+            echo "SNS_RUNTIME_CURRENT_PRESENT=false"
+          fi
+          if command -v flock >/dev/null 2>&1; then
+            echo "SNS_OS_FLOCK_AVAILABLE=true"
+          else
+            echo "SNS_OS_FLOCK_AVAILABLE=false"
+          fi
+          if command -v crontab >/dev/null 2>&1; then
+            if crontab -l 2>/dev/null | grep -q 'SNS-GROWTH-BUFFERED'; then
+              echo "SNS_CRON_BUFFERED_MARKER_PRESENT=true"
+            else
+              echo "SNS_CRON_BUFFERED_MARKER_PRESENT=false"
+            fi
+          else
+            echo "SNS_CRONTAB_NOT_AVAILABLE=true"
+          fi
+          envfile="$runtime/shared/runtime.env"
+          if [ -f "$envfile" ] && [ -r "$envfile" ]; then
+            echo "SNS_HOST_RUNTIME_ENV_READABLE=true"
+            env_mode="$(stat -c '%a' "$envfile")"
+            if [ "$env_mode" = "600" ]; then
+              echo "SNS_HOST_RUNTIME_ENV_OWNER_ONLY=true"
+            else
+              echo "SNS_HOST_RUNTIME_ENV_OWNER_ONLY=false"
+            fi
+            for key in BUFFERED_POSTING_ENABLED SNS_P0_ONCE_GATE_ENABLED SNS_P0_ONCE_DB_PATH SNS_P0_ONCE_HMAC_KEY_HEX; do
+              if grep -q "^$key=" "$envfile"; then
+                echo "SNS_HOST_KEY_${key}_PRESENT=true"
+              else
+                echo "SNS_HOST_KEY_${key}_PRESENT=false"
+              fi
+            done
+            if grep -q '^BUFFERED_POSTING_ENABLED=true$' "$envfile"; then
+              echo "SNS_HOST_POSTING_ENABLED=true"
+            else
+              echo "SNS_HOST_POSTING_ENABLED=false_or_unknown"
+            fi
+            if grep -q '^SNS_P0_ONCE_GATE_ENABLED=true$' "$envfile"; then
+              echo "SNS_HOST_P0_ONCE_GATE_ENABLED=true"
+            else
+              echo "SNS_HOST_P0_ONCE_GATE_ENABLED=false_or_unknown"
+            fi
+          else
+            echo "SNS_HOST_RUNTIME_ENV_READABLE=false"
+          fi
+          echo "=== SNS_RUNTIME_READONLY_END ==="
