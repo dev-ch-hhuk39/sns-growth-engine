@@ -11,15 +11,24 @@ class Worksheet:
     def __init__(self):
         self.appended = None
         self.updated = None
+        self.row = {"result_id": "result", "external_post_id": ""}
 
     def append_row(self, values, *, value_input_option):
         self.appended = (values, value_input_option)
 
-    def find(self, value, *, in_column):
-        return SimpleNamespace(row=2)
+    def findall(self, value, *, in_column):
+        return ([SimpleNamespace(row=2, value="result")]
+                if in_column == 1 and value == "result" else [])
+
+    def row_values(self, number):
+        assert number == 2
+        return [self.row["result_id"], self.row["external_post_id"]]
 
     def batch_update(self, ranges, *, value_input_option):
         self.updated = (ranges, value_input_option)
+        for item in ranges:
+            assert item["range"] == "B2"
+            self.row["external_post_id"] = item["values"][0][0]
 
 
 class PersistenceTests(unittest.TestCase):

@@ -115,16 +115,13 @@ jobs:
               --confirm-post --dry-run
           fi
 
-      - name: Real post (Threads only — X は 402 ブロッカーのため手動対応)
+      # This legacy pilot has no queue ID or one-use ledger. Keep the
+      # diagnostic workflow available, but never send directly to Threads.
+      - name: Legacy direct Threads publish is blocked
         if: env.CONFIRM_REAL_POST == 'true' && env.PLATFORM == 'threads'
-        env:
-          PUBLISH_ENABLED: "true"
-          ALLOW_REAL_THREADS_POST: "true"
         run: |
-          python3 scripts/publish_threads_post.py \
-            --account-id "$ACCOUNT_ID" \
-            --text "$POST_TEXT" \
-            --confirm-post --no-dry-run
+          echo "[BLOCKED] THREADS_DIRECT_REAL_POST_UNSUPPORTED_USE_CANONICAL_QUEUE"
+          exit 1
 
       - name: X post note (402 ブロッカー対応)
         if: env.CONFIRM_REAL_POST == 'true' && env.PLATFORM == 'x'

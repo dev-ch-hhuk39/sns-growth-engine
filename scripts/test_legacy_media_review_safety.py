@@ -148,7 +148,12 @@ class LegacyMediaReviewSafetyTests(unittest.TestCase):
             def row_values(self, index):
                 return ["queue_id", "decision_result", "decision_applied_at", "review_status"]
             def batch_update(self, updates, **kwargs):
+                from gspread.utils import a1_to_rowcol
                 self.updates.extend(updates)
+                headers = self.row_values(1)
+                for item in updates:
+                    row, col = a1_to_rowcol(item["range"])
+                    self.rows[row - 2][headers[col - 1]] = item["values"][0][0]
         class FakeClient:
             def __init__(self):
                 self.queue = Worksheet([media_queue()])

@@ -148,52 +148,42 @@ os.environ["ALLOW_REAL_X_POST"] = "false"
 
 
 # ------------------------------------------------------------------ #
-# Test 8-9: XPublisher dry_run=False + HTTP transport モック
+# Test 8-9: Product policy forbids all real X outbound requests
 # ------------------------------------------------------------------ #
 
-print("\n[Test 8-9] XPublisher dry_run=False + HTTP transport モック（実API呼び出しなし）")
-
-# モック認証情報を設定
+print("\n[Test 8-9] X real publishing is disabled by product policy")
 os.environ["PUBLISH_ENABLED"] = "true"
 os.environ["ALLOW_REAL_X_POST"] = "true"
 os.environ["X_PUBLISHER_ENABLED"] = "true"
-os.environ["X_API_KEY"] = "mock_api_key"
-os.environ["X_API_SECRET"] = "mock_api_secret"
-os.environ["X_ACCESS_TOKEN"] = "mock_access_token"
-os.environ["X_ACCESS_TOKEN_SECRET"] = "mock_access_token_secret"
+for key in ("X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"):
+    os.environ[key] = "synthetic-test-value"
 
-mock_response_ok = mock.MagicMock(status_code=201)
-mock_response_ok.json.return_value = {"data": {"id": "9876543210987654321"}}
-with mock.patch("requests.post", return_value=mock_response_ok):
-    r_ok = XPublisher().publish(
-        _TEXT_NORMAL,
-        account=_ACCOUNT, derivative=_DERIV_X, queue_item=_QUEUE, dry_run=False
+with mock.patch("requests.post", side_effect=AssertionError("X network forbidden")) as network:
+    denied = XPublisher().publish(
+        _TEXT_NORMAL, account=_ACCOUNT, derivative=_DERIV_X,
+        queue_item=_QUEUE, dry_run=False,
     )
-    _assert(r_ok.success is True, "tweepy モック: 投稿成功 → success=True", r_ok.message)
-    _assert(r_ok.posted_url is not None, "tweepy モック: posted_url が設定される")
-    _assert("9876543210987654321" in (r_ok.external_post_id or ""),
-            "tweepy モック: external_post_id に tweet_id が入る",
-            r_ok.external_post_id or "")
-    _assert(r_ok.dry_run is False, "tweepy モック: result.dry_run=False")
-    _assert("twitter.com" in (r_ok.posted_url or ""),
-            "tweepy モック: posted_url が twitter.com を含む", r_ok.posted_url or "")
-
-# HTTP error case is mocked at the actual transport boundary.
-mock_response_err = mock.MagicMock(status_code=401, text="unauthorized")
-with mock.patch("requests.post", return_value=mock_response_err):
-    r_err = XPublisher().publish(
-        _TEXT_NORMAL,
-        account=_ACCOUNT, derivative=_DERIV_X, queue_item=_QUEUE, dry_run=False
+    _assert(not denied.success, "X forbidden despite all legacy env flags")
+    _assert("X_REAL_POST_DISABLED_BY_PRODUCT_POLICY" in denied.message,
+            "X product policy reason returned")
+    _assert(denied.posted_url is None, "X no posted URL")
+    _assert(denied.external_post_id is None, "X no external post ID")
+    _assert(network.call_count == 0, "X no network request")
+with mock.patch("requests.post", side_effect=AssertionError("X sink forbidden")) as network:
+    denied_sink = XPublisher()._publish_with_oauth1(
+        text=_TEXT_NORMAL, creds={}, account_id="night_scout",
+        queue_id="q-test-d01", derivative_id="sd-d01",
     )
-    _assert(r_err.success is False, "tweepy エラー → success=False", r_err.message)
-    _assert("POST_FAILED" in r_err.message, "tweepy エラー → POST_FAILED メッセージ")
-    _assert(r_err.posted_url is None, "tweepy エラー → posted_url=None")
+    _assert(not denied_sink.success, "direct X sink forbidden")
+    _assert("X_HTTP_SINK_DISABLED_BY_PRODUCT_POLICY" in denied_sink.message,
+            "X direct sink uses same immutable policy")
+    _assert(network.call_count == 0, "direct X sink no network")
 
-# 認証情報とガードをクリア
 os.environ["PUBLISH_ENABLED"] = "false"
 os.environ["ALLOW_REAL_X_POST"] = "false"
-for _k in ["X_PUBLISHER_ENABLED", "X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]:
-    os.environ.pop(_k, None)
+for key in ("X_PUBLISHER_ENABLED", "X_API_KEY", "X_API_SECRET",
+            "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"):
+    os.environ.pop(key, None)
 
 
 # ------------------------------------------------------------------ #
@@ -205,8 +195,8 @@ print("\n[Test 10-11] factory.py")
 from publishers.factory import _SafetyStopPublisher
 
 pub_factory_x = get_publisher("x", dry_run=False)
-_assert(isinstance(pub_factory_x, XPublisher),
-        "factory.py x dry_run=False → XPublisher", type(pub_factory_x).__name__)
+_assert(isinstance(pub_factory_x, _SafetyStopPublisher),
+        "factory.py x dry_run=False remains SAFETY_STOP", type(pub_factory_x).__name__)
 
 pub_factory_t = get_publisher("threads", dry_run=False)
 _assert(isinstance(pub_factory_t, _SafetyStopPublisher),
@@ -250,74 +240,31 @@ _assert("実 SNS 投稿は行いません" in r13.stdout,
 
 
 # ------------------------------------------------------------------ #
-# Test 14-15: publish_queue.py --confirm-real-post (HTTP transport モック)
+# Test 14-15: Legacy X CLI refuses before Sheets/credential access
 # ------------------------------------------------------------------ #
 
-print("\n[Test 14-15] publish_queue.py --confirm-real-post + HTTP transport モック")
-
+print("\n[Test 14-15] legacy X CLI cannot send or persist real posts")
 sheets_real = _setup_mock(status="READY")
 posted_before = len(sheets_real._posted_results)
-queue_before_status = sheets_real.get_queue_item("q-test-d01")
-status_before = queue_before_status.get("status", "") if queue_before_status else ""
-
-# PUBLISH_ENABLED=true / ALLOW_REAL_X_POST=true に一時設定
-_saved_pe = os.environ.get("PUBLISH_ENABLED", "false")
-_saved_ax = os.environ.get("ALLOW_REAL_X_POST", "false")
-os.environ["PUBLISH_ENABLED"] = "true"
-os.environ["ALLOW_REAL_X_POST"] = "true"
-os.environ["X_PUBLISHER_ENABLED"] = "true"
-os.environ["X_API_KEY"] = "mock_api_key"
-os.environ["X_API_SECRET"] = "mock_api_secret"
-os.environ["X_ACCESS_TOKEN"] = "mock_access_token"
-os.environ["X_ACCESS_TOKEN_SECRET"] = "mock_access_token_secret"
-
-mock_response2 = mock.MagicMock(status_code=201)
-mock_response2.json.return_value = {"data": {"id": "1122334455667788990"}}
-
-# XPublisher を直接呼び出して verify する。HTTP transportは必ずmockする。
-with mock.patch("requests.post", return_value=mock_response2):
-    publisher_real = XPublisher()
-    deriv = sheets_real.find_social_derivative("d-test-d01", "x") or {}
-    acc = sheets_real.get_account("night_scout") or {}
-    q_item = sheets_real.get_queue_item("q-test-d01") or {}
-
-    r_real = publisher_real.publish(
-        str(deriv.get("text", "")),
-        account=acc, derivative=deriv, queue_item=q_item, dry_run=False,
-    )
-
-_assert(r_real.success is True,
-        "XPublisher + tweepy モック: 投稿成功 → success=True", r_real.message)
-_assert(r_real.posted_url is not None,
-        "XPublisher + tweepy モック: posted_url が設定される", str(r_real.posted_url))
-_assert(r_real.external_post_id == "1122334455667788990",
-        "XPublisher + tweepy モック: external_post_id", r_real.external_post_id or "")
-
-# 成功後の状態更新をシミュレート
-sheets_real.update_queue_item(
-    "q-test-d01", status="POSTED",
-    processed_at="2026-05-23T10:00:00Z",
+queue_before = sheets_real.get_queue_item("q-test-d01")["status"]
+env_test = {**os.environ,
+            "PUBLISH_ENABLED": "true", "ALLOW_REAL_X_POST": "true",
+            "X_PUBLISHER_ENABLED": "true"}
+r_real_cli = subprocess.run(
+    [sys.executable, "scripts/publish_queue.py",
+     "--mock", "--account-id", "night_scout", "--platform", "x",
+     "--status", "READY", "--confirm-real-post",
+     "--queue-id", "q-test-d01", "--max-real-posts", "1"],
+    cwd=_V2_ROOT, capture_output=True, text=True, env=env_test,
 )
-sheets_real.save_result(
-    draft_id="d-test-d01", account_id="night_scout",
-    note_url=r_real.posted_url, manual_memo=f"queue_id=q-test-d01",
-)
-
-queue_after = sheets_real.get_queue_item("q-test-d01")
-status_after = queue_after.get("status", "") if queue_after else ""
-posted_after = len(sheets_real._posted_results)
-
-_assert(status_after == "POSTED",
-        "投稿成功後: queue.status=POSTED", f"status={status_after}")
-_assert(posted_after > posted_before,
-        "投稿成功後: posted_results に記録あり",
-        f"before={posted_before} after={posted_after}")
-
-# ガードをクリア
-os.environ["PUBLISH_ENABLED"] = _saved_pe
-os.environ["ALLOW_REAL_X_POST"] = _saved_ax
-for _k in ["X_PUBLISHER_ENABLED", "X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]:
-    os.environ.pop(_k, None)
+_assert(r_real_cli.returncode != 0,
+        "legacy X CLI refuses real posting", str(r_real_cli.returncode))
+_assert("X_REAL_POST_DISABLED_BY_PRODUCT_POLICY" in r_real_cli.stdout,
+        "legacy X CLI reports immutable disable reason")
+_assert(len(sheets_real._posted_results) == posted_before,
+        "no posted_results mutation while X disabled")
+_assert(sheets_real.get_queue_item("q-test-d01")["status"] == queue_before,
+        "no queue status promotion while X disabled")
 
 
 # ------------------------------------------------------------------ #

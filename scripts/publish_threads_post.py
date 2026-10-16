@@ -61,6 +61,13 @@ def main() -> int:
         print("  実投稿は実行していません")
         return 1
 
+    # Legacy direct-text CLI has no canonical READY queue identity, durable
+    # one-use claim, Sheets result verification, or metrics reservation.
+    # Never allow explicit real-mode flags to turn it into a second sender.
+    if not dry_run:
+        print("[BLOCKED] THREADS_DIRECT_REAL_POST_UNSUPPORTED_USE_CANONICAL_QUEUE")
+        return 2
+
     try:
         from src.publishers.threads_publisher import ThreadsPublisher
     except Exception as e:

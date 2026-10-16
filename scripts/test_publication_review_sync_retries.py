@@ -15,9 +15,13 @@ labels = {
     "get_all_records:publication_review:sync_verify",
 }
 checks = [
-    ("all production reads and writes use bounded retry", all(label in text for label in labels)),
-    ("mock-compatible retry wrapper remains available", "def sheets_call(" in text),
-    ("read-after-write remains mandatory", 'plan["read_after_write"]' in text),
+    ("all reads have bounded retry labels", all(label in text for label in labels)),
+    ("mock-compatible read retry wrapper remains", "def sheets_call(" in text),
+    ("non-idempotent writes have no automatic retry", 'sheets_write_once(' in text
+        and 'value_input_option="RAW"' in text),
+    ("no accidental worksheet creation during plan/apply", "._ensure_tab(" not in text),
+    ("read-after-write compares exact contents", 'plan["read_after_write"] = True' in text
+        and "review_sync_readback_mismatch_manual_reconciliation" in text),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

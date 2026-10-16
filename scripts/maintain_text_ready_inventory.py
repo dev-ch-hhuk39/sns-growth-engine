@@ -547,6 +547,14 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--horizon-hours", type=int, default=policy()["text_horizon_hours"])
     parser.add_argument("--evergreen-bank", action="store_true")
+    parser.add_argument(
+        "--reuse-only", action="store_true",
+        help="Approved bank allocations only; never create content or call paid AI",
+    )
+    parser.add_argument(
+        "--max-bank-allocations", type=int, default=2,
+        help="Maximum validated bank allocations per account per run (0 to 6)",
+    )
     args = parser.parse_args()
     if args.apply and (not args.confirm_ready_maintenance or not args.use_sheets):
         print(json.dumps({"status": "BLOCKED", "reason": "apply requires confirmation and --use-sheets"}))
@@ -554,16 +562,33 @@ def main() -> int:
     if args.apply == args.dry_run:
         print(json.dumps({"status": "BLOCKED", "reason": "choose exactly one of --dry-run or --apply"}))
         return 1
+    if args.apply and args.account_id == "all":
+        print(json.dumps({"status": "BLOCKED", "reason": "apply_requires_one_account", "would_post": False}))
+        return 1
+    if not 0 <= args.max_bank_allocations <= 6:
+        print(json.dumps({"status": "BLOCKED", "reason": "max_bank_allocations_must_be_0_to_6", "would_post": False}))
+        return 1
+    if args.reuse_only and (not args.apply or not args.use_sheets or args.evergreen_bank):
+        print(json.dumps({"status": "BLOCKED", "reason": "reuse_only_requires_single_account_apply_without_evergreen_bank", "would_post": False}))
+        return 1
+    if not 1 <= args.horizon_hours <= 168:
+        print(json.dumps({"status": "BLOCKED", "reason": "inventory_horizon_must_be_1_to_168_hours", "would_post": False}))
+        return 1
     requested = PREPARED_ACCOUNTS if args.account_id == "all" else (args.account_id,)
     accounts = [account for account in requested if account in PREPARED_ACCOUNTS]
     queue_rows: list[dict[str, Any]] = []
     if args.use_sheets:
         cfg = get_config()
-        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
+        client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=not args.apply)
         queue_rows = [dict(row) for row in read_records_safely(client, "queue")]
         if args.apply:
-            from sheets_client import TAB_DEFINITIONS
-            client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
+            if args.reuse_only:
+                # Approval is for allocating pre-existing candidates, NOT
+                # auto-creating operational tabs or running migrations.
+                client._ws("evergreen_bank")
+            else:
+                from sheets_client import TAB_DEFINITIONS
+                client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
     results: list[dict[str, Any]] = []
     coverage_by_account: dict[str, dict[str, int]] = {}
     for account_id in accounts:
@@ -573,6 +598,7 @@ def main() -> int:
         now = datetime.now(JST)
         budget_blocked = False
         sheets_quota_blocked = False
+        bank_allocation_count = 0
         snapshot = copy.copy(client) if args.use_sheets else None
         if snapshot is not None:
             enable_readonly_record_cache(snapshot)
@@ -603,12 +629,17 @@ def main() -> int:
                 return updated
 
             def allocate_bank(required: int, already_ready: int) -> list[str]:
+                nonlocal bank_allocation_count
                 if not (args.apply and required > 0):
                     return []
                 from evergreen_inventory import allocate_bank_candidate
                 from generate_threads_ideas_from_references import original_text_similarity_guard
                 recovered: list[str] = []
                 bank_needed = min(required, max(0, reserve_target - already_ready))
+                if args.reuse_only:
+                    bank_needed = min(
+                        bank_needed, max(0, args.max_bank_allocations - bank_allocation_count),
+                    )
                 for _ in range(bank_needed):
                     allocated = allocate_bank_candidate(client, account=account_id, slot=slot, now=now, apply=True,
                         runtime_check=lambda row: hybrid_ai_gate_passed(row, build_source_context(snapshot, row))[0]
@@ -617,6 +648,7 @@ def main() -> int:
                     if allocated["status"] != "ALLOCATED":
                         break
                     recovered.append(allocated["queue_id"])
+                    bank_allocation_count += 1
                 return recovered
 
             if delivery_missing and args.apply and not sheets_quota_blocked:
@@ -633,52 +665,63 @@ def main() -> int:
                 result["delivery_generation_status"] = "SKIPPED_SHEETS_QUOTA"
                 result["delivery_generation_failure_category"] = "SHEETS_QUOTA_EXHAUSTED"
             if delivery_missing and len(ready_rows) == 0 and not sheets_quota_blocked:
-                generated = replenish(
-                    account_id, slot, apply=args.apply, required=1, offline_only=budget_blocked,
-                )
-                result["delivery_generation_status"] = generated.get("status", "")
-                result["delivery_generation_failure_category"] = generated.get("failure_category", "")
-                sheets_quota_blocked = sheets_quota_blocked or (
-                    generated.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
-                )
-                result["delivery_generation_attempts"] = generated.get("attempts", [])
-                result["delivery_recovery_queue_ids"] = list(
-                    result.get("delivery_recovery_queue_ids", [])
-                ) + list(generated.get("queue_ids", []))
-                budget_blocked = budget_blocked or any(
-                    attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
-                    for attempt in generated.get("attempts", [])
-                )
-                queue_rows = refresh_queue_snapshot()
-                ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+                if args.reuse_only:
+                    result["delivery_generation_status"] = "SKIPPED_PAID_GENERATION_REUSE_ONLY"
+                    result["delivery_generation_failure_category"] = "NO_VALIDATED_BANK_CANDIDATE"
+                else:
+                    generated = replenish(
+                        account_id, slot, apply=args.apply, required=1, offline_only=budget_blocked,
+                    )
+                    result["delivery_generation_status"] = generated.get("status", "")
+                    result["delivery_generation_failure_category"] = generated.get("failure_category", "")
+                    sheets_quota_blocked = sheets_quota_blocked or (
+                        generated.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
+                    )
+                    result["delivery_generation_attempts"] = generated.get("attempts", [])
+                    result["delivery_recovery_queue_ids"] = list(
+                        result.get("delivery_recovery_queue_ids", [])
+                    ) + list(generated.get("queue_ids", []))
+                    budget_blocked = budget_blocked or any(
+                        attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
+                        for attempt in generated.get("attempts", [])
+                    )
+                    queue_rows = refresh_queue_snapshot()
+                    ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
 
             # A delivery-safe row is the hard requirement. Additional reserve
             # candidates are attempted only after that row is durably visible.
             reserve_missing = reserve_generation_required(len(ready_rows), reserve_target)
             if reserve_missing and not sheets_quota_blocked:
-                reserve_result = replenish(
-                    account_id, slot, apply=args.apply,
-                    required=reserve_missing, offline_only=budget_blocked,
-                )
-                result["reserve_generation_status"] = reserve_result.get("status", "")
-                result["reserve_generation_failure_category"] = reserve_result.get("failure_category", "")
-                sheets_quota_blocked = sheets_quota_blocked or (
-                    reserve_result.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
-                )
-                result["reserve_generation_attempts"] = reserve_result.get("attempts", [])
-                result["reserve_queue_ids"] = list(reserve_result.get("queue_ids", []))
-                budget_blocked = budget_blocked or any(
-                    attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
-                    for attempt in reserve_result.get("attempts", [])
-                )
-                queue_rows = refresh_queue_snapshot()
-                ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
-                bank_ids = allocate_bank(
-                    max(0, reserve_target - len(ready_rows)), len(ready_rows),
-                )
-                if bank_ids:
-                    result["reserve_queue_ids"] = list(result.get("reserve_queue_ids", [])) + bank_ids
+                if args.reuse_only:
+                    result["reserve_generation_status"] = "BANK_REUSE_ONLY"
+                    bank_ids = allocate_bank(reserve_missing, len(ready_rows))
+                    if bank_ids:
+                        result["reserve_queue_ids"] = bank_ids
+                        queue_rows = refresh_queue_snapshot()
+                else:
+                    reserve_result = replenish(
+                        account_id, slot, apply=args.apply,
+                        required=reserve_missing, offline_only=budget_blocked,
+                    )
+                    result["reserve_generation_status"] = reserve_result.get("status", "")
+                    result["reserve_generation_failure_category"] = reserve_result.get("failure_category", "")
+                    sheets_quota_blocked = sheets_quota_blocked or (
+                        reserve_result.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
+                    )
+                    result["reserve_generation_attempts"] = reserve_result.get("attempts", [])
+                    result["reserve_queue_ids"] = list(reserve_result.get("queue_ids", []))
+                    budget_blocked = budget_blocked or any(
+                        attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
+                        for attempt in reserve_result.get("attempts", [])
+                    )
                     queue_rows = refresh_queue_snapshot()
+                    ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+                    bank_ids = allocate_bank(
+                        max(0, reserve_target - len(ready_rows)), len(ready_rows),
+                    )
+                    if bank_ids:
+                        result["reserve_queue_ids"] = list(result.get("reserve_queue_ids", [])) + bank_ids
+                        queue_rows = refresh_queue_snapshot()
 
             verified_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
             reserve_state = _reserve_status(len(verified_rows), reserve_target)
@@ -693,6 +736,15 @@ def main() -> int:
             )
             results.append(result)
         coverage_by_account[account_id] = {"covered_slots": account_covered, "required_slots": len(slots)}
+        if args.reuse_only:
+            results.append({
+                "account_id": account_id,
+                "stage": "bank_reuse_budget",
+                "allocation_count": bank_allocation_count,
+                "allocation_limit": args.max_bank_allocations,
+                "paid_ai_requests_allowed": False,
+                "would_post": False,
+            })
     delivery_failures = [row for row in results if row.get("delivery_slo") == "FAIL"]
     coverage_total = sum(item["required_slots"] for item in coverage_by_account.values())
     coverage_covered = sum(item["covered_slots"] for item in coverage_by_account.values())

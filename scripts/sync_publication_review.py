@@ -16,86 +16,139 @@ sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 
 from config_loader import get_config  # noqa: E402
 from publication_review_board import is_reviewable, review_row, text  # noqa: E402
-from sheets_client import TAB_DEFINITIONS, _col_letter, make_client  # noqa: E402
+from sheets_client import (  # noqa: E402
+    SheetsMutationOutcomeUnknown, _col_letter, make_client, sheets_write_once,
+)
+from review_board_integrity import (  # noqa: E402
+    ReviewBoardBlocked, index_review_rows, require_review_account_match,
+)
 
 
 def build_rows(queue_rows: list[dict], existing_rows: list[dict]) -> list[dict[str, str]]:
-    existing = {text(row.get("queue_id")): row for row in existing_rows if text(row.get("queue_id"))}
-    return [review_row(queue, existing.get(text(queue.get("queue_id")))) for queue in queue_rows if is_reviewable(queue)]
+    # Never let duplicate queue IDs overwrite one another in a dict,
+    # including across accounts. A reviewer decision belongs to one identity.
+    queues = index_review_rows(queue_rows, source="QUEUE")
+    existing = index_review_rows(existing_rows, source="REVIEW")
+    require_review_account_match(existing, queues)
+    return [
+        review_row(queue, existing.get(queue_id))
+        for queue_id, queue in queues.items()
+        if is_reviewable(queue)
+    ]
 
 
 def sheets_call(client, label: str, operation):
+    """Only SAFE reads get provider retries. Mutations use sheets_write_once."""
     retry = getattr(client, "_call_with_rate_limit_retry", None)
     return retry(label, operation) if callable(retry) else operation()
 
 
 def sync(client, *, apply: bool) -> dict:
-    if not hasattr(client, "_ensure_tab") or not hasattr(client, "_ws"):
+    if not hasattr(client, "_ws"):
         return {"status": "MOCK_PLAN", "would_write": 0, "review_rows": []}
-    client._ensure_tab("queue", TAB_DEFINITIONS["queue"])
-    if apply:
-        client._ensure_tab("publication_review", TAB_DEFINITIONS["publication_review"])
+    if apply and getattr(client, "dry_run", False):
+        raise ReviewBoardBlocked("REVIEW_SYNC_DRY_RUN_CLIENT")
+    # Unlike the previous path, a plan cannot create/resize a tab. Even on
+    # apply, missing schema is an operator task, not implicit migration.
+    queue_ws = client._ws("queue")
+    review_ws = client._ws("publication_review")
     queue_rows = [
-        dict(row)
-        for row in sheets_call(
-            client,
-            "get_all_records:queue:publication_review_sync",
-            lambda: client._ws("queue").get_all_records(),
+        dict(row) for row in sheets_call(
+            client, "get_all_records:queue:publication_review_sync",
+            queue_ws.get_all_records,
         )
     ]
-    try:
-        existing_rows = [
-            dict(row)
-            for row in sheets_call(
-                client,
-                "get_all_records:publication_review:sync_existing",
-                lambda: client._ws("publication_review").get_all_records(),
-            )
-        ]
-    except Exception:
-        existing_rows = []
+    existing_rows = [
+        dict(row) for row in sheets_call(
+            client, "get_all_records:publication_review:sync_existing",
+            review_ws.get_all_records,
+        )
+    ]
     rows = build_rows(queue_rows, existing_rows)
-    plan = {"status": "PLAN_ONLY" if not apply else "APPLIED", "review_count": len(rows), "would_write": len(rows), "review_rows": rows}
+    plan = {
+        "status": "PLAN_ONLY" if not apply else "APPLIED",
+        "review_count": len(rows), "would_write": len(rows),
+        "review_rows": rows,
+    }
     if not apply:
         return plan
-    ws = client._ws("publication_review")
     headers = sheets_call(
-        client,
-        "row_values:publication_review:sync",
-        lambda: ws.row_values(1),
+        client, "row_values:publication_review:sync",
+        lambda: review_ws.row_values(1),
     )
-    by_queue = {text(row.get("queue_id")): index for index, row in enumerate(existing_rows, start=2) if text(row.get("queue_id"))}
+    if (not isinstance(headers, list) or len(headers) != len(set(headers))
+            or not {"queue_id", "account_id", "review_decision", "reviewer_note",
+                    "decision_applied_at", "decision_result"}.issubset(headers)):
+        raise ReviewBoardBlocked("REVIEW_SYNC_SCHEMA_MISSING_OR_AMBIGUOUS")
+    old = index_review_rows(existing_rows, source="REVIEW")
+    by_queue = {
+        text(row.get("queue_id")): index
+        for index, row in enumerate(existing_rows, start=2)
+        if text(row.get("queue_id"))
+    }
+    # Mutable reviewer cells are NEVER rewritten on an existing row.
+    readonly = {"review_decision", "reviewer_note",
+                "decision_applied_at", "decision_result"}
     updates, appends = [], []
+    expected: dict[str, dict[str, str]] = {}
     for row in rows:
         if row["queue_id"] not in by_queue:
             appends.append([row.get(header, "") for header in headers])
+            expected[row["queue_id"]] = {
+                field: row.get(field, "") for field in headers
+            }
             continue
         target_row = by_queue[row["queue_id"]]
-        for field, value in row.items():
-            if field in {"review_decision", "reviewer_note", "decision_applied_at", "decision_result"} or field not in headers:
-                continue
-            updates.append({"range": f"{_col_letter(headers.index(field) + 1)}{target_row}", "values": [[value]]})
+        expected[row["queue_id"]] = {
+            field: value for field, value in row.items()
+            if field in headers and field not in readonly
+        }
+        for field, value in expected[row["queue_id"]].items():
+            updates.append({
+                "range": f"{_col_letter(headers.index(field) + 1)}{target_row}",
+                "values": [[value]],
+            })
+    # Google Sheets writes are non-idempotent and can ACK after a timeout.
+    # Never run the generic 429/5xx retry helper on mutation calls.
     if appends:
-        sheets_call(
-            client,
+        sheets_write_once(
             "append_rows:publication_review:sync",
-            lambda: ws.append_rows(appends, value_input_option="USER_ENTERED"),
+            lambda: review_ws.append_rows(appends, value_input_option="RAW"),
         )
     if updates:
-        sheets_call(
-            client,
+        sheets_write_once(
             "batch_update:publication_review:sync",
-            lambda: ws.batch_update(updates, value_input_option="USER_ENTERED"),
+            lambda: review_ws.batch_update(updates, value_input_option="RAW"),
         )
-    saved = {
-        text(row.get("queue_id"))
-        for row in sheets_call(
-            client,
-            "get_all_records:publication_review:sync_verify",
-            lambda: client._ws("publication_review").get_all_records(),
+    try:
+        after = [
+            dict(row) for row in sheets_call(
+                client, "get_all_records:publication_review:sync_verify",
+                review_ws.get_all_records,
+            )
+        ]
+        saved = index_review_rows(after, source="REVIEW")
+        require_review_account_match(saved, index_review_rows(queue_rows, source="QUEUE"))
+        valid = all(
+            identity in saved and all(
+                text(saved[identity].get(field)) == text(value)
+                for field, value in fields.items()
+            )
+            for identity, fields in expected.items()
         )
-    }
-    plan["read_after_write"] = all(row["queue_id"] in saved for row in rows)
+    except ReviewBoardBlocked:
+        raise SheetsMutationOutcomeUnknown(
+            "review_sync_identity_readback_unknown_manual_reconciliation"
+        ) from None
+    except Exception:
+        raise SheetsMutationOutcomeUnknown(
+            "review_sync_readback_unknown_manual_reconciliation"
+        ) from None
+    if not valid:
+        raise SheetsMutationOutcomeUnknown(
+            "review_sync_readback_mismatch_manual_reconciliation"
+        )
+    plan["read_after_write"] = True
     plan["appended_count"] = len(appends)
     plan["updated_count"] = len(updates)
     return plan
@@ -110,12 +163,14 @@ def main() -> int:
     args = parser.parse_args()
     if args.apply and not args.confirm_review_sync:
         raise SystemExit("BLOCKED: --apply requires --confirm-review-sync")
+    if args.apply and not args.use_sheets:
+        raise SystemExit("BLOCKED: --apply requires --use-sheets (no mock success)")
     client = make_client(get_config(), dry_run=not args.apply, force_mock=not args.use_sheets)
     result = sync(client, apply=args.apply)
     if args.output:
         args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: value for key, value in result.items() if key != "review_rows"}, ensure_ascii=False))
-    return 0
+    return 2 if args.apply and result.get("status") != "APPLIED" else 0
 
 
 if __name__ == "__main__":

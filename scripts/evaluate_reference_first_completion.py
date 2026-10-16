@@ -314,8 +314,15 @@ def evaluate(
                 "final_public_post_validator",
                 "delivery_idempotency_key",
                 "verify_posted_result_persistence",
-                "build_metric_collection_jobs",
+                "reserve_metrics",
+                'result["verified_count"]',
                 "media_required",
+            ),
+            "scripts/metrics_reservations.py": (
+                "build_metric_collection_jobs",
+                "read_reservation_plan",
+                'if verified["missing_count"]',
+                "metric_reservation_outcome_unknown_manual_reconciliation",
             ),
             "src/publishers/threads_publisher.py": (
                 '"TEXT"',

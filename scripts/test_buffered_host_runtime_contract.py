@@ -14,15 +14,18 @@ assert "flock -n -E 75" in launcher
 assert 'flock -w 240 "$sheets_lock_file"' in launcher
 assert "PRODUCTION_TRIGGER" in launcher
 assert "PUBLISH_ENABLED=true ALLOW_REAL_THREADS_POST=true" in launcher
-assert 'posting_enabled="${BUFFERED_POSTING_ENABLED:-true}"' in launcher
+assert 'posting_enabled="${BUFFERED_POSTING_ENABLED:-false}"' in launcher
 assert "[SKIPPED] buffered production posting is disabled" in launcher
-assert "ALLOW_MEDIA_POSTS=true ALLOW_REAL_THREADS_VIDEO_POST=true" in launcher
-assert "ALLOW_THREADS_CAROUSEL=true ALLOW_THREADS_MIXED_CAROUSEL=false" in launcher
+assert "ALLOW_MEDIA_POSTS=false ALLOW_REAL_THREADS_VIDEO_POST=false" in launcher
+assert "ALLOW_THREADS_CAROUSEL=false ALLOW_THREADS_MIXED_CAROUSEL=false" in launcher
 assert "ALLOW_REAL_X_POST=false" in launcher
 assert "BEAUTY_PRODUCTION_ENABLED=false" in launcher
 assert '"$account" == "beauty_account"' in launcher
 assert "BEAUTY_ACTIVATION_APPROVED" in launcher
 assert "BEAUTY_PRODUCTION_ENABLED=true" in launcher
+assert "P0_ONCE_RUNTIME_GATE_DISABLED" in launcher
+assert "P0_ONCE_TEXT_ONLY_ACCOUNT_SCOPE" in launcher
+assert "validate_p0_once_runtime.py" in launcher
 assert "--confirm-reconcile" in launcher
 assert "runtime.env" in launcher and "permissions must be 0600" in launcher
 assert "reconcile_due_production_slots.py" in launcher

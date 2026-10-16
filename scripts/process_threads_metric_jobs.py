@@ -66,6 +66,8 @@ FATAL_PREFLIGHT_ERRORS = {
     "posted_result_missing",
     "posted_result_platform_invalid",
     "posted_result_not_posted",
+    "posted_result_account_mismatch",
+    "posted_result_ambiguous",
 }
 
 RETRYABLE_PREFLIGHT_ERRORS = {
@@ -129,6 +131,8 @@ def classify_due_work(
     now: datetime | None = None,
 ) -> dict[str, list[dict[str, Any]]]:
     """Classify due jobs into collect, cancel, or deferred work."""
+
+    result_counts = Counter(str(row.get("result_id", "")) for row in posted_results)
 
     posted_by_result = {
         str(
@@ -206,6 +210,13 @@ def classify_due_work(
                 result
             )
         )
+
+        if result_counts[job_result_id] > 1:
+            preflight_error = "posted_result_ambiguous"
+        elif result is not None and (
+            not job_account or job_account != str(result.get("account_id", ""))
+        ):
+            preflight_error = "posted_result_account_mismatch"
 
         lifecycle_row = {
             "job_id": str(
@@ -1272,6 +1283,34 @@ def main() -> int:
             )
         )
 
+        return 1
+
+    if args.apply and args.dry_run:
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "dry_run_and_apply_are_mutually_exclusive",
+            "would_write": False,
+        }))
+        return 1
+
+    # Validate ALL write authorizations before loading Google credentials.
+    # load_state(apply=True) constructs a write-capable Sheets client.
+    if args.apply and not args.confirm_metrics:
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "apply_requires_confirm_metrics",
+            "would_write": False,
+        }))
+        return 1
+
+    # One account at a time; the host entrypoint shares the Sheets lock.
+    # An all-accounts read-only plan is still supported.
+    if args.apply and args.account_id == "all":
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "apply_requires_one_account",
+            "would_write": False,
+        }))
         return 1
 
     if not args.use_sheets:

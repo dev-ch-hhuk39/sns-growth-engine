@@ -180,7 +180,7 @@ class BufferedReconcilerTests(unittest.TestCase):
             gate.return_value.returncode = 0
             result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"], now=self.now,
                                       slot_id=self.slot["slot_id"], apply=True)
-        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "FAILED")
         self.assertEqual(result["results"][0]["status"], "PRE_PUBLISH_FAILED")
         self.assertFalse(release.call_args.args[2]["publish_attempted"])
         save.assert_not_called()
@@ -201,7 +201,7 @@ class BufferedReconcilerTests(unittest.TestCase):
             gate.return_value.returncode = 0
             result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"], now=self.now,
                                       slot_id=self.slot["slot_id"], apply=True)
-        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["status"], "FAILED")
         self.assertEqual(result["results"][0]["status"], "DELIVERY_FAILED_CONFIRMED")
         self.assertEqual(release.call_args.args[2], confirmed)
         save.assert_not_called()
@@ -222,12 +222,15 @@ class BufferedReconcilerTests(unittest.TestCase):
             publish_calls.append(row['queue_id'])
             tables['queue'][0]['status'] = 'POSTED'
             post = {"queue_id": row['queue_id'], "result_id": "r1", "account_id": row['account_id'],
+                    "platform": "threads", "status": "POSTED",
                     "posted_text": row['public_post_text'], "real_post": "true",
                     "external_post_id": "123456", "post_url": "https://www.threads.com/@test/post/example",
                     "verification_status": "READ_AFTER_WRITE_PASS", "posted_at": self.now.isoformat()}
             tables['posted_results'].append(post)
-            tables['metrics_collection_jobs'] = [{"result_id": "r1", "account_id": row['account_id'],
-                                                  "window_hours": str(window)} for window in (24, 72, 168)]
+            from metrics_collection_schedule import build_metric_collection_jobs
+            tables['metrics_collection_jobs'] = build_metric_collection_jobs(
+                [{**post, 'platform': 'threads', 'status': 'POSTED'}], [], now=self.now,
+            )
             tables['media_post_results'] = [{"result_id": "r1", "queue_id": row['queue_id'],
                                              "account_id": row['account_id'], "status": "POSTED",
                                              "post_url": post["post_url"]}]
@@ -262,6 +265,60 @@ class BufferedReconcilerTests(unittest.TestCase):
         with patch.object(runner, 'records', side_effect=lambda _, name: tables[name]), \
              self.assertRaisesRegex(RuntimeError, 'DELIVERY_METRICS_UNVERIFIED'):
             runner.verify_delivery(None, self.row, {'result_id': 'r'})
+
+    def test_metrics_identity_conflicts_block_verified_delivery(self):
+        from metrics_collection_schedule import build_metric_collection_jobs
+        post = {"queue_id": "q", "account_id": "night_scout", "result_id": "r1",
+                "platform": "threads", "status": "POSTED",
+                "posted_text": self.row["public_post_text"], "real_post": "true",
+                "verification_status": "READ_AFTER_WRITE_PASS", "external_post_id": "123",
+                "posted_at": self.now.isoformat(),
+                "post_url": "https://www.threads.com/@test/post/example"}
+        jobs = build_metric_collection_jobs([post], [], now=self.now)
+        for bad in (
+            [{**jobs[0], "account_id": "liver_manager"}, *jobs[1:]],
+            [{**jobs[0], "post_url": "https://example.com/other"}, *jobs[1:]],
+            [{**jobs[0], "job_id": "wrong"}, *jobs[1:]],
+            [*jobs, dict(jobs[0])],
+        ):
+            tables = {"posted_results": [post],
+                      "queue": [{**self.row, "status": "POSTED"}],
+                      "metrics_collection_jobs": bad}
+            with self.subTest(bad=bad), patch.object(
+                runner, "records", side_effect=lambda _, name: tables[name]
+            ), self.assertRaisesRegex(RuntimeError, "DELIVERY_METRICS_UNVERIFIED"):
+                runner.verify_delivery(None, self.row, {"result_id": "r1"})
+
+    def test_apply_rechecks_posted_history_for_each_due_slot(self):
+        slots = [
+            {"account_id": "night_scout", "slot_id": "ns_1600_original",
+             "business_date_jst": "2026-09-09", "post_type": "original_text",
+             "publishable": True, "reason": "DUE"},
+            {"account_id": "night_scout", "slot_id": "ns_1400_reference",
+             "business_date_jst": "2026-09-09", "post_type": "reference_text",
+             "publishable": True, "reason": "DUE"},
+        ]
+        tables = {"queue": [], "posted_results": [], "content_slot_runs": [],
+                  "evergreen_bank": []}
+        observed = []
+        def check_limit(account, posts, now):
+            observed.append(len(posts))
+            if not posts:
+                tables["posted_results"].append({"account_id": account, "real_post": "true",
+                                                  "posted_at": now.isoformat()})
+                return "COOLDOWN_ACTIVE"
+            return "COOLDOWN_ACTIVE"
+        with patch.object(runner, "policy", return_value={**policy(), "activation_enabled": True}), \
+             patch.object(runner, "due_slots", return_value=slots), \
+             patch.object(runner, "records", side_effect=lambda _, name: list(tables[name])), \
+             patch.object(runner, "delivery_limit", side_effect=check_limit), \
+             patch.object(runner, "process_one") as publisher:
+            result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"],
+                                      now=self.now, apply=True)
+        self.assertEqual(observed, [0, 1])
+        self.assertEqual([r["reason"] for r in result["results"]],
+                         ["COOLDOWN_ACTIVE", "COOLDOWN_ACTIVE"])
+        publisher.assert_not_called()
 
     def test_bank_batch_has_constant_reads_and_is_idempotent(self):
         from copy import deepcopy

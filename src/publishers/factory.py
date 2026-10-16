@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from .base import BasePublisher, PublishResult
 from .dry_run import DryRunPublisher
+from .active_platform_policy import allowed_for_real_post
 
 SUPPORTED_PLATFORMS = {"x", "threads", "note"}
 
@@ -42,7 +43,11 @@ def get_publisher(platform: str, dry_run: bool = True) -> BasePublisher:
     if dry_run:
         return DryRunPublisher()
 
-    # Phase 3-D: XPublisher が安全ガードを担う
+    # X stays non-postable even with every historical .env switch enabled.
+    if plat == "x" and not allowed_for_real_post("x"):
+        return _SafetyStopPublisher(platform="x")
+
+    # Preserved legacy adapter; requires a future reviewed product change.
     if plat == "x":
         from .x_publisher import XPublisher
         return XPublisher()
@@ -87,8 +92,13 @@ class _SafetyStopPublisher(BasePublisher):
             posted_url=None,
             external_post_id=None,
             message=(
-                f"SAFETY_STOP: factory.py は Phase 3-C では本番 Publisher を返しません。"
-                f" platform={self._platform!r} queue_id={queue_id} account={account_id}"
-                f" → Phase 3-D 以降に factory.py の XPublisher コメントを外してください。"
+                (
+                    "SAFETY_STOP: X_REAL_POST_DISABLED_BY_PRODUCT_POLICY"
+                    if self._platform == "x"
+                    else (
+                        "SAFETY_STOP: no authorized live publisher for this platform"
+                        f" platform={self._platform!r}"
+                    )
+                )
             ),
         )

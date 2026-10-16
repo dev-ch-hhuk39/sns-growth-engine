@@ -1,3 +1,134 @@
+## P0 operational publisher one-use ledger (local code only, 2026-10-14)
+
+- Optional disabled-by-default one-use SQLite barrier is integrated into
+  scripts/process_threads_queue.py around a real Threads TEXT provider call.
+- Claims precede the provider call; provider ACK is journaled before Sheets
+  post-result writes; final VERIFICATION requires a matching persisted queue
+  and posted result. Ambiguous outcomes never permit blind resends.
+- This is NOT a canonical queue migration, external writer freeze, release
+  permit, or automatic live posting. Do NOT set SNS_P0_ONCE_GATE_ENABLED in
+  production until an operator has proved single-host, sole-writer custody,
+  rights and backup/restore readiness. Existing disabled flags stay OFF.
+- Docs: docs/P0_ACTUAL_PROVIDER_ONCE_BARRIER_20261014.md
+
+## Phase 5B-6AK/AL — P0 one-command release rehearsal (2026-10-14 JST)
+
+- Combines existing Phase 6AH metadata preflight, 6AI/AJ two independently timestamped captures and SQLite memory-only shadow parity with the existing **blocked** P0 SQLite CAS rehearsal. A stale or changed capture cannot proceed to a temporary import or synthetic claim.
+- Every READY text candidate is only synthetically observed/claimed/quarantined, with retry refusal. All operational capabilities remain false. A local rehearsal PASS means source-unattested metadata was stable, **not** actual production cutover, media authorization or a posting canary.
+- Legacy P0/all Sheets writer call counts are read from the frozen live-repo AST inventory. Real legacy writers, external schedulers, OAuth/ACL and signed source evidence remain unverified and not migrated.
+- Acceptance criteria, operational blockers and one-command offline verification: docs/PHASE5B6AK_AL_P0_RELEASE_ACCEPTANCE.md. No GitHub Actions, Codex, public push, VPS/Google/SNS writes or deployment.
+
+## 2026-10-13 - Phase 5B-6AF/AG: blocked SQLite one-use CAS rehearsal for P0
+
+- Built explicit migration 0014 and scripts/p0_queue_cas_rehearsal.py: SQLite BEGIN IMMEDIATE, global queue IDs, exact revision/event SHA comparison, append-only hash-chain audit, strict account/Threads scope and finite observation freshness. An observed candidate can be claimed once, then quarantined forever after unknown outcome; neither claimed nor expired observations can enable real publishing.
+- Added scripts/rehearse_p0_queue_cas.py --demo, which creates only a temporary synthetic DB, verifies replay refusal, reports the untouched current legacy Sheets P0 callsite count and always returns CUTOVER_BLOCKED (exit 2). It has no production apply or network path. Report output is owner-only and never overwrites existing files.
+- New adversarial 16-test local suite checks two independent competing connections, stale digest/version, account crossing, journal tamper, event immutability, crash rollback and forbidden authorization; included in local focused QA.
+- This is an OFFLINE foundation, not a production cutover, durable authenticated source truth, actual shared-process publisher lease or real Google/SNS posting. All existing live producer, media-rights and VPS restrictions remain in force.
+- Details and outstanding owner/ops stages: docs/PHASE5B6AF_AG_P0_SQLITE_CAS_REHEARSAL_20261013.md. Final QA count and Git SHA to be appended after verified full run.
+- **Verified local Phase 6AF/AG QA:** 989/989 offline repository scripts PASS; focused checks, workflow static, Ruff, compile, diff and gitleaks PASS. Synthetic SQLite claims do NOT authorize publishing or migrate the legacy operational P0 writers.
+
+## 2026-10-13 — Phase 5B-6AC/AD/AE: P0 publisher identity and durable POSTED boundary (Mac local-only)
+
+- P0 process_threads_queue.py now rejects global queue ID collisions before candidate selection; draft and social derivative lookups use account-owned unique identities, permitting explicit distinct Night/Liver records with the same draft ID but refusing conflicting/unowned matches. Duplicate checks no longer conflate separately owned draft/derivative posts.
+- Per-publish Sheets mutation checks all queue identity fields, refuses terminal-state regression, requires PROCESSING before POSTED, verifies fresh current headers and all submitted operational fields. PROCESSING lock readback compares source/media/slot/content identity in addition to text; no stale media can be substituted after approval.
+- publisher_delivery_contract.py rejects duplicate result IDs, queue IDs and external post IDs, including across accounts; the result verification marker is re-read with the same unique evidence. A successful provider result without both post ID and permalink is PUBLISH_OUTCOME_UNVERIFIED, not POSTED; an unknown/missing queue POSTED finalization is POSTED_SAVE_UNVERIFIED, not a successful run or a replay.
+- --dry-run now constructs a write-disabled Sheets client at transport initialization. All new tests use synthetic data and patched provider objects; no live publishing, real Sheets mutation, SQLite authority migration or credential access.
+- New offline adversarial test suite and expanded delivery contract checks added to Mac focused QA. Detailed design, operator recovery and limitations: docs/PHASE5B6AC_AE_P0_PUBLISHER_IDENTITY_AND_DURABLE_FINALIZATION_20261013.md.
+- **Final Mac local QA Phase 6AC/AD/AE:** 988/988 offline repository scripts PASS, workflow static checks, Ruff, Python compile, diff checks and gitleaks PASS. Initial old cache assertion updated to require fresh headers; final full rerun passed. No real posting, Sheets mutation or SQLite operational migration.
+- Production source of truth is still Sheets; no distributed CAS or one-use claim was added. Protected SQLite is NOT promoted to production. Do not claim genuine canary/rights/24h/72h/168h acceptance or bypass manual reconciliation.
+
+## 2026-10-13 — Phase 5B-6AA/AB: permanent X outbound stop and legacy writer workstreams (Mac-only)
+
+- Product scope mismatch closed: GOAL.md forbids live X publication, but legacy X publish/factory/HTTP sink remained env-enableable. New immutable source-level platform policy refuses real X at the CLI, factory, public publisher and low-level HTTP sink even when all old flags and OAuth variables are present; X dry-run/reference research remains available.
+- The historic Phase 3D success simulation now enforces a stronger **zero-X-network and zero-result-write** contract; no disabled publishing path is incorrectly represented as deployed. Offline X safety and 6A interlock tests verify fail-closed operation.
+- New read-only and never-authorizing Sheets migration workstream plan: scripts/plan_legacy_writer_cutover.py categorizes the frozen 6H AST writer inventory into P0/P1/P2, tracks every observed route as NOT_MIGRATED, rejects baseline drift, and always exits CUTOVER_BLOCKED. It cannot import a production approval or alter SQLite/Sheets.
+- Source/code/limitations and exact offline invocation: docs/PHASE5B6AA_AB_X_SCOPE_AND_WRITER_CUTOVER_PLAN_20261013.md. Tests included in the local focused gate; the full gate and current SHA are recorded separately after verification.
+- **Final Mac offline QA:** 987/987 repository scripts PASS; local workflow static checks, Ruff, Python compile, Git diff and gitleaks PASS. The initial Phase3C mock expectation was corrected to enforce disabled X; final full rerun PASS. Current 6H inventory: 68 files / 165 method callsites, all NOT_MIGRATED.
+- Real Sheets/SQLite cutover, legacy writer disablement, one-use publishing lease, authenticated service identities, canaries, rights and 24h/72h/168h observations remain **unimplemented/not verified**. No Codex, Actions CI, production Google/SNS calls, shared VPS operations, public pushes, or deployments.
+
+## 2026-10-13 — Phase 5B-6Y/Z: queue identity and stale-review authorization stop (Mac local-only)
+
+- Hardened real and mock Sheets queue identity: global unique reader semantics, immutable account/route/draft/slot keys, no terminal-to-READY reopening; bulk changes now preflight every target and nonempty writable fields before mutation. No provider-call retry or publish gate was weakened.
+- Review sync and decision apply now reject ambiguous queue/review identities and cross-account conflicts; plans cannot mutate schema, and apply requires both --confirm-* and --use-sheets. Non-idempotent Sheets review writes are single attempt with exact post-write row verification and sanitized unknown-outcome stop.
+- A decision on older public text/source/media cannot be carried into newly modified material. Human decision and note are retained, with STALE_REVIEW_RECHECK_REQUIRED requiring explicit clear, fresh sync and new decision. Protected-media READY remains blocked.
+- Offline adversarial tests added; full-run outcomes must be independently verified before claiming release acceptance. Detailed contract: docs/PHASE5B6Y_Z_QUEUE_REVIEW_CONSISTENCY_20261013.md.
+- **Final Mac local QA Phase 6Y/Z:** 986/986 offline repository scripts PASS; workflow static safety, Ruff, Python compile, staged/unstaged diff and gitleaks PASS. No real provider probe, source-of-truth cutover or deployment.
+- **Still missing:** actual Sheets/SQLite one-authority migration, provider IdP/ACL/backup, approved canaries, media publication and measured production feedback. No GitHub Actions, Codex, public push, shared VPS, Google production writes or SNS posts in this batch.
+
+## 2026-10-13 — Phase 5B-6W/X: queue writer unique identity and offline cutover audit
+
+- Operational queue append is now one RAW attempt with strict unique queue identity and verified readback; lost ACKs and mismatches fail closed without automatic replay. Both real/mock queue lookups are account-scoped in the queue builder, and single-row updates reject duplicate global queue IDs.
+- The Threads publisher Sheets updater also verifies exact unique target, requires READY before PROCESSING, and confirms persisted mutation fields after one RAW write. Existing media interlocks, account identity, publisher no-retry and metrics reservations remain intact.
+- Introduced read-only cutover audit comparing a strict untrusted, minimal metadata snapshot against existing protected SQLite shadow/managed/outbox event chains, with legacy AST inventory validation. Reports contain hashed identities and static codes only; cutover remains unconditionally unauthorized. No live source, ACL, MFA, migration or posting claim.
+- New synthetic/adversarial regressions added to focused local QA; scope, commands and remaining real operational requirements: docs/PHASE5B6W_X_QUEUE_AUTHORITY_AND_OFFLINE_CUTOVER_AUDIT.md.
+- **Mac-local final Phase 6W/X QA:** 984/984 offline repository scripts PASS;
+  workflow static safety, Ruff, compile, diff and gitleaks PASS. The initial
+  identifier test mock was corrected to support unique lookup/readback;
+  final full rerun passed without relaxing source or media safety gates.
+  Source-of-truth production cutover remains unauthorized and unperformed.
+- Complete authoritative migration remains blocked on verified identity/ACL, source evidence, writer ownership, backup/restore, operator canary and signed rights. Do not infer production acceptance from offline parity.
+
+## 2026-10-13 — operational Sheets write-once/readback and isolated scheduled READY (Mac local-only)
+
+- High-priority source changes: publisher and AUTO_READY queue updates/posted-result appends now avoid automatic mutation retry after uncertain Google outcomes; single/bulk queue updates are verified against fresh server-side values and preserve RAW IDs/strings. AUTO_READY approval success logs are emitted only after the writer succeeds.
+- Bulk queue READY migration safety: exact identity, no duplicate request IDs or duplicated physical queue rows, current WAITING_REVIEW source required, post-write field readback. Multiple chunks are not atomic; unknown outcomes must be reconciled manually. Unreviewed legacy writers and protected SQLite source of truth **remain separate**.
+- Isolated temporary JSON output for each exact scheduled hybrid READY invocation; missing, corrupt, mismatched account/slot/queue output fails closed. Intended slots with confirmed no post or a pre-publish failure now produce overall FAILED, not false PASS.
+- Added adversarial tests and the changed reconciler/6A tests to the Mac-only focused quality gate; full offline suite evidence and new local SHA should be read from the latest Git history/report, not assumed from this entry.
+- **Final local offline QA:** 982/982 repository scripts PASS; static workflows, Ruff, compile, diff and gitleaks PASS. An initial MagicMock fixture mismatch was corrected without relaxing production guards. No external probe or live publishing was run.
+- Detailed contract, limits, read-only Ops reconciliation and incomplete true database cutover: `docs/OPERATIONAL_QUEUE_WRITE_SAFETY_AND_READY_ISOLATION_20261013.md`. No provider/API, public GitHub, Actions, deployment or production mutation executed here.
+
+## 2026-10-13 — bounded reconciler freshness and metrics identity (Mac local-only)
+
+- Updated `scripts/reconcile_due_production_slots.py`: on apply, re-read same-account queue, persisted posts and slot-run status immediately before each due-slot decision; a slot closed by another actor is skipped rather than re-published. This closes stale in-invocation daily-cap/cooldown checks. Existing publisher and actual posting approval gates remain unchanged.
+- Reused `metrics_reservations.plan_reservations` at posted-result reconciliation. Three reservation rows are not enough: each 24/72/168-hour reservation must match the exact account, result, job ID, permalink, due time, and allowed status; duplicate/foreign identities fail closed.
+- The reconciler CLI now constructs a read-only SheetsClient on `--dry-run`, and existing `--apply --confirm-reconcile` behavior is maintained. No live provider access, new scheduler, AI generation, or media interlock change.
+- Expanded `scripts/test_buffered_reconciler.py` with duplicate/mismatched job evidence and successive-slot freshness regression. Focused test: 24/24 PASS. Full offline QA recorded separately if successful.
+- **Status: source code/local tests only.** GitHub public push remains blocked pending independent approval; no deployment, production Google/Threads call, or timed observation occurred. Remaining: the actual SQLite/Sheets cutover, signed IdP and Google access, allowed media publishing, and real Night/Liver posting/metric/PDCA evidence via Ops.
+
+## 2026-10-13 Phase 5B-6T/U/V — bundled measured-strategy persistence and zero-paid-AI READY reuse (local source only)
+
+- Extended the existing Action-free `scripts/run_buffered_metrics_aftercare_host.sh` rather than creating another scheduler: opt-in **`--with-strategy-apply`** and **`--with-ready-bank-reuse`**, with `--max-bank-allocations 0..6` (default 2), on exact Night/Liver accounts **only under `--apply --confirm-metrics --trigger manual`**. Separate operator-managed private `runtime.env` flags `AFTERCARE_STRATEGY_WRITE_APPROVED` and `AFTERCARE_READY_BANK_REUSE_APPROVED` plus the prior protected metrics and disabled-Actions attestations are mandatory. Cron cannot silently enable either optional write path.
+- Hardened `scripts/run_growth_attribution_cycle.py`: require measured observations, bound total output rows (host=120), enforce exact account and unique IDs and pre-existing output tabs, skip identical evidence/strategies, use `RAW` cell updates (no formula injection), read-after-write verification, and block unknown/partial delivery without automatic retry. No operational `queue`/`posted_results` schema change by this feedback writer. Provider updates are **not atomic across tabs or SQLite**.
+- `scripts/maintain_text_ready_inventory.py --reuse-only --max-bank-allocations 2` invokes **only already approved evergreen-bank candidate allocation** subject to existing slot/rights checks; it cannot call `replenish()`, `replenish_bank()`, Gemini or paid content generation, cannot auto-create the bank tab, and does not post. Global one-account allocation cap 0..6 and no-candidate failure are explicit.
+- Added synthetic/adversarial tests `scripts/test_measured_feedback_write_safety.py`, expanded offline host tests `scripts/test_buffered_metrics_aftercare_host.py` and one-command focused Mac QA. All actual provider, cron, GitHub CI and shared VPS operations remain outside this chat.
+- Detailed read-only inspection, owner/ops/manual-canary and uncertain-result recovery requirements: `docs/PHASE5B6TUV_APPROVED_MEASURED_FEEDBACK_AND_BANK_REUSE.md`. Real account permissions, Actions disablement, operational migration, durable unknown-outcome audit and source-of-truth cutover are still incomplete.
+- **This is Mac-local development, NOT a deployed release, live SNS posting, production Sheets write or GitHub main merge**. Public GitHub export was previously withheld pending approval; do not bypass that check.
+
+## 2026-10-13 Phase 5B-6R/6S — bundled Action-free post-metrics feedback (local only)
+
+- Extended the existing `run_buffered_metrics_aftercare_host.sh` with optional `--with-feedback-preview`: after the bounded 24/72/168-hour metrics job, run the **existing** measured-attribution and next-text READY-inventory CLIs strictly in `--dry-run --use-sheets` mode, under continuous shared Sheets and per-account locks. The pure `--plan` branch stays completely offline; Beauty remains blocked in this host. No new cron/worker/GitHub Actions.
+- Hardened `run_growth_attribution_cycle.py`: missing `--confirm-attribution`, `--apply --dry-run`, `--account-id all` apply, or inconsistent JSON/Sheet sources refuse access **before** a write-capable Sheets client is opened. `maintain_text_ready_inventory.py` blocks all-account apply and invalid horizon before I/O, and uses read-only `SheetsClient(dry_run=True)` on preview.
+- Added `test_action_free_feedback_cli_gates.py`, expanded host offline tests, and added feature attribution/READY contract checks to the focused local QA command. See `docs/PHASE5B6Q_ACTIONS_FREE_METRICS_AFTERCARE.md` for the bundled usage, guarantees and important caveat: strategy persistence, queue mutation, paid generation and real production metrics are **not** enabled by this preview.
+- GitHub Actions CI/Codex **not used**; no public GitHub push, real provider calls, common VPS changes, credential bootstrap, paid AI or actual SNS posting. Private/local Git validation and Ops-only deployment policy remain.
+
+## 2026-10-13 Phase 5B-6Q — Action-free bounded Threads metrics aftercare (development only)
+
+- Added `scripts/run_buffered_metrics_aftercare_host.sh`, an isolated **VPS cron/manual code entrypoint** invoking the existing 24/72/168-hour Threads metric worker without GitHub Actions. Default `--plan` is 100% offline and read-only; real `--dry-run --confirm-readonly` requires a protected VPS runtime and can read Sheets. No VPS schedule installed and no provider API invoked in development.
+- A possible later `--apply --confirm-metrics` requires both `AFTERCARE_METRICS_WRITE_APPROVED=true` and `AFTERCARE_ACTIONS_DISABLED_ATTESTED=true` from protected 0600 `runtime.env`, exact immutable current release, common deploy lock, shared Sheets quota lock and per-account lock. Only `night_scout` and `liver_manager`; Beauty remains blocked. The script cannot post, create media or use Gemini. Production activation requires separate owner/VPS Ops approval and disabling the old scheduled Actions aftercare worker to prevent duplicate writes.
+- Hardened existing `scripts/process_threads_metric_jobs.py` CLI: `--apply` lacking explicit confirmation, conflicting dry-run/apply flags, and broad `--account-id all` apply now fail **before write-capable SheetsClient initialization**. Read-only all-account planning remains available.
+- New offline tests `scripts/test_buffered_metrics_aftercare_host.py` and `scripts/test_metrics_aftercare_apply_preflight.py`, and both added to the Mac-only focused quality gate. Review `docs/PHASE5B6Q_ACTIONS_FREE_METRICS_AFTERCARE.md` for precise operations handoff, prerequisites, rollback and remaining PDCA integration.
+- **No GitHub Actions CI, GitHub push, common VPS access, cron change, real Sheets write, Insights call, SNS post or production deployment performed.** Local-only PR gate and source-of-truth restrictions remain in force.
+
+## 2026-10-13 owner directive — Mac-local QA only, ChatGPT takeover (no Codex, no GitHub Actions)
+
+- ChatGPT took over Codex's **local committed** metrics/reservation improvement `9b9891ee7c20dccb8af3ea17b8ead0d7e32aee01`, based on verified main `57ef785118ca9c34679723d94151435ce2f30dca`. Codex's 4 uncommitted docs remain untouched. This is NOT a merged PR or deployed change.
+- New isolated worktree: `v2-chatgpt-local-noactions-20261013`, branch `chatgpt/sns-completion-local-noactions-20261013`. Existing root worktree stays untouched.
+- **Do not run GitHub Actions CI or GitHub Actions dispatch, and do not use Codex.** Use `python3 scripts/run_local_quality_gate.py --mode focused` for iteration and `--mode full` for local offline release checks. Static workflow lint is not an Actions run.
+- Public GitHub repository: prior public code export from Codex was stopped by an explicit approval check. Do not bypass that safeguard through an alternative remote write; no PR/remote merge or deploy is claimed by this takeover. Existing GitHub Actions workflows were **not** changed.
+- No shared VPS access or production cron/deploy/Sheets/API/SNS writes. User performs/coordinates deployment separately. Historical `docs/goal-status.json` (July 2026) is stale and not a valid current progress percentage.
+- Policy, exact local commands, code-release restrictions and remaining critical path: `docs/LOCAL_NO_ACTIONS_DEVELOPMENT_20261013.md`.
+
+## 2026-10-13 Codex — verified metrics reservations and account-safe collection
+
+- Branch `codex/sns-growth-engine-completion-20261012`, base `57ef785` / PR #393. Dedicated worktree only.
+- Implemented one-result 24h/72h/168h reservation inspection and gated repair in the existing scheduling CLI; post-success worker now returns all three readback-verified reservations, including preexisting rows. A bounded RAW append has no in-call retry; unknown outcomes require manual reconciliation. Sheets has no cross-process CAS and the repair CLI is not an automatic retry service.
+- Collector rejects foreign-account/ambiguous result bindings before Insights collection. Completed/failed reservations are preserved; cancelled/conflicting/duplicate rows are not silently reset. No SNS, queue, account activation, media authorization or production configuration changes.
+- Fixed a date-selected Liver first-viewer fallback body that lacked explicit reasoning/audience context; nine framing combinations now pass the unchanged persona/public-text validator. Added 18 offline lifecycle/CLI tests and a CI focused entry. Reviewed one new metrics-only Sheets append callsite. Completion evaluator now follows the shared reservation writer and checks its readback contract; acceptance thresholds/assertions unchanged.
+- Baseline: 973/973 repository scripts PASS; first post-change run 973/974 (stale evaluator file marker); second run exposed the preexisting date-dependent fallback failure. Both focused regressions now PASS; **final full rerun 975/975 PASS**. Workflow safety 527/527, IdP suite 241, focused tests 18, Ruff fatal rules, compileall and diff checks PASS.
+- Audit, four-way feature classification, critical path, scope conflicts, operations prerequisites/commands/rollback: `docs/COMPLETION_AUDIT_20261012.md`.
+- No production access/migration/deployment/Sheets write/post/paid API. `docs/goal-status.json` unchanged. Real IdP, ACL evidence, source-authority cutover and media publication acceptance remain external/integration work.
+- GitHub access restored on continuation via approved CLI escalation; remote main still `57ef785`. Local verification complete; PR, remote CI and merge pending.
+
 ## 2026-10-12 Phase 5B-6P — independent operator IdP session and phishing-resistant MFA proof (code only)
 
 - Base verified main `030355dd6caa3253dea24ca571730f4815388d20` (PR #392), isolated branch `chatgpt/phase5b6p-operator-identity-enrollment-20261012`.
