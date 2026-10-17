@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """Scope check for safe interrupted SNS installation stage retention."""
+import io
+import json
 import os
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.cleanup_owned_sns_deploy_stages import candidates
+from scripts.cleanup_owned_sns_deploy_stages import candidates, main
 
 
 class StaleStageTests(unittest.TestCase):
@@ -38,6 +42,20 @@ class StaleStageTests(unittest.TestCase):
             (root / 'pending').symlink_to(old)
             self.assertEqual(candidates(root), [])
             self.assertTrue(old.exists())
+
+
+    def test_incomplete_process_inventory_is_a_bounded_block(self):
+        out = io.StringIO()
+        with patch("scripts.cleanup_owned_sns_deploy_stages.candidates",
+                   side_effect=RuntimeError("process_fd_inventory_unknown")):
+            with patch.object(sys, "argv", ["cleanup_owned_sns_deploy_stages.py"]):
+                with redirect_stdout(out):
+                    result = main()
+        self.assertEqual(result, 78)
+        report = json.loads(out.getvalue())
+        self.assertEqual(report["status"], "BLOCKED")
+        self.assertEqual(report["reason"], "RuntimeError")
+        self.assertNotIn("process_fd_inventory_unknown", out.getvalue())
 
 
 if __name__ == '__main__':
