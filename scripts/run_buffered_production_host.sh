@@ -91,6 +91,14 @@ if [[ "$MODE" == "apply" ]]; then
   esac
   runtime_python="$CURRENT_RELEASE/.venv/bin/python"
   [[ -x "$runtime_python" ]] || runtime_python=python3
+  # Enabling BOTH runtime switches alone never grants production authority.
+  # A current, owner-signed exact text/queue/slot approval is a separate
+  # necessary guard. This is BEFORE any Sheets I/O or mutation.
+  "$runtime_python" -B "$CURRENT_RELEASE/scripts/p0_exact_canary_approval.py" \
+      --account-id "$ACCOUNT_ID" --release-sha "$CODE_REVISION" || {
+    echo '[BLOCKED] P0_EXACT_CANARY_OWNER_APPROVAL_MISSING' >&2
+    exit 78
+  }
   "$runtime_python" -B "$CURRENT_RELEASE/scripts/validate_p0_once_runtime.py"     --account-id "$ACCOUNT_ID" || {
     echo '[BLOCKED] P0_ONCE_RUNTIME_PREFLIGHT_FAILED' >&2
     exit 78

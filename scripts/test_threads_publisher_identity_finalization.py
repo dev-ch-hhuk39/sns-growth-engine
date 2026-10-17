@@ -288,7 +288,10 @@ class PublisherIsolationTests(unittest.TestCase):
                 worker.os.environ,
                 {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
                  "SNS_P0_ONCE_GATE_ENABLED": "true"},
-            ), prior_tests.mocked_real_once_ledger(), patch.object(
+            ), prior_tests.mocked_real_once_ledger(), patch(
+                "p0_exact_canary_approval.verify_current",
+                return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"},
+            ), patch.object(
                 worker, "records",
                 side_effect=lambda _client, logical: (
                     [locked] if logical == "queue" else []
@@ -366,7 +369,10 @@ class PublisherIsolationTests(unittest.TestCase):
                 worker.os.environ,
                 {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
                  "SNS_P0_ONCE_GATE_ENABLED": "true"},
-            ), prior_tests.mocked_real_once_ledger(), patch.object(worker, "records", side_effect=records), patch.object(
+            ), prior_tests.mocked_real_once_ledger(), patch(
+                "p0_exact_canary_approval.verify_current",
+                return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"},
+            ), patch.object(worker, "records", side_effect=records), patch.object(
                 worker, "update_row", side_effect=save_update,
             ), patch.object(worker, "log_event"), patch.object(
                 worker, "ThreadsPublisher",

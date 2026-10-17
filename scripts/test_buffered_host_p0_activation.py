@@ -56,10 +56,10 @@ class ActivationTests(unittest.TestCase):
                 self.assertEqual(out.returncode, 78)
                 self.assertIn("P0_ONCE_TEXT_ONLY_ACCOUNT_SCOPE", out.stderr)
 
-    def test_missing_db_or_hmac_cannot_enter_reconciler(self):
+    def test_flags_both_on_still_require_exact_owner_approval(self):
         out = self.run_host(posting="true", once="true")
         self.assertEqual(out.returncode, 78)
-        self.assertIn("P0_ONCE_RUNTIME_PREFLIGHT_FAILED", out.stderr)
+        self.assertIn("P0_EXACT_CANARY_OWNER_APPROVAL_MISSING", out.stderr)
         self.assertNotIn("MUST_NOT_START_RECONCILER", out.stderr)
 
 

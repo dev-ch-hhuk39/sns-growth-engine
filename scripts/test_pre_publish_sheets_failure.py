@@ -52,12 +52,35 @@ class PrePublishTests(unittest.TestCase):
                  "SNS_P0_ONCE_GATE_ENABLED": "true",
              }), \
              mocked_real_once_ledger(), \
+             patch("p0_exact_canary_approval.verify_current",
+                   return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"}), \
              patch.object(worker, 'records', side_effect=lambda _, tab: locked if tab == 'queue' else []), \
              patch.object(worker, 'update_row', side_effect=update if isinstance(update, Exception) else None, return_value=update), \
              patch.object(worker, 'log_event', side_effect=log_error), \
              patch.object(worker, 'ThreadsPublisher', return_value=SimpleNamespace(publish=publish)):
             result = worker.process_one(SimpleNamespace(), self.row, dry_run=False, confirm_real_post=True)
         return result, calls
+
+    def test_without_owner_approval_two_runtime_toggles_never_lock_queue(self):
+        attempts = []
+        def publish(text, **kwargs):
+            attempts.append(kwargs["dry_run"])
+            return SimpleNamespace(success=True)
+        with patch.dict(worker.os.environ, {
+            "PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
+            "SNS_P0_ONCE_GATE_ENABLED": "true",
+        }), mocked_real_once_ledger(), \
+            patch.object(worker, "records", return_value=[]), \
+            patch.object(worker, "update_row") as mutation, \
+            patch.object(worker, "ThreadsPublisher",
+                         return_value=SimpleNamespace(publish=publish)):
+            output = worker.process_one(SimpleNamespace(), self.row,
+                                        dry_run=False, confirm_real_post=True)
+        self.assertEqual(output["status"], "P0_ONCE_PREPUBLISH_BLOCKED")
+        self.assertEqual(output["reason"], "EXACT_CANARY_OWNER_CONSENT_MISSING_OR_INVALID")
+        self.assertFalse(output["publish_attempted"])
+        self.assertEqual(attempts, [True])
+        mutation.assert_not_called()
 
     def test_missing_lock_and_429_never_publish(self):
         for update in (False, RuntimeError('429 private response')):

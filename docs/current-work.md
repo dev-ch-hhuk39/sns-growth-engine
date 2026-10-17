@@ -1,3 +1,12 @@
+## 2026-10-17 — P0の個別署名付き投稿カナリア許可を必須化（全投稿OFF）
+
+- 2つの本番投稿フラグと健全な一回限りの送信台帳だけでは、Threads実投稿を許可しない。
+- オーナー署名付きで最大30分の、アカウント/投稿枠/キュー/本文/リリースSHAを限定した承認が必要。
+- VPSエントリ、予約枠クレーム直前、Threads送信前に個別検証し、不足時は状態変更前に停止。
+- 7件の外部確認事項は署名を作るだけでは事実と認めない。実運用の証拠・正式承認は未確認。
+- docs/P0_EXACT_SIGNED_CANARY_RELEASE_20261017.md に運用ルール、現状NO-GO、署名手順を記載。
+- この作業ではSNS実投稿、投稿ON、実アカウント/秘密設定の変更、Sheets書き込みを一切行っていない。
+
 ## 2026-10-17 — Require live Threads proof for old orphan recovery
 
 - Hardened `recover_orphan_threads_post.py` to refuse legacy
