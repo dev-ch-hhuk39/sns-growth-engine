@@ -1,0 +1,49 @@
+name: Recover SNS Runner Regenerable Python Cache (No Posting)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_cleanup:
+        description: "false = inspect only. true = delete ONLY old SNS setup-python toolcache"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-runner-dedicated-toolcache-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    env:
+      PUBLISH_ENABLED: "false"
+      ALLOW_REAL_THREADS_POST: "false"
+      ALLOW_REAL_X_POST: "false"
+      POSTING_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Inspect and optionally clean only SNS Runner Python toolcache
+        shell: bash
+        env:
+          CONFIRM_CLEANUP: ${{ inputs.confirm_cleanup }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          args=()
+          if [ "$CONFIRM_CLEANUP" = "true" ]; then
+            args+=(--confirm-cleanup)
+          else
+            test "$CONFIRM_CLEANUP" = "false"
+          fi
+          /usr/bin/python3 -B scripts/cleanup_sns_runner_python_toolcache.py "${args[@]}"

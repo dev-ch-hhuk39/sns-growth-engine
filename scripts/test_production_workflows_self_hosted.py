@@ -18,6 +18,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "production-storage-readonly-audit.yml",
     "provision-p0-once-host-authority.yml",
     "p0-private-restore-readonly-drill.yml",
+    "sns-runner-toolcache-recovery.yml",
     "production-capacity-recovery.yml",
 }
 
