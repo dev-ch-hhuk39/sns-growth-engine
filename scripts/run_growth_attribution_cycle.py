@@ -64,6 +64,26 @@ def _same_sheet_value(logical: str, header: str, observed: Any, expected: Any) -
     return str(observed) == str(expected)
 
 
+_PUBLIC_REPORT_FIELDS = frozenset({
+    "status", "account_id", "observation_count", "attribution_count",
+    "strategy_row_count", "active_strategy_count", "would_write", "would_post",
+    "would_rewrite_prompts", "readback_verified", "reason",
+    "external_write_outcome_uncertain", "external_write_may_have_occurred",
+    "requires_readonly_reconciliation",
+})
+
+
+def public_growth_cycle_report(result: dict[str, Any]) -> dict[str, Any]:
+    """Return only non-identifying execution metadata for CI and operator logs.
+
+    Never emit individual post IDs, source text, per-post metrics, strategy
+    evidence, or free-form provider responses to hosted CI logs.
+    """
+    return {key: value for key, value in result.items()
+            if key in _PUBLIC_REPORT_FIELDS
+            and isinstance(value, (str, int, bool, float, type(None)))}
+
+
 def _upsert_rows(
     client: Any, logical: str, key: str, rows: list[dict[str, Any]],
     *, account_id: str, max_changes: int,
@@ -311,7 +331,10 @@ def main() -> int:
     if args.output:
         Path(args.output).parent.mkdir(parents=True, exist_ok=True)
         Path(args.output).write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    # --output remains an explicit local file for detailed investigation.
+    # Hosted workflow stdout must not expose provider IDs or per-post metrics.
+    stdout_result = public_growth_cycle_report(result) if args.use_sheets else result
+    print(json.dumps(stdout_result, ensure_ascii=False, indent=2))
     return 0 if result.get("status") in {"PLAN_ONLY", "APPLIED"} else 1
 
 
