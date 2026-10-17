@@ -74,22 +74,55 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
             "targets": chosen, "kept_count": len(remaining)}
 
 
-def assert_not_in_use(paths: list[Path]) -> None:
-    require(sys.platform == "linux" and Path("/proc").is_dir(), "linux_proc_required")
-    for proc in Path("/proc").iterdir():
+def assert_not_in_use(paths: list[Path], *, proc_root: Path = Path("/proc")) -> None:
+    """Block deletion if any live process might reference the old SNS release.
+
+    Do not silently treat inaccessible /proc entries as evidence that a
+    release is unused. The shared VPS runs services under multiple users.
+    """
+    require(sys.platform == "linux" and proc_root.is_dir(), "linux_proc_required")
+    targets = tuple(str(path) for path in paths)
+    for proc in proc_root.iterdir():
         if not proc.name.isdecimal() or int(proc.name) == os.getpid():
             continue
         try:
-            args = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace")
-        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
-            args = ""
+            args = (proc / "cmdline").read_bytes().replace(b"\\0", b" ").decode("utf-8", "replace")
+        except (FileNotFoundError, ProcessLookupError):
+            require(not proc.exists(), "process_cmdline_inventory_unknown")
+            continue
+        except OSError:
+            raise RuntimeError("process_cmdline_inventory_unknown") from None
         try:
             cwd = os.readlink(proc / "cwd")
-        except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
-            cwd = ""
-        for path in paths:
-            real = str(path)
-            require(real not in args and cwd != real and not cwd.startswith(real + "/"), "target_release_in_use")
+        except (FileNotFoundError, ProcessLookupError):
+            # Kernel threads and exited processes may not have a cwd. A live
+            # user-space process with command line data must be inspectable.
+            require(not proc.exists() or not args.strip(), "process_cwd_inventory_unknown")
+            continue
+        except OSError:
+            raise RuntimeError("process_cwd_inventory_unknown") from None
+        for real in targets:
+            require(real not in args and cwd != real and not cwd.startswith(real + "/"),
+                    "target_release_in_use")
+        try:
+            descriptors = list((proc / "fd").iterdir())
+        except (FileNotFoundError, ProcessLookupError):
+            require(not proc.exists() or not args.strip(), "process_fd_inventory_unknown")
+            continue
+        except OSError:
+            raise RuntimeError("process_fd_inventory_unknown") from None
+        for descriptor in descriptors:
+            try:
+                linked = os.readlink(descriptor)
+            except (FileNotFoundError, ProcessLookupError):
+                # Descriptors can close while being enumerated.
+                continue
+            except OSError:
+                raise RuntimeError("process_fd_inventory_unknown") from None
+            for real in targets:
+                require(not (linked == real or linked.startswith(real + "/")
+                             or linked.startswith(real + " (deleted)")),
+                        "target_release_open_fd")
 
 
 def run(root: Path, expected: str, targets: list[str], *, confirm: bool) -> dict:
