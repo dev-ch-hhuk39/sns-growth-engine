@@ -62,6 +62,11 @@ fi
 
 mkdir -p "$RUNTIME_ROOT/releases" "$RUNTIME_ROOT/shared/locks" "$RUNTIME_ROOT/shared/threads_tokens"
 target="$RUNTIME_ROOT/releases/$REVISION"
+# Standalone stage-only callers must reserve space before making a new
+# immutable Python/media environment, even outside the transaction workflow.
+if [[ "$STAGE_ONLY" == "true" && ! -d "$target" ]]; then
+  "$(dirname "$0")/check_chadult_vps_deploy_preflight.sh" --min-free-gib 9
+fi
 if [[ "$SCHEDULER_ONLY" == "true" ]]; then
   if [[ ! -f "$target/.production-release" || "$(cat "$target/.production-release")" != "$REVISION" ||
         ! -x "$target/.venv/bin/python" || "$(readlink -f "$RUNTIME_ROOT/current")" != "$target" ]]; then
@@ -94,6 +99,9 @@ if [[ "$STAGE_ONLY" == "true" && ! -d "$target" ]]; then
     "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --no-compile -r "$stage/requirements.txt"
   PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
     "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --no-compile -r "$stage/requirements-media-runtime.txt"
+  # A stage can consume substantial disk; block promotion if the shared
+  # 8-GiB safety floor was crossed. EXIT cleans up only this owned stage.
+  "$(dirname "$0")/check_chadult_vps_deploy_preflight.sh" --min-free-gib 8
   mv "$stage" "$target"
   stage=""
 fi
