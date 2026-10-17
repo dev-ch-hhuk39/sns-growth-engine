@@ -29,7 +29,7 @@ common_lock=/run/lock/chadult-production-deploy.lock
 }
 exec 9<>"$common_lock"
 flock -x -w 600 9 || { echo '[BLOCKED] global deployment lock is busy' >&2; exit 75; }
-"$source_root/scripts/check_chadult_vps_deploy_preflight.sh" --min-free-gib 8
+"$source_root/scripts/check_chadult_vps_deploy_preflight.sh" --min-free-gib 9
 current="$runtime_root/current"
 [[ -L "$current" ]] || { echo '[BLOCKED] existing current release pointer required' >&2; exit 78; }
 old_release="$(readlink -f "$current")"
@@ -62,6 +62,9 @@ old_previous=""
 if [[ -L "$runtime_root/previous" ]]; then old_previous="$(readlink "$runtime_root/previous")"; fi
 promoted=false
 completed=false
+cron_changed=false
+cron_backup_ready=false
+pending_created=false
 atomic_pointer() {
   local destination="$1"; local release="$2"; local stage="$destination.$$.new"
   ln -s "$release" "$stage"
@@ -82,8 +85,13 @@ finish() {
         code=90
       fi
     fi
-    if [[ -f "$backup_cron" ]]; then
-      crontab "$backup_cron" || { echo '[CRITICAL] previous cron restoration failed' >&2; code=90; }
+    # The cron snapshot is pinned on FD 8, so an unlinked path cannot break
+    # rollback. Only restore when scheduler mutation was actually started.
+    if [[ "$cron_changed" == true ]]; then
+      if [[ "$cron_backup_ready" != true ]] || ! crontab - <&8; then
+        echo '[CRITICAL] previous cron restoration failed' >&2
+        code=90
+      fi
     fi
     if [[ -n "$old_previous" ]]; then
       atomic_pointer "$runtime_root/previous" "$old_previous" || { echo '[CRITICAL] previous pointer restore failed' >&2; code=90; }
@@ -94,6 +102,16 @@ finish() {
       code=90
     fi
   fi
+  # If we created this pending link and failed, drop the link but retain
+  # the staged release directory for forensic/rollback inspection.
+  if [[ "$completed" != true && "$pending_created" == true &&
+        -L "$pending" && "$(readlink -f "$pending")" == "$new_release" ]]; then
+    if ! rm -- "$pending"; then
+      echo '[CRITICAL] pending pointer cleanup failed' >&2
+      code=90
+    fi
+  fi
+  if [[ "$cron_backup_ready" == true ]]; then exec 8<&-; fi
   rm -f -- "$staged_env" "$backup_env" "$backup_cron" "$shared/.deploy-live-env.$$"     "$current.$$.new" "$pending.$$.new" "$runtime_root/previous.$$.new"
   flock -u 9 || true
   exit "$code"
@@ -105,10 +123,18 @@ BUFFERED_POSTING_ENABLED=false python3 "$source_root/scripts/write_buffered_runt
   --runtime-root "$runtime_root" --out "$staged_env" \
   --inherit-local-p0 "$live_env"
 cp -p "$live_env" "$backup_env"
-(crontab -l 2>/dev/null || true) > "$backup_cron"
+if ! crontab -l > "$backup_cron" 2>/dev/null; then
+  echo '[BLOCKED] SNS crontab snapshot unavailable' >&2
+  exit 78
+fi
+exec 8< "$backup_cron"
+cron_backup_ready=true
 "$source_root/scripts/install_buffered_production_runtime.sh" \
   --source-root "$source_root" --revision "$revision" --apply --confirm-install --stage-only
-if [[ ! -L "$pending" ]]; then atomic_pointer "$pending" "$new_release"; fi
+if [[ ! -L "$pending" ]]; then
+  atomic_pointer "$pending" "$new_release"
+  pending_created=true
+fi
 THREADS_CLI_INSTALL_DIR="$shared/threads-cli" bash "$source_root/scripts/install_threads_cli.sh"
 [[ -x "$(command -v ffmpeg)" && -x "$(command -v xvfb-run)" ]] || {
   echo '[BLOCKED] media runtime binaries unavailable' >&2; exit 78;
@@ -116,6 +142,9 @@ THREADS_CLI_INSTALL_DIR="$shared/threads-cli" bash "$source_root/scripts/install
 # Read-only Sheets readiness, imports, exact SHA and non-publishing gates before switching.
 "$source_root/scripts/verify_buffered_runtime_health.py" --release "$new_release" \
   --revision "$revision" --env-file "$staged_env"
+# Fail before promoting: staging can consume enough disk to violate the
+# shared 8-GiB post-stage resource floor.
+"$source_root/scripts/check_chadult_vps_deploy_preflight.sh" --min-free-gib 8
 # Point in time handover: new config and current pointer are protected by EXIT rollback.
 promoted=true
 # Apply the new environment with posting OFF first. If SIGKILL occurs before
@@ -126,6 +155,7 @@ atomic_pointer "$current" "$new_release"
 "$source_root/scripts/verify_buffered_runtime_health.py" --release "$new_release" \
   --revision "$revision" --env-file "$live_env"
 if [[ "$schedule" == true ]]; then
+  cron_changed=true
   "$source_root/scripts/install_buffered_production_runtime.sh" \
     --source-root "$source_root" --revision "$revision" --apply --confirm-install \
     --scheduler-only --enable-scheduler --confirm-enable

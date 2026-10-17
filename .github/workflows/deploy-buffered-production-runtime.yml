@@ -68,7 +68,7 @@ jobs:
           fi
       - name: Fail closed on shared VPS disk and RAM preflight
         shell: bash
-        run: bash scripts/check_chadult_vps_deploy_preflight.sh --min-free-gib 8
+        run: bash scripts/check_chadult_vps_deploy_preflight.sh --min-free-gib 9
       - name: Transactional candidate deploy, health, activation and rollback
         shell: bash
         run: |
