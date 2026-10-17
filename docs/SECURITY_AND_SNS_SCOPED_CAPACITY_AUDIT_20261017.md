@@ -32,3 +32,15 @@ No release, old log or production data was deleted during this audit.
 5. Run full CI and signed secret-history audit for this change. Perform no-post deploy only when staging headroom, all shared locks and rollback conditions are confirmed; then independently re-audit installed SHA and both posting OFF switches.
 
 The approved post candidate and snapshots remain Mac-local in a project-specific owner-only private folder and are not added to Git.
+
+
+## Continuous CI fallback for disabled repository security services
+
+At the audit date GitHub reported: native Dependabot alerts disabled,
+native Secret Scanning disabled, and no Code Scanning analysis available.
+These are not proof of zero findings. Hosted-runner CI now schedules daily at
+03:20 JST with the existing pinned pip-audit and Gitleaks jobs. The
+schedule intentionally skips PR-only and integration-test jobs and does
+not use the SNS VPS runner, post, deploy, delete, or modify external data.
+Enable native GitHub alerts separately with appropriate repository admin
+permissions; this workflow does not automatically enable GitHub settings.
