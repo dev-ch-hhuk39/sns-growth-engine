@@ -26,6 +26,9 @@ assert "BEAUTY_PRODUCTION_ENABLED=true" in launcher
 assert "P0_ONCE_RUNTIME_GATE_DISABLED" in launcher
 assert "P0_ONCE_TEXT_ONLY_ACCOUNT_SCOPE" in launcher
 assert "validate_p0_once_runtime.py" in launcher
+assert "p0_exact_canary_approval.py" in launcher
+assert launcher.index("p0_exact_canary_approval.py") < launcher.index("validate_p0_once_runtime.py")
+assert "P0_EXACT_CANARY_OWNER_APPROVAL_MISSING" in launcher
 assert "--confirm-reconcile" in launcher
 assert "runtime.env" in launcher and "permissions must be 0600" in launcher
 assert "reconcile_due_production_slots.py" in launcher

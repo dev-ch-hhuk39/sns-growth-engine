@@ -12,6 +12,13 @@ from production_inventory import JST, has_media, media_asset_ids, policy, recent
 
 class BufferedReconcilerTests(unittest.TestCase):
     def setUp(self):
+        # These older synthetic tests specifically exercise slot retry and
+        # reservation behavior. The independent signed owner-approval contract
+        # has dedicated adversarial tests and is explicitly mocked here.
+        self._owner_guard = patch("p0_exact_canary_approval.verify_current",
+                                  return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"})
+        self._owner_guard.start()
+        self.addCleanup(self._owner_guard.stop)
         self.now = datetime(2026, 9, 9, 18, tzinfo=JST)
         self.slot = {"account_id": "night_scout", "slot_id": "ns_1800_direct_media",
                      "business_date_jst": "2026-09-09", "post_type": "direct_reference_media"}
@@ -150,6 +157,28 @@ class BufferedReconcilerTests(unittest.TestCase):
             result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"], now=self.now)
         self.assertTrue(any(r["status"] == "DRY_RUN" for r in result["results"]))
         self.assertTrue(all(c.kwargs["dry_run"] and not c.kwargs["confirm_real_post"] for c in worker.call_args_list))
+        claim.assert_not_called()
+
+    def test_missing_exact_owner_approval_blocks_before_slot_claim(self):
+        from p0_exact_canary_approval import CanaryBlocked
+        tables = {"queue": [self.media_row()], "posted_results": [],
+                  "content_slot_runs": [], "evergreen_bank": []}
+        with patch.object(runner, "policy", return_value={**policy(), "activation_enabled": True}), \
+             patch.object(runner, "records", side_effect=lambda _, name: tables[name]), \
+             patch.object(runner, "process_one", return_value={"status": "DRY_RUN"}) as worker, \
+             patch.object(runner.subprocess, "run") as gate, \
+             patch("p0_exact_canary_approval.verify_current",
+                   side_effect=CanaryBlocked("P0_CANARY_PRIVATE_FILE_UNAVAILABLE")), \
+             patch.object(runner, "claim_slot_run") as claim:
+            gate.return_value.returncode = 0
+            result = runner.reconcile(SimpleNamespace(), accounts=["night_scout"],
+                                      now=self.now, apply=True)
+        self.assertEqual(result["status"], "FAILED")
+        blocked = [row for row in result["results"]
+                   if row.get("reason") == "EXACT_CANARY_OWNER_CONSENT_MISSING_OR_INVALID"]
+        self.assertEqual(len(blocked), 1, result)
+        self.assertEqual(blocked[0]["status"], "BLOCKED")
+        self.assertEqual(worker.call_count, 1)  # read-only candidate check
         claim.assert_not_called()
 
     def test_uncertain_publish_is_not_retried(self):
