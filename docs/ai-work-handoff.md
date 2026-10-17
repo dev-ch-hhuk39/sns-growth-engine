@@ -1,3 +1,25 @@
+## 2026-10-17 — Disable legacy GitHub direct SNS publish routes
+
+- Audited all 50 workflow YAML files and found old Ubuntu-hosted direct
+  publication steps that could become reachable when GitHub's
+  BUFFERED_INVENTORY_ACTIVE mirror differs from the repository/runtime.
+  Some old configuration switches are true; VPS posting itself remains OFF.
+- Quarantined all 11 direct SNS send steps across legacy Night/Liver autonomous,
+  manual autonomous, Beauty, direct media, saved media and onboarding workflows
+  with an immutable always-false step condition. Dry-run, candidate preparation,
+  review and metrics steps are intentionally retained.
+- Blocked the GitHub manual queue worker's real_post/owner-approval modes before
+  any potentially mutating Sheets operation; dry-run remains available.
+- Removed the self-hosted recovery's fallback to old direct backfill. The only
+  remaining recovery apply route goes through the buffered VPS launcher, whose
+  P0 ledger and posting authority are still OFF. Beauty/media are not released.
+- Added an adversarial workflow-source contract checking frozen send steps,
+  no new outbound workflow, and no legacy recovery fallback. See
+  docs/LEGACY_DIRECT_PUBLISH_QUARANTINE_20261017.md. This is not proof of
+  external publisher shutdown, Sheets cutover, historical repair or live canary.
+- Reenable direct publication only through a separately reviewed architecture
+  change after owner-attested single-writer and source reconciliation proof.
+
 ## 2026-10-17 — Offline final operational blocker report
 
 - Added `scripts/final_operational_readiness.py`: stdout-only, read-only report

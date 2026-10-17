@@ -168,7 +168,9 @@ jobs:
             if [ -z "${!name}" ]; then echo "[BLOCKED] required secret is missing: $name"; exit 1; fi
           done
       - name: Post one saved approved media asset
-        if: ((github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_media_post == 'true' && github.event.inputs.dry_run_only != 'true') || (github.event_name == 'schedule' && steps.clip_ready.outputs.has_ready == 'true' && steps.activation.outputs.allowed == 'true')) && steps.media_budget.outcome == 'success'
+        # Single-writer quarantine: legacy GitHub direct SNS publishing is disabled.
+        # Preparation/review/metrics remain available; only VPS one-use worker may publish.
+        if: ${{ false }}
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"

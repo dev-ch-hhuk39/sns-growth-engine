@@ -104,9 +104,8 @@ jobs:
               --account-id "$ACCOUNT_ID" \
               --apply --confirm-reconcile \
               --trigger github_schedule_recovery
-          elif [ "$ACCOUNT_ID" != "beauty_account" ]; then
-            # Preserve the current worker until the filled buffer is activated.
-            python3 scripts/backfill_missed_content_slots.py --account-id "$ACCOUNT_ID" --apply --confirm-backfill
           else
-            echo '[CUTOVER_PENDING] Beauty remains on its existing production workflow'
+            # Never revert to the pre-buffer legacy publisher if the activation
+            # mirror is unset or disabled. One-use VPS authority is mandatory.
+            echo '[NO_POST] BUFFERED_RUNTIME_INACTIVE_LEGACY_FALLBACK_DISABLED'
           fi

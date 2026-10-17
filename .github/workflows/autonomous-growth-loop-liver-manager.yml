@@ -158,7 +158,9 @@ jobs:
           test -n "$SA_JSON_BASE64$GCP_SA_JSON_BASE64" || { echo "[BLOCKED] Sheets service account secret is missing."; exit 1; }
 
       - name: Apply autonomous Threads loop
-        if: env.RUN_AUTONOMOUS_APPLY == 'true'
+        # Single-writer quarantine: legacy GitHub direct SNS publishing is disabled.
+        # Preparation/review/metrics remain available; only VPS one-use worker may publish.
+        if: ${{ false }}
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
