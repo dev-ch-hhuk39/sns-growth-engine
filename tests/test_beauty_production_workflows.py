@@ -59,7 +59,15 @@ def test_beauty_workflow_prepares_then_publishes_only_reviewed_ready_rows() -> N
         if step.get("name") == "Preview candidate"
     )
     assert preview_step["if"] == "env.ACTION == 'dry_run'"
-    assert text.count("prepare_beauty_review_candidates.py") == 2
+    prepare_steps = {
+        step.get("name")
+        for step in data["jobs"]["beauty-production"]["steps"]
+        if "prepare_beauty_review_candidates.py" in str(step.get("run", ""))
+    }
+    assert prepare_steps == {
+        "Preview candidate", "Save WAITING_REVIEW candidate",
+        "Bounded Beauty READY recovery",
+    }
     save_step = next(
         step for step in data["jobs"]["beauty-production"]["steps"]
         if step.get("name") == "Save WAITING_REVIEW candidate"
@@ -358,13 +366,25 @@ def test_beauty_pdca_unavailable_falls_back_only_to_beauty_new_text(monkeypatch)
     assert calls == ["pdca_text_generation", "new_text_generation"]
 
 
-def test_beauty_media_route_skips_without_text_fallback(monkeypatch) -> None:
+def test_beauty_media_route_never_substitutes_unverified_text_context(monkeypatch) -> None:
     prepare = _load_script("prepare_beauty_review_candidates.py")
     monkeypatch.setattr(prepare, "select_beauty_route", lambda _sequence: "direct_reference_media")
+    looked_up = []
+
+    def context(route, _topic=""):
+        looked_up.append(route)
+        if route == "direct_reference_media":
+            return {"status": "DELEGATED_MEDIA_ROUTE"}
+        return {"status": "BLOCKED", "reason": "beauty_text_context_missing"}
+
+    monkeypatch.setattr(prepare, "load_route_context", context)
     candidate = prepare.generate_candidate(slot_index=0, sequence_number=1)
-    assert candidate["status"] == "SKIPPED", candidate
-    assert candidate["reason"] == "beauty_media_route_delegated_no_text_fallback"
-    assert candidate["generation_route"] == "direct_reference_media"
+    assert looked_up == ["direct_reference_media", "new_text_generation"]
+    assert candidate == {
+        "status": "BLOCKED",
+        "reason": "beauty_text_context_missing",
+        "generation_route": "new_text_generation",
+    }
 
 
 def test_beauty_gemini_errors_are_sanitized_and_classified() -> None:
