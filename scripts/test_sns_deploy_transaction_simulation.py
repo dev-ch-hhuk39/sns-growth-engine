@@ -154,7 +154,10 @@ exit 0
         res = self.run_transaction(TEST_HEALTH_FAIL_AT='1')
         self.assertNotEqual(res.returncode, 0)
         self.assertEqual(self.current(), self.old)
-        self.assertTrue((self.runtime / 'pending').is_symlink())
+        # A transaction-created pending link is removed after a failed stage;
+        # the immutable candidate directory remains for inspection.
+        self.assertFalse((self.runtime / 'pending').exists())
+        self.assertTrue((self.releases / NEW).is_dir())
         self.assertFalse((self.runtime / 'previous').exists())
         self.assertEqual(self.counter.read_text().strip(), '1')
 
