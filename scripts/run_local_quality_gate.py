@@ -31,6 +31,10 @@ SENSITIVE_PARTS = (
     "API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENAI_API_KEY",
 )
 FOCUSED = (
+    "test_p0_ledger_backup_restore_drill.py",
+    "test_p0_host_restore_drill.py",
+    "test_orphan_provider_proof_required.py",
+    "test_recover_orphan_threads_post.py",
     "test_legacy_github_publisher_quarantine.py",
     "test_final_operational_readiness.py",
     "test_p0_snapshot_cutover_preflight.py",

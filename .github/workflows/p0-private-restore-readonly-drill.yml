@@ -1,0 +1,48 @@
+name: Verify P0 Private Ledger Restore (Read-only, No Posting)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_readonly_drill:
+        description: 'Enter READONLY_EPHEMERAL_P0_RESTORE (does not enable posting)'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-p0-private-restore-readonly-drill
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Verify exact main commit and authorized read-only intent
+        shell: bash
+        env:
+          CONFIRM_READONLY_DRILL: ${{ inputs.confirm_readonly_drill }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$CONFIRM_READONLY_DRILL" = "READONLY_EPHEMERAL_P0_RESTORE"
+          echo "P0_RESTORE_READONLY_PRECHECK_PASS"
+      - name: Verify private ledger backup into disposable scratch and independent restore
+        shell: bash
+        env:
+          CONFIRM_READONLY_DRILL: ${{ inputs.confirm_readonly_drill }}
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 -B scripts/run_p0_host_restore_drill.py \
+            --runtime-root /opt/github-runners/sns-growth-engine/.buffered-runtime \
+            --confirm "$CONFIRM_READONLY_DRILL"
+          echo "P0_RESTORE_EPHEMERAL_CHECK_COMPLETE_POSTING_OFF"
