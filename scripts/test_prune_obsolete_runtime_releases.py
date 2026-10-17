@@ -103,7 +103,7 @@ class PruneProcessInventoryTests(unittest.TestCase):
         self.proc.mkdir(parents=True)
         self.target = self.base / "releases" / ("a" * 40)
         self.target.mkdir(parents=True)
-        (self.proc / "cmdline").write_bytes(b"python3\\0unrelated.py\\0")
+        (self.proc / "cmdline").write_bytes(b"python3\0unrelated.py\0")
         (self.proc / "cwd").symlink_to(self.base / "unrelated")
         (self.proc / "fd").mkdir()
 
