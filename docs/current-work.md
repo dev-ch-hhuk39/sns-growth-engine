@@ -1,3 +1,25 @@
+## 2026-10-17 — Offline final operational blocker report
+
+- Added `scripts/final_operational_readiness.py`: stdout-only, read-only report
+  from an existing `sns_operational_queue_offline_metadata_v1` JSON manifest.
+  Run `python3 scripts/final_operational_readiness.py --snapshot <local-metadata.json>`;
+  omitting the manifest explicitly reports missing evidence. Exit 2 always means
+  `CUTOVER_BLOCKED`, including when local metadata checks find no problems.
+- Reuses the queue authority loader/frozen writer inventory, P0 snapshot checks
+  and P0 release hard blockers. Emits only computed counts/static reason codes;
+  no source IDs, paths, URLs, exception payloads or claimed authorization.
+- Production writer exclusivity, reconciliation of queued/results ambiguity,
+  backup/restore, provider account identity, Beauty exclusion/media rights and
+  24h/72h/168h aftercare remain unproven. Offline metadata cannot clear these
+  blockers. No production evidence was obtained or production state changed.
+- New adversarial suite covers missing/malformed/false/stale evidence, identity,
+  ambiguity, rights and inventory failure. A fresh-interpreter audit hook checks
+  the actual CLI for network, process, DB and file-write attempts.
+- Validation: new 9-test suite and 50 focused checks PASS (including compile,
+  Ruff fatal rules and diff checks); offline repository regression in progress.
+  Git-history scanning was skipped; no full quality-gate PASS is claimed.
+  No Actions, deployment, external operations, commit or push.
+
 ## 2026-10-16 - Prepared protected VPS P0 bootstrap without activation
 
 - Added a manually confirmed, protected-main, single-host private SQLite/HMAC
