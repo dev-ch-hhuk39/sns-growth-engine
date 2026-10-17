@@ -689,3 +689,9 @@ Live stock failure was numeric coercion in canonical drafts RAW verification. Fi
 Preparation runs: AUTO_READY `34921321706`, direct media `34921582346`. No manual Threads post in this continuation. Buffered activation remains OFF pending actual inventory and safe scheduler cutover. Existing SNS VPS SSH is accessible; do not deploy to unrelated GCP projects.
 
 - Full Mac offline QA: 992/992 PASS. Source, rights, provider and live writer cutover **remain blocked**.
+
+## 2026-10-17 | SNS-only P0 encrypted off-VPS backup (still posting OFF)
+
+- Added scope-limited encrypted P0 ledger export and independent disposable restore/HMAC verification tooling. The operator Mac performed one successful off-VPS encrypted snapshot and restore (no live cutover). Docs: docs/P0_OFFSITE_ENCRYPTED_BACKUP_20261017.md.
+- Owner approved the Night Scout exact text candidate in this chat, saved in owner-only local operations folder; not placed in Sheets, not HMAC-signed for actual delivery, not posted.
+- External writer disablement, provider account identity, and historical ambiguous sends remain unverified. The current VPS disk is below the 8GiB deploy gate, and no other service storage may be touched. No autonomous posting and no permanent activation.
