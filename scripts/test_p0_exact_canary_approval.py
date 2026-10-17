@@ -35,7 +35,7 @@ class CanaryApprovalTests(unittest.TestCase):
         self.folder = Path(temp.name).resolve()
         self.folder.chmod(0o700)
         self.db = self.folder / "once.sqlite3"
-        self.path = self.folder / "approved_text_canary.json"
+        self.path = self.folder / f"approved_text_canary_{ACCOUNT}.json"
         self.clean_env = patch.dict(os.environ, {
             "SNS_P0_ONCE_DB_PATH": str(self.db),
             "SNS_P0_ONCE_HMAC_KEY_HEX": KEY.hex(),
@@ -69,6 +69,26 @@ class CanaryApprovalTests(unittest.TestCase):
             account_id=ACCOUNT, release_sha=RELEASE,
             allow_test_path=True, now=NOW, **kwargs,
         )
+
+    def test_two_accounts_have_independent_immutable_canary_approvals(self) -> None:
+        from p0_exact_canary_approval import _filename
+        other = "liver_manager"
+        other_doc = self.request(account_id=other, queue_id="liver_other_queue_456")
+        signed = signed_manifest(other_doc, key=KEY, now=NOW)
+        other_path = _filename(allow_test_path=True, account_id=other)
+        _write_new(other_path, signed)
+        self.assertNotEqual(other_path, self.path)
+        self.assertFalse(self.path.exists())
+        with self.assertRaises(CanaryBlocked):
+            self.check()
+        result = verify_current(account_id=other, release_sha=RELEASE,
+                                allow_test_path=True, now=NOW)
+        self.assertEqual(result["status"], "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY")
+        self.save()
+        self.assertEqual(self.check()["status"], "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY")
+        self.assertEqual(other_path.read_bytes(), (
+            json.dumps(signed, ensure_ascii=True,
+                       sort_keys=True, separators=(",", ":")) + "\n").encode("ascii"))
 
     def test_two_switches_without_manifest_cannot_publish(self) -> None:
         with self.assertRaisesRegex(CanaryBlocked, "UNAVAILABLE"):

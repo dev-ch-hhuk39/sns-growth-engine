@@ -59,7 +59,7 @@ class ActivationTests(unittest.TestCase):
     def test_flags_both_on_still_require_exact_owner_approval(self):
         out = self.run_host(posting="true", once="true")
         self.assertEqual(out.returncode, 78)
-        self.assertIn("P0_EXACT_CANARY_OWNER_APPROVAL_MISSING", out.stderr)
+        self.assertIn("P0_RELEASE_OWNER_CONSENT_OR_HOST_PROOF_MISSING", out.stderr)
         self.assertNotIn("MUST_NOT_START_RECONCILER", out.stderr)
 
 

@@ -25,8 +25,8 @@ def main() -> int:
     assert src.count("SNS_P0_ONCE_BARRIER") == 4, "one-use guard missing or duplicated"
     assert "SNS_P0_ONCE_GATE_ENABLED" in src, "explicit off-by-default flag missing"
     assert "P0_ONCE_GATE_NOT_ACTIVATED" in src, "unprotected real write not refused"
-    assert "EXACT_CANARY_OWNER_CONSENT_MISSING_OR_INVALID" in src
-    assert src.index("verify_exact_canary(") < src.index('locked = update_row(client, "queue"')
+    assert "P0_RELEASE_OWNER_CONSENT_OR_LIVE_PROOF_INVALID" in src
+    assert src.index("verify_release(") < src.index('locked = update_row(client, "queue"')
     assert src.index("P0_ONCE_GATE_NOT_ACTIVATED") < src.index('locked = update_row(client, "queue"')
     assert src.count("    result = publisher.publish(") == 1, "real call count changed"
     assert src.count('    if not confirm_real_post:') == 1, "real-post opt-in changed"

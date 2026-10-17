@@ -289,7 +289,7 @@ class PublisherIsolationTests(unittest.TestCase):
                 {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
                  "SNS_P0_ONCE_GATE_ENABLED": "true"},
             ), prior_tests.mocked_real_once_ledger(), patch(
-                "p0_exact_canary_approval.verify_current",
+                "p0_release_mode_authority.verify_release",
                 return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"},
             ), patch.object(
                 worker, "records",
@@ -370,7 +370,7 @@ class PublisherIsolationTests(unittest.TestCase):
                 {"PUBLISH_ENABLED": "true", "ALLOW_REAL_THREADS_POST": "true",
                  "SNS_P0_ONCE_GATE_ENABLED": "true"},
             ), prior_tests.mocked_real_once_ledger(), patch(
-                "p0_exact_canary_approval.verify_current",
+                "p0_release_mode_authority.verify_release",
                 return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"},
             ), patch.object(worker, "records", side_effect=records), patch.object(
                 worker, "update_row", side_effect=save_update,

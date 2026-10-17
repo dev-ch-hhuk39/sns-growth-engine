@@ -1,3 +1,15 @@
+## 2026-10-17 — P0初回カナリアと継続自動投稿の二段階許可（投稿OFF）
+
+- GOAL.mdにある人間の毎回承認を不要にする通常運用と、
+  初回1件しか許可できなかった実装の矛盾を修正。
+- 初回署名をnight_scout/liver_manager別ファイルに分離。
+- 継続モードは別のオーナー署名＋実リリースの初回POSTED_VERIFIED＋
+  当該accountの未解決送信ゼロ＋LIVE RAW Sheetsの実投稿と24/72/168予約を要求。
+- ワーカーはSheetsのPROCESSING変更前に毎回照合、失敗は再送不可。
+- GitHubによる勝手な運用モード昇格を禁止。既定canary、投稿OFFを維持。
+- ランブック：docs/P0_CONTINUOUS_POST_RELEASE_20261017.md。
+- 外部writer、実カナリア、独立永続バックアップ、Beauty/Media権利は別途未証明。
+
 ## 2026-10-17 — SNS専用Pythonツールキャッシュ容量回復（実投稿OFF）
 
 - VPSの8GiB空き容量ゲートが不足し、PR #399の投稿OFFデプロイが安全に停止。

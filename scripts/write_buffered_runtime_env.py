@@ -24,6 +24,7 @@ HOST_ONLY_P0 = (
     'SNS_P0_ONCE_DB_PATH',
     'SNS_P0_ONCE_HMAC_KEY_HEX',
 )
+MODE_ONLY_P0 = 'SNS_P0_AUTONOMY_MODE'
 
 
 def inherited_p0_env(source: Path, shared: Path) -> dict[str, str]:
@@ -45,7 +46,7 @@ def inherited_p0_env(source: Path, shared: Path) -> dict[str, str]:
         if not re.fullmatch(r'[A-Z][A-Z0-9_]*', key) or key in seen:
             raise ValueError('host_env_key_invalid_or_duplicate')
         seen.add(key)
-        if key in HOST_ONLY_P0:
+        if key in HOST_ONLY_P0 or key == MODE_ONLY_P0:
             result[key] = value
     return result
 
@@ -78,6 +79,9 @@ def write_candidate_env(path: Path, runtime_root: Path, env: dict[str, str],
     gate = inherited.get('SNS_P0_ONCE_GATE_ENABLED', 'false')
     if gate not in {'false', 'true'}:
         raise ValueError('host_p0_gate_boolean_invalid')
+    autonomy_mode = inherited.get('SNS_P0_AUTONOMY_MODE', 'canary')
+    if autonomy_mode not in {'canary', 'continuous'}:
+        raise ValueError('host_p0_autonomy_mode_invalid')
     if env.get('BUFFERED_POSTING_ENABLED') == 'true':
         if (gate != 'true' or
                 not Path(inherited.get('SNS_P0_ONCE_DB_PATH') or '').is_absolute()
@@ -88,6 +92,7 @@ def write_candidate_env(path: Path, runtime_root: Path, env: dict[str, str],
     assignments = [(key, env.get(key, '')) for key in KEYS]
     assignments.extend((key, inherited.get(key, 'false' if key ==
                         'SNS_P0_ONCE_GATE_ENABLED' else '')) for key in HOST_ONLY_P0)
+    assignments.append((MODE_ONLY_P0, autonomy_mode))
     assignments.append(('THREADS_TOKEN_STORE_DIR', str(shared / 'threads_tokens')))
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:

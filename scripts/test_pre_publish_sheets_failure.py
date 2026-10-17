@@ -52,7 +52,7 @@ class PrePublishTests(unittest.TestCase):
                  "SNS_P0_ONCE_GATE_ENABLED": "true",
              }), \
              mocked_real_once_ledger(), \
-             patch("p0_exact_canary_approval.verify_current",
+             patch("p0_release_mode_authority.verify_release",
                    return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"}), \
              patch.object(worker, 'records', side_effect=lambda _, tab: locked if tab == 'queue' else []), \
              patch.object(worker, 'update_row', side_effect=update if isinstance(update, Exception) else None, return_value=update), \
@@ -77,7 +77,7 @@ class PrePublishTests(unittest.TestCase):
             output = worker.process_one(SimpleNamespace(), self.row,
                                         dry_run=False, confirm_real_post=True)
         self.assertEqual(output["status"], "P0_ONCE_PREPUBLISH_BLOCKED")
-        self.assertEqual(output["reason"], "EXACT_CANARY_OWNER_CONSENT_MISSING_OR_INVALID")
+        self.assertEqual(output["reason"], "P0_RELEASE_OWNER_CONSENT_OR_LIVE_PROOF_INVALID")
         self.assertFalse(output["publish_attempted"])
         self.assertEqual(attempts, [True])
         mutation.assert_not_called()

@@ -80,8 +80,19 @@ def _db_parent(*, allow_test_path: bool) -> Path:
     return candidate.parent
 
 
-def _filename(*, allow_test_path: bool) -> Path:
-    return _db_parent(allow_test_path=allow_test_path) / FILENAME
+def _filename(*, allow_test_path: bool, account_id: str | None = None,
+              allow_legacy: bool = False) -> Path:
+    parent = _db_parent(allow_test_path=allow_test_path)
+    if type(account_id) is not str or account_id not in ACCOUNTS:
+        raise CanaryBlocked("P0_CANARY_ACCOUNT_SCOPE_INVALID")
+    per_account = parent / f"approved_text_canary_{account_id}.json"
+    # Read-only legacy fallback for an operator who signed before the
+    # account-separated release. New approvals are always account-specific.
+    if allow_legacy and not per_account.exists() and not per_account.is_symlink():
+        old = parent / FILENAME
+        if old.exists() or old.is_symlink():
+            return old
+    return per_account
 
 
 def _read_private(path: Path) -> bytes:
@@ -190,7 +201,9 @@ def verify_current(
     current = now if now is not None else datetime.now(timezone.utc)
     if current.tzinfo is None:
         raise CanaryBlocked("P0_CANARY_TIME_INVALID")
-    doc = _decode(_read_private(_filename(allow_test_path=allow_test_path)))
+    doc = _decode(_read_private(_filename(
+        allow_test_path=allow_test_path, account_id=account_id, allow_legacy=True,
+    )))
     _validate_fields(doc, now=current)
     signature = doc.get("signature")
     if type(signature) is not str or not SHA64.fullmatch(signature):
@@ -251,7 +264,7 @@ def main() -> int:
             request = _decode(_read_private(args.sign_private_request))
             now = datetime.now(timezone.utc)
             doc = signed_manifest(request, key=_secret(), now=now)
-            target = _filename(allow_test_path=False)
+            target = _filename(allow_test_path=False, account_id=doc["account_id"])
             _write_new(target, doc)
             result = {"status": "SIGNED_PRIVATE_ATTESTATION_SAVED_NO_POST",
                       "publish_authorized": False}
