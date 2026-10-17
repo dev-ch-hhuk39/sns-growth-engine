@@ -15,7 +15,7 @@ class BufferedReconcilerTests(unittest.TestCase):
         # These older synthetic tests specifically exercise slot retry and
         # reservation behavior. The independent signed owner-approval contract
         # has dedicated adversarial tests and is explicitly mocked here.
-        self._owner_guard = patch("p0_exact_canary_approval.verify_current",
+        self._owner_guard = patch("p0_release_mode_authority.verify_release",
                                   return_value={"status": "PASS_ONE_APPROVED_CANARY_SCOPE_ONLY"})
         self._owner_guard.start()
         self.addCleanup(self._owner_guard.stop)
@@ -167,7 +167,7 @@ class BufferedReconcilerTests(unittest.TestCase):
              patch.object(runner, "records", side_effect=lambda _, name: tables[name]), \
              patch.object(runner, "process_one", return_value={"status": "DRY_RUN"}) as worker, \
              patch.object(runner.subprocess, "run") as gate, \
-             patch("p0_exact_canary_approval.verify_current",
+             patch("p0_release_mode_authority.verify_release",
                    side_effect=CanaryBlocked("P0_CANARY_PRIVATE_FILE_UNAVAILABLE")), \
              patch.object(runner, "claim_slot_run") as claim:
             gate.return_value.returncode = 0
@@ -175,7 +175,7 @@ class BufferedReconcilerTests(unittest.TestCase):
                                       now=self.now, apply=True)
         self.assertEqual(result["status"], "FAILED")
         blocked = [row for row in result["results"]
-                   if row.get("reason") == "EXACT_CANARY_OWNER_CONSENT_MISSING_OR_INVALID"]
+                   if row.get("reason") == "P0_RELEASE_OWNER_CONSENT_OR_LIVE_PROOF_INVALID"]
         self.assertEqual(len(blocked), 1, result)
         self.assertEqual(blocked[0]["status"], "BLOCKED")
         self.assertEqual(worker.call_count, 1)  # read-only candidate check

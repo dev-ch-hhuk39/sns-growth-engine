@@ -9,7 +9,7 @@
 投稿審査・投稿枠制約も引き続き適用する。
 
 加えて、オーナー署名の短時間承認
-shared/p0_once_private/approved_text_canary.json を必須とする。
+shared/p0_once_private/approved_text_canary_<account_id>.json を必須とする。
 
 - 認証：所有者だけが読める0600ファイル、HMAC-SHA256、改ざん防止、秘密キー非表示
 - 対象：アカウント、投稿枠ID、キューID、正確なテキストの source_fingerprint、デプロイSHA
@@ -90,3 +90,7 @@ scripts/run_buffered_production_host.sh、
 scripts/reconcile_due_production_slots.py、
 scripts/process_threads_queue.py、
 scripts/test_p0_exact_canary_approval.py
+
+## 継続運用についての追記（2026-10-17）
+
+最初の1件だけの承認と、実カナリア＋正確なライブSheets＋3計測予約を必須とする継続自動投稿の許可は別。詳しくは docs/P0_CONTINUOUS_POST_RELEASE_20261017.md を参照。通常モードの既定はcanaryで、本番投稿許可は現在OFF。\n

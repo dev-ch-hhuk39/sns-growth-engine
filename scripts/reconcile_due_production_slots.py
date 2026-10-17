@@ -218,23 +218,23 @@ def reconcile(client, *, accounts: list[str], apply: bool = False, now: datetime
                 if gate.returncode:
                     outcomes.append({**slot, "status": "BLOCKED", "reason": "RUNTIME_ACTIVATION_GATE_BLOCKED"})
                     break
-                # Check the same owner-signed exact canary before claiming a
-                # schedule slot or allocating a queue. The publisher checks
-                # the source SHA again before touching queue.status.
+                # Initial signed exact canary OR signed continuity with
+                # authenticated provider proof and 24/72/168 metrics. This
+                # precedes slot claim; the worker verifies again before writes.
                 if account in {"night_scout", "liver_manager"}:
-                    from p0_exact_canary_approval import (
-                        CanaryBlocked, verify_current as verify_exact_canary,
+                    from p0_release_mode_authority import (
+                        CanaryBlocked, verify_release,
                     )
                     try:
-                        verify_exact_canary(
+                        verify_release(
                             account_id=account,
                             release_sha=os.environ.get("CODE_REVISION", ""),
                             slot_id=str(slot["slot_id"]),
-                            queue_id=str(chosen["queue_id"]),
+                            queue_id=str(chosen["queue_id"]), client=client,
                         )
                     except CanaryBlocked:
                         outcomes.append({**slot, "status": "BLOCKED",
-                                         "reason": "EXACT_CANARY_OWNER_CONSENT_MISSING_OR_INVALID"})
+                                         "reason": "P0_RELEASE_OWNER_CONSENT_OR_LIVE_PROOF_INVALID"})
                         break
                 claim = claim_slot_run(client, account, slot["slot_id"], at=now, schedule_date_jst=slot["business_date_jst"])
                 if claim.get("status") != "CLAIMED":

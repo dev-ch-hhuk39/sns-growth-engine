@@ -1199,20 +1199,20 @@ def process_one(client: SheetsClient, queue_row: dict[str, Any], *, dry_run: boo
                 "reason": "OPERATOR_LEDGER_OR_TEXT_SCOPE_INVALID",
                 "queue_id": queue_id, "publish_attempted": False}
 
-    # Independent of PUBLISH_ENABLED and SNS_P0_ONCE_GATE_ENABLED. Bind the
-    # owner's private 30-minute approval to the EXACT source content. Even
-    # a legitimate one-use ledger cannot authorize another queue or text.
-    from p0_exact_canary_approval import CanaryBlocked, verify_current as verify_exact_canary
+    # One-use signed canary OR independently signed continuation. Live RAW
+    # provider and metric reservations are rechecked before ANY Sheets change.
+    from p0_release_mode_authority import CanaryBlocked, verify_release
     try:
-        verify_exact_canary(
+        verify_release(
             account_id=account_id,
             release_sha=os.environ.get("CODE_REVISION", ""),
             slot_id=str(queue_row.get("slot_id", "")),
             queue_id=queue_id, source_sha256=p0_once_source,
+            client=client,
         )
     except CanaryBlocked:
         return {"status": "P0_ONCE_PREPUBLISH_BLOCKED",
-                "reason": "EXACT_CANARY_OWNER_CONSENT_MISSING_OR_INVALID",
+                "reason": "P0_RELEASE_OWNER_CONSENT_OR_LIVE_PROOF_INVALID",
                 "queue_id": queue_id, "publish_attempted": False}
 
     try:

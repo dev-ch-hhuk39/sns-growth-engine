@@ -50,6 +50,7 @@ class DeploymentLifecycleTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(self.env_path.stat().st_mode), 0o600)
         self.assertIn('fake_secret_not_real', self.env_path.read_text())
         self.assertEqual(self.env_path.read_text().count('BUFFERED_POSTING_ENABLED='), 1)
+        self.assertIn('SNS_P0_AUTONOMY_MODE=canary', self.env_path.read_text())
         with self.assertRaises(ValueError):
             write_candidate_env(self.env_path, self.root, self.env)
 
@@ -76,6 +77,25 @@ class DeploymentLifecycleTests(unittest.TestCase):
         self.assertNotIn('ee'*32, content)
         self.assertIn('SNS_P0_ONCE_GATE_ENABLED=true', content)
         self.assertIn('BUFFERED_POSTING_ENABLED=false', content)
+
+    def test_github_input_never_enables_continuous_or_overrides_local_mode(self):
+        supplied = {**self.env, 'SNS_P0_AUTONOMY_MODE': 'continuous'}
+        write_candidate_env(self.env_path, self.root, supplied)
+        self.assertIn('SNS_P0_AUTONOMY_MODE=canary', self.env_path.read_text())
+        self.env_path.unlink()
+        live = self.shared / 'runtime.env'
+        live.write_text('SNS_P0_AUTONOMY_MODE=continuous\n'
+                        'SNS_P0_ONCE_GATE_ENABLED=false\n')
+        live.chmod(0o600)
+        write_candidate_env(self.env_path, self.root, self.env,
+                            inherit_local_p0=live)
+        self.assertIn('SNS_P0_AUTONOMY_MODE=continuous', self.env_path.read_text())
+        self.env_path.unlink()
+        live.write_text('SNS_P0_AUTONOMY_MODE=invalid\n')
+        with self.assertRaisesRegex(ValueError, 'autonomy_mode_invalid'):
+            write_candidate_env(self.env_path, self.root, self.env,
+                                inherit_local_p0=live)
+        self.assertFalse(self.env_path.exists())
 
     def test_posting_enable_requires_preexisting_local_authority(self):
         attempted = {**self.env, 'BUFFERED_POSTING_ENABLED': 'true',

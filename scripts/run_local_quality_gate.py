@@ -33,6 +33,8 @@ SENSITIVE_PARTS = (
 FOCUSED = (
     "test_cleanup_sns_runner_python_toolcache.py",
     "test_p0_exact_canary_approval.py",
+    "test_p0_release_mode_authority.py",
+    "test_sns_deploy_lifecycle.py",
     "test_buffered_host_runtime_contract.py",
     "test_buffered_reconciler.py",
     "test_pre_publish_sheets_failure.py",

@@ -191,6 +191,7 @@
   },
   "production_code_evidence": {
     "publisher": [
+      "scripts/p0_release_mode_authority.py",
       "scripts/process_threads_queue.py",
       "src/publishers/threads_publisher.py",
       "scripts/publisher_delivery_contract.py"
