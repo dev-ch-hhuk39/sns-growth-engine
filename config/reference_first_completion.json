@@ -146,7 +146,8 @@
       "threads-queue-worker.yml",
       "tiktok-shop-threads-onboarding.yml",
       "provision-p0-once-host-authority.yml",
-      "p0-private-restore-readonly-drill.yml"
+      "p0-private-restore-readonly-drill.yml",
+      "sns-runner-toolcache-recovery.yml"
     ]
   },
   "entrypoint_classification": {
