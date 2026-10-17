@@ -29,7 +29,7 @@ common_lock=/run/lock/chadult-production-deploy.lock
 }
 exec 9<>"$common_lock"
 flock -x -w 600 9 || { echo '[BLOCKED] global deployment lock is busy' >&2; exit 75; }
-"$source_root/scripts/check_chadult_vps_deploy_preflight.sh" --min-free-gib 8
+"$source_root/scripts/check_chadult_vps_deploy_preflight.sh" --min-free-gib 9
 current="$runtime_root/current"
 [[ -L "$current" ]] || { echo '[BLOCKED] existing current release pointer required' >&2; exit 78; }
 old_release="$(readlink -f "$current")"
