@@ -145,7 +145,8 @@
       "seed-approved-media-permissions.yml",
       "threads-queue-worker.yml",
       "tiktok-shop-threads-onboarding.yml",
-      "provision-p0-once-host-authority.yml"
+      "provision-p0-once-host-authority.yml",
+      "p0-private-restore-readonly-drill.yml"
     ]
   },
   "entrypoint_classification": {

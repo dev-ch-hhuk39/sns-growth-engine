@@ -17,6 +17,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "refresh-threads-tokens.yml",
     "production-storage-readonly-audit.yml",
     "provision-p0-once-host-authority.yml",
+    "p0-private-restore-readonly-drill.yml",
     "production-capacity-recovery.yml",
 }
 
