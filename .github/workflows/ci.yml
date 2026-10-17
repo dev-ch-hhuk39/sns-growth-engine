@@ -167,7 +167,7 @@ jobs:
           python3 scripts/test_external_library_registry.py
 
   dependency-audit:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -179,7 +179,7 @@ jobs:
           inputs: requirements.txt requirements-acquisition.txt requirements-media-runtime.txt requirements-ci.txt
 
   secret-history-scan:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
