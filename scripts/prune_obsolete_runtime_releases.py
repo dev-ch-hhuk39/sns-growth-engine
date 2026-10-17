@@ -86,7 +86,7 @@ def assert_not_in_use(paths: list[Path], *, proc_root: Path = Path("/proc")) -> 
         if not proc.name.isdecimal() or int(proc.name) == os.getpid():
             continue
         try:
-            args = (proc / "cmdline").read_bytes().replace(b"\\0", b" ").decode("utf-8", "replace")
+            args = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace")
         except (FileNotFoundError, ProcessLookupError):
             require(not proc.exists(), "process_cmdline_inventory_unknown")
             continue
