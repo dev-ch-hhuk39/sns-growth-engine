@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,37 @@ def _read_tab(client: Any, logical: str) -> tuple[list[dict[str, Any]], str]:
 
 class AttributionWriteBlocked(RuntimeError):
     """A sanitized write failure; ambiguous external results are never retried."""
+
+
+_SHEET_NUMERIC_FIELDS = {
+    "post_attributions": frozenset({
+        "window_hours", "performance_score", "account_baseline_score",
+        "delta_vs_baseline", "confidence",
+    }),
+    "strategy_state": frozenset({
+        "sample_count", "account_sample_count", "mean_performance_score",
+        "delta_vs_account", "confidence", "allocation_weight", "exploration_floor",
+    }),
+}
+
+
+def _same_sheet_value(logical: str, header: str, observed: Any, expected: Any) -> bool:
+    """Compare only declared numeric columns by numeric value.
+
+    gspread get_all_records numericises whole-number cells to int, even when
+    the RAW upsert specified 1.0. Identity, account and all JSON/text fields
+    retain strict string equality so this cannot mask a mismatched record.
+    """
+    if header in _SHEET_NUMERIC_FIELDS.get(logical, ()):
+        if not isinstance(observed, bool) and not isinstance(expected, bool):
+            try:
+                left = Decimal(str(observed))
+                right = Decimal(str(expected))
+                if left.is_finite() and right.is_finite():
+                    return left == right
+            except (InvalidOperation, ValueError):
+                pass
+    return str(observed) == str(expected)
 
 
 def _upsert_rows(
@@ -97,11 +129,11 @@ def _upsert_rows(
                 # Do not rewrite identical learning evidence solely because
                 # this invocation sampled a later wall-clock timestamp.
                 if all(
-                    str(old.get(header, "")) == str(merged.get(header, ""))
+                    _same_sheet_value(logical, header, old.get(header, ""), merged.get(header, ""))
                     for header in headers if header != "updated_at"
                 ):
                     merged["updated_at"] = old["updated_at"]
-            if all(str(old.get(header, "")) == str(merged.get(header, "")) for header in headers):
+            if all(_same_sheet_value(logical, header, old.get(header, ""), merged.get(header, "")) for header in headers):
                 skipped += 1
                 continue
             updates.append({
@@ -136,7 +168,7 @@ def _upsert_rows(
             if len(found.get(identity, [])) != 1:
                 raise AttributionWriteBlocked("attribution_readback_mismatch")
             observed = found[identity][0]
-            if any(str(observed.get(header, "")) != str(wanted.get(header, "")) for header in headers):
+            if any(not _same_sheet_value(logical, header, observed.get(header, ""), wanted.get(header, "")) for header in headers):
                 raise AttributionWriteBlocked("attribution_readback_mismatch")
     except Exception:
         # A partial success or lost acknowledgment MUST NOT trigger blind
