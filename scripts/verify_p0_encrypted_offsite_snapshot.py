@@ -12,6 +12,7 @@ import io
 import json
 import os
 import re
+import resource
 import shutil
 import sqlite3
 import stat
@@ -31,6 +32,10 @@ EXTRA = {"approved_text_canary_night_scout.json",
          "approved_text_canary_liver_manager.json",
          "approved_text_canary.json"}
 ESSENTIAL = {"manifest.json", "once.sqlite3", "signing_key.hex"}
+MAX_PLAINTEXT = 80 * 1024 * 1024
+MAX_SQLITE = 64 * 1024 * 1024
+MAX_MANIFEST = 16 * 1024
+MAX_APPROVAL = 8192
 
 
 class RestoreBlocked(RuntimeError):
@@ -66,18 +71,36 @@ def verify_plain_snapshot(
 ) -> dict[str, object]:
     check(SHA40.fullmatch(expected_release_sha) is not None,
           "RESTORE_EXPECTED_SHA_INVALID")
-    check(0 < len(raw) <= 80 * 1024 * 1024, "SNAPSHOT_SIZE_INVALID")
+    check(0 < len(raw) <= MAX_PLAINTEXT, "SNAPSHOT_SIZE_INVALID")
     try:
+        docs: dict[str, bytes] = {}
+        total = 0
+        # Iterate lazily rather than getmembers(), which may materialize an
+        # arbitrarily long, compressible archive header list in memory.
         with tarfile.open(fileobj=io.BytesIO(raw), mode="r:gz") as archive:
-            members = archive.getmembers()
-            names = [m.name for m in members]
-            check(len(set(names)) == len(names) and ESSENTIAL.issubset(names)
-                  and set(names) <= ESSENTIAL | EXTRA,
-                  "RESTORE_ARCHIVE_MEMBERS_UNSAFE")
-            check(all(m.isfile() and 0 < m.size <= 64 * 1024 * 1024
-                      and m.mode & 0o077 == 0 and m.name == Path(m.name).name
-                      for m in members), "RESTORE_ARCHIVE_STRUCTURE_UNSAFE")
-            docs = {m.name: archive.extractfile(m).read() for m in members}
+            for member in archive:
+                name = member.name
+                check(name not in docs and name in ESSENTIAL | EXTRA
+                      and len(docs) < len(ESSENTIAL | EXTRA),
+                      "RESTORE_ARCHIVE_MEMBERS_UNSAFE")
+                limit = (MAX_SQLITE if name == "once.sqlite3" else
+                         MAX_MANIFEST if name == "manifest.json" else
+                         256 if name == "signing_key.hex" else MAX_APPROVAL)
+                check(member.isfile() and 0 < member.size <= limit
+                      and member.mode & 0o077 == 0
+                      and name == Path(name).name,
+                      "RESTORE_ARCHIVE_STRUCTURE_UNSAFE")
+                total += member.size
+                check(total <= MAX_PLAINTEXT,
+                      "RESTORE_ARCHIVE_EXPANSION_LIMIT")
+                file = archive.extractfile(member)
+                check(file is not None, "RESTORE_ARCHIVE_EXTRACT_FAILED")
+                content = file.read(limit + 1)
+                check(len(content) == member.size,
+                      "RESTORE_ARCHIVE_CONTENT_SIZE_INVALID")
+                docs[name] = content
+        names = set(docs)
+        check(ESSENTIAL.issubset(names), "RESTORE_ARCHIVE_MEMBERS_UNSAFE")
         meta = json.loads(docs["manifest.json"].decode("utf-8"))
         check(type(meta) is dict and meta.get("schema") == SCHEMA
               and meta.get("release_sha") == expected_release_sha
@@ -154,14 +177,35 @@ def main() -> int:
         read_private(args.identity_file, 65536)
         age = shutil.which("age")
         check(bool(age), "AGE_DECRYPTOR_UNAVAILABLE")
-        result = subprocess.run(
-            [age, "-d", "-i", str(args.identity_file)],
-            input=ciphertext, capture_output=True, timeout=45, check=False,
-        )
-        check(result.returncode == 0, "AGE_DECRYPTION_FAILED")
-        report = verify_plain_snapshot(
-            result.stdout, args.expected_release_sha,
-            scratch_parent=args.scratch_parent)
+        if args.scratch_parent is not None:
+            parent = args.scratch_parent
+            check(parent.is_dir() and not parent.is_symlink()
+                  and stat.S_IMODE(parent.stat().st_mode) == 0o700
+                  and parent.stat().st_uid == os.getuid(),
+                  "RESTORE_SCRATCH_PARENT_UNSAFE")
+        # Avoid capture_output=True: an attacker-controlled encrypted file may
+        # decompress to unlimited stdout. The child is capped by RLIMIT_FSIZE
+        # and the 0600 temporary is never promoted or restored to production.
+        with tempfile.TemporaryDirectory(
+            prefix="sns-p0-age-decrypt-", dir=args.scratch_parent,
+        ) as tmp:
+            os.chmod(tmp, 0o700)
+            plain_path = Path(tmp) / "decrypted-snapshot.tar.gz"
+            fd = os.open(plain_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as out:
+                result = subprocess.run(
+                    [age, "-d", "-i", str(args.identity_file)],
+                    input=ciphertext, stdout=out, stderr=subprocess.DEVNULL,
+                    timeout=45, check=False,
+                    preexec_fn=lambda: resource.setrlimit(
+                        resource.RLIMIT_FSIZE, (MAX_PLAINTEXT, MAX_PLAINTEXT)),
+                )
+            check(result.returncode == 0 and
+                  0 < plain_path.stat().st_size <= MAX_PLAINTEXT,
+                  "AGE_DECRYPTION_FAILED_OR_OVERSIZE")
+            report = verify_plain_snapshot(
+                plain_path.read_bytes(), args.expected_release_sha,
+                scratch_parent=args.scratch_parent)
     except Exception:
         print(json.dumps({"status": "BLOCKED",
                           "reason": "P0_OFFSITE_RESTORE_DRILL_FAILED",

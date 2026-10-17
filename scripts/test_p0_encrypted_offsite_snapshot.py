@@ -76,6 +76,31 @@ def main() -> None:
                 tar.addfile(ti, io.BytesIO(payload))
         assert refused(lambda: verify_plain_snapshot(out.getvalue(), SHA), RestoreBlocked)
 
+        # A gzip-compressible metadata bomb must be rejected before expanding
+        # a large member into memory or extracting to any live directory.
+        bomb = dict(files)
+        bomb["manifest.json"] = b"A" * (16 * 1024 + 1)
+        for bad in (
+            bomb,
+            {**files, "surprise-secret.txt": b"x"},
+            {**files, "signing_key.hex": b"c" * 65},
+        ):
+            tarbuf = io.BytesIO()
+            with tarfile.open(fileobj=tarbuf, mode="w:gz") as tar:
+                for name, data in bad.items():
+                    info = tarfile.TarInfo(name)
+                    info.size = len(data)
+                    info.mode = 0o600
+                    tar.addfile(info, io.BytesIO(data))
+            assert refused(
+                lambda value=tarbuf.getvalue(): verify_plain_snapshot(value, SHA),
+                RestoreBlocked,
+            )
+        # A valid SQLite backup must still pass after archive size hardening.
+        assert verify_plain_snapshot(clean, SHA)["status"] == (
+            "RESTORED_AND_HMAC_VERIFIED_NO_CUTOVER"
+        )
+
         s = env_file.read_text()
         env_file.write_text(s.replace("BUFFERED_POSTING_ENABLED=false",
                                       "BUFFERED_POSTING_ENABLED=true"))
@@ -87,7 +112,7 @@ def main() -> None:
         os.chmod(env_file, 0o644)
         assert refused(lambda: make_snapshot(root, test_mode=True), ExportBlocked)
         assert not (root / "shared" / "p0_once_private" / "approved_text_canary_night_scout.json").exists()
-        print("OFFSITE_P0_SNAPSHOT_TESTS_PASS: 8/8")
+        print("OFFSITE_P0_SNAPSHOT_TESTS_PASS: 12/12")
 
 
 if __name__ == "__main__":

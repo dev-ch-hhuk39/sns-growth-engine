@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [main]
+  # Read-only hosted-runner vulnerability/secret scanning, 03:20 JST daily.
+  # No SNS posting, runner/VPS cleanup, Sheets writes, or deployment.
+  schedule:
+    - cron: "20 18 * * *"
 
 permissions:
   contents: read
@@ -148,7 +152,7 @@ jobs:
           python3 scripts/test_external_library_registry.py
 
   dependency-audit:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -160,7 +164,7 @@ jobs:
           inputs: requirements.txt requirements-acquisition.txt requirements-media-runtime.txt requirements-ci.txt
 
   secret-history-scan:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

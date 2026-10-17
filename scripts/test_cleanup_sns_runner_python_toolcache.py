@@ -78,6 +78,14 @@ class CleanupTests(unittest.TestCase):
             inspect(self.root, allow_test_root=True, now=self.version.stat().st_mtime + 30)
         self.assertTrue(self.version.exists())
 
+    def test_reclaim_floor_never_below_half_gib(self):
+        self.assertEqual(MIN_RECLAIM_BYTES, 512 * 1024 * 1024)
+        with patch("cleanup_sns_runner_python_toolcache._tree_size",
+                   return_value=MIN_RECLAIM_BYTES - 1):
+            with self.assertRaisesRegex(CacheBlocked, "NOT_ENOUGH_RECLAIM"):
+                self.plan()
+        self.assertTrue(self.version.exists())
+
     def test_insufficient_reclaim_fails_closed(self):
         with patch("cleanup_sns_runner_python_toolcache._tree_size", return_value=4):
             with self.assertRaisesRegex(CacheBlocked, "NOT_ENOUGH_RECLAIM"):
