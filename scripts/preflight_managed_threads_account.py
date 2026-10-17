@@ -23,19 +23,36 @@ from accounts.managed_accounts import (  # noqa: E402
 from publishers.threads_credentials import has_required_for_publish, resolve_credentials  # noqa: E402
 
 
+class _NoIdentityRedirects(urllib.request.HTTPRedirectHandler):
+    """Never forward credentials from the exact Meta API endpoint to a redirect."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
 def _verify_live_identity(account_id: str, credentials: dict[str, str]) -> dict[str, Any]:
     expected_handle = os.environ.get(credential_env_names(account_id)["handle"], "").strip().lstrip("@")
-    query = urllib.parse.urlencode({
-        "fields": "id,username",
-        "access_token": credentials["access_token"],
-    })
+    token = credentials.get("access_token", "")
+    expected_user_id = credentials.get("user_id", "")
+    if not expected_handle or not token or not expected_user_id:
+        return {"status": "CREDENTIAL_BLOCKED",
+                "reason": "THREADS_IDENTITY_INPUT_INCOMPLETE",
+                "secret_values_exposed": False}
+    # Tokens must NEVER appear in the URL, which could be logged by proxies,
+    # HTTP error tooling or redirect targets. Meta's OAuth2 endpoint supports
+    # Authorization: Bearer; deny redirects before dispatching credentials.
+    query = urllib.parse.urlencode({"fields": "id,username"})
     request = urllib.request.Request(
         f"https://graph.threads.net/v1.0/me?{query}",
-        headers={"User-Agent": "sns-growth-engine-account-preflight/1"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "User-Agent": "sns-growth-engine-account-preflight/1",
+        },
     )
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+        opener = urllib.request.build_opener(_NoIdentityRedirects())
+        with opener.open(request, timeout=20) as response:
+            payload = json.loads(response.read(65536).decode("utf-8"))
     except Exception as exc:
         return {
             "status": "CREDENTIAL_BLOCKED",
@@ -47,7 +64,7 @@ def _verify_live_identity(account_id: str, credentials: dict[str, str]) -> dict[
     reasons: list[str] = []
     if actual_id != str(credentials.get("user_id") or ""):
         reasons.append("threads_user_id_mismatch")
-    if expected_handle and actual_handle.lower() != expected_handle.lower():
+    if not actual_handle or actual_handle.lower() != expected_handle.lower():
         reasons.append("threads_handle_mismatch")
     return {
         "status": "PASS" if not reasons else "ACCOUNT_IDENTITY_BLOCKED",
