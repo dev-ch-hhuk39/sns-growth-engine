@@ -284,7 +284,9 @@ jobs:
             --dry-run
 
       - name: Publish one scheduled strictly approved Beauty row
-        if: env.ACTION == 'publish' && github.event_name == 'schedule' && env.BEAUTY_ACTIVATION_APPROVED == 'true' && steps.scheduled_queue.outputs.approved == 'true' && steps.scheduled_queue.outputs.queue_id != ''
+        # Single-writer quarantine: legacy GitHub direct SNS publishing is disabled.
+        # Preparation/review/metrics remain available; only VPS one-use worker may publish.
+        if: ${{ false }}
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -313,11 +315,9 @@ jobs:
         run: python3 scripts/process_threads_queue.py --account-id beauty_account --slot-id "$BEAUTY_SLOT_ID" --business-date-jst "$BUSINESS_DATE_JST" --max-posts 1 --dry-run
 
       - name: Publish one manually confirmed approved READY text row
-        if: >-
-          env.ACTION == 'publish' &&
-          github.event_name == 'workflow_dispatch' &&
-          env.BEAUTY_ACTIVATION_APPROVED == 'true' &&
-          github.event.inputs.confirm_publish == 'true'
+        # Single-writer quarantine: legacy GitHub direct SNS publishing is disabled.
+        # Preparation/review/metrics remain available; only VPS one-use worker may publish.
+        if: ${{ false }}
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
@@ -329,11 +329,9 @@ jobs:
         run: python3 scripts/process_threads_queue.py --account-id beauty_account --queue-id "${{ github.event.inputs.queue_id }}" --max-posts 1 --dry-run
 
       - name: Publish one exact human-approved Beauty media row
-        if: >-
-          env.ACTION == 'publish_media' &&
-          env.BEAUTY_ACTIVATION_APPROVED == 'true' &&
-          github.event_name == 'workflow_dispatch' &&
-          github.event.inputs.confirm_publish == 'true'
+        # Single-writer quarantine: legacy GitHub direct SNS publishing is disabled.
+        # Preparation/review/metrics remain available; only VPS one-use worker may publish.
+        if: ${{ false }}
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"

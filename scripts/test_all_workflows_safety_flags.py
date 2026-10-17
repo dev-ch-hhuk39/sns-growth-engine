@@ -56,7 +56,11 @@ def as_text(value: Any) -> str:
 
 
 def has_guard(value: Any) -> bool:
-    text = as_text(value).lower()
+    text = as_text(value).lower().strip()
+    # An immutable false step condition is stronger than an input-dependent
+    # approval guard: this GitHub workflow can never be a direct sender.
+    if text == "${{ false }}":
+        return True
     return any(token in text for token in (
         "confirm",
         "run_autonomous_apply",

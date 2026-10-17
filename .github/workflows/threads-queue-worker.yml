@@ -123,6 +123,12 @@ jobs:
 
       - name: Guard account and mode
         run: |
+          # Legacy GitHub-hosted delivery lacks the VPS one-use ledger.
+          # Stop BEFORE any live Sheets approval/repair or provider operation.
+          if [ "$MODE" = "real_post" ] || [ "$EXACT_QUEUE_APPROVAL" = "OWNER_APPROVED_EXACT_QUEUE" ]; then
+            echo "[BLOCKED] LEGACY_GITHUB_DIRECT_POSTING_DISABLED_USE_BUFFERED_VPS"
+            exit 78
+          fi
           if [ "$ACCOUNT_ID" != "night_scout" ] && [ "$ACCOUNT_ID" != "liver_manager" ] && [ "$ACCOUNT_ID" != "beauty_account" ]; then
             echo "[BLOCKED] unsupported account"
             exit 1

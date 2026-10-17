@@ -29,11 +29,8 @@ def main() -> int:
             "THREADS_ACCESS_TOKEN_LIVER_MANAGER",
             "THREADS_USER_ID_LIVER_MANAGER",
         ])),
-        ("manual apply requires explicit confirm", any(gate in apply_step for gate in [
-            "if: github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true'",
-            "if: (github.event_name == 'schedule' || github.event.inputs.confirm_autonomous == 'true')",
-            "if: github.event.inputs.confirm_autonomous == 'true'",
-        ])),
+        ("manual apply frozen at source during single-writer cutover",
+         "if: ${{ false }}" in apply_step),
     ]
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
