@@ -157,3 +157,43 @@ jobs:
             echo "SNS_HOST_RUNTIME_ENV_READABLE=false"
           fi
           echo "=== SNS_RUNTIME_READONLY_END ==="
+          echo "=== SNS_RELEASE_CAPACITY_READONLY_V1_BEGIN ==="
+          # Latest capacity gate: 9 GiB before new immutable staging, 8 GiB after it.
+          # This is observation only: it neither approves deletion nor deploys.
+          free_bytes="$(df -B1 --output=avail / | tail -n 1 | tr -d '[:space:]')"
+          if [[ "$free_bytes" =~ ^[0-9]+$ ]]; then
+            echo "SNS_ROOT_FREE_BYTES=$free_bytes"
+            if (( free_bytes >= 9 * 1024 * 1024 * 1024 )); then
+              echo "SNS_NEW_STAGE_9GIB_GATE=PASS"
+            else
+              echo "SNS_NEW_STAGE_9GIB_GATE=BLOCKED"
+            fi
+          else
+            echo "SNS_ROOT_FREE_BYTES=UNKNOWN"
+            echo "SNS_NEW_STAGE_9GIB_GATE=BLOCKED"
+          fi
+          if [ -d "$runtime" ] && [ ! -L "$runtime" ] && [ -d "$runtime/releases" ] && [ ! -L "$runtime/releases" ]; then
+            releases_real="$(readlink -f "$runtime/releases")"
+            for role in current previous pending; do
+              pointer="$runtime/$role"
+              if [ ! -e "$pointer" ] && [ ! -L "$pointer" ]; then
+                echo "SNS_RELEASE_POINTER_${role^^}=MISSING"
+                continue
+              fi
+              if [ ! -L "$pointer" ]; then
+                echo "SNS_RELEASE_POINTER_${role^^}=INVALID"
+                continue
+              fi
+              resolved="$(readlink -f "$pointer" 2>/dev/null || true)"
+              leaf="${resolved##*/}"
+              parent="${resolved%/*}"
+              if [ -n "$resolved" ] && [ "$parent" = "$releases_real" ] && [[ "$leaf" =~ ^[0-9a-f]{40}$ ]] && [ -d "$resolved" ] && [ ! -L "$resolved" ]; then
+                echo "SNS_RELEASE_POINTER_${role^^}=$leaf"
+              else
+                echo "SNS_RELEASE_POINTER_${role^^}=INVALID"
+              fi
+            done
+          else
+            echo "SNS_RELEASE_POINTERS=UNVERIFIABLE_RUNTIME_SCOPE"
+          fi
+          echo "=== SNS_RELEASE_CAPACITY_READONLY_V1_END ==="
