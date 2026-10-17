@@ -1,0 +1,55 @@
+name: Resolve Exact SNS Abandoned Pending Pointer (No Posting)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_current:
+        description: Exact 40-character currently active release SHA
+        required: true
+      expected_pending:
+        description: Exact 40-character abandoned candidate SHA
+        required: true
+      confirm:
+        description: Leave empty to inspect, or CLEAR_EXACT_PENDING_POINTER_ONLY
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-exact-abandoned-pending-reconcile
+  cancel-in-progress: false
+
+jobs:
+  inspect-or-clear:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    env:
+      PUBLISH_ENABLED: "false"
+      POSTING_ENABLED: "false"
+      ALLOW_REAL_THREADS_POST: "false"
+      ALLOW_REAL_X_POST: "false"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Verify exact abandoned SNS pointer; remove link only if confirmed
+        shell: bash
+        env:
+          CURRENT: ${{ inputs.expected_current }}
+          PENDING: ${{ inputs.expected_pending }}
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          args=(--expected-current "$CURRENT" --expected-pending "$PENDING")
+          if [ "$CONFIRM" = "CLEAR_EXACT_PENDING_POINTER_ONLY" ]; then
+            args+=(--confirm "$CONFIRM")
+          else
+            test -z "$CONFIRM"
+          fi
+          /usr/bin/python3 -B scripts/resolve_abandoned_sns_pending.py "${args[@]}"

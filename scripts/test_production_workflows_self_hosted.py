@@ -20,6 +20,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "p0-private-restore-readonly-drill.yml",
     "sns-runner-toolcache-recovery.yml",
     "production-capacity-recovery.yml",
+    "resolve-sns-abandoned-pending.yml",
 }
 
 checks: list[tuple[str, bool]] = []
