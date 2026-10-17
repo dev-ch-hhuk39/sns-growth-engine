@@ -71,7 +71,7 @@ def main() -> int:
                           'eligible_count': len(paths), 'removed': removed,
                           'scope': 'sns_owned_stage_only'}, sort_keys=True))
         return 0
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, RuntimeError) as exc:
         print(json.dumps({'status': 'BLOCKED', 'reason': type(exc).__name__}))
         return 78
 
