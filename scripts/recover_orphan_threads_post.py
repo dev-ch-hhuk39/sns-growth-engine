@@ -44,6 +44,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -51,7 +52,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from publishers.threads_credentials import resolve_credentials  # noqa: E402
-from sheets_client import SheetsClient  # noqa: E402
+from sheets_client import SheetsClient, sheets_write_once  # noqa: E402
 
 
 def _now_iso() -> str:
@@ -93,9 +94,14 @@ def _get_records(client: SheetsClient, logical: str) -> list[dict[str, Any]]:
 def _append_row(client: SheetsClient, logical: str, row: dict[str, Any]) -> None:
     ws = _ws(client, logical)
     headers = _get_headers_with_retry(ws)
-    client._call_with_rate_limit_retry(
-        f"append_row:{logical}:orphan_recovery",
-        lambda: ws.append_row([str(row.get(h, "")) for h in headers], value_input_option="USER_ENTERED"),
+    # An accepted append followed by a network error is an UNKNOWN outcome.
+    # Never blindly replay a potentially accepted result/metric/log insert.
+    sheets_write_once(
+        f"orphan_recovery_{logical}_append",
+        lambda: ws.append_row(
+            [str(row.get(h, "")) for h in headers],
+            value_input_option="USER_ENTERED",
+        ),
     )
 
 
@@ -187,14 +193,53 @@ def _match_post_in_api_results(
     api_posts: list[dict],
     expected_text: str,
 ) -> dict | None:
+    """An exact and *unique* provider match; prefixes are not proof."""
     expected_norm = expected_text.strip()
-    for post in api_posts:
-        actual = str(post.get("text", "")).strip()
-        if actual == expected_norm:
-            return post
-        if len(expected_norm) > 20 and expected_norm[:20] in actual:
-            return post
-    return None
+    if not expected_norm:
+        return None
+    matches = [post for post in api_posts
+               if str(post.get("text", "")).strip() == expected_norm]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _verified_provider_identity(post: dict, *, expected_text: str) -> bool:
+    """An authenticated account readback must supply both ID and permalink."""
+    import re
+
+    if not expected_text.strip() or str(post.get("text", "")).strip() != expected_text.strip():
+        return False
+    if not re.fullmatch(r"[0-9]{2,30}", str(post.get("id", "")).strip()):
+        return False
+    try:
+        parsed = urlsplit(str(post.get("permalink", "")).strip())
+        port = parsed.port
+    except ValueError:
+        return False
+    if (parsed.scheme != "https"
+            or parsed.hostname not in {
+                "threads.net", "www.threads.net",
+                "threads.com", "www.threads.com",
+            }
+            or not re.fullmatch(r"/@[^/]+/post/[A-Za-z0-9_-]+/?", parsed.path)
+            or parsed.username or parsed.password or port not in (None, 443)):
+        return False
+    return True
+
+
+def _provider_timestamp_corresponds(queue_row: dict[str, Any], post: dict) -> bool:
+    """The provider result must be from this exact failed save attempt."""
+    started = str(queue_row.get("processed_at", "")).strip()
+    provider = str(post.get("timestamp", "")).strip()
+    if not started or not provider:
+        return False
+    try:
+        a = datetime.fromisoformat(started.replace("Z", "+00:00"))
+        b = datetime.fromisoformat(provider.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if a.tzinfo is None or b.tzinfo is None:
+        return False
+    return abs((a - b).total_seconds()) <= 900
 
 
 def _write_recovery(
@@ -206,7 +251,21 @@ def _write_recovery(
     external_post_id: str,
     post_url: str,
     dry_run: bool,
+    provider_verified: bool = False,
 ) -> dict[str, Any]:
+    # The legacy orphan tool must never fabricate a REAL posted result from
+    # user-entered identity or an unauthenticated/partial Threads lookup.
+    if not dry_run and str(queue_row.get("status", "")).strip().upper() not in {
+        "POSTED_SAVE_FAILED", "POSTED_SAVE_UNVERIFIED", "PUBLISH_OUTCOME_UNVERIFIED",
+    }:
+        return {"status": "BLOCKED", "reason": "AMBIGUOUS_SAVE_FAILURE_STATE_REQUIRED"}
+    if not dry_run and not provider_verified:
+        return {"status": "BLOCKED", "reason": "LIVE_PROVIDER_PROOF_REQUIRED"}
+    if not dry_run and not _verified_provider_identity(
+        {"id": external_post_id, "permalink": post_url, "text": text},
+        expected_text=text,
+    ):
+        return {"status": "BLOCKED", "reason": "LIVE_PROVIDER_IDENTITY_INVALID"}
     queue_id = str(queue_row.get("queue_id", ""))
     account_id = str(queue_row.get("account_id", ""))
     draft_id = str(queue_row.get("draft_id", ""))
@@ -227,6 +286,7 @@ def _write_recovery(
         "posted_text": text,
         "posted_at": queue_row.get("processed_at") or _now_iso(),
         "status": "RECOVERED",
+        "verification_status": "LIVE_PROVIDER_MATCH_PENDING_SHEETS_READBACK",
         "metrics_status": "MANUAL_PENDING",
         "real_post": "true",
         "media_used": "false",
@@ -320,10 +380,38 @@ def _write_recovery(
         }
 
     _append_row(client, "posted_results", posted_result_row)
-    print(f"  [WRITE] posted_results: result_id={result_id}")
+    # Read back immediately before touching the source queue. A lost ACK must
+    # not be turned into a second append or a silent success.
+    matches = [row for row in _get_records(client, "posted_results")
+               if str(row.get("result_id", "")) == result_id]
+    if (len(matches) != 1
+            or str(matches[0].get("queue_id", "")) != queue_id
+            or str(matches[0].get("account_id", "")) != account_id
+            or str(matches[0].get("external_post_id", "")) != external_post_id
+            or str(matches[0].get("status", "")) != "RECOVERED"):
+        return {
+            "status": "PARTIAL_SAVE_UNVERIFIED_NO_RETRY",
+            "reason": "POSTED_RESULT_READBACK_FAILED",
+            "would_post": False,
+        }
 
     updated = _update_row(client, "queue", "queue_id", queue_id, queue_update_fields)
-    print(f"  [WRITE] queue: queue_id={queue_id} status=POSTED updated={updated}")
+    if not updated:
+        return {
+            "status": "PARTIAL_SAVE_UNVERIFIED_NO_RETRY",
+            "reason": "QUEUE_UPDATE_UNVERIFIED",
+            "would_post": False,
+        }
+    queue_matches = [row for row in _get_records(client, "queue")
+                     if str(row.get("queue_id", "")) == queue_id]
+    if (len(queue_matches) != 1
+            or str(queue_matches[0].get("status", "")) != "POSTED"
+            or str(queue_matches[0].get("account_id", "")) != account_id):
+        return {
+            "status": "PARTIAL_SAVE_UNVERIFIED_NO_RETRY",
+            "reason": "QUEUE_READBACK_FAILED",
+            "would_post": False,
+        }
 
     _append_row(client, "logs", log_row)
     _append_row(client, "pdca_runs", pdca_row)
@@ -404,10 +492,10 @@ def main() -> int:
     )
     parser.add_argument("--account-id", required=True, choices=["night_scout", "liver_manager"], help="対象アカウント")
     parser.add_argument("--queue-id", required=True, help="復旧対象の queue_id")
-    parser.add_argument("--external-post-id", default="", help="既知のThreads post ID（省略時はAPI検索）")
-    parser.add_argument("--post-url", default="", help="既知のThreads投稿URL（省略可）")
+    parser.add_argument("--external-post-id", default="", help="API読取と一致を要求する任意の期待post ID")
+    parser.add_argument("--post-url", default="", help="API読取と一致を要求する任意の期待投稿URL")
     parser.add_argument("--apply", action="store_true", help="Sheetsへの書き込みを実行する（省略時はdry-run）")
-    parser.add_argument("--skip-api-lookup", action="store_true", help="Threads API検索をスキップ（APIなしで確定する場合）")
+    parser.add_argument("--skip-api-lookup", action="store_true", help="非推奨: 実復旧は不可（読み取り専用保留）")
     parser.add_argument("--repair-existing-save", action="store_true")
     args = parser.parse_args()
 
@@ -465,41 +553,44 @@ def main() -> int:
         return 1
     print(f"  expected_text_len={len(text)}")
 
-    external_post_id = args.external_post_id
-    post_url = args.post_url
+    # A supplied ID/URL is only a FILTER, never provider proof. Do not
+    # claim a historical post exists just because an operator typed an ID.
+    if args.apply and str(queue_row.get("status", "")).strip().upper() not in {
+        "POSTED_SAVE_FAILED", "POSTED_SAVE_UNVERIFIED", "PUBLISH_OUTCOME_UNVERIFIED",
+    }:
+        print("[BLOCKED] AMBIGUOUS_SAVE_FAILURE_STATE_REQUIRED")
+        return 2
+    if args.skip_api_lookup:
+        print("[BLOCKED] LIVE_PROVIDER_READBACK_REQUIRED; no recovery applied")
+        return 2 if args.apply else 0
 
-    # Threads API で投稿候補を検索（ID不明かつAPIスキップ不要の場合）
-    if not external_post_id and not args.skip_api_lookup:
-        print(f"  [LOOKUP] Threads API で最新投稿を検索します (account_id={args.account_id})")
-        try:
-            api_posts = _fetch_recent_threads_posts(args.account_id, limit=25)
-            matched = _match_post_in_api_results(api_posts, text)
-            if matched:
-                external_post_id = str(matched.get("id", ""))
-                post_url = str(matched.get("permalink", ""))
-                print(f"  [MATCH] Threads投稿が一致: external_post_id={external_post_id}")
-            else:
-                print(f"  [NO_MATCH] APIの最新{len(api_posts)}件にテキスト一致なし")
-                print("  --external-post-id または --skip-api-lookup を指定して再実行してください")
-                if dry_run:
-                    print("  [DRY_RUN] 情報確認完了。一致なしのため apply 不可。")
-                    return 0
-                else:
-                    print("[BLOCKED] テキスト一致なし・external-post-id 未指定のため apply を中断します")
-                    return 1
-        except Exception as exc:
-            print(f"  [WARN] Threads API 検索に失敗: {exc}")
-            print("  --external-post-id または --skip-api-lookup を指定して再実行してください")
-            if dry_run:
-                print("  [DRY_RUN] API失敗のまま継続はしません。")
-                return 0
-            else:
-                print("[BLOCKED] Threads API 失敗のため apply を中断します")
-                return 1
-    elif args.skip_api_lookup and not external_post_id:
-        print("  [SKIP_API] Threads API検索スキップ。external_post_id は空のまま復旧します。")
+    print(f"  [LOOKUP] Threads API から読み取り専用で照合 (account_id={args.account_id})")
+    try:
+        api_posts = _fetch_recent_threads_posts(args.account_id, limit=25)
+    except Exception as exc:
+        # Never leak an HTTP client's token/URL/response into workflow logs.
+        print(f"  [BLOCKED] LIVE_PROVIDER_READBACK_FAILED type={type(exc).__name__}")
+        return 2 if args.apply else 0
 
-    # 復旧実行
+    matched = _match_post_in_api_results(api_posts, text)
+    if (matched is None or not _verified_provider_identity(matched, expected_text=text)):
+        print("[BLOCKED] UNIQUE_EXACT_PROVIDER_POST_NOT_VERIFIED")
+        return 2 if args.apply else 0
+    if args.apply and not _provider_timestamp_corresponds(queue_row, matched):
+        print("[BLOCKED] EXACT_PROVIDER_POST_TIMESTAMP_PROOF_REQUIRED")
+        return 2
+    external_post_id = str(matched["id"])
+    post_url = str(matched["permalink"])
+    if args.external_post_id and external_post_id != args.external_post_id:
+        print("[BLOCKED] SUPPLIED_PROVIDER_ID_CONFLICT")
+        return 2 if args.apply else 0
+    if args.post_url and post_url != args.post_url:
+        print("[BLOCKED] SUPPLIED_PROVIDER_PERMALINK_CONFLICT")
+        return 2 if args.apply else 0
+    print("  [MATCH] 認証済みThreads投稿が一意に一致（ID・本文・URL確認済み）")
+
+    # Never trigger a second Threads POST. Any saved result is RECOVERED,
+    # and only independently verified post/result readback can mark it final.
     outcome = _write_recovery(
         client,
         queue_row=queue_row,
@@ -508,13 +599,17 @@ def main() -> int:
         external_post_id=external_post_id,
         post_url=post_url,
         dry_run=dry_run,
+        provider_verified=True,
     )
     print(json.dumps(outcome, ensure_ascii=False, indent=2))
 
     if dry_run:
-        print("\n[DRY_RUN] 実際の書き込みは行いませんでした。--apply を付けて再実行すると復旧を実行します。")
+        print("\n[DRY_RUN] 実際の書き込みは行いませんでした。--apply には認証済みAPI照合が必須です。")
+    elif outcome.get("status") != "RECOVERED":
+        print("[BLOCKED] PARTIAL_SAVE_UNVERIFIED_NO_RETRY: providerの再送は禁止")
+        return 2
     else:
-        print(f"\n[DONE] 復旧完了: result_id={outcome.get('result_id')}")
+        print("[DONE] Threads再投稿なし・Sheets保存結果を再読込で確認")
 
     return 0
 

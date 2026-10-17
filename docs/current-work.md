@@ -1,3 +1,34 @@
+## 2026-10-17 — Require live Threads proof for old orphan recovery
+
+- Hardened `recover_orphan_threads_post.py` to refuse legacy
+  `--skip-api-lookup --apply` and treating user-supplied IDs as provider proof.
+  Only one **full exact text** from the account's authenticated API with a
+  valid provider ID, HTTPS post permalink, 15-minute queued processing-time
+  consistency and unresolved save status can enter an explicit recovery.
+- The posted_result append is non-retrying on unknown provider acceptance;
+  posting result and source queue are independently read back. Unknown
+  results stay `PARTIAL_SAVE_UNVERIFIED_NO_RETRY`, not success. No reposting.
+- Added adversarial tests and a runbook
+  `docs/ORPHAN_RECOVERY_PROVIDER_PROOF_20261017.md`. Actual account access,
+  external provider evidence, source backup/sole-writer attestation and any
+  Sheets repair remain operator-controlled. Nothing was applied live.
+
+## 2026-10-17 — P0 signed-ledger read-only restore drill (no Codex)
+
+- Added `scripts/p0_ledger_backup_restore_drill.py`: source SQLite remains
+  mode=ro; private ephemeral snapshot and independent restore are verified
+  against the existing immutable HMAC event and send-attempt chains, and
+  complete local table content digests are compared. No source modification,
+  SNS calls, Sheets writes, new operational DB or permanent backup.
+- Added `scripts/run_p0_host_restore_drill.py` and a manual-only,
+  protected-main, no-post, owner-private host runner workflow, with strict
+  runtime.env parsing, deployment-lock check and posting-OFF precondition.
+- Added 22 synthetic adversarial tests and integrated both in focused QA.
+  Reports never contain secrets or provider/source identifiers.
+- See `docs/P0_READONLY_RESTORE_DRILL_20261017.md`. A successful
+  **ephemeral** restore remains insufficient for a durable production backup,
+  writer exclusivity, historic provider reconciliation or live cutover.
+
 ## 2026-10-17 — Disable legacy GitHub direct SNS publish routes
 
 - Audited all 50 workflow YAML files and found old Ubuntu-hosted direct

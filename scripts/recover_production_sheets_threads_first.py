@@ -1168,7 +1168,7 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
     ]
     if recovered_missing_ext_id:
         warning_list.append(f"recovered_missing_external_post_id: count={len(recovered_missing_ext_id)}")
-        recommended_actions.append("recover_orphan_threads_post.py --apply --external-post-id <id> で更新してください")
+        recommended_actions.append("IDの補完には既存の実投稿をThreads APIで本人照合してください。外部ID指定だけでの --apply は不可。まず --dry-run で一意一致・時刻を確認し、別途投稿結果の読戻しを検証してください")
 
     # --- 参考収集・採点パイプラインの安全不変条件 ---
     def _to_float(value: Any) -> float:
