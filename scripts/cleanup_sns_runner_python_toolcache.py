@@ -24,7 +24,9 @@ DEPLOY_LOCK = Path("/run/lock/chadult-production-deploy.lock")
 VERSION = re.compile(r"3\.(?:11|12|13|14)\.\d+(?:\.\d+)?\Z")
 MAX_VERSIONS = 5
 MIN_AGE_SECONDS = 30 * 60
-MIN_RECLAIM_BYTES = 600 * 1024 * 1024
+# Reinstallable setup-python artifacts only. At least 512 MiB must be
+# recoverable to justify a guarded cache eviction; live .venv is never touched.
+MIN_RECLAIM_BYTES = 512 * 1024 * 1024
 
 
 class CacheBlocked(RuntimeError):

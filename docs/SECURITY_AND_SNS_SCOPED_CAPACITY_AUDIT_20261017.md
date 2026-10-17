@@ -14,7 +14,11 @@ This report is a bounded verification, not a guarantee of zero vulnerabilities.
 
 - SNS runner directory: approximately 5.6GB total.
 - Buffered runtime releases: approximately 4.3GB. Keep current, previous, and all existing releases today: oldest is Oct 11 at 15:46 JST, not yet 7 days old.
-- Dedicated setup-python cache: approximately 570MB. Existing minimum recoverable cache policy is 600MiB; do not bypass or break CI.
+- Dedicated setup-python cache: approximately 570MB. Initial recoverable cache floor was 600MiB; a dedicated 512MiB floor is now
+validated by offline tests while preserving the same main-only workflow, strict
+version shape, 30-minute cache age, exclusive cross-service deploy lock, process
+inspection, and zero touch to production virtualenv or any other applications.
+This cache must be re-downloaded when setup-python next needs that version.
 - Runner _work: approximately 611MB; runner checkouts, action dependencies and toolcache, not an indiscriminate deletion target.
 - Runner diagnostic logs: approximately 65MB. Of this, logs aged more than 7 days total about 40MB; older than 14 days about 21MB. Preserve incident diagnostics unless separately archived and reviewed.
 - Live SNS shared runtime and private ledger: approximately 16MB. Absolutely protect tokens, HMAC keys, runtime.env, once.sqlite3, lock files, backups, posting records.
@@ -44,3 +48,12 @@ schedule intentionally skips PR-only and integration-test jobs and does
 not use the SNS VPS runner, post, deploy, delete, or modify external data.
 Enable native GitHub alerts separately with appropriate repository admin
 permissions; this workflow does not automatically enable GitHub settings.
+
+## Bounded cache recovery note
+
+If CI is green and the production shared lock is idle, the existing
+sns-runner-toolcache-recovery workflow may be applied with confirm_cleanup=true,
+but ONLY against the SNS dedicated runner toolcache. All candidate bytes are
+re-read under lock before deletion; if Python is in use, fail closed. Historical
+release directories and diagnostic logs remain preserved. The code change does
+not itself delete anything or grant permission to publish.
