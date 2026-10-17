@@ -129,7 +129,7 @@ cp "$3/bin/pip" "$3/bin/python"
         names = [step.get("name", "") for step in steps]
         self.assertLess(names.index("Fail closed on shared VPS disk and RAM preflight"),
                         names.index("Transactional candidate deploy, health, activation and rollback"))
-        self.assertIn("--min-free-gib 8", steps[names.index(
+        self.assertIn("--min-free-gib 9", steps[names.index(
             "Fail closed on shared VPS disk and RAM preflight")]["run"])
 
 
