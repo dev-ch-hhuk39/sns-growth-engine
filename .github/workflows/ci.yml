@@ -144,6 +144,21 @@ jobs:
         run: python3 -m compileall -q src scripts
       - name: Unit and integration tests
         run: python3 scripts/run_repository_tests.py --json-output /tmp/repository-tests.json
+      - name: Run isolated pytest tests directory
+        # scripts/test_*.py is covered separately by run_repository_tests.py.
+        # Keep pytest plugin autoload disabled and production side effects OFF.
+        env:
+          PYTHONPATH: "src:scripts:."
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+          PUBLISH_ENABLED: "false"
+          ALLOW_REAL_THREADS_POST: "false"
+          ALLOW_REAL_X_POST: "false"
+          ALLOW_MEDIA_POSTS: "false"
+          ALLOW_VIDEO_DOWNLOAD: "false"
+          ALLOW_VIDEO_CUT: "false"
+          ALLOW_CLOUDINARY_UPLOAD: "false"
+        run: python3 -m pytest -q -p no:cacheprovider tests/
+
       - name: Workflow security and license contracts
         run: |
           python3 scripts/test_all_workflows_safety_flags.py
@@ -152,7 +167,7 @@ jobs:
           python3 scripts/test_external_library_registry.py
 
   dependency-audit:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -164,7 +179,7 @@ jobs:
           inputs: requirements.txt requirements-acquisition.txt requirements-media-runtime.txt requirements-ci.txt
 
   secret-history-scan:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
