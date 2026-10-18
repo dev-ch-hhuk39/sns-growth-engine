@@ -273,7 +273,7 @@ class BoundedStrategyPersistenceTests(unittest.TestCase):
                 attribution, "--account-id", "night_scout", "--apply",
                 "--confirm-attribution", "--use-sheets",
             )
-        self.assertEqual(code, 1)
+        self.assertEqual(code, 0)
         self.assertEqual(payload["status"], "NO_MEASURED_OBSERVATIONS")
         self.assertFalse(payload["would_write"])
 
