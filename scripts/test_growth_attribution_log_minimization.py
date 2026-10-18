@@ -6,7 +6,7 @@ import json
 import unittest
 from pathlib import Path
 
-from run_growth_attribution_cycle import public_growth_cycle_report
+from run_growth_attribution_cycle import public_growth_cycle_report, growth_cycle_exit_code
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -66,6 +66,47 @@ class GrowthAttributionLogTests(unittest.TestCase):
         self.assertEqual(safe["observation_count"], 0)
         self.assertNotIn("attributions", safe)
         self.assertNotIn("strategy_state", safe)
+
+    def test_verified_no_data_is_successful_noop_without_misleading_results(self):
+        missing = {
+            "status": "NO_MEASURED_OBSERVATIONS",
+            "account_id": "beauty_account",
+            "observation_count": 0,
+            "reason": "no_verified_metrics_for_account",
+            "would_write": False,
+            "would_post": False,
+            "attributions": [],
+            "strategy_state": [],
+        }
+        self.assertEqual(growth_cycle_exit_code(missing), 0)
+        safe = public_growth_cycle_report(missing)
+        self.assertEqual(safe["status"], "NO_MEASURED_OBSERVATIONS")
+        self.assertFalse(safe["would_write"])
+        self.assertFalse(safe["would_post"])
+        self.assertNotIn("attributions", safe)
+        self.assertNotIn("strategy_state", safe)
+
+    def test_zero_metrics_never_hides_blocked_or_unknown_writes(self):
+        for payload in (
+            {"status": "NO_MEASURED_OBSERVATIONS", "observation_count": 1,
+             "would_write": False},
+            {"status": "NO_MEASURED_OBSERVATIONS", "observation_count": 0,
+             "would_write": True},
+            {"status": "NO_MEASURED_OBSERVATIONS", "observation_count": 0,
+             "would_write": False, "external_write_outcome_uncertain": True},
+            {"status": "READ_FAILED", "would_write": False},
+            {"status": "OUTCOME_UNKNOWN_BLOCKED", "would_write": False},
+            {"status": "BLOCKED", "would_write": False},
+        ):
+            with self.subTest(payload=payload):
+                self.assertEqual(growth_cycle_exit_code(payload), 1)
+        self.assertEqual(growth_cycle_exit_code({"status": "APPLIED"}), 0)
+
+    def test_no_measured_workflow_remains_visible_to_operator(self):
+        workflow = (ROOT / ".github/workflows/production-autopilot-aftercare.yml").read_text()
+        self.assertIn("growth_attribution_status=NO_MEASURED_OBSERVATIONS", workflow)
+        self.assertIn('grep -Fq \'"status": "NO_MEASURED_OBSERVATIONS"\'', workflow)
+        self.assertIn("::warning::Verified metrics absent", workflow)
 
     def test_sheets_stdout_uses_public_result_and_keeps_local_explicit_output(self):
         source = (ROOT / "scripts" / "run_growth_attribution_cycle.py").read_text()
