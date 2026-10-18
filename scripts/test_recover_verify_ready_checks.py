@@ -162,6 +162,42 @@ def main() -> int:
     checks.append(("clean: 人間承認済みBeauty READYは許可", res["no_ready_for_x_or_beauty"] is True))
     checks.append(("clean: Beauty queueのaccount/platform境界", res["queue_beauty_0"] is True))
 
+    # A legacy saved creator clip is safe to leave READY only if the actual
+    # asset rights and the hard gate were independently verified. Whitelisting
+    # a generation mode alone must never authorize a missing asset.
+    saved_clip = _base_tabs()
+    saved_clip["queue"] = [{
+        "queue_id": "clip_with_rights",
+        "account_id": "night_scout",
+        "platform": "threads",
+        "status": "READY",
+        "generation_mode": "saved_approved_source_clip",
+        "media_asset_id": "ma_verified",
+        "media_url": "https://res.cloudinary.com/chadult/video/upload/safe.mp4",
+        "public_post_text": "承認された動画の検証済みテキストです。",
+        "hard_gate_status": "PASS",
+    }]
+    saved_clip["media_assets"] = [{
+        "media_id": "ma_verified",
+        "rights_status": "approved_creator_clip",
+        "permission_status": "approved",
+        "reuse_status": "approved_creator_clip",
+        "storage_url": "https://res.cloudinary.com/chadult/video/upload/safe.mp4",
+    }]
+    res = mod.verify_state(_FakeClient(saved_clip))["checks"]
+    checks.append(("clean: verified creator clip is READY without legacy text log",
+                   res["generated_candidates_not_ready_by_default"] is True))
+    saved_clip["queue"][0]["hard_gate_status"] = ""
+    saved_clip["queue"][0]["validator_status"] = "BLOCKED"
+    res = mod.verify_state(_FakeClient(saved_clip))["checks"]
+    checks.append(("bad: creator clip lacking validator and hard-gate proof is blocked",
+                   res["generated_candidates_not_ready_by_default"] is False))
+    saved_clip["queue"][0]["hard_gate_status"] = "PASS"
+    saved_clip["media_assets"] = []
+    res = mod.verify_state(_FakeClient(saved_clip))["checks"]
+    checks.append(("bad: creator clip missing approved asset is blocked",
+                   res["generated_candidates_not_ready_by_default"] is False))
+
     # === violation: media 必須なのに media 参照なし ===
     v3 = _base_tabs()
     v3["queue"] = [
