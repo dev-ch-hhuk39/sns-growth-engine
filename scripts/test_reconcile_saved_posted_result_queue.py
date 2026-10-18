@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import copy
+import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from scripts import recover_orphan_threads_post as recovery
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
+from scripts import recover_orphan_threads_post as recovery  # noqa: E402
 
 
 class ReconcileExistingResultTests(unittest.TestCase):
