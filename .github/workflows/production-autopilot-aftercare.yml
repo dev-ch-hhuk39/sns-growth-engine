@@ -163,12 +163,18 @@ jobs:
           # retries measured_pdca before safe_original_fallback. Generating an
           # extra activation_pdca batch first creates near-duplicates and burns
           # the bounded Gemini budget without adding usable inventory.
+          ready_report="$(mktemp)"
+          trap 'rm -f "$ready_report"' EXIT
           if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
-            --confirm-ready-maintenance --use-sheets; then
-            echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed after bounded fallback"
+            --confirm-ready-maintenance --use-sheets > "$ready_report"; then
+            python3 scripts/ready_inventory_diagnostics.py \
+              --account-id "$ACCOUNT_ID" --report "$ready_report" || true
+            echo "[OPERATIONAL_FAILURE] next 24h verified READY coverage is below requirement"
             exit 1
           fi
+          python3 scripts/ready_inventory_diagnostics.py \
+            --account-id "$ACCOUNT_ID" --report "$ready_report"
           if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
             --confirm-ready-maintenance --use-sheets --evergreen-bank; then
