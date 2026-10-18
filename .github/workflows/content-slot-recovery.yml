@@ -77,7 +77,9 @@ jobs:
         continue-on-error: true
         run: python3 scripts/reconcile_due_production_slots.py --account-id "$ACCOUNT_ID" --dry-run
       - name: Guard and backfill at most one slot per account
-        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_recovery == 'true' && github.event.inputs.dry_run_only != 'true')
+        # Scheduled scans are read-only. External posts require a separate
+        # intentional manual dispatch and explicit owner-controlled activation.
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.confirm_recovery == 'true' && github.event.inputs.dry_run_only != 'true' && vars.SNS_OWNER_PUBLISH_APPROVED == 'true'
         env:
           PUBLISH_ENABLED: "true"
           ALLOW_REAL_THREADS_POST: "true"
