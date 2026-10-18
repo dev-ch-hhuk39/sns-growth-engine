@@ -76,7 +76,7 @@ def expired_unpublished_bank_allocations(
             "account_id": str(queue.get("account_id", "")),
             "previous_slot_id": str(queue.get("slot_id", "")),
             "previous_business_date_jst": scheduled,
-            "fields": {"slot_id": "", "business_date_jst": "", "schedule_date_jst": ""},
+            "fields": {"business_date_jst": "", "schedule_date_jst": ""},
             "reason": "EXPIRED_UNPUBLISHED_BANK_ALLOCATION",
         })
     return releases
@@ -122,6 +122,9 @@ def release_expired_unpublished_bank_allocations(
         row_number = by_id.get(str(release["queue_id"]))
         if not row_number:
             raise RuntimeError("EVERGREEN_RELEASE_QUEUE_MISSING")
+        # The bank may free dates, never the already-approved immutable slot.
+        if set(release["fields"]) != {"business_date_jst", "schedule_date_jst"}:
+            raise PermissionError("evergreen_release_immutable_queue_identity")
         for field, value in release["fields"].items():
             updates.append({
                 "range": rowcol_to_a1(row_number, headers.index(field) + 1),
@@ -219,7 +222,7 @@ def admit_bank_batch(client, candidates: list[dict], *, now: datetime,
         requested = bank_record(candidate, now=now, runtime_check=runtime_check)
         if before != requested:
             raise RuntimeError("EVERGREEN_QUEUE_CHANGED")
-        allocated = {**current, "slot_id": "", "business_date_jst": "", "schedule_date_jst": ""}
+        allocated = {**current, "business_date_jst": "", "schedule_date_jst": ""}
         after = bank_record(allocated, now=now, runtime_check=runtime_check)
         existing = [r for r in bank if r.get("fallback_id") == after["fallback_id"]]
         if existing:
@@ -232,7 +235,7 @@ def admit_bank_batch(client, candidates: list[dict], *, now: datetime,
             additions.append(after)
         physical_row = next(i for i, row in enumerate(qvalues[1:], 2)
                             if len(row) > qheaders.index("queue_id") and str(row[qheaders.index("queue_id")]) == qid)
-        for key in ("slot_id", "business_date_jst", "schedule_date_jst"):
+        for key in ("business_date_jst", "schedule_date_jst"):
             if current.get(key):
                 ranges.append({"range": rowcol_to_a1(physical_row, qheaders.index(key) + 1), "values": [[""]]})
         expected.append((allocated, after))
@@ -262,16 +265,30 @@ def allocate_bank_candidate(client, *, account: str, slot: dict, now: datetime,
     if slot.get("account_id", account) != account:
         raise ValueError("EVERGREEN_ACCOUNT_SLOT_MISMATCH")
     queues = records(client, "queue")
-    # Allocated future candidates are reserves, not a pool to steal from.
-    unallocated = [r for r in queues if not (r.get("business_date_jst") or r.get("schedule_date_jst"))]
+    # A queue's slot_id is an immutable approval identity. Reuse only within
+    # that very same slot; never reassign a cross-slot or blank-slot candidate.
+    # This retains the publisher's identity guard instead of bypassing it.
+    exact_slot = str(slot.get("slot_id") or "").strip()
+    target_date = str(slot.get("business_date_jst") or "").strip()
+    if not exact_slot or not target_date:
+        return {"status": "BLOCKED", "reason": "EVERGREEN_TARGET_SLOT_IDENTITY_MISSING",
+                "would_post": False}
+    unallocated = [
+        r for r in queues
+        if not (r.get("business_date_jst") or r.get("schedule_date_jst"))
+        and str(r.get("slot_id") or "").strip() == exact_slot
+    ]
     selected = select_evergreen(records(client, "evergreen_bank"), unallocated,
         records(client, "posted_results"), account=account, now=now,
         runtime_check=runtime_check, similar=similar)
     if not selected:
-        return {"status": "NO_ELIGIBLE_EVERGREEN", "would_post": False}
+        return {"status": "NO_ELIGIBLE_EVERGREEN",
+                "reason": "NO_APPROVED_BANK_IN_EXACT_IMMUTABLE_SLOT", "would_post": False}
     queue = selected["canonical_queue"]
-    fields = {"slot_id": slot["slot_id"], "business_date_jst": slot["business_date_jst"],
-              "schedule_date_jst": slot["business_date_jst"]}
+    if str(queue.get("slot_id") or "").strip() != exact_slot:
+        return {"status": "BLOCKED", "reason": "EVERGREEN_SELECTED_SLOT_MISMATCH",
+                "would_post": False}
+    fields = {"business_date_jst": target_date, "schedule_date_jst": target_date}
     if not runtime_check({**queue, **fields}):
         return {"status": "BLOCKED", "reason": "ALLOCATION_INVALIDATES_APPROVAL", "would_post": False}
     if not apply:

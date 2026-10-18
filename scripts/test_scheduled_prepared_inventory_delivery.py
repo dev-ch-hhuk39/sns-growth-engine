@@ -187,13 +187,14 @@ class PreparedInventoryTests(unittest.TestCase):
 
         def update(_client, _table, _key, queue_id, changes):
             self.assertEqual(queue_id, "q1")
+            self.assertNotIn("slot_id", changes)
             rows[0].update(changes)
             return True
 
         with patch("process_threads_queue.update_row", side_effect=update), \
              patch("process_threads_queue.records", return_value=rows):
             maintenance.release_temporary_bank_allocations(SimpleNamespace(), [dict(rows[0])])
-        self.assertEqual(rows[0]["slot_id"], "")
+        self.assertEqual(rows[0]["slot_id"], "future")
         self.assertEqual(rows[0]["business_date_jst"], "")
         self.assertEqual(rows[0]["schedule_date_jst"], "")
 

@@ -39,8 +39,12 @@ def release_temporary_bank_allocations(client: Any, rows: list[dict[str, Any]]) 
     from process_threads_queue import records, update_row
 
     for row in rows:
+        # The approved queue is bound to its original slot_id forever.
+        # Clearing only its temporary future dates keeps it out of the live
+        # scheduler while preserving the immutable source identity.
+        if not str(row.get("slot_id") or "").strip():
+            raise RuntimeError("EVERGREEN_TEMPORARY_SLOT_IDENTITY_MISSING")
         if not update_row(client, "queue", "queue_id", row["queue_id"], {
-            "slot_id": "",
             "business_date_jst": "",
             "schedule_date_jst": "",
         }):
@@ -48,7 +52,8 @@ def release_temporary_bank_allocations(client: Any, rows: list[dict[str, Any]]) 
     released_rows = records(client, "queue")
     for row in rows:
         matches = [item for item in released_rows if item.get("queue_id") == row["queue_id"]]
-        if (len(matches) != 1 or matches[0].get("slot_id")
+        if (len(matches) != 1
+                or str(matches[0].get("slot_id") or "") != str(row.get("slot_id") or "")
                 or matches[0].get("business_date_jst") or matches[0].get("schedule_date_jst")):
             raise RuntimeError("EVERGREEN_ALLOCATION_RELEASE_READ_AFTER_WRITE_FAILED")
 
