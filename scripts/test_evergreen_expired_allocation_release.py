@@ -22,7 +22,7 @@ def queue(**overrides):
 
 bank = [{"queue_id": "q1", "account_id": "night_scout", "status": "VALIDATED"}]
 safe = expired_unpublished_bank_allocations(bank, [queue()], [], [], current_business_date="2026-09-15")
-assert len(safe) == 1 and safe[0]["fields"] == {"slot_id": "", "business_date_jst": "", "schedule_date_jst": ""}
+assert len(safe) == 1 and safe[0]["fields"] == {"business_date_jst": "", "schedule_date_jst": ""}
 
 assert not expired_unpublished_bank_allocations(bank, [queue()], [{"queue_id": "q1"}], [], current_business_date="2026-09-15")
 assert not expired_unpublished_bank_allocations(bank, [queue()], [], [{
@@ -61,5 +61,16 @@ ws = Worksheet()
 client = SimpleNamespace(_ws=lambda logical: ws)
 result = release_expired_unpublished_bank_allocations(client, safe, apply=True)
 assert result == {"status": "RELEASED", "released": 1, "read_after_write": "PASS", "would_post": False}
-assert ws.values[1] == ["q1", "", "", ""]
+assert ws.values[1] == ["q1", "ns_1600_original", "", ""]
+# Even a caller-supplied legacy release cannot bypass the slot identity guard.
+corrupt = {"queue_id": "q1", "fields": {
+    "slot_id": "", "business_date_jst": "", "schedule_date_jst": "",
+}}
+try:
+    release_expired_unpublished_bank_allocations(client, [corrupt], apply=True)
+except PermissionError as error:
+    assert "evergreen_release_immutable_queue_identity" in str(error)
+else:
+    raise AssertionError("immutable slot rewrite was not blocked")
+assert ws.values[1] == ["q1", "ns_1600_original", "", ""]
 print("PASS test_evergreen_expired_allocation_release.py")
