@@ -128,7 +128,7 @@ class ReconcileExistingResultTests(unittest.TestCase):
         self.update_mock.assert_not_called()
 
     def test_current_queue_changed_since_read_blocks(self):
-        self.tabs["queue"][0]["status"] = "POSTED"
+        self.tabs["queue"][0] = {**self.queue, "status": "POSTED"}
         self.assertEqual(self.reconcile(apply=True)["reason"], "PREWRITE_SOURCE_CHANGED_NO_RETRY")
         self.update_mock.assert_not_called()
 
