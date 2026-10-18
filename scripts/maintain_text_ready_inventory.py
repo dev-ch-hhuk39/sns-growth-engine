@@ -176,6 +176,7 @@ def hard_replenishment_blocker(result: dict[str, Any]) -> bool:
         "SHEETS_QUOTA_EXHAUSTED",
         "KILL_SWITCH_ACTIVE",
         "PERMISSION_OR_SAFETY_FAILURE",
+        "OWNER_REVIEW_REQUIRED",
     }
     if str(result.get("failure_category", "")) in hard_categories:
         return True
@@ -217,6 +218,7 @@ def generation_failure_category(payload: dict[str, Any]) -> str:
     codes = {str(value) for value in reasons}
     codes.add(str(outcome.get("reason") or ""))
     categories = (
+        ({"content_quality_v2_owner_review_required"}, "OWNER_REVIEW_REQUIRED"),
         ({"gemini_auth_rejected", "GEMINI_API_KEY_MISSING"}, "PROVIDER_CREDENTIALS_MISSING_OR_REJECTED"),
         ({"gemini_rate_limited"}, "PROVIDER_RATE_LIMITED"),
         ({"gemini_connection_error", "gemini_retryable_server_error"}, "PROVIDER_UNAVAILABLE"),
@@ -346,6 +348,7 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
     last_payload: dict[str, Any] = {}
     budget_blocked = False
     sheets_quota_blocked = False
+    owner_review_blocked = False
     for generation_route, generation in _generation_commands(account_id, slot, offline_only=offline_only):
         if budget_blocked and generation_route != "offline_original_bank":
             continue
@@ -364,6 +367,9 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
             "reason": str(payload.get("failure_category") or payload.get("reason") or ""),
         })
         if rc != 0:
+            if str(payload.get("failure_category", "")) == "OWNER_REVIEW_REQUIRED":
+                owner_review_blocked = True
+                break
             if str(payload.get("failure_category", "")) == "SHEETS_QUOTA_EXHAUSTED":
                 sheets_quota_blocked = True
                 break
@@ -428,11 +434,12 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
             break
     return {
         **result,
-        "status": "QUALITY_EXHAUSTED",
+        "status": "OWNER_REVIEW_REQUIRED" if owner_review_blocked else "QUALITY_EXHAUSTED",
         "queue_ids": approved,
         "missing": required - len(approved),
         "generation_status": str(last_payload.get("status", "")),
-        "failure_category": ("SHEETS_QUOTA_EXHAUSTED" if sheets_quota_blocked else
+        "failure_category": ("OWNER_REVIEW_REQUIRED" if owner_review_blocked else
+                             "SHEETS_QUOTA_EXHAUSTED" if sheets_quota_blocked else
                              str(last_payload.get("failure_category") or
                                  ("AI_APPROVAL_BUDGET_EXHAUSTED" if budget_blocked else "QUALITY_EXHAUSTED"))),
         "attempts": attempts,
