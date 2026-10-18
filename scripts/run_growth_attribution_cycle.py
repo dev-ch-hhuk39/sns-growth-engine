@@ -16,7 +16,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from learning.feature_attribution import build_growth_cycle  # noqa: E402
+from learning.feature_attribution import FEATURE_SCHEMA_VERSION, build_growth_cycle  # noqa: E402
 from accounts.managed_accounts import account_choices  # noqa: E402
 
 
@@ -205,6 +205,51 @@ def _load_input(path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return list(data.get("posted_results", [])), list(data.get("metric_snapshots", []))
 
 
+
+
+def empty_attribution_observation_state(
+    posted: list[dict[str, Any]], snapshots: list[dict[str, Any]],
+    *, account_id: str,
+) -> dict[str, str]:
+    """Explain zero *eligible* observations without pretending metrics are absent."""
+    measured = any(
+        str(r.get("account_id") or "") == account_id
+        and str(r.get("metrics_status") or r.get("collection_status") or "").upper() == "MEASURED"
+        for r in snapshots
+    )
+    if not measured:
+        return {"status": "NO_MEASURED_OBSERVATIONS",
+                "reason": "no_verified_metrics_for_account"}
+    supported_posts = any(
+        str(r.get("account_id") or "") == account_id
+        and str(r.get("feature_schema_version") or "") == FEATURE_SCHEMA_VERSION
+        and str(r.get("status") or "").upper() in {"POSTED", "RECOVERED", ""}
+        for r in posted
+    )
+    if not supported_posts:
+        return {"status": "NO_ELIGIBLE_ATTRIBUTION_OBSERVATIONS",
+                "reason": "measured_posts_missing_feature_provenance"}
+    return {"status": "NO_ELIGIBLE_ATTRIBUTION_OBSERVATIONS",
+            "reason": "measured_snapshots_no_eligible_feature_join"}
+
+
+def growth_cycle_exit_code(result: dict[str, Any]) -> int:
+    """No measurements is a *visible no-op*, not a Sheets/runtime failure.
+
+    An account with no verified observations must not fabricate attribution,
+    but also must not prevent unrelated aftercare inventory and health checks.
+    Keep permission, read, and uncertain-write errors as hard failures.
+    """
+    status = str(result.get("status") or "")
+    if status in {"NO_MEASURED_OBSERVATIONS", "NO_ELIGIBLE_ATTRIBUTION_OBSERVATIONS"}:
+        if (result.get("would_write") is False
+                and result.get("observation_count") == 0
+                and not result.get("external_write_outcome_uncertain")):
+            return 0
+        return 1
+    return 0 if status in {"PLAN_ONLY", "APPLIED"} else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -282,8 +327,10 @@ def main() -> int:
         planned_rows = len(result["attributions"]) + len(result["strategy_state"])
         if result["observation_count"] < 1:
             result.update({
-                "status": "NO_MEASURED_OBSERVATIONS", "would_write": False,
-                "reason": "no_verified_metrics_for_account",
+                **empty_attribution_observation_state(
+                    posted, snapshots, account_id=args.account_id,
+                ),
+                "would_write": False,
             })
         elif planned_rows > args.max_write_rows:
             result.update({
@@ -335,7 +382,7 @@ def main() -> int:
     # Hosted workflow stdout must not expose provider IDs or per-post metrics.
     stdout_result = public_growth_cycle_report(result) if args.use_sheets else result
     print(json.dumps(stdout_result, ensure_ascii=False, indent=2))
-    return 0 if result.get("status") in {"PLAN_ONLY", "APPLIED"} else 1
+    return growth_cycle_exit_code(result)
 
 
 if __name__ == "__main__":

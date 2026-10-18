@@ -456,6 +456,78 @@ def _fetch_exact_threads_post(account_id: str, media_id: str) -> dict[str, Any]:
     return payload
 
 
+
+def _write_verified_saved_result_queue_only(
+    client: SheetsClient,
+    *,
+    queue_id: str,
+    account_id: str,
+    expected_text: str,
+    expected_draft_id: str,
+    result_id: str,
+) -> bool:
+    """Narrow exception for an independently proven *existing* external post.
+
+    The ordinary queue writer intentionally prohibits any terminal-state
+    transition. This private reconciliation writer must never be called before
+    the saved POSTED result and the authenticated provider GET are proven
+    identical. It changes precisely status/error/result_id, never immutable
+    identity or posting fields; an ambiguous response is never retried.
+    """
+    if getattr(client, "dry_run", False):
+        raise PermissionError("saved_queue_repair_dry_run_forbidden")
+    ws = _ws(client, "queue")
+    headers = _get_headers_with_retry(ws)
+    required = {"queue_id", "account_id", "platform", "draft_id", "status",
+                "result_id", "error", "public_post_text"}
+    if len(headers) != len(set(headers)) or not required.issubset(headers):
+        raise PermissionError("saved_queue_repair_schema_unverified")
+
+    cells = client._call_with_rate_limit_retry(
+        "findall:queue:saved_result_repair",
+        lambda: ws.findall(queue_id, in_column=headers.index("queue_id") + 1),
+    )
+    exact = [cell for cell in cells if str(cell.value) == queue_id]
+    if len(exact) != 1:
+        raise PermissionError("saved_queue_repair_identity_ambiguous")
+    rownum = exact[0].row
+    before_values = client._call_with_rate_limit_retry(
+        "row_values:queue:saved_result_repair:prewrite",
+        lambda: ws.row_values(rownum),
+    )
+    before = dict(zip(headers, before_values))
+    if (str(before.get("queue_id") or "") != queue_id
+            or str(before.get("account_id") or "") != account_id
+            or str(before.get("platform") or "").lower() != "threads"
+            or str(before.get("status") or "").upper() != "POSTED_SAVE_FAILED"
+            or str(before.get("draft_id") or "") != expected_draft_id
+            or str(before.get("public_post_text") or "").strip() != expected_text
+            or str(before.get("result_id") or "") not in {"", result_id}):
+        raise PermissionError("saved_queue_repair_source_changed")
+
+    # Queue-labelled updates use SheetsClient.sheets_write_once (no retries
+    # after a possible remote commit). The old publisher guard is unchanged.
+    client._batch_update_fields(
+        ws, headers, rownum,
+        {"status": "POSTED", "error": "", "result_id": result_id},
+        label=f"queue:{queue_id}:saved_result_reconciliation",
+    )
+    after_values = client._call_with_rate_limit_retry(
+        "row_values:queue:saved_result_repair:readback",
+        lambda: ws.row_values(rownum),
+    )
+    after = dict(zip(headers, after_values))
+    if (str(after.get("queue_id") or "") != queue_id
+            or str(after.get("account_id") or "") != account_id
+            or str(after.get("draft_id") or "") != expected_draft_id
+            or str(after.get("public_post_text") or "").strip() != expected_text
+            or str(after.get("status") or "").upper() != "POSTED"
+            or str(after.get("result_id") or "") != result_id
+            or str(after.get("error") or "").strip()):
+        raise RuntimeError("saved_queue_repair_readback_unverified")
+    return True
+
+
 def reconcile_saved_result_queue(
     client: SheetsClient,
     queue: dict[str, Any],
@@ -469,8 +541,6 @@ def reconcile_saved_result_queue(
     provider GET are required. This path NEVER appends posted_results or replays
     a publish request, even when a prior Sheets ACK was ambiguous.
     """
-    from process_threads_queue import update_row
-
     queue_id = str(queue.get("queue_id", "")).strip()
     account = str(queue.get("account_id", "")).strip()
     if (not queue_id or account not in {"night_scout", "liver_manager"}
@@ -546,11 +616,19 @@ def reconcile_saved_result_queue(
             or str(current_saved[0].get("verification_status", "")).upper() != "READ_AFTER_WRITE_PASS"
             or str(current_saved[0].get("external_post_id", "")).strip() != ext_id):
         return {"status": "BLOCKED", "reason": "PREWRITE_SOURCE_CHANGED_NO_RETRY"}
-    changed = update_row(client, "queue", "queue_id", queue_id, {
-        "status": "POSTED",
-        "error": "",
-        "result_id": result_id,
-    })
+    try:
+        changed = _write_verified_saved_result_queue_only(
+            client, queue_id=queue_id, account_id=account,
+            expected_text=text, expected_draft_id=str(queue.get("draft_id") or ""),
+            result_id=result_id,
+        )
+    except PermissionError:
+        return {"status": "BLOCKED", "reason": "SAVED_RESULT_QUEUE_IDENTITY_CHANGED",
+                "would_post": False}
+    except Exception:
+        # An accepted Sheets write can lose its acknowledgement. Never replay
+        # the writer and never submit another Threads request.
+        return {"status": "PARTIAL_SAVE_UNVERIFIED_NO_RETRY", "would_post": False}
     if not changed:
         return {"status": "PARTIAL_SAVE_UNVERIFIED_NO_RETRY", "would_post": False}
     after = [r for r in _get_records(client, "queue")
