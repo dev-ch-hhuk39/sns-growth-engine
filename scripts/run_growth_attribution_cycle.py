@@ -205,6 +205,24 @@ def _load_input(path: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     return list(data.get("posted_results", [])), list(data.get("metric_snapshots", []))
 
 
+
+def growth_cycle_exit_code(result: dict[str, Any]) -> int:
+    """No measurements is a *visible no-op*, not a Sheets/runtime failure.
+
+    An account with no verified observations must not fabricate attribution,
+    but also must not prevent unrelated aftercare inventory and health checks.
+    Keep permission, read, and uncertain-write errors as hard failures.
+    """
+    status = str(result.get("status") or "")
+    if status == "NO_MEASURED_OBSERVATIONS":
+        if (result.get("would_write") is False
+                and result.get("observation_count") == 0
+                and not result.get("external_write_outcome_uncertain")):
+            return 0
+        return 1
+    return 0 if status in {"PLAN_ONLY", "APPLIED"} else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -335,7 +353,7 @@ def main() -> int:
     # Hosted workflow stdout must not expose provider IDs or per-post metrics.
     stdout_result = public_growth_cycle_report(result) if args.use_sheets else result
     print(json.dumps(stdout_result, ensure_ascii=False, indent=2))
-    return 0 if result.get("status") in {"PLAN_ONLY", "APPLIED"} else 1
+    return growth_cycle_exit_code(result)
 
 
 if __name__ == "__main__":
