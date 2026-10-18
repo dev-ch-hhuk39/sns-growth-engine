@@ -1317,6 +1317,9 @@ def verify_state(client: SheetsClient) -> dict[str, Any]:
         )
 
     media_pipeline_modes = {
+        # Saved approved creator clips use the same exact rights + hard-gate
+        # proof as direct reference media; a missing/failed gate still blocks.
+        "saved_approved_source_clip",
         "direct_reference_media",
         "approved_saved_media",
         "approved_media_growth",

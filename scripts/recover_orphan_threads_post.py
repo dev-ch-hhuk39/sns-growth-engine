@@ -426,6 +426,147 @@ def _write_recovery(
     }
 
 
+
+def _fetch_exact_threads_post(account_id: str, media_id: str) -> dict[str, Any]:
+    """Read an existing Graph media ID with this account's token; never publish."""
+    import re
+    import requests
+
+    if not re.fullmatch(r"[0-9]{2,30}", media_id):
+        raise RuntimeError("saved_result_media_id_invalid")
+    creds = resolve_credentials(account_id)
+    token = str(creds.get("access_token") or "")
+    user_id = str(creds.get("user_id") or "")
+    if not token or not user_id:
+        raise RuntimeError("saved_result_provider_credentials_missing")
+    try:
+        response = requests.get(
+            f"https://graph.threads.net/v1.0/{media_id}",
+            params={"fields": "id,text,timestamp,permalink"},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        # Provider response bodies and bearer secrets must not reach stdout.
+        raise RuntimeError("saved_result_provider_readback_unavailable") from None
+    if not isinstance(payload, dict):
+        raise RuntimeError("saved_result_provider_response_invalid")
+    return payload
+
+
+def reconcile_saved_result_queue(
+    client: SheetsClient,
+    queue: dict[str, Any],
+    provider_post: dict[str, Any],
+    *,
+    apply: bool,
+) -> dict[str, Any]:
+    """Reconcile an already-saved result without creating or publishing a post.
+
+    Both the existing Sheets read-after-write proof and an authenticated exact
+    provider GET are required. This path NEVER appends posted_results or replays
+    a publish request, even when a prior Sheets ACK was ambiguous.
+    """
+    from process_threads_queue import update_row
+
+    queue_id = str(queue.get("queue_id", "")).strip()
+    account = str(queue.get("account_id", "")).strip()
+    if (not queue_id or account not in {"night_scout", "liver_manager"}
+            or str(queue.get("status", "")).upper() != "POSTED_SAVE_FAILED"):
+        return {"status": "BLOCKED", "reason": "EXACT_FAILED_QUEUE_REQUIRED"}
+    existing = _get_records(client, "posted_results")
+    matches = [row for row in existing if str(row.get("queue_id", "")) == queue_id]
+    if len(matches) != 1:
+        return {"status": "BLOCKED", "reason": "EXACT_EXISTING_RESULT_REQUIRED"}
+    saved = matches[0]
+    text = str(saved.get("posted_text", "")).strip()
+    ext_id = str(saved.get("external_post_id", "")).strip()
+    url = str(saved.get("post_url", "")).strip()
+    if (str(saved.get("account_id", "")) != account
+            or str(saved.get("platform", "")).lower() != "threads"
+            or str(saved.get("status", "")).upper() != "POSTED"
+            or str(saved.get("verification_status", "")).upper() != "READ_AFTER_WRITE_PASS"
+            or str(saved.get("real_post", "")).lower() != "true"
+            or not text or str(queue.get("public_post_text", "")).strip() != text
+            or not str(saved.get("result_id", "")).strip()
+            or not _verified_provider_identity(
+                {"id": ext_id, "permalink": url, "text": text}, expected_text=text
+            )):
+        return {"status": "BLOCKED", "reason": "SAVED_RESULT_PROOF_INCOMPLETE"}
+    if (str(queue.get("draft_id", "")).strip()
+            and str(saved.get("draft_id", "")).strip() != str(queue.get("draft_id", "")).strip()):
+        return {"status": "BLOCKED", "reason": "SAVED_RESULT_DRAFT_MISMATCH"}
+    if sum(
+        1 for row in existing
+        if str(row.get("account_id", "")) == account
+        and str(row.get("external_post_id", "")).strip() == ext_id
+    ) != 1:
+        return {"status": "BLOCKED", "reason": "SAVED_RESULT_EXTERNAL_ID_NOT_UNIQUE"}
+    if (not isinstance(provider_post, dict)
+            or str(provider_post.get("id", "")).strip() != ext_id
+            or str(provider_post.get("permalink", "")).strip() != url
+            or not _verified_provider_identity(provider_post, expected_text=text)
+            or not _provider_timestamp_corresponds(queue, provider_post)):
+        return {"status": "BLOCKED", "reason": "LIVE_PROVIDER_EXACT_MATCH_REQUIRED"}
+    try:
+        saved_at = datetime.fromisoformat(str(saved.get("posted_at", "")).replace("Z", "+00:00"))
+        provider_at = datetime.fromisoformat(str(provider_post.get("timestamp", "")).replace("Z", "+00:00"))
+        if (saved_at.tzinfo is None or provider_at.tzinfo is None
+                or abs((saved_at - provider_at).total_seconds()) > 120):
+            raise ValueError("timestamp_not_verified")
+    except (ValueError, TypeError):
+        return {"status": "BLOCKED", "reason": "LIVE_PROVIDER_POSTED_AT_MISMATCH"}
+
+    result_id = str(saved["result_id"])
+    plan = {
+        "status": "PLAN_ONLY",
+        "read_only": True,
+        "queue_id": queue_id,
+        "existing_result_id": result_id,
+        "would_post": False,
+        "would_append_posted_results": False,
+        "metrics_reservation": "NOT_VERIFIED_BY_THIS_ACTION",
+    }
+    if not apply:
+        return plan
+
+    # Reload both tabs just before updating; fail closed if another operator
+    # or workflow changed the source state while provider proof was fetched.
+    current = [r for r in _get_records(client, "queue")
+               if str(r.get("queue_id", "")) == queue_id]
+    current_saved = [r for r in _get_records(client, "posted_results")
+                     if str(r.get("queue_id", "")) == queue_id]
+    if (len(current) != 1 or len(current_saved) != 1
+            or str(current[0].get("status", "")).upper() != "POSTED_SAVE_FAILED"
+            or str(current[0].get("account_id", "")) != account
+            or str(current[0].get("public_post_text", "")).strip() != text
+            or str(current_saved[0].get("result_id", "")) != result_id
+            or str(current_saved[0].get("verification_status", "")).upper() != "READ_AFTER_WRITE_PASS"
+            or str(current_saved[0].get("external_post_id", "")).strip() != ext_id):
+        return {"status": "BLOCKED", "reason": "PREWRITE_SOURCE_CHANGED_NO_RETRY"}
+    changed = update_row(client, "queue", "queue_id", queue_id, {
+        "status": "POSTED",
+        "error": "",
+        "result_id": result_id,
+    })
+    if not changed:
+        return {"status": "PARTIAL_SAVE_UNVERIFIED_NO_RETRY", "would_post": False}
+    after = [r for r in _get_records(client, "queue")
+             if str(r.get("queue_id", "")) == queue_id]
+    if (len(after) != 1 or str(after[0].get("status", "")).upper() != "POSTED"
+            or str(after[0].get("result_id", "")) != result_id
+            or str(after[0].get("account_id", "")) != account
+            or str(after[0].get("error", "")).strip()):
+        return {"status": "PARTIAL_SAVE_UNVERIFIED_NO_RETRY", "would_post": False}
+    return {
+        **plan, "status": "RECONCILED_QUEUE_ONLY", "read_only": False,
+        "queue_readback_verified": True,
+    }
+
+
+
 def repair_existing_save(client: SheetsClient, queue: dict[str, Any], api_posts: list[dict], *, apply: bool) -> dict[str, Any]:
     from process_threads_queue import records, update_row, schedule_metrics_after_post, verify_posted_result_persistence
     from content_slot_runs import build_slot_run, upsert_slot_run
@@ -497,6 +638,8 @@ def main() -> int:
     parser.add_argument("--apply", action="store_true", help="Sheetsへの書き込みを実行する（省略時はdry-run）")
     parser.add_argument("--skip-api-lookup", action="store_true", help="非推奨: 実復旧は不可（読み取り専用保留）")
     parser.add_argument("--repair-existing-save", action="store_true")
+    parser.add_argument("--reconcile-saved-result-queue", action="store_true",
+                        help="Reconcile an already saved POSTED result to a failed queue without reposting")
     args = parser.parse_args()
 
     dry_run = not args.apply
@@ -517,6 +660,24 @@ def main() -> int:
     if str(queue_row.get("account_id", "")) != args.account_id:
         print(f"[ERROR] queue の account_id={queue_row.get('account_id')} が {args.account_id} と不一致")
         return 1
+
+    if args.reconcile_saved_result_queue:
+        if args.repair_existing_save or args.skip_api_lookup or args.external_post_id or args.post_url:
+            print("[BLOCKED] RECONCILE_REQUIRES_AUTHENTICATED_EXACT_PROVIDER_GET")
+            return 2
+        existing = [r for r in _get_records(client, "posted_results")
+                    if str(r.get("queue_id", "")) == args.queue_id]
+        if len(existing) != 1:
+            print("[BLOCKED] EXACT_EXISTING_RESULT_REQUIRED")
+            return 2
+        try:
+            provider = _fetch_exact_threads_post(args.account_id, str(existing[0].get("external_post_id", "")))
+        except Exception:
+            print("[BLOCKED] EXACT_PROVIDER_READBACK_FAILED")
+            return 2
+        outcome = reconcile_saved_result_queue(client, queue_row, provider, apply=args.apply)
+        print(json.dumps(outcome, ensure_ascii=False, indent=2))
+        return 0 if outcome["status"] in {"PLAN_ONLY", "RECONCILED_QUEUE_ONLY"} else 2
 
     if args.repair_existing_save:
         if args.skip_api_lookup or args.external_post_id or args.post_url:
