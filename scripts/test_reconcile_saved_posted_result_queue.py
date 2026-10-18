@@ -49,7 +49,7 @@ class ReconcileExistingResultTests(unittest.TestCase):
         self.tabs = {"queue": [self.queue], "posted_results": [self.saved]}
         self.client = object()
         self.read = patch.object(recovery, "_get_records", side_effect=self._read)
-        self.update = patch("process_threads_queue.update_row", side_effect=self._update)
+        self.update = patch.object(recovery, "_write_verified_saved_result_queue_only", side_effect=self._update)
         self.read.start()
         self.update_mock = self.update.start()
         self.addCleanup(self.read.stop)
@@ -58,13 +58,14 @@ class ReconcileExistingResultTests(unittest.TestCase):
     def _read(self, _client, logical):
         return copy.deepcopy(self.tabs[logical])
 
-    def _update(self, _client, logical, key, value, data):
-        if logical != "queue" or key != "queue_id":
-            raise AssertionError("attempted writes outside exact queue")
-        matches = [row for row in self.tabs["queue"] if row.get(key) == value]
-        if len(matches) != 1:
+    def _update(self, _client, *, queue_id, account_id, expected_text,
+                expected_draft_id, result_id):
+        matches = [row for row in self.tabs["queue"] if row.get("queue_id") == queue_id]
+        if (len(matches) != 1 or matches[0]["account_id"] != account_id
+                or matches[0]["public_post_text"] != expected_text
+                or matches[0]["draft_id"] != expected_draft_id):
             return False
-        matches[0].update(data)
+        matches[0].update({"status": "POSTED", "error": "", "result_id": result_id})
         return True
 
     def reconcile(self, apply=False):
