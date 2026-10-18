@@ -8,7 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 workflow = (ROOT / ".github/workflows/content-slot-recovery.yml").read_text(encoding="utf-8")
 runner = (ROOT / "scripts/backfill_missed_content_slots.py").read_text(encoding="utf-8")
 
-assert "github.event_name == 'schedule' ||" in workflow
+assert "github.event_name == 'schedule' ||" not in workflow
+assert "github.event_name == 'workflow_dispatch'" in workflow
+assert "vars.SNS_OWNER_PUBLISH_APPROVED == 'true'" in workflow
 assert "--apply --confirm-reconcile" in workflow
 assert "reconcile_due_production_slots.py" in workflow
 assert 'PUBLISH_ENABLED: "true"' in workflow
