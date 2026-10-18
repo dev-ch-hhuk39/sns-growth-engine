@@ -151,9 +151,9 @@ jobs:
             --output /tmp/growth-attribution.json
           # A genuine zero-measurement account is explicitly labelled and
           # does not suppress unrelated inventory and health aftercare.
-          if grep -Fq '"status": "NO_MEASURED_OBSERVATIONS"' /tmp/growth-attribution.json; then
-            echo "::warning::Verified metrics absent; attribution not applied for $ACCOUNT_ID"
-            echo "growth_attribution_status=NO_MEASURED_OBSERVATIONS" >> "$GITHUB_STEP_SUMMARY"
+          if grep -Eq '"status": "(NO_MEASURED_OBSERVATIONS|NO_ELIGIBLE_ATTRIBUTION_OBSERVATIONS)"' /tmp/growth-attribution.json; then
+            echo "::warning::No eligible feature attribution; reason is in the redacted status JSON for $ACCOUNT_ID"
+            echo "growth_attribution_status=NO_ELIGIBLE_OR_NO_MEASURED_OBSERVATIONS" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Maintain next 24h READY inventory from measured PDCA
