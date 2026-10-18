@@ -145,7 +145,7 @@ class GrowthAttributionLogTests(unittest.TestCase):
         source = (ROOT / "scripts" / "run_growth_attribution_cycle.py").read_text()
         self.assertIn("public_growth_cycle_report(result) if args.use_sheets else result", source)
         self.assertIn('Path(args.output).write_text(json.dumps(result', source)
-        self.assertIn("return 0 if result.get(\"status\")", source)
+        self.assertIn("return growth_cycle_exit_code(result)", source)
 
 
 if __name__ == "__main__":
