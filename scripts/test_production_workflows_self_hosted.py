@@ -17,6 +17,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "refresh-threads-tokens.yml",
     "production-storage-readonly-audit.yml",
     "sns-once-host-resource-audit.yml",
+    "sns-once-resolve-abandoned-pending.yml",
     "provision-p0-once-host-authority.yml",
     "p0-private-restore-readonly-drill.yml",
     "sns-runner-toolcache-recovery.yml",
