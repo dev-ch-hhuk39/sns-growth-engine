@@ -104,7 +104,8 @@
       "production-storage-readonly-audit.yml",
       "production-capacity-recovery.yml",
       "source-research.yml",
-      "threads-video-reference-preparation.yml"
+      "threads-video-reference-preparation.yml",
+      "sns-stale-actions-queue-recovery.yml"
     ],
     "inactive_compatibility": [
       "autonomous-growth-loop.yml",
