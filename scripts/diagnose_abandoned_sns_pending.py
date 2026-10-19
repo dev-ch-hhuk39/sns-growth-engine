@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import json
+import os
 import re
 from pathlib import Path
 
@@ -56,6 +57,8 @@ def diagnose(current: str, previous: str, pending: str, *,
         inspect(root, current, pending)
     except (PendingBlocked, OSError, RuntimeError):
         return {**base, "status": "BLOCKED", "category": "PRIVATE_RUNTIME_SAFETY_UNVERIFIED"}
+    if not os.access(root, os.W_OK | os.X_OK):
+        return {**base, "status": "BLOCKED", "category": "PENDING_PARENT_NOT_WRITABLE"}
     if not lock.is_file() or lock.is_symlink():
         return {**base, "status": "BLOCKED", "category": "SHARED_LOCK_UNAVAILABLE"}
     try:
