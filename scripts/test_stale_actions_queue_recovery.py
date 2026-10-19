@@ -23,7 +23,7 @@ RUN = {
 }
 JOBS = {
     "total_count": 1, "jobs": [
-        {"status": "queued", "started_at": None,
+        {"id": 111823333981, "status": "queued", "started_at": None,
          "completed_at": None, "conclusion": None},
     ],
 }
@@ -74,13 +74,66 @@ class StaleQueueRecoveryTests(unittest.TestCase):
 
     def test_existing_started_job_or_partial_job_list_blocks(self):
         started = {"total_count": 1, "jobs": [
-            {"status": "in_progress", "started_at": "2026-10-15T00:00:00Z",
+            {"id": 111823333981, "status": "in_progress",
+             "started_at": "2026-10-15T00:00:00Z",
              "completed_at": None, "conclusion": None},
         ]}
         self.assertEqual(recovery.eligible(TARGET_ID, RUN, started, NOW),
                          "JOB_ALREADY_STARTED_OR_FINISHED")
         self.assertEqual(recovery.eligible(TARGET_ID, RUN, {"total_count": 2, "jobs": []}, NOW),
                          "JOB_LIST_INCOMPLETE")
+
+    def test_exact_github_queued_timestamp_is_not_job_execution(self):
+        # Live GitHub API returned started_at=created_at while queued,
+        # with no runner allocated and no steps: this is not execution.
+        job = {
+            "id": 111823333981, "status": "queued",
+            "created_at": "2026-10-05T14:50:12Z",
+            "started_at": "2026-10-05T14:50:12Z",
+            "completed_at": None, "conclusion": None,
+            "runner_name": None, "runner_id": None, "steps": [],
+        }
+        jobs = {"total_count": 1, "jobs": [job]}
+        self.assertEqual(recovery.eligible(TARGET_ID, RUN, jobs, NOW),
+                         "ELIGIBLE_STALE_QUEUED")
+        api = FakeApi(jobs=jobs)
+        result = recovery.assess_and_cancel(api, TARGET_ID, apply=True, now=NOW)
+        self.assertEqual(result["status"], "CANCEL_REQUESTED_NOT_YET_CONFIRMED")
+        self.assertEqual(api.canceled, [TARGET_ID])
+
+    def test_timestamp_exception_rejects_runner_or_steps(self):
+        job = {
+            "id": 111823333981, "status": "queued",
+            "created_at": "2026-10-05T14:50:12Z",
+            "started_at": "2026-10-05T14:50:12Z",
+            "completed_at": None, "conclusion": None,
+            "runner_name": None, "runner_id": None, "steps": [],
+        }
+        alternatives = [
+            {**job, "runner_name": "self-hosted"},
+            {**job, "runner_id": 12},
+            {**job, "steps": [{"status": "in_progress"}]},
+            {**job, "started_at": "2026-10-05T15:00:00Z"},
+            {**job, "created_at": "2026-10-05T15:00:00Z"},
+            {**job, "status": "in_progress"},
+            {**job, "completed_at": "2026-10-05T15:00:00Z"},
+        ]
+        for item in alternatives:
+            with self.subTest(item=item):
+                self.assertEqual(
+                    recovery.eligible(TARGET_ID, RUN, {"total_count": 1, "jobs": [item]}, NOW),
+                    "JOB_ALREADY_STARTED_OR_FINISHED",
+                )
+
+    def test_job_identity_or_extra_job_must_not_be_ignored(self):
+        original = dict(JOBS["jobs"][0])
+        for jobs in (
+            {"total_count": 1, "jobs": [{**original, "id": 999}]},
+            {"total_count": 1, "jobs": ["invalid"]},
+            {"total_count": 2, "jobs": [original, dict(original)]},
+        ):
+            reason = recovery.eligible(TARGET_ID, RUN, jobs, NOW)
+            self.assertEqual(reason, "JOB_LIST_IDENTITY_MISMATCH")
 
     def test_wrong_repository_sha_event_or_id_is_rejected(self):
         self.assertEqual(recovery.eligible(99999, RUN, JOBS, NOW), "UNLISTED_RUN_BLOCKED")
@@ -122,6 +175,8 @@ class StaleQueueRecoveryTests(unittest.TestCase):
         self.assertEqual(job["permissions"], {"contents": "read", "actions": "write"})
         self.assertIn("branches: [main]", raw)
         self.assertIn("paths:", raw)
+        self.assertIn("- scripts/reconcile_stale_actions_queue.py", raw)
+        self.assertIn("- .github/workflows/sns-stale-actions-queue-recovery.yml", raw)
         self.assertNotIn("  schedule:", raw)
         self.assertIn("github.event_name == 'push'", raw)
         self.assertIn("github.event_name == 'workflow_dispatch'", raw)
