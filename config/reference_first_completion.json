@@ -104,6 +104,7 @@
       "production-storage-readonly-audit.yml",
       "publication-review-sync.yml",
       "sns-once-host-resource-audit.yml",
+      "sns-once-resolve-abandoned-pending.yml",
       "sns-once-reconcile-saved-threads-result.yml",
       "sns-stale-actions-queue-recovery.yml",
       "source-research.yml",
