@@ -46,6 +46,26 @@ def _guard_existing(path: Path) -> None:
         raise TokenStoreError("token_file_not_regular_or_hardlinked")
 
 
+
+def preflight_token_store(directory: Path, account_id: str) -> None:
+    """Verify a token can be staged locally before calling the refresh API."""
+    path = token_path(directory, account_id)
+    _guard_directory(path.parent)
+    _guard_existing(path)
+    fd: int | None = None
+    temp_name: str | None = None
+    try:
+        fd, temp_name = tempfile.mkstemp(
+            prefix="." + account_id + ".preflight.", suffix=".tmp", dir=path.parent
+        )
+        os.fchmod(fd, 0o600)
+    finally:
+        if fd is not None:
+            os.close(fd)
+        if temp_name is not None:
+            Path(temp_name).unlink(missing_ok=True)
+
+
 def store_token(directory: Path, account_id: str, data: Mapping[str, Any]) -> Path:
     """Commit one validated token JSON with 0600 permissions and os.replace.
 
