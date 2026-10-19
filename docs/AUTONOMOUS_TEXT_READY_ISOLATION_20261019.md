@@ -25,3 +25,15 @@ Local regression: `python3 scripts/test_autonomous_text_ready_isolation.py`; exi
 ## Deployment conditions
 
 Verify green required CI, VPS capacity >=9GiB before staging and >=8GiB after staging, backup and restore, immutable `current`/`previous`/`pending` pointers and unreferenced process proof, lock ownership, and no cross-service changes. Start with real posting OFF; do not touch unrelated services or perform global deletion. No production release or canary may be claimed from this local QA alone.
+
+## October 20 follow-up: second candidate marker gate
+
+PR #429 opened a safe legacy text generator entrypoint, but queue rows still
+inherited DRAFT_ONLY_RANKED and were rejected by automatic approval. This fix
+only removes the editorial draft marker for strict, text-only WAITING_REVIEW
+candidates which independently pass final text validation and pre-existing
+V2 safety hard gates. Other editorial V2 drafts are unchanged. Hybrid AI review
+remains mandatory before AUTO_READY. Integration tests mock ONLY its success.
+
+The VPS October 17 abandoned pending symlink was safely unlinked on October 20
+without deleting release files or changing current/previous. Posting is OFF.

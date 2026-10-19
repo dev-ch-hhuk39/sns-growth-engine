@@ -31,6 +31,8 @@ SENSITIVE_PARTS = (
     "API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENAI_API_KEY",
 )
 FOCUSED = (
+    "test_autonomous_text_ready_isolation.py",
+    "test_autonomous_text_strict_review_integration.py",
     "test_cleanup_sns_runner_python_toolcache.py",
     "test_p0_exact_canary_approval.py",
     "test_p0_release_mode_authority.py",
