@@ -49,6 +49,7 @@ from public_post_quality import (  # noqa: E402
     reader_facing_template_count,
 )
 from accounts.managed_accounts import account_choices, managed_account_ids  # noqa: E402
+from auto_ready_draft_preflight import autonomous_text_policy_status  # noqa: E402
 
 CLI_NAME = "generate_threads_ideas_from_references"
 ALLOWED_ACCOUNTS = set(managed_account_ids())
@@ -2198,8 +2199,12 @@ def run_reference_generation(
     include_preview_rows: bool = False,
     video_only_reference: bool = False,
     client: Any | None = None,
+    allow_autonomous_text_generation: bool = False,
 ) -> dict[str, Any]:
-    if apply:
+    if apply and not (
+        allow_autonomous_text_generation
+        and autonomous_text_policy_status(account_id)[1] == 0
+    ):
         return {
             "status": "DRAFT_ONLY",
             "account_id": account_id,
@@ -2685,9 +2690,13 @@ def offline_history_context(posted: list[dict[str, Any]], queue: list[dict[str, 
 
 def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
                                     slot_id: str, schedule_date_jst: str,
-                                    client: Any | None = None) -> dict[str, Any]:
+                                    client: Any | None = None,
+                                    allow_autonomous_text_generation: bool = False) -> dict[str, Any]:
     """Use the canonical row builder/persistence without source or AI dependencies."""
-    if apply:
+    if apply and not (
+        allow_autonomous_text_generation
+        and autonomous_text_policy_status(account_id)[1] == 0
+    ):
         return {"status": "DRAFT_ONLY", "account_id": account_id, "candidate_count": 0,
                 "reason": "content_quality_v2_owner_review_required", "would_post": False,
                 "ai_requests": 0}
@@ -2735,7 +2744,14 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     offline = bool(getattr(args, "offline_original", False))
     if offline and (args.source != "references" or args.post_type != "original_text"):
         return {"status": "BLOCKED", "reason": "offline_original_scope_invalid"}
-    if args.account_id == "beauty_account" and not offline:
+    text_mode = bool(getattr(args, "autonomous_text_generation", False))
+    if text_mode:
+        if args.source != "references" or not (args.apply and args.confirm_generate):
+            return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "autonomous_text_requires_confirmed_reference_apply"}
+        status, rc = autonomous_text_policy_status(args.account_id)
+        if rc:
+            return {"status": "BLOCKED", "cli": CLI_NAME, "reason": status}
+    if args.account_id == "beauty_account" and not (offline or text_mode):
         return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "beauty_account は対象外（draft_only）"}
     if args.platform not in ALLOWED_PLATFORMS:
         return {"status": "BLOCKED", "cli": CLI_NAME, "reason": "platform は threads のみ（X は将来対応）"}
@@ -2805,6 +2821,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--theme", default="")
     parser.add_argument("--schedule-date-jst", default="")
     parser.add_argument("--offline-original", action="store_true", help="Finite local original-copy fallback; never calls an AI provider.")
+    parser.add_argument("--autonomous-text-generation", action="store_true",
+                        help="Opt in to isolated legacy text candidate generation; Content Quality V2 stays draft-only.")
     parser.add_argument(
         "--include-preview-queue",
         action="store_true",
@@ -2837,6 +2855,7 @@ def main() -> int:
         result = run_offline_original_generation(
             args.account_id, min(3, max(1, args.top_n)), apply=plan["status"] == "WILL_RUN",
             slot_id=args.slot_id, schedule_date_jst=args.schedule_date_jst,
+            allow_autonomous_text_generation=args.autonomous_text_generation,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["status"] in {"GENERATED", "PLAN_ONLY"} else 2
@@ -2878,6 +2897,7 @@ def main() -> int:
                 args.require_measured_pdca
             ),
             video_only_reference=args.video_only_reference,
+            allow_autonomous_text_generation=args.autonomous_text_generation,
         )
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0 if result["status"] in {"GENERATED", "NO_DATA"} else 1

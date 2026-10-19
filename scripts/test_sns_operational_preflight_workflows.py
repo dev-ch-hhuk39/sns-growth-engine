@@ -14,11 +14,11 @@ AUDIT = ROOT / ".github/workflows/sns-once-host-authority-probe.yml"
 
 
 class OperationalGateWorkflowTests(unittest.TestCase):
-    def test_auto_ready_draft_hold_precedes_any_external_work(self):
+    def test_autonomous_text_isolation_gate_precedes_any_external_work(self):
         source = AUTOREADY.read_text(encoding="utf-8")
         job = yaml.safe_load(source)["jobs"]["auto-ready"]
         names = [step.get("name", "") for step in job["steps"]]
-        guard = "Block deterministic V2 owner-review hold before provider and Sheets work"
+        guard = "Verify isolated legacy text AUTO_READY and preserve V2 draft-only"
         self.assertIn(guard, names)
         self.assertLess(names.index("Resolve scheduled inventory maintenance"), names.index(guard))
         for late in ("Install dependencies", "Guard account and Sheets secrets",
@@ -27,7 +27,8 @@ class OperationalGateWorkflowTests(unittest.TestCase):
             self.assertLess(names.index(guard), names.index(late))
         step = next(item for item in job["steps"] if item.get("name") == guard)
         self.assertEqual(step["if"], "env.AUTO_READY_APPLY == 'true'")
-        self.assertIn("python3 scripts/auto_ready_draft_preflight.py", step["run"])
+        self.assertIn("python3 scripts/auto_ready_draft_preflight.py --autonomous-text-only", step["run"])
+        self.assertIn('--account-id "$ACCOUNT_ID"', step["run"])
         self.assertEqual(job["runs-on"], "ubuntu-latest")
         for flag in ("PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_REAL_X_POST"):
             self.assertEqual(yaml.safe_load(source)["env"][flag], "false")

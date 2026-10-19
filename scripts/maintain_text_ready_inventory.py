@@ -279,6 +279,7 @@ def _primary_generation_commands(account_id: str, slot: dict[str, str]) -> list[
         account_id,
         "--apply",
         "--confirm-generate",
+        "--autonomous-text-generation",
         "--top-n",
         "3",
         "--slot-id",
@@ -310,7 +311,8 @@ def _primary_generation_commands(account_id: str, slot: dict[str, str]) -> list[
 
 def _generation_commands(account_id: str, slot: dict[str, str], *, offline_only: bool = False) -> list[tuple[str, list[str]]]:
     offline = ("offline_original_bank", [sys.executable, "scripts/generate_threads_ideas_from_references.py",
-        "--account-id", account_id, "--apply", "--confirm-generate", "--top-n", "3",
+        "--account-id", account_id, "--apply", "--confirm-generate",
+        "--autonomous-text-generation", "--top-n", "3",
         "--slot-id", str(slot["slot_id"]), "--post-type", "original_text",
         "--schedule-date-jst", str(slot["business_date_jst"]), "--offline-original"])
     if slot.get("theme"):
