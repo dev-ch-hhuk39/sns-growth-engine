@@ -1,0 +1,96 @@
+name: One-Shot Resolve Exact Abandoned SNS Pending Link
+
+# A single guarded main introduction. Never creates/deletes a release or posts.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sns-once-resolve-abandoned-pending.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-production-abandoned-pending-one-shot
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  POSTING_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  clear-one-abandoned-symlink:
+    if: github.repository == 'dev-ch-hhuk39/sns-growth-engine' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    env:
+      BEFORE_SHA: ${{ github.event.before }}
+      TARGET_WORKFLOW: .github/workflows/sns-once-resolve-abandoned-pending.yml
+      EXPECTED_CURRENT: f6b78bacd6fa4a72d67894bd3c09cbac38391d99
+      EXPECTED_PREVIOUS: 2fd217c5910704cdf3f686f0ebadbc731a33c1fd
+      EXPECTED_PENDING: bec16989c859e97abe53a736afb6d76bc12338a1
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require unique first main introduction and exact rollback pointer
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1 || exit 2
+          [[ "$BEFORE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$BEFORE_SHA" != "0000000000000000000000000000000000000000"
+          git cat-file -e "$BEFORE_SHA^{commit}" || exit 2
+          if git cat-file -e "$BEFORE_SHA:$TARGET_WORKFLOW" 2>/dev/null; then
+            echo "[BLOCKED] one-shot workflow existed before this main update"
+            exit 2
+          fi
+          git cat-file -e "$GITHUB_SHA:$TARGET_WORKFLOW" || exit 2
+          root=/opt/github-runners/sns-growth-engine/.buffered-runtime
+          test "$(basename "$(readlink -f "$root/current")")" = "$EXPECTED_CURRENT"
+          test "$(basename "$(readlink -f "$root/previous")")" = "$EXPECTED_PREVIOUS"
+          test "$(basename "$(readlink -f "$root/pending")")" = "$EXPECTED_PENDING"
+          echo "ONE_SHOT_SCOPE=EXACT_SNS_LINK"
+      - name: Read-only trusted release, private environment and process preflight
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/resolve_abandoned_sns_pending.py \
+            --expected-current "$EXPECTED_CURRENT" \
+            --expected-pending "$EXPECTED_PENDING" > "$RUNNER_TEMP/pending-plan.json"
+          grep -Fq '"status": "PASS_EXACT_SNS_PENDING_SCOPE"' "$RUNNER_TEMP/pending-plan.json"
+          grep -Fq '"mode": "DRY_RUN"' "$RUNNER_TEMP/pending-plan.json"
+          echo "ABANDONED_PENDING_DRY_RUN=PASS"
+      - name: Under shared lock unlink only the exact abandoned pending symlink
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! python3 scripts/resolve_abandoned_sns_pending.py \
+            --expected-current "$EXPECTED_CURRENT" \
+            --expected-pending "$EXPECTED_PENDING" \
+            --confirm CLEAR_EXACT_PENDING_POINTER_ONLY > "$RUNNER_TEMP/pending-apply.json"; then
+            echo "[BLOCKED] exact pending-only cleanup not verified; no retry"
+            exit 2
+          fi
+          grep -Fq '"removed_only_pending_symlink": true' "$RUNNER_TEMP/pending-apply.json" || exit 2
+          grep -Fq '"mode": "APPLY"' "$RUNNER_TEMP/pending-apply.json" || exit 2
+          root=/opt/github-runners/sns-growth-engine/.buffered-runtime
+          test ! -e "$root/pending" && test ! -L "$root/pending"
+          test "$(basename "$(readlink -f "$root/current")")" = "$EXPECTED_CURRENT"
+          test "$(basename "$(readlink -f "$root/previous")")" = "$EXPECTED_PREVIOUS"
+          test -d "$root/releases/$EXPECTED_PENDING"
+          echo "ABANDONED_PENDING_LINK=REMOVED_VERIFIED"
+          echo "RELEASE_DIRECTORY=RETAINED"
+          echo "SNS_PUBLISH_ATTEMPTS=0"
