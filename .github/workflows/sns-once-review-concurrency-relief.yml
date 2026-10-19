@@ -1,0 +1,69 @@
+name: One-Shot Clear Stale Publication Review Concurrency
+
+# Only the original trusted main-branch file introduction may run.
+# Acts on one immutable Oct 5 queued review run, never on a live job.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sns-once-review-concurrency-relief.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-review-concurrency-relief-once
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  cancel-exact-stale-review:
+    if: github.repository == 'dev-ch-hhuk39/sns-growth-engine' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    env:
+      BEFORE_SHA: ${{ github.event.before }}
+      TARGET_WORKFLOW: .github/workflows/sns-once-review-concurrency-relief.yml
+      GH_ACTIONS_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require exact first main introduction
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1 || exit 2
+          [[ "$BEFORE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$BEFORE_SHA" != "0000000000000000000000000000000000000000"
+          git cat-file -e "$BEFORE_SHA^{commit}" || exit 2
+          if git cat-file -e "$BEFORE_SHA:$TARGET_WORKFLOW" 2>/dev/null; then
+            echo "ONE_SHOT_REPLAY_BLOCKED"
+            exit 2
+          fi
+          git cat-file -e "$GITHUB_SHA:$TARGET_WORKFLOW" || exit 2
+      - name: Cancel only verified 14-day unstarted Oct 5 review run
+        shell: bash
+        env:
+          SNS_EXACT_STALE_REVIEW_ALLOWED: "true"
+        run: |
+          set -euo pipefail
+          python3 scripts/cancel_exact_stale_review_once.py
+          echo "SNS_PUBLISH_ATTEMPTS=0"
+          echo "SNS_QUEUE_OR_SHEETS_WRITES=0"
