@@ -28,7 +28,11 @@ for path in WORKFLOWS:
     raw = path.read_text(encoding="utf-8")
     data = yaml.safe_load(raw) or {}
     for job_name, job in (data.get("jobs") or {}).items():
-        if path.name in HOST_RUNTIME_WORKFLOWS:
+        if path.name == "content-slot-recovery.yml" and job_name == "audit-missed-slots":
+            checks.append((f"{path.name}:{job_name}:hosted-readonly",
+                           job.get("runs-on") == RUNNER
+                           and job.get("if") == "github.event_name == 'schedule'"))
+        elif path.name in HOST_RUNTIME_WORKFLOWS:
             checks.append((f"{path.name}:{job_name}:approved-host-runtime", job.get("runs-on") == ["self-hosted", "Linux", "X64"]))
         else:
             checks.append((f"{path.name}:{job_name}:github-hosted", job.get("runs-on") == RUNNER))
