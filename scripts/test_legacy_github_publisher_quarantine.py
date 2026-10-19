@@ -65,8 +65,12 @@ class LegacyGitHubPublisherQuarantineTest(unittest.TestCase):
 
     def test_recovery_never_falls_back_to_legacy_publisher(self):
         w = workflow("content-slot-recovery.yml")
-        recovery = list(w["jobs"].values())[0]
+        recovery = w["jobs"]["recover-missed-slots"]
         self.assertIn("self-hosted", recovery["runs-on"])
+        self.assertEqual(recovery["if"], "github.event_name == 'workflow_dispatch'")
+        audit = w["jobs"]["audit-missed-slots"]
+        self.assertEqual(audit["runs-on"], "ubuntu-latest")
+        self.assertEqual(audit["if"], "github.event_name == 'schedule'")
         step = [s for s in steps(w) if s.get("name") == "Guard and backfill at most one slot per account"]
         self.assertEqual(len(step), 1)
         run = step[0]["run"]
