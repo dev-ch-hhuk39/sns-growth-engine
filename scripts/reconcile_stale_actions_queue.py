@@ -90,12 +90,32 @@ def eligible(run_id: int, run: dict[str, Any], jobs: dict[str, Any],
         return "JOB_LIST_UNVERIFIED"
     if jobs.get("total_count") != len(entries) or len(entries) >= 100:
         return "JOB_LIST_INCOMPLETE"
+    # GitHub may set started_at=created_at when a job is *queued*, before
+    # assigning a runner or executing any step. This one historic job has
+    # an independently observed exact API fingerprint. Never generalize that
+    # exception to other runs/jobs, runner-assigned jobs or nonempty steps.
+    if run_id == 37327934561 and (
+        len(entries) != 1 or entries[0].get("id") != 111823333981
+    ):
+        return "JOB_LIST_IDENTITY_MISMATCH"
     for job in entries:
         if (not isinstance(job, dict) or job.get("status") not in QUEUED_STATES
-                or job.get("started_at") is not None
                 or job.get("completed_at") is not None
                 or job.get("conclusion") is not None):
             return "JOB_ALREADY_STARTED_OR_FINISHED"
+        if job.get("started_at") is not None:
+            untouched_queue_timestamp = (
+                run_id == 37327934561
+                and job.get("id") == 111823333981
+                and job.get("status") == "queued"
+                and job.get("created_at") == "2026-10-05T14:50:12Z"
+                and job.get("started_at") == job.get("created_at")
+                and job.get("runner_name") is None
+                and job.get("runner_id") is None
+                and job.get("steps") == []
+            )
+            if not untouched_queue_timestamp:
+                return "JOB_ALREADY_STARTED_OR_FINISHED"
     return "ELIGIBLE_STALE_QUEUED"
 
 
