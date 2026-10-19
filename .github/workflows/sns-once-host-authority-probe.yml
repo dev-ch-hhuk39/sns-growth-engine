@@ -1,0 +1,63 @@
+name: One-Shot SNS Host Privilege and Capacity Proof (Read Only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sns-once-host-authority-probe.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-host-authority-once
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  audit-only:
+    if: github.repository == 'dev-ch-hhuk39/sns-growth-engine' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    env:
+      BEFORE_SHA: ${{ github.event.before }}
+      TARGET_WORKFLOW: .github/workflows/sns-once-host-authority-probe.yml
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Guard first main introduction only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1 || exit 2
+          [[ "$BEFORE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$BEFORE_SHA" != "0000000000000000000000000000000000000000"
+          git cat-file -e "$BEFORE_SHA^{commit}" || exit 2
+          if git cat-file -e "$BEFORE_SHA:$TARGET_WORKFLOW" 2>/dev/null; then
+            echo "ONE_SHOT_REPLAY_BLOCKED"
+            exit 2
+          fi
+          git cat-file -e "$GITHUB_SHA:$TARGET_WORKFLOW" || exit 2
+          echo "ONE_SHOT_AUTHORITY_PROBE=PASS"
+      - name: Gather read-only scoped root authority and age-only release eligibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/sns_vps_authority_capability.py
+          echo "SNS_PUBLISH_ATTEMPTS=0"
+          echo "SNS_HOST_AUDIT_MODE=READ_ONLY"
