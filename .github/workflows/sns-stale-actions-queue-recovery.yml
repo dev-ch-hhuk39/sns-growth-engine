@@ -1,0 +1,42 @@
+name: One-Shot Stale Actions Queue Recovery
+
+# Only the first trusted main-branch introduction of this file will trigger
+# the one-shot cleanup. Manual reruns are deliberately read-only.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sns-stale-actions-queue-recovery.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-stale-actions-queue-recovery-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  inspect-stale-runs:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    env:
+      GH_ACTIONS_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8 # v4
+        with:
+          persist-credentials: false
+      - name: Inspect exact stale run IDs (manual dispatch is never an apply)
+        if: github.event_name == 'workflow_dispatch'
+        run: python3 scripts/reconcile_stale_actions_queue.py
+      - name: Cancel only twice-verified never-started stale runs
+        if: github.event_name == 'push'
+        env:
+          SNS_QUEUE_RECOVERY_ALLOWED: 'true'
+        run: |
+          python3 scripts/reconcile_stale_actions_queue.py \
+            --apply --confirm-stale-run-cancel
