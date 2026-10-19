@@ -2,6 +2,7 @@
 """Offline contract for the one-time, no-post historical Threads queue repair."""
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 import yaml
@@ -18,6 +19,11 @@ class OneShotSavedResultWorkflowTests(unittest.TestCase):
         cls.doc = yaml.safe_load(cls.source)
         cls.job = cls.doc["jobs"]["verified-saved-result-queue-only"]
         cls.steps = cls.job["steps"]
+
+    def test_canonical_workflow_inventory_tracks_new_file(self):
+        contract = json.loads((ROOT / "config/reference_first_completion.json").read_text(encoding="utf-8"))
+        listed = contract["workflow_classification"]["canonical"]
+        self.assertEqual(listed.count(PATH.name), 1)
 
     def test_only_first_main_file_introduction_triggers(self):
         triggers = self.doc.get("on", self.doc.get(True))
