@@ -1,12 +1,13 @@
 name: One-Shot Stale Actions Queue Recovery
 
-# Only the first trusted main-branch introduction of this file will trigger
-# the one-shot cleanup. Manual reruns are deliberately read-only.
+# Only trusted main-branch changes to this recovery workflow or its exact
+# ID-bound guards trigger cleanup. No schedule; manual dispatch is read-only.
 on:
   push:
     branches: [main]
     paths:
       - .github/workflows/sns-stale-actions-queue-recovery.yml
+      - scripts/reconcile_stale_actions_queue.py
   workflow_dispatch:
 
 permissions:
