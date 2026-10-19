@@ -2186,6 +2186,58 @@ def attach_pdca_activation_evidence(
     return copied
 
 
+
+def _admit_autonomous_text_review_rows(
+    rows: dict[str, list[dict[str, Any]]], account_id: str,
+) -> int:
+    """Keep editorial V2 drafts held; admit only verified legacy text to strict review.
+
+    This never marks READY. The existing hybrid/auto-approval gates must
+    independently evaluate every candidate before publication eligibility.
+    """
+    status, code = autonomous_text_policy_status(account_id)
+    if code:
+        raise ValueError(f"autonomous_text_policy_blocked:{status}")
+    admitted = 0
+    for row in rows.get("queue", []):
+        if not isinstance(row, dict):
+            raise ValueError("autonomous_text_queue_record_invalid")
+        if (row.get("content_quality_v2_version") != "content_quality_v2"
+                or row.get("content_quality_v2_status") != "DRAFT_ONLY_RANKED"
+                or row.get("route_status") != "DRAFT_ONLY"):
+            raise ValueError("autonomous_text_unexpected_candidate_provenance")
+        if (row.get("account_id") != account_id
+                or row.get("target_account_id") != account_id
+                or row.get("platform") != "threads"
+                or row.get("status") != CANDIDATE_STATUS):
+            raise ValueError("autonomous_text_queue_identity_invalid")
+        if (str(row.get("media_required") or "").lower() not in {"", "false"}
+                or any(str(row.get(key) or "").strip() for key in (
+                    "media_asset_id", "media_asset_ids_json", "media_url", "media_urls_json",
+                    "video_clip_id", "clip_candidate_id",
+                ))
+                or row.get("rights_status") != "not_required"
+                or row.get("permission_status") != "not_required"
+                or str(row.get("rights_review_required") or "").lower() != "false"):
+            raise ValueError("autonomous_text_media_boundary_invalid")
+        # A ranking PASS is never sufficient to grant READY: the final publisher
+        # quality validator and original V2 safety checks remain authoritative.
+        validation = final_public_post_validator(str(row.get("public_post_text") or ""), account_id)
+        if (validation.get("status") != "PASS"
+                or row.get("validator_status") != "PASS"
+                or row.get("internal_leak_status") != "PASS"
+                or row.get("account_fit_status") != "PASS"
+                or str(row.get("hard_gate_reasons") or "").strip() != "[]"
+                or row.get("rejected_reason") or row.get("blocked_reason")):
+            continue
+        row["content_quality_v2_version"] = ""
+        row["content_quality_v2_status"] = ""
+        row["route_status"] = "AUTONOMOUS_TEXT_STRICT_REVIEW_PENDING"
+        row["auto_publish"] = "false"
+        admitted += 1
+    return admitted
+
+
 def run_reference_generation(
     account_id: str,
     top_n: int,
@@ -2599,6 +2651,10 @@ def run_reference_generation(
         return summary
     if not rows["queue"]:
         return {**summary, "status": "NO_DATA", "reason": "reference posts/scores and fallback candidates are missing"}
+    auto_text_admitted = (
+        _admit_autonomous_text_review_rows(rows, account_id)
+        if allow_autonomous_text_generation else 0
+    )
     ops = {
         "drafts": _append_missing(client, "drafts", "draft_id", rows["drafts"]),
         "social_derivatives": _append_missing(client, "social_derivatives", "derivative_id", rows["social_derivatives"]),
@@ -2624,6 +2680,8 @@ def run_reference_generation(
             preferred_topics=preferred_topics,
         )
         fallback_topup_used = bool(fallback_rows["queue"])
+        if allow_autonomous_text_generation and fallback_topup_used:
+            auto_text_admitted += _admit_autonomous_text_review_rows(fallback_rows, account_id)
         fallback_ops = {
             "drafts": _append_missing(client, "drafts", "draft_id", fallback_rows["drafts"]),
             "social_derivatives": _append_missing(client, "social_derivatives", "derivative_id", fallback_rows["social_derivatives"]),
@@ -2642,6 +2700,7 @@ def run_reference_generation(
             ]
         ),
         "fallback_topup_used": fallback_topup_used,
+        "autonomous_text_strict_review_candidates": auto_text_admitted,
         "applied_operations": ops,
         "fallback_topup_operations": fallback_ops,
     }
@@ -2724,6 +2783,8 @@ def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
     if not rows["queue"]:
         return {"status": "QUALITY_EXHAUSTED", "failure_category": "OFFLINE_CATALOG_EXHAUSTED",
                 "queue_ids": [], "would_post": False, "ai_requests": 0}
+    admitted = (_admit_autonomous_text_review_rows(rows, account_id)
+                if apply and allow_autonomous_text_generation else 0)
     if apply:
         for logical, key in (("drafts", "draft_id"), ("social_derivatives", "derivative_id"), ("queue", "queue_id")):
             _append_missing(client, logical, key, rows[logical], value_input_option="RAW")
@@ -2736,6 +2797,7 @@ def run_offline_original_generation(account_id: str, top_n: int, *, apply: bool,
     return {"status": "GENERATED" if apply else "PLAN_ONLY", "account_id": account_id,
             "queue_ids": [row["queue_id"] for row in rows["queue"]] if apply else [],
             "candidate_count": len(rows["queue"]), "read_after_write": apply,
+            "autonomous_text_strict_review_candidates": admitted,
             "ai_requests": 0, "would_post": False}
 
 

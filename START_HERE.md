@@ -1,3 +1,14 @@
+## 2026-10-20 - Strict AUTO_READY candidate provenance and pending cleanup
+
+- Verified PR #429 was fully green and merged to main (303a23ebdb880a2e46107d11ee9fe5beeb009e79).
+- Found the second readiness blocker: normal text generation still stamped every candidate DRAFT_ONLY_RANKED, causing auto_approve_queue to reject it even after explicit legacy-text opt-in.
+- Added a narrow in-memory admission step only for independently verified text-only WAITING_REVIEW rows. Account, target, Threads scope, permission, no-media, V2 hard-gate proof, final public text validator and no-rejection state must match.
+- Cleared V2 editorial provenance markers ONLY for these legacy-text candidates, retaining quality rank diagnostics and independent Hybrid AI approval; candidates remain WAITING_REVIEW.
+- Added offline regression tests for all three accounts, unsafe media, cross-account cases, missing Hybrid gate and approvability after a verified Hybrid PASS.
+- Shared VPS disk increased to 9.62 GiB free; privileged 9 GiB resource preflight passed October 20 JST.
+- Exact abandoned pending symlink from Oct 17 failed deploy was removed under shared lock with verified code and administrator process inspection. current, previous and staged release directory remained intact. Posting flags are OFF.
+- Pending: full QA, GitHub checks, no-post VPS deployment, independent verification and actual READY coverage. Real SNS canaries and 24/72/168h observation are not claimed.
+
 ## 2026-10-19 — Autonomous text READY isolation (posting OFF, development QA)
 
 - Verified the live `main` SHA `dfd991fa319dceb80d2dcf9ebd14ec540bea81c5`, existing three-account Google Sheets queue, and failing READY/Direct Media actions before editing.
