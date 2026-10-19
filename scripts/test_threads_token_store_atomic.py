@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from threads_token_store import TokenStoreError, store_token, token_path
+from threads_token_store import TokenStoreError, preflight_token_store, store_token, token_path
 
 
 class TokenStoreAtomicTests(unittest.TestCase):
@@ -23,6 +23,32 @@ class TokenStoreAtomicTests(unittest.TestCase):
         self.store = self.root / "tokens"
         self.data = {"account_id": "night_scout", "access_token": "fake-test-token",
                      "expires_at": "2026-12-19T00:00:00+09:00"}
+
+    def test_preflight_creates_no_token_and_checks_permissions(self):
+        preflight_token_store(self.store, "night_scout")
+        self.assertTrue(self.store.is_dir())
+        self.assertEqual(list(self.store.iterdir()), [])
+        self.assertEqual(stat.S_IMODE(self.store.stat().st_mode), 0o700)
+        target = store_token(self.store, "night_scout", self.data)
+        preflight_token_store(self.store, "night_scout")
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8")), self.data)
+        self.assertEqual(sorted(x.name for x in self.store.iterdir()), ["night_scout.json"])
+
+    def test_preflight_refuses_symlink_and_does_not_touch_target(self):
+        other = self.root / "other"
+        other.mkdir()
+        alias = self.root / "alias"
+        alias.symlink_to(other, target_is_directory=True)
+        with self.assertRaises(TokenStoreError):
+            preflight_token_store(alias, "night_scout")
+        self.assertEqual(list(other.iterdir()), [])
+
+    def test_refresh_calls_store_preflight_before_requests(self):
+        source = (Path(__file__).parent / "refresh_threads_token.py").read_text(encoding="utf-8")
+        self.assertLess(
+            source.index("preflight_token_store(_DEFAULT_TOKEN_DIR, account_id)"),
+            source.index("requests.get(THREADS_REFRESH_URL"),
+        )
 
     def test_private_atomic_creation_and_account_isolation(self):
         with contextlib.redirect_stdout(io.StringIO()) as output:
