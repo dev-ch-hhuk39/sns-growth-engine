@@ -35,7 +35,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from publishers.threads_credentials import resolve_credentials
-from threads_token_store import SUPPORTED_ACCOUNTS, TokenStoreError, store_token, token_path
+from threads_token_store import (SUPPORTED_ACCOUNTS, TokenStoreError, preflight_token_store, store_token, token_path)
 
 THREADS_REFRESH_URL = "https://graph.threads.net/refresh_access_token"
 _DEFAULT_TOKEN_DIR = Path(os.environ.get("THREADS_TOKEN_STORE_DIR", "data/threads_tokens"))
@@ -100,6 +100,8 @@ def refresh(account_id: str, dry_run: bool) -> None:
         print(f"  実際にリフレッシュするには --confirm-refresh を使用してください。")
         return
 
+    # Fail before requesting a fresh provider token if protected persistence is not ready.
+    preflight_token_store(_DEFAULT_TOKEN_DIR, account_id)
     print(f"\nリフレッシュ中...")
     params = {
         "grant_type": "th_refresh_token",
