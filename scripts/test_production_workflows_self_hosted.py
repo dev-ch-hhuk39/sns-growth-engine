@@ -16,6 +16,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "deploy-buffered-production-runtime.yml",
     "refresh-threads-tokens.yml",
     "production-storage-readonly-audit.yml",
+    "sns-once-host-resource-audit.yml",
     "provision-p0-once-host-authority.yml",
     "p0-private-restore-readonly-drill.yml",
     "sns-runner-toolcache-recovery.yml",
