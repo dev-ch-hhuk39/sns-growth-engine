@@ -1,0 +1,70 @@
+name: One-Shot Diagnose SNS Pending Access (Read Only)
+
+# A proof-only follow-up to the blocked guarded link cleanup.
+# No apply, no release change, no posting, no retry.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sns-once-diagnose-pending-access.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-pending-diagnosis-once
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  diagnose-only:
+    if: github.repository == 'dev-ch-hhuk39/sns-growth-engine' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    env:
+      BEFORE_SHA: ${{ github.event.before }}
+      TARGET_WORKFLOW: .github/workflows/sns-once-diagnose-pending-access.yml
+      EXPECTED_CURRENT: f6b78bacd6fa4a72d67894bd3c09cbac38391d99
+      EXPECTED_PREVIOUS: 2fd217c5910704cdf3f686f0ebadbc731a33c1fd
+      EXPECTED_PENDING: bec16989c859e97abe53a736afb6d76bc12338a1
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require unique first main introduction
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_RUN_ATTEMPT" = 1 || exit 2
+          [[ "$BEFORE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$BEFORE_SHA" != "0000000000000000000000000000000000000000"
+          git cat-file -e "$BEFORE_SHA^{commit}" || exit 2
+          if git cat-file -e "$BEFORE_SHA:$TARGET_WORKFLOW" 2>/dev/null; then
+            echo "ONE_SHOT_DIAGNOSIS_REPLAY_BLOCKED"
+            exit 2
+          fi
+          git cat-file -e "$GITHUB_SHA:$TARGET_WORKFLOW" || exit 2
+      - name: Diagnose link outcome and scoped process and lock access without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/diagnose_abandoned_sns_pending.py \
+            --expected-current "$EXPECTED_CURRENT" \
+            --expected-previous "$EXPECTED_PREVIOUS" \
+            --expected-pending "$EXPECTED_PENDING"
+          echo "SNS_PUBLISH_ATTEMPTS=0"
+          echo "SNS_PENDING_DIAGNOSIS_MODE=READ_ONLY"
