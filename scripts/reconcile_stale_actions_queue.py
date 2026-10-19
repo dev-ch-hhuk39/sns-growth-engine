@@ -95,7 +95,8 @@ def eligible(run_id: int, run: dict[str, Any], jobs: dict[str, Any],
     # an independently observed exact API fingerprint. Never generalize that
     # exception to other runs/jobs, runner-assigned jobs or nonempty steps.
     if run_id == 37327934561 and (
-        len(entries) != 1 or entries[0].get("id") != 111823333981
+        len(entries) != 1 or not isinstance(entries[0], dict)
+        or entries[0].get("id") != 111823333981
     ):
         return "JOB_LIST_IDENTITY_MISMATCH"
     for job in entries:
