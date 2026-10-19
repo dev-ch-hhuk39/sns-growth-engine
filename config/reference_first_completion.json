@@ -106,6 +106,7 @@
       "sns-once-host-resource-audit.yml",
       "sns-once-resolve-abandoned-pending.yml",
       "sns-once-diagnose-pending-access.yml",
+      "sns-once-host-authority-probe.yml",
       "sns-once-reconcile-saved-threads-result.yml",
       "sns-stale-actions-queue-recovery.yml",
       "source-research.yml",
