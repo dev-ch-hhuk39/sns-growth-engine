@@ -52,7 +52,10 @@ assert "--exclude .runtime" in installer
 assert "--stage-only" in installer and "--scheduler-only" in installer
 assert "implicit activation is disabled" in installer
 assert "runs-on: [self-hosted, Linux, X64]" in recovery
-assert 'cron: "3-58/5 * * * *"' in recovery
+assert 'cron: "13 * * * *"' in recovery
+assert "runs-on: ubuntu-latest" in recovery
+assert "if: github.event_name == 'schedule'" in recovery
+assert "if: github.event_name == 'workflow_dispatch'" in recovery
 assert "run_buffered_production_host.sh" in recovery
 assert "--trigger github_schedule_recovery" in recovery
 assert "workflow_dispatch" in deploy

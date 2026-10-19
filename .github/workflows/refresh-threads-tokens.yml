@@ -119,7 +119,7 @@ jobs:
           if [ "$_GH_TOKEN_SET" != "true" ]; then
             echo "READY_WITH_MISSING_GH_SECRET_WRITE_TOKEN: GH_SECRET_WRITE_TOKEN が GitHub Secrets に設定されていません。"
             echo "  Settings → Secrets and variables → Actions → GH_SECRET_WRITE_TOKEN を追加してください。"
-            echo "  必要なスコープ: secrets:write"
+            echo "  必要な権限: Fine-grained PAT / GitHub App: Repository Environments = Read and write (production環境)"
             exit 1
           fi
           if ! command -v gh >/dev/null 2>&1 || [ -z "${GH_TOKEN:-}" ]; then
@@ -136,6 +136,12 @@ jobs:
         run: |
           set -euo pipefail
           set +x
+          # Environment secrets use Environments permissions, not the repository
+          # Secrets permission. Fail before temporary secret creation on a 403.
+          if ! gh api "repos/$GH_REPO/environments/production/secrets/public-key" --silent >/dev/null 2>&1; then
+            echo "[BLOCKED] ENVIRONMENT_SECRETS_PERMISSION_DENIED: GH_SECRET_WRITE_TOKEN needs Repository Environments: Read and write; refresh was not attempted."
+            exit 1
+          fi
           probe_name="SNS_GH_SECRET_WRITE_PREFLIGHT_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}"
           probe_file="$RUNNER_TEMP/gh-secret-write-probe"
           cleanup() {

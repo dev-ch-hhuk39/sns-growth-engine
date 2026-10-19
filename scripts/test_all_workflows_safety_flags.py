@@ -183,7 +183,11 @@ def main() -> int:
             results.append((f"{name} activation output visible", ">/dev/null 2>&1" not in text))
 
         elif name == "content-slot-recovery.yml":
-            results.append((f"{name} owner-authorized recovery cadence", 'cron: "3-58/5 * * * *"' in text))
+            # Scheduled scans are read-only hosted jobs; the only recovery
+            # publisher is a manually invoked, separately guarded VPS job.
+            results.append((f"{name} hosted audit cadence", 'cron: "13 * * * *"' in text))
+            results.append((f"{name} manual-only VPS recovery", "if: github.event_name == 'workflow_dispatch'" in text and "runs-on: [self-hosted, Linux, X64]" in text))
+            results.append((f"{name} scheduled audit cannot publish", "if: github.event_name == 'schedule'" in text and "runs-on: ubuntu-latest" in text and "--dry-run" in text))
             results.append((f"{name} explicit reconcile confirmation", "--confirm-reconcile" in text))
             results.append((f"{name} isolated account concurrency", "matrix.lock" in text and "cancel-in-progress: false" in text))
 
