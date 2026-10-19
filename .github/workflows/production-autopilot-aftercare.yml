@@ -170,7 +170,7 @@ jobs:
             --confirm-ready-maintenance --use-sheets > "$ready_report"; then
             python3 scripts/ready_inventory_diagnostics.py \
               --account-id "$ACCOUNT_ID" --report "$ready_report" || true
-            echo "[OPERATIONAL_FAILURE] next 24h verified READY coverage is below requirement"
+            echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed after bounded fallback; next 24h verified READY coverage is below requirement"
             exit 1
           fi
           python3 scripts/ready_inventory_diagnostics.py \
