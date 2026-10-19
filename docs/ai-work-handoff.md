@@ -1,3 +1,14 @@
+## 2026-10-19 — Autonomous text READY isolation (posting OFF, development QA)
+
+- Verified the live `main` SHA `dfd991fa319dceb80d2dcf9ebd14ec540bea81c5`, existing three-account Google Sheets queue, and failing READY/Direct Media actions before editing.
+- Added an opt-in legacy text generator path for `night_scout`, `liver_manager`, and `beauty_account`: generation persists `WAITING_REVIEW`, then existing Hybrid AI and `auto_approve_queue.py` perform strict text-only checks before any READY change.
+- `config/content_quality_v2.json` stays `draft_only=true` / `publishing_enabled=false`; V2 editorial drafts, unknown rights, media, X, malformed policies, and kill-switch configurations stay blocked. No SNS publishing permission has been added.
+- Scoped `.github/workflows/autopilot-auto-ready.yml` preflight to verified autonomous text mode, preserving provider/Sheets guards and production environment controls.
+- Added adversarial test `scripts/test_autonomous_text_ready_isolation.py` for allowed accounts, invalid policies, rights/safety, generation opt-in and V2 default hold.
+- Execution in this change: local test/quality gates only. No real SNS posts, Sheets writes, remote deploy, or credential disclosure; production READY coverage remains **UNVERIFIED** until live read-after-write proof.
+- Related known blockers remain separate: Direct Media permission provenance/Sheets 429; shared VPS disk capacity, abandoned `pending` release process proof, and authenticated production canaries.
+- Release requires green CI and rollout proof, followed by independent signed publisher authorization if any real posting is later considered.
+
 ## 2026-10-17 — P0初回カナリアと継続自動投稿の二段階許可（投稿OFF）
 
 - GOAL.mdにある人間の毎回承認を不要にする通常運用と、
