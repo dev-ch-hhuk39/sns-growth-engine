@@ -35,6 +35,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from publishers.threads_credentials import resolve_credentials
+from threads_token_store import (SUPPORTED_ACCOUNTS, TokenStoreError, preflight_token_store, store_token, token_path)
 
 THREADS_REFRESH_URL = "https://graph.threads.net/refresh_access_token"
 _DEFAULT_TOKEN_DIR = Path(os.environ.get("THREADS_TOKEN_STORE_DIR", "data/threads_tokens"))
@@ -43,24 +44,24 @@ JST = timezone(timedelta(hours=9))
 
 
 def _token_path(account_id: str) -> Path:
-    return _DEFAULT_TOKEN_DIR / f"{account_id}.json"
+    return token_path(_DEFAULT_TOKEN_DIR, account_id)
 
 
 def _load_token(account_id: str) -> dict | None:
     """トークンJSONを読み込む。存在しなければ None を返す。"""
     p = _token_path(account_id)
+    if p.is_symlink():
+        raise TokenStoreError("token_file_symlink")
     if p.exists():
-        with open(p) as f:
+        if not p.is_file():
+            raise TokenStoreError("token_file_not_regular")
+        with open(p, encoding="utf-8") as f:
             return json.load(f)
     return None
 
 
 def _save_token(account_id: str, data: dict) -> None:
-    p = _token_path(account_id)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with open(p, "w") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    p.chmod(0o600)
+    p = store_token(_DEFAULT_TOKEN_DIR, account_id, data)
     print(f"  保存先: {p}")
 
 
@@ -99,6 +100,8 @@ def refresh(account_id: str, dry_run: bool) -> None:
         print(f"  実際にリフレッシュするには --confirm-refresh を使用してください。")
         return
 
+    # Fail before requesting a fresh provider token if protected persistence is not ready.
+    preflight_token_store(_DEFAULT_TOKEN_DIR, account_id)
     print(f"\nリフレッシュ中...")
     params = {
         "grant_type": "th_refresh_token",
@@ -168,6 +171,7 @@ def main() -> None:
     parser.add_argument(
         "--account-id",
         required=True,
+        choices=sorted(SUPPORTED_ACCOUNTS),
         help="対象アカウントID (例: night_scout, liver_manager)",
     )
     parser.add_argument(
