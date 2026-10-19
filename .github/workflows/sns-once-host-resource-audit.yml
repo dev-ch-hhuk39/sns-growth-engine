@@ -1,0 +1,137 @@
+name: One-Shot SNS Host Resource Audit (Read Only)
+
+# No scheduled execution, no publish, no deletion, no deployment.
+# Only the initial main introduction of this workflow is eligible.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/sns-once-host-resource-audit.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-host-resource-audit-once
+  cancel-in-progress: false
+
+env:
+  PUBLISH_ENABLED: "false"
+  ALLOW_REAL_THREADS_POST: "false"
+  ALLOW_REAL_X_POST: "false"
+  ALLOW_MEDIA_POSTS: "false"
+  ALLOW_REAL_THREADS_VIDEO_POST: "false"
+  ALLOW_VIDEO_DOWNLOAD: "false"
+  ALLOW_VIDEO_CUT: "false"
+  ALLOW_CLOUDINARY_UPLOAD: "false"
+  ALLOW_TRANSCRIPTION_API: "false"
+
+jobs:
+  inspect-host:
+    if: github.repository == 'dev-ch-hhuk39/sns-growth-engine' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    env:
+      BEFORE_SHA: ${{ github.event.before }}
+      TARGET_WORKFLOW: .github/workflows/sns-once-host-resource-audit.yml
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Guard first main introduction only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = "push"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_RUN_ATTEMPT" = "1" || exit 2
+          [[ "$BEFORE_SHA" =~ ^[a-f0-9]{40}$ ]] || exit 2
+          test "$BEFORE_SHA" != "0000000000000000000000000000000000000000"
+          git cat-file -e "$BEFORE_SHA^{commit}" || exit 2
+          if git cat-file -e "$BEFORE_SHA:$TARGET_WORKFLOW" 2>/dev/null; then
+            echo "ONE_SHOT_REPLAY_BLOCKED"
+            exit 2
+          fi
+          git cat-file -e "$GITHUB_SHA:$TARGET_WORKFLOW" || exit 2
+          echo "ONE_SHOT_GUARD=PASS"
+      - name: Inspect resource gate, protected releases and posting flag
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime=/opt/github-runners/sns-growth-engine/.buffered-runtime
+          free_bytes="$(df -B1 --output=avail / | tail -n 1 | tr -d '[:space:]')"
+          mem_kib="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+          if [[ "$free_bytes" =~ ^[0-9]+$ ]]; then
+            echo "HOST_ROOT_FREE_BYTES=$free_bytes"
+            if (( free_bytes >= 9 * 1024 * 1024 * 1024 )); then
+              echo "HOST_STAGE_9GIB_CAPACITY=PASS"
+            else
+              echo "HOST_STAGE_9GIB_CAPACITY=BLOCKED"
+            fi
+          else
+            echo "HOST_STAGE_9GIB_CAPACITY=UNVERIFIED"
+          fi
+          if [[ "$mem_kib" =~ ^[0-9]+$ ]]; then
+            echo "HOST_MEMAVAILABLE_KIB=$mem_kib"
+            if (( mem_kib >= 384 * 1024 )); then
+              echo "HOST_MEMORY_384MIB_GATE=PASS"
+            else
+              echo "HOST_MEMORY_384MIB_GATE=BLOCKED"
+            fi
+          else
+            echo "HOST_MEMORY_384MIB_GATE=UNVERIFIED"
+          fi
+          if sudo -n /usr/local/sbin/chadult-vps-resource-check --preflight 9 >/dev/null 2>&1; then
+            echo "HOST_PRIVILEGED_RESOURCE_GATE=PASS"
+          else
+            echo "HOST_PRIVILEGED_RESOURCE_GATE=BLOCKED_OR_UNAVAILABLE"
+          fi
+          if [[ -d "$runtime/releases" && ! -L "$runtime/releases" ]]; then
+            releases_real="$(readlink -f "$runtime/releases")"
+            for role in current previous pending; do
+              pointer="$runtime/$role"
+              upper="${role^^}"
+              if [[ ! -e "$pointer" && ! -L "$pointer" ]]; then
+                echo "HOST_RELEASE_${upper}=MISSING"
+                continue
+              fi
+              if [[ ! -L "$pointer" ]]; then
+                echo "HOST_RELEASE_${upper}=INVALID"
+                continue
+              fi
+              resolved="$(readlink -f "$pointer" 2>/dev/null || true)"
+              leaf="${resolved##*/}"
+              if [[ "${resolved%/*}" = "$releases_real" && "$leaf" =~ ^[a-f0-9]{40}$ && -d "$resolved" && ! -L "$resolved" ]]; then
+                echo "HOST_RELEASE_${upper}=$leaf"
+              else
+                echo "HOST_RELEASE_${upper}=INVALID"
+              fi
+            done
+            if [[ -x "$runtime/current/.venv/bin/python" ]]; then
+              echo "HOST_CURRENT_VENV=READY"
+            else
+              echo "HOST_CURRENT_VENV=BLOCKED"
+            fi
+          else
+            echo "HOST_RELEASE_POINTERS=UNVERIFIED"
+          fi
+          envfile="$runtime/shared/runtime.env"
+          if [[ -f "$envfile" && ! -L "$envfile" && -r "$envfile" ]]; then
+            if [[ "$(stat -c '%a' "$envfile")" = 600 ]]; then
+              echo "HOST_RUNTIME_ENV_MODE=OWNER_ONLY"
+            else
+              echo "HOST_RUNTIME_ENV_MODE=UNSAFE_OR_UNKNOWN"
+            fi
+            if grep -Fxq 'BUFFERED_POSTING_ENABLED=true' "$envfile"; then
+              echo "HOST_POSTING_FLAG=TRUE_NO_CHANGE"
+            else
+              echo "HOST_POSTING_FLAG=FALSE_OR_UNKNOWN_NO_CHANGE"
+            fi
+          else
+            echo "HOST_RUNTIME_ENV=UNVERIFIED"
+          fi
+          echo "HOST_BACKUP_RESTORE_PROOF=NOT_CHECKED"
+          echo "HOST_DEPLOYMENT_AUTHORIZATION=NOT_GRANTED_BY_READONLY_AUDIT"
+          echo "SNS_PUBLISH_ATTEMPTS=0"
