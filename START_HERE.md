@@ -1,3 +1,12 @@
+## 2026-10-20 - SNS-owned Storage Lifecycle Policy (capacity and safety)
+
+- Read-only VPS audit: 8 immutable SHA folders total 4,452,212 KiB, current .venv 720,152 KiB, dedicated runner _work 627,400 KiB, Hugging Face cache 551,380 KiB, root free 9,532,727,296 bytes (below existing 9 GiB staging threshold). Detailed source: docs/SNS_STORAGE_LIFECYCLE_POLICY_20261020.md.
+- Added exact-scope read-only daily lifecycle monitor (02:45 JST), 14-day sanitized artifact, warning below 9 GiB, growth delta against fixed audited 2026-10-20 baseline, no deletion.
+- Protected current/previous/pending plus a separate marker/venv-verified emergency recovery release in preexisting approval-gated release pruner. Revised capacity recovery workflow to accept one or two explicit target SHA values; default still DRY_RUN. Current 4ddab7079f70, previous f6b78bacd6fa; pending absent.
+- Added post-successful-deploy read-only report, preserved shared lock, stage-only cleanup, rollout gating and all P0/SNS posting OFF controls.
+- Oldest preliminary release candidate 2669c472... ~732,580 KiB, BUT no deletion or cache pruning authorized or performed. Explicit target approval and independent process, restore and lock checks required.
+- Concurrent no-post Night Scout READY six-hour acceptance run 39349595143 failed QUALITY_EXHAUSTED with generator timeout, budget exhaustion and exact-slot candidate not eligible. Do not treat as rollout success.
+
 ## 2026-10-20 - Bounded READY acceptance path (no SNS posting)
 
 - Added manual-only 6-hour READY horizon via Autopilot AUTO_READY Pilot. Default scheduled 24-hour inventory remains intact, and manual 6-hour mode avoids long evergreen-bank top-up.

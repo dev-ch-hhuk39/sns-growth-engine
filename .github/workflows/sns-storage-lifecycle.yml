@@ -1,0 +1,81 @@
+name: SNS Storage Lifecycle Read-Only Monitor
+
+on:
+  schedule:
+    # Daily 02:45 JST, before the owned 05:15 JST media-preparation window.
+    - cron: "45 17 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-storage-lifecycle-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 10
+    env:
+      PUBLISH_ENABLED: "false"
+      ALLOW_REAL_THREADS_POST: "false"
+      ALLOW_REAL_X_POST: "false"
+      ALLOW_MEDIA_POSTS: "false"
+      ALLOW_VIDEO_DOWNLOAD: "false"
+      ALLOW_VIDEO_CUT: "false"
+      ALLOW_CLOUDINARY_UPLOAD: "false"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Verify immutable protected-main source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = refs/heads/main
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+      - name: Read-only lifecycle inventory and trend against verified baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/sns-storage-lifecycle.json"
+          /usr/bin/python3 -B scripts/sns_storage_lifecycle_audit.py \
+            --output "$report" --summary-only
+          /usr/bin/python3 -B - "$report" <<'PY'
+          import json
+          import sys
+          data = json.load(open(sys.argv[1], encoding="utf-8"))
+          summary = [
+              "## SNS-owned storage lifecycle (read only)",
+              "- Result: " + data["status"],
+              "- Protected: current, previous, pending (when present), one independent emergency release",
+              "- Releases: " + str(data["release_count"]),
+              "- Releases allocated bytes: " + str(data["release_allocated_bytes"]),
+              "- Pre-stage 9 GiB gate: " + data["before_stage_9gib_gate"],
+              "- Available bytes: " + str(data["disk_free_bytes"]),
+              "- Old release review candidates (no deletion): " + str(len(data["review_candidates"])),
+              "- Preliminary review-only recoverable bytes: " + str(data["preliminary_reclaim_bytes"]),
+              "- Growth vs 2026-10-20 measured baseline, release bytes: " + str(
+                  data["growth_since_baseline"]["release_allocated_bytes"]
+              ),
+              "- Docker/containerd: shared, explicitly out of scope",
+              "- No asset or source content read, no disk cleanup and no social posting",
+          ]
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("\n".join(summary) + "\n")
+          if data["before_stage_9gib_gate"] != "PASS":
+              print("::warning::SNS/VPS free space is below the existing 9-GiB pre-stage gate; approval-gated recovery required.")
+          if data["growth_since_baseline"]["release_allocated_bytes"] > 0:
+              print("::warning::SNS immutable releases have grown since the measured baseline; review retention.")
+          PY
+      - name: Keep only a bounded non-sensitive audit artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sns-storage-lifecycle-${{ github.run_id }}
+          path: ${{ runner.temp }}/sns-storage-lifecycle.json
+          if-no-files-found: warn
+          retention-days: 14

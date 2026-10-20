@@ -176,4 +176,13 @@ completed=true
 python3 "$source_root/scripts/cleanup_owned_sns_deploy_stages.py" \
   --runtime-root "$runtime_root" --apply --confirm-owned-stage-cleanup || \
   echo '[WARN] stale-stage cleanup skipped; live release remains protected' >&2
+# Drop the shared VPS deploy lock before the slower read-only directory scan.
+# After this point the transaction is complete and cannot roll back anything.
+flock -u 9 || true
+# Collect a bounded SNS-only snapshot after deployment. This does not clean
+# releases or caches, and failed monitoring must not roll back a healthy live
+# release. Daily GitHub monitoring independently tracks the trend.
+if ! python3 -B "$source_root/scripts/sns_storage_lifecycle_audit.py" --summary-only; then
+  echo '[WARN] SNS-owned read-only storage audit incomplete; no asset deleted' >&2
+fi
 echo "[OK] immutable runtime promoted with rollback and Sheets verification: $revision"
