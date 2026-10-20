@@ -21,6 +21,7 @@ DEFAULT_RUNNER = Path("/opt/github-runners/sns-growth-engine")
 DEFAULT_DATA = Path("/var/lib/sns-growth-engine")
 DEFAULT_ROOT = DEFAULT_RUNNER / ".buffered-runtime"
 BASELINE = Path(__file__).resolve().parents[1] / "config" / "sns_storage_lifecycle_baseline_20261020.json"
+MEDIA_POLICY_CONFIG = Path(__file__).resolve().parents[1] / "config" / "media_growth_engine.json"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 MIN_RELEASE_AGE_SECONDS = 7 * 86400
 MIN_STAGE_FREE_BYTES = 9 * 1024**3
@@ -215,6 +216,18 @@ def audit(
     if disk_total is None or disk_free is None:
         usage = shutil.disk_usage("/")
         disk_total, disk_free = usage.total, usage.free
+    require(disk_total > 0 and 0 <= disk_free <= disk_total,
+            "SNS_STORAGE_DISK_USAGE_INVALID")
+    # Read the exact existing media resource stop threshold; never invent an
+    # independent limit that drifts from check_media_resource_budget.py.
+    try:
+        media_policy = json.loads(MEDIA_POLICY_CONFIG.read_text(encoding="utf-8"))
+        media_prepare_stop = float(media_policy["resource_limits"]["disk_prepare_stop_percent"])
+        require(0 < media_prepare_stop <= 100, "SNS_STORAGE_MEDIA_THRESHOLD_INVALID")
+    except (OSError, ValueError, KeyError, TypeError):
+        raise StorageAuditBlocked("SNS_STORAGE_MEDIA_THRESHOLD_UNVERIFIABLE") from None
+    used_percent = round(100.0 * (disk_total - disk_free) / disk_total, 2)
+    media_preparation_gate = "PASS" if used_percent < media_prepare_stop else "BLOCKED"
     try:
         baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
         baseline_metrics = baseline["metrics"]
@@ -237,7 +250,8 @@ def audit(
         "baseline_measured_at_jst": baseline["measured_at_jst"],
         "growth_since_baseline": growth,
         "schema_version": 1,
-        "status": "PASS" if disk_free >= MIN_STAGE_FREE_BYTES else "CAPACITY_WARNING",
+        "status": ("PASS" if disk_free >= MIN_STAGE_FREE_BYTES
+                   and media_preparation_gate == "PASS" else "CAPACITY_WARNING"),
         "audit_mode": "READ_ONLY",
         "owner": "sns-growth-engine",
         "measured_at_utc": datetime.fromtimestamp(
@@ -245,6 +259,9 @@ def audit(
         ).isoformat(),
         "disk_total_bytes": disk_total,
         "disk_free_bytes": disk_free,
+        "disk_used_percent": used_percent,
+        "media_prepare_stop_percent": media_prepare_stop,
+        "media_preparation_disk_gate": media_preparation_gate,
         "before_stage_9gib_gate": "PASS" if disk_free >= MIN_STAGE_FREE_BYTES else "BLOCKED",
         "after_stage_8gib_gate": "PASS" if disk_free >= MIN_POST_STAGE_FREE_BYTES else "BLOCKED",
         "owned_subtree_allocated_bytes": measured,
@@ -285,6 +302,7 @@ def main() -> int:
             key: report[key] for key in (
                 "status", "release_count", "release_allocated_bytes",
                 "release_venv_bytes", "disk_free_bytes", "before_stage_9gib_gate",
+                "disk_used_percent", "media_prepare_stop_percent", "media_preparation_disk_gate",
                 "review_candidates", "preliminary_reclaim_bytes", "deletion_performed",
             )
         }, sort_keys=True))
