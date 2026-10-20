@@ -34,6 +34,8 @@ FOCUSED = (
     "test_autonomous_text_ready_isolation.py",
     "test_autonomous_text_strict_review_integration.py",
     "test_cleanup_sns_runner_python_toolcache.py",
+    "test_sns_storage_lifecycle_audit.py",
+    "test_prune_obsolete_runtime_releases.py",
     "test_p0_exact_canary_approval.py",
     "test_p0_release_mode_authority.py",
     "test_sns_deploy_lifecycle.py",

@@ -16,6 +16,7 @@ CURRENT = "a" * 40
 ROLLBACK = "b" * 40
 OLD = "c" * 40
 OLDER = "d" * 40
+OLDEST = "e" * 40
 
 
 class PruneReleaseTests(unittest.TestCase):
@@ -27,62 +28,80 @@ class PruneReleaseTests(unittest.TestCase):
         releases.mkdir(parents=True)
         (self.root / "shared" / "locks").mkdir(parents=True)
         now = time.time()
-        for sha, days in ((CURRENT, 1), (ROLLBACK, 2), (OLD, 14), (OLDER, 15)):
+        for sha, days in ((CURRENT, 1), (ROLLBACK, 2), (OLD, 14), (OLDER, 15), (OLDEST, 16)):
             directory = releases / sha
             directory.mkdir()
             (directory / "smoke.txt").write_text("immutable")
+            (directory / ".production-release").write_text(sha)
+            (directory / ".venv" / "bin").mkdir(parents=True)
+            (directory / ".venv" / "bin" / "python").symlink_to(sys.executable)
             os.utime(directory, (now - days * 86400, now - days * 86400))
         (self.root / "current").symlink_to(releases / CURRENT)
         (self.root / "previous").symlink_to(releases / ROLLBACK)
 
     def test_dry_run_is_read_only_and_keeps_current_and_rollback(self):
-        result = run(self.root, CURRENT, [OLD, OLDER], confirm=False)
+        result = run(self.root, CURRENT, [OLDER, OLDEST], confirm=False)
         self.assertEqual(result["mode"], "DRY_RUN")
-        self.assertEqual(result["kept_count"], 2)
+        self.assertEqual(result["kept_count"], 3)
+        self.assertEqual(result["emergency"], OLD)
         self.assertTrue((self.root / "releases" / OLD).is_dir())
 
     def test_locked_retention_removes_only_requested_stale_releases(self):
         # This helper is called by the shared-lock-protected public runner.
-        state = candidate_state(self.root, CURRENT, [OLD, OLDER])
+        state = candidate_state(self.root, CURRENT, [OLDER, OLDEST])
         before = shutil.disk_usage("/")
         result = {"mode": "APPLY", **state}
         with patch("prune_obsolete_runtime_releases.assert_not_in_use"):
-            result = _apply_under_shared_lock(self.root, CURRENT, [OLD, OLDER], state, before, result,
+            result = _apply_under_shared_lock(self.root, CURRENT, [OLDER, OLDEST], state, before, result,
                                               self.root / "shared" / "locks")
-        self.assertEqual(set(result["removed_releases"]), {OLD, OLDER})
-        self.assertFalse((self.root / "releases" / OLD).exists())
+        self.assertEqual(set(result["removed_releases"]), {OLDER, OLDEST})
+        self.assertFalse((self.root / "releases" / OLDEST).exists())
+        self.assertTrue((self.root / "releases" / OLD).exists())
         self.assertTrue((self.root / "releases" / CURRENT).exists())
         self.assertTrue((self.root / "releases" / ROLLBACK).exists())
 
     def test_confirm_without_shared_deploy_lock_blocks(self):
         with self.assertRaisesRegex(RuntimeError, "shared_deploy_lock_unavailable"):
-            run(self.root, CURRENT, [OLD], confirm=True)
+            run(self.root, CURRENT, [OLDER], confirm=True)
         self.assertTrue((self.root / "releases" / OLD).exists())
 
     def test_protected_current_or_rollback_blocked(self):
-        for sha in (CURRENT, ROLLBACK):
+        for sha in (CURRENT, ROLLBACK, OLD):
             with self.assertRaisesRegex(RuntimeError, "protected_release_target"):
                 candidate_state(self.root, CURRENT, [sha])
 
     def test_expected_revision_mismatch_blocks(self):
         with self.assertRaisesRegex(RuntimeError, "unexpected_current_release"):
-            candidate_state(self.root, OLD, [OLDER])
+            candidate_state(self.root, OLDER, [OLDEST])
 
     def test_recent_release_blocks(self):
-        target = self.root / "releases" / OLD
+        target = self.root / "releases" / OLDER
         now = time.time()
+        # Another healthy emergency must remain newer than the target.
+        os.utime(self.root / "releases" / OLD, (now - 86400, now - 86400))
         os.utime(target, (now - 4 * 86400, now - 4 * 86400))
         with self.assertRaisesRegex(RuntimeError, "target_release_too_recent"):
-            candidate_state(self.root, CURRENT, [OLD])
+            candidate_state(self.root, CURRENT, [OLDER])
 
     def test_symlink_target_blocks(self):
-        target = self.root / "releases" / OLD
-        for file in target.iterdir():
-            file.unlink()
-        target.rmdir()
+        target = self.root / "releases" / OLDEST
+        shutil.rmtree(target)
         target.symlink_to(self.root / "releases" / CURRENT)
         with self.assertRaisesRegex(RuntimeError, "target_not_regular_directory"):
-            candidate_state(self.root, CURRENT, [OLD])
+            candidate_state(self.root, CURRENT, [OLDEST])
+
+    def test_only_current_and_previous_blocks_even_old_target(self):
+        shutil.rmtree(self.root / "releases" / OLD)
+        shutil.rmtree(self.root / "releases" / OLDER)
+        shutil.rmtree(self.root / "releases" / OLDEST)
+        with self.assertRaisesRegex(RuntimeError, "not_enough_installed_releases_for_retention"):
+            candidate_state(self.root, CURRENT, [OLDEST])
+
+    def test_no_healthy_independent_emergency_fails_closed(self):
+        for sha in (OLD, OLDER, OLDEST):
+            (self.root / "releases" / sha / ".venv" / "bin" / "python").unlink()
+        with self.assertRaisesRegex(RuntimeError, "independent_emergency_release_required"):
+            candidate_state(self.root, CURRENT, [OLDEST])
 
     def test_invalid_sha_blocks(self):
         with self.assertRaisesRegex(RuntimeError, "invalid_target_sha"):

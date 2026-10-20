@@ -179,8 +179,12 @@ class DeploymentLifecycleTests(unittest.TestCase):
         current = self.releases / ('a'*40)
         previous = self.releases / ('c'*40)
         old = self.releases / ('d'*40)
-        for x in (current, previous, old):
+        emergency = self.releases / ('e'*40)
+        for x in (current, previous, old, emergency):
             x.mkdir()
+        (emergency / '.production-release').write_text(emergency.name)
+        (emergency / '.venv' / 'bin').mkdir(parents=True)
+        (emergency / '.venv' / 'bin' / 'python').symlink_to(sys.executable)
         (self.root / 'current').symlink_to(current)
         (self.root / 'previous').symlink_to(previous)
         (self.root / 'pending').symlink_to(self.candidate)
@@ -188,7 +192,8 @@ class DeploymentLifecycleTests(unittest.TestCase):
         state = candidate_state(self.root, current.name, [old.name])
         self.assertEqual(state['rollback'], previous.name)
         self.assertEqual(state['pending'], self.revision)
-        for protected in (current.name, previous.name, self.revision):
+        self.assertEqual(state['emergency'], emergency.name)
+        for protected in (current.name, previous.name, self.revision, emergency.name):
             with self.subTest(sha=protected):
                 with self.assertRaisesRegex(RuntimeError, 'protected_release_target'):
                     candidate_state(self.root, current.name, [protected])

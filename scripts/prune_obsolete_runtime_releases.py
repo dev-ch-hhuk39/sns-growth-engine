@@ -41,7 +41,6 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
             entries.append(entry)
     require(any(x.name == expected for x in entries), "current_release_not_installed")
     require(len(entries) >= 3, "not_enough_installed_releases_for_retention")
-    ordered = sorted(entries, key=lambda item: item.stat().st_mtime, reverse=True)
     previous_pointer = root / "previous"
     require(previous_pointer.is_symlink(), "explicit_previous_release_pointer_required")
     rollback_path = previous_pointer.resolve(strict=True)
@@ -60,6 +59,27 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
     keep = {expected, rollback_path.name}
     if pending is not None:
         keep.add(pending)
+    # Independent emergency recovery: never prune the newest healthy full
+    # immutable release outside current, previous, and pending.  An installed
+    # directory without its exact marker and executable Python venv is not
+    # evidence of a recoverable release.
+    emergency_options = [
+        entry for entry in entries
+        if entry.name not in keep
+        and (entry / ".production-release").is_file()
+        and not (entry / ".production-release").is_symlink()
+        and (entry / ".production-release").stat().st_size <= 128
+        and (entry / ".production-release").read_text(encoding="ascii").strip() == entry.name
+        and (entry / ".venv").is_dir()
+        and not (entry / ".venv").is_symlink()
+        and (entry / ".venv" / "bin").is_dir()
+        and not (entry / ".venv" / "bin").is_symlink()
+        and (entry / ".venv" / "bin" / "python").exists()
+        and os.access(entry / ".venv" / "bin" / "python", os.X_OK)
+    ]
+    require(bool(emergency_options), "independent_emergency_release_required")
+    emergency = max(emergency_options, key=lambda path: path.stat().st_mtime)
+    keep.add(emergency.name)
     chosen = []
     for sha in targets:
         path = releases / sha
@@ -69,9 +89,9 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
         require(now - path.stat().st_mtime >= MIN_AGE_SECONDS, "target_release_too_recent")
         chosen.append(str(path))
     remaining = {p.name for p in entries} - set(targets)
-    require(keep.issubset(remaining) and len(remaining) >= 2, "rollback_retention_violation")
+    require(keep.issubset(remaining) and len(remaining) >= 3, "rollback_retention_violation")
     return {"current": expected, "rollback": rollback_path.name, "pending": pending,
-            "targets": chosen, "kept_count": len(remaining)}
+            "emergency": emergency.name, "targets": chosen, "kept_count": len(remaining)}
 
 
 def assert_not_in_use(paths: list[Path], *, proc_root: Path = Path("/proc")) -> None:

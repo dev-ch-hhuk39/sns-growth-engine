@@ -102,6 +102,7 @@
       "media-preparation-scheduler.yml",
       "production-capacity-recovery.yml",
       "production-storage-readonly-audit.yml",
+      "sns-storage-lifecycle.yml",
       "publication-review-sync.yml",
       "sns-once-host-resource-audit.yml",
       "sns-once-resolve-abandoned-pending.yml",

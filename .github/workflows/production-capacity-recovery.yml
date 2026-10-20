@@ -12,8 +12,9 @@ on:
         required: true
         type: string
       obsolete_release_two:
-        description: Second obsolete release SHA
-        required: true
+        description: Optional second obsolete release SHA; leave blank to recover only one
+        required: false
+        default: ""
         type: string
       confirm_cleanup:
         description: False performs read-only preflight; true applies exact bounded cleanup
@@ -53,8 +54,12 @@ jobs:
           args=(
             --expected-current "$EXPECTED_CURRENT"
             --target "$OBSOLETE_ONE"
-            --target "$OBSOLETE_TWO"
           )
+          # A second release is optional. Never force selection of a safe
+          # rollback version just to satisfy workflow input shape.
+          if [ -n "$OBSOLETE_TWO" ]; then
+            args+=(--target "$OBSOLETE_TWO")
+          fi
           if [ "$CONFIRM_CLEANUP" = "true" ]; then
             args+=(--confirm-cleanup)
           fi

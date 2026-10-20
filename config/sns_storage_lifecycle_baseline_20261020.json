@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "measured_at_jst": "2026-10-20T10:11:10+09:00",
+  "note": "Read-only actual measurements, not a deletion authorization",
+  "metrics": {
+    "release_allocated_bytes": 4559065088,
+    "runner_python_toolcache": 597393408,
+    "huggingface_model_cache": 564613120,
+    "pip_cache": 84971520,
+    "runner_diagnostic_logs": 66539520,
+    "runtime_shared_protected": 16691200,
+    "disk_free_bytes": 9532727296
+  }
+}
