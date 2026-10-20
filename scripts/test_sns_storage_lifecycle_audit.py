@@ -84,6 +84,26 @@ class StorageLifecycleReadOnly(unittest.TestCase):
                   disk_free=MIN_POST_STAGE_FREE_BYTES - 1)
         self.assertEqual(r["after_stage_8gib_gate"], "BLOCKED")
 
+    def test_media_limit_can_block_without_blocking_9gib_pre_stage(self):
+        # Use the existing configured 80% threshold, independent of the
+        # 9-GiB minimum for immutable staging. Do not change either policy.
+        total = 100 * 1024**3
+        free = 11 * 1024**3
+        result = audit(self.root, self.runner, self.data,
+                       allow_test_roots=True, now=self.now,
+                       disk_total=total, disk_free=free)
+        self.assertEqual(result["before_stage_9gib_gate"], "PASS")
+        self.assertEqual(result["media_prepare_stop_percent"], 80.0)
+        self.assertEqual(result["disk_used_percent"], 89.0)
+        self.assertEqual(result["media_preparation_disk_gate"], "BLOCKED")
+        self.assertEqual(result["status"], "CAPACITY_WARNING")
+        self.assertFalse(result["deletion_performed"])
+        result = audit(self.root, self.runner, self.data,
+                       allow_test_roots=True, now=self.now,
+                       disk_total=total, disk_free=21 * 1024**3)
+        self.assertEqual(result["media_preparation_disk_gate"], "PASS")
+        self.assertEqual(result["status"], "PASS")
+
     def test_pending_pointer_never_becomes_removable(self):
         (self.root / "pending").symlink_to(self.releases / O)
         report = audited_release_inventory(self.root, now=self.now)
@@ -141,6 +161,8 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         self.assertEqual(job["env"]["ALLOW_REAL_THREADS_POST"], "false")
         self.assertEqual(job["env"]["ALLOW_REAL_X_POST"], "false")
         self.assertIn("sns_storage_lifecycle_audit.py", source)
+        self.assertIn("media_preparation_disk_gate", source)
+        self.assertIn("configured disk usage limit", source)
         self.assertIn("--summary-only", source)
         self.assertNotIn("--confirm-cleanup", source)
         self.assertNotIn("shutil.rmtree(", source)

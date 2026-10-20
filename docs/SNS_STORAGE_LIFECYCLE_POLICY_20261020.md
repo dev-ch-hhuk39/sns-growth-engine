@@ -61,3 +61,12 @@ As of this initial audit: **actual bytes reclaimed 0**; potential oldest candida
 
 ## Separate READY acceptance problem
 The 2026-10-20 six-hour Night Scout READY workflow run 39349595143 failed with QUALITY_EXHAUSTED. Underlying structured reasons include GENERATION_PROCESS_TIMEOUT, AI_APPROVAL_BUDGET_EXHAUSTED and no_hybrid_pass_candidate_for_exact_slot. Do not rewrite WAITING_REVIEW rows or bypass hybrid validation; successful measured READY needs a future scoped production verification.
+
+
+## 2026-10-20 second verification — real disk gate and completed deployment
+
+Owner-approved full-release cleanup removed only SHA 2669c472afc3c4974fb495dd83b5d80464265b7e under the shared deployment lock, using the same source-controlled process/cwd/FD scan with read permission elevated to VPS root. Reclaimed exactly 750,157,824 bytes (~715 MiB), with current/previous/emergency retained. The dedicated-runner attempt correctly failed closed with process_cwd_inventory_unknown and removed nothing; the privileged verified replay succeeded.
+
+The newest source-controlled main SHA 4c162d5fb96168b2c88b8b58b40b8d918b3017dd then deployed with social posting OFF after passing the 9-GiB pre-stage gate. Its new immutable .venv again consumed most of the reclaimed space. Post-deploy independent SSH confirmed current=4c162d5..., previous=4ddab7079..., emergency=bec16989..., pending absent, posting OFF, P0 gate OFF, 0600 private environment, 3 account cron lines. The new release completed health and Sheets read-only verification. Do not claim permanent disk recovery; the future release-retention cycle remains approval-gated.
+
+The existing media resource policy at config/media_growth_engine.json sets disk_prepare_stop_percent=80, independently of the staging free-space gates. The audit now reads that exact config and flags media-preparation status whenever used disk is >= the configured limit, even if a new release fits. The monitor emits a GitHub warning. This change adds no automatic deletion and is deployed through the GitHub-hosted audit workflow without staging another 720-MiB immutable runtime.

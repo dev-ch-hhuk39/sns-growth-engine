@@ -1,3 +1,9 @@
+## 2026-10-20 — Disk threshold observability post-deploy
+
+- Owner-approved one-release cleanup removed SHA 2669c472... with exact in-use scan under VPS privileged scope and global lock; 750,157,824 bytes recovered. Source/prune script retains current/previous/emergency. Newest immutable runtime 4c162d5... then deployed successfully posting OFF, but recreated ~720-MiB Python dependencies; no persistent 80% capacity recovery yet.
+- The separate media-preparation stop threshold is 80% disk used, sourced from existing config/media_growth_engine.json, and is now included as an independent monitoring warning even if 9-GiB pre-stage free-space rule would pass. No automatic file removal.
+- Background AI quality approval still blocks Night Scout READY; no unauthorized automatic approvals or SNS publishing.
+
 ## 2026-10-20 - SNS-owned Storage Lifecycle Policy (capacity and safety)
 
 - Read-only VPS audit: 8 immutable SHA folders total 4,452,212 KiB, current .venv 720,152 KiB, dedicated runner _work 627,400 KiB, Hugging Face cache 551,380 KiB, root free 9,532,727,296 bytes (below existing 9 GiB staging threshold). Detailed source: docs/SNS_STORAGE_LIFECYCLE_POLICY_20261020.md.
