@@ -15,10 +15,10 @@ OLD="2026-08-11T09:16:24+00:00"
 NEW="2026-10-05T05:49:13+00:00"
 def pair():
     row=review_row(QUEUE)
-    old={**row,"last_sync_at":OLD,"updated_at":OLD,"created_at":OLD,
+    old={**row,"last_sync_at":OLD,"updated_at":OLD,"created_at":"2026-08-10T00:39:59+00:00",
          "review_decision":"","reviewer_note":"","decision_result":"",
          "decision_applied_at":"","review_status":"PENDING_REVIEW"}
-    new={**row,"last_sync_at":NEW,"updated_at":NEW,"created_at":NEW,
+    new={**row,"last_sync_at":NEW,"updated_at":NEW,"created_at":"2026-08-11T11:10:41+00:00",
          "review_decision":"","reviewer_note":"","decision_result":"",
          "decision_applied_at":"","review_status":"PENDING_REVIEW"}
     return old,new
@@ -50,6 +50,7 @@ class LegacyReviewMirrors(unittest.TestCase):
             {"account_id":"liver_manager"},{"review_id":"other"},
             {"platform":"x"},{"post_type":"media"},{"review_status":"APPROVED"},
             {"last_sync_at":NEW},{"last_sync_at":"bad"},
+            {"created_at":"2026-10-20T00:00:00+00:00"},
             {"last_sync_at":"2027-01-01T00:00:00Z"}
         )
         for change in patches:
@@ -62,7 +63,8 @@ class LegacyReviewMirrors(unittest.TestCase):
 
     def test_newer_identity_or_timestamp_mismatch_blocks(self):
         for change in ({"last_sync_at":"bad"},{"last_sync_at":OLD},
-                       {"account_id":"beauty_account"},{"review_id":"other"}):
+                       {"account_id":"beauty_account"},{"review_id":"other"},
+                       {"created_at":"2026-10-20T00:00:00+00:00"}):
             old,new=pair();new.update(change)
             with self.subTest(change=change),self.assertRaises(ReviewBoardBlocked):
                 index_review_rows([old,new],source="REVIEW")
@@ -91,6 +93,7 @@ class LegacyReviewMirrors(unittest.TestCase):
         old,new=pair()
         new={**new,**reviewed(decision="OK",note="explicit decision")}
         new["last_sync_at"]=NEW
+        new["created_at"]="2026-08-11T11:10:41+00:00"
         client=FakeClient(reviews=[old,new])
         report=decisions.apply(client,do_apply=True,allow_media_posts=False)
         self.assertEqual(report["outcomes"],["READY"])

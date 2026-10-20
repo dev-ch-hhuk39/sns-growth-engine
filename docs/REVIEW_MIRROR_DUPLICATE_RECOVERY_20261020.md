@@ -7,3 +7,5 @@ The legacy REVIEW indexer now selects only the later snapshot when immutable sco
 The review sync now emits changed-cell-only updates, updating the sync timestamps only when another projection field actually changes, while preserving all human-authored cells and performing exact readback. No historic row is deleted, cleared, renamed or hidden. Separate archival/deletion requires independent owner-approved proof.
 
 Tests: scripts/test_legacy_review_mirror_reconciliation.py plus existing review-board safety suites. A passing review workflow does not prove operational posting, READY inventory, media permissions or performance feedback. SNS publishing remains disabled.
+
+Historical fingerprint: all 58 newer rows have created_at=2026-08-11T11:10:41+00:00. The reconciliation requires exactly that UTC creation instant and an earlier prior created_at. Future duplicates remain blocked.

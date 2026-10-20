@@ -17,6 +17,8 @@ _REVIEW_MUTABLE_FIELDS = (
     "review_decision", "reviewer_note", "decision_applied_at", "decision_result",
 )
 _LEGACY_IDENTITY_FIELDS = ("review_id", "account_id", "platform", "post_type")
+# Historical 58 second-copy mirrors were all made by this exact import.
+_LEGACY_MIRROR_IMPORT_AT = datetime(2026, 8, 11, 11, 10, 41, tzinfo=timezone.utc)
 
 
 def _timestamp(value: Any) -> datetime | None:
@@ -50,6 +52,11 @@ def _safe_newer_unreviewed_legacy_snapshot(
     if str(prior.get("platform") or "").strip().lower() != "threads":
         return False
     if str(prior.get("review_status") or "").strip().upper() != "PENDING_REVIEW":
+        return False
+    old_created = _timestamp(prior.get("created_at"))
+    new_created = _timestamp(newer.get("created_at"))
+    if (new_created != _LEGACY_MIRROR_IMPORT_AT
+            or old_created is None or old_created >= new_created):
         return False
     old_time = _timestamp(prior.get("last_sync_at"))
     new_time = _timestamp(newer.get("last_sync_at"))
