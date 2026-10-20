@@ -1,3 +1,11 @@
+## 2026-10-20 - Historical Publication Review mirror recovery
+
+- Read-only actual Sheets audit: 1,637 unique operational queue IDs; 58 pairs of historical duplicate review mirrors, no earlier human decision cells, later sync timestamps newer.
+- Strict in-memory read-time reconciliation of verified unreviewed mirrors; ambiguous or edited older rows and queue duplicates continue to block.
+- Sync writes only changed projection cells and protects all reviewer-authored fields, reducing avoidable Sheets API calls.
+- Tests and evidence: docs/REVIEW_MIRROR_DUPLICATE_RECOVERY_20261020.md.
+- No Sheets deletion or SNS posting; verify live post-merge review job before claiming resolved.
+
 ## 2026-10-20 - Strict AUTO_READY candidate provenance and pending cleanup
 
 - Verified PR #429 was fully green and merged to main (303a23ebdb880a2e46107d11ee9fe5beeb009e79).

@@ -65,9 +65,15 @@ def sync(client, *, apply: bool) -> dict:
         )
     ]
     rows = build_rows(queue_rows, existing_rows)
+    existing_unique = index_review_rows(existing_rows, source="REVIEW")
+    legacy_duplicates = (
+        sum(bool(text(row.get("queue_id"))) for row in existing_rows)
+        - len(existing_unique)
+    )
     plan = {
         "status": "PLAN_ONLY" if not apply else "APPLIED",
         "review_count": len(rows), "would_write": len(rows),
+        "legacy_unreviewed_duplicate_rows_preserved": legacy_duplicates,
         "review_rows": rows,
     }
     if not apply:
@@ -99,11 +105,23 @@ def sync(client, *, apply: bool) -> dict:
             }
             continue
         target_row = by_queue[row["queue_id"]]
-        expected[row["queue_id"]] = {
+        # Only changed projection fields are sent back to Sheets. Blindly
+        # rewriting every review row/column every two hours burns API quota
+        # and creates needless write contention. Reviewer-authored cells
+        # remain excluded, and last_sync_at moves only with a real change.
+        previous = old[row["queue_id"]]
+        changed = {
             field: value for field, value in row.items()
             if field in headers and field not in readonly
+            and field not in {"last_sync_at", "updated_at"}
+            and text(previous.get(field)) != text(value)
         }
-        for field, value in expected[row["queue_id"]].items():
+        if changed:
+            for timestamp_field in ("updated_at", "last_sync_at"):
+                if timestamp_field in headers:
+                    changed[timestamp_field] = row.get(timestamp_field, "")
+        expected[row["queue_id"]] = changed
+        for field, value in changed.items():
             updates.append({
                 "range": f"{_col_letter(headers.index(field) + 1)}{target_row}",
                 "values": [[value]],
@@ -151,6 +169,10 @@ def sync(client, *, apply: bool) -> dict:
     plan["read_after_write"] = True
     plan["appended_count"] = len(appends)
     plan["updated_count"] = len(updates)
+    plan["unchanged_review_rows"] = sum(
+        bool(text(row.get("queue_id"))) and not expected.get(text(row.get("queue_id")), {})
+        for row in rows
+    )
     return plan
 
 

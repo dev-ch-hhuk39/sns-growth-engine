@@ -5,11 +5,62 @@ Applied before review-board planning and writes. No media rights are issued.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime, timezone
 from typing import Any
 
 
 class ReviewBoardBlocked(RuntimeError):
     """Sanitized blocking reason; never put editable text into exceptions."""
+
+
+_REVIEW_MUTABLE_FIELDS = (
+    "review_decision", "reviewer_note", "decision_applied_at", "decision_result",
+)
+_LEGACY_IDENTITY_FIELDS = ("review_id", "account_id", "platform", "post_type")
+# Historical 58 second-copy mirrors were all made by this exact import.
+_LEGACY_MIRROR_IMPORT_AT = datetime(2026, 8, 11, 11, 10, 41, tzinfo=timezone.utc)
+
+
+def _timestamp(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
+
+
+def _safe_newer_unreviewed_legacy_snapshot(
+    prior: Mapping[str, Any], newer: Mapping[str, Any],
+) -> bool:
+    """Reconcile only clearly older, never-reviewed mirror records.
+
+    The original row stays untouched in Sheets. A newer duplicate may contain
+    an operator decision: material evidence is checked separately before use.
+    The older row must NEVER contain reviewer-authored data.
+    """
+    if any(str(prior.get(field) or "").strip() for field in _REVIEW_MUTABLE_FIELDS):
+        return False
+    if any(
+        not str(prior.get(field) or "").strip()
+        or str(prior.get(field) or "").strip() != str(newer.get(field) or "").strip()
+        for field in _LEGACY_IDENTITY_FIELDS
+    ):
+        return False
+    if str(prior.get("platform") or "").strip().lower() != "threads":
+        return False
+    if str(prior.get("review_status") or "").strip().upper() != "PENDING_REVIEW":
+        return False
+    old_created = _timestamp(prior.get("created_at"))
+    new_created = _timestamp(newer.get("created_at"))
+    if (new_created != _LEGACY_MIRROR_IMPORT_AT
+            or old_created is None or old_created >= new_created):
+        return False
+    old_time = _timestamp(prior.get("last_sync_at"))
+    new_time = _timestamp(newer.get("last_sync_at"))
+    return old_time is not None and new_time is not None and new_time > old_time
 
 
 def index_review_rows(
@@ -20,6 +71,7 @@ def index_review_rows(
     if source not in {"QUEUE", "REVIEW"}:
         raise ReviewBoardBlocked("REVIEW_SOURCE_INVALID")
     indexed: dict[str, dict[str, Any]] = {}
+    legacy_duplicates_seen: set[str] = set()
     for row in rows:
         if not isinstance(row, Mapping):
             raise ReviewBoardBlocked("REVIEW_SOURCE_ROW_INVALID")
@@ -29,7 +81,14 @@ def index_review_rows(
                 raise ReviewBoardBlocked(f"{source}_QUEUE_ID_MISSING")
             continue
         if identity in indexed:
-            raise ReviewBoardBlocked(f"{source}_QUEUE_ID_DUPLICATE")
+            # Never coalesce operational queue identities or live review votes.
+            # Legacy duplicate review mirrors are only reconciled when their
+            # older row was never reviewed and the newer row has the same
+            # immutable identity, scope and a strictly later sync timestamp.
+            if (source != "REVIEW" or identity in legacy_duplicates_seen
+                    or not _safe_newer_unreviewed_legacy_snapshot(indexed[identity], row)):
+                raise ReviewBoardBlocked(f"{source}_QUEUE_ID_DUPLICATE")
+            legacy_duplicates_seen.add(identity)
         indexed[identity] = dict(row)
     return indexed
 
