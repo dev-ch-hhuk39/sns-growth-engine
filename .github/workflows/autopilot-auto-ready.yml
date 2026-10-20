@@ -17,6 +17,12 @@ on:
           - "night_scout"
           - "liver_manager"
           - "beauty_account"
+      horizon_hours:
+        description: "Manual no-post verification scope: 6h bounded, or usual 24h"
+        required: true
+        default: "24"
+        type: choice
+        options: ["6", "24"]
       max_ready:
         description: "Maximum rows to promote to READY"
         required: true
@@ -59,6 +65,7 @@ jobs:
     env:
       ACCOUNT_ID: ${{ matrix.account_id }}
       MAX_READY: ${{ github.event.inputs.max_ready || '1' }}
+      HORIZON_HOURS: ${{ github.event.inputs.horizon_hours || '24' }}
       GCP_SA_JSON_BASE64: ${{ secrets.GCP_SA_JSON_BASE64 || secrets.SA_JSON_BASE64 }}
       SA_JSON_BASE64: ${{ secrets.SA_JSON_BASE64 || secrets.GCP_SA_JSON_BASE64 }}
       SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID || secrets.SNS_MASTER_SHEET_ID }}
@@ -80,11 +87,19 @@ jobs:
         run: |
           apply=false
           max_ready="$MAX_READY"
+          case "$HORIZON_HOURS" in
+            6|24) ;;
+            *) echo "[BLOCKED] unsupported horizon"; exit 2 ;;
+          esac
           if [ "${{ github.event_name }}" = "schedule" ]; then
             apply=true
             max_ready=3
           elif [ "$MANUAL_CONFIRM" = "true" ]; then
             apply=true
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "$HORIZON_HOURS" != "24" ]; then
+            echo "[BLOCKED] scheduled horizon must remain 24h"
+            exit 2
           fi
           echo "AUTO_READY_APPLY=$apply" >> "$GITHUB_ENV"
           echo "MAX_READY=$max_ready" >> "$GITHUB_ENV"
@@ -134,10 +149,12 @@ jobs:
         run: |
           python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
-            --confirm-ready-maintenance --use-sheets
+            --confirm-ready-maintenance --use-sheets \
+            --horizon-hours "$HORIZON_HOURS"
 
       - name: Refill validated non-AI emergency bank
-        if: success() && env.AUTO_READY_APPLY == 'true' && steps.preparation_guard.outcome == 'success'
+        # Manual 6h no-post canary does not run long evergreen-bank top-up.
+        if: success() && env.AUTO_READY_APPLY == 'true' && env.HORIZON_HOURS == '24' && steps.preparation_guard.outcome == 'success'
         run: |
           python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --evergreen-bank --apply \

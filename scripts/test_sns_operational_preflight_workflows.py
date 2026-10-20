@@ -34,6 +34,28 @@ class OperationalGateWorkflowTests(unittest.TestCase):
             self.assertEqual(yaml.safe_load(source)["env"][flag], "false")
         self.assertNotIn("--confirm-real-post", source)
 
+    def test_manual_six_hour_inventory_canary_keeps_schedule_and_posting_off(self):
+        doc = yaml.safe_load(AUTOREADY.read_text(encoding="utf-8"))
+        triggers = doc.get("on", doc.get(True))
+        horizon = triggers["workflow_dispatch"]["inputs"]["horizon_hours"]
+        self.assertEqual(horizon["type"], "choice")
+        self.assertEqual(horizon["options"], ["6", "24"])
+        self.assertEqual(horizon["default"], "24")
+        job = doc["jobs"]["auto-ready"]
+        self.assertEqual(job["strategy"]["max-parallel"], 1)
+        self.assertEqual(job["env"]["HORIZON_HOURS"], "${{ github.event.inputs.horizon_hours || '24' }}")
+        steps = {step.get("name"): step for step in job["steps"]}
+        setup = steps["Resolve scheduled inventory maintenance"]["run"]
+        for item in ('case "$HORIZON_HOURS" in', '6|24)', '"$HORIZON_HOURS" != "24"'):
+            self.assertIn(item, setup)
+        maintain = steps["Maintain next text-slot READY inventory"]["run"]
+        self.assertIn('--horizon-hours "$HORIZON_HOURS"', maintain)
+        self.assertIn("env.HORIZON_HOURS == '24'", steps["Refill validated non-AI emergency bank"]["if"])
+        self.assertIn("--skip-real-post", steps["AUTO_READY apply only"]["run"])
+        self.assertNotIn("--confirm-real-post", AUTOREADY.read_text(encoding="utf-8"))
+        for key in ("PUBLISH_ENABLED", "ALLOW_REAL_THREADS_POST", "ALLOW_REAL_X_POST"):
+            self.assertEqual(doc["env"][key], "false")
+
     def test_one_shot_vps_authority_audit_has_no_writes_or_privilege_escalation(self):
         source = AUDIT.read_text(encoding="utf-8")
         doc = yaml.safe_load(source)

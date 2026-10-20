@@ -1,3 +1,9 @@
+## 2026-10-20 - Bounded READY acceptance path (no SNS posting)
+
+- Added manual-only 6-hour READY horizon via Autopilot AUTO_READY Pilot. Default scheduled 24-hour inventory remains intact, and manual 6-hour mode avoids long evergreen-bank top-up.
+- Only exact horizons 6 or 24 are permitted; the original text-only autonomous-policy guard, account and Sheets identity checks, Hybrid AI, final public-text validator, duplicate prevention and --skip-real-post all remain unchanged.
+- Registered workflow safety contract in focused offline QA. Acceptance requires a successful scoped protected-main no-post run and actual Sheets READY readback, not merely a passing code test.
+
 ## 2026-10-20 - Historical Publication Review mirror recovery
 
 - Read-only actual Sheets audit: 1,637 unique operational queue IDs; 58 pairs of historical duplicate review mirrors, no earlier human decision cells, later sync timestamps newer.

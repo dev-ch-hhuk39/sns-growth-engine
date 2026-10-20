@@ -69,6 +69,7 @@ FOCUSED = (
     "test_x_legacy_compatibility.py",
     "test_publication_review_write_safety.py",
     "test_legacy_review_mirror_reconciliation.py",
+    "test_sns_operational_preflight_workflows.py",
     "test_queue_identity_transition_policy.py",
     "test_legacy_media_review_safety.py",
     "test_publication_review_sync_retries.py",
