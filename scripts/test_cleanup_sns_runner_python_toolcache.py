@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from cleanup_sns_runner_python_toolcache import (
     CacheBlocked, MIN_RECLAIM_BYTES, inspect, recover,
+    assert_no_release_venv_uses_toolcache,
 )
 
 NOW = time.time() + 4000.0
@@ -108,6 +109,26 @@ class CleanupTests(unittest.TestCase):
             (self.target / version).mkdir()
         with self.assertRaisesRegex(CacheBlocked, "SCOPE_INVALID"):
             self.plan()
+
+    def test_release_python_runtime_dependency_blocks_toolcache_removal(self):
+        releases = self.root / ".buffered-runtime" / "releases"
+        config = releases / ("a" * 40) / ".venv" / "pyvenv.cfg"
+        config.parent.mkdir(parents=True)
+        config.write_text(
+            "home = " + str(self.version / "x64" / "bin") + "\n"
+        )
+        with self.assertRaisesRegex(CacheBlocked, "REQUIRED_BY_ROLLBACK_RELEASE"):
+            assert_no_release_venv_uses_toolcache(self.root, "3.11.14")
+        self.assertTrue(self.version.is_dir())
+
+    def test_release_python_config_forgery_blocks_cache_cleanup(self):
+        releases = self.root / ".buffered-runtime" / "releases"
+        config = releases / ("b" * 40) / ".venv" / "pyvenv.cfg"
+        config.parent.mkdir(parents=True)
+        config.symlink_to(self.version / "x64.complete")
+        with self.assertRaisesRegex(CacheBlocked, "RELEASE_CONFIG_UNVERIFIABLE"):
+            assert_no_release_venv_uses_toolcache(self.root, "3.11.14")
+        self.assertTrue(self.version.exists())
 
     def test_workflow_never_calls_a_publisher(self):
         import yaml

@@ -135,9 +135,39 @@ def recover(root: Path = ROOT, *, confirm: bool = False,
     raise CacheBlocked("SNS_TOOLCACHE_APPLY_REQUIRES_LOCKED_MAIN_ENTRYPOINT")
 
 
+def assert_no_release_venv_uses_toolcache(root: Path, version: str) -> None:
+    """Protect installed immutable releases that need the Python stdlib base.
+
+    Production Python 3.11 venv executables are patched to use this exact
+    toolcache's versioned libpython/stdlib. Its removal makes rollback
+    unrecoverable. Never infer safety from an idle process list alone.
+    """
+    target = root / "_work" / "_tool" / "Python" / version
+    releases = root / ".buffered-runtime" / "releases"
+    require(releases.is_dir() and not releases.is_symlink(),
+            "SNS_TOOLCACHE_RELEASE_INVENTORY_UNVERIFIABLE")
+    for candidate in releases.iterdir():
+        if not candidate.is_dir() or candidate.is_symlink():
+            raise CacheBlocked("SNS_TOOLCACHE_UNKNOWN_RELEASE_ENTRY")
+        cfg = candidate / ".venv" / "pyvenv.cfg"
+        if not cfg.exists():
+            continue
+        require(cfg.is_file() and not cfg.is_symlink()
+                and cfg.stat().st_size <= 8192,
+                "SNS_TOOLCACHE_RELEASE_CONFIG_UNVERIFIABLE")
+        try:
+            configuration = cfg.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            raise CacheBlocked("SNS_TOOLCACHE_RELEASE_CONFIG_UNVERIFIABLE") from None
+        if str(target) in configuration:
+            raise CacheBlocked("SNS_TOOLCACHE_REQUIRED_BY_ROLLBACK_RELEASE")
+
+
 def apply_under_lock(root: Path, *, now: float | None = None) -> dict:
     """Acquired only by main; release untouched if another deploy is active."""
     initial = inspect(root, now=now)
+    for candidate in initial["candidate_versions"]:
+        assert_no_release_venv_uses_toolcache(root, candidate["version"])
     _check_processes(root / "_work/_tool/Python")
     target = root / "_work/_tool/Python"
     before = shutil.disk_usage("/")
