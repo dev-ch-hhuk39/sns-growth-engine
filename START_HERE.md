@@ -4,6 +4,20 @@
 - SNS setup-python toolcache becomes a required rollback dependency for 3.11 releases and must not be manually purged. Offsite R2 P0 restoration remains PASS; separate master Google Sheets R2 disaster recovery is not done.
 - Scope, failure gates and verification: docs/SNS_PY311_PILLOW13_MIGRATION_20261021.md. No automatic deletion, live posting, or global VPS package changes.
 
+## 2026-10-21 — Exact one-time SNS pip cache cleanup
+
+- Under shared deploy lock with root process check, verified owner path and no symlinks/pip jobs, purged ONLY /var/lib/sns-growth-engine/.cache/pip via the official pip cache command as snsrunner. Cache path size fell by 84,409,551 bytes (80.50 MiB), from 84,418,043 to 8,492 bytes; live/previous SHA marker+venv and P0/posting OFF reconfirmed.
+- Not removed: runner setup-python (actually consumed by self-hosted jobs), Hugging Face models, GitHub old releases younger than seven-day grace, partial directories lacking healthy venv, R2 recovery snapshots or SaaS Sheets data. Ownership/age/pruner + monitor hardening is in this PR.
+- Source evidence and current constraints: docs/SNS_STORAGE_LIFECYCLE_POLICY_20261020.md.
+
+## 2026-10-21 — Owner-scoped release aging, forensic safety and R2 verification
+
+- Re-audited 8 SNS SHA release dirs; current=4c162d5, previous=4ddab70, independent emergency=bec1698 remain protected, three old healthy SHA and two exact-marker incomplete SHA all within seven-day minimum. No full release deleted in this change.
+- Existing AgentOps encrypted R2 remote P0 SQLite/initial DB isolated restore and private config readback confirmed PASS on the current VPS, but external Google Sheets still has no verified R2 restore.
+- Hardened SHA-based manual retention pruner to require exact own marker on every target and healthy live/previous. The two 16-MiB incomplete releases become cleanup candidates only after seven-day grace; missing or forged ownership markers stay on forensic hold. Daily source-controlled read-only monitoring now reports future eligibility and warns for exact-SHA approval candidates.
+- Dedicated runner Python setup-python toolcache is actually used by self-hosted workflows and Hugging Face Whisper caches can be needed for offline media, so no unconditional removal. CPU load low during snapshot, memory/swap usage merits separate operational profiling.
+- No automatic deletion, Docker/containerd edits, database edits or SNS posting. Check docs/SNS_STORAGE_LIFECYCLE_POLICY_20261020.md.
+
 ## 2026-10-20 — Disk threshold observability post-deploy
 
 - Owner-approved one-release cleanup removed SHA 2669c472... with exact in-use scan under VPS privileged scope and global lock; 750,157,824 bytes recovered. Source/prune script retains current/previous/emergency. Newest immutable runtime 4c162d5... then deployed successfully posting OFF, but recreated ~720-MiB Python dependencies; no persistent 80% capacity recovery yet.

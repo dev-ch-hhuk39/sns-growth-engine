@@ -60,6 +60,8 @@ jobs:
               "- Media disk stop threshold percentage: " + str(data["media_prepare_stop_percent"]),
               "- Available bytes: " + str(data["disk_free_bytes"]),
               "- Old release review candidates (no deletion): " + str(len(data["review_candidates"])),
+              "- Releases protected by seven-day grace: " + str(data["grace_period_hold_count"]),
+              "- Exact SHA candidates (manual, read-only): " + ", ".join(data["review_candidates"][:5]),
               "- Preliminary review-only recoverable bytes: " + str(data["preliminary_reclaim_bytes"]),
               "- Growth vs 2026-10-20 measured baseline, release bytes: " + str(
                   data["growth_since_baseline"]["release_allocated_bytes"]
@@ -73,6 +75,8 @@ jobs:
               print("::warning::SNS/VPS free space is below the existing 9-GiB pre-stage gate; approval-gated recovery required.")
           if data["media_preparation_disk_gate"] != "PASS":
               print("::warning::SNS media preparation is blocked by its configured disk usage limit; no media job or cleanup triggered.")
+          if data["review_candidates"]:
+              print("::warning::SNS-owned releases eligible for exact-SHA approval-gated cleanup; no deletion automatically performed.")
           if data["growth_since_baseline"]["release_allocated_bytes"] > 0:
               print("::warning::SNS immutable releases have grown since the measured baseline; review retention.")
           PY

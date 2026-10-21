@@ -182,9 +182,9 @@ class DeploymentLifecycleTests(unittest.TestCase):
         emergency = self.releases / ('e'*40)
         for x in (current, previous, old, emergency):
             x.mkdir()
-        (emergency / '.production-release').write_text(emergency.name)
-        (emergency / '.venv' / 'bin').mkdir(parents=True)
-        (emergency / '.venv' / 'bin' / 'python').symlink_to(sys.executable)
+            (x / '.production-release').write_text(x.name)
+            (x / '.venv' / 'bin').mkdir(parents=True)
+            (x / '.venv' / 'bin' / 'python').symlink_to(sys.executable)
         (self.root / 'current').symlink_to(current)
         (self.root / 'previous').symlink_to(previous)
         (self.root / 'pending').symlink_to(self.candidate)

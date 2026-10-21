@@ -17,6 +17,33 @@ DEFAULT_ROOT = Path("/opt/github-runners/sns-growth-engine/.buffered-runtime")
 MIN_AGE_SECONDS = 7 * 86400
 
 
+def exact_release_marker(entry: Path) -> bool:
+    """Identify only our immutable SHA-named releases, even incomplete ones.
+
+    An old directory without its exact tiny owner marker is never a cleanup
+    candidate, regardless of age or a matching-looking basename.
+    """
+    marker = entry / ".production-release"
+    try:
+        return (entry.is_dir() and not entry.is_symlink()
+                and marker.is_file() and not marker.is_symlink()
+                and marker.stat().st_size <= 128
+                and marker.read_text(encoding="ascii").strip() == entry.name)
+    except (OSError, UnicodeError):
+        return False
+
+
+def release_bootable(entry: Path) -> bool:
+    if not exact_release_marker(entry):
+        return False
+    env = entry / ".venv"
+    binaries = env / "bin"
+    python = binaries / "python"
+    return (env.is_dir() and not env.is_symlink()
+            and binaries.is_dir() and not binaries.is_symlink()
+            and python.exists() and os.access(python, os.X_OK))
+
+
 def require(condition: bool, reason: str) -> None:
     if not condition:
         raise RuntimeError(reason)
@@ -48,6 +75,8 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
     require(SHA.fullmatch(rollback_path.name) is not None and rollback_path.name != expected,
             "invalid_previous_release")
     require(rollback_path.is_dir() and not rollback_path.is_symlink(), "previous_release_missing")
+    require(release_bootable(current_path), "current_release_unhealthy")
+    require(release_bootable(rollback_path), "previous_release_unhealthy")
     pending_pointer = root / "pending"
     pending = None
     if pending_pointer.exists() or pending_pointer.is_symlink():
@@ -65,17 +94,7 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
     # evidence of a recoverable release.
     emergency_options = [
         entry for entry in entries
-        if entry.name not in keep
-        and (entry / ".production-release").is_file()
-        and not (entry / ".production-release").is_symlink()
-        and (entry / ".production-release").stat().st_size <= 128
-        and (entry / ".production-release").read_text(encoding="ascii").strip() == entry.name
-        and (entry / ".venv").is_dir()
-        and not (entry / ".venv").is_symlink()
-        and (entry / ".venv" / "bin").is_dir()
-        and not (entry / ".venv" / "bin").is_symlink()
-        and (entry / ".venv" / "bin" / "python").exists()
-        and os.access(entry / ".venv" / "bin" / "python", os.X_OK)
+        if entry.name not in keep and release_bootable(entry)
     ]
     require(bool(emergency_options), "independent_emergency_release_required")
     emergency = max(emergency_options, key=lambda path: path.stat().st_mtime)
@@ -86,6 +105,10 @@ def candidate_state(root: Path, expected: str, targets: list[str], *, now: float
         require(sha not in keep, "protected_release_target")
         require(path.is_dir() and not path.is_symlink(), "target_not_regular_directory")
         require(path.resolve(strict=True).parent == releases.resolve(strict=True), "target_outside_release_root")
+        # Accept complete or incomplete old SNS releases, but NEVER another
+        # application's files, a copied directory, or a markerless forensic
+        # artifact. An incomplete .venv must not be mistaken for a rollback.
+        require(exact_release_marker(path), "target_release_identity_unverified")
         require(now - path.stat().st_mtime >= MIN_AGE_SECONDS, "target_release_too_recent")
         chosen.append(str(path))
     remaining = {p.name for p in entries} - set(targets)
