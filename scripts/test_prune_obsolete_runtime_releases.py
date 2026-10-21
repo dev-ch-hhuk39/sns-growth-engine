@@ -9,7 +9,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from prune_obsolete_runtime_releases import candidate_state, run, _apply_under_shared_lock, assert_not_in_use  # noqa: E402
+from prune_obsolete_runtime_releases import (
+    candidate_state, run, _apply_under_shared_lock, assert_not_in_use,
+    assert_owned_unmounted_release_trees,
+)  # noqa: E402
 import shutil
 
 CURRENT = "a" * 40
@@ -51,7 +54,8 @@ class PruneReleaseTests(unittest.TestCase):
         state = candidate_state(self.root, CURRENT, [OLDER, OLDEST])
         before = shutil.disk_usage("/")
         result = {"mode": "APPLY", **state}
-        with patch("prune_obsolete_runtime_releases.assert_not_in_use"):
+        with patch("prune_obsolete_runtime_releases.assert_not_in_use"), \
+             patch("prune_obsolete_runtime_releases.assert_owned_unmounted_release_trees"):
             result = _apply_under_shared_lock(self.root, CURRENT, [OLDER, OLDEST], state, before, result,
                                               self.root / "shared" / "locks")
         self.assertEqual(set(result["removed_releases"]), {OLDER, OLDEST})
@@ -59,6 +63,53 @@ class PruneReleaseTests(unittest.TestCase):
         self.assertTrue((self.root / "releases" / OLD).exists())
         self.assertTrue((self.root / "releases" / CURRENT).exists())
         self.assertTrue((self.root / "releases" / ROLLBACK).exists())
+
+    def test_old_release_tree_with_mountpoint_blocks_before_rmtree(self):
+        victim = self.root / "releases" / OLDEST
+        mountinfo = Path(self.tmp.name) / "mountinfo"
+        mountinfo.write_text(
+            "1 0 1:1 / / rw - ext4 /dev/root rw\n"
+            + f"5 1 1:1 / {victim / '.venv'} rw - ext4 /dev/root rw\n"
+        )
+        with self.assertRaisesRegex(RuntimeError, "owned_release_nested_mount"):
+            assert_owned_unmounted_release_trees(
+                [victim], owner_uid=os.getuid(), mountinfo=mountinfo
+            )
+        self.assertTrue(victim.is_dir())
+
+    def test_foreign_owned_release_is_blocked(self):
+        victim = self.root / "releases" / OLDEST
+        mountinfo = Path(self.tmp.name) / "mountinfo"
+        mountinfo.write_text("1 0 1:1 / / rw - ext4 /dev/root rw\n")
+        with self.assertRaisesRegex(RuntimeError, "owned_release_foreign_owner"):
+            assert_owned_unmounted_release_trees(
+                [victim], owner_uid=os.getuid() + 1, mountinfo=mountinfo
+            )
+        self.assertTrue(victim.is_dir())
+
+    def test_nested_symlinks_are_never_followed(self):
+        victim = self.root / "releases" / OLDEST
+        external = Path(self.tmp.name) / "outside"
+        external.mkdir()
+        (external / "private.txt").write_text("outside")
+        (victim / "outside-link").symlink_to(external, target_is_directory=True)
+        mountinfo = Path(self.tmp.name) / "mountinfo"
+        mountinfo.write_text("1 0 1:1 / / rw - ext4 /dev/root rw\n")
+        assert_owned_unmounted_release_trees(
+            [victim], owner_uid=os.getuid(), mountinfo=mountinfo
+        )
+        self.assertEqual((external / "private.txt").read_text(), "outside")
+
+    def test_hardlinked_files_refuse_cleanup(self):
+        victim = self.root / "releases" / OLDEST
+        (victim / "duplicate").hardlink_to(victim / "smoke.txt")
+        mountinfo = Path(self.tmp.name) / "mountinfo"
+        mountinfo.write_text("1 0 1:1 / / rw - ext4 /dev/root rw\n")
+        with self.assertRaisesRegex(RuntimeError, "owned_release_hardlink_unknown"):
+            assert_owned_unmounted_release_trees(
+                [victim], owner_uid=os.getuid(), mountinfo=mountinfo
+            )
+        self.assertTrue(victim.is_dir())
 
     def test_confirm_without_shared_deploy_lock_blocks(self):
         # This test must pass on both an ordinary developer Mac and the real
