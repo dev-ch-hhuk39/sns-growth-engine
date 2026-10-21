@@ -436,8 +436,18 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
     budget_blocked = False
     sheets_quota_blocked = False
     owner_review_blocked = False
+    # Repeated paid generation cannot recover the same provider budget/rate
+    # failure or a timed-out generation. Keep one existing deterministic
+    # offline route, with exactly the same downstream approval gates.
+    paid_provider_blocker = ""
+    paid_stop_categories = {
+        "GENERATION_PROCESS_TIMEOUT", "PROVIDER_TIMEOUT",
+        "PROVIDER_RATE_LIMITED", "PROVIDER_UNAVAILABLE",
+        "PROVIDER_CONFIGURATION_ERROR",
+        "PROVIDER_CREDENTIALS_MISSING_OR_REJECTED",
+    }
     for generation_route, generation in _generation_commands(account_id, slot, offline_only=offline_only):
-        if budget_blocked and generation_route != "offline_original_bank":
+        if (budget_blocked or paid_provider_blocker) and generation_route != "offline_original_bank":
             continue
         rc, payload = _run(generation)
         last_payload = payload
@@ -454,12 +464,19 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
             "reason": str(payload.get("failure_category") or payload.get("reason") or ""),
         })
         if rc != 0:
-            if str(payload.get("failure_category", "")) == "OWNER_REVIEW_REQUIRED":
+            failure_category = str(payload.get("failure_category") or "")
+            if failure_category == "OWNER_REVIEW_REQUIRED":
                 owner_review_blocked = True
                 break
-            if str(payload.get("failure_category", "")) == "SHEETS_QUOTA_EXHAUSTED":
+            if failure_category == "SHEETS_QUOTA_EXHAUSTED":
                 sheets_quota_blocked = True
                 break
+            if (failure_category == "AI_APPROVAL_BUDGET_EXHAUSTED"
+                    or approval_budget_exhausted(payload)):
+                budget_blocked = True
+                paid_provider_blocker = "AI_APPROVAL_BUDGET_EXHAUSTED"
+            elif failure_category in paid_stop_categories:
+                paid_provider_blocker = paid_provider_blocker or failure_category
             continue
         for queue_id in queue_ids[:3]:
             if queue_id in approved:
@@ -527,8 +544,9 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
         "generation_status": str(last_payload.get("status", "")),
         "failure_category": ("OWNER_REVIEW_REQUIRED" if owner_review_blocked else
                              "SHEETS_QUOTA_EXHAUSTED" if sheets_quota_blocked else
-                             str(last_payload.get("failure_category") or
-                                 ("AI_APPROVAL_BUDGET_EXHAUSTED" if budget_blocked else "QUALITY_EXHAUSTED"))),
+                             ("AI_APPROVAL_BUDGET_EXHAUSTED" if budget_blocked else
+                              paid_provider_blocker or
+                              str(last_payload.get("failure_category") or "QUALITY_EXHAUSTED"))),
         "attempts": attempts,
     }
 
