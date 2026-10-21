@@ -1,0 +1,40 @@
+name: SNS Python 3.11 Isolated Runtime QA
+
+on:
+  # Shared VPS never executes untrusted pull-request source. Dispatch only
+  # from protected main after CI and explicit owner approval.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-python311-protected-main-disposable
+  cancel-in-progress: false
+
+jobs:
+  linux-isolated-python311:
+    # Strictly protected-main: no PR/fork source on the shared VPS.
+    # No workflow secrets; no prod deployment or posting.
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 12
+    env:
+      PUBLISH_ENABLED: "false"
+      ALLOW_REAL_THREADS_POST: "false"
+      ALLOW_REAL_X_POST: "false"
+      ALLOW_MEDIA_POSTS: "false"
+      ALLOW_VIDEO_DOWNLOAD: "false"
+      ALLOW_VIDEO_CUT: "false"
+      ALLOW_CLOUDINARY_UPLOAD: "false"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Disposable SNS-owned Python 3.11 and media wheels smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${PUBLISH_ENABLED}" = false
+          test "${ALLOW_REAL_THREADS_POST}" = false
+          python3 scripts/qa_sns_python311_host.py
