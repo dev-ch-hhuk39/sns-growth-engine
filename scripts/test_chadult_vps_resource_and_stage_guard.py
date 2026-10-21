@@ -81,11 +81,14 @@ while [ "$#" -gt 2 ]; do shift; done
 cp -R "$1/." "$2/"
 ''')
         self._executable("python3", '''#!/bin/sh
-if [ "${TEST_VENV_FAIL:-0}" = "1" ]; then exit 23; fi
-mkdir -p "$3/bin"
-printf '#!/bin/sh\\nexit 0\\n' > "$3/bin/pip"
-chmod +x "$3/bin/pip"
-cp "$3/bin/pip" "$3/bin/python"
+if [ "$TEST_VENV_FAIL" = "1" ]; then exit 23; fi
+# Fixture-only bootstrap. No real Python installation is performed.
+[ "$2" = "--stage" ] || exit 64
+[ -n "$3" ] || exit 64
+mkdir -p "$3/.venv/bin"
+printf '#!/bin/sh\\nexit 0\\n' > "$3/.venv/bin/pip"
+chmod +x "$3/.venv/bin/pip"
+cp "$3/.venv/bin/pip" "$3/.venv/bin/python"
 ''')
         args = ["--source-root", str(source), "--revision", new_sha, "--apply", "--confirm-install", "--stage-only"]
         return release_root, old, releases / new_sha, args

@@ -17,6 +17,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "refresh-threads-tokens.yml",
     "production-storage-readonly-audit.yml",
     "sns-storage-lifecycle.yml",
+    "sns-python311-runtime-qa.yml",
     "sns-once-host-resource-audit.yml",
     "sns-once-resolve-abandoned-pending.yml",
     "sns-once-diagnose-pending-access.yml",
@@ -41,6 +42,16 @@ for path in WORKFLOWS:
             checks.append((f"{path.name}:{job_name}:approved-host-runtime", job.get("runs-on") == ["self-hosted", "Linux", "X64"]))
         else:
             checks.append((f"{path.name}:{job_name}:github-hosted", job.get("runs-on") == RUNNER))
+    if path.name == "sns-python311-runtime-qa.yml":
+        triggers = data.get("on", data.get(True))
+        checks.append((
+            "sns-python311-runtime-qa.yml:protected-main-dispatch-only",
+            set(triggers) == {"workflow_dispatch"}
+            and (data["jobs"]["linux-isolated-python311"]["if"]
+                 == "github.ref == 'refs/heads/main'")
+            and "secrets." not in raw
+            and 'PUBLISH_ENABLED: "false"' in raw,
+        ))
     forbidden_triggers = ("pull_request_target:", "repository_dispatch:", "issue_comment:", "workflow_run:")
     safe_pr_ci = path.name == "ci.yml" and "pull_request:" in raw and "secrets." not in raw
     checks.append((f"{path.name}:no untrusted production trigger", all(term not in raw for term in forbidden_triggers) and ("pull_request:" not in raw or safe_pr_ci)))

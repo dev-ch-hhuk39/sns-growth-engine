@@ -14,7 +14,7 @@
 - `patchelf`は正確なホイール名とSHA-256を一致照合し、取得失敗・署名対象の不一致・バージョン不一致時はステージ作成を中断する。取得物は一時領域に限定して削除する。
 - `requirements.txt`のPillowは13.0.0とし、ステージ完了前にPythonバージョン、Pillowバージョン、pip checkを検査する。
 - 専用RunnerのPython toolcacheは、リリースがpyvenv.cfgで参照している間は**再生成可能キャッシュではなく復旧に必要な実行基盤**として保護する。従来の手動toolcache削除スクリプトも参照が残れば停止する。
-- 新規のGitHub PRでは同じVPS上の**自動削除される隔離/tmp**にフル依存環境をインストールし、Pillow PNG・PyAV・CTranslate2・ONNX Runtime・Sheetsクライアント・Playwrightの起動を検査する。SNSに送信しない。全工程で専用VPS共有デプロイロックを遵守する。
+- 2026-10-21にSNS専用Runner上の一時隔離環境でフル依存インストールとPillow PNG・PyAV・CTranslate2・ONNX Runtime・Sheetsクライアント・Playwrightの起動がPASS。安全監査を受け、GitHubワークフローは保護されたmainの手動dispatchのみとし、PRコードを共有VPSのRunnerで自動実行しない。SNSに送信しない。全工程で専用VPS共有デプロイロックを遵守する。
 - 現行・直前・独立緊急用を3段で保護し、`pending`や復旧用環境の削除を禁止する。SNS実投稿/P0送信ゲートは引き続きOFF。
 
 ## 本番反映条件

@@ -1,29 +1,22 @@
 name: SNS Python 3.11 Isolated Runtime QA
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "requirements.txt"
-      - "requirements-acquisition.txt"
-      - "requirements-media-runtime.txt"
-      - "scripts/bootstrap_sns_python311.py"
-      - "scripts/qa_sns_python311_host.py"
-      - "scripts/install_buffered_production_runtime.sh"
-      - ".github/workflows/sns-python311-runtime-qa.yml"
+  # Shared VPS never executes untrusted pull-request source. Dispatch only
+  # from protected main after CI and explicit owner approval.
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: sns-python311-disposable-${{ github.event.pull_request.number }}
+  group: sns-python311-protected-main-disposable
   cancel-in-progress: false
 
 jobs:
   linux-isolated-python311:
-    # Never run untrusted fork source on the shared VPS. No workflow secret
-    # bindings; it does not install or activate a production release.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Strictly protected-main: no PR/fork source on the shared VPS.
+    # No workflow secrets; no prod deployment or posting.
+    if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 12
     env:
