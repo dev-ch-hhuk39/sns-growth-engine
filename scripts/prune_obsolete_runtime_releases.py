@@ -6,8 +6,10 @@ import argparse
 import fcntl
 import json
 import os
+import pwd
 import re
 import shutil
+import stat
 import sys
 import time
 from pathlib import Path
@@ -168,6 +170,67 @@ def assert_not_in_use(paths: list[Path], *, proc_root: Path = Path("/proc")) -> 
                         "target_release_open_fd")
 
 
+def assert_owned_unmounted_release_trees(
+    paths: list[Path], *, owner_uid: int | None = None,
+    mountinfo: Path = Path("/proc/self/mountinfo"),
+) -> None:
+    """No shared bind mounts, other-user assets or hardlinked data may be removed.
+
+    This expensive check applies only under the shared deployment lock, after
+    all-live-process cmdline/cwd/FD inspection. It never follows symlinks.
+    """
+    if owner_uid is None:
+        require(sys.platform == "linux", "linux_owner_inventory_required")
+        try:
+            owner_uid = pwd.getpwnam("snsrunner").pw_uid
+        except KeyError:
+            raise RuntimeError("sns_owner_unavailable") from None
+    require(shutil.rmtree.avoids_symlink_attacks,
+            "fd_safe_rmtree_required")
+    try:
+        lines = mountinfo.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        raise RuntimeError("mount_inventory_unknown") from None
+    require(bool(lines), "mount_inventory_empty")
+    mounted = set()
+    for line in lines:
+        fields = line.split()
+        require(len(fields) >= 7 and fields[4].startswith("/"),
+                "mount_inventory_invalid")
+        # Linux mountinfo encodes spaces, tabs, newlines and backslashes
+        # as octal escapes. Do not treat a raw escaped name as a safe path.
+        point = re.sub(
+            r"\\([0-7]{3})",
+            lambda m: chr(int(m.group(1), 8)),
+            fields[4],
+        )
+        mounted.add(point)
+    def safe_node(path: Path, expected_device: int) -> None:
+        try:
+            meta = path.lstat()
+        except OSError:
+            raise RuntimeError("owned_release_tree_unreadable") from None
+        require(meta.st_uid == owner_uid, "owned_release_foreign_owner")
+        require(meta.st_dev == expected_device, "owned_release_foreign_device")
+        mode = meta.st_mode
+        require(stat.S_ISDIR(mode) or stat.S_ISREG(mode) or stat.S_ISLNK(mode),
+                "owned_release_special_file")
+        if stat.S_ISREG(mode):
+            require(meta.st_nlink == 1, "owned_release_hardlink_unknown")
+    for entry in paths:
+        require(entry.is_dir() and not entry.is_symlink(),
+                "owned_release_root_unsafe")
+        base = str(entry)
+        require(not any(m == base or m.startswith(base + "/") for m in mounted),
+                "owned_release_nested_mount")
+        device = entry.lstat().st_dev
+        for directory, subdirs, filenames in os.walk(entry, followlinks=False):
+            parent = Path(directory)
+            safe_node(parent, device)
+            for name in subdirs + filenames:
+                safe_node(parent / name, device)
+
+
 def run(root: Path, expected: str, targets: list[str], *, confirm: bool) -> dict:
     state = candidate_state(root, expected, targets)
     before = shutil.disk_usage("/")
@@ -192,6 +255,7 @@ def _apply_under_shared_lock(root: Path, expected: str, targets: list[str],
         candidate_state(root, expected, targets)
         paths = [Path(path) for path in state["targets"]]
         assert_not_in_use(paths)
+        assert_owned_unmounted_release_trees(paths)
         removed = []
         for path in paths:
             candidate_state(root, expected, [path.name])

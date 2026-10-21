@@ -1,3 +1,9 @@
+## 2026-10-21 — Persisted owner completion directive / R2 audit
+
+- Owner requested continued SNS development to verified completion without repeated instructions: complete R2 disaster recovery, reduce only SNS-owned redundant VPS assets after proven restore, preserve 3 healthy rollback generations, and fix no-post READY quality failures.
+- Cross-chat source of truth: docs/SNS_COMPLETION_R2_VPS_STORAGE_20261021.md and GitHub Issue #439. Actual central full R2 multi-tool service run 2026-10-21 13:49 JST succeeded with SNS P0/config/SaaS Google Sheets formula-value remote isolated restore PASS; native full Sheets restore is still open #437. Expiring obsolete SHA list and 7-day policy recorded in linked doc.
+- This branch adds separate ownership/mount/hardlink safety checks to the approval-gated exact-SHA pruner. No destructive cleanup performed.
+
 ## 2026-10-21 — Python 3.11 / Pillow 13 security migration in progress
 
 - Source on branch chatgpt/sns-python311-pillow13-20261021 introduces exactly versioned Python3.11.17 isolated venv from the dedicated SNS runner, patched copies of the Python ELF binary using SHA256-pinned patchelf, and Pillow13.0.0. The shared OS Python and existing current/previous/emergency remain unchanged until required CI/isolated Linux checks pass.
