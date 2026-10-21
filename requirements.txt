@@ -11,4 +11,4 @@ youtube-transcript-api==1.2.4
 youtube-comment-downloader==0.1.78
 ffmpeg-python==0.2.0
 cloudinary==1.45.0
-pillow==12.3.0
+pillow==13.0.0

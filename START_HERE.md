@@ -1,3 +1,9 @@
+## 2026-10-21 — Python 3.11 / Pillow 13 security migration in progress
+
+- Source on branch chatgpt/sns-python311-pillow13-20261021 introduces exactly versioned Python3.11.17 isolated venv from the dedicated SNS runner, patched copies of the Python ELF binary using SHA256-pinned patchelf, and Pillow13.0.0. The shared OS Python and existing current/previous/emergency remain unchanged until required CI/isolated Linux checks pass.
+- SNS setup-python toolcache becomes a required rollback dependency for 3.11 releases and must not be manually purged. Offsite R2 P0 restoration remains PASS; separate master Google Sheets R2 disaster recovery is not done.
+- Scope, failure gates and verification: docs/SNS_PY311_PILLOW13_MIGRATION_20261021.md. No automatic deletion, live posting, or global VPS package changes.
+
 ## 2026-10-21 — Exact one-time SNS pip cache cleanup
 
 - Under shared deploy lock with root process check, verified owner path and no symlinks/pip jobs, purged ONLY /var/lib/sns-growth-engine/.cache/pip via the official pip cache command as snsrunner. Cache path size fell by 84,409,551 bytes (80.50 MiB), from 84,418,043 to 8,492 bytes; live/previous SHA marker+venv and P0/posting OFF reconfirmed.
