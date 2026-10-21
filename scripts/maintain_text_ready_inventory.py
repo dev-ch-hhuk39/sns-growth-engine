@@ -148,6 +148,75 @@ def _publishable_ready_rows(
     return selected
 
 
+def generated_ready_rejection_counts(
+    snapshot: Any,
+    rows: list[dict[str, Any]],
+    account_id: str,
+    slot: dict[str, str],
+    generated_ids: list[Any],
+) -> dict[str, int]:
+    """Explain a generated READY that fails the exact no-post publisher gates.
+
+    Report ONLY fixed rejection reason categories and aggregate counts. Never
+    reveal queue IDs, captions, unpublished drafts, model prompts or secrets.
+    This is optional READ-ONLY diagnostics; it cannot approve or post content.
+    """
+    from collections import Counter
+    from process_threads_queue import process_one
+
+    reasons: Counter[str] = Counter()
+    if not generated_ids:
+        return {"GENERATION_REPORTED_NO_IDS": 1}
+    if len(generated_ids) > 12 or not all(isinstance(v, str) and 0 < len(v) <= 180
+                                         for v in generated_ids):
+        return {"GENERATED_ID_LIST_UNVERIFIABLE": 1}
+    for queue_id in dict.fromkeys(generated_ids):
+        matches = [row for row in rows if str(row.get("queue_id") or "") == queue_id]
+        if len(matches) != 1:
+            reasons["QUEUE_ID_NOT_UNIQUE_OR_NOT_VISIBLE"] += 1
+            continue
+        row = matches[0]
+        if str(row.get("account_id") or "") != account_id:
+            reason = "ACCOUNT_ID_MISMATCH"
+        elif str(row.get("slot_id") or "") != str(slot.get("slot_id") or "") or (
+            str(row.get("business_date_jst") or row.get("schedule_date_jst") or "")
+            != str(slot.get("business_date_jst") or "")
+        ):
+            reason = "EXACT_SLOT_OR_DATE_MISMATCH"
+        elif str(row.get("status") or "").upper() != "READY":
+            reason = "STATUS_NOT_READY"
+        elif not _ready_exists([row], account_id, slot):
+            reason = "READY_APPROVAL_FLAGS_INCOMPLETE"
+        elif str(slot.get("post_type") or "") not in TEXT_POST_TYPES or (
+            str(row.get("post_type") or "") not in TEXT_POST_TYPES
+        ):
+            reason = "NON_TEXT_POST_TYPE"
+        else:
+            try:
+                if not eligible_ready(row, account_id) or has_media(row):
+                    reason = "RUNTIME_ELIGIBILITY_OR_MEDIA_GATE"
+                elif final_public_post_validator(
+                    str(row.get("public_post_text") or ""), account_id
+                ).get("status") != "PASS":
+                    reason = "FINAL_PUBLIC_TEXT_VALIDATOR"
+                elif not hybrid_ai_gate_passed(
+                    row, build_source_context(snapshot, row) if snapshot is not None else {}
+                )[0]:
+                    reason = "HYBRID_AI_SOURCE_GATE"
+                elif snapshot is None or process_one(
+                    snapshot, row, dry_run=True, confirm_real_post=False
+                ).get("status") != "DRY_RUN":
+                    reason = "RUNTIME_DRY_RUN_GATE"
+                else:
+                    reason = "PUBLISHABILITY_AUDIT_INCONSISTENT"
+            except Exception:
+                # Diagnostics may not leak exception text from private content
+                # or backend payloads. Keep the original SLO failure decisive.
+                reason = "RUNTIME_DIAGNOSTIC_UNAVAILABLE"
+        reasons[reason] += 1
+    return dict(sorted(reasons.items()))
+
+
 def _reserve_status(delivery_count: int, reserve_target: int) -> str:
     if delivery_count < 1:
         return "DELIVERY_SLO_FAILED"
@@ -738,6 +807,13 @@ def main() -> int:
                         queue_rows = refresh_queue_snapshot()
 
             verified_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
+            if (args.apply and not verified_rows
+                    and result.get("delivery_generation_status") == "READY_REPLENISHED"):
+                result["delivery_generation_failure_category"] = "READY_CREATED_NOT_PUBLISHABLE"
+                result["generated_ready_rejection_counts"] = generated_ready_rejection_counts(
+                    snapshot, queue_rows, account_id, slot,
+                    list(result.get("delivery_recovery_queue_ids") or []),
+                )
             reserve_state = _reserve_status(len(verified_rows), reserve_target)
             account_covered += int(len(verified_rows) >= 1)
             result.update(

@@ -23,6 +23,7 @@ REASONS = {
     "NO_VALIDATED_BANK_CANDIDATE": "No validated evergreen inventory exists.",
     "QUALITY_EXHAUSTED": "Keep rejected candidates out of READY.",
     "NO_PUBLISHABLE_READY": "No slot-eligible candidate was verified.",
+    "READY_CREATED_NOT_PUBLISHABLE": "A generated READY did not pass exact-slot dry-run gates; inspect redacted rejection counts.",
     "GENERATION_PROCESS_FAILED": "Inspect redacted generator diagnostics.",
     "GENERATION_PROCESS_TIMEOUT": "Review timeout and bounded retry settings.",
     "PERMISSION_OR_SAFETY_FAILURE": "Do not bypass the fail-closed safety gate.",
@@ -30,6 +31,24 @@ REASONS = {
     "PROVIDER_TIMEOUT": "Check provider latency.",
 }
 UNKNOWN = "UNCLASSIFIED_FAILURE"
+# Stable, privacy-preserving categories only. No queue IDs, captions, freeform
+# provider text or exception details are allowed through this renderer.
+READY_REJECTION_CODES = frozenset({
+    "GENERATION_REPORTED_NO_IDS",
+    "GENERATED_ID_LIST_UNVERIFIABLE",
+    "QUEUE_ID_NOT_UNIQUE_OR_NOT_VISIBLE",
+    "ACCOUNT_ID_MISMATCH",
+    "EXACT_SLOT_OR_DATE_MISMATCH",
+    "STATUS_NOT_READY",
+    "READY_APPROVAL_FLAGS_INCOMPLETE",
+    "NON_TEXT_POST_TYPE",
+    "RUNTIME_ELIGIBILITY_OR_MEDIA_GATE",
+    "FINAL_PUBLIC_TEXT_VALIDATOR",
+    "HYBRID_AI_SOURCE_GATE",
+    "RUNTIME_DRY_RUN_GATE",
+    "PUBLISHABILITY_AUDIT_INCONSISTENT",
+    "RUNTIME_DIAGNOSTIC_UNAVAILABLE",
+})
 
 
 def normalized_reason(value: Any) -> str:
@@ -78,6 +97,20 @@ def render_report(data: Any, account: str) -> str:
     for code, count in sorted(counts.items()):
         lines.append("- " + code + ": " + str(count) + " affected slots")
         lines.append("  Action: " + REASONS.get(code, "Inspect redacted logs; do not automatically retry."))
+    rejection_counts: Counter[str] = Counter()
+    for row in failed:
+        if row.get("delivery_generation_failure_category") != "READY_CREATED_NOT_PUBLISHABLE":
+            continue
+        details = row.get("generated_ready_rejection_counts")
+        if not isinstance(details, dict) or len(details) > 20:
+            rejection_counts["UNCLASSIFIED_REJECTION"] += 1
+            continue
+        for code, value in details.items():
+            sanitized = code if isinstance(code, str) and code in READY_REJECTION_CODES else "UNCLASSIFIED_REJECTION"
+            count = value if type(value) is int and 0 < value <= 12 else 1
+            rejection_counts[sanitized] += count
+    for code, count in sorted(rejection_counts.items()):
+        lines.append("- Generated READY rejection " + code + ": " + str(count) + " candidates")
     lines.append("- Safety: no approval bypass, no queue-status rewrite, no SNS post.")
     return "\n".join(lines)
 
