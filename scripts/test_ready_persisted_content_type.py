@@ -45,7 +45,7 @@ def persisted_ready(**changes):
     return row
 
 
-def checked(rows, *, runtime_status="DRY_RUN"):
+def checked(rows, *, runtime_status="DRY_RUN", hybrid_pass=True):
     fake_publisher = SimpleNamespace(
         process_one=lambda *args, **kwargs: {"status": runtime_status}
     )
@@ -54,7 +54,7 @@ def checked(rows, *, runtime_status="DRY_RUN"):
                       return_value={"status": "PASS"}), \
          patch.object(inventory, "build_source_context", return_value={}), \
          patch.object(inventory, "hybrid_ai_gate_passed",
-                      return_value=(True, "PASS")):
+                      return_value=(hybrid_pass, "PASS")):
         return inventory._publishable_ready_rows(
             object(), rows, ACCOUNT, SLOT
         )
@@ -123,9 +123,7 @@ class PersistedQueueRouteRegression(unittest.TestCase):
 
     def test_hybrid_ai_gate_remains_mandatory(self):
         row = persisted_ready()
-        with patch.object(inventory, "hybrid_ai_gate_passed",
-                          return_value=(False, "BLOCKED")):
-            self.assertEqual(checked([row]), [])
+        self.assertEqual(checked([row], hybrid_pass=False), [])
 
     def test_runtime_dry_run_gate_remains_mandatory(self):
         row = persisted_ready()
