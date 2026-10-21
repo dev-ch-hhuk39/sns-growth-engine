@@ -63,6 +63,11 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         self.assertEqual(report["emergency_recovery_sha"], E)
         self.assertEqual(set(report["review_candidates"]), {O, S})
         self.assertEqual(report["max_manual_releases_per_approval"], 2)
+        self.assertEqual(report["grace_period_hold_count"], 0)
+        self.assertTrue(all(
+            candidate["cleanup_eligible_after_utc"] for candidate in report["releases"]
+            if candidate["marker_valid"]
+        ))
         self.assertEqual({p.name for p in self.releases.iterdir()}, before)
         self.assertTrue((self.releases / O).is_dir())
 
@@ -119,7 +124,29 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         (self.releases / S / ".venv" / "bin" / "python").unlink()
         report = audited_release_inventory(self.root, now=self.now)
         self.assertEqual(next(x for x in report["releases"] if x["sha"] == S)["protected_reason"],
-                         "INCOMPLETE_OR_FORENSIC_HOLD")
+                         "CANDIDATE_REQUIRES_APPROVAL_AND_IN_USE_SCAN")
+        self.assertIn(S, report["review_candidates"])
+        details = next(x for x in report["review_candidates_details"] if x["sha"] == S)
+        self.assertFalse(details["full_recovery_release"])
+        # An incomplete release without a valid exact marker is never eligible.
+        (self.releases / S / ".production-release").write_text("not-owned")
+        report = audited_release_inventory(self.root, now=self.now)
+        self.assertNotIn(S, report["review_candidates"])
+        self.assertEqual(next(x for x in report["releases"] if x["sha"] == S)["protected_reason"],
+                         "FORENSIC_HOLD_UNVERIFIED_IDENTITY")
+
+    def test_recent_marker_verified_partial_is_held_for_seven_days(self):
+        (self.releases / O / ".venv" / "bin" / "python").unlink()
+        os.utime(self.releases / O, (self.now - 3 * 86400, self.now - 3 * 86400))
+        report = audited_release_inventory(self.root, now=self.now)
+        record = next(x for x in report["releases"] if x["sha"] == O)
+        self.assertEqual(record["protected_reason"], "INCOMPLETE_SEVEN_DAY_GRACE")
+        self.assertEqual(
+            len([x for x in report["grace_period_hold_sha"] if x["sha"] == O]), 1
+        )
+        self.assertIsNotNone(record["cleanup_eligible_after_utc"])
+        self.assertNotIn(O, report["review_candidates"])
+        self.assertEqual(report["minimum_release_age_days"], 7)
 
     def test_fails_closed_on_pointer_escape_and_broken_pointer(self):
         (self.root / "current").unlink()
@@ -161,6 +188,8 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         self.assertEqual(job["env"]["ALLOW_REAL_THREADS_POST"], "false")
         self.assertEqual(job["env"]["ALLOW_REAL_X_POST"], "false")
         self.assertIn("sns_storage_lifecycle_audit.py", source)
+        self.assertIn("grace_period_hold_count", source)
+        self.assertIn("approval-gated cleanup", source)
         self.assertIn("media_preparation_disk_gate", source)
         self.assertIn("configured disk usage limit", source)
         self.assertIn("--summary-only", source)

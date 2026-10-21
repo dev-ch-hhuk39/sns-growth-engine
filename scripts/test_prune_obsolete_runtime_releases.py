@@ -61,8 +61,19 @@ class PruneReleaseTests(unittest.TestCase):
         self.assertTrue((self.root / "releases" / ROLLBACK).exists())
 
     def test_confirm_without_shared_deploy_lock_blocks(self):
-        with self.assertRaisesRegex(RuntimeError, "shared_deploy_lock_unavailable"):
-            run(self.root, CURRENT, [OLDER], confirm=True)
+        # This test must pass on both an ordinary developer Mac and the real
+        # shared Linux VPS where the global deploy lock correctly EXISTS.
+        original_is_file = Path.is_file
+
+        def simulate_missing_global_lock(path):
+            if path == Path("/run/lock/chadult-production-deploy.lock"):
+                return False
+            return original_is_file(path)
+
+        with patch("prune_obsolete_runtime_releases.Path.is_file",
+                   autospec=True, side_effect=simulate_missing_global_lock):
+            with self.assertRaisesRegex(RuntimeError, "shared_deploy_lock_unavailable"):
+                run(self.root, CURRENT, [OLDER], confirm=True)
         self.assertTrue((self.root / "releases" / OLD).exists())
 
     def test_protected_current_or_rollback_blocked(self):
@@ -101,6 +112,40 @@ class PruneReleaseTests(unittest.TestCase):
         for sha in (OLD, OLDER, OLDEST):
             (self.root / "releases" / sha / ".venv" / "bin" / "python").unlink()
         with self.assertRaisesRegex(RuntimeError, "independent_emergency_release_required"):
+            candidate_state(self.root, CURRENT, [OLDEST])
+
+    def test_stale_incomplete_exact_release_is_eligible_only_after_grace(self):
+        target = self.root / "releases" / OLDEST
+        shutil.rmtree(target / ".venv")
+        old = time.time() - 16 * 86400
+        os.utime(target, (old, old))
+        state = candidate_state(self.root, CURRENT, [OLDEST])
+        self.assertEqual(state["targets"], [str(target)])
+        self.assertEqual(state["emergency"], OLD)
+        now = time.time()
+        os.utime(target, (now - 2 * 86400, now - 2 * 86400))
+        with self.assertRaisesRegex(RuntimeError, "target_release_too_recent"):
+            candidate_state(self.root, CURRENT, [OLDEST])
+
+    def test_markerless_or_forged_release_never_cleanup_eligible(self):
+        target = self.root / "releases" / OLDEST
+        (target / ".production-release").write_text("another-service")
+        with self.assertRaisesRegex(RuntimeError, "target_release_identity_unverified"):
+            candidate_state(self.root, CURRENT, [OLDEST])
+        (target / ".production-release").unlink()
+        with self.assertRaisesRegex(RuntimeError, "target_release_identity_unverified"):
+            candidate_state(self.root, CURRENT, [OLDEST])
+        (target / ".production-release").symlink_to(self.root / "releases" / OLD / ".production-release")
+        with self.assertRaisesRegex(RuntimeError, "target_release_identity_unverified"):
+            candidate_state(self.root, CURRENT, [OLDEST])
+
+    def test_broken_live_or_previous_release_blocks_all_cleanup(self):
+        (self.root / "releases" / CURRENT / ".production-release").write_text("forged")
+        with self.assertRaisesRegex(RuntimeError, "current_release_unhealthy"):
+            candidate_state(self.root, CURRENT, [OLDEST])
+        (self.root / "releases" / CURRENT / ".production-release").write_text(CURRENT)
+        (self.root / "releases" / ROLLBACK / ".venv" / "bin" / "python").unlink()
+        with self.assertRaisesRegex(RuntimeError, "previous_release_unhealthy"):
             candidate_state(self.root, CURRENT, [OLDEST])
 
     def test_invalid_sha_blocks(self):

@@ -14,7 +14,7 @@ import stat
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DEFAULT_RUNNER = Path("/opt/github-runners/sns-growth-engine")
@@ -136,6 +136,10 @@ def audited_release_inventory(root: Path, *, now: float | None = None) -> dict:
             "python_venv_bytes": disk_bytes(path / ".venv") if (path / ".venv").is_dir() else 0,
             "modified_at_utc": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat(),
             "age_days": max(0, int((now - mtime) // 86400)),
+            "cleanup_eligible_after_utc": (
+                datetime.fromtimestamp(mtime, tz=timezone.utc)
+                + timedelta(seconds=MIN_RELEASE_AGE_SECONDS)
+            ).isoformat() if marker else None,
             "marker_valid": marker,
             "rebuildable_venv_present": healthy,
             "protected_reason": "POINTER" if path.name in protected else "",
@@ -155,13 +159,19 @@ def audited_release_inventory(root: Path, *, now: float | None = None) -> dict:
     for item in items:
         if item["sha"] in protected:
             continue
-        if not item["marker_valid"] or not item["rebuildable_venv_present"]:
-            item["protected_reason"] = "INCOMPLETE_OR_FORENSIC_HOLD"
-        elif now - datetime.fromisoformat(item["modified_at_utc"]).timestamp() < MIN_RELEASE_AGE_SECONDS:
-            item["protected_reason"] = "SEVEN_DAY_GRACE"
+        age = now - datetime.fromisoformat(item["modified_at_utc"]).timestamp()
+        if not item["marker_valid"]:
+            # Unknown ownership is never inferred from an old SHA-looking name.
+            item["protected_reason"] = "FORENSIC_HOLD_UNVERIFIED_IDENTITY"
+        elif age < MIN_RELEASE_AGE_SECONDS:
+            item["protected_reason"] = (
+                "INCOMPLETE_SEVEN_DAY_GRACE"
+                if not item["rebuildable_venv_present"] else "SEVEN_DAY_GRACE"
+            )
         else:
-            # This is only a review candidate, NOT proof the process/FD lock
-            # and restore invariants allow removal.
+            # Exact marker-matched stale partials can enter the SAME guarded
+            # explicit SHA cleanup as full releases, but are never auto-deleted.
+            # A candidate is not proof of no process/FD/rollback dependencies.
             item["protected_reason"] = "CANDIDATE_REQUIRES_APPROVAL_AND_IN_USE_SCAN"
     candidates = [item for item in items
                   if item["protected_reason"] == "CANDIDATE_REQUIRES_APPROVAL_AND_IN_USE_SCAN"]
@@ -175,6 +185,21 @@ def audited_release_inventory(root: Path, *, now: float | None = None) -> dict:
         "release_venv_bytes": sum(i["python_venv_bytes"] for i in items),
         "releases": items,
         "review_candidates": [i["sha"] for i in candidates],
+        "review_candidates_details": [
+            {"sha": i["sha"], "allocated_bytes": i["allocated_bytes"],
+             "full_recovery_release": i["rebuildable_venv_present"]}
+            for i in candidates
+        ],
+        "grace_period_hold_count": sum(
+            i["protected_reason"] in ("SEVEN_DAY_GRACE", "INCOMPLETE_SEVEN_DAY_GRACE")
+            for i in items
+        ),
+        "grace_period_hold_sha": [
+            {"sha": i["sha"], "eligible_after_utc": i["cleanup_eligible_after_utc"]}
+            for i in items if i["protected_reason"] in (
+                "SEVEN_DAY_GRACE", "INCOMPLETE_SEVEN_DAY_GRACE"
+            )
+        ],
         "preliminary_reclaim_bytes": sum(i["allocated_bytes"] for i in candidates),
         "max_manual_releases_per_approval": 2,
         "minimum_release_age_days": 7,
