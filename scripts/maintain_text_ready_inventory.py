@@ -253,6 +253,34 @@ def reserve_generation_required(publishable_ready: int, reserve_target: int) -> 
     return max(0, reserve_target - publishable_ready)
 
 
+# A provider outage/limit on one slot should not trigger another paid
+# generation on the next slot for the same account and inventory run.
+# It does NOT waive the existing review or publisher validation gates.
+PAID_GENERATION_PAUSE_REASONS = frozenset({
+    "AI_APPROVAL_BUDGET_EXHAUSTED",
+    "GENERATION_PROCESS_TIMEOUT",
+    "PROVIDER_TIMEOUT",
+    "PROVIDER_RATE_LIMITED",
+    "PROVIDER_UNAVAILABLE",
+    "PROVIDER_CONFIGURATION_ERROR",
+    "PROVIDER_CREDENTIALS_MISSING_OR_REJECTED",
+})
+
+
+def paid_generation_pause_required(result: dict[str, Any]) -> bool:
+    """Pure, sanitized account-scope circuit breaker for paid generation."""
+    if not isinstance(result, dict):
+        return False
+    reasons = {str(result.get("failure_category") or "")}
+    attempts = result.get("attempts", [])
+    if isinstance(attempts, list):
+        reasons.update(
+            str(item.get("reason") or item.get("failure_category") or "")
+            for item in attempts if isinstance(item, dict)
+        )
+    return bool(reasons & PAID_GENERATION_PAUSE_REASONS)
+
+
 def hard_replenishment_blocker(result: dict[str, Any]) -> bool:
     """Only stop bounded evergreen attempts for known operational hard blocks."""
     hard_categories = {
@@ -715,6 +743,7 @@ def main() -> int:
         now = datetime.now(JST)
         budget_blocked = False
         sheets_quota_blocked = False
+        paid_generation_paused = False
         bank_allocation_count = 0
         snapshot = copy.copy(client) if args.use_sheets else None
         if snapshot is not None:
@@ -787,7 +816,8 @@ def main() -> int:
                     result["delivery_generation_failure_category"] = "NO_VALIDATED_BANK_CANDIDATE"
                 else:
                     generated = replenish(
-                        account_id, slot, apply=args.apply, required=1, offline_only=budget_blocked,
+                        account_id, slot, apply=args.apply, required=1,
+                        offline_only=(budget_blocked or paid_generation_paused),
                     )
                     result["delivery_generation_status"] = generated.get("status", "")
                     result["delivery_generation_failure_category"] = generated.get("failure_category", "")
@@ -801,6 +831,9 @@ def main() -> int:
                     budget_blocked = budget_blocked or any(
                         attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
                         for attempt in generated.get("attempts", [])
+                    )
+                    paid_generation_paused = (
+                        paid_generation_paused or paid_generation_pause_required(generated)
                     )
                     queue_rows = refresh_queue_snapshot()
                     ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
@@ -818,7 +851,8 @@ def main() -> int:
                 else:
                     reserve_result = replenish(
                         account_id, slot, apply=args.apply,
-                        required=reserve_missing, offline_only=budget_blocked,
+                        required=reserve_missing,
+                        offline_only=(budget_blocked or paid_generation_paused),
                     )
                     result["reserve_generation_status"] = reserve_result.get("status", "")
                     result["reserve_generation_failure_category"] = reserve_result.get("failure_category", "")
@@ -830,6 +864,9 @@ def main() -> int:
                     budget_blocked = budget_blocked or any(
                         attempt.get("reason") == "AI_APPROVAL_BUDGET_EXHAUSTED"
                         for attempt in reserve_result.get("attempts", [])
+                    )
+                    paid_generation_paused = (
+                        paid_generation_paused or paid_generation_pause_required(reserve_result)
                     )
                     queue_rows = refresh_queue_snapshot()
                     ready_rows = _publishable_ready_rows(snapshot, queue_rows, account_id, slot)
@@ -857,6 +894,7 @@ def main() -> int:
                 reserve_status="FULL" if len(verified_rows) >= reserve_target else "RESERVE_DEGRADED",
                 reserve_shortfall=max(0, reserve_target - len(verified_rows)),
                 would_post=False,
+                paid_generation_paused=paid_generation_paused,
             )
             results.append(result)
         coverage_by_account[account_id] = {"covered_slots": account_covered, "required_slots": len(slots)}
