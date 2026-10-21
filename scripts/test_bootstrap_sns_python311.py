@@ -76,6 +76,9 @@ class SnsPython311BootstrapContracts(unittest.TestCase):
         self.assertIn("SNS_RUNTIME_PILLOW_VERSION_MISMATCH", install)
         self.assertIn("pillow==13.0.0", requirements)
         self.assertNotIn("pillow==12.3.0", requirements)
+        ci = (root / "requirements-ci.txt").read_text()
+        self.assertIn("Pillow==13.0.0", ci)
+        self.assertNotIn("Pillow==12.3.0", ci)
 
     def test_no_mutation_of_global_python_or_live_pointers_in_source(self):
         source = (Path(__file__).parent / "bootstrap_sns_python311.py").read_text()
