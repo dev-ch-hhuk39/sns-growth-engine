@@ -62,11 +62,19 @@ jobs:
           # Keep draft/queue details and provider diagnostics out of public logs.
           audit_file="$RUNNER_TEMP/sns-slot-audit.json"
           error_file="$RUNNER_TEMP/sns-slot-audit.err"
-          if python3 scripts/reconcile_due_production_slots.py \
-            --account-id "$ACCOUNT_ID" --dry-run > "$audit_file" 2> "$error_file"; then
+          # Keep original audit failure semantics. The separate parser emits
+          # *only* preapproved aggregate labels/counts, never queue IDs, Sheet
+          # rows, user content or raw provider/HTTP error strings.
+          audit_rc=0
+          python3 scripts/reconcile_due_production_slots.py \
+            --account-id "$ACCOUNT_ID" --dry-run > "$audit_file" 2> "$error_file" || audit_rc=$?
+          summary_rc=0
+          python3 scripts/summarize_readonly_slot_audit.py \
+            --account-id "$ACCOUNT_ID" --report-file "$audit_file" || summary_rc=$?
+          if [ "$audit_rc" -eq 0 ] && [ "$summary_rc" -eq 0 ]; then
             echo "READ_ONLY_SLOT_AUDIT_PASS account=$ACCOUNT_ID"
           else
-            echo "::error::READ_ONLY_SLOT_AUDIT_FAILED account=$ACCOUNT_ID (details withheld)"
+            echo "::error::READ_ONLY_SLOT_AUDIT_FAILED account=$ACCOUNT_ID (classified result above; details withheld)"
             exit 1
           fi
 

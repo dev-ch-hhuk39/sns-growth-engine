@@ -40,6 +40,13 @@ class HostedScheduledSlotAuditTests(unittest.TestCase):
         self.assertIn("reconcile_due_production_slots.py", commands)
         self.assertIn("--dry-run", commands)
         self.assertIn("audit_file", commands)
+        self.assertIn("summarize_readonly_slot_audit.py", commands)
+        self.assertIn("--report-file", commands)
+        self.assertIn('audit_rc=$?', commands)
+        self.assertIn('summary_rc=$?', commands)
+        self.assertIn('if [ "$audit_rc" -eq 0 ] && [ "$summary_rc" -eq 0 ]', commands)
+        self.assertNotIn('cat "$audit_file"', commands)
+        self.assertNotIn('cat "$error_file"', commands)
         for forbidden in ("--apply", "--confirm-reconcile", "run_buffered_production_host.sh",
                           "ALLOW_REAL_THREADS_POST: \"true\"", "curl -X POST"):
             self.assertNotIn(forbidden, commands)
