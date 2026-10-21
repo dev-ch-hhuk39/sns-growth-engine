@@ -104,8 +104,18 @@ def offline_original_reasons(queue: Mapping[str, Any]) -> list[str]:
 
 
 @lru_cache(maxsize=3)
-def _prepared_candidates(account_id: str) -> tuple[dict[str, Any], ...]:
-    """Validate and rank immutable catalog items once per account/process."""
+def _prepared_candidates(
+    account_id: str, used_normalized: frozenset[str] = frozenset(),
+) -> tuple[dict[str, Any], ...]:
+    """Rank only unused catalogue entries, with unchanged editorial gates.
+
+    An exact-normalized previously used candidate can never be selected by
+    select_original, so filtering it before the expensive hard/quality/voice
+    checks does not waive a gate. The optional empty exclusion argument keeps
+    existing offline evidence and catalogue consumers backward-compatible.
+    Cached keys remain in process RAM only; no unpublished text is persisted.
+    """
+    from auto_approve_queue import normalize_text
     from generation_quality_gates import evaluate_generation_quality
     from generation.content_quality_v2 import hard_gate, rank_candidate, repair_style_only
     from public_post_quality import final_public_post_validator
@@ -117,6 +127,10 @@ def _prepared_candidates(account_id: str) -> tuple[dict[str, Any], ...]:
         text = repaired["public_post_text"]
         key = re.sub(r"\s+", "", text).lower()
         if not key or key in seen:
+            continue
+        if used_normalized and normalize_text(text) in used_normalized:
+            # This entry is unselectable regardless of its editorial score.
+            # Keep hard checks mandatory for every remaining, new candidate.
             continue
         public = final_public_post_validator(text, account_id)
         gate = hard_gate({"account_id": account_id, "target_account_id": account_id,
@@ -170,7 +184,10 @@ def select_original(account_id: str, history: list[Any], *, batch_compared: list
                 for row in (used_texts or [])]
     used = {normalize_text(text) for text in old_texts + all_used if text}
     ranked: list[tuple[float, dict[str, Any]]] = []
-    for candidate in _prepared_candidates(account_id):
+    # Existing exact-used rejection below remains the authoritative
+    # selection guard; this safe prefilter avoids ranking the many obviously
+    # unselectable old catalogue entries on every isolated worker process.
+    for candidate in _prepared_candidates(account_id, frozenset(used)):
         source_text = candidate["source_text"]
         text = candidate["text"]
         if normalize_text(text) in used:
