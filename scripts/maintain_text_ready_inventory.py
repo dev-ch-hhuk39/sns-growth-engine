@@ -119,6 +119,22 @@ def _ready_exists(rows: list[dict[str, Any]], account_id: str, slot: dict[str, s
     )
 
 
+
+def _persisted_text_route(row: dict[str, Any]) -> str:
+    """Use the persisted queue schema, not an unpersisted synthetic post_type.
+
+    SheetsClient.TAB_DEFINITIONS["queue"] persists content_type, while
+    publication_review (a different sheet) persists post_type. Legacy
+    in-memory unit rows may still specify post_type alone. If both appear
+    and disagree, reject the ambiguous row rather than weakening gates.
+    """
+    persisted = str(row.get("content_type") or "").strip()
+    legacy = str(row.get("post_type") or "").strip()
+    if persisted and legacy and persisted != legacy:
+        return ""
+    return persisted or legacy
+
+
 def _publishable_ready_rows(
     snapshot: Any,
     rows: list[dict[str, Any]],
@@ -131,7 +147,7 @@ def _publishable_ready_rows(
     selected = []
     for row in rows:
         if (str(slot.get("post_type") or "") not in TEXT_POST_TYPES
-                or str(row.get("post_type") or "") not in TEXT_POST_TYPES
+                or _persisted_text_route(row) not in TEXT_POST_TYPES
                 or not eligible_ready(row, account_id) or has_media(row)
                 or not _ready_exists([row], account_id, slot)):
             continue
@@ -188,7 +204,7 @@ def generated_ready_rejection_counts(
         elif not _ready_exists([row], account_id, slot):
             reason = "READY_APPROVAL_FLAGS_INCOMPLETE"
         elif str(slot.get("post_type") or "") not in TEXT_POST_TYPES or (
-            str(row.get("post_type") or "") not in TEXT_POST_TYPES
+            _persisted_text_route(row) not in TEXT_POST_TYPES
         ):
             reason = "NON_TEXT_POST_TYPE"
         else:
