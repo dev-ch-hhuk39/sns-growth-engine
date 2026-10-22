@@ -103,6 +103,7 @@
       "production-capacity-recovery.yml",
       "production-storage-readonly-audit.yml",
       "sns-storage-lifecycle.yml",
+      "sns-chrome-crash-diagnostics-lifecycle.yml",
       "sns-python311-runtime-qa.yml",
       "publication-review-sync.yml",
       "sns-once-host-resource-audit.yml",
