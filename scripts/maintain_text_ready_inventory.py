@@ -675,12 +675,64 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             release_temporary_bank_allocations(client, admissions)
             prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         current = count_usable()
-        if hard_replenishment_blocker(result):
+        # One timeout/rate limit must not start nine more paid model calls
+        # in this SAME evergreen top-up. The failed target remains visible.
+        if hard_replenishment_blocker(result) or paid_generation_pause_required(result):
             break
     return {"status": "READY_INVENTORY_OK" if current >= minimum else "QUALITY_EXHAUSTED",
             "account_id": account_id, "usable_evergreen": current, "minimum": minimum,
             "expired_allocation_release": release_result,
             "attempts": attempts, "would_post": False}
+
+
+def evergreen_bank_mode_result(
+    results: list[dict[str, Any]], accounts: list[str], *, apply: bool,
+) -> dict[str, Any]:
+    """Bank-only status is determined by the bank, never empty text slots.
+
+    The ordinary delivery-only path deliberately continues to fail when it
+    has no scheduled text slots; don't apply that rule to evergreen reserves.
+    A failed or incomplete bank top-up remains a hard operational failure.
+    """
+    accepted = "READY_INVENTORY_OK" if apply else "PLAN_ONLY"
+    expected = set(accounts)
+    observed = [
+        str(item.get("account_id") or "")
+        for item in results if isinstance(item, dict)
+    ]
+    complete = (
+        len(results) == len(accounts)
+        and len(set(observed)) == len(observed)
+        and set(observed) == expected
+        and all(isinstance(item, dict) and item.get("status") == accepted
+                for item in results)
+        and (not apply or all(
+            type(item.get("usable_evergreen")) is int
+            and type(item.get("minimum")) is int
+            and item["minimum"] > 0
+            and item["usable_evergreen"] >= item["minimum"]
+            for item in results
+        ))
+    )
+    status = accepted if complete else "FAILED"
+    return {
+        "status": "PASS" if status == "READY_INVENTORY_OK" else status,
+        "mode": "EVERGREEN_BANK",
+        "evergreen_bank_by_account": {
+            account: next(
+                ({"status": row.get("status", "UNKNOWN"),
+                  "usable_evergreen": row.get("usable_evergreen"),
+                  "minimum": row.get("minimum")}
+                 for row in results if isinstance(row, dict)
+                 and row.get("account_id") == account),
+                {"status": "MISSING"},
+            )
+            for account in accounts
+        },
+        "bank_failure_reason": "" if complete else "EVERGREEN_BANK_NOT_READY",
+        "results": results,
+        "would_post": False,
+    }
 
 
 def main() -> int:
@@ -907,6 +959,10 @@ def main() -> int:
                 "paid_ai_requests_allowed": False,
                 "would_post": False,
             })
+    if args.evergreen_bank:
+        payload = evergreen_bank_mode_result(results, accounts, apply=args.apply)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0 if payload["status"] in ("PASS", "PLAN_ONLY") else 1
     delivery_failures = [row for row in results if row.get("delivery_slo") == "FAIL"]
     coverage_total = sum(item["required_slots"] for item in coverage_by_account.values())
     coverage_covered = sum(item["covered_slots"] for item in coverage_by_account.values())

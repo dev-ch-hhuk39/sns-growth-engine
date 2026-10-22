@@ -101,7 +101,7 @@ assert 'records(snapshot, "evergreen_bank")' in bank_source
 assert 'prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))' in bank_source
 assert 'records(client, "evergreen_bank")' not in bank_source
 assert 'records(client, "posted_results")' not in bank_source
-assert "if hard_replenishment_blocker(result):" in bank_source
+assert "if hard_replenishment_blocker(result) or paid_generation_pause_required(result):" in bank_source
 assert "if not result.get(\"queue_ids\"):" not in bank_source
 main_source = inspect.getsource(__import__("maintain_text_ready_inventory").main)
 assert main_source.index("delivery_missing = delivery_generation_required") < main_source.index(
