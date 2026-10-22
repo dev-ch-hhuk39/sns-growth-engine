@@ -135,12 +135,14 @@ jobs:
             --account-id "$ACCOUNT_ID" --dry-run --use-sheets \
             --horizon-hours "$HORIZON_HOURS" > "$ready_report" 2> "$ready_stderr"; then
             python3 scripts/ready_inventory_diagnostics.py \
-              --account-id "$ACCOUNT_ID" --report "$ready_report" || true
+              --account-id "$ACCOUNT_ID" --report "$ready_report" \
+              --private-stderr "$ready_stderr" || true
             echo "[OPERATIONAL_FAILURE] read-only READY coverage failed; no writes or SNS post"
             exit 1
           fi
           python3 scripts/ready_inventory_diagnostics.py \
-            --account-id "$ACCOUNT_ID" --report "$ready_report"
+            --account-id "$ACCOUNT_ID" --report "$ready_report" \
+              --private-stderr "$ready_stderr"
 
       - name: Guard account and Sheets secrets
         id: preparation_guard
@@ -185,12 +187,14 @@ jobs:
             --confirm-ready-maintenance --use-sheets \
             --horizon-hours "$HORIZON_HOURS" > "$ready_report" 2> "$ready_stderr"; then
             python3 scripts/ready_inventory_diagnostics.py \
-              --account-id "$ACCOUNT_ID" --report "$ready_report" || true
+              --account-id "$ACCOUNT_ID" --report "$ready_report" \
+              --private-stderr "$ready_stderr" || true
             echo "[OPERATIONAL_FAILURE] exact-slot READY coverage failed (redacted)"
             exit 1
           fi
           python3 scripts/ready_inventory_diagnostics.py \
-            --account-id "$ACCOUNT_ID" --report "$ready_report"
+            --account-id "$ACCOUNT_ID" --report "$ready_report" \
+              --private-stderr "$ready_stderr"
 
       - name: Refill validated non-AI emergency bank
         # Manual 6h no-post canary does not run long evergreen-bank top-up.
