@@ -95,6 +95,34 @@ def build_plan(args: argparse.Namespace, rules: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _report_outcome(plan: dict[str, Any], results: list[dict[str, Any]], *,
+                    mode: str, summary_only: bool) -> int:
+    """Propagate nested command failures, never log raw child output in CI."""
+    failed_steps = sum(
+        type(result.get("returncode")) is not int or result["returncode"] != 0
+        for result in results
+    )
+    status = "FAILED" if failed_steps else ("DONE" if mode == "apply" else "PLAN_ONLY")
+    if summary_only:
+        # Fixed fields only: do not expose subprocess commands, unpublished
+        # queue IDs, captions, Sheets data, stdout/stderr, or provider text.
+        report = {
+            "status": "FAILED" if failed_steps else "PASS",
+            "mode": mode,
+            "account_id": plan["account_id"],
+            "steps_checked": len(results),
+            "failed_steps": failed_steps,
+            "real_post_allowed": plan["auto_post_gate"]["allowed"],
+        }
+    else:
+        # The final status must override plan["status"] ("WILL_RUN").
+        report = {**plan, "status": status, "results": results}
+        if mode == "dry-run":
+            report["mode"] = mode
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 1 if failed_steps else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="run safe autopilot loop")
     parser.add_argument("--dry-run", action="store_true", help="plan only (default)")
@@ -108,6 +136,10 @@ def main() -> int:
     parser.add_argument("--use-sheets", action="store_true")
     parser.add_argument("--skip-real-post", action="store_true")
     parser.add_argument("--confirm-real-post", action="store_true")
+    parser.add_argument(
+        "--summary-only", action="store_true",
+        help="Print only fixed, redacted CI status fields; never child output",
+    )
     args = parser.parse_args()
 
     rules = load_rules()
@@ -122,8 +154,8 @@ def main() -> int:
             for acct in plan["accounts"]:
                 results.append(_run([sys.executable, "scripts/process_threads_queue.py", "--account-id", acct, "--dry-run", "--max-posts", str(min(args.max_posts, 2))]))
                 results.append(_run([sys.executable, "scripts/generate_next_queue_from_metrics.py", "--account-id", acct, "--count", "1", "--dry-run"]))
-        print(json.dumps({"mode": "dry-run", **plan, "results": results}, ensure_ascii=False, indent=2))
-        return 0
+        return _report_outcome(plan, results, mode="dry-run",
+                               summary_only=args.summary_only)
 
     results.append(_run([sys.executable, "scripts/recover_production_sheets_threads_first.py", "--verify-only", "--json"]))
     if args.auto_ready:
@@ -136,8 +168,8 @@ def main() -> int:
     else:
         for acct in plan["accounts"]:
             results.append(_run([sys.executable, "scripts/process_threads_queue.py", "--account-id", acct, "--dry-run", "--max-posts", str(min(args.max_posts, 2))]))
-    print(json.dumps({"status": "DONE", **plan, "results": results}, ensure_ascii=False, indent=2))
-    return 0
+    return _report_outcome(plan, results, mode="apply",
+                           summary_only=args.summary_only)
 
 
 if __name__ == "__main__":

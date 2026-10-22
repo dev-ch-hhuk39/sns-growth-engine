@@ -147,18 +147,38 @@ jobs:
       - name: Maintain next text-slot READY inventory
         if: env.AUTO_READY_APPLY == 'true'
         run: |
-          python3 scripts/maintain_text_ready_inventory.py \
+          # The queue report contains unpublished queue identifiers.
+          # Only the existing allowlisted diagnostics may reach public CI.
+          ready_report="$(mktemp)"
+          trap 'rm -f "$ready_report"' EXIT
+          if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
             --confirm-ready-maintenance --use-sheets \
-            --horizon-hours "$HORIZON_HOURS"
+            --horizon-hours "$HORIZON_HOURS" > "$ready_report" 2>&1; then
+            python3 scripts/ready_inventory_diagnostics.py \
+              --account-id "$ACCOUNT_ID" --report "$ready_report" || true
+            echo "[OPERATIONAL_FAILURE] exact-slot READY coverage failed (redacted)"
+            exit 1
+          fi
+          python3 scripts/ready_inventory_diagnostics.py \
+            --account-id "$ACCOUNT_ID" --report "$ready_report"
 
       - name: Refill validated non-AI emergency bank
         # Manual 6h no-post canary does not run long evergreen-bank top-up.
         if: success() && env.AUTO_READY_APPLY == 'true' && env.HORIZON_HOURS == '24' && steps.preparation_guard.outcome == 'success'
         run: |
-          python3 scripts/maintain_text_ready_inventory.py \
+          bank_report="$(mktemp)"
+          trap 'rm -f "$bank_report"' EXIT
+          if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --evergreen-bank --apply \
-            --confirm-ready-maintenance --use-sheets
+            --confirm-ready-maintenance --use-sheets > "$bank_report" 2>&1; then
+            python3 scripts/ready_evergreen_bank_summary.py \
+              --account-id "$ACCOUNT_ID" --report "$bank_report" || true
+            echo "[OPERATIONAL_FAILURE] evergreen reserve not verified (redacted)"
+            exit 1
+          fi
+          python3 scripts/ready_evergreen_bank_summary.py \
+            --account-id "$ACCOUNT_ID" --report "$bank_report"
 
       - name: AUTO_READY apply only
         if: env.AUTO_READY_APPLY == 'true'
@@ -171,7 +191,8 @@ jobs:
             --max-ready "$MAX_READY" \
             --max-posts 1 \
             --use-sheets \
-            --skip-real-post
+            --skip-real-post \
+            --summary-only
 
       - name: Verify Sheets after AUTO_READY
         if: env.AUTO_READY_APPLY == 'true'
