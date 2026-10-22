@@ -1,0 +1,12 @@
+[Unit]
+Description=Chadult SNS-only release TTL cleanup at 18:25 JST
+
+[Timer]
+OnCalendar=*-*-* 18:25:00 Asia/Tokyo
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=0
+Unit=sns-growth-release-retention.service
+
+[Install]
+WantedBy=timers.target
