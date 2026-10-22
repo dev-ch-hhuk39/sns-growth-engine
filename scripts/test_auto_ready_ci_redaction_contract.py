@@ -29,7 +29,7 @@ class PublicAutoReadyLogContract(unittest.TestCase):
         self.assertIn('ready_inventory_diagnostics.py', code)
         self.assertNotIn("2>&1", code)
         self.assertIn("exit 1", code)
-        self.assertIn("trap 'rm -f \"$ready_report\"' EXIT", code)
+        self.assertIn("trap 'rm -f \"$ready_report\" \"$ready_stderr\"' EXIT", code)
 
     def test_evergreen_result_redacted_before_emission(self):
         code = self.steps["Refill validated non-AI emergency bank"]["run"]
@@ -38,7 +38,7 @@ class PublicAutoReadyLogContract(unittest.TestCase):
         self.assertIn("ready_evergreen_bank_summary.py", code)
         self.assertNotIn("2>&1", code)
         self.assertIn("exit 1", code)
-        self.assertIn("trap 'rm -f \"$bank_report\"' EXIT", code)
+        self.assertIn("trap 'rm -f \"$bank_report\" \"$bank_stderr\"' EXIT", code)
 
     def test_autopilot_status_only_and_fails_closed(self):
         code = self.steps["AUTO_READY apply only"]["run"]
