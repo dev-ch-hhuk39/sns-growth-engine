@@ -115,10 +115,34 @@ def render_report(data: Any, account: str) -> str:
     return "\n".join(lines)
 
 
+def classify_private_stderr(path: Path | None) -> str:
+    """Return one fixed error code from private diagnostics, never their contents."""
+    if path is None:
+        return "NO_PRIVATE_DIAGNOSTICS"
+    try:
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
+            return "PRIVATE_DIAGNOSTICS_UNAVAILABLE"
+        data = path.read_text(encoding="utf-8", errors="replace").lower()
+    except OSError:
+        return "PRIVATE_DIAGNOSTICS_UNAVAILABLE"
+    indicators = (
+        ("API_QUOTA_OR_RATE_LIMIT", ("resourceexhausted", "quota exceeded", "429 too many requests")),
+        ("PROCESS_TIMEOUT", ("timeoutexpired", "readtimeout", "timed out", "deadlineexceeded")),
+        ("PERMISSION_REJECTED", ("permissionerror", "permissiondenied", "403 forbidden")),
+        ("PROVIDER_UNAVAILABLE", ("connectionerror", "connectionrefusederror", "serviceunavailable")),
+        ("PYTHON_EXCEPTION", ("traceback (most recent call last)",)),
+    )
+    for code, phrases in indicators:
+        if any(phrase in data for phrase in phrases):
+            return code
+    return "UNCLASSIFIED_FAILURE" if data.strip() else "EMPTY_PRIVATE_DIAGNOSTICS"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", choices=ACCOUNTS, required=True)
     parser.add_argument("--report", required=True)
+    parser.add_argument("--private-stderr", help="Private subprocess errors; emits fixed status only")
     args = parser.parse_args(argv)
     try:
         path = Path(args.report)
@@ -127,7 +151,8 @@ def main(argv: list[str] | None = None) -> int:
         report = json.loads(path.read_text(encoding="utf-8"))
         result = render_report(report, args.account_id)
     except (OSError, UnicodeError, ValueError, TypeError):
-        print("READY_DIAGNOSTICS_UNAVAILABLE: invalid or missing report; original step failure remains authoritative.")
+        hint = classify_private_stderr(Path(args.private_stderr) if args.private_stderr else None)
+        print("READY_DIAGNOSTICS_UNAVAILABLE: invalid or missing report; original step failure remains authoritative. PRIVATE_FAILURE_HINT=" + hint)
         return 2
     print(result)
     return 0
