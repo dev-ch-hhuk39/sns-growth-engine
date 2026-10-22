@@ -17,6 +17,7 @@ HOST_RUNTIME_WORKFLOWS = {
     "refresh-threads-tokens.yml",
     "production-storage-readonly-audit.yml",
     "sns-storage-lifecycle.yml",
+    "sns-chrome-crash-diagnostics-lifecycle.yml",
     "sns-python311-runtime-qa.yml",
     "sns-once-host-resource-audit.yml",
     "sns-once-resolve-abandoned-pending.yml",

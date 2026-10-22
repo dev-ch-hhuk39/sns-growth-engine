@@ -1,0 +1,49 @@
+name: SNS Chrome Crash Diagnostics Lifecycle
+
+on:
+  # Sunday 06:23 JST. Bound only old SNS-owned Chrome crash telemetry.
+  schedule:
+    - cron: "23 21 * * 6"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-chrome-crash-diagnostics-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 5
+    env:
+      PUBLISH_ENABLED: "false"
+      BUFFERED_POSTING_ENABLED: "false"
+      SNS_P0_ONCE_GATE_ENABLED: "false"
+      ALLOW_REAL_THREADS_POST: "false"
+      ALLOW_REAL_X_POST: "false"
+      ALLOW_MEDIA_POSTS: "false"
+      ALLOW_VIDEO_DOWNLOAD: "false"
+      ALLOW_VIDEO_CUT: "false"
+      ALLOW_CLOUDINARY_UPLOAD: "false"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Verify dedicated SNS runner identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          test "$(id -un)" = "snsrunner"
+          test "$(hostname -s)" = "x85-131-249-42"
+      - name: Audit exact SNS Chrome diagnostics candidates
+        shell: bash
+        run: python3 -B scripts/cleanup_sns_chrome_crash_diagnostics.py
+      - name: Expire only 14d-old SNS-owned crash dump telemetry
+        shell: bash
+        run: python3 -B scripts/cleanup_sns_chrome_crash_diagnostics.py --apply
