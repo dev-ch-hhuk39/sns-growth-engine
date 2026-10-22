@@ -26,3 +26,19 @@ Google Sheets write authorization.
 
 The next scheduled apply-mode failures, if any, should supply bounded
 fixed-field hints. Historical failure logs cannot be retroactively fixed.
+
+## Follow-up: stdout with non-JSON progress messages
+
+A reproduced no-post manual Apply failed in READY maintenance with private
+stderr empty and a report that could not be decoded as one JSON document.
+The reporter now searches only a bounded set of column-zero JSON object
+starts in the 5MB private stdout buffer and requires the final report's
+fixed schema fields (status/results/account coverage/would_post=false).
+This allows the last JSON report to be redacted even if harmless progress
+messages or embedded generator reports precede it. An early BLOCKED
+invocation is rendered only through a fixed reason allowlist; unknown
+reason text is never printed.
+
+This is **diagnostic recovery**, not an approval bypass, an automatic retry,
+a forced new READY candidate, or evidence that the scheduled generation
+failure is resolved. The original command's nonzero status remains decisive.
