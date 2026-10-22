@@ -138,6 +138,69 @@ def classify_private_stderr(path: Path | None) -> str:
     return "UNCLASSIFIED_FAILURE" if data.strip() else "EMPTY_PRIVATE_DIAGNOSTICS"
 
 
+EARLY_BLOCK_CODES = {
+    "apply requires confirmation and --use-sheets": "APPLY_CONFIRMATION_MISSING",
+    "choose exactly one of --dry-run or --apply": "MODE_SELECTION_INVALID",
+    "apply_requires_one_account": "MULTI_ACCOUNT_APPLY_BLOCKED",
+    "max_bank_allocations_must_be_0_to_6": "BANK_ALLOCATION_LIMIT_INVALID",
+    "reuse_only_requires_single_account_apply_without_evergreen_bank": "REUSE_MODE_INVALID",
+    "inventory_horizon_must_be_1_to_168_hours": "HORIZON_INVALID",
+}
+
+
+def render_early_blocked_report(data: dict[str, Any]) -> str:
+    """Only fixed identifiers may pass through from a blocked CLI response."""
+    reason = data.get("reason")
+    code = EARLY_BLOCK_CODES.get(reason, "UNCLASSIFIED_EARLY_BLOCK") if isinstance(reason, str) else "UNCLASSIFIED_EARLY_BLOCK"
+    return "READY_INVOCATION_BLOCKED: " + code + "; no SNS post or approval bypass."
+
+
+def parse_bounded_ready_json(raw: str) -> dict[str, Any]:
+    """Decode a final READY report despite unrelated stdout lines.
+
+    Never return arbitrary preceding generator objects or echo their text.
+    Candidate starts are restricted to column zero JSON object braces,
+    and the scan is strictly bounded.
+    """
+    if not raw or len(raw) > 5_000_000:
+        raise ValueError("ready_output_size_invalid")
+    try:
+        direct = json.loads(raw)
+        if isinstance(direct, dict):
+            return direct
+    except json.JSONDecodeError:
+        pass
+
+    starts = []
+    position = 0
+    for line in raw.splitlines(keepends=True):
+        if line.startswith("{"):
+            starts.append(position)
+            if len(starts) > 512:
+                raise ValueError("too_many_output_objects")
+        position += len(line)
+    decoder = json.JSONDecoder()
+    for position in reversed(starts):
+        try:
+            value, _end = decoder.raw_decode(raw, position)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            regular_ready = (
+                value.get("status") in ("PASS", "FAILED", "PLAN_ONLY")
+                and value.get("would_post") is False
+                and isinstance(value.get("results"), list)
+                and isinstance(value.get("text_delivery_coverage_by_account"), dict)
+            )
+            early_block = (
+                value.get("status") == "BLOCKED"
+                and isinstance(value.get("reason"), str)
+            )
+            if regular_ready or early_block:
+                return value
+    raise ValueError("no_final_ready_report")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--account-id", choices=ACCOUNTS, required=True)
@@ -148,8 +211,12 @@ def main(argv: list[str] | None = None) -> int:
         path = Path(args.report)
         if path.stat().st_size > 5_000_000:
             raise ValueError("report_too_large")
-        report = json.loads(path.read_text(encoding="utf-8"))
-        result = render_report(report, args.account_id)
+        report = parse_bounded_ready_json(path.read_text(encoding="utf-8"))
+        result = (
+            render_early_blocked_report(report)
+            if report.get("status") == "BLOCKED"
+            else render_report(report, args.account_id)
+        )
     except (OSError, UnicodeError, ValueError, TypeError):
         hint = classify_private_stderr(Path(args.private_stderr) if args.private_stderr else None)
         print("READY_DIAGNOSTICS_UNAVAILABLE: invalid or missing report; original step failure remains authoritative. PRIVATE_FAILURE_HINT=" + hint)
