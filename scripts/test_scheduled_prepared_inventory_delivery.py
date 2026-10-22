@@ -162,13 +162,40 @@ class PreparedInventoryTests(unittest.TestCase):
         with patch("process_threads_queue.records", return_value=[]), \
              patch.object(maintenance, "replenish", side_effect=fail_for_theme) as generate:
             result = maintenance.replenish_bank(client, "beauty_account", apply=True)
-        self.assertEqual(generate.call_count, 10)
-        self.assertEqual(len(observed_themes), len(set(observed_themes)))
+        # A provider rate limit is not an editorial-quality rejection:
+        # pause paid calls immediately instead of burning nine more themes.
+        generate.assert_called_once()
+        self.assertEqual(len(observed_themes), 1)
         self.assertFalse(generate.call_args.kwargs["offline_only"])
         self.assertEqual(result["status"], "QUALITY_EXHAUSTED")
         self.assertEqual(result["usable_evergreen"], 0)
         self.assertEqual(result["attempts"][0]["failure_category"], "PROVIDER_RATE_LIMITED")
         self.assertEqual(result["attempts"][0]["generation_attempts"], generation["attempts"])
+        self.assertFalse(result["would_post"])
+
+    def test_normal_quality_rejection_can_still_try_bounded_themes(self):
+        # A normal content rejection, unlike rate-limit/timeout, is not a
+        # provider outage. Keep the existing 10-theme bounded quality search.
+        generation = {
+            "status": "QUALITY_EXHAUSTED", "queue_ids": [],
+            "failure_category": "QUALITY_EXHAUSTED", "attempts": [],
+        }
+        client = SimpleNamespace(_ensure_tab=lambda *args: None)
+        seen = []
+
+        def reject_content(_account_id, slot, **_kwargs):
+            seen.append(slot["theme"])
+            return generation
+
+        with patch("process_threads_queue.records", return_value=[]), \
+             patch.object(maintenance, "replenish",
+                          side_effect=reject_content) as generate:
+            result = maintenance.replenish_bank(
+                client, "beauty_account", apply=True,
+            )
+        self.assertEqual(generate.call_count, 10)
+        self.assertEqual(len(seen), len(set(seen)))
+        self.assertEqual(result["status"], "QUALITY_EXHAUSTED")
         self.assertFalse(result["would_post"])
 
     def test_bank_stops_on_hard_ai_budget_blocker(self):
