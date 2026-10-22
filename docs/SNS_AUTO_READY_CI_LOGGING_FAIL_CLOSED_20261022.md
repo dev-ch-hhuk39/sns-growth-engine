@@ -43,3 +43,11 @@ therefore hosted Actions must not echo complete JSON maintenance reports.
 This change does not certify full Google Sheets native restore, off-VPS
 two-device credential recovery, or deletion eligibility for old VPS releases.
 Those remain separate SNS Issue #437 / AgentOps Issue #35 / SNS Issue #439 gates.
+
+## 2026-10-22 follow-up: JSON stream integrity
+The public CI workflows now capture standard output and standard error in
+separate private temporary files. The structured JSON parser reads only
+standard output: SDK warnings written to standard error must not corrupt a
+valid READY or evergreen status report. No raw stderr or full queue report is
+printed in Actions. Both temporary files are removed on EXIT, and failure or
+invalid JSON remains fail-closed without publishing.

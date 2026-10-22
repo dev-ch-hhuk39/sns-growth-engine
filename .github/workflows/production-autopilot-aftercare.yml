@@ -164,10 +164,11 @@ jobs:
           # extra activation_pdca batch first creates near-duplicates and burns
           # the bounded Gemini budget without adding usable inventory.
           ready_report="$(mktemp)"
-          trap 'rm -f "$ready_report"' EXIT
+          ready_stderr="$(mktemp)"
+          trap 'rm -f "$ready_report" "$ready_stderr"' EXIT
           if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
-            --confirm-ready-maintenance --use-sheets > "$ready_report" 2>&1; then
+            --confirm-ready-maintenance --use-sheets > "$ready_report" 2> "$ready_stderr"; then
             python3 scripts/ready_inventory_diagnostics.py \
               --account-id "$ACCOUNT_ID" --report "$ready_report" || true
             echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed after bounded fallback; next 24h verified READY coverage is below requirement"
@@ -176,10 +177,11 @@ jobs:
           python3 scripts/ready_inventory_diagnostics.py \
             --account-id "$ACCOUNT_ID" --report "$ready_report"
           bank_report="$(mktemp)"
-          trap 'rm -f "$ready_report" "$bank_report"' EXIT
+          bank_stderr="$(mktemp)"
+          trap 'rm -f "$ready_report" "$ready_stderr" "$bank_report" "$bank_stderr"' EXIT
           if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
-            --confirm-ready-maintenance --use-sheets --evergreen-bank > "$bank_report" 2>&1; then
+            --confirm-ready-maintenance --use-sheets --evergreen-bank > "$bank_report" 2> "$bank_stderr"; then
             python3 scripts/ready_evergreen_bank_summary.py \
               --account-id "$ACCOUNT_ID" --report "$bank_report" || true
             echo "[OPERATIONAL_FAILURE] validated evergreen reserve not verified (redacted)"

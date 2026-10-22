@@ -25,18 +25,20 @@ class PublicAutoReadyLogContract(unittest.TestCase):
     def test_ready_source_report_private_and_diagnostic_only(self):
         code = self.steps["Maintain next text-slot READY inventory"]["run"]
         self.assertIn('ready_report="$(mktemp)"', code)
-        self.assertIn('> "$ready_report" 2>&1', code)
+        self.assertIn('> "$ready_report" 2> "$ready_stderr"', code)
         self.assertIn('ready_inventory_diagnostics.py', code)
+        self.assertNotIn("2>&1", code)
         self.assertIn("exit 1", code)
-        self.assertIn("trap 'rm -f \"$ready_report\"' EXIT", code)
+        self.assertIn("trap 'rm -f \"$ready_report\" \"$ready_stderr\"' EXIT", code)
 
     def test_evergreen_result_redacted_before_emission(self):
         code = self.steps["Refill validated non-AI emergency bank"]["run"]
         self.assertIn('bank_report="$(mktemp)"', code)
-        self.assertIn('> "$bank_report" 2>&1', code)
+        self.assertIn('> "$bank_report" 2> "$bank_stderr"', code)
         self.assertIn("ready_evergreen_bank_summary.py", code)
+        self.assertNotIn("2>&1", code)
         self.assertIn("exit 1", code)
-        self.assertIn("trap 'rm -f \"$bank_report\"' EXIT", code)
+        self.assertIn("trap 'rm -f \"$bank_report\" \"$bank_stderr\"' EXIT", code)
 
     def test_autopilot_status_only_and_fails_closed(self):
         code = self.steps["AUTO_READY apply only"]["run"]
@@ -49,10 +51,11 @@ class PublicAutoReadyLogContract(unittest.TestCase):
         doc = yaml.safe_load(AFTERCARE.read_text(encoding="utf-8"))
         steps = {step.get("name"): step for step in doc["jobs"]["aftercare"]["steps"]}
         code = steps["Maintain next 24h READY inventory from measured PDCA"]["run"]
-        self.assertIn('> "$ready_report" 2>&1', code)
-        self.assertIn('> "$bank_report" 2>&1', code)
+        self.assertIn('> "$ready_report" 2> "$ready_stderr"', code)
+        self.assertIn('> "$bank_report" 2> "$bank_stderr"', code)
         self.assertIn("ready_inventory_diagnostics.py", code)
         self.assertIn("ready_evergreen_bank_summary.py", code)
+        self.assertNotIn("2>&1", code)
         self.assertIn("exit 1", code)
         self.assertEqual(doc["env"]["ALLOW_REAL_THREADS_POST"], "false")
         self.assertEqual(doc["env"]["ALLOW_REAL_X_POST"], "false")
