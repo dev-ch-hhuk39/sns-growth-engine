@@ -1,7 +1,7 @@
 # AUTO_READY hosted CI: redacted receipts and fail-closed child commands (2026-10-22)
 
 ## Scope and operator safety
-This change is limited to the AUTO_READY workflow, the CLI reporting contract
+This change covers AUTO_READY and Aftercare READY-inventory logging, the CLI reporting contract
 of the parent autopilot loop, and a fixed-field evergreen-bank status renderer.
 No publication switch, review/approval rule, Sheet permission, R2 setting,
 VPS asset, backup retention, or paid provider budget is changed.
@@ -20,7 +20,9 @@ therefore hosted Actions must not echo complete JSON maintenance reports.
 3. The parent autopilot step uses skip-real-post and summary-only flags. It
    prints only account, step count, status and real-post-gate fields.
    Nonzero return codes from any nested subprocess cause parent nonzero.
-4. Temporary reports are removed on EXIT. Publication remains disabled.
+4. Aftercare uses the same private captures for READY and evergreen output.
+   Both workflows retain their existing approval gates and failure semantics.
+5. Temporary reports are removed on EXIT. Publication remains disabled.
    Failure must remain visible as a failed workflow rather than a misleading
    success status.
 
