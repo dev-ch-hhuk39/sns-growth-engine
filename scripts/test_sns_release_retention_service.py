@@ -7,7 +7,6 @@ from unittest.mock import patch
 import subprocess
 import tempfile
 import unittest
-import yaml
 
 import sns_release_retention_service as service
 
