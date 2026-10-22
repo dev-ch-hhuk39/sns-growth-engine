@@ -167,7 +167,7 @@ jobs:
           trap 'rm -f "$ready_report"' EXIT
           if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
-            --confirm-ready-maintenance --use-sheets > "$ready_report"; then
+            --confirm-ready-maintenance --use-sheets > "$ready_report" 2>&1; then
             python3 scripts/ready_inventory_diagnostics.py \
               --account-id "$ACCOUNT_ID" --report "$ready_report" || true
             echo "[OPERATIONAL_FAILURE] one or more measured PDCA generations failed after bounded fallback; next 24h verified READY coverage is below requirement"
@@ -175,12 +175,18 @@ jobs:
           fi
           python3 scripts/ready_inventory_diagnostics.py \
             --account-id "$ACCOUNT_ID" --report "$ready_report"
+          bank_report="$(mktemp)"
+          trap 'rm -f "$ready_report" "$bank_report"' EXIT
           if ! python3 scripts/maintain_text_ready_inventory.py \
             --account-id "$ACCOUNT_ID" --apply \
-            --confirm-ready-maintenance --use-sheets --evergreen-bank; then
-            echo "[OPERATIONAL_FAILURE] validated evergreen reserve could not be replenished"
+            --confirm-ready-maintenance --use-sheets --evergreen-bank > "$bank_report" 2>&1; then
+            python3 scripts/ready_evergreen_bank_summary.py \
+              --account-id "$ACCOUNT_ID" --report "$bank_report" || true
+            echo "[OPERATIONAL_FAILURE] validated evergreen reserve not verified (redacted)"
             exit 1
           fi
+          python3 scripts/ready_evergreen_bank_summary.py \
+            --account-id "$ACCOUNT_ID" --report "$bank_report"
           echo "beauty_account_pdca_route=dedicated_beauty_generation" >> "$GITHUB_STEP_SUMMARY"
           echo "ready_inventory_24h_exit=0" >> "$GITHUB_STEP_SUMMARY"
           echo "evergreen_inventory_exit=0" >> "$GITHUB_STEP_SUMMARY"
