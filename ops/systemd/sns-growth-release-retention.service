@@ -1,0 +1,23 @@
+[Unit]
+Description=Chadult SNS Growth Engine only - guarded immutable release retention
+After=local-fs.target
+ConditionPathExists=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+ConditionPathExists=/opt/github-runners/sns-growth-engine/.buffered-runtime/previous
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/chadult-sns-retention/sns_release_retention_service.py --apply
+TimeoutStartSec=900
+RuntimeMaxSec=900
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+ReadWritePaths=/opt/github-runners/sns-growth-engine/.buffered-runtime/releases
+ReadWritePaths=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/locks
+ReadWritePaths=/run/lock/chadult-production-deploy.lock
+StandardOutput=journal
+StandardError=journal
