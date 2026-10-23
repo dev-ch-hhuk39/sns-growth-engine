@@ -77,9 +77,38 @@ def reasons_for_slot(row: dict[str, Any]) -> set[str]:
     return reasons
 
 
+def validated_no_due_slot_skip(data: dict[str, Any], account: str) -> bool:
+    """A no-op is not proof of READY coverage; verify its exact scope."""
+    if data.get("status") != "SKIPPED_NO_DUE_TEXT_SLOTS":
+        return False
+    horizon = data.get("horizon_hours")
+    return (
+        account in ACCOUNTS
+        and type(horizon) is int and 1 <= horizon < 24
+        and data.get("would_post") is False
+        and data.get("coverage_failure_reason") == "NO_REQUIRED_TEXT_SLOTS"
+        and data.get("text_delivery_coverage_72h_percent") is None
+        and data.get("text_delivery_coverage_by_account") ==
+            {account: {"covered_slots": 0, "required_slots": 0}}
+        and data.get("results") == []
+        and data.get("hard_delivery_failures") == []
+        and data.get("reserve_status") == "NOT_APPLICABLE"
+    )
+
+
 def render_report(data: Any, account: str) -> str:
     if account not in ACCOUNTS or not isinstance(data, dict) or not isinstance(data.get("results"), list):
         raise ValueError("invalid_diagnostics_scope_or_input")
+    if data.get("status") == "SKIPPED_NO_DUE_TEXT_SLOTS":
+        if not validated_no_due_slot_skip(data, account):
+            raise ValueError("invalid_no_due_slot_skip")
+        return "\n".join((
+            "### READY inventory diagnosis: " + account,
+            "- Delivery slots: 0/0 verified; 0 missing",
+            "- Maintenance outcome: SKIPPED_NO_DUE_TEXT_SLOTS (not READY coverage PASS)",
+            "- Evidence: NO_DUE_TEXT_SLOTS_IN_REQUESTED_HORIZON",
+            "- Safety: no approval bypass, no queue-status rewrite, no SNS post.",
+        ))
     scoped = [row for row in data["results"]
               if isinstance(row, dict) and row.get("account_id") == account and "delivery_slo" in row]
     failed = [row for row in scoped if row.get("delivery_slo") != "PASS"]
@@ -187,7 +216,7 @@ def parse_bounded_ready_json(raw: str) -> dict[str, Any]:
             continue
         if isinstance(value, dict):
             regular_ready = (
-                value.get("status") in ("PASS", "FAILED", "PLAN_ONLY")
+                value.get("status") in ("PASS", "FAILED", "PLAN_ONLY", "SKIPPED_NO_DUE_TEXT_SLOTS")
                 and value.get("would_post") is False
                 and isinstance(value.get("results"), list)
                 and isinstance(value.get("text_delivery_coverage_by_account"), dict)
