@@ -129,9 +129,19 @@ def run(*, confirm: bool) -> dict:
     # Revalidate SHA pointers, one-day cutoff, owner/mount and process use
     # inside prune.run's shared global deployment lock before unlinking.
     result = prune.run(ROOT, expected, targets, confirm=True)
-    report["removed_count"] = len(result["removed_releases"])
-    report["freed_bytes"] = result["recovered_bytes"]
-    report["status"] = result["status"]
+    # The underlying pruner returns a verified receipt WITHOUT a "status"
+    # field. Success is implied only by a complete, exact target list, its
+    # bounded disk measurement and a normally returned locked prune call.
+    removed = result.get("removed_releases")
+    recovered = result.get("recovered_bytes")
+    require(isinstance(removed, list) and len(removed) == len(targets)
+            and set(removed) == set(targets),
+            "SNS_RETENTION_REMOVAL_RECEIPT_MISMATCH")
+    require(type(recovered) is int and recovered >= 0,
+            "SNS_RETENTION_DISK_RECEIPT_INVALID")
+    report["removed_count"] = len(removed)
+    report["freed_bytes"] = recovered
+    report["status"] = "PASS"
     return report
 
 
