@@ -31,6 +31,19 @@ Date: 2026-10-23 JST
   provider timeout signals retain higher priority. Other private
   exception text, paths and queue IDs are never printed.
 
+## Sheets quota reduction
+
+Production replenishment originally requested four read-only tabs
+(queue, evergreen_bank, posted_results, content_slot_runs) using four
+separate API calls. Genuine SheetsClient objects now prime the existing
+one-request values_batch_get snapshot for all four before inventory checks.
+Mock clients retain their existing test adapter. A failed initial batch
+stops immediately before candidate admission or paid generation.
+
+Synthetic tests verify one batch and fail-closed on quota errors. This
+reduces initial values reads from four to one, but does not eliminate
+Sheets metadata requests or guarantee success during a rate-limited minute.
+
 ## Safety / limitations
 - Zero real SNS posts or activation changes.
 - No changes to R2, other VPS applications, credentials, or workflows.

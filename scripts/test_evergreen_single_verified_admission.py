@@ -12,6 +12,53 @@ import process_threads_queue
 
 
 class VerifiedBankAdmissionTests(unittest.TestCase):
+    def test_real_client_uses_one_four_tab_snapshot_before_health_check(self):
+        from unittest.mock import Mock
+        client = Mock(spec=maintenance.SheetsClient)
+        client._ensure_tab = Mock()
+        labels = []
+        reserve = [
+            {"canonical_queue": {"slot_id": slot["slot_id"]},
+             "normalized_hash": str(index)}
+            for slot in maintenance.text_slots("night_scout")
+            for index in range(10)
+        ]
+        def capture_prime(snapshot, tables):
+            self.assertEqual(tables, (
+                "queue", "evergreen_bank", "posted_results", "content_slot_runs",
+            ))
+            labels.append(tables)
+        with (
+            patch.object(maintenance, "prime_readonly_record_cache", side_effect=capture_prime),
+            patch.object(process_threads_queue, "records", return_value=[]),
+            patch.object(maintenance, "usable_evergreen_entries", return_value=reserve),
+            patch.object(maintenance, "replenish") as generation,
+        ):
+            result = maintenance.replenish_bank(client, "night_scout", apply=True)
+        self.assertEqual(result["status"], "READY_INVENTORY_OK")
+        self.assertEqual(result["usable_evergreen"], 30)
+        self.assertEqual(len(labels), 1)
+        generation.assert_not_called()
+
+    def test_batched_snapshot_failure_stops_before_any_mutation_or_provider(self):
+        client = Mock(spec=maintenance.SheetsClient)
+        client._ensure_tab = Mock()
+        with (
+            patch.object(
+                maintenance, "prime_readonly_record_cache",
+                side_effect=RuntimeError("SHEETS_QUOTA_EXHAUSTED"),
+            ) as prime,
+            patch.object(maintenance, "replenish") as generation,
+            patch.object(evergreen_inventory, "admit_bank_batch") as admission,
+            patch.object(evergreen_inventory, "release_expired_unpublished_bank_allocations") as release,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "SHEETS_QUOTA_EXHAUSTED"):
+                maintenance.replenish_bank(client, "beauty_account", apply=True)
+        prime.assert_called_once()
+        generation.assert_not_called()
+        admission.assert_not_called()
+        release.assert_not_called()
+
     def test_canonical_batch_receipt_allows_single_verified_admission(self):
         candidate = {"queue_id": "q_synthetic"}
         expected = {"status": "SAVED", "count": 1, "created": 1,

@@ -666,6 +666,15 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
     snapshot = copy.copy(client)
     enable_readonly_record_cache(snapshot)
+    # A production bank invocation previously fetched these four large
+    # tabs with separate Sheets values calls. The existing read-only batch
+    # API captures them together, reducing 429/quota exposure without
+    # weakening any canonical identity or runtime-publishability gate.
+    # Keep synthetic/mock clients on their existing record adapter.
+    if isinstance(client, SheetsClient):
+        prime_readonly_record_cache(
+            snapshot, ("queue", "evergreen_bank", "posted_results", "content_slot_runs")
+        )
     initial_queues = records(snapshot, "queue")
     initial_bank = records(snapshot, "evergreen_bank")
     initial_posts = records(snapshot, "posted_results")
