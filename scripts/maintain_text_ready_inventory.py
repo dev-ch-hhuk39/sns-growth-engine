@@ -316,11 +316,51 @@ def _required_text_slots(account_id: str, start: datetime, end: datetime) -> lis
 
 
 def approval_budget_exhausted(payload: dict[str, Any]) -> bool:
+    """Untrusted generator stages cannot crash the paid-budget gate."""
     reasons = {"HYBRID_AI_EXECUTION_LIMIT_EXCEEDED", "HYBRID_AI_DAILY_LIMIT_EXCEEDED",
                "HYBRID_AI_MONTHLY_LIMIT_EXCEEDED"}
-    packets = [payload, *(s.get("payload", {}) for s in payload.get("stages", []) if isinstance(s, dict))]
-    return any(error.get("reason") in reasons for packet in packets
-               for error in packet.get("runtime_errors", []) if isinstance(error, dict))
+    if not isinstance(payload, dict):
+        return False
+    stages = payload.get("stages")
+    stages = stages if isinstance(stages, list) else []
+    packets = [payload, *(
+        stage["payload"] for stage in stages
+        if isinstance(stage, dict) and isinstance(stage.get("payload"), dict)
+    )]
+    for packet in packets:
+        errors = packet.get("runtime_errors")
+        if isinstance(errors, list) and any(
+            isinstance(error, dict) and error.get("reason") in reasons
+            for error in errors
+        ):
+            return True
+    return False
+
+
+def _validated_generation_queue_ids(payload: dict[str, Any], account_id: str) -> tuple[list[str], bool]:
+    """A malformed provider envelope never becomes a queue approval target."""
+    raw = payload.get("effective_queue_ids", payload.get("queue_ids", []))
+    if not isinstance(raw, list) or len(raw) > 30:
+        return [], False
+    if any(type(qid) is not str or not 1 <= len(qid) <= 256
+           or any(not 33 <= ord(c) <= 126 for c in qid) for qid in raw):
+        return [], False
+    if len(set(raw)) != len(raw):
+        return [], False
+    if account_id == "beauty_account" and "apply_result" in payload:
+        result = payload["apply_result"]
+        if not isinstance(result, dict):
+            return [], False
+        if result.get("read_after_write") is True or result.get("read_after_write") == "PASS":
+            qid = result.get("queue_id")
+            if (type(qid) is not str or not 1 <= len(qid) <= 256
+                    or any(not 33 <= ord(c) <= 126 for c in qid)):
+                return [], False
+            return [qid], True
+        # In particular "FAILED" is a non-empty string but NOT verified.
+        # No other effective IDs can bypass a failed Beauty readback.
+        return [], False
+    return raw, True
 
 
 def generation_failure_category(payload: dict[str, Any]) -> str:
@@ -474,19 +514,19 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
         "PROVIDER_RATE_LIMITED", "PROVIDER_UNAVAILABLE",
         "PROVIDER_CONFIGURATION_ERROR",
         "PROVIDER_CREDENTIALS_MISSING_OR_REJECTED",
+        "GENERATION_OUTPUT_INVALID",
     }
     for generation_route, generation in _generation_commands(account_id, slot, offline_only=offline_only):
         if (budget_blocked or paid_provider_blocker) and generation_route != "offline_original_bank":
             continue
         rc, payload = _run(generation)
         last_payload = payload
-        queue_ids = [
-            str(value)
-            for value in payload.get("effective_queue_ids", payload.get("queue_ids", []))
-            if str(value)
-        ]
-        if account_id == "beauty_account" and payload.get("apply_result", {}).get("read_after_write"):
-            queue_ids = [str(payload["apply_result"]["queue_id"])]
+        queue_ids, envelope_valid = _validated_generation_queue_ids(payload, account_id)
+        if not envelope_valid:
+            # Do not treat null, scalar, duplicate, or unverified readback
+            # IDs as target queue records, even if the provider exits 0.
+            payload["failure_category"] = "GENERATION_OUTPUT_INVALID"
+            rc = rc or 1
         attempts.append({
             "route": generation_route,
             "status": str(payload.get("status", "")),
@@ -535,7 +575,16 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
             review_rc, review = _run(command)
             subprocess_failure_category = str(review.get("failure_category", ""))
             if ready_output.exists():
-                review = json.loads(ready_output.read_text(encoding="utf-8"))
+                try:
+                    parsed_review = json.loads(ready_output.read_text(encoding="utf-8"))
+                    if not isinstance(parsed_review, dict):
+                        raise ValueError("nonobject_review")
+                    review = parsed_review
+                except (OSError, UnicodeError, ValueError, TypeError):
+                    # No freeform error, queue ID, caption, or provider text
+                    # leaves the private validation process.
+                    review = {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+                    review_rc = review_rc or 1
                 if subprocess_failure_category == "SHEETS_QUOTA_EXHAUSTED":
                     review["failure_category"] = subprocess_failure_category
             budget_blocked = approval_budget_exhausted(review)
