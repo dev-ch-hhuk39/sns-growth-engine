@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -144,6 +145,40 @@ def render_report(data: Any, account: str) -> str:
     return "\n".join(lines)
 
 
+# Exact error identities only. Never derive public hints from arbitrary
+# exception messages, paths, IDs, provider responses, captions or secrets.
+# These codes identify the branch to inspect and never authorize a retry.
+SAFE_EVERGREEN_EXCEPTION_CODES = frozenset({
+    "EVERGREEN_APPROVAL_READ_AFTER_WRITE_FAILED",
+    "EVERGREEN_BATCH_READ_AFTER_WRITE_FAILED",
+    "EVERGREEN_ADMISSION_RECEIPT_UNVERIFIED",
+    "EVERGREEN_ALLOCATION_RELEASE_READ_AFTER_WRITE_FAILED",
+    "EVERGREEN_RELEASE_READ_AFTER_WRITE_FAILED",
+    "EVERGREEN_QUEUE_SCHEMA_MISSING",
+    "EVERGREEN_BANK_SCHEMA_MISSING",
+    "EVERGREEN_CANONICAL_IDENTITY_CONFLICT",
+    "EVERGREEN_QUEUE_CHANGED",
+    "EVERGREEN_BANK_IDENTITY_CONFLICT",
+    "EVERGREEN_BATCH_LIMIT_OR_DUPLICATE",
+})
+
+
+def fixed_evergreen_exception_hint(stderr: str) -> str:
+    """Extract only an approved literal exception code, not trace contents."""
+    if not isinstance(stderr, str):
+        return ""
+    # Parse only exception terminator lines, never arbitrary provider prose.
+    for line in reversed(stderr.splitlines()[-256:]):
+        match = re.fullmatch(
+            r"(?:RuntimeError|ValueError|PermissionError|AssertionError): "
+            r"([A-Z][A-Z0-9_]{4,96})",
+            line.strip(),
+        )
+        if match and match.group(1) in SAFE_EVERGREEN_EXCEPTION_CODES:
+            return match.group(1)
+    return ""
+
+
 def classify_private_stderr(path: Path | None) -> str:
     """Return one fixed error code from private diagnostics, never their contents."""
     if path is None:
@@ -151,9 +186,21 @@ def classify_private_stderr(path: Path | None) -> str:
     try:
         if path.is_symlink() or not path.is_file() or path.stat().st_size > 2_000_000:
             return "PRIVATE_DIAGNOSTICS_UNAVAILABLE"
-        data = path.read_text(encoding="utf-8", errors="replace").lower()
+        raw = path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return "PRIVATE_DIAGNOSTICS_UNAVAILABLE"
+    data = raw.lower()
+    # Provider quota/timeout markers remain the higher-priority circuit
+    # breakers; otherwise classify exact known bank readback faults.
+    for code, phrases in (
+        ("API_QUOTA_OR_RATE_LIMIT", ("resourceexhausted", "quota exceeded", "429 too many requests")),
+        ("PROCESS_TIMEOUT", ("timeoutexpired", "readtimeout", "timed out", "deadlineexceeded")),
+    ):
+        if any(phrase in data for phrase in phrases):
+            return code
+    fixed = fixed_evergreen_exception_hint(raw)
+    if fixed:
+        return fixed
     indicators = (
         ("API_QUOTA_OR_RATE_LIMIT", ("resourceexhausted", "quota exceeded", "429 too many requests")),
         ("PROCESS_TIMEOUT", ("timeoutexpired", "readtimeout", "timed out", "deadlineexceeded")),

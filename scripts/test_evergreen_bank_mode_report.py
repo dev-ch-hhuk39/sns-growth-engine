@@ -113,8 +113,60 @@ class EvergreenBankModeContracts(unittest.TestCase):
         self.assertEqual(doc["mode"], "EVERGREEN_BANK")
         bank.assert_called_once()
         self.assertTrue(bank.call_args.kwargs["apply"])
-        self.assertTrue(client._ensure_tab.called)
+        # Only the real replenisher performs this one-time schema check.
+        # A CLI wrapper must not repeat it beforehand.
+        client._ensure_tab.assert_not_called()
         self.assertFalse(doc["would_post"])
+
+    def test_bank_only_apply_has_no_redundant_main_sheet_reads(self):
+        client = Mock()
+        out = StringIO()
+        args = ["maintain_text_ready_inventory.py", "--account-id", "night_scout",
+                "--evergreen-bank", "--apply", "--confirm-ready-maintenance",
+                "--use-sheets"]
+        with (
+            patch.object(sys, "argv", args),
+            patch.object(m, "SheetsClient", return_value=client),
+            patch.object(m, "get_config",
+                         return_value={"sheet_id": "synthetic", "sa_dict": {}}),
+            patch.object(m, "read_records_safely",
+                         side_effect=AssertionError("CLI duplicate queue read")) as read,
+            patch.object(m, "replenish_bank", return_value={
+                "account_id": "night_scout", "status": "QUALITY_EXHAUSTED",
+                "usable_evergreen": 0, "minimum": 30, "would_post": False,
+            }) as bank,
+            redirect_stdout(out),
+        ):
+            rc = m.main()
+        self.assertEqual(rc, 1)
+        self.assertEqual(json.loads(out.getvalue())["status"], "FAILED")
+        read.assert_not_called()
+        client._ensure_tab.assert_not_called()
+        bank.assert_called_once_with(client, "night_scout", apply=True)
+
+    def test_bank_plan_does_not_create_sheets_client_or_read_credentials(self):
+        out = StringIO()
+        with (
+            patch.object(sys, "argv", [
+                "maintain_text_ready_inventory.py", "--account-id", "night_scout",
+                "--evergreen-bank", "--dry-run", "--use-sheets",
+            ]),
+            patch.object(m, "SheetsClient",
+                         side_effect=AssertionError("Plan needs no Sheets")) as client,
+            patch.object(m, "get_config",
+                         side_effect=AssertionError("Plan needs no secrets")) as config,
+            patch.object(m, "replenish_bank", return_value={
+                "account_id": "night_scout", "status": "PLAN_ONLY",
+                "minimum": 30, "would_post": False,
+            }) as bank,
+            redirect_stdout(out),
+        ):
+            rc = m.main()
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(out.getvalue())["status"], "PLAN_ONLY")
+        client.assert_not_called()
+        config.assert_not_called()
+        bank.assert_called_once_with(None, "night_scout", apply=False)
 
     def test_apply_bank_quality_exhaustion_returns_nonzero(self):
         rc, doc, bank, _ = self._run_cli("QUALITY_EXHAUSTED", apply=True)
