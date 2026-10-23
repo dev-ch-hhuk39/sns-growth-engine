@@ -114,6 +114,16 @@ def _report_outcome(plan: dict[str, Any], results: list[dict[str, Any]], *,
             "failed_steps": failed_steps,
             "real_post_allowed": plan["auto_post_gate"]["allowed"],
         }
+        if plan.get("ready_only"):
+            # Static stage categories only, never child stdout/stderr.
+            names = ("TEXT_PREFLIGHT", "AUTO_READY_APPLY", "TEXT_POSTVERIFY")
+            report["stage_statuses"] = [
+                {"stage": name, "status": "PASS" if i < len(results)
+                 and type(results[i].get("returncode")) is int
+                 and results[i]["returncode"] == 0 else
+                 ("NOT_RUN" if i >= len(results) else "FAILED")}
+                for i, name in enumerate(names)
+            ]
     else:
         # The final status must override plan["status"] ("WILL_RUN").
         report = {**plan, "status": status, "results": results}
@@ -137,14 +147,51 @@ def main() -> int:
     parser.add_argument("--skip-real-post", action="store_true")
     parser.add_argument("--confirm-real-post", action="store_true")
     parser.add_argument(
+        "--ready-only", action="store_true",
+        help="Single-account, no-post text READY maintenance; no unrelated media/publisher validation",
+    )
+    parser.add_argument(
         "--summary-only", action="store_true",
         help="Print only fixed, redacted CI status fields; never child output",
     )
     args = parser.parse_args()
 
+    # Explicit authority only for a no-post single-account READY writer.
+    if args.ready_only and not (
+        args.apply and args.confirm_run and args.auto_ready
+        and args.skip_real_post and not args.auto_post
+        and not args.confirm_real_post and args.use_sheets
+        and args.account_id != "all" and 1 <= args.max_ready <= 3
+    ):
+        print(json.dumps({"status": "BLOCKED", "reason": "READY_ONLY_SCOPE_INVALID"}))
+        return 2
     rules = load_rules()
     plan = build_plan(args, rules)
     results: list[dict[str, Any]] = []
+
+    if args.ready_only:
+        plan["ready_only"] = True
+        verify_text = [
+            sys.executable, "scripts/recover_production_sheets_threads_first.py",
+            "--verify-only", "--text-inventory-scope",
+            "--account-id", args.account_id, "--json",
+        ]
+        preflight = _run(verify_text)
+        results.append(preflight)
+        if preflight.get("returncode") != 0:
+            return _report_outcome(plan, results, mode="apply",
+                                   summary_only=args.summary_only)
+        results.append(_run([
+            sys.executable, "scripts/auto_approve_queue.py",
+            "--apply", "--confirm-auto-ready",
+            "--account-id", args.account_id,
+            "--max-ready", str(args.max_ready),
+            "--use-sheets", "--skip-setup",
+        ]))
+        # Reverify even if the READY write returned an ambiguous failure.
+        results.append(_run(verify_text))
+        return _report_outcome(plan, results, mode="apply",
+                               summary_only=args.summary_only)
 
     if not (args.apply and args.confirm_run):
         if args.use_sheets:
