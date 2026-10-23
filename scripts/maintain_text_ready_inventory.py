@@ -892,6 +892,29 @@ def main() -> int:
         return 1
     requested = PREPARED_ACCOUNTS if args.account_id == "all" else (args.account_id,)
     accounts = [account for account in requested if account in PREPARED_ACCOUNTS]
+    # A bounded manual no-post probe can legitimately have NO text slot in
+    # its next few hours. Return an explicit non-coverage SKIP before even
+    # constructing the Sheets writer. Do NOT weaken 24h+ monitoring (which
+    # must still fail closed if a complete daily slot plan is missing).
+    # Evergreen-bank mode is independent of due scheduled slots.
+    if (not args.evergreen_bank and args.account_id != "all"
+            and 1 <= args.horizon_hours < 24):
+        now = datetime.now(JST)
+        if not _required_text_slots(args.account_id, now, now + timedelta(hours=args.horizon_hours)):
+            print(json.dumps({
+                "status": "SKIPPED_NO_DUE_TEXT_SLOTS",
+                "horizon_hours": args.horizon_hours,
+                "text_delivery_coverage_72h_percent": None,
+                "text_delivery_coverage_by_account": {
+                    args.account_id: {"covered_slots": 0, "required_slots": 0}
+                },
+                "coverage_failure_reason": "NO_REQUIRED_TEXT_SLOTS",
+                "reserve_status": "NOT_APPLICABLE",
+                "hard_delivery_failures": [],
+                "results": [],
+                "would_post": False,
+            }, ensure_ascii=False, indent=2))
+            return 0
     queue_rows: list[dict[str, Any]] = []
     if args.use_sheets:
         cfg = get_config()
