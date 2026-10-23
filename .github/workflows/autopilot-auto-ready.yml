@@ -207,12 +207,14 @@ jobs:
             --account-id "$ACCOUNT_ID" --evergreen-bank --apply \
             --confirm-ready-maintenance --use-sheets > "$bank_report" 2> "$bank_stderr"; then
             python3 scripts/ready_evergreen_bank_summary.py \
-              --account-id "$ACCOUNT_ID" --report "$bank_report" || true
+              --account-id "$ACCOUNT_ID" --report "$bank_report" \
+              --private-stderr "$bank_stderr" || true
             echo "[OPERATIONAL_FAILURE] evergreen reserve not verified (redacted)"
             exit 1
           fi
           python3 scripts/ready_evergreen_bank_summary.py \
-            --account-id "$ACCOUNT_ID" --report "$bank_report"
+            --account-id "$ACCOUNT_ID" --report "$bank_report" \
+              --private-stderr "$bank_stderr"
 
       - name: AUTO_READY apply only
         if: env.AUTO_READY_APPLY == 'true'

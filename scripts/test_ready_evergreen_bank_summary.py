@@ -60,6 +60,51 @@ class SafeBankSummaryTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(receipt.split("status=")[-1], "INVALID_COUNTS")
 
+    def test_failed_bank_outputs_bounded_shortfall_and_whitelisted_cause(self):
+        r = self.report()
+        r["status"] = "FAILED"
+        r["evergreen_bank_by_account"]["night_scout"].update(
+            status="QUALITY_EXHAUSTED", usable_evergreen=2, minimum=10)
+        r["results"] = [{"account_id": "night_scout", "attempts": [
+            {"failure_category": "AI_APPROVAL_BUDGET_EXHAUSTED",
+             "public_post_text": "PRIVATE_DRAFT_MUST_NOT_LEAK"},
+        ]}]
+        receipt, okay = mod.redacted_bank_summary(r, "night_scout")
+        self.assertFalse(okay)
+        self.assertIn("usable=2 minimum=10", receipt)
+        self.assertIn("category=AI_APPROVAL_BUDGET_EXHAUSTED", receipt)
+        self.assertNotIn("PRIVATE_DRAFT", receipt)
+
+    def test_unknown_provider_text_never_appears(self):
+        r = self.report()
+        r["status"] = "FAILED"
+        r["evergreen_bank_by_account"]["night_scout"].update(
+            status="QUALITY_EXHAUSTED", usable_evergreen=0, minimum=10)
+        r["results"] = [{"account_id": "night_scout", "attempts": [
+            {"failure_category": "SECRET_TOKEN_UNPUBLISHED_QUEUE_ID"}
+        ]}]
+        receipt, okay = mod.redacted_bank_summary(r, "night_scout")
+        self.assertFalse(okay)
+        self.assertIn("category=UNCLASSIFIED", receipt)
+        self.assertNotIn("SECRET_TOKEN", receipt)
+
+    def test_missing_json_with_private_stderr_classified_not_leaked(self):
+        with tempfile.TemporaryDirectory() as root:
+            out = Path(root) / "report.json"
+            err = Path(root) / "stderr"
+            out.write_text("PRIVATE_UNPUBLISHED_CAPTION", encoding="utf-8")
+            err.write_text("ReadTimeout token=PRIVATE_SESSION_KEY", encoding="utf-8")
+            target = io.StringIO()
+            with patch.object(sys, "argv", [
+                "summary", "--account-id", "night_scout",
+                "--report", str(out), "--private-stderr", str(err),
+            ]), contextlib.redirect_stdout(target):
+                code = mod.main()
+            self.assertEqual(code, 2)
+            self.assertIn("PRIVATE_FAILURE_HINT=PROCESS_TIMEOUT", target.getvalue())
+            self.assertNotIn("PRIVATE_SESSION_KEY", target.getvalue())
+            self.assertNotIn("PRIVATE_UNPUBLISHED_CAPTION", target.getvalue())
+
     def test_private_input_file_never_printed_by_cli(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / "report.json"
