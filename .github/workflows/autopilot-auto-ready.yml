@@ -232,6 +232,7 @@ jobs:
             --confirm-run \
             --account-id "$ACCOUNT_ID" \
             --auto-ready \
+            --ready-only \
             --max-ready "$MAX_READY" \
             --max-posts 1 \
             --use-sheets \
