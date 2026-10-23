@@ -122,13 +122,29 @@ class ReleaseRetentionTests(unittest.TestCase):
                  patch.object(service.audit,"audited_release_inventory",return_value=data),\
                  patch.object(service,"manual_backup_gate") as backup,\
                  patch.object(service.prune,"run",return_value={
-                     "status":"PASS","removed_releases":["f"*40,"1"*40,"e"*40],
+                     "removed_releases":["f"*40,"1"*40,"e"*40],
                      "recovered_bytes":1234}) as prune:
                 report=service.run(confirm=True)
             backup.assert_called_once_with()
             prune.assert_called_once_with(runtime,CURRENT,["f"*40,"1"*40,"e"*40],confirm=True)
             self.assertEqual(report["removed_count"],3)
+            self.assertEqual(report["status"], "PASS")
             self.assertEqual(report["freed_bytes"],1234)
+
+    def test_pruner_incomplete_receipt_is_not_false_success(self):
+        with tempfile.TemporaryDirectory() as directory:
+            runtime=Path(directory)/".buffered-runtime"
+            runtime.mkdir()
+            data=inventory()
+            with patch.object(service,"ROOT",runtime), \
+                 patch.object(service.sys,"platform","linux"), \
+                 patch.object(service.os,"geteuid",return_value=0), \
+                 patch.object(service.audit,"audited_release_inventory",return_value=data), \
+                 patch.object(service,"manual_backup_gate"), \
+                 patch.object(service.prune,"run",return_value={
+                     "removed_releases":["f"*40], "recovered_bytes":1234}):
+                with self.assertRaisesRegex(service.RetentionBlocked,"RECEIPT_MISMATCH"):
+                    service.run(confirm=True)
 
     def test_audit_mode_never_deletes_or_queries_backup_credentials(self):
         with tempfile.TemporaryDirectory() as directory:
