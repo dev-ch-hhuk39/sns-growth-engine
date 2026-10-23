@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+from collections import Counter
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -579,6 +580,48 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
     }
 
 
+def evergreen_active_text_slots(account_id: str) -> list[dict[str, Any]]:
+    """Respect route cycles: an exclusively-media slot needs no text bank."""
+    cycles = policy().get("slot_route_cycles", {}).get(account_id, {})
+    result = []
+    for slot in text_slots(account_id):
+        sid = str(slot["slot_id"])
+        overrides = cycles.get(sid)
+        if slot["post_type"] not in TEXT_POST_TYPES:
+            continue
+        if overrides and not any(route in TEXT_POST_TYPES for route in overrides):
+            continue
+        result.append(slot)
+    return result
+
+
+def evergreen_canonical_slot_health(
+    usable: list[dict[str, Any]], account_id: str, minimum: int,
+) -> tuple[int, dict[str, int], dict[str, int]]:
+    """Count only reserves usable by each currently active text route."""
+    canonical = [
+        str(slot["slot_id"]) for slot in evergreen_active_text_slots(account_id)
+    ]
+    if (not canonical or len(canonical) > 16 or len(set(canonical)) != len(canonical)
+            or minimum < len(canonical) or minimum > 10000):
+        raise ValueError("CANONICAL_EVERGREEN_SLOT_POLICY_INVALID")
+    targets = {
+        slot_id: minimum // len(canonical) + (i < minimum % len(canonical))
+        for i, slot_id in enumerate(canonical)
+    }
+    by_slot = {slot_id: 0 for slot_id in canonical}
+    for entry in usable:
+        queue = entry.get("canonical_queue", {})
+        if not isinstance(queue, dict):
+            continue
+        slot_id = str(queue.get("slot_id") or "")
+        if slot_id in by_slot:
+            by_slot[slot_id] += 1
+    effective = sum(min(by_slot[key], targets[key]) for key in canonical)
+    deficits = {key: max(0, targets[key] - by_slot[key]) for key in canonical}
+    return effective, deficits, by_slot
+
+
 def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     from evergreen_inventory import (
         admit_bank_batch,
@@ -600,6 +643,53 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     initial_bank = records(snapshot, "evergreen_bank")
     initial_posts = records(snapshot, "posted_results")
     initial_slot_runs = records(snapshot, "content_slot_runs")
+    def check(row):
+        return (final_public_post_validator(str(row.get("public_post_text", "")), account_id).get("status") == "PASS"
+                and hybrid_ai_gate_passed(row, build_source_context(snapshot, row))[0]
+                and process_one(snapshot, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN")
+
+    canonical_slots = evergreen_active_text_slots(account_id)
+    canonical_ids = {str(slot["slot_id"]) for slot in canonical_slots}
+
+    def current_bank_health() -> tuple[int, dict[str, int], dict[str, int]]:
+        bank = records(snapshot, "evergreen_bank")
+        queues = records(snapshot, "queue")
+        posted = records(snapshot, "posted_results")
+        unallocated = [
+            row for row in queues
+            if str(row.get("account_id") or "") == account_id
+            and str(row.get("slot_id") or "") in canonical_ids
+            and not (row.get("business_date_jst") or row.get("schedule_date_jst"))
+        ]
+        exact_ids = {str(row.get("queue_id") or "") for row in unallocated}
+        matching_bank = [
+            item for item in bank
+            if str(item.get("account_id") or "") == account_id
+            and str(item.get("queue_id") or "") in exact_ids
+        ]
+        eligible = usable_evergreen_entries(
+            matching_bank, unallocated, posted, account=account_id, now=now,
+            runtime_check=check,
+            similar=lambda a, b: original_text_similarity_guard(a, b)["status"] == "BLOCKED",
+        )
+        return evergreen_canonical_slot_health(eligible, account_id, minimum)
+
+    def sufficient_result(usable: int, release: Any) -> dict[str, Any]:
+        return {
+            "status": "READY_INVENTORY_OK", "account_id": account_id,
+            "usable_evergreen": usable, "minimum": minimum,
+            "expired_allocation_release": release,
+            "attempts": [], "would_post": False,
+        }
+
+
+    # The READY supply is already sufficient: short-circuit BEFORE any write,
+    # expiry-release mutation, broad historical candidate scan or paid AI call.
+    # This is critical for per-2-hour scheduled jobs and Sheets write quota.
+    current, deficits, by_slot = current_bank_health()
+    if current >= minimum:
+        return sufficient_result(current, {"status": "SKIPPED_HEALTHY_BANK"})
+
     from content_slot_runs import business_date
     releases = expired_unpublished_bank_allocations(
         initial_bank, initial_queues, initial_posts, initial_slot_runs,
@@ -608,75 +698,101 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     release_result = release_expired_unpublished_bank_allocations(client, releases, apply=apply)
     if releases:
         prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
-
-    def check(row):
-        return (final_public_post_validator(str(row.get("public_post_text", "")), account_id).get("status") == "PASS"
-                and hybrid_ai_gate_passed(row, build_source_context(snapshot, row))[0]
-                and process_one(snapshot, row, dry_run=True, confirm_real_post=False).get("status") == "DRY_RUN")
+        current, deficits, by_slot = current_bank_health()
+        if current >= minimum:
+            return sufficient_result(current, release_result)
 
     posted_ids = {r.get("queue_id") for r in records(snapshot, "posted_results")}
     existing_bank_ids = {r.get("queue_id") for r in records(snapshot, "evergreen_bank")}
     canonical_queues = records(snapshot, "queue")
+    queue_id_counts = Counter(str(row.get("queue_id") or "") for row in canonical_queues)
     admissions = []
     for row in canonical_queues:
         date = str(row.get("business_date_jst") or row.get("schedule_date_jst") or "")
-        if (sum(r.get("queue_id") == row.get("queue_id") for r in canonical_queues) != 1
+        sid = str(row.get("slot_id") or "")
+        queue_id = str(row.get("queue_id") or "")
+        if (not queue_id or queue_id_counts[queue_id] != 1
                 or row.get("queue_id") in posted_ids or row.get("queue_id") in existing_bank_ids
                 or row.get("generation_mode") not in {"original_text", "beauty_new_text_generation", "new_text_generation"}
                 or not eligible_ready(row, account_id) or has_media(row)
-                or (date and date >= now.date().isoformat()) or not check(row)):
+                or deficits.get(sid, 0) <= sum(
+                    str(saved.get("slot_id") or "") == sid for saved in admissions
+                )
+                or bool(date) or not check(row)):
             continue
         admissions.append(row)
-        if len(admissions) >= minimum:
+        if len(admissions) >= max(0, minimum - current):
             break
     if admissions:
         admit_bank_batch(client, admissions, now=now, runtime_check=check, apply=True)
         prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
 
-    def count_usable():
-        bank, queues, posted = records(snapshot, "evergreen_bank"), records(snapshot, "queue"), records(snapshot, "posted_results")
-        unallocated = [r for r in queues if not (r.get("business_date_jst") or r.get("schedule_date_jst"))]
-        return len(usable_evergreen_entries(
-            bank, unallocated, posted, account=account_id, now=now,
-            runtime_check=check,
-            similar=lambda a, b: original_text_similarity_guard(a, b)["status"] == "BLOCKED",
-        ))
-
-    current, attempts = count_usable(), []
-    # Temporary future allocation prevents an approved candidate from becoming
-    # today's publish target during the two-phase bank admission.
-    slot = next((r for r in text_slots(account_id) if r["post_type"] == "original_text"), text_slots(account_id)[0])
-    slot = {**slot, "business_date_jst": (now.date() + timedelta(days=7)).isoformat()}
+    current, deficits, by_slot = current_bank_health()
+    attempts: list[dict[str, Any]] = []
+    # New bank candidates must be generated for an actual immutable slot_id,
+    # not an account-wide generic reserve identity.
+    future_date = (now.date() + timedelta(days=7)).isoformat()
     theme_variants = evergreen_theme_variants(account_id)
+    exhausted_slots: set[str] = set()
     for attempt_number in range(10):
         if current >= minimum:
             break
+        possible = [
+            slot for slot in canonical_slots
+            if deficits.get(str(slot["slot_id"]), 0) > 0
+            and str(slot["slot_id"]) not in exhausted_slots
+        ]
+        if not possible:
+            break
+        selected = min(
+            possible,
+            key=lambda item: (
+                by_slot.get(str(item["slot_id"]), 0),
+                -deficits[str(item["slot_id"])],
+                canonical_slots.index(item),
+            ),
+        )
+        sid = str(selected["slot_id"])
+        # The original-text fallback is approved for reference and PDCA
+        # delivery, but the immutable slot identity must remain canonical.
+        target = {
+            **selected,
+            "post_type": "original_text",
+            "business_date_jst": future_date,
+        }
         if theme_variants:
-            slot["theme"] = theme_variants[attempt_number % len(theme_variants)]
-        result = replenish(account_id, slot, apply=True, required=min(3, minimum-current), offline_only=False)
-        attempts.append({"status": result["status"], "queue_ids": result.get("queue_ids", []),
-                         "failure_category": result.get("failure_category", ""),
-                         "theme_variant": slot.get("theme", ""),
-                         "generation_attempts": result.get("attempts", [])})
+            target["theme"] = theme_variants[attempt_number % len(theme_variants)]
+        result = replenish(
+            account_id, target, apply=True,
+            required=min(3, deficits[sid]), offline_only=False,
+        )
+        attempts.append({
+            "status": result["status"], "slot_id": sid,
+            "queue_ids": result.get("queue_ids", []),
+            "failure_category": result.get("failure_category", ""),
+            "generation_attempts": result.get("attempts", []),
+        })
         if result.get("queue_ids"):
             prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         generated_rows = records(snapshot, "queue") if result.get("queue_ids") else []
         admissions = []
         for qid in result.get("queue_ids", []):
             matches = [r for r in generated_rows if r.get("queue_id") == qid]
-            if len(matches) != 1 or not eligible_ready(matches[0], account_id) or not check(matches[0]):
+            if (len(matches) != 1
+                    or str(matches[0].get("slot_id") or "") != sid
+                    or not eligible_ready(matches[0], account_id)
+                    or not check(matches[0])):
                 raise RuntimeError("EVERGREEN_APPROVAL_READ_AFTER_WRITE_FAILED")
             admissions.append(matches[0])
         if admissions:
             admit_bank_batch(client, admissions, now=now, runtime_check=check, apply=True)
-            # Generation uses a temporary future allocation so the queue cannot
-            # race today's publisher before bank admission.  Once the bank row
-            # is durable, return the canonical queue to the unallocated pool.
             release_temporary_bank_allocations(client, admissions)
             prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
-        current = count_usable()
-        # One timeout/rate limit must not start nine more paid model calls
-        # in this SAME evergreen top-up. The failed target remains visible.
+        updated, deficits, by_slot = current_bank_health()
+        if updated <= current:
+            exhausted_slots.add(sid)
+        current = updated
+        # A provider failure/rate-limit must not trigger more paid attempts.
         if hard_replenishment_blocker(result) or paid_generation_pause_required(result):
             break
     return {"status": "READY_INVENTORY_OK" if current >= minimum else "QUALITY_EXHAUSTED",
