@@ -733,26 +733,30 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     # not an account-wide generic reserve identity.
     future_date = (now.date() + timedelta(days=7)).isoformat()
     theme_variants = evergreen_theme_variants(account_id)
-    exhausted_slots: set[str] = set()
+    # Quality rejection may still try the existing bounded ten distinct themes.
+    # Prefer slots attempted least so a single hard-to-satisfy route cannot
+    # monopolize the refill budget. Provider/paid-budget blockers still stop.
+    attempts_by_slot: dict[str, int] = {}
     for attempt_number in range(10):
         if current >= minimum:
             break
         possible = [
             slot for slot in canonical_slots
             if deficits.get(str(slot["slot_id"]), 0) > 0
-            and str(slot["slot_id"]) not in exhausted_slots
         ]
         if not possible:
             break
         selected = min(
             possible,
             key=lambda item: (
+                attempts_by_slot.get(str(item["slot_id"]), 0),
                 by_slot.get(str(item["slot_id"]), 0),
                 -deficits[str(item["slot_id"])],
                 canonical_slots.index(item),
             ),
         )
         sid = str(selected["slot_id"])
+        attempts_by_slot[sid] = attempts_by_slot.get(sid, 0) + 1
         # The original-text fallback is approved for reference and PDCA
         # delivery, but the immutable slot identity must remain canonical.
         target = {
@@ -789,10 +793,9 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             release_temporary_bank_allocations(client, admissions)
             prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         updated, deficits, by_slot = current_bank_health()
-        if updated <= current:
-            exhausted_slots.add(sid)
         current = updated
         # A provider failure/rate-limit must not trigger more paid attempts.
+        # Editorial QUALITY_EXHAUSTED alone can try a different bounded theme.
         if hard_replenishment_blocker(result) or paid_generation_pause_required(result):
             break
     return {"status": "READY_INVENTORY_OK" if current >= minimum else "QUALITY_EXHAUSTED",
