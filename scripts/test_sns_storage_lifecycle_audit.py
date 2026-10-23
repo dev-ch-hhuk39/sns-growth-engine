@@ -62,7 +62,7 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         self.assertIsNone(report["pointers"]["pending"])
         self.assertEqual(report["emergency_recovery_sha"], E)
         self.assertEqual(set(report["review_candidates"]), {O, S})
-        self.assertEqual(report["max_manual_releases_per_approval"], 2)
+        self.assertEqual(report["max_manual_releases_per_approval"], 4)
         self.assertEqual(report["grace_period_hold_count"], 0)
         self.assertTrue(all(
             candidate["cleanup_eligible_after_utc"] for candidate in report["releases"]
@@ -116,11 +116,13 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         self.assertEqual(report["review_candidates"], [S])
 
     def test_recent_and_incomplete_releases_protected(self):
+        # The independent emergency must not be the same recent candidate.
+        os.utime(self.releases / E, (self.now - 3600, self.now - 3600))
         item = self.releases / O
-        os.utime(item, (self.now - 4 * 86400, self.now - 4 * 86400))
+        os.utime(item, (self.now - 12 * 3600, self.now - 12 * 3600))
         report = audited_release_inventory(self.root, now=self.now)
         self.assertEqual(next(x for x in report["releases"] if x["sha"] == O)["protected_reason"],
-                         "SEVEN_DAY_GRACE")
+                         "ONE_DAY_GRACE")
         (self.releases / S / ".venv" / "bin" / "python").unlink()
         report = audited_release_inventory(self.root, now=self.now)
         self.assertEqual(next(x for x in report["releases"] if x["sha"] == S)["protected_reason"],
@@ -137,16 +139,16 @@ class StorageLifecycleReadOnly(unittest.TestCase):
 
     def test_recent_marker_verified_partial_is_held_for_seven_days(self):
         (self.releases / O / ".venv" / "bin" / "python").unlink()
-        os.utime(self.releases / O, (self.now - 3 * 86400, self.now - 3 * 86400))
+        os.utime(self.releases / O, (self.now - 12 * 3600, self.now - 12 * 3600))
         report = audited_release_inventory(self.root, now=self.now)
         record = next(x for x in report["releases"] if x["sha"] == O)
-        self.assertEqual(record["protected_reason"], "INCOMPLETE_SEVEN_DAY_GRACE")
+        self.assertEqual(record["protected_reason"], "INCOMPLETE_ONE_DAY_GRACE")
         self.assertEqual(
             len([x for x in report["grace_period_hold_sha"] if x["sha"] == O]), 1
         )
         self.assertIsNotNone(record["cleanup_eligible_after_utc"])
         self.assertNotIn(O, report["review_candidates"])
-        self.assertEqual(report["minimum_release_age_days"], 7)
+        self.assertEqual(report["minimum_release_age_days"], 1)
 
     def test_fails_closed_on_pointer_escape_and_broken_pointer(self):
         (self.root / "current").unlink()

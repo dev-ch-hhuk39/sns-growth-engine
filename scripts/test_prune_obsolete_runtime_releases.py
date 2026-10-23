@@ -140,8 +140,8 @@ class PruneReleaseTests(unittest.TestCase):
         target = self.root / "releases" / OLDER
         now = time.time()
         # Another healthy emergency must remain newer than the target.
-        os.utime(self.root / "releases" / OLD, (now - 86400, now - 86400))
-        os.utime(target, (now - 4 * 86400, now - 4 * 86400))
+        os.utime(self.root / "releases" / OLD, (now - 3600, now - 3600))
+        os.utime(target, (now - 12 * 3600, now - 12 * 3600))
         with self.assertRaisesRegex(RuntimeError, "target_release_too_recent"):
             candidate_state(self.root, CURRENT, [OLDER])
 
@@ -174,7 +174,7 @@ class PruneReleaseTests(unittest.TestCase):
         self.assertEqual(state["targets"], [str(target)])
         self.assertEqual(state["emergency"], OLD)
         now = time.time()
-        os.utime(target, (now - 2 * 86400, now - 2 * 86400))
+        os.utime(target, (now - 12 * 3600, now - 12 * 3600))
         with self.assertRaisesRegex(RuntimeError, "target_release_too_recent"):
             candidate_state(self.root, CURRENT, [OLDEST])
 

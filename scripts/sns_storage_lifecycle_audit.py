@@ -23,7 +23,7 @@ DEFAULT_ROOT = DEFAULT_RUNNER / ".buffered-runtime"
 BASELINE = Path(__file__).resolve().parents[1] / "config" / "sns_storage_lifecycle_baseline_20261020.json"
 MEDIA_POLICY_CONFIG = Path(__file__).resolve().parents[1] / "config" / "media_growth_engine.json"
 SHA = re.compile(r"[0-9a-f]{40}\Z")
-MIN_RELEASE_AGE_SECONDS = 7 * 86400
+MIN_RELEASE_AGE_SECONDS = 24 * 3600
 MIN_STAGE_FREE_BYTES = 9 * 1024**3
 MIN_POST_STAGE_FREE_BYTES = 8 * 1024**3
 
@@ -165,8 +165,8 @@ def audited_release_inventory(root: Path, *, now: float | None = None) -> dict:
             item["protected_reason"] = "FORENSIC_HOLD_UNVERIFIED_IDENTITY"
         elif age < MIN_RELEASE_AGE_SECONDS:
             item["protected_reason"] = (
-                "INCOMPLETE_SEVEN_DAY_GRACE"
-                if not item["rebuildable_venv_present"] else "SEVEN_DAY_GRACE"
+                "INCOMPLETE_ONE_DAY_GRACE"
+                if not item["rebuildable_venv_present"] else "ONE_DAY_GRACE"
             )
         else:
             # Exact marker-matched stale partials can enter the SAME guarded
@@ -191,18 +191,18 @@ def audited_release_inventory(root: Path, *, now: float | None = None) -> dict:
             for i in candidates
         ],
         "grace_period_hold_count": sum(
-            i["protected_reason"] in ("SEVEN_DAY_GRACE", "INCOMPLETE_SEVEN_DAY_GRACE")
+            i["protected_reason"] in ("ONE_DAY_GRACE", "INCOMPLETE_ONE_DAY_GRACE")
             for i in items
         ),
         "grace_period_hold_sha": [
             {"sha": i["sha"], "eligible_after_utc": i["cleanup_eligible_after_utc"]}
             for i in items if i["protected_reason"] in (
-                "SEVEN_DAY_GRACE", "INCOMPLETE_SEVEN_DAY_GRACE"
+                "ONE_DAY_GRACE", "INCOMPLETE_ONE_DAY_GRACE"
             )
         ],
         "preliminary_reclaim_bytes": sum(i["allocated_bytes"] for i in candidates),
-        "max_manual_releases_per_approval": 2,
-        "minimum_release_age_days": 7,
+        "max_manual_releases_per_approval": 4,
+        "minimum_release_age_days": 1,
     }
 
 
