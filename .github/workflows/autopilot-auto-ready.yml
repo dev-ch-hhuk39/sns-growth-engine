@@ -197,6 +197,10 @@ jobs:
               --private-stderr "$ready_stderr"
 
       - name: Refill validated non-AI emergency bank
+        id: evergreen_refill
+        # Preserve the bank failure signal, but allow the independent safe
+        # delivery/verify path to complete before the job fails operationally.
+        continue-on-error: true
         # Manual 6h no-post canary does not run long evergreen-bank top-up.
         if: success() && env.AUTO_READY_APPLY == 'true' && env.HORIZON_HOURS == '24' && steps.preparation_guard.outcome == 'success'
         run: |
@@ -216,6 +220,10 @@ jobs:
             --account-id "$ACCOUNT_ID" --report "$bank_report" \
               --private-stderr "$bank_stderr"
 
+      - name: Verify Sheets after failed evergreen reserve
+        if: env.AUTO_READY_APPLY == 'true' && steps.evergreen_refill.outcome == 'failure'
+        run: python3 scripts/recover_production_sheets_threads_first.py --verify-only --text-inventory-scope
+
       - name: AUTO_READY apply only
         if: env.AUTO_READY_APPLY == 'true'
         run: |
@@ -233,3 +241,9 @@ jobs:
       - name: Verify Sheets after AUTO_READY
         if: env.AUTO_READY_APPLY == 'true'
         run: python3 scripts/recover_production_sheets_threads_first.py --verify-only --text-inventory-scope
+
+      - name: Report failed evergreen reserve after delivery check
+        if: always() && env.AUTO_READY_APPLY == 'true' && steps.evergreen_refill.outcome == 'failure'
+        run: |
+          echo "[OPERATIONAL_FAILURE] evergreen bank below canonical slot target; no SNS post"
+          exit 1
