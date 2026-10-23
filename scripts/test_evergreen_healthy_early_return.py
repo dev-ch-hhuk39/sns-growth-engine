@@ -132,6 +132,30 @@ class HealthyBankEarlyReturnTests(unittest.TestCase):
         self.assertEqual(deficits, {"beauty_1130": 21})
         self.assertEqual(by_slot, {"beauty_1130": 9})
 
+    def test_normal_quality_rejection_spreads_ten_bounded_trials_across_slots(self):
+        from collections import Counter
+        client = self.owner()
+        seen = []
+        def reject(_account, target, **_kwargs):
+            seen.append((target["slot_id"], target.get("theme", "")))
+            return {"status": "QUALITY_EXHAUSTED", "queue_ids": [],
+                    "failure_category": "QUALITY_EXHAUSTED", "attempts": []}
+        with (
+            patch.object(process_threads_queue, "records", return_value=[]),
+            patch.object(module, "usable_evergreen_entries", return_value=[]),
+            patch.object(evergreen_inventory, "expired_unpublished_bank_allocations",
+                         return_value=[]),
+            patch.object(evergreen_inventory, "release_expired_unpublished_bank_allocations",
+                         return_value={"status": "SKIPPED"}),
+            patch.object(module, "replenish", side_effect=reject),
+        ):
+            result = module.replenish_bank(client, "night_scout", apply=True)
+        self.assertEqual(len(seen), 10)
+        self.assertEqual(len({theme for _slot, theme in seen}), 10)
+        self.assertEqual(sorted(Counter(slot for slot, _theme in seen).values()), [3, 3, 4])
+        self.assertEqual(result["status"], "QUALITY_EXHAUSTED")
+        self.assertFalse(result["would_post"])
+
     def test_bank_plan_never_creates_runtime_client(self):
         owner = self.owner()
         result = module.replenish_bank(owner, "beauty_account", apply=False)
