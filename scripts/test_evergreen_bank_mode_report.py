@@ -144,6 +144,66 @@ class EvergreenBankModeContracts(unittest.TestCase):
         client._ensure_tab.assert_not_called()
         bank.assert_called_once_with(client, "night_scout", apply=True)
 
+    def test_explicit_bank_reuse_only_invokes_no_ai_bank_path(self):
+        client = Mock()
+        output = StringIO()
+        argv = [
+            "maintain_text_ready_inventory.py", "--account-id", "beauty_account",
+            "--evergreen-bank", "--bank-reuse-only", "--apply",
+            "--confirm-ready-maintenance", "--use-sheets",
+        ]
+        with (
+            patch.object(sys, "argv", argv),
+            patch.object(m, "SheetsClient", return_value=client),
+            patch.object(m, "get_config", return_value={
+                "sheet_id": "synthetic", "sa_dict": {},
+            }),
+            patch.object(m, "replenish_bank", return_value={
+                "status": "QUALITY_EXHAUSTED", "account_id": "beauty_account",
+                "usable_evergreen": 25, "minimum": 30, "reuse_only": True,
+                "failure_category": "NO_VALIDATED_BANK_CANDIDATE",
+                "would_post": False, "attempts": [],
+            }) as bank,
+            redirect_stdout(output),
+        ):
+            code = m.main()
+        doc = json.loads(output.getvalue())
+        self.assertEqual(code, 1)
+        self.assertEqual(doc["status"], "FAILED")
+        self.assertEqual(doc["mode"], "EVERGREEN_BANK")
+        self.assertFalse(doc["would_post"])
+        bank.assert_called_once_with(
+            client, "beauty_account", apply=True, reuse_only=True,
+        )
+
+    def test_bank_reuse_only_requires_confirmed_bank_apply(self):
+        invalid = (
+            ["--bank-reuse-only", "--evergreen-bank", "--dry-run"],
+            ["--bank-reuse-only", "--apply", "--confirm-ready-maintenance",
+             "--use-sheets"],
+            ["--bank-reuse-only", "--evergreen-bank", "--apply",
+             "--confirm-ready-maintenance"],
+            ["--bank-reuse-only", "--evergreen-bank", "--apply",
+             "--confirm-ready-maintenance", "--use-sheets",
+             "--reuse-only"],
+        )
+        for tail in invalid:
+            with self.subTest(tail=tail):
+                out = StringIO()
+                with (
+                    patch.object(sys, "argv", [
+                        "maintain_text_ready_inventory.py",
+                        "--account-id", "beauty_account", *tail,
+                    ]),
+                    patch.object(m, "get_config",
+                                 side_effect=AssertionError("No credentials")) as cfg,
+                    redirect_stdout(out),
+                ):
+                    code = m.main()
+                self.assertEqual(code, 1)
+                self.assertEqual(json.loads(out.getvalue())["status"], "BLOCKED")
+                cfg.assert_not_called()
+
     def test_bank_plan_does_not_create_sheets_client_or_read_credentials(self):
         out = StringIO()
         with (

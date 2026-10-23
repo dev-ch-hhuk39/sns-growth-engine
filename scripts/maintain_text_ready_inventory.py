@@ -781,7 +781,8 @@ def evergreen_canonical_slot_health(
     return effective, deficits, by_slot
 
 
-def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
+def replenish_bank(client, account_id: str, *, apply: bool,
+                   reuse_only: bool = False) -> dict[str, Any]:
     from evergreen_inventory import (
         expired_unpublished_bank_allocations,
         release_expired_unpublished_bank_allocations,
@@ -905,6 +906,17 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
         prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
 
     current, deficits, by_slot = current_bank_health()
+    if reuse_only:
+        # Explicitly approved low-cost bank recovery. Even with a remaining
+        # shortfall, do not call the paid/AI generator or claim a false PASS.
+        return {
+            "status": "READY_INVENTORY_OK" if current >= minimum else "QUALITY_EXHAUSTED",
+            "account_id": account_id, "usable_evergreen": current,
+            "minimum": minimum, "reuse_only": True,
+            "failure_category": "" if current >= minimum else "NO_VALIDATED_BANK_CANDIDATE",
+            "expired_allocation_release": release_result,
+            "attempts": [], "would_post": False,
+        }
     attempts: list[dict[str, Any]] = []
     # New bank candidates must be generated for an actual immutable slot_id,
     # not an account-wide generic reserve identity.
@@ -1063,6 +1075,10 @@ def main() -> int:
     parser.add_argument("--horizon-hours", type=int, default=policy()["text_horizon_hours"])
     parser.add_argument("--evergreen-bank", action="store_true")
     parser.add_argument(
+        "--bank-reuse-only", action="store_true",
+        help="Confirmed evergreen-bank Apply using existing approved candidates only; no AI generation",
+    )
+    parser.add_argument(
         "--reuse-only", action="store_true",
         help="Approved bank allocations only; never create content or call paid AI",
     )
@@ -1085,6 +1101,16 @@ def main() -> int:
         return 1
     if args.reuse_only and (not args.apply or not args.use_sheets or args.evergreen_bank):
         print(json.dumps({"status": "BLOCKED", "reason": "reuse_only_requires_single_account_apply_without_evergreen_bank", "would_post": False}))
+        return 1
+    if args.bank_reuse_only and not (
+        args.apply and args.use_sheets and args.evergreen_bank
+        and args.account_id in PREPARED_ACCOUNTS and not args.reuse_only
+    ):
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "bank_reuse_only_requires_single_account_confirmed_bank_apply",
+            "would_post": False,
+        }))
         return 1
     if not 1 <= args.horizon_hours <= 168:
         print(json.dumps({"status": "BLOCKED", "reason": "inventory_horizon_must_be_1_to_168_hours", "would_post": False}))
@@ -1137,7 +1163,12 @@ def main() -> int:
     coverage_by_account: dict[str, dict[str, int]] = {}
     for account_id in accounts:
         if args.evergreen_bank:
-            results.append(replenish_bank(client if args.use_sheets else None, account_id, apply=args.apply))
+            kwargs: dict[str, Any] = {"apply": args.apply}
+            if args.bank_reuse_only:
+                kwargs["reuse_only"] = True
+            results.append(replenish_bank(
+                client if args.use_sheets else None, account_id, **kwargs,
+            ))
             continue
         now = datetime.now(JST)
         budget_blocked = False

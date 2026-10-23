@@ -197,6 +197,41 @@ class StagedRecoveryIntegrationTests(unittest.TestCase):
         self.assertFalse(outcome["would_post"])
 
 
+class ReuseOnlyShortfallTests(unittest.TestCase):
+    def test_bank_only_recovery_shortfall_never_calls_paid_generator(self):
+        client = Mock()
+        client._ensure_tab = Mock()
+        with (
+            patch.object(maintenance, "policy", return_value={
+                "minimum_evergreen_per_account": 30}),
+            patch.object(maintenance, "evergreen_active_text_slots",
+                         return_value=[{"slot_id": SLOT, "post_type": "original_text"}]),
+            patch.object(maintenance, "evergreen_canonical_slot_health",
+                         return_value=(0, {SLOT: 30}, {SLOT: 0})),
+            patch.object(maintenance, "usable_evergreen_entries", return_value=[]),
+            patch.object(process_threads_queue, "records", return_value=[]),
+            patch.object(evergreen_inventory, "expired_unpublished_bank_allocations",
+                         return_value=[]),
+            patch.object(evergreen_inventory, "release_expired_unpublished_bank_allocations",
+                         return_value={"status": "SKIPPED"}),
+            patch.object(maintenance, "prime_readonly_record_cache"),
+            patch.object(maintenance, "replenish",
+                         side_effect=AssertionError("Paid AI call blocked")) as generation,
+            patch.object(maintenance, "verified_bank_admission") as admission,
+        ):
+            result = maintenance.replenish_bank(
+                client, ACCOUNT, apply=True, reuse_only=True)
+        self.assertEqual(result["status"], "QUALITY_EXHAUSTED")
+        self.assertEqual(result["usable_evergreen"], 0)
+        self.assertEqual(result["minimum"], 30)
+        self.assertEqual(result["failure_category"], "NO_VALIDATED_BANK_CANDIDATE")
+        self.assertEqual(result["attempts"], [])
+        self.assertTrue(result["reuse_only"])
+        self.assertFalse(result["would_post"])
+        generation.assert_not_called()
+        admission.assert_not_called()
+
+
 class GeneratedBankIntegrationTests(unittest.TestCase):
     def run_bank(self, *, status: str, runtime_gate=True):
         queue = ready(status=status)

@@ -51,6 +51,22 @@ the historical failure (the private stdout/ID was deliberately not logged).
    appends bank evidence and verifies the canonical queue + bank
    read-after-write. A failed receipt never increases usable inventory.
 
+## Explicit reuse-only recovery operator mode
+
+Use the already confirmed account-scoped bank Apply, plus the new
+--bank-reuse-only switch:
+
+    python3 scripts/maintain_text_ready_inventory.py --account-id beauty_account --evergreen-bank --bank-reuse-only --apply --confirm-ready-maintenance --use-sheets
+
+The mode performs the same normal read-only source validation and
+canonical bank read-after-write, including bounded staged reserve rescue,
+but refuses to call any paid content generator. If 30 approved reserves
+are still not present, the overall command must exit nonzero with a
+QUALITY_EXHAUSTED result, even when six valid candidates were safely
+recovered. Only actual verified usable_evergreen numbers may be
+reported. The original non-bank --reuse-only retains its
+pre-existing separate constraints; it is NOT silently repurposed.
+
 ## Explicit non-goals and operational acceptance
 - No real Threads publishing or cross-app writes; P0/post switches OFF.
 - No quality/review bypass, unknown-ID adoption, cross-slot migration,

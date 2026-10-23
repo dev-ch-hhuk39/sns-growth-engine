@@ -37,6 +37,9 @@ def safe_bank_failure_category(report: dict, account: str) -> str:
     for row in results:
         if not isinstance(row, dict) or row.get("account_id") != account:
             continue
+        direct = row.get("failure_category")
+        if isinstance(direct, str) and direct in SAFE_BANK_FAILURES:
+            return direct
         attempts = row.get("attempts")
         if not isinstance(attempts, list) or len(attempts) > 20:
             continue
