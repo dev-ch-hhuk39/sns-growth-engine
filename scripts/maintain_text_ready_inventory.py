@@ -6,6 +6,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -62,6 +63,87 @@ def verified_bank_admission(
             or receipt["count"] != len(rows)):
         raise RuntimeError("EVERGREEN_ADMISSION_RECEIPT_UNVERIFIED")
     return receipt
+
+
+def classified_generated_bank_admissions(
+    rows: list[dict[str, Any]], queue_ids: Any, account_id: str,
+    slot_id: str, runtime_check: Any,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """Never admit an unverified generated READY; return fixed reason counts.
+
+    A generator's success is NOT proof of the durable queue or downstream
+    approval. Reasons contain only fixed codes, never queue IDs or drafts.
+    Ambiguous or partially failed batches are not admitted.
+    """
+    if (type(queue_ids) is not list or len(queue_ids) > 3
+            or any(type(qid) is not str or not 1 <= len(qid) <= 256
+                   or any(not 33 <= ord(ch) <= 126 for ch in qid)
+                   for qid in queue_ids)
+            or len(set(queue_ids)) != len(queue_ids)):
+        return [], {"GENERATED_ID_LIST_UNVERIFIABLE": 1}
+
+    candidates: list[dict[str, Any]] = []
+    reasons: Counter[str] = Counter()
+    for qid in queue_ids:
+        matches = [row for row in rows if row.get("queue_id") == qid]
+        if len(matches) != 1:
+            reasons["GENERATED_READBACK_UNVERIFIED"] += 1
+            continue
+        row = matches[0]
+        if (str(row.get("account_id") or "") != account_id
+                or str(row.get("slot_id") or "") != slot_id):
+            reasons["GENERATED_IDENTITY_MISMATCH"] += 1
+        elif str(row.get("status") or "") != "READY":
+            reasons["GENERATED_NOT_READY"] += 1
+        elif not eligible_ready(row, account_id) or has_media(row):
+            reasons["GENERATED_APPROVAL_INCOMPLETE"] += 1
+        elif not runtime_check(row):
+            reasons["GENERATED_RUNTIME_GATE_REJECTED"] += 1
+        else:
+            candidates.append(row)
+    # A mixed batch is uncertain; no partial bank append is authorized.
+    return ([], dict(sorted(reasons.items()))) if reasons else (candidates, {})
+
+
+def is_explicit_staged_beauty_reserve(
+    row: dict[str, Any], *, now: datetime,
+    posted_ids: set[str], bank_ids: set[str], used_run_ids: set[str],
+) -> bool:
+    """Recover only uncommitted, distinctly marked Beauty reserve drafts.
+
+    The reserve generator uses _reserve_1/_reserve_2 IDs; its candidate 0
+    has NO reserve marker and may be an intended scheduled primary post.
+    Never rewrite a primary, already posted, used, mismatched, or near-due
+    queue merely to improve a reserve KPI.
+    """
+    if (str(row.get("account_id") or "") != "beauty_account"
+            or str(row.get("slot_id") or "") != "beauty_1130"
+            or row.get("generated_by") != "prepare_beauty_review_candidates.py"
+            or row.get("status") != "READY"):
+        return False
+    queue_id = row.get("queue_id")
+    if type(queue_id) is not str:
+        return False
+    match = re.fullmatch(
+        r"q_beauty_(\d{8})_1_chadult_v1_reserve_[12]_[0-9a-f]{8}"
+        r"(?:_r_[0-9a-f]{8})?",
+        queue_id,
+    )
+    if not match or queue_id in posted_ids | bank_ids | used_run_ids:
+        return False
+    business_date = str(row.get("business_date_jst") or "")
+    schedule_date = str(row.get("schedule_date_jst") or "")
+    try:
+        staged_date = datetime.strptime(match.group(1), "%Y%m%d").date()
+    except ValueError:
+        return False
+    # Bound recovery to previous reserve-run dates (T+2 through T+7).
+    # Anything imminently due, past-due, or farther out is untouched.
+    return (
+        2 <= (staged_date - now.date()).days <= 7
+        and business_date == staged_date.isoformat()
+        and schedule_date in ("", business_date)
+    )
 
 
 def release_temporary_bank_allocations(client: Any, rows: list[dict[str, Any]]) -> None:
@@ -699,7 +781,8 @@ def evergreen_canonical_slot_health(
     return effective, deficits, by_slot
 
 
-def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
+def replenish_bank(client, account_id: str, *, apply: bool,
+                   reuse_only: bool = False) -> dict[str, Any]:
     from evergreen_inventory import (
         expired_unpublished_bank_allocations,
         release_expired_unpublished_bank_allocations,
@@ -787,8 +870,12 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
         if current >= minimum:
             return sufficient_result(current, release_result)
 
-    posted_ids = {r.get("queue_id") for r in records(snapshot, "posted_results")}
-    existing_bank_ids = {r.get("queue_id") for r in records(snapshot, "evergreen_bank")}
+    posted_ids = {str(r.get("queue_id") or "") for r in records(snapshot, "posted_results")}
+    existing_bank_ids = {str(r.get("queue_id") or "") for r in records(snapshot, "evergreen_bank")}
+    used_slot_run_ids = {
+        str(r.get(key) or "") for r in initial_slot_runs
+        for key in ("queue_id", "ready_queue_id", "selected_queue_id", "candidate_queue_id")
+    }
     canonical_queues = records(snapshot, "queue")
     queue_id_counts = Counter(str(row.get("queue_id") or "") for row in canonical_queues)
     admissions = []
@@ -803,7 +890,13 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
                 or deficits.get(sid, 0) <= sum(
                     str(saved.get("slot_id") or "") == sid for saved in admissions
                 )
-                or bool(date) or not check(row)):
+                or (bool(date) and not is_explicit_staged_beauty_reserve(
+                    row, now=now,
+                    posted_ids=posted_ids,
+                    bank_ids=existing_bank_ids,
+                    used_run_ids=used_slot_run_ids,
+                ))
+                or not check(row)):
             continue
         admissions.append(row)
         if len(admissions) >= max(0, minimum - current):
@@ -813,6 +906,17 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
         prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
 
     current, deficits, by_slot = current_bank_health()
+    if reuse_only:
+        # Explicitly approved low-cost bank recovery. Even with a remaining
+        # shortfall, do not call the paid/AI generator or claim a false PASS.
+        return {
+            "status": "READY_INVENTORY_OK" if current >= minimum else "QUALITY_EXHAUSTED",
+            "account_id": account_id, "usable_evergreen": current,
+            "minimum": minimum, "reuse_only": True,
+            "failure_category": "" if current >= minimum else "NO_VALIDATED_BANK_CANDIDATE",
+            "expired_allocation_release": release_result,
+            "attempts": [], "would_post": False,
+        }
     attempts: list[dict[str, Any]] = []
     # New bank candidates must be generated for an actual immutable slot_id,
     # not an account-wide generic reserve identity.
@@ -861,18 +965,38 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
             "failure_category": result.get("failure_category", ""),
             "generation_attempts": result.get("attempts", []),
         })
-        if result.get("queue_ids"):
+        generated_ids = result.get("queue_ids", [])
+        if not generated_ids and result.get("status") == "READY_REPLENISHED":
+            attempts[-1]["status"] = "READBACK_REJECTED"
+            attempts[-1]["failure_category"] = "GENERATED_READBACK_UNVERIFIED"
+            attempts[-1]["verification_rejection_counts"] = {
+                "GENERATION_REPORTED_NO_IDS": 1,
+            }
+            break
+        if generated_ids:
             prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
-        generated_rows = records(snapshot, "queue") if result.get("queue_ids") else []
-        admissions = []
-        for qid in result.get("queue_ids", []):
-            matches = [r for r in generated_rows if r.get("queue_id") == qid]
-            if (len(matches) != 1
-                    or str(matches[0].get("slot_id") or "") != sid
-                    or not eligible_ready(matches[0], account_id)
-                    or not check(matches[0])):
-                raise RuntimeError("EVERGREEN_APPROVAL_READ_AFTER_WRITE_FAILED")
-            admissions.append(matches[0])
+        generated_rows = records(snapshot, "queue") if generated_ids else []
+        admissions, rejected = classified_generated_bank_admissions(
+            generated_rows, generated_ids, account_id, sid, check,
+        )
+        if rejected:
+            # A subprocess may have created a draft without making it
+            # publishable or even visible. Count no reserve and never
+            # approve a partially verified batch. Do not repeat a paid
+            # provider request when a durable readback or human approval
+            # is uncertain. Pure editorial rejection may use the existing
+            # at-most-ten-theme quality retry budget.
+            attempt = attempts[-1]
+            attempt["verification_rejection_counts"] = rejected
+            attempt["status"] = "READBACK_REJECTED"
+            attempt["failure_category"] = (
+                "GENERATED_RUNTIME_GATE_REJECTED"
+                if set(rejected) == {"GENERATED_RUNTIME_GATE_REJECTED"}
+                else "GENERATED_READBACK_UNVERIFIED"
+            )
+            if attempt["failure_category"] != "GENERATED_RUNTIME_GATE_REJECTED":
+                break
+            continue
         if admissions:
             # One canonical batch transaction already releases temporary
             # dates and verifies queue + reserve readback. Never rewrite
@@ -951,6 +1075,10 @@ def main() -> int:
     parser.add_argument("--horizon-hours", type=int, default=policy()["text_horizon_hours"])
     parser.add_argument("--evergreen-bank", action="store_true")
     parser.add_argument(
+        "--bank-reuse-only", action="store_true",
+        help="Confirmed evergreen-bank Apply using existing approved candidates only; no AI generation",
+    )
+    parser.add_argument(
         "--reuse-only", action="store_true",
         help="Approved bank allocations only; never create content or call paid AI",
     )
@@ -973,6 +1101,16 @@ def main() -> int:
         return 1
     if args.reuse_only and (not args.apply or not args.use_sheets or args.evergreen_bank):
         print(json.dumps({"status": "BLOCKED", "reason": "reuse_only_requires_single_account_apply_without_evergreen_bank", "would_post": False}))
+        return 1
+    if args.bank_reuse_only and not (
+        args.apply and args.use_sheets and args.evergreen_bank
+        and args.account_id in PREPARED_ACCOUNTS and not args.reuse_only
+    ):
+        print(json.dumps({
+            "status": "BLOCKED",
+            "reason": "bank_reuse_only_requires_single_account_confirmed_bank_apply",
+            "would_post": False,
+        }))
         return 1
     if not 1 <= args.horizon_hours <= 168:
         print(json.dumps({"status": "BLOCKED", "reason": "inventory_horizon_must_be_1_to_168_hours", "would_post": False}))
@@ -1025,7 +1163,12 @@ def main() -> int:
     coverage_by_account: dict[str, dict[str, int]] = {}
     for account_id in accounts:
         if args.evergreen_bank:
-            results.append(replenish_bank(client if args.use_sheets else None, account_id, apply=args.apply))
+            kwargs: dict[str, Any] = {"apply": args.apply}
+            if args.bank_reuse_only:
+                kwargs["reuse_only"] = True
+            results.append(replenish_bank(
+                client if args.use_sheets else None, account_id, **kwargs,
+            ))
             continue
         now = datetime.now(JST)
         budget_blocked = False
