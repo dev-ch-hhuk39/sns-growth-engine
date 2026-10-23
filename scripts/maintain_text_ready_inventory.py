@@ -36,6 +36,34 @@ JST = timezone(timedelta(hours=9))
 PREPARED_ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
 
 
+def verified_bank_admission(
+    client: Any, rows: list[dict[str, Any]], *, now: datetime,
+    runtime_check: Any,
+) -> dict[str, Any]:
+    """Require the canonical batch writer's readback before counting reserves.
+
+    admit_bank_batch already clears temporary dates, appends the reserve
+    evidence and rereads BOTH source Sheets. No extra legacy date mutation
+    may run afterward: it increases quota exposure and can fail after the
+    bank writer has already committed.
+    """
+    from evergreen_inventory import admit_bank_batch
+
+    if not rows or len(rows) > 30:
+        raise ValueError("EVERGREEN_ADMISSION_BATCH_SCOPE_INVALID")
+    receipt = admit_bank_batch(
+        client, rows, now=now, runtime_check=runtime_check, apply=True,
+    )
+    if (not isinstance(receipt, dict)
+            or receipt.get("status") != "SAVED"
+            or receipt.get("read_after_write") != "PASS"
+            or receipt.get("would_post") is not False
+            or type(receipt.get("count")) is not int
+            or receipt["count"] != len(rows)):
+        raise RuntimeError("EVERGREEN_ADMISSION_RECEIPT_UNVERIFIED")
+    return receipt
+
+
 def release_temporary_bank_allocations(client: Any, rows: list[dict[str, Any]]) -> None:
     from process_threads_queue import records, update_row
 
@@ -624,7 +652,6 @@ def evergreen_canonical_slot_health(
 
 def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
     from evergreen_inventory import (
-        admit_bank_batch,
         expired_unpublished_bank_allocations,
         release_expired_unpublished_bank_allocations,
     )
@@ -724,7 +751,7 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
         if len(admissions) >= max(0, minimum - current):
             break
     if admissions:
-        admit_bank_batch(client, admissions, now=now, runtime_check=check, apply=True)
+        verified_bank_admission(client, admissions, now=now, runtime_check=check)
         prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
 
     current, deficits, by_slot = current_bank_health()
@@ -789,8 +816,10 @@ def replenish_bank(client, account_id: str, *, apply: bool) -> dict[str, Any]:
                 raise RuntimeError("EVERGREEN_APPROVAL_READ_AFTER_WRITE_FAILED")
             admissions.append(matches[0])
         if admissions:
-            admit_bank_batch(client, admissions, now=now, runtime_check=check, apply=True)
-            release_temporary_bank_allocations(client, admissions)
+            # One canonical batch transaction already releases temporary
+            # dates and verifies queue + reserve readback. Never rewrite
+            # the same dates again with the legacy per-row mutation.
+            verified_bank_admission(client, admissions, now=now, runtime_check=check)
             prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         updated, deficits, by_slot = current_bank_health()
         current = updated
