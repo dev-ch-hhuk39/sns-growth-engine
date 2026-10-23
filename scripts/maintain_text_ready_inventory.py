@@ -954,18 +954,24 @@ def main() -> int:
             }, ensure_ascii=False, indent=2))
             return 0
     queue_rows: list[dict[str, Any]] = []
-    if args.use_sheets:
+    client = None
+    # Bank-only apply owns its own schema and canonical queue snapshot inside
+    # replenish_bank. An unconditional main() read used to load queue twice
+    # and recheck bank headers twice before any work, worsening Sheets 429s.
+    # Bank-only planning does not need credentials or external reads at all.
+    if args.use_sheets and (not args.evergreen_bank or args.apply):
         cfg = get_config()
         client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=not args.apply)
-        queue_rows = [dict(row) for row in read_records_safely(client, "queue")]
-        if args.apply:
-            if args.reuse_only:
-                # Approval is for allocating pre-existing candidates, NOT
-                # auto-creating operational tabs or running migrations.
-                client._ws("evergreen_bank")
-            else:
-                from sheets_client import TAB_DEFINITIONS
-                client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
+        if not args.evergreen_bank:
+            queue_rows = [dict(row) for row in read_records_safely(client, "queue")]
+            if args.apply:
+                if args.reuse_only:
+                    # Approval is for allocating pre-existing candidates, NOT
+                    # auto-creating operational tabs or running migrations.
+                    client._ws("evergreen_bank")
+                else:
+                    from sheets_client import TAB_DEFINITIONS
+                    client._ensure_tab("evergreen_bank", TAB_DEFINITIONS["evergreen_bank"])
     results: list[dict[str, Any]] = []
     coverage_by_account: dict[str, dict[str, int]] = {}
     for account_id in accounts:

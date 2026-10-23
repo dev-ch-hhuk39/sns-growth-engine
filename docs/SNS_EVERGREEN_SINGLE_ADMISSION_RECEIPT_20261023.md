@@ -43,6 +43,12 @@ stops immediately before candidate admission or paid generation.
 Synthetic tests verify one batch and fail-closed on quota errors. This
 reduces initial values reads from four to one, but does not eliminate
 Sheets metadata requests or guarantee success during a rate-limited minute.
+The bank-only CLI previously loaded the queue and ensured bank headers
+before invoking replenishment, which performed those same operations again.
+The wrapper now delegates exactly one queue snapshot and one bank header
+check to the canonical replenisher. A bank-only dry-run plan does not
+create a Sheets client or request credentials. Normal READY delivery
+keeps its existing data loading and approval path unchanged.
 
 ## Safety / limitations
 - Zero real SNS posts or activation changes.
