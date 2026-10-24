@@ -52,6 +52,48 @@ def safe_bank_failure_category(report: dict, account: str) -> str:
     return "UNCLASSIFIED"
 
 
+
+# Fixed internal rejection keys only. Never print candidate text or identifiers.
+SAFE_READBACK_REJECTIONS = frozenset({
+    "GENERATION_REPORTED_NO_IDS",
+    "GENERATED_ID_LIST_UNVERIFIABLE",
+    "GENERATED_READBACK_UNVERIFIED",
+    "GENERATED_IDENTITY_MISMATCH",
+    "GENERATED_NOT_READY",
+    "GENERATED_APPROVAL_INCOMPLETE",
+    "GENERATED_RUNTIME_GATE_REJECTED",
+})
+
+
+def safe_bank_rejection_summary(report: dict, account: str) -> str:
+    """Aggregate only allowlisted bounded review rejections, without IDs."""
+    results = report.get("results")
+    if account not in ACCOUNTS or not isinstance(results, list) or len(results) > 20:
+        return ""
+    counts: dict[str, int] = {}
+    for row in results:
+        if not isinstance(row, dict) or row.get("account_id") != account:
+            continue
+        attempts = row.get("attempts")
+        if not isinstance(attempts, list) or len(attempts) > 20:
+            continue
+        for attempt in attempts:
+            if not isinstance(attempt, dict):
+                continue
+            rejection = attempt.get("verification_rejection_counts")
+            if not isinstance(rejection, dict) or len(rejection) > 12:
+                continue
+            for code, count in rejection.items():
+                if (type(code) is str and code in SAFE_READBACK_REJECTIONS
+                        and type(count) is int and 0 < count <= 3):
+                    counts[code] = min(60, counts.get(code, 0) + count)
+    if not counts:
+        return ""
+    return " readback_rejections=" + ",".join(
+        f"{code}:{count}" for code, count in sorted(counts.items())
+    )
+
+
 def redacted_bank_summary(report: object, account: str) -> tuple[str, bool]:
     """Emit only bounded aggregate counts and fixed failure categories."""
     prefix = "EVERGREEN_BANK_REDACTED: account=" + account
@@ -80,7 +122,8 @@ def redacted_bank_summary(report: object, account: str) -> tuple[str, bool]:
         return prefix + " status=UNVERIFIED_NO_POST_GUARD", False
     reason = safe_bank_failure_category(report, account)
     return (prefix + f" status=NOT_READY usable={count} minimum={minimum}"
-            + " category=" + reason + " no_post=true"), False
+            + " category=" + reason + " no_post=true"
+            + safe_bank_rejection_summary(report, account)), False
 
 
 def parse_bounded_bank_json(raw: str, account: str) -> dict:
