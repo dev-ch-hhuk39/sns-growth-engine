@@ -2,7 +2,7 @@
 """Owner-only SNS release retention. No shared tool files or R2 mutation.
 
 Runs from a root-owned immutable installed code copy. Every candidate must
-pass the existing SNS one-day, three-rollback, owner, mount and all-process
+pass the existing SNS seven-day, three-rollback, owner, mount and all-process
 open-FD checks under the common VPS deploy lock. No network or Docker.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ import sns_storage_lifecycle_audit as audit
 
 ROOT = Path("/opt/github-runners/sns-growth-engine/.buffered-runtime")
 PINNED_EMERGENCY_SHA = "bec16989c859e97abe53a736afb6d76bc12338a1"
-MAX_RELEASES_PER_RUN = 4
+MAX_RELEASES_PER_RUN = 2
 MAX_BACKUP_AGE_SECONDS = 36 * 3600
 BACKUP_UNITS = (
     "chadult-r2-offsite-backup.service",
@@ -70,7 +70,7 @@ def manual_backup_gate(now_monotonic_us: int | None = None) -> None:
 
 
 def choose_targets(inventory: dict, *, pinned_sha: str = PINNED_EMERGENCY_SHA) -> list[str]:
-    """Only auditor-labeled, exact-SHA, one-day-aged releases are candidates."""
+    """Only auditor-labeled, exact-SHA, seven-day-aged releases are candidates."""
     expected = inventory.get("pointers", {}).get("current")
     require(bool(prune.SHA.fullmatch(str(expected))), "CURRENT_SHA_UNVERIFIED")
     keep = {s for s in inventory.get("pointers", {}).values() if s}
@@ -90,13 +90,13 @@ def choose_targets(inventory: dict, *, pinned_sha: str = PINNED_EMERGENCY_SHA) -
             continue
         if row.get("protected_reason") != "CANDIDATE_REQUIRES_APPROVAL_AND_IN_USE_SCAN":
             continue
-        require(row.get("marker_valid") is True and row.get("age_days", -1) >= 1,
+        require(row.get("marker_valid") is True and row.get("age_days", -1) >= 7,
                 "SNS_RETENTION_AGE_OR_OWNER_INVALID")
         size = row.get("allocated_bytes")
         require(type(size) is int and 0 <= size <= 3 * 1024**3,
                 "SNS_RETENTION_SIZE_INVALID")
         choices.append((size, sha))
-    # Max four per guarded invocation. Biggest reclaim first; stable SHA tie-breaker.
+    # Max two per manually approved guarded invocation. Biggest reclaim first; stable SHA tie-breaker.
     choices.sort(key=lambda entry: (-entry[0], entry[1]))
     return [sha for _, sha in choices[:MAX_RELEASES_PER_RUN]]
 
@@ -112,7 +112,7 @@ def run(*, confirm: bool) -> dict:
     report = {
         "status": "PASS", "mode": "APPLY" if confirm else "AUDIT",
         "scope": "sns_growth_immutable_releases_only",
-        "age_floor_days": 1, "candidates": len(targets),
+        "age_floor_days": 7, "candidates": len(targets),
         "planned_reclaim_bytes": sum(
             x["allocated_bytes"] for x in inventory["releases"] if x["sha"] in targets
         ), "removed_count": 0, "freed_bytes": 0,
@@ -126,7 +126,7 @@ def run(*, confirm: bool) -> dict:
     # offsite backup and health have succeeded recently and the timer is on.
     manual_backup_gate()
     expected = inventory["pointers"]["current"]
-    # Revalidate SHA pointers, one-day cutoff, owner/mount and process use
+    # Revalidate SHA pointers, seven-day cutoff, owner/mount and process use
     # inside prune.run's shared global deployment lock before unlinking.
     result = prune.run(ROOT, expected, targets, confirm=True)
     # The underlying pruner returns a verified receipt WITHOUT a "status"

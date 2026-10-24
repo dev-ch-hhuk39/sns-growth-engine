@@ -1,3 +1,11 @@
+## 2026-10-24 — Corrected release-retention policy / audit-only timer
+
+- Production investigation found an installed SNS-only systemd retention timer running a root service with `--apply` and a **1-day** release age floor. This contradicted the documented **minimum 7-day** grace and exact-SHA/owner approval requirements. The SNS timer was stopped and disabled at approximately 18:16 JST; shared R2 timers, other tools, and posting were untouched. No release directory was removed.
+- This change sets a consistent **7-day** floor in the standalone pruner, source-controlled storage auditor, and retention service candidate selection. A release aged 6 days is always held. At most two manually approved exact SHAs may be passed to the standalone cleanup tool per invocation; the current/previous/pending and a separate healthy emergency release remain protected.
+- The daily systemd retention unit is now **read-only**: no `--apply`, no `ReadWritePaths`, and no automatic deletion permission. The installed VPS unit and root-owned code copy remain separately managed and MUST be updated and checked before the timer is re-enabled. Never re-enable the old `--apply` unit. Do not treat a source commit as proof of installation.
+- For the actual VPS, the 2026-10-24 pre-change audit showed eight SNS immutable releases, five preliminary 1-day candidates and around 3.74GB potential reclaim. These were **NOT eligible under the corrected 7-day policy** at the measured time; the large count was a policy bug, not permission to delete.
+- Cleanup stays restricted to the protected-main `Production Capacity Recovery` workflow with exact SHA, recent R2 health, global lock, full process/cwd/FD and ownership/mount/hardlink checks, no changes to unrelated services. Live SNS posting remains OFF.
+
 ## 2026-10-24 — Scheduled READY / Aftercare reliability follow-up (posting OFF)
 
 - Current remote main at audit: `80bd22bf`. The 2026-10-24 scheduled AUTO_READY run 40062422777 verified next-24h READY coverage of night_scout 3/3, liver_manager 3/3 and beauty_account 1/1, but all three failed the evergreen-bank top-up. The same day Aftercare run 40054587967 had night 6/9, liver 7/9 and beauty 3/3 delivery slots verified; Aftercare remains operationally failing.
