@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
@@ -529,6 +530,31 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     return completed.returncode, payload
 
 
+def _run_isolated_ready_review(command: list[str]) -> tuple[int, dict[str, Any]]:
+    """Give every approval subprocess a private, unique receipt location.
+
+    Concurrent AUTO_READY and Aftercare runs must never share a predictable
+    /tmp receipt or read another invocation's approval decision.
+    """
+    with tempfile.TemporaryDirectory(prefix="sns-ready-review-") as directory:
+        receipt = Path(directory) / "review.json"
+        rc, review = _run([*command, "--json-output", str(receipt)])
+        failure = str(review.get("failure_category", ""))
+        if receipt.exists():
+            try:
+                parsed = json.loads(receipt.read_text(encoding="utf-8"))
+                if not isinstance(parsed, dict):
+                    raise ValueError("nonobject_review")
+                review = parsed
+            except (OSError, UnicodeError, ValueError, TypeError):
+                # Never expose the private receipt or a provider response.
+                review = {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+                rc = rc or 1
+            if failure == "SHEETS_QUOTA_EXHAUSTED":
+                review["failure_category"] = failure
+        return rc, review
+
+
 def _primary_generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[str, list[str]]]:
     if account_id == "beauty_account":
         from content_schedule import slots_for_account
@@ -660,9 +686,6 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
         for queue_id in queue_ids[:3]:
             if queue_id in approved:
                 continue
-            ready_output = Path(f"/tmp/ready-inventory-{account_id}-{slot['slot_id']}.json")
-            # A failed subprocess must not inherit a previous candidate's READY.
-            ready_output.unlink(missing_ok=True)
             command = [
                 sys.executable,
                 "scripts/run_hybrid_ready_pipeline.py",
@@ -679,24 +702,8 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
                 "--autonomous-low-risk",
                 "--apply",
                 "--use-sheets",
-                "--json-output",
-                str(ready_output),
             ]
-            review_rc, review = _run(command)
-            subprocess_failure_category = str(review.get("failure_category", ""))
-            if ready_output.exists():
-                try:
-                    parsed_review = json.loads(ready_output.read_text(encoding="utf-8"))
-                    if not isinstance(parsed_review, dict):
-                        raise ValueError("nonobject_review")
-                    review = parsed_review
-                except (OSError, UnicodeError, ValueError, TypeError):
-                    # No freeform error, queue ID, caption, or provider text
-                    # leaves the private validation process.
-                    review = {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
-                    review_rc = review_rc or 1
-                if subprocess_failure_category == "SHEETS_QUOTA_EXHAUSTED":
-                    review["failure_category"] = subprocess_failure_category
+            review_rc, review = _run_isolated_ready_review(command)
             budget_blocked = approval_budget_exhausted(review)
             if budget_blocked:
                 review["failure_category"] = "AI_APPROVAL_BUDGET_EXHAUSTED"

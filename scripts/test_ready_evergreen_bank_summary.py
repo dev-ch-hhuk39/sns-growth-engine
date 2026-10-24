@@ -117,6 +117,34 @@ class SafeBankSummaryTest(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertNotIn("SECRET_PRIVATE", output.getvalue())
 
+    def test_final_scoped_report_survives_bounded_prior_stdout(self):
+        report = self.report()
+        raw = 'synthetic progress\n{"status":"UNRELATED"}\n'
+        raw += json.dumps(report, ensure_ascii=False, indent=2)
+        parsed = mod.parse_bounded_bank_json(raw, "night_scout")
+        receipt, ok = mod.redacted_bank_summary(parsed, "night_scout")
+        self.assertTrue(ok)
+        self.assertIn("usable=5", receipt)
+        self.assertNotIn("UNRELATED", receipt)
+
+    def test_trailing_text_or_fake_final_object_never_falls_back_to_old_pass(self):
+        valid = json.dumps(self.report())
+        for suffix in ("\nBAD_TRAILING_OUTPUT", '\n{"mode":"EVERGREEN_BANK","status":"FAILED"}'):
+            with self.subTest(suffix=suffix):
+                with self.assertRaises(ValueError):
+                    mod.parse_bounded_bank_json(valid + suffix, "night_scout")
+
+    def test_missing_guard_or_foreign_account_fails_closed(self):
+        report = self.report()
+        report["would_post"] = True
+        with self.assertRaises(ValueError):
+            mod.parse_bounded_bank_json(json.dumps(report), "night_scout")
+        report["would_post"] = False
+        with self.assertRaises(ValueError):
+            mod.parse_bounded_bank_json(json.dumps(report), "beauty_account")
+        with self.assertRaises(ValueError):
+            mod.parse_bounded_bank_json("{}", "night_scout")
+
     def test_missing_file_gives_only_fixed_error(self):
         output = io.StringIO()
         with patch.object(sys, "argv",
