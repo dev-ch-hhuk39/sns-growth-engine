@@ -87,8 +87,11 @@ def classified_generated_bank_admissions(
     reasons: Counter[str] = Counter()
     for qid in queue_ids:
         matches = [row for row in rows if row.get("queue_id") == qid]
+        if not matches:
+            reasons["GENERATED_READBACK_NOT_VISIBLE"] += 1
+            continue
         if len(matches) != 1:
-            reasons["GENERATED_READBACK_UNVERIFIED"] += 1
+            reasons["GENERATED_READBACK_DUPLICATE_ID"] += 1
             continue
         row = matches[0]
         if (str(row.get("account_id") or "") != account_id
@@ -104,6 +107,34 @@ def classified_generated_bank_admissions(
             candidates.append(row)
     # A mixed batch is uncertain; no partial bank append is authorized.
     return ([], dict(sorted(reasons.items()))) if reasons else (candidates, {})
+
+
+def confirm_missing_generated_bank_rows_literal(
+    snapshot: Any, queue_ids: list[str], account_id: str,
+    slot_id: str, runtime_check: Any,
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """One direct literal Sheets read only after a generated queue ID is absent.
+
+    The batched read uses the worksheet's initial grid bounds. An append
+    during this invocation can expand that grid, so missing rows must be
+    verified against the actual current sheet rather than an older snapshot.
+    This is read-only, never repeats AI generation, and never admits a
+    duplicate, unapproved or non-publishable candidate.
+    """
+    try:
+        literal_rows = read_records_safely(snapshot, "queue", preserve_strings=True)
+        if (not isinstance(literal_rows, list) or len(literal_rows) > 100000
+                or any(not isinstance(row, dict) for row in literal_rows)):
+            raise ValueError("literal_queue_snapshot_invalid")
+    except Exception:
+        # Provider and private candidate details must never reach public logs.
+        return [], {"GENERATED_LITERAL_READBACK_UNAVAILABLE": 1}
+    cache = getattr(snapshot, READONLY_RECORD_CACHE_ATTR, None)
+    if isinstance(cache, dict):
+        cache["queue"] = [dict(row) for row in literal_rows]
+    return classified_generated_bank_admissions(
+        literal_rows, queue_ids, account_id, slot_id, runtime_check,
+    )
 
 
 def is_explicit_staged_beauty_reserve(
@@ -960,6 +991,8 @@ def replenish_bank(client, account_id: str, *, apply: bool,
     # Prefer slots attempted least so a single hard-to-satisfy route cannot
     # monopolize the refill budget. Provider/paid-budget blockers still stop.
     attempts_by_slot: dict[str, int] = {}
+    # One extra literal queue read is the maximum in a bank invocation.
+    literal_readback_used = False
     for attempt_number in range(10):
         if current >= minimum:
             break
@@ -1013,6 +1046,12 @@ def replenish_bank(client, account_id: str, *, apply: bool,
         admissions, rejected = classified_generated_bank_admissions(
             generated_rows, generated_ids, account_id, sid, check,
         )
+        if (rejected and not literal_readback_used
+                and set(rejected) == {"GENERATED_READBACK_NOT_VISIBLE"}):
+            literal_readback_used = True
+            admissions, rejected = confirm_missing_generated_bank_rows_literal(
+                snapshot, generated_ids, account_id, sid, check,
+            )
         if rejected:
             # A subprocess may have created a draft without making it
             # publishable or even visible. Count no reserve and never
