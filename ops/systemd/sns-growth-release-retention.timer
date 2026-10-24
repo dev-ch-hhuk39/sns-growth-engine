@@ -1,5 +1,5 @@
 [Unit]
-Description=Chadult SNS-only release TTL cleanup at 18:25 JST
+Description=Chadult SNS-only read-only release audit at 18:25 JST
 
 [Timer]
 OnCalendar=*-*-* 18:25:00 Asia/Tokyo

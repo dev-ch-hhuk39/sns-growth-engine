@@ -21,8 +21,8 @@ def inventory():
         (CURRENT, "POINTER", 755000000, 0),
         (PREVIOUS, "POINTER", 755000000, 0),
         (EMERGENCY, "EMERGENCY_RECOVERY", 755000000, 4),
-        (PINNED, "ONE_DAY_GRACE", 755000000, 0),
-        ("d"*40, "ONE_DAY_GRACE", 800000000, 0),
+        (PINNED, "SEVEN_DAY_GRACE", 755000000, 0),
+        ("d"*40, "SEVEN_DAY_GRACE", 800000000, 0),
         ("e"*40, "CANDIDATE_REQUIRES_APPROVAL_AND_IN_USE_SCAN", 500000000, 8),
         ("f"*40, "CANDIDATE_REQUIRES_APPROVAL_AND_IN_USE_SCAN", 700000000, 9),
         ("1"*40, "CANDIDATE_REQUIRES_APPROVAL_AND_IN_USE_SCAN", 600000000, 10),
@@ -38,9 +38,15 @@ def inventory():
 
 
 class ReleaseRetentionTests(unittest.TestCase):
-    def test_selects_largest_aged_sns_sha_with_four_item_cap(self):
+    def test_selects_largest_aged_sns_sha_with_two_item_cap(self):
         self.assertEqual(
-            service.choose_targets(inventory()), ["f"*40, "1"*40, "e"*40])
+            service.choose_targets(inventory()), ["f"*40, "1"*40])
+
+    def test_six_day_candidate_does_not_bypass_auditor(self):
+        data=inventory()
+        data["releases"][5]["age_days"]=6
+        with self.assertRaisesRegex(service.RetentionBlocked,"AGE"):
+            service.choose_targets(data)
 
     def test_pinned_old_emergency_is_never_deleted(self):
         data=inventory()
@@ -122,12 +128,12 @@ class ReleaseRetentionTests(unittest.TestCase):
                  patch.object(service.audit,"audited_release_inventory",return_value=data),\
                  patch.object(service,"manual_backup_gate") as backup,\
                  patch.object(service.prune,"run",return_value={
-                     "removed_releases":["f"*40,"1"*40,"e"*40],
+                     "removed_releases":["f"*40,"1"*40],
                      "recovered_bytes":1234}) as prune:
                 report=service.run(confirm=True)
             backup.assert_called_once_with()
-            prune.assert_called_once_with(runtime,CURRENT,["f"*40,"1"*40,"e"*40],confirm=True)
-            self.assertEqual(report["removed_count"],3)
+            prune.assert_called_once_with(runtime,CURRENT,["f"*40,"1"*40],confirm=True)
+            self.assertEqual(report["removed_count"],2)
             self.assertEqual(report["status"], "PASS")
             self.assertEqual(report["freed_bytes"],1234)
 
@@ -166,7 +172,7 @@ class ReleaseRetentionTests(unittest.TestCase):
         data=inventory()
         for row in data["releases"]:
             if row["sha"] not in (CURRENT,PREVIOUS,EMERGENCY,PINNED):
-                row["protected_reason"]="ONE_DAY_GRACE"
+                row["protected_reason"]="SEVEN_DAY_GRACE"
         with tempfile.TemporaryDirectory() as directory:
             runtime=Path(directory)/".buffered-runtime"
             runtime.mkdir()
@@ -189,7 +195,9 @@ class ReleaseRetentionTests(unittest.TestCase):
         self.assertIn("ProtectSystem=strict",u)
         self.assertIn("NoNewPrivileges=true",u)
         self.assertIn("/usr/local/libexec/chadult-sns-retention",u)
-        self.assertIn("ReadWritePaths=/opt/github-runners/sns-growth-engine/",u)
+        self.assertNotIn("ReadWritePaths=",u)
+        self.assertNotIn("--apply",u)
+        self.assertIn("read-only",u)
         self.assertIn("OnCalendar=*-*-* 18:25:00 Asia/Tokyo",t)
         self.assertIn("Persistent=true",t)
         self.assertNotIn("restic forget",u+t)
