@@ -50,10 +50,13 @@ class GeneratedAdmissionClassifierTests(unittest.TestCase):
                 approved, rejected = self.classify([ready()], ids)
                 self.assertEqual(approved, [])
                 self.assertEqual(rejected, {"GENERATED_ID_LIST_UNVERIFIABLE": 1})
-        for rows in ([], [ready(), ready()]):
+        for rows, expected in (
+            ([], {"GENERATED_READBACK_NOT_VISIBLE": 1}),
+            ([ready(), ready()], {"GENERATED_READBACK_DUPLICATE_ID": 1}),
+        ):
             approved, rejected = self.classify(rows, ["q_synthetic"])
             self.assertEqual(approved, [])
-            self.assertEqual(rejected, {"GENERATED_READBACK_UNVERIFIED": 1})
+            self.assertEqual(rejected, expected)
 
     def test_wrong_account_or_immutable_slot_is_rejected(self):
         for row in (ready(account="night_scout"), ready(slot="beauty_2030")):
@@ -85,6 +88,52 @@ class GeneratedAdmissionClassifierTests(unittest.TestCase):
             self.assertEqual(approved, [])
             self.assertEqual(rejected, {"GENERATED_NOT_READY": 1})
             self.assertNotIn("PRIVATE_SYNTHETIC_TEXT", json.dumps(rejected))
+
+
+class LiteralGeneratedReadbackTests(unittest.TestCase):
+    def test_missing_from_batch_but_visible_in_literal_read_can_be_checked(self):
+        source = ready()
+        snapshot = Mock()
+        setattr(snapshot, maintenance.READONLY_RECORD_CACHE_ATTR, {"queue": []})
+        with (
+            patch.object(maintenance, "read_records_safely", return_value=[source]) as reader,
+            patch.object(maintenance, "eligible_ready", return_value=True),
+            patch.object(maintenance, "has_media", return_value=False),
+        ):
+            admissions, rejected = maintenance.confirm_missing_generated_bank_rows_literal(
+                snapshot, [source["queue_id"]], ACCOUNT, SLOT, lambda _row: True,
+            )
+        self.assertEqual(rejected, {})
+        self.assertEqual(admissions, [source])
+        self.assertEqual(getattr(snapshot, maintenance.READONLY_RECORD_CACHE_ATTR)["queue"], [source])
+        reader.assert_called_once_with(snapshot, "queue", preserve_strings=True)
+
+    def test_literal_duplicate_and_not_ready_remain_blocked(self):
+        for rows, expected in (
+            ([ready(), ready()], {"GENERATED_READBACK_DUPLICATE_ID": 1}),
+            ([ready(status="WAITING_REVIEW")], {"GENERATED_NOT_READY": 1}),
+            ([], {"GENERATED_READBACK_NOT_VISIBLE": 1}),
+        ):
+            with self.subTest(expected=expected), patch.object(
+                maintenance, "read_records_safely", return_value=rows
+            ):
+                admissions, rejected = maintenance.confirm_missing_generated_bank_rows_literal(
+                    Mock(), ["q_synthetic"], ACCOUNT, SLOT, lambda _row: True,
+                )
+            self.assertEqual(admissions, [])
+            self.assertEqual(rejected, expected)
+
+    def test_literal_read_failure_never_prints_private_provider_data(self):
+        with patch.object(
+            maintenance, "read_records_safely",
+            side_effect=RuntimeError("PRIVATE_TOKEN_NOT_TO_LOG"),
+        ):
+            admissions, rejected = maintenance.confirm_missing_generated_bank_rows_literal(
+                Mock(), ["q_synthetic"], ACCOUNT, SLOT, lambda _row: True,
+            )
+        self.assertEqual(admissions, [])
+        self.assertEqual(rejected, {"GENERATED_LITERAL_READBACK_UNAVAILABLE": 1})
+        self.assertNotIn("PRIVATE_TOKEN_NOT_TO_LOG", json.dumps(rejected))
 
 
 class ExplicitBeautyStagedReserveTests(unittest.TestCase):
