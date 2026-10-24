@@ -16,7 +16,7 @@ from pathlib import Path
 
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 DEFAULT_ROOT = Path("/opt/github-runners/sns-growth-engine/.buffered-runtime")
-MIN_AGE_SECONDS = 24 * 3600
+MIN_AGE_SECONDS = 7 * 24 * 3600
 
 
 def exact_release_marker(entry: Path) -> bool:
@@ -54,7 +54,7 @@ def require(condition: bool, reason: str) -> None:
 def candidate_state(root: Path, expected: str, targets: list[str], *, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     require(bool(SHA.fullmatch(expected)), "invalid_expected_current_sha")
-    require(0 < len(targets) <= 4 and len(set(targets)) == len(targets), "target_count_out_of_bounds")
+    require(0 < len(targets) <= 2 and len(set(targets)) == len(targets), "target_count_out_of_bounds")
     require(all(SHA.fullmatch(value) for value in targets), "invalid_target_sha")
     require(root.name == ".buffered-runtime" and not root.is_symlink() and root.is_dir(), "invalid_runtime_root")
     releases = root / "releases"

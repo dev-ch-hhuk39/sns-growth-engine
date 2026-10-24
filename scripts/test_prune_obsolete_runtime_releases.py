@@ -145,6 +145,22 @@ class PruneReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "target_release_too_recent"):
             candidate_state(self.root, CURRENT, [OLDER])
 
+    def test_six_day_grace_blocks_manual_cleanup(self):
+        target = self.root / "releases" / OLDER
+        now = time.time()
+        # A different independent healthy release must remain the emergency.
+        emergency = self.root / "releases" / OLD
+        os.utime(emergency, (now - 86400, now - 86400))
+        os.utime(target, (now - 6 * 86400, now - 6 * 86400))
+        with self.assertRaisesRegex(RuntimeError, "target_release_too_recent"):
+            candidate_state(self.root, CURRENT, [OLDER])
+        os.utime(target, (now - 8 * 86400, now - 8 * 86400))
+        self.assertEqual(candidate_state(self.root, CURRENT, [OLDER])["targets"], [str(target)])
+
+    def test_only_two_explicit_release_targets_per_approval(self):
+        with self.assertRaisesRegex(RuntimeError, "target_count_out_of_bounds"):
+            candidate_state(self.root, CURRENT, [OLD, OLDER, OLDEST])
+
     def test_symlink_target_blocks(self):
         target = self.root / "releases" / OLDEST
         shutil.rmtree(target)

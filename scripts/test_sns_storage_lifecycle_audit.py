@@ -62,7 +62,7 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         self.assertIsNone(report["pointers"]["pending"])
         self.assertEqual(report["emergency_recovery_sha"], E)
         self.assertEqual(set(report["review_candidates"]), {O, S})
-        self.assertEqual(report["max_manual_releases_per_approval"], 4)
+        self.assertEqual(report["max_manual_releases_per_approval"], 2)
         self.assertEqual(report["grace_period_hold_count"], 0)
         self.assertTrue(all(
             candidate["cleanup_eligible_after_utc"] for candidate in report["releases"]
@@ -122,7 +122,7 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         os.utime(item, (self.now - 12 * 3600, self.now - 12 * 3600))
         report = audited_release_inventory(self.root, now=self.now)
         self.assertEqual(next(x for x in report["releases"] if x["sha"] == O)["protected_reason"],
-                         "ONE_DAY_GRACE")
+                         "SEVEN_DAY_GRACE")
         (self.releases / S / ".venv" / "bin" / "python").unlink()
         report = audited_release_inventory(self.root, now=self.now)
         self.assertEqual(next(x for x in report["releases"] if x["sha"] == S)["protected_reason"],
@@ -142,13 +142,21 @@ class StorageLifecycleReadOnly(unittest.TestCase):
         os.utime(self.releases / O, (self.now - 12 * 3600, self.now - 12 * 3600))
         report = audited_release_inventory(self.root, now=self.now)
         record = next(x for x in report["releases"] if x["sha"] == O)
-        self.assertEqual(record["protected_reason"], "INCOMPLETE_ONE_DAY_GRACE")
+        self.assertEqual(record["protected_reason"], "INCOMPLETE_SEVEN_DAY_GRACE")
         self.assertEqual(
             len([x for x in report["grace_period_hold_sha"] if x["sha"] == O]), 1
         )
         self.assertIsNotNone(record["cleanup_eligible_after_utc"])
         self.assertNotIn(O, report["review_candidates"])
-        self.assertEqual(report["minimum_release_age_days"], 1)
+        self.assertEqual(report["minimum_release_age_days"], 7)
+
+    def test_six_day_verified_release_remains_held(self):
+        target = self.release("f" * 40, 6)
+        report = audited_release_inventory(self.root, now=self.now)
+        row = next(item for item in report["releases"] if item["sha"] == target.name)
+        self.assertEqual(row["protected_reason"], "SEVEN_DAY_GRACE")
+        self.assertNotIn(target.name, report["review_candidates"])
+        self.assertEqual(report["minimum_release_age_days"], 7)
 
     def test_fails_closed_on_pointer_escape_and_broken_pointer(self):
         (self.root / "current").unlink()
