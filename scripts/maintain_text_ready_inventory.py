@@ -66,6 +66,54 @@ def verified_bank_admission(
     return receipt
 
 
+
+def refresh_verified_bank_cache_from_literal(
+    snapshot: Any, admitted_rows: list[dict[str, Any]],
+) -> None:
+    """Avoid recounting a committed bank append using stale sheet grid bounds.
+
+    The canonical writer has independently verified queue and bank readback.
+    This read-only extra check uses literal, unbounded-to-current-grid values,
+    not the earlier worksheet.row_count used by a batch snapshot. Cache is
+    replaced only after all exact queue/bank identifiers verify together.
+    """
+    if not admitted_rows or len(admitted_rows) > 30:
+        raise ValueError("EVERGREEN_POSTCOMMIT_SCOPE_INVALID")
+    try:
+        queue_rows = read_records_safely(snapshot, "queue", preserve_strings=True)
+        bank_rows = read_records_safely(snapshot, "evergreen_bank", preserve_strings=True)
+        if (not isinstance(queue_rows, list) or not isinstance(bank_rows, list)
+                or len(queue_rows) > 100000 or len(bank_rows) > 100000
+                or any(not isinstance(r, dict) for r in (*queue_rows, *bank_rows))):
+            raise ValueError("literal_row_limit_or_type")
+        for admitted in admitted_rows:
+            qid = admitted.get("queue_id")
+            account = admitted.get("account_id")
+            slot = admitted.get("slot_id")
+            if not all(type(v) is str and v for v in (qid, account, slot)):
+                raise ValueError("candidate_identity_missing")
+            queues = [r for r in queue_rows if r.get("queue_id") == qid]
+            reserves = [r for r in bank_rows if r.get("queue_id") == qid]
+            if (len(queues) != 1 or len(reserves) != 1
+                    or queues[0].get("account_id") != account
+                    or queues[0].get("slot_id") != slot
+                    or queues[0].get("status") != "READY"
+                    or queues[0].get("business_date_jst")
+                    or queues[0].get("schedule_date_jst")
+                    or reserves[0].get("account_id") != account):
+                raise ValueError("postcommit_identity_or_allocation_invalid")
+    except Exception:
+        # Do not expose unpublished drafts, full Sheets errors or credentials.
+        raise RuntimeError("EVERGREEN_POSTCOMMIT_LITERAL_READBACK_UNVERIFIED") from None
+    cache = getattr(snapshot, READONLY_RECORD_CACHE_ATTR, None)
+    if not isinstance(cache, dict):
+        enable_readonly_record_cache(snapshot)
+        cache = getattr(snapshot, READONLY_RECORD_CACHE_ATTR)
+    cache["queue"] = [dict(row) for row in queue_rows]
+    cache["evergreen_bank"] = [dict(row) for row in bank_rows]
+
+
+
 def classified_generated_bank_admissions(
     rows: list[dict[str, Any]], queue_ids: Any, account_id: str,
     slot_id: str, runtime_check: Any,
@@ -968,7 +1016,10 @@ def replenish_bank(client, account_id: str, *, apply: bool,
             break
     if admissions:
         verified_bank_admission(client, admissions, now=now, runtime_check=check)
-        prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
+        if isinstance(client, SheetsClient):
+            refresh_verified_bank_cache_from_literal(snapshot, admissions)
+        else:
+            prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
 
     current, deficits, by_slot = current_bank_health()
     if reuse_only:
@@ -1075,7 +1126,10 @@ def replenish_bank(client, account_id: str, *, apply: bool,
             # dates and verifies queue + reserve readback. Never rewrite
             # the same dates again with the legacy per-row mutation.
             verified_bank_admission(client, admissions, now=now, runtime_check=check)
-            prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
+            if isinstance(client, SheetsClient):
+                refresh_verified_bank_cache_from_literal(snapshot, admissions)
+            else:
+                prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         updated, deficits, by_slot = current_bank_health()
         current = updated
         # A provider failure/rate-limit must not trigger more paid attempts.
