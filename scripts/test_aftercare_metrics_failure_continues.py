@@ -15,6 +15,9 @@ checks = [
     ("all managed accounts receive independent PDCA", "account: [night_scout, liver_manager, beauty_account]" in SOURCE and '--account-id "$ACCOUNT_ID"' in SOURCE and "beauty_account_pdca_route=dedicated_beauty_generation" in SOURCE),
     ("PDCA failure is operational", "one or more measured PDCA generations failed" in SOURCE),
     ("aftercare health reads operational counts", "--use-sheets" in SOURCE),
+    ("24h title uses explicit 24h horizon", '--account-id "$ACCOUNT_ID" --apply --horizon-hours 24' in SOURCE
+     and SOURCE.count("--horizon-hours 24") == 1),
+    ("evergreen reserve independent of due horizon", "--evergreen-bank" in SOURCE),
 ]
 failed = [name for name, ok in checks if not ok]
 for name, ok in checks:

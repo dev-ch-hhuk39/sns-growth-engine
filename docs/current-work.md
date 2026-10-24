@@ -1,3 +1,9 @@
+## 2026-10-24 — Aftercare actual horizon corrected
+
+- The hourly `Production Autopilot Aftercare` workflow described its maintenance as **next 24h READY**, but omitted `--horizon-hours`; `maintain_text_ready_inventory.py` instead defaulted to `production_inventory.json:text_horizon_hours=72`. The 2026-10-24 run #40093543069 tested 4/9 Night Scout and 5/9 Liver Manager slots and failed as though these were next-24h results, even though separate verified 24h runs had 3/3 text slots for each account. The cause of 72h shortfalls is **not** thereby resolved.
+- The Aftercare maintenance step now passes explicit `--horizon-hours 24` only for next-24h delivery. Evergreen bank remains independently scoped to the real minimum 30 per account and is **not** weakened; 72h/168h targets remain distinct acceptance/reporting requirements. No queue writes, social posting, thresholds or credentials changed by this code patch.
+- Focused workflow tests validate the exact 24h invocation, privacy redaction and no suppression of real operational failures. Real CI and no-post Aftercare rerun are required before claiming operational success. Prior outstanding 0/30 Night/Liver reserves and 29/30 Beauty reserve are still blockers.
+
 ## 2026-10-24 — Postcommit immutable READY bank cache verification (no posting)
 
 - Source issue: the successful `admit_bank_batch` writer uses a **literal Sheets read-after-write**, but the following `prime_readonly_record_cache` used the original worksheet.row_count bounded range. A newly appended bank entry at a resized worksheet boundary could therefore be absent from the next bank-health count even though durable writing succeeded. This is a plausible cause of 29/30 after admission, **not proven as the exact live failure yet**.

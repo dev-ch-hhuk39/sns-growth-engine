@@ -52,6 +52,8 @@ class PublicAutoReadyLogContract(unittest.TestCase):
         steps = {step.get("name"): step for step in doc["jobs"]["aftercare"]["steps"]}
         code = steps["Maintain next 24h READY inventory from measured PDCA"]["run"]
         self.assertIn('> "$ready_report" 2> "$ready_stderr"', code)
+        self.assertIn('--account-id "$ACCOUNT_ID" --apply --horizon-hours 24', code)
+        self.assertEqual(code.count("--horizon-hours 24"), 1)
         self.assertIn('> "$bank_report" 2> "$bank_stderr"', code)
         self.assertIn("ready_inventory_diagnostics.py", code)
         self.assertIn("ready_evergreen_bank_summary.py", code)
