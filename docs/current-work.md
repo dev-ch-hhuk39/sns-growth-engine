@@ -1,3 +1,11 @@
+## 2026-10-24 — Scheduled READY / Aftercare reliability follow-up (posting OFF)
+
+- Current remote main at audit: `80bd22bf`. The 2026-10-24 scheduled AUTO_READY run 40062422777 verified next-24h READY coverage of night_scout 3/3, liver_manager 3/3 and beauty_account 1/1, but all three failed the evergreen-bank top-up. The same day Aftercare run 40054587967 had night 6/9, liver 7/9 and beauty 3/3 delivery slots verified; Aftercare remains operationally failing.
+- This branch `chatgpt/sns-20261024-ready-aftercare` replaces a shared predictable hybrid-review JSON receipt under /tmp with a per-invocation private temporary directory, preventing concurrent READY/Aftercare jobs from reading each other's review result.
+- The evergreen public report parser now accepts only a bounded final account-scoped, no-post report after unrelated preceding stdout. Missing, malformed, cross-account, trailing, and unsafe outputs remain failures; review/rights/provider-budget gates are unchanged.
+- Synthetic tests cover distinct receipt paths, cleanup, malformed review, Sheets quota priority and report isolation. This does not prove the historical missing-report failure cause or fill the 30-per-account reserve target.
+- Still required: verified 30 usable reserves per account and canonical text slot, repeated scheduled AUTO_READY/Aftercare success, protected CI, posting-OFF deployment/rollback, R2 native isolated restoration, and a separately authorized real Threads canary with downstream 24/72/168h observation. Do not enable real posting by implication.
+
 ## 2026-10-21 — Persisted owner completion directive / R2 audit
 
 - Owner requested continued SNS development to verified completion without repeated instructions: complete R2 disaster recovery, reduce only SNS-owned redundant VPS assets after proven restore, preserve 3 healthy rollback generations, and fix no-post READY quality failures.

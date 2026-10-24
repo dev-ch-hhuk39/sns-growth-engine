@@ -116,9 +116,9 @@ class BufferedGenerationTests(unittest.TestCase):
         slot = {'slot_id': 'test_buffer', 'business_date_jst': '2026-09-10', 'post_type': 'original_text'}
         review = {'stages': [{'payload': {'runtime_errors': [{'reason': 'HYBRID_AI_DAILY_LIMIT_EXCEEDED'}]}}]}
         with patch('maintain_text_ready_inventory._generation_commands', return_value=[('primary', ['generator']), ('fallback', ['generator'])]), \
-             patch('maintain_text_ready_inventory._run', side_effect=[(0, {'queue_ids': ['q1', 'q2']}), (1, review)]) as run, \
-             patch('maintain_text_ready_inventory.Path') as path:
-            path.return_value.exists.return_value = False
+             patch('maintain_text_ready_inventory._run', side_effect=[(0, {'queue_ids': ['q1', 'q2']}), (1, review)]) as run:
+            # The production review receipt lives in a unique real temp directory.
+            # The failed mocked review writes no approval, preserving the budget block.
             result = replenish('night_scout', slot, apply=True, required=2)
         self.assertEqual(run.call_count, 2)
         self.assertEqual(result['failure_category'], 'AI_APPROVAL_BUDGET_EXHAUSTED')

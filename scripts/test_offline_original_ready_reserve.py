@@ -323,6 +323,13 @@ class OfflineReserveTests(unittest.TestCase):
                 return 0, {"queue_ids": ["q_offline" if "--offline-original" in command else "q_remote"]}
             if "q_remote" in command:
                 return 2, {"runtime_errors": [{"reason": "HYBRID_AI_DAILY_LIMIT_EXCEEDED"}]}
+            self.assertIn("q_offline", command)
+            self.assertEqual(command[-2], "--json-output")
+            Path(command[-1]).write_text(json.dumps({
+                "status": "READY", "account_id": "night_scout",
+                "slot_id": slot["slot_id"], "selected_queue_id": "q_offline",
+                "would_post": False,
+            }), encoding="utf-8")
             return 0, {"status": "READY"}
         with patch("maintain_text_ready_inventory._run", side_effect=run):
             result = replenish("night_scout", slot, apply=True)

@@ -83,6 +83,43 @@ def redacted_bank_summary(report: object, account: str) -> tuple[str, bool]:
             + " category=" + reason + " no_post=true"), False
 
 
+def parse_bounded_bank_json(raw: str, account: str) -> dict:
+    """Recover only a final, account-scoped bank receipt after noisy stdout.
+
+    A preceding generator object or an incomplete run must never be accepted
+    as proof of usable reserves. No raw text is included in public reports.
+    """
+    if not raw or len(raw) > MAX_REPORT_BYTES:
+        raise ValueError("bank_report_size_invalid")
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        starts = []
+        position = 0
+        for line in raw.splitlines(keepends=True):
+            if line.startswith("{"):
+                starts.append(position)
+                if len(starts) > 512:
+                    raise ValueError("too_many_bank_output_objects")
+            position += len(line)
+        if not starts:
+            raise ValueError("no_bank_report")
+        try:
+            value, end = json.JSONDecoder().raw_decode(raw, starts[-1])
+        except json.JSONDecodeError as exc:
+            raise ValueError("invalid_final_bank_report") from exc
+        if raw[starts[-1] + end:].strip():
+            raise ValueError("trailing_unverified_bank_output")
+    if (not isinstance(value, dict)
+            or value.get("mode") != "EVERGREEN_BANK"
+            or value.get("would_post") is not False
+            or not isinstance(value.get("results"), list)
+            or not isinstance(value.get("evergreen_bank_by_account"), dict)
+            or set(value["evergreen_bank_by_account"]) != {account}):
+        raise ValueError("bank_report_scope_or_safety_invalid")
+    return value
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", required=True)
@@ -93,7 +130,7 @@ def main() -> int:
         path = Path(args.report)
         if path.stat().st_size > MAX_REPORT_BYTES:
             raise ValueError("oversized_report")
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = parse_bounded_bank_json(path.read_text(encoding="utf-8"), args.account_id)
     except (OSError, UnicodeError, ValueError, TypeError):
         if args.private_stderr:
             hint = classify_private_stderr(Path(args.private_stderr))

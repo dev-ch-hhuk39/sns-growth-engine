@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from datetime import datetime, time, timedelta, timezone
 from pathlib import Path
@@ -529,6 +530,58 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
     return completed.returncode, payload
 
 
+def _run_isolated_ready_review(command: list[str]) -> tuple[int, dict[str, Any]]:
+    """Accept only a fresh, identity-matched and no-post hybrid READY receipt.
+
+    Concurrent AUTO_READY and Aftercare must not share a predictable /tmp
+    result or trust a subprocess's stdout when its durable receipt is missing.
+    """
+    def argument(flag: str) -> str:
+        try:
+            value = command[command.index(flag) + 1]
+        except (ValueError, IndexError):
+            return ""
+        return value if type(value) is str else ""
+
+    expected = (
+        argument("--account-id"), argument("--slot-id"), argument("--queue-id"),
+    )
+    if not all(expected) or "--json-output" in command:
+        return 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+    with tempfile.TemporaryDirectory(prefix="sns-ready-review-") as directory:
+        receipt = Path(directory) / "review.json"
+        rc, review = _run([*command, "--json-output", str(receipt)])
+        failure = str(review.get("failure_category", ""))
+        # A successful stdout alone is not a persisted approval decision.
+        if not receipt.exists():
+            if rc:
+                return rc, review
+            return 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        try:
+            if (receipt.is_symlink() or not receipt.is_file()
+                    or receipt.stat().st_size > 5_000_000):
+                raise ValueError("untrusted_review_receipt")
+            parsed = json.loads(receipt.read_text(encoding="utf-8"))
+            if not isinstance(parsed, dict):
+                raise ValueError("nonobject_review")
+        except (OSError, UnicodeError, ValueError, TypeError):
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if (parsed.get("account_id"), parsed.get("slot_id")) != expected[:2]:
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if (parsed.get("status") == "READY"
+                and (parsed.get("selected_queue_id") != expected[2]
+                     or parsed.get("would_post") is not False)):
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if parsed.get("status") not in {"READY", "NO_READY_CANDIDATE", "FAILED"}:
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if failure == "SHEETS_QUOTA_EXHAUSTED":
+            parsed["failure_category"] = failure
+        if rc and parsed.get("status") == "READY":
+            parsed["status"] = "FAILED"
+            parsed["failure_category"] = failure or "READY_REVIEW_REPORT_INVALID"
+        return rc, parsed
+
+
 def _primary_generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[str, list[str]]]:
     if account_id == "beauty_account":
         from content_schedule import slots_for_account
@@ -660,9 +713,6 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
         for queue_id in queue_ids[:3]:
             if queue_id in approved:
                 continue
-            ready_output = Path(f"/tmp/ready-inventory-{account_id}-{slot['slot_id']}.json")
-            # A failed subprocess must not inherit a previous candidate's READY.
-            ready_output.unlink(missing_ok=True)
             command = [
                 sys.executable,
                 "scripts/run_hybrid_ready_pipeline.py",
@@ -679,24 +729,8 @@ def replenish(account_id: str, slot: dict[str, str], *, apply: bool,
                 "--autonomous-low-risk",
                 "--apply",
                 "--use-sheets",
-                "--json-output",
-                str(ready_output),
             ]
-            review_rc, review = _run(command)
-            subprocess_failure_category = str(review.get("failure_category", ""))
-            if ready_output.exists():
-                try:
-                    parsed_review = json.loads(ready_output.read_text(encoding="utf-8"))
-                    if not isinstance(parsed_review, dict):
-                        raise ValueError("nonobject_review")
-                    review = parsed_review
-                except (OSError, UnicodeError, ValueError, TypeError):
-                    # No freeform error, queue ID, caption, or provider text
-                    # leaves the private validation process.
-                    review = {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
-                    review_rc = review_rc or 1
-                if subprocess_failure_category == "SHEETS_QUOTA_EXHAUSTED":
-                    review["failure_category"] = subprocess_failure_category
+            review_rc, review = _run_isolated_ready_review(command)
             budget_blocked = approval_budget_exhausted(review)
             if budget_blocked:
                 review["failure_category"] = "AI_APPROVAL_BUDGET_EXHAUSTED"
