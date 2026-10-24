@@ -145,6 +145,57 @@ class SafeBankSummaryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             mod.parse_bounded_bank_json("{}", "night_scout")
 
+    def test_bounded_account_scoped_readback_rejections_without_private_data(self):
+        report = self.report()
+        report["status"] = "FAILED"
+        report["evergreen_bank_by_account"]["night_scout"].update(
+            status="QUALITY_EXHAUSTED", usable_evergreen=29, minimum=30)
+        report["results"] = [
+            {"account_id": "night_scout", "attempts": [
+                {"failure_category": "GENERATED_READBACK_UNVERIFIED",
+                 "queue_id": "PRIVATE_QUEUE_123",
+                 "verification_rejection_counts": {
+                     "GENERATED_NOT_READY": 2,
+                     "GENERATED_READBACK_UNVERIFIED": 1,
+                     "PRIVATE_CAPTION_SHOULD_NOT_PRINT": 3,
+                     "GENERATED_IDENTITY_MISMATCH": "SECRET_PROVIDER_MESSAGE",
+                     "GENERATED_APPROVAL_INCOMPLETE": 99,
+                 }},
+            ]},
+            {"account_id": "beauty_account", "attempts": [
+                {"verification_rejection_counts": {"GENERATED_RUNTIME_GATE_REJECTED": 2}},
+            ]},
+        ]
+        receipt, ok = mod.redacted_bank_summary(report, "night_scout")
+        self.assertFalse(ok)
+        self.assertIn("usable=29 minimum=30", receipt)
+        self.assertIn("category=GENERATED_READBACK_UNVERIFIED", receipt)
+        self.assertIn("GENERATED_NOT_READY:2", receipt)
+        self.assertIn("GENERATED_READBACK_UNVERIFIED:1", receipt)
+        for forbidden in (
+            "PRIVATE_QUEUE", "PRIVATE_CAPTION", "SECRET_PROVIDER_MESSAGE",
+            "GENERATED_RUNTIME_GATE_REJECTED", "GENERATED_APPROVAL_INCOMPLETE:99",
+        ):
+            self.assertNotIn(forbidden, receipt)
+
+    def test_untrusted_rejection_map_never_surfaces_freeform_text(self):
+        report = self.report()
+        report["status"] = "FAILED"
+        report["evergreen_bank_by_account"]["night_scout"].update(
+            status="QUALITY_EXHAUSTED", usable_evergreen=0, minimum=30)
+        report["results"] = [{"account_id": "night_scout", "attempts": [
+            {"verification_rejection_counts": {
+                "SECRET_PRIVATE_TOKEN": 1, "GENERATED_NOT_READY": True,
+            }},
+            {"verification_rejection_counts": "PRIVATE_FREEFORM_TEXT"},
+        ]}]
+        receipt, ok = mod.redacted_bank_summary(report, "night_scout")
+        self.assertFalse(ok)
+        self.assertNotIn("SECRET_PRIVATE_TOKEN", receipt)
+        self.assertNotIn("PRIVATE_FREEFORM_TEXT", receipt)
+        self.assertNotIn("GENERATED_NOT_READY:True", receipt)
+        self.assertNotIn("readback_rejections=", receipt)
+
     def test_missing_file_gives_only_fixed_error(self):
         output = io.StringIO()
         with patch.object(sys, "argv",
