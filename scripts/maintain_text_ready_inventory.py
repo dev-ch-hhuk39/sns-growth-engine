@@ -531,28 +531,55 @@ def _run(command: list[str]) -> tuple[int, dict[str, Any]]:
 
 
 def _run_isolated_ready_review(command: list[str]) -> tuple[int, dict[str, Any]]:
-    """Give every approval subprocess a private, unique receipt location.
+    """Accept only a fresh, identity-matched and no-post hybrid READY receipt.
 
-    Concurrent AUTO_READY and Aftercare runs must never share a predictable
-    /tmp receipt or read another invocation's approval decision.
+    Concurrent AUTO_READY and Aftercare must not share a predictable /tmp
+    result or trust a subprocess's stdout when its durable receipt is missing.
     """
+    def argument(flag: str) -> str:
+        try:
+            value = command[command.index(flag) + 1]
+        except (ValueError, IndexError):
+            return ""
+        return value if type(value) is str else ""
+
+    expected = (
+        argument("--account-id"), argument("--slot-id"), argument("--queue-id"),
+    )
+    if not all(expected) or "--json-output" in command:
+        return 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
     with tempfile.TemporaryDirectory(prefix="sns-ready-review-") as directory:
         receipt = Path(directory) / "review.json"
         rc, review = _run([*command, "--json-output", str(receipt)])
         failure = str(review.get("failure_category", ""))
-        if receipt.exists():
-            try:
-                parsed = json.loads(receipt.read_text(encoding="utf-8"))
-                if not isinstance(parsed, dict):
-                    raise ValueError("nonobject_review")
-                review = parsed
-            except (OSError, UnicodeError, ValueError, TypeError):
-                # Never expose the private receipt or a provider response.
-                review = {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
-                rc = rc or 1
-            if failure == "SHEETS_QUOTA_EXHAUSTED":
-                review["failure_category"] = failure
-        return rc, review
+        # A successful stdout alone is not a persisted approval decision.
+        if not receipt.exists():
+            if rc:
+                return rc, review
+            return 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        try:
+            if (receipt.is_symlink() or not receipt.is_file()
+                    or receipt.stat().st_size > 5_000_000):
+                raise ValueError("untrusted_review_receipt")
+            parsed = json.loads(receipt.read_text(encoding="utf-8"))
+            if not isinstance(parsed, dict):
+                raise ValueError("nonobject_review")
+        except (OSError, UnicodeError, ValueError, TypeError):
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if (parsed.get("account_id"), parsed.get("slot_id")) != expected[:2]:
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if (parsed.get("status") == "READY"
+                and (parsed.get("selected_queue_id") != expected[2]
+                     or parsed.get("would_post") is not False)):
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if parsed.get("status") not in {"READY", "NO_READY_CANDIDATE", "FAILED"}:
+            return rc or 2, {"status": "FAILED", "failure_category": "READY_REVIEW_REPORT_INVALID"}
+        if failure == "SHEETS_QUOTA_EXHAUSTED":
+            parsed["failure_category"] = failure
+        if rc and parsed.get("status") == "READY":
+            parsed["status"] = "FAILED"
+            parsed["failure_category"] = failure or "READY_REVIEW_REPORT_INVALID"
+        return rc, parsed
 
 
 def _primary_generation_commands(account_id: str, slot: dict[str, str]) -> list[tuple[str, list[str]]]:

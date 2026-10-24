@@ -6,6 +6,7 @@ This file never invokes an API, Google Sheets, paid AI or real SNS posting.
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -91,11 +92,15 @@ class PaidRetryContainmentTests(unittest.TestCase):
                 return 0, {"queue_ids": ["synthetic-q1"]}
             self.assertIn("scripts/run_hybrid_ready_pipeline.py", command)
             self.assertIn("--autonomous-low-risk", command)
+            self.assertEqual(command[-2], "--json-output")
+            Path(command[-1]).write_text(json.dumps({
+                "status": "READY", "account_id": "night_scout",
+                "slot_id": SLOT["slot_id"], "selected_queue_id": "synthetic-q1",
+                "would_post": False,
+            }), encoding="utf-8")
             return 0, {"status": "READY"}
         with patch.object(maintenance, "_generation_commands", return_value=ROUTES), \
-             patch.object(maintenance, "_run", side_effect=run), \
-             patch.object(maintenance, "Path") as path:
-            path.return_value.exists.return_value = False
+             patch.object(maintenance, "_run", side_effect=run):
             result = maintenance.replenish("night_scout", SLOT, apply=True)
         self.assertEqual(calls, ["paid-primary", "offline", sys.executable])
         self.assertEqual(result["status"], "READY_REPLENISHED")
@@ -112,11 +117,15 @@ class PaidRetryContainmentTests(unittest.TestCase):
             if command[0] == "paid-fallback":
                 return 0, {"queue_ids": ["synthetic-q2"]}
             self.assertIn("--autonomous-low-risk", command)
+            self.assertEqual(command[-2], "--json-output")
+            Path(command[-1]).write_text(json.dumps({
+                "status": "READY", "account_id": "night_scout",
+                "slot_id": SLOT["slot_id"], "selected_queue_id": "synthetic-q2",
+                "would_post": False,
+            }), encoding="utf-8")
             return 0, {"status": "READY"}
         with patch.object(maintenance, "_generation_commands", return_value=ROUTES), \
-             patch.object(maintenance, "_run", side_effect=run), \
-             patch.object(maintenance, "Path") as path:
-            path.return_value.exists.return_value = False
+             patch.object(maintenance, "_run", side_effect=run):
             result = maintenance.replenish("night_scout", SLOT, apply=True)
         self.assertEqual(calls, ["paid-primary", "paid-fallback", sys.executable])
         self.assertEqual(result["status"], "READY_REPLENISHED")
