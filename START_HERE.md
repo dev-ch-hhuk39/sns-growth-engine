@@ -1,3 +1,7 @@
+## 2026-10-25 23:17 JST - Failed GitHub refresh workflow stopped, token watch remains active
+
+Five prior GitHub refresh runs failed at the Secrets permission check. Disabled only the hosted refresh-threads-tokens.yml workflow after verifying daily VPS read-only token-expiry watch. Token renewal is NOT implemented yet; the current three tokens were valid with ~17.71 days left. Production posting OFF. Full offline local tests 1085/1085 PASS, plus six expiry-watch offline contracts PASS. Details in docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
 ## 2026-10-25 23:15 JST - Expiry watcher active, renewal remains disabled
 
 Official Threads expiry watch deployed to VPS and first run PASS: three accounts each have 17.71 days remaining, daily 08:05 JST checks. Zero posts/token changes. Renewal still blocked. Existing offline regression 1085/1085 PASS plus six targeted watchdog checks. Full status in docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.

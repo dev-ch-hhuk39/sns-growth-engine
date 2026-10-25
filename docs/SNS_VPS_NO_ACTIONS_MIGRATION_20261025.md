@@ -94,3 +94,9 @@
 - Added root-owned official-Meta debug_token expiry watchdog on VPS under snsrunner with systemd sandbox. Reads only three owner-pinned accounts, rejects redirects, token mismatch and missing scopes; no token values logged or modified.
 - First live execution PASS: Night, Liver, Beauty each 17.71 days left, token valid and user ID matched; zero paid API, zero refresh, zero posts or Sheets writes. Four offline tests and two unit-contract tests PASS.
 - Enabled daily 08:05 JST sns-growth-local-threads-expiry-watch.timer. The experimental renewal timer remains disabled and the unknown Night-refresh marker remains quarantined. This monitors expiry but does NOT fix token renewal.
+
+## 2026-10-25 23:17 JST - Failed hosted refresh schedule disabled
+
+- Five recent GitHub Actions Refresh Threads Tokens runs were all FAILED (Sept 27, Oct 4, 11, 18, 25), previously blocked by GitHub production-environment Secret-write preflight. This scheduled job did not successfully renew a token.
+- After installing and verifying the VPS read-only daily expiry watch, explicitly disabled GitHub workflow refresh-threads-tokens.yml. Verified the workflow is disabled_manually. The prior 6 fully migrated hosted schedules remain migrated; hosted refresh is a SEVENTH disabled scheduled workflow, but it is NOT a completed refresh migration. Other active schedules remain, and no protected-main checks were changed.
+- The VPS read-only expiry watcher runs daily at 08:05 JST, last PASS for all three accounts with ~17.71 days left; the separate token-refresh timer remains disabled. Real rotation requires an independent, safe, owner-verified and auditable credential renewal process before expiry. The Night unknown-refresh-outcome latch remains intact. No tokens were modified or printed and no SNS posts were sent.
