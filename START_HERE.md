@@ -1,3 +1,7 @@
+## 2026-10-25 23:12 JST - Development continuation checkpoint
+
+Review read-only monitor PASS; publishing remains OFF. Full regression retesting is ongoing (last 750/1085, zero failures), exact source branch 7636f27 with isolated test-timeout fix. Vulnerability audit detects setuptools 79.0.1 in current VPS; patched 84.1.0 is already pinned for NEXT immutable release, but VPS storage is under 9GiB staging threshold. Shared R2 7.51GB with Restic snapshot locks still blocking safe prune, no forced deletions. 15 scheduled GitHub Actions still require safe replacements. Threads token refresh unverified and disabled. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md for complete state and evidence.
+
 ## 2026-10-25 22:22 JST - Read-only review monitoring restored, source fix pending deployment
 
 VPS review-board writer remains fail-closed with the unknown-write marker preserved and its failing timer disabled. New read-only consistency monitor installed and enabled (2,023 queue, 1,612 review, 1,605 eligible, 10 saved feedback all matched, zero inconsistencies/posts/writes). Source idempotency patch and dedicated regression tests pass, but live immutable release is unchanged. Earlier offline test failures now fixed individually; full re-run pending. SNS posting OFF, root disk ~81%; do not clear writer latch or bypass GitHub required checks. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
