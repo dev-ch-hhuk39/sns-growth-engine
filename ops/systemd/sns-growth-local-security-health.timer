@@ -1,0 +1,11 @@
+[Unit]
+Description=Chadult SNS security, offsite backup and disk read-only daily audit
+
+[Timer]
+OnCalendar=*-*-* 08:30:00 Asia/Tokyo
+Persistent=true
+AccuracySec=1min
+Unit=sns-growth-local-security-health.service
+
+[Install]
+WantedBy=timers.target

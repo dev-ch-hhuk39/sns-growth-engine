@@ -1,0 +1,17 @@
+[Unit]
+Description=Chadult SNS-only local read-only security and backup health
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/chadult-sns-retention/sns_host_security_health.py
+TimeoutStartSec=120
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
