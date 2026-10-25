@@ -1,3 +1,7 @@
+## 2026-10-25 23:15 JST - Expiry watcher active, renewal remains disabled
+
+Official Threads expiry watch deployed to VPS and first run PASS: three accounts each have 17.71 days remaining, daily 08:05 JST checks. Zero posts/token changes. Renewal still blocked. Existing offline regression 1085/1085 PASS plus six targeted watchdog checks. Full status in docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
 ## 2026-10-25 23:13 JST - Local QA PASS, production still gated
 
 Repository full offline regression 1,085/1,085 PASS, workflow safety 620/620 PASS, Ruff/compileall/Gitleaks PASS. Branch code 4d92d70 had not yet been merged into protected main or released to VPS. Server posting OFF; review writer quarantined with read-only monitoring PASS; Threads token renewal unresolved and 15 scheduled GitHub workflows not yet migrated. VPS 8.4GiB disk free blocks 9GiB staging floor; R2 7.51GB and 7-day protected Restic retention. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.

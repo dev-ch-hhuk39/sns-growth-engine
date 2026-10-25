@@ -1,0 +1,23 @@
+[Unit]
+Description=Chadult SNS read-only Threads token expiry watch (never refresh)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+EnvironmentFile=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
+Environment=THREADS_TOKEN_STORE_DIR=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens
+ExecStart=/opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python -B /usr/local/libexec/chadult-sns-readonly/sns_local_threads_expiry_watch.py
+TimeoutStartSec=150
+MemoryMax=220M
+Nice=10
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

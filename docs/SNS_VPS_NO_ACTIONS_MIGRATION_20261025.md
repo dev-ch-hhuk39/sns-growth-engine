@@ -88,3 +88,9 @@
 - Additional standalone static checks PASS: 620 workflow-safety assertions across 64 workflows, Ruff fatal errors E9/F63/F7/F82, Python compileall and Gitleaks (12 commits, no leaks). Exact immutable-release setuptools 84.1.0 contract 2/2 PASS, and upstream OSV confirmed 0 known records for that pinned version.
 - Feature branch remains outside protected main, so these findings are local SOURCE-level QA evidence only. No real SNS posts or new production release were deployed. VPS current still runs older setuptools 79.0.1 and is blocked from building another immutable release by 9GiB preflight storage floor. Review writer quarantine is preserved; read-only watcher remains active.
 - These QA artifacts do not certify end-to-end Threads publishing, secondary media rights, platform approval, or the remaining 15 GitHub Actions schedules. A P0 signed first-post canary and production aftercare remain necessary before declaring completed development.
+
+## 2026-10-25 23:15 JST - Daily read-only Threads expiry watcher enabled
+
+- Added root-owned official-Meta debug_token expiry watchdog on VPS under snsrunner with systemd sandbox. Reads only three owner-pinned accounts, rejects redirects, token mismatch and missing scopes; no token values logged or modified.
+- First live execution PASS: Night, Liver, Beauty each 17.71 days left, token valid and user ID matched; zero paid API, zero refresh, zero posts or Sheets writes. Four offline tests and two unit-contract tests PASS.
+- Enabled daily 08:05 JST sns-growth-local-threads-expiry-watch.timer. The experimental renewal timer remains disabled and the unknown Night-refresh marker remains quarantined. This monitors expiry but does NOT fix token renewal.
