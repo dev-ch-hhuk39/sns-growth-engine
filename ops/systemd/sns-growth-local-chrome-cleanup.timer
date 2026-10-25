@@ -1,0 +1,11 @@
+[Unit]
+Description=Chadult SNS-only weekly old Chrome crash telemetry retention on VPS
+
+[Timer]
+OnCalendar=Sun *-*-* 06:23:00 Asia/Tokyo
+Persistent=true
+AccuracySec=3min
+Unit=sns-growth-local-chrome-cleanup.service
+
+[Install]
+WantedBy=timers.target

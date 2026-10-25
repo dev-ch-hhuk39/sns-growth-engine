@@ -1,0 +1,11 @@
+[Unit]
+Description=Chadult SNS read-only dependency CVE audit daily at 03:20 JST
+
+[Timer]
+OnCalendar=*-*-* 03:20:00 Asia/Tokyo
+Persistent=true
+AccuracySec=5min
+Unit=sns-growth-local-dependency-audit.service
+
+[Install]
+WantedBy=timers.target

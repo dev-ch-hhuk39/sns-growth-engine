@@ -1,3 +1,7 @@
+## 2026-10-25 — VPS no-Actions infrastructure migration checkpoint
+
+See `docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md` for exact live verifications, two disabled Actions workflows, 755MB reclaimed, R2 7-day lock, and remaining blocking acceptance conditions. Current real SNS posting remains OFF. The latest setuptools fixed-version pin affects future staged releases only.
+
 ## 2026-10-24 — Aftercare actual horizon corrected
 
 - The hourly `Production Autopilot Aftercare` workflow described its maintenance as **next 24h READY**, but omitted `--horizon-hours`; `maintain_text_ready_inventory.py` instead defaulted to `production_inventory.json:text_horizon_hours=72`. The 2026-10-24 run #40093543069 tested 4/9 Night Scout and 5/9 Liver Manager slots and failed as though these were next-24h results, even though separate verified 24h runs had 3/3 text slots for each account. The cause of 72h shortfalls is **not** thereby resolved.

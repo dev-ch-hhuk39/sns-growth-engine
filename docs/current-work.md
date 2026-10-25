@@ -1,3 +1,7 @@
+## 2026-10-25 — VPS no-Actions infrastructure migration checkpoint
+
+See `docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md` for exact live verifications, two disabled Actions workflows, 755MB reclaimed, R2 7-day lock, and remaining blocking acceptance conditions. Current real SNS posting remains OFF. The latest setuptools fixed-version pin affects future staged releases only.
+
 ## 2026-10-25 JST — VPS no-GitHub-Actions read-only operations now installed
 
 - Dedicated SNS-only systemd security timer installed and enabled daily 08:30 JST: `sns-growth-local-security-health.timer` and service. On-host 12/12 checks PASS, including Ubuntu unattended upgrade configuration, UFW, Fail2ban, R2 backup/health, immutable current pointer, 85% disk warning and `BUFFERED_POSTING_ENABLED=false`. No secrets printed, writes, delete or posts.

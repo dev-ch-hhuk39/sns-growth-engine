@@ -98,6 +98,10 @@ if [[ "$STAGE_ONLY" == "true" && ! -d "$target" ]]; then
   python3 "$stage/scripts/bootstrap_sns_python311.py" --stage "$stage"
   PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
     "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --upgrade "pip==26.2.1"
+  # Build a NEW immutable runtime with the OSV-verified fixed setuptools.
+  # Never mutate the live release or its independent rollback environments.
+  PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
+    "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --upgrade "setuptools==84.1.0"
   # Never compile native dependencies or accumulate a second pip wheel cache
   # on this 1.9 GiB multi-service host. Missing binary wheels fail closed.
   PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
