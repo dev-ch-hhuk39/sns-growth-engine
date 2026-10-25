@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.chadult.sns.oss-library-health</string>
+	<key>Nice</key>
+	<integer>15</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/bash</string>
+		<string>/Users/hayatoa/Projects/sns-growth-engine-bank-acceptance-20261024/scripts/run_local_oss_library_health.sh</string>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/Users/hayatoa/.cache/chadult-sns-oss-health/launchd.stderr.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/hayatoa/.cache/chadult-sns-oss-health/launchd.stdout.log</string>
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>3</integer>
+		<key>Minute</key>
+		<integer>17</integer>
+		<key>Weekday</key>
+		<integer>1</integer>
+	</dict>
+	<key>ThrottleInterval</key>
+	<integer>600</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/hayatoa/Projects/sns-growth-engine-bank-acceptance-20261024</string>
+</dict>
+</plist>

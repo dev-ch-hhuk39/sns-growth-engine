@@ -1,3 +1,7 @@
+## 2026-10-25 18:22 JST — Local research library health replaced hosted Actions
+
+Fifth hosted schedule migrated without GitHub Actions: the weekly OSS Library Health job now uses a sandboxed Mac venv, a pinned last30days revision, 12 exact public tool+provider checks and a Monday 03:17 JST user launchd agent. Live launchctl kickstart finished PASS 12/12, exit=0; GitHub library-health.yml was disabled only after the local replacement passed. Sixteen originally scheduled hosted workflows remain, and Mac shutdown can defer this weekly check. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
 ## 2026-10-25 17:58 JST — Fourth hosted schedule replaced by VPS
 
 Production publication review sync moved from GitHub Actions to VPS systemd (odd JST hours at :25), with strict non-posting modes, Sheets read-after-write and quarantine-on-unknown to prevent auto-retry. First real execution PASS: 1,605 review records, 40 existing-cell updates, 0 new rows, 10 explicit decisions. GitHub publication-review-sync.yml disabled after confirmed VPS success. Total 4 scheduled hosted workflows replaced, 17 still pending. R2 now 7.50 GB with ~2.50 GB simple storage margin; shared capacity WARN with 4.9-day projection, 7-day lock protects existing objects. Liver media due-slot missed despite text READY. Full details: docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
