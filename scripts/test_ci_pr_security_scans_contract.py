@@ -20,7 +20,7 @@ class PrSecurityScanContractTests(unittest.TestCase):
         for name in ("dependency-audit", "secret-history-scan"):
             job = self.jobs[name]
             self.assertIn("github.event_name == 'pull_request'", job.get("if", ""), name)
-            self.assertIn("github.event_name == 'schedule'", job.get("if", ""), name)
+            self.assertNotIn("github.event_name == 'schedule'", job.get("if", ""), name)
             self.assertNotIn("continue-on-error", job, name)
             self.assertEqual(job["runs-on"], "ubuntu-latest", name)
             self.assertLessEqual(job["timeout-minutes"], 15, name)

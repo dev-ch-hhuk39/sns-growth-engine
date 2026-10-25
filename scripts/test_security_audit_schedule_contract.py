@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static fail-closed contract for hosted read-only nightly and PR security CI."""
+"""Daily Mac security audit replaces hosted schedule; PR controls remain enforced."""
 from pathlib import Path
 import unittest
 
@@ -7,12 +7,16 @@ CI = Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml"
 
 
 class SecurityScheduleContract(unittest.TestCase):
-    def test_nightly_and_pull_request_security_audits_are_hosted_and_readonly(self):
+    def test_nightly_moved_to_mac_and_pr_security_stays_on_hosted_ci(self):
         text = CI.read_text(encoding="utf-8")
-        self.assertIn('  schedule:\n    - cron: "20 18 * * *"', text)
+        self.assertNotIn("  schedule:", text)
         self.assertEqual(text.count(
-            "if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'"
-        ), 2)
+            "if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'"
+        ), 3)
+        plist = (CI.parents[2] / "ops/launchd/com.chadult.sns.repo-security-audit.plist").read_text()
+        self.assertIn("com.chadult.sns.repo-security-audit", plist)
+        self.assertIn("<key>Hour</key><integer>3</integer>", plist)
+        self.assertIn("<key>Minute</key><integer>20</integer>", plist)
         self.assertIn("  dependency-audit:", text)
         self.assertIn("  secret-history-scan:", text)
         self.assertIn("if: github.event_name == 'pull_request'\n", text)

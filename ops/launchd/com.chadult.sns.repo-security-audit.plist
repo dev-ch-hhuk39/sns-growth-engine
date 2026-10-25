@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.chadult.sns.repo-security-audit</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Library/Frameworks/Python.framework/Versions/3.13/bin/python3</string>
+    <string>/Users/hayatoa/Projects/sns-growth-engine-bank-acceptance-20261024/scripts/sns_local_repo_security_audit.py</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/hayatoa/Projects/sns-growth-engine-bank-acceptance-20261024</string>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>20</integer></dict>
+  <key>RunAtLoad</key><false/>
+  <key>Nice</key><integer>15</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>ThrottleInterval</key><integer>600</integer>
+  <key>StandardOutPath</key><string>/Users/hayatoa/.cache/chadult-sns-repo-audit/launchd.stdout.log</string>
+  <key>StandardErrorPath</key><string>/Users/hayatoa/.cache/chadult-sns-repo-audit/launchd.stderr.log</string>
+</dict>
+</plist>

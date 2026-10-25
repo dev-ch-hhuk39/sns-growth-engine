@@ -1,3 +1,7 @@
+## 2026-10-26 00:04 JST - AUTO_READY corrected; Mac nightly security auditor PASS
+
+One night_scout READY without approval log was reverted to WAITING_REVIEW (one Sheets write, 0 SNS posts); independent Sheets text-inventory verification now PASS. Private Mac 03:20 JST security audit installed: pip-audit 4 requirements PASS, full-history Gitleaks PASS after verifying one exact Git commit SHA false positive via official GitHub commit lookup. Branch CI schedule removed but protected PR checks retained; main still has old schedule until merge. VPS deployment still storage-blocked and Threads refresh unresolved. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
 ## 2026-10-25 23:17 JST - Failed GitHub refresh workflow stopped, token watch remains active
 
 Five prior GitHub refresh runs failed at the Secrets permission check. Disabled only the hosted refresh-threads-tokens.yml workflow after verifying daily VPS read-only token-expiry watch. Token renewal is NOT implemented yet; the current three tokens were valid with ~17.71 days left. Production posting OFF. Full offline local tests 1085/1085 PASS, plus six expiry-watch offline contracts PASS. Details in docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
