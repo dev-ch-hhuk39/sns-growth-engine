@@ -9,7 +9,8 @@ OPS=ROOT / "ops/systemd"
 class LocalTimerContractTests(unittest.TestCase):
     def test_all_four_local_timer_pairs_present(self):
         for name in ("local-ready-audit", "local-security-health",
-                     "local-dependency-audit", "local-chrome-cleanup"):
+                     "local-dependency-audit", "local-chrome-cleanup",
+                     "local-missed-slot-audit"):
             with self.subTest(name=name):
                 service=(OPS / f"sns-growth-{name}.service").read_text()
                 timer=(OPS / f"sns-growth-{name}.timer").read_text()
@@ -22,7 +23,7 @@ class LocalTimerContractTests(unittest.TestCase):
                 self.assertNotIn("ALLOW_REAL_THREADS_POST=true",service)
 
     def test_security_ready_and_dependency_are_not_mutating(self):
-        for name in ("local-ready-audit","local-security-health","local-dependency-audit"):
+        for name in ("local-ready-audit","local-security-health","local-dependency-audit","local-missed-slot-audit"):
             s=(OPS / f"sns-growth-{name}.service").read_text()
             self.assertNotIn("ReadWritePaths=",s)
             self.assertNotIn("ExecStartPre=/bin/bash",s)

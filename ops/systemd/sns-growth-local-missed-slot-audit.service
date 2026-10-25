@@ -1,0 +1,20 @@
+[Unit]
+Description=Chadult SNS hourly no-post no-write three-account due-slot audit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+EnvironmentFile=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
+ExecStart=/usr/bin/flock -w 120 /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/locks/sheets-io.lock /opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python -B /usr/local/libexec/chadult-sns-readonly/sns_local_missed_slot_audit.py
+TimeoutStartSec=780
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
