@@ -97,24 +97,26 @@ if [[ "$STAGE_ONLY" == "true" && ! -d "$target" ]]; then
   # on LD_LIBRARY_PATH or changing shared VPS/system Python settings.
   python3 "$stage/scripts/bootstrap_sns_python311.py" --stage "$stage"
   PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
-    "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --upgrade "pip==26.2.1"
+    "$stage/.venv/bin/python" -m pip install --quiet --only-binary=:all: --upgrade "pip==26.2.1"
   # Build a NEW immutable runtime with the OSV-verified fixed setuptools.
   # Never mutate the live release or its independent rollback environments.
   PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
-    "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --upgrade "setuptools==84.1.0"
+    "$stage/.venv/bin/python" -m pip install --quiet --only-binary=:all: --upgrade "setuptools==84.1.0"
   # Never compile native dependencies or accumulate a second pip wheel cache
   # on this 1.9 GiB multi-service host. Missing binary wheels fail closed.
   PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
-    "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --no-compile -r "$stage/requirements.txt"
+    "$stage/.venv/bin/python" -m pip install --quiet --only-binary=:all: --no-compile -r "$stage/requirements.txt"
   PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 nice -n 15 \
-    "$stage/.venv/bin/pip" install --quiet --only-binary=:all: --no-compile -r "$stage/requirements-media-runtime.txt"
+    "$stage/.venv/bin/python" -m pip install --quiet --only-binary=:all: --no-compile -r "$stage/requirements-media-runtime.txt"
   PIP_NO_CACHE_DIR=1 "$stage/.venv/bin/python" - <<'PY'
 import sys
 import PIL
+from importlib.metadata import version as package_version
 assert sys.version_info[:3] == (3, 11, 17), "SNS_RUNTIME_PYTHON_VERSION_MISMATCH"
 assert PIL.__version__ == "13.0.0", "SNS_RUNTIME_PILLOW_VERSION_MISMATCH"
+assert package_version("setuptools") == "84.1.0", "SNS_RUNTIME_SETUPOOLS_SECURITY_VERSION_MISMATCH"
 PY
-  "$stage/.venv/bin/pip" check
+  "$stage/.venv/bin/python" -m pip check
   # A stage can consume substantial disk; block promotion if the shared
   # 8-GiB safety floor was crossed. EXIT cleans up only this owned stage.
   "$(dirname "$0")/check_chadult_vps_deploy_preflight.sh" --min-free-gib 8
