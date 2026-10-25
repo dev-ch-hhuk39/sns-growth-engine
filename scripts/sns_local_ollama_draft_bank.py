@@ -49,6 +49,12 @@ def validate(text: str, history: list[str], forbidden: list[str]) -> str:
     return "PASS"
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Local Ollama results must never cause an HTTP redirect or egress."""
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        raise ValueError("LOCAL_INFERENCE_REDIRECT_BLOCKED")
+
+
 def generate(account: str, config: dict, count: int, batch: int) -> list:
     topic = TOPICS[account][batch % len(TOPICS[account])]
     prompt = (
@@ -69,7 +75,7 @@ def generate(account: str, config: dict, count: int, batch: int) -> list:
     request = urllib.request.Request(URL, data=json.dumps(payload, ensure_ascii=False).encode(),
                                      headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.urlopen(request, timeout=130) as response:
+        with urllib.request.build_opener(NoRedirect()).open(request, timeout=130) as response:
             if response.status != 200:
                 return []
             raw = response.read(2_000_001)

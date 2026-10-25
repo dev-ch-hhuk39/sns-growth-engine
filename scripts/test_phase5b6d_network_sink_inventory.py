@@ -26,6 +26,9 @@ from publishers.threads_publisher import (  # noqa: E402
 # changes. New code silently adding a POST route must not pass PR CI.
 EXPECTED = {
     "scripts/gemini_hybrid_client.py": {"urllib.Request:POST": 1},
+    # The only new transport is a fixed localhost Ollama inference endpoint,
+    # not a Meta/Cloudinary/Google external publisher or a paid API.
+    "scripts/sns_local_ollama_draft_bank.py": {"urllib.Request:POST": 1},
     "src/transcription/cloudflare_whisper_client.py": {
         "urllib.Request:POST": 1,
     },
@@ -136,6 +139,16 @@ def _forbidden_helper_imports() -> list[str]:
 class NetworkSinkInventoryTests(unittest.TestCase):
     def test_exact_network_post_inventory(self):
         self.assertEqual(_all_sinks(), EXPECTED)
+
+    def test_ollama_sink_is_fixed_localhost_and_no_redirect(self):
+        script = ROOT / "scripts" / "sns_local_ollama_draft_bank.py"
+        source = script.read_text(encoding="utf-8")
+        self.assertIn('URL = "http://127.0.0.1:11434/api/generate"', source)
+        self.assertIn("class NoRedirect(urllib.request.HTTPRedirectHandler)", source)
+        self.assertIn("urllib.request.build_opener(NoRedirect())", source)
+        self.assertNotIn("urllib.request.urlopen(request", source)
+        self.assertNotIn("https://graph.threads.net", source)
+        self.assertNotIn("https://api.openai.com", source)
 
     def test_private_threads_post_helpers_have_no_new_callers(self):
         self.assertEqual(_forbidden_helper_imports(), [])

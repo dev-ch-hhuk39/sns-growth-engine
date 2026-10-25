@@ -18,6 +18,11 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path("/opt/github-runners/sns-growth-engine/.buffered-runtime/current")
+# Root-owned VPS helper runs from outside the immutable release. Local offline
+# unit tests instead resolve the checkout; never select a writable runtime in
+# production when the canonical immutable root exists.
+if not (ROOT / "src" / "accounts" / "managed_accounts.py").is_file():
+    ROOT = Path(__file__).resolve().parents[1]
 ENV_FILE = Path("/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env")
 sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
 

@@ -77,9 +77,13 @@ def fake_real_discovery(
     return [row], "REAL_DISCOVERY"
 
 
+# This is a wholly offline discovery PLAN contract: fake metadata is already
+# fully verified. Do not invoke yt-dlp enrichment or the network for it.
 original_real_discovery = d.discover_source_videos_real
+original_detail_enrichment = d.enrich_selected_video_metadata
 
 d.discover_source_videos_real = fake_real_discovery
+d.enrich_selected_video_metadata = lambda rows: [dict(row) for row in rows]
 
 try:
     plan = d.build_discovery_plan(
@@ -92,6 +96,7 @@ try:
     )
 finally:
     d.discover_source_videos_real = original_real_discovery
+    d.enrich_selected_video_metadata = original_detail_enrichment
 
 
 checks = [

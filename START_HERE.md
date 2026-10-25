@@ -1,3 +1,7 @@
+## 2026-10-25 22:22 JST - Read-only review monitoring restored, source fix pending deployment
+
+VPS review-board writer remains fail-closed with the unknown-write marker preserved and its failing timer disabled. New read-only consistency monitor installed and enabled (2,023 queue, 1,612 review, 1,605 eligible, 10 saved feedback all matched, zero inconsistencies/posts/writes). Source idempotency patch and dedicated regression tests pass, but live immutable release is unchanged. Earlier offline test failures now fixed individually; full re-run pending. SNS posting OFF, root disk ~81%; do not clear writer latch or bypass GitHub required checks. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
 ## 2026-10-25 20:06 JST - Six hosted schedules replaced, 48 private drafts, token refresh unresolved
 
 VPS/Mac local jobs replaced 6 GitHub schedules. Pinned reference research launchd PASS and Mac Ollama produced 24 Night + 24 Liver PENDING_HUMAN_QA private draft ideas (never READY). Threads identity handle repair passed all three official account identity checks. Critical: 3 original tokens had ~17.9 days remaining at 18:48, local token renewal still blocked with a Night unknown-refresh marker. Posting OFF and no main merge/deploy. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
