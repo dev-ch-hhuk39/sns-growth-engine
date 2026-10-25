@@ -7,10 +7,10 @@ ROOT=Path(__file__).resolve().parents[1]
 OPS=ROOT / "ops/systemd"
 
 class LocalTimerContractTests(unittest.TestCase):
-    def test_all_four_local_timer_pairs_present(self):
+    def test_all_six_local_timer_pairs_present(self):
         for name in ("local-ready-audit", "local-security-health",
                      "local-dependency-audit", "local-chrome-cleanup",
-                     "local-missed-slot-audit"):
+                     "local-missed-slot-audit", "local-publication-review"):
             with self.subTest(name=name):
                 service=(OPS / f"sns-growth-{name}.service").read_text()
                 timer=(OPS / f"sns-growth-{name}.timer").read_text()
