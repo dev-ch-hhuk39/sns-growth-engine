@@ -1,3 +1,7 @@
+## 2026-10-25 20:06 JST - Six hosted schedules replaced, 48 private drafts, token refresh unresolved
+
+VPS/Mac local jobs replaced 6 GitHub schedules. Pinned reference research launchd PASS and Mac Ollama produced 24 Night + 24 Liver PENDING_HUMAN_QA private draft ideas (never READY). Threads identity handle repair passed all three official account identity checks. Critical: 3 original tokens had ~17.9 days remaining at 18:48, local token renewal still blocked with a Night unknown-refresh marker. Posting OFF and no main merge/deploy. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
 ## 2026-10-25 18:22 JST — Local research library health replaced hosted Actions
 
 Fifth hosted schedule migrated without GitHub Actions: the weekly OSS Library Health job now uses a sandboxed Mac venv, a pinned last30days revision, 12 exact public tool+provider checks and a Monday 03:17 JST user launchd agent. Live launchctl kickstart finished PASS 12/12, exit=0; GitHub library-health.yml was disabled only after the local replacement passed. Sixteen originally scheduled hosted workflows remain, and Mac shutdown can defer this weekly check. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
