@@ -1,3 +1,9 @@
+## 2026-10-27 — preserve existing aftercare consents during deploy
+
+- Active branch `codex/sns-aftercare-env-preservation-20261027`. Found that deployment preserved protected P0 controls but dropped the existing independent aftercare approvals required by the metrics/strategy/reuse wrapper.
+- Candidate environment creation now carries those four booleans only from the same owner-private protected source. Missing flags default false; caller/CI values cannot grant or override approval. Malformed inherited booleans block candidate creation. Live configuration and aftercare behavior are unchanged by this source edit.
+- Focused deployment lifecycle 19 and aftercare wrapper 15 tests PASS. Full Mac quality gate PASS: 1,095 regression scripts, workflow safety 619/619, fatal Ruff, compile, diff and history Gitleaks; no new exclusions. No new production approval, deployment, metrics write, posting or schedule activation is implied. Details: `docs/SNS_AFTERCARE_ENV_PRESERVATION_20261027.md`.
+
 ## 2026-10-27 — continuation
 
 The scoped catalogue performance implementation passed the complete Mac quality gate on October 26; source delivery through protected PR is the next action. Operator approval for dedicated-Runner capacity cleanup is still pending. The new continuation message does not approve the previously rejected stop/delete operation. No production repeat, token refresh or Bank write is authorized by this checkpoint.

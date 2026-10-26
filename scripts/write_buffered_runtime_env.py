@@ -26,6 +26,14 @@ HOST_ONLY_P0 = (
     'SNS_P0_ONCE_HMAC_KEY_HEX',
 )
 MODE_ONLY_P0 = 'SNS_P0_AUTONOMY_MODE'
+# Existing independent aftercare consents belong to the protected host too.
+# A deploy caller cannot grant them, and missing consents stay disabled.
+HOST_ONLY_AFTERCARE = (
+    'AFTERCARE_METRICS_WRITE_APPROVED',
+    'AFTERCARE_ACTIONS_DISABLED_ATTESTED',
+    'AFTERCARE_STRATEGY_WRITE_APPROVED',
+    'AFTERCARE_READY_BANK_REUSE_APPROVED',
+)
 
 
 def inherited_p0_env(source: Path, shared: Path) -> dict[str, str]:
@@ -47,7 +55,7 @@ def inherited_p0_env(source: Path, shared: Path) -> dict[str, str]:
         if not re.fullmatch(r'[A-Z][A-Z0-9_]*', key) or key in seen:
             raise ValueError('host_env_key_invalid_or_duplicate')
         seen.add(key)
-        if key in HOST_ONLY_P0 or key == MODE_ONLY_P0:
+        if key in HOST_ONLY_P0 or key == MODE_ONLY_P0 or key in HOST_ONLY_AFTERCARE:
             result[key] = value
     return result
 
@@ -86,6 +94,9 @@ def write_candidate_env(path: Path, runtime_root: Path, env: dict[str, str],
     autonomy_mode = inherited.get('SNS_P0_AUTONOMY_MODE', 'canary')
     if autonomy_mode not in {'canary', 'continuous'}:
         raise ValueError('host_p0_autonomy_mode_invalid')
+    aftercare = {key: inherited.get(key, 'false') for key in HOST_ONLY_AFTERCARE}
+    if any(value not in {'true', 'false'} for value in aftercare.values()):
+        raise ValueError('host_aftercare_approval_boolean_invalid')
     if env.get('BUFFERED_POSTING_ENABLED') == 'true':
         if (gate != 'true' or
                 not Path(inherited.get('SNS_P0_ONCE_DB_PATH') or '').is_absolute()
@@ -97,6 +108,7 @@ def write_candidate_env(path: Path, runtime_root: Path, env: dict[str, str],
     assignments.extend((key, inherited.get(key, 'false' if key ==
                         'SNS_P0_ONCE_GATE_ENABLED' else '')) for key in HOST_ONLY_P0)
     assignments.append((MODE_ONLY_P0, autonomy_mode))
+    assignments.extend(aftercare.items())
     assignments.append(('THREADS_TOKEN_STORE_DIR', str(shared / 'threads_tokens')))
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
