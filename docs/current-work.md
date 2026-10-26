@@ -1,3 +1,11 @@
+## 2026-10-26 Liver pilot — utility installed, preflight blocked before refresh
+
+- Owner approved the exact two-file versioned utility installation and one conditional Liver refresh. Installed root-owned read-only bundle from merged main `cc578f8` / PR #472; both SHA-256 hashes verified. Live immutable release `94b744f` and existing timers unchanged.
+- Read-only Liver preflight BLOCKED: `CURRENT_TOKEN_LIFECYCLE_UNVERIFIED`. Diagnostic: expected app ID not configured (`app_id_configured=false`, `META_APP_ID_MISMATCH`); this is missing expected identity, not proof of a wrong token app. Owner-confirmed **Threads App ID** requested; no value was inferred or pinned.
+- Actual token refreshes 0, posts 0, Sheets writes 0. Independent metadata check: Night unknown marker, Beauty token-file state and protected environment unchanged; Liver JSON absent and no new Liver marker. No apply command or automatic retry occurred.
+- Bank aggregate-query execution was separately rejected by automatic approval review for missing specific VPS/payload approval; no alternate path or accepted Bank result. Awaiting owner App ID and separate read-only Bank approval.
+- Receipts, exact bundle hashes and safe resumption: `docs/SNS_LIVER_TOKEN_PILOT_20261026.md`. Private evidence `/private/tmp/sns-liver-pilot-evidence-20261026/`. No acceptance evidence or thresholds changed; `docs/goal-status.json` untouched.
+
 ## 2026-10-26 Codex — durable renewal/review intents; live monitoring reverified
 
 - Isolated branch `codex/sns-production-completion-20261026` at `/private/tmp/sns-growth-engine-completion-20261026`, base `41838cf`; origin/main `fc1a930`. Original worktree and all five untracked renewal files remain untouched (hash-verified).
