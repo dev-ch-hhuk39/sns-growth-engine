@@ -219,6 +219,9 @@
     "scripts/setup_sheets.py": {
       "sheet_like.update": 1
     },
+    "scripts/sns_failclosed_unapproved_ready.py": {
+      "update_queue_item": 1
+    },
     "scripts/sync_publication_review.py": {
       "append_rows": 1,
       "batch_update": 1

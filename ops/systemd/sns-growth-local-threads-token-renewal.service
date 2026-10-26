@@ -1,0 +1,25 @@
+[Unit]
+Description=Chadult SNS weekly verified Threads token refresh, no GitHub Actions
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+EnvironmentFile=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
+Environment=THREADS_TOKEN_STORE_DIR=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens
+ExecStart=/usr/bin/flock -x -w 120 /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens/.threads-refresh.lock /opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python -B /usr/local/libexec/chadult-sns-readonly/sns_local_threads_token_renewal.py --apply --confirm-token-renewal
+# 120s flock wait + 3 accounts * (4 bounded 20s reads + 30s refresh).
+TimeoutStartSec=600
+MemoryMax=200M
+Nice=10
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

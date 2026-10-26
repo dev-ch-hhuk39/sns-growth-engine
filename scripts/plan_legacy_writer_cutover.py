@@ -31,6 +31,7 @@ GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "scripts/auto_approve_queue.py", "scripts/approve_queue.py",
         "scripts/apply_publication_review_decisions.py",
         "scripts/sync_publication_review.py",
+        "scripts/sns_failclosed_unapproved_ready.py",
         "scripts/normalize_scheduled_media_caption.py",
         "scripts/promote_hybrid_approved_media.py",
         "scripts/prepare_beauty_review_candidates.py",

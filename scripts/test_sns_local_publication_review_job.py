@@ -61,6 +61,55 @@ class ReviewJobTests(unittest.TestCase):
                     job.run(base=Path(tmp), state_dir=Path(tmp))
             self.assertNotIn("PRIVATE_TOKEN", (Path(tmp) / job.LATCH).read_text())
 
+    def test_process_termination_during_write_still_latches(self):
+        class Crash(BaseException):
+            pass
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / job.LATCH
+            def crash(*args, **kwargs):
+                self.assertTrue(marker.exists())
+                raise Crash()
+            with patch.object(job.subprocess, "run", side_effect=crash):
+                with self.assertRaises(Crash):
+                    job.run(base=Path(tmp), state_dir=Path(tmp))
+            before = marker.read_bytes()
+            with patch.object(job.subprocess, "run") as process:
+                with self.assertRaises(job.ReviewJobBlocked):
+                    job.run(base=Path(tmp), state_dir=Path(tmp))
+                process.assert_not_called()
+            self.assertEqual(before, marker.read_bytes())
+
+    def test_intent_persistence_failure_prevents_child_process(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(job, "sync_state_directory", side_effect=OSError("private")), \
+                    patch.object(job.subprocess, "run") as process:
+                with self.assertRaises(job.ReviewJobBlocked):
+                    job.run(base=Path(tmp), state_dir=Path(tmp))
+                process.assert_not_called()
+            self.assertTrue((Path(tmp) / job.LATCH).exists())
+
+    def test_legacy_quarantine_is_not_auto_cleared_even_with_successful_fixtures(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / job.LATCH
+            marker.write_text("LEGACY_UNKNOWN_WRITE")
+            with patch.object(job.subprocess, "run", side_effect=[result([], SYNC), result([], DECISIONS)]) as process:
+                with self.assertRaises(job.ReviewJobBlocked):
+                    job.run(base=Path(tmp), state_dir=Path(tmp))
+                process.assert_not_called()
+            self.assertEqual(marker.read_text(), "LEGACY_UNKNOWN_WRITE")
+
+    def test_verified_pair_completes_only_own_intent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(job.subprocess, "run", side_effect=[result([], SYNC), result([], DECISIONS)]):
+                self.assertEqual(job.run(base=Path(tmp), state_dir=Path(tmp))[0], "PASS")
+            self.assertFalse((Path(tmp) / job.LATCH).exists())
+            lease = job.mark_quarantine(Path(tmp))
+            marker = Path(tmp) / job.LATCH
+            marker.write_text("different owner operation")
+            with self.assertRaises(job.ReviewJobBlocked):
+                job.finish_verified_run(Path(tmp), lease)
+            self.assertEqual(marker.read_text(), "different owner operation")
+
     def test_bad_types_and_rows_cannot_pass(self):
         for payload in ({**SYNC, "review_count": True},
                         {**SYNC, "appended_count": -2},

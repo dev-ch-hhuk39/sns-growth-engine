@@ -1,0 +1,11 @@
+[Unit]
+Description=Chadult SNS account-verified Threads token weekly refresh on VPS
+
+[Timer]
+OnCalendar=Mon *-*-* 09:40:00 Asia/Tokyo
+Persistent=true
+AccuracySec=4min
+Unit=sns-growth-local-threads-token-renewal.service
+
+[Install]
+WantedBy=timers.target

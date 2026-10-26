@@ -89,6 +89,28 @@ class ExpiryWatchTests(unittest.TestCase):
                     "beauty_account",
                     {"access_token": "not-a-token", "user_id": "expected"}, clock=now)
 
+    def test_lifecycle_requires_live_issue_time_app_and_future_expiry(self):
+        now = datetime(2026, 10, 26, tzinfo=timezone.utc)
+        valid = {"is_valid": True, "user_id": "id1", "app_id": "app1",
+                 "scopes": ["threads_basic"], "issued_at": int(now.timestamp())-86401,
+                 "expires_at": int(now.timestamp())+20*86400}
+        credentials = {"access_token": "SYNTHETIC", "user_id": "id1", "app_id": "app1"}
+        class Opener:
+            def __init__(self, data): self.data = data
+            def open(self, req, timeout): return FakeResponse({"data": self.data})
+        cases = [dict(valid, issued_at=None), dict(valid, issued_at=True),
+                 dict(valid, issued_at=int(now.timestamp())+300),
+                 dict(valid, app_id="wrong"), dict(valid, expires_at=int(now.timestamp())-1)]
+        for data in cases:
+            with self.subTest(data=data), patch.object(audit.urllib.request, "build_opener", return_value=Opener(data)):
+                with self.assertRaises(ValueError):
+                    audit.check_one("liver_manager", credentials, clock=now, include_lifecycle=True)
+        with patch.object(audit.urllib.request, "build_opener", return_value=Opener(valid)):
+            result = audit.check_one("liver_manager", credentials, clock=now, include_lifecycle=True)
+        self.assertEqual(result["issued_at"], valid["issued_at"])
+        self.assertEqual(result["expires_at"], valid["expires_at"])
+        self.assertNotIn("SYNTHETIC", json.dumps(result))
+
     def test_redirect_denied(self):
         with self.assertRaises(ValueError):
             audit.NoRedirect().redirect_request(None, None, 302, "Found", {}, "https://unknown.invalid/")

@@ -32,7 +32,8 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError("META_REDIRECT_NOT_ALLOWED")
 
 
-def check_one(account: str, current: dict, *, clock: datetime | None = None) -> dict:
+def check_one(account: str, current: dict, *, clock: datetime | None = None,
+              include_lifecycle: bool = False) -> dict:
     if account not in ACCOUNTS:
         raise ValueError("ACCOUNT_SCOPE_INVALID")
     token = str(current.get("access_token") or "")
@@ -70,11 +71,22 @@ def check_one(account: str, current: dict, *, clock: datetime | None = None) -> 
         raise ValueError("META_EXPIRY_INVALID")
     now = clock or datetime.now(timezone.utc)
     days_left = round((expiry - now.timestamp()) / 86400, 2)
-    return {
+    result = {
         "account": account, "valid": True, "id_matched": True,
         "expires_in_days": days_left,
         "state": "RENEWAL_REQUIRED" if days_left <= WARNING_DAYS else "CURRENT",
     }
+    if include_lifecycle:
+        issued_at = data.get("issued_at")
+        if type(issued_at) is not int or not 0 < issued_at <= now.timestamp():
+            raise ValueError("META_ISSUED_AT_UNVERIFIED")
+        app_id = str(data.get("app_id") or "")
+        if not current.get("app_id") or app_id != str(current["app_id"]):
+            raise ValueError("META_APP_ID_MISMATCH")
+        if expiry <= now.timestamp():
+            raise ValueError("META_TOKEN_EXPIRED")
+        result.update(issued_at=issued_at, expires_at=expiry, scopes=sorted(set(scopes)))
+    return result
 
 
 def run() -> dict:

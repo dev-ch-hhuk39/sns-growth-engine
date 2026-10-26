@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import stat
+import uuid
 import sys
 
 ROOT = Path("/opt/github-runners/sns-growth-engine/.buffered-runtime/current")
@@ -52,19 +54,55 @@ def validated_result(stage: str, code: int, output: str) -> dict[str, int]:
         raise ReviewJobBlocked("REVIEW_READBACK_UNVERIFIED") from None
 
 
-def mark_quarantine(directory: Path) -> None:
-    # Never overwrite previous evidence; never store draft text or provider stderr.
+def sync_state_directory(directory: Path) -> None:
+    fd = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def mark_quarantine(directory: Path) -> tuple[int, int, str] | None:
+    """Persist BEFORE a writer starts; never overwrite previous evidence."""
     marker = directory / LATCH
+    nonce = uuid.uuid4().hex
     try:
         fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     except FileExistsError:
-        return
+        return None
     except OSError:
         raise ReviewJobBlocked("REVIEW_QUARANTINE_NOT_WRITABLE") from None
-    with os.fdopen(fd, "w", encoding="ascii") as out:
-        out.write("REVIEW_MUTATION_OUTCOME_UNVERIFIED\n")
-        out.flush()
-        os.fsync(out.fileno())
+    try:
+        with os.fdopen(fd, "w", encoding="ascii") as out:
+            metadata = os.fstat(out.fileno())
+            out.write("REVIEW_MUTATION_OUTCOME_UNVERIFIED\n" + nonce + "\n")
+            out.flush()
+            os.fsync(out.fileno())
+        sync_state_directory(directory)
+    except Exception:
+        raise ReviewJobBlocked("REVIEW_QUARANTINE_NOT_WRITABLE") from None
+    return metadata.st_dev, metadata.st_ino, nonce
+
+
+def finish_verified_run(directory: Path, lease: tuple[int, int, str]) -> None:
+    """Complete only this invocation's record, after both readbacks pass."""
+    marker = directory / LATCH
+    try:
+        fd = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(fd, "r", encoding="ascii") as stream:
+            metadata = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+                    or metadata.st_mode & 0o077
+                    or (metadata.st_dev, metadata.st_ino) != lease[:2]
+                    or stream.read(4096) != "REVIEW_MUTATION_OUTCOME_UNVERIFIED\n" + lease[2] + "\n"):
+                raise ValueError()
+        metadata = marker.lstat()
+        if (metadata.st_dev, metadata.st_ino) != lease[:2]:
+            raise ValueError()
+        marker.unlink()
+        sync_state_directory(directory)
+    except Exception:
+        raise ReviewJobBlocked("REVIEW_MANUAL_RECONCILIATION_REQUIRED") from None
 
 
 def run(*, base: Path = ROOT, state_dir: Path = STATE_DIR) -> tuple[str, dict[str, dict[str, int]]]:
@@ -85,6 +123,11 @@ def run(*, base: Path = ROOT, state_dir: Path = STATE_DIR) -> tuple[str, dict[st
         "ALLOW_VIDEO_DOWNLOAD": "false",
         "ALLOW_VIDEO_CUT": "false",
     }
+    # Mark intent before the first child can mutate Sheets. A SIGKILL or power
+    # loss is not caught by Python exception handlers; this file survives it.
+    lease = mark_quarantine(state_dir)
+    if lease is None:
+        raise ReviewJobBlocked("REVIEW_MANUAL_RECONCILIATION_REQUIRED")
     for stage, script, confirmation in STAGES:
         args = [sys.executable, "-B", str(base / script),
                 "--apply", confirmation, "--use-sheets"]
@@ -100,8 +143,8 @@ def run(*, base: Path = ROOT, state_dir: Path = STATE_DIR) -> tuple[str, dict[st
             )
             reports[stage] = validated_result(stage, result.returncode, result.stdout)
         except Exception:
-            mark_quarantine(state_dir)
             raise ReviewJobBlocked("REVIEW_MANUAL_RECONCILIATION_REQUIRED") from None
+    finish_verified_run(state_dir, lease)
     return "PASS", reports
 
 

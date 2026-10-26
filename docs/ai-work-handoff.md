@@ -3587,7 +3587,7 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 - 作業開始HEAD: `b3f6188296424c0b74f22b92adeaa65619abc47d`
 - code/test commit: `97950f75e272c47f94a8bc78c7f94ef09fa2a28f`
-- workflow secret fallback commit: `3b862de49b6441ec8bd8ef6ed8820b9ab108dd55`
+- workflow fallback Git revision: `3b862de49b6441ec8bd8ef6ed8820b9ab108dd55`
 - true dry-run修正:
   - `process_threads_queue.py --dry-run`: `setup_all()`なし、read-only出力あり。
   - `refill_threads_queue.py --dry-run`: `setup_all()`なし、appendなし、planned/tone_check出力あり。
@@ -8723,3 +8723,13 @@ Direct media run `34921582346` started without publish capability. Existing Xser
 - Vision multimodal implementation is AST-identical to base. No changes to Vision schema/prompt/model, media facts/binding, relevance criteria, angles, caption quality, rights, production workflows, scheduler, queues or posting.
 - Validation: focused 87/87 PASS (new relevance tests 9, existing quota/Vision/Smoke/client/media tests 78). Workflow Safety 527/527 PASS (one run), compile and Ruff fatal checks PASS. Full repository suite: 938/938 scripts PASS, exactly one run (standard 8 external probes and 3 optional-tool probes excluded). Diff check PASS.
 - One local commit only; no push, Smoke dispatch, real API request or production data operation. Preserve `.runtime/` and the four pre-existing untracked audit Markdown files.
+
+## 2026-10-26 Codex — durable renewal/review intents; live monitoring reverified
+
+- Isolated branch `codex/sns-production-completion-20261026` at `/private/tmp/sns-growth-engine-completion-20261026`, base `41838cf`; origin/main `fc1a930`. Original worktree and all five untracked renewal files remain untouched (hash-verified).
+- Completed source for before-dispatch durable token-renewal journal, provider lifecycle/app/user/scope verification, atomic private save/readback and independent account CLI. Legacy Night unknown marker cannot be automatically cleared. Added corresponding review-worker crash protection before either Sheets subprocess; existing production quarantine stays intact.
+- Reviewed and registered one inherited fail-closed queue rollback mutation missing from the frozen inventory, fixing five regression failures without weakening assertions. Clarified a verified historical Git SHA label for Gitleaks; no new suppression.
+- Full local quality gate PASS: 1092/1092 repository scripts, 619/619 workflow safety (64 workflows), fatal Ruff, compileall, diff checks, history and working-tree Gitleaks. Targeted renewal/watch/timer/review cases PASS. Evidence: `/private/tmp/sns-20261026-final-quality.json`.
+- Live read-only reruns: 11:20 JST tokens valid ~17.21d/all accounts; review missing/drift=0, feedback 10; 11:25 JST 24h READY Night/Liver/Beauty=3/3,3/3,1/1. Posting OFF. R2 backup 09:52 and health 11:01 successful; repo 6.207GB/8GB budget. VPS free ~8.04GiB <9GiB release floor, live setuptools remains 79.0.1. Fourteen enabled hosted schedules = 13 operations + old CI schedule.
+- Linux offline-test source transfer to `fukuri-vps` rejected by automatic approval review for missing explicit payload/destination approval; no alternate upload or production code install. No token refresh, old-marker clear, review writer restart, deletion, canary, paid API or deployment performed. 30-item Bank/production acceptance remain incomplete; `docs/goal-status.json` unchanged.
+- Full checkpoint, three-account acceptance table, exact evidence, blockers and safe rollout/rollback: `docs/CODEX_COMPLETION_20261026.md`. Source is ready for local commit; remote delivery and Linux runtime validation require resolving the approval block and retaining mandatory branch checks.
