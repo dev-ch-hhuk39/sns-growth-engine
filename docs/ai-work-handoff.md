@@ -1,3 +1,7 @@
+## 2026-10-26 10:08 JST - R2 and review recovered; publishing still blocked
+
+R2 stale lock safely removed, backup PASS 09:52 and health PASS 09:53. Single unapproved READY night_scout row returned to WAITING_REVIEW. One-off review sync appended 40 rows and reconciled 38 cells; independent 09:59 monitor PASS (1,645 reviewable, 0 drift, 10 verified feedback). Original review-writer quarantine maintained, timer disabled. Mac nightly security PASS. VPS below 9GiB staging threshold, 13 hosted schedules active, live setuptools patch pending, first-wave signed canary 0/4 READY, Threads renewal disabled. SNS posts OFF. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
 ## 2026-10-26 00:04 JST - AUTO_READY corrected; Mac nightly security auditor PASS
 
 One night_scout READY without approval log was reverted to WAITING_REVIEW (one Sheets write, 0 SNS posts); independent Sheets text-inventory verification now PASS. Private Mac 03:20 JST security audit installed: pip-audit 4 requirements PASS, full-history Gitleaks PASS after verifying one exact Git commit SHA false positive via official GitHub commit lookup. Branch CI schedule removed but protected PR checks retained; main still has old schedule until merge. VPS deployment still storage-blocked and Threads refresh unresolved. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
