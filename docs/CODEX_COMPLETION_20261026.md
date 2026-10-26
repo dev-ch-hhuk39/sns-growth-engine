@@ -32,6 +32,10 @@ The baseline run reported 5 failed scripts, all caused by one inherited change: 
 
 A working-tree Gitleaks scan found a historical Git SHA near a key-like documentation label. GitHub's official Git commit endpoint confirmed the value is a real revision. The label was clarified; the full SHA remains, and no new secret-scan suppression or broad exclusion was added.
 
+## Delivery
+
+Implementation commit `b8764cd35415a8382080e267afb58b4f1a14e46f` is published on the dedicated branch. [PR #472](https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/472) contains the inherited operations work plus this completion change. Main `fc1a930` was merged normally; conflicting progress-document prefixes were combined while retaining the main Aftercare handoff. No Python, config or workflow content changed during this integration. Current required-check and merge state is authoritative on the PR.
+
 ## Local verification
 
 - Full `run_local_quality_gate.py --mode full`: **PASS**.
@@ -40,7 +44,7 @@ A working-tree Gitleaks scan found a historical Git SHA near a key-like document
 - Renewal prototype 5 cases, crash/persistence/account isolation 12, lifecycle watchdog 5, timer contracts 3, review writer 9: PASS.
 - Ruff fatal rules, compileall, unstaged/staged diff checks, branch-history Gitleaks and redacted working-tree Gitleaks: PASS.
 - Full report: `/private/tmp/sns-20261026-final-quality.json`; detailed logs and repository JSON under `/private/tmp/sns-20261026-final-quality-logs/`.
-- No GitHub Actions were dispatched. Linux runtime tests are **not performed**: automatic approval review rejected the export of the five source/test files to `fukuri-vps`. No alternate upload was attempted.
+- After direct owner approval, the exact five-file payload passed **22 offline tests** on the existing VPS Python runtime, using an empty environment in `/tmp/sns-renewal-offline-Ypa6CJqu`: renewal 5, crash/persistence/account isolation 12, watchdog 5. No production credentials were loaded. The source was pushed as `b8764cd`; [PR #472](https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/472) runs the protected PR checks. No scheduled or production workflow was manually dispatched.
 
 ## Live evidence (all times JST, 2026-10-26)
 
@@ -86,7 +90,7 @@ One comprehensive read-only readiness diagnostic was stopped after discovering t
 ## Release and recovery prerequisites
 
 1. Review this branch and the inherited unmerged work; retain the protected-main `pr-gate`. Routine Actions-free operation is separate from required PR checks. The new request is not permission to forge a status or bypass the protection.
-2. Direct owner approval is needed for the specific Linux-test source payload to `fukuri-vps`, because automatic approval review rejected that transfer. The prepared test is five files in a fresh `/tmp/sns-renewal-offline-*` directory and the existing Python runtime with an empty environment; no production token file or service is modified. Include the review tests in a separately reviewed payload if validating that worker too.
+2. **Completed:** direct owner approval received and the five-file Linux token payload validated successfully, without changing production token files or services. Review-worker tests passed locally; do not misrepresent them as part of the approved five-file VPS run. Any additional runtime-install payload remains a separate rollout action.
 3. Resolve the legacy Night unknown outcome through independent owner-authenticated evidence/re-authorization, not another refresh request or marker deletion. Preserve the old marker and token until replacement identity/expiry and protected persistence are verified. Current valid tokens give time for this prerequisite; they do not justify blind replay.
 4. Before any real renewal, deploy the matching renewal helper and lifecycle watchdog as an approved, versioned bundle and verify host permissions, independent ID/app anchors, timeout, service sandbox and rollback custody. Run read-only preflight first, then one explicitly accepted account pilot, independently read back identity/expiry/store and marker state, then consider timer activation. Never enable a timer merely because offline tests pass.
 5. Full immutable deployment remains blocked until the unchanged 9GiB floor is met. Preserve 7-day release retention, current/previous/emergency custody and R2 protection. No lower threshold, shared-cache purge, hardlink dedup or unapproved paid disk expansion is a substitute. The source fix for setuptools is ready but not installed.
