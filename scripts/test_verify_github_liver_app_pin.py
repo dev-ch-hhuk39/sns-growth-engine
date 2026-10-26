@@ -10,9 +10,12 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 import verify_github_liver_app_pin as pin
+import sns_local_threads_token_renewal as renewal
 
 PREVIEW = {'status': 'DRY_RUN', 'accounts': {'liver_manager': 'DUE'},
            'refresh_due': 1, 'posts': 0}
+ENVELOPE = {'status': 'DRY_RUN', 'accounts': {'liver_manager': PREVIEW},
+            'posts': 0, 'github_secrets_changed': False}
 
 
 class GithubAppPinTests(unittest.TestCase):
@@ -88,15 +91,49 @@ class GithubAppPinTests(unittest.TestCase):
         self.assertFalse(self.target.exists())
 
     def test_foreign_account_apply_output_or_provider_failure_is_not_preflight(self):
-        valid = 'SNS_LOCAL_THREADS_TOKENS='+json.dumps(PREVIEW)
+        valid = 'SNS_LOCAL_THREADS_TOKENS='+json.dumps(ENVELOPE)
         self.assertEqual(pin.validated_preflight(0, valid), PREVIEW)
         for data in ({**PREVIEW, 'status': 'PASS'},
                      {**PREVIEW, 'accounts': {'night_scout': 'DUE'}},
                      {**PREVIEW, 'posts': 1}, {**PREVIEW, 'refresh_due': True}):
             with self.assertRaises(pin.PinBlocked):
-                pin.validated_preflight(0, 'SNS_LOCAL_THREADS_TOKENS='+json.dumps(data))
+                pin.validated_preflight(0, 'SNS_LOCAL_THREADS_TOKENS='+json.dumps({
+                    **ENVELOPE, 'accounts': {'liver_manager': data}}))
         with self.assertRaises(pin.PinBlocked):
             pin.validated_preflight(1, valid)
+        with self.assertRaises(pin.PinBlocked):
+            pin.validated_preflight(0, 'SNS_LOCAL_THREADS_TOKENS='+json.dumps(PREVIEW))
+
+    def test_real_renewal_cli_envelope_is_accepted_without_apply(self):
+        output = io.StringIO()
+        with patch.object(renewal, 'run', return_value=PREVIEW) as run, \
+                patch('sys.argv', ['renewal', '--account-id', 'liver_manager']), redirect_stdout(output):
+            self.assertEqual(renewal.main(), 0)
+        run.assert_called_once_with(apply=False, account_id='liver_manager')
+        self.assertEqual(pin.validated_preflight(0, output.getvalue()), PREVIEW)
+
+    def test_real_blocked_cli_envelope_cannot_become_verified(self):
+        output = io.StringIO()
+        with patch.object(renewal, 'run', side_effect=renewal.TokenBlocked('CURRENT_TOKEN_LIFECYCLE_UNVERIFIED')), \
+                patch('sys.argv', ['renewal', '--account-id', 'liver_manager']), redirect_stdout(output):
+            self.assertEqual(renewal.main(), 1)
+        with self.assertRaises(pin.PinBlocked):
+            pin.validated_preflight(1, output.getvalue())
+
+    def test_lifecycle_diagnostic_emits_only_allowlisted_codes(self):
+        from subprocess import CompletedProcess
+        current = self.root/'releases/example'
+        current.mkdir(parents=True)
+        (self.root/'current').symlink_to(current, target_is_directory=True)
+        for supplied, expected in (('META_APP_ID_MISMATCH', 'META_APP_ID_MISMATCH'),
+                                   ('PRIVATE_DO_NOT_PRINT', 'LIFECYCLE_UNVERIFIED')):
+            with patch.object(pin.subprocess, 'run', return_value=CompletedProcess(
+                    [], 0, json.dumps({'reason':supplied}), 'PRIVATE_STDERR')) as runner:
+                self.assertEqual(pin.lifecycle_diagnostic(self.root, self.candidate), expected)
+            args = runner.call_args.args[0]
+            self.assertNotIn('--apply', args)
+            self.assertNotIn('--confirm-token-renewal', args)
+            self.assertEqual(runner.call_args.kwargs['timeout'], 60)
 
     def test_cli_never_echoes_private_runtime_error(self):
         output = io.StringIO()

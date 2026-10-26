@@ -1,3 +1,11 @@
+## 2026-10-26 — App ID preflight integration correction
+
+- PR #474 merged as `3a9e089` after Mac/Linux 1,094 regression scripts, 150 CI pytest cases, workflow safety 619/619 and all four protected checks passed.
+- First existing-GitHub-ID job `40291784315` stopped before pin creation with `APP_PIN_PREFLIGHT_BLOCKED` (child exit nonzero); no refresh, pin save, posting or Sheets write. The exact underlying lifecycle reason is not yet established. Preserve all markers and the unused single real-refresh allowance.
+- Independently found that the bridge expected the helper's internal flat result rather than its actual per-account CLI envelope. Corrected the parser and added tests against the real renewal CLI entrypoint, including rejection of blocked/foreign/apply output. A bounded read-only diagnostic now emits only allowlisted lifecycle reason codes when preflight blocks; it cannot print app/token values or authorize pin creation.
+- Focused integration tests 12/12 and renewal crash tests 12/12 PASS. Full regression report: `/private/tmp/sns-app-cli-quality-20261026.json`; protected PR checks remain mandatory before another configuration verification.
+- Fresh read-only review audit now finds 7 missing review rows and 2 drifted projections; 10 feedback records verified, 0 pending decisions. Old quarantine preserved. Bounded projection-repair preparation continues; no repair or timer restart has occurred yet.
+
 ## 2026-10-26 — GitHub App ID handoff and qualified draft generation
 
 - Owner requested the remaining work together and specifically authorized checking/reusing the existing GitHub App ID configuration if verified. Repository metadata confirms Night/Liver App-ID secrets exist, while the VPS deploy env writer omitted their names. No secret values were retrieved or printed; independent live matching is still required.
