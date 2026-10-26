@@ -1,9 +1,17 @@
+## 2026-10-26 14:45 JST — Bank audit complete; local draft QA added
+
+- Owner-approved one-time read-only Bank audit completed: Night 12/30 (18 short), Liver 11/30 (19 short), Beauty 36 distinct / 30 slot-effective (minimum met). Overall INVENTORY_SHORTFALL; no Sheets writes, paid AI calls or posts. Receipt: `/private/tmp/sns-bank-live-readonly-result-20261026.json`.
+- Added `sns_local_ollama_draft_bank.py --qa-only`: existing public/hard/diversity/topic rules, account/pending/private-file boundaries, count/reason-only output, no generation or writes. Actual 48 drafts: individual checks Night 1/24, Liver 0/24; whole-batch checks 0/24 each. Source hashes unchanged; all remain PENDING_HUMAN_QA, no Bank/READY promotion. Global historical duplication and runtime publisher checks remain unperformed.
+- Full local quality gate PASS: 1,093/1,093 repository scripts, 619/619 workflow checks (64 workflows), fatal Ruff, compileall, diff checks and branch-history Gitleaks; working-tree Gitleaks also PASS. Dedicated QA 9/9 and existing generation 4/4 PASS. Report: `/private/tmp/sns-bank-qa-quality-20261026.json`. No new exclusions.
+- Owner cannot check the Liver Threads App ID until later. Do not ask again now or infer it from token metadata; installed utility remains inert, actual refresh calls 0. Existing conditional pilot approval is unused.
+- Details: `docs/SNS_BANK_LOCAL_DRAFT_QA_20261026.md`, `docs/SNS_LIVER_TOKEN_PILOT_20261026.md`. Production completion, reserve refill, signed canaries and full immutable release remain open. `docs/goal-status.json` untouched.
+
 ## 2026-10-26 Liver pilot — utility installed, preflight blocked before refresh
 
 - Owner approved the exact two-file versioned utility installation and one conditional Liver refresh. Installed root-owned read-only bundle from merged main `cc578f8` / PR #472; both SHA-256 hashes verified. Live immutable release `94b744f` and existing timers unchanged.
 - Read-only Liver preflight BLOCKED: `CURRENT_TOKEN_LIFECYCLE_UNVERIFIED`. Diagnostic: expected app ID not configured (`app_id_configured=false`, `META_APP_ID_MISMATCH`); this is missing expected identity, not proof of a wrong token app. Owner-confirmed **Threads App ID** requested; no value was inferred or pinned.
 - Actual token refreshes 0, posts 0, Sheets writes 0. Independent metadata check: Night unknown marker, Beauty token-file state and protected environment unchanged; Liver JSON absent and no new Liver marker. No apply command or automatic retry occurred.
-- Bank aggregate-query execution was separately rejected by automatic approval review for missing specific VPS/payload approval; no alternate path or accepted Bank result. Awaiting owner App ID and separate read-only Bank approval.
+- Initial Bank audit rejection was later resolved by explicit owner approval; the single read-only audit completed at 14:32 JST (Night 12 / Liver 11 / Beauty 36 distinct). The owner will check Liver Threads App ID later; real refresh remains on hold. See the latest Bank/QA checkpoint.
 - Receipts, exact bundle hashes and safe resumption: `docs/SNS_LIVER_TOKEN_PILOT_20261026.md`. Private evidence `/private/tmp/sns-liver-pilot-evidence-20261026/`. No acceptance evidence or thresholds changed; `docs/goal-status.json` untouched.
 
 ## 2026-10-26 Codex — durable renewal/review intents; live monitoring reverified

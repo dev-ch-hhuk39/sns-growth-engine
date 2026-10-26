@@ -34,7 +34,7 @@ A working-tree Gitleaks scan found a historical Git SHA near a key-like document
 
 ## Delivery
 
-Implementation commit `b8764cd35415a8382080e267afb58b4f1a14e46f` is published on the dedicated branch. [PR #472](https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/472) contains the inherited operations work plus this completion change. Main `fc1a930` was merged normally; conflicting progress-document prefixes were combined while retaining the main Aftercare handoff. No Python, config or workflow content changed during this integration. Current required-check and merge state is authoritative on the PR.
+Implementation commit `b8764cd35415a8382080e267afb58b4f1a14e46f` was delivered by [PR #472](https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/472), normally merged as `cc578f8a5cef169679583aca05652a95398a8fbc`. All four protected CI checks passed, including 1,092 repository scripts, 150 pytest cases and 619 workflow checks. Main `fc1a930` had been integrated without changing Python/config/workflow content; progress-document histories were both retained. The independently approved versioned token utility is installed, but its Liver preflight stops before refresh because the expected app ID is missing. The owner will confirm it later; see `docs/SNS_LIVER_TOKEN_PILOT_20261026.md`.
 
 ## Local verification
 
@@ -64,9 +64,11 @@ Implementation commit `b8764cd35415a8382080e267afb58b4f1a14e46f` is published on
 | R2 health | Actual `chadult-r2-offsite-health.service` success at 11:01:02; last backup within 36h | PASS; stale-lock history was not treated as a current lock |
 | R2 capacity | 10:17:35 capacity audit: 6,206,752,561 bytes, 400 snapshots, 0 stale tags; internal budget 8GB, forecast 40.2d | Normal repository budget; not an account-wide free-tier guarantee |
 | Shared retention | Last retention service result exit 3 at 07:53:56 | Not repaired/deleted here; protection/retention remains intact |
-| Hosted schedules | API state + fetched main YAML: 13 operations schedules **plus 1 old scheduled CI**, total **14** | Do not disable CI as a whole; branch removes only CI schedule after protected merge |
+| Hosted schedules | Pre-merge API state + main YAML had 13 operations schedules plus 1 old scheduled CI | PR #472 removed only the CI schedule; protected PR CI remains. Operational migration is incomplete |
 
-One comprehensive read-only readiness diagnostic was stopped after discovering the VPS lacks `jq`. It produced no accepted Bank/media result. Only that transient audit was stopped; the three existing READY/review/expiry timers were independently confirmed active. No claim is made that Bank was freshly recounted. The prior 8/9/30 figures and the 48 `PENDING_HUMAN_QA` local drafts are historical/unaccepted inputs, not current accepted reserves.
+One earlier comprehensive read-only diagnostic was stopped after discovering the VPS lacks `jq`; it produced no accepted Bank/media result. That failure is superseded for Bank by the separately owner-approved, single aggregate audit at **14:32 JST**: Night **12**, Liver **11**, Beauty **36** usable distinct entries (slot-effective **12/11/30**, minimum 30). It used the existing live canonical gates, with no Sheets writes, paid AI calls or posts. Private receipt: `/private/tmp/sns-bank-live-readonly-result-20261026.json`.
+
+At **14:45 JST**, all 48 private drafts were audited through the new read-only `--qa-only` mode: individual local checks passed Night **1/24**, Liver **0/24**, whole-batch checks **0** for both. Source files were unchanged and all candidates remain pending; global historical duplication, slot assignment and runtime publisher acceptance are not established. See `docs/SNS_BANK_LOCAL_DRAFT_QA_20261026.md`.
 
 ## Per-account acceptance checkpoint
 
@@ -77,7 +79,7 @@ One comprehensive read-only readiness diagnostic was stopped after discovering t
 | Discovery | Source tested; fresh live collection not performed | Same | Same |
 | Generation | Source tested; private pending drafts not accepted | Same | Source tested; no new accepted batch |
 | Quality / persona | Full regression PASS | Full regression PASS | Full regression PASS |
-| 30-item reserve | Not freshly verified | Not freshly verified | Not freshly verified |
+| 30-item reserve | Live 12/30; 18 short | Live 11/30; 19 short | Live 36 distinct / 30 slot-effective; minimum met |
 | 24h schedule coverage | Live 3/3 | Live 3/3 | Live 1/1 |
 | Media | Signed first-wave acceptance incomplete | Signed first-wave acceptance incomplete | No fresh media acceptance |
 | Real publish | OFF, signed P0 canary not executed | OFF, signed P0 canary not executed | OFF |
@@ -89,13 +91,13 @@ One comprehensive read-only readiness diagnostic was stopped after discovering t
 
 ## Release and recovery prerequisites
 
-1. Review this branch and the inherited unmerged work; retain the protected-main `pr-gate`. Routine Actions-free operation is separate from required PR checks. The new request is not permission to forge a status or bypass the protection.
+1. **Completed for PR #472:** protected checks passed and source merged normally. Retain `pr-gate` for every subsequent change; routine Actions-free operation is separate from required PR checks.
 2. **Completed:** direct owner approval received and the five-file Linux token payload validated successfully, without changing production token files or services. Review-worker tests passed locally; do not misrepresent them as part of the approved five-file VPS run. Any additional runtime-install payload remains a separate rollout action.
 3. Resolve the legacy Night unknown outcome through independent owner-authenticated evidence/re-authorization, not another refresh request or marker deletion. Preserve the old marker and token until replacement identity/expiry and protected persistence are verified. Current valid tokens give time for this prerequisite; they do not justify blind replay.
-4. Before any real renewal, deploy the matching renewal helper and lifecycle watchdog as an approved, versioned bundle and verify host permissions, independent ID/app anchors, timeout, service sandbox and rollback custody. Run read-only preflight first, then one explicitly accepted account pilot, independently read back identity/expiry/store and marker state, then consider timer activation. Never enable a timer merely because offline tests pass.
+4. The approved matching renewal/watchdog bundle is installed with hashes and permissions verified. Liver read-only preflight is blocked by the absent independent app-ID anchor, which the owner will check later. Keep renewal on hold until that input and scoped configuration are confirmed, then recheck preflight before the already-approved single pilot. Independently read back identity/expiry/store and marker state before considering timer activation; offline tests alone cannot authorize it.
 5. Full immutable deployment remains blocked until the unchanged 9GiB floor is met. Preserve 7-day release retention, current/previous/emergency custody and R2 protection. No lower threshold, shared-cache purge, hardlink dedup or unapproved paid disk expansion is a substitute. The source fix for setuptools is ready but not installed.
 6. Review writer restart requires approved deployed source, fresh independent projection/decision readback and an explicit resolution of the old unknown operation. This code deliberately cannot clear that old latch.
-7. Recount usable Bank against the exact current canonical runtime gates, perform QA on pending private drafts, and refill through the existing approved routes. Signed Night/Liver P0 canaries are a separate authorization step; no mass publishing is implied.
+7. The single authorized Bank recount and local draft QA are complete; Night/Liver still lack 18/19 accepted entries. Refill must use the existing quality/approval/duplicate/publisher routes with the appropriate write authorization; the local ideas cannot be bulk-promoted. Signed Night/Liver P0 canaries remain a separate authorization step.
 
 Rollback: leave renewal/review writer timers disabled while adopting the source change. Existing read-only monitors remain active. Preserve old credential files and every unknown-operation record. Roll back code through the approved immutable release/pinned helper mechanism; never restore an old credential over a verified newly rotated token or delete audit records as an automatic rollback.
 

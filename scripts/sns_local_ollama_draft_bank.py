@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import difflib
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
 import tempfile
 import urllib.request
@@ -173,17 +175,116 @@ def run(account: str, target: int, folder: Path = STATE) -> dict:
             "ready_count": 0, "posts": 0, "paid_api_calls": 0, "sheets_writes": 0}
 
 
+
+def _read_private_pending(path: Path) -> bytes:
+    """Bound the read and reject links before consuming private source data."""
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as source:
+        meta = os.fstat(source.fileno())
+        if (not stat.S_ISREG(meta.st_mode) or meta.st_nlink != 1
+                or meta.st_mode & 0o077 or meta.st_size > 2_000_000):
+            raise ValueError("LOCAL_QA_SOURCE_NOT_PRIVATE_REGULAR")
+        raw = source.read(2_000_001)
+    if len(raw) > 2_000_000:
+        raise ValueError("LOCAL_QA_SOURCE_TOO_LARGE")
+    return raw
+
+
+def review_existing(account: str, folder: Path = STATE) -> dict:
+    """Read-only production-rule QA; never turns a local idea into approval.
+
+    Only account-scoped pending files are accepted. The result contains fixed
+    codes/counts/indexes, not private text or claimed approval/provenance.
+    Historical/global duplicates and runtime publisher joins remain unchecked.
+    """
+    if (account not in ACCOUNTS or folder.is_symlink() or not folder.is_dir()
+            or folder.stat().st_mode & 0o077):
+        raise ValueError("LOCAL_QA_SCOPE_INVALID")
+    path = folder / (account + "-pending-qa.json")
+    raw = _read_private_pending(path)
+    before = hashlib.sha256(raw).digest()
+    source = json.loads(raw)
+    if (not isinstance(source, dict) or source.get("schema") != "sns_ollama_drafts_v1"
+            or source.get("account_id") != account
+            or source.get("status") != "PENDING_HUMAN_QA"
+            or source.get("canonical_bank_ready") is not False):
+        raise ValueError("LOCAL_QA_SOURCE_NOT_PENDING")
+    rows = source.get("candidates")
+    if not isinstance(rows, list) or not 1 <= len(rows) <= 200:
+        raise ValueError("LOCAL_QA_COUNT_INVALID")
+    ids = []
+    for row in rows:
+        if (not isinstance(row, dict) or row.get("account_id") != account
+                or row.get("workflow_status") != "PENDING_HUMAN_QA"
+                or row.get("canonical_bank_ready") is not False
+                or row.get("post_type") != "original_text"
+                or row.get("source") != "local_ollama_unverified"
+                or not isinstance(row.get("draft_text"), str) or not row["draft_text"].strip()
+                or not isinstance(row.get("draft_id"), str) or not row["draft_id"]):
+            raise ValueError("LOCAL_QA_CANDIDATE_SCOPE_INVALID")
+        ids.append(row["draft_id"])
+    if len(set(ids)) != len(ids):
+        raise ValueError("LOCAL_QA_ID_AMBIGUOUS")
+    sys.path[:0] = [str(ROOT / "src"), str(ROOT / "scripts")]
+    from public_post_quality import final_public_post_validator
+    from generation_quality_gates import evaluate_generation_quality
+    from generation.content_quality_v2 import hard_gate
+
+    results = []
+    reasons: Counter[str] = Counter()
+    for index, row in enumerate(rows):
+        text = row["draft_text"]
+        others = [item["draft_text"] for i, item in enumerate(rows) if i != index]
+        public = final_public_post_validator(text, account)
+        # Ignore any caller-supplied supported_claims/approval fields: these
+        # original ideas have no independently verified factual evidence.
+        hard = hard_gate({"account_id": account, "target_account_id": account,
+                          "platform": "threads", "public_post_text": text,
+                          "supported_claims": []}, account_id=account, public_validation=public)
+        individual = evaluate_generation_quality(account, text, others, batch_compared=[])
+        batch = evaluate_generation_quality(account, text, others, batch_compared=others)
+        codes = sorted(set(public["blocked_reasons"] + hard["hard_gate_reasons"]
+                           + batch.get("diversity_blocked_reasons", [])
+                           + batch.get("topic_blocked_reasons", [])))
+        reasons.update(codes)
+        results.append({"index": index, "public_status": public["status"],
+                        "hard_gate_status": hard["status"],
+                        "individual_quality_status": individual["status"],
+                        "whole_batch_quality_status": batch["status"], "reason_codes": codes})
+    # A changed source cannot receive a receipt bound to the earlier content.
+    if hashlib.sha256(_read_private_pending(path)).digest() != before:
+        raise ValueError("LOCAL_QA_SOURCE_CHANGED")
+    return {"mode": "QA_ONLY", "account": account, "qa_completed": True,
+            "status": "PENDING_HUMAN_QA", "draft_count": len(rows),
+            "public_validation_pass": sum(r["public_status"] == "PASS" for r in results),
+            "hard_gate_pass": sum(r["hard_gate_status"] == "PASS" for r in results),
+            "individual_local_checks_pass": sum(all(r[k] == "PASS" for k in
+                ("public_status", "hard_gate_status", "individual_quality_status")) for r in results),
+            "whole_batch_checks_pass": sum(all(r[k] == "PASS" for k in
+                ("public_status", "hard_gate_status", "whole_batch_quality_status")) for r in results),
+            "reason_counts": dict(sorted(reasons.items())), "candidates": results,
+            "original_unchanged": True, "canonical_bank_ready": False,
+            "global_duplicate_scan": "NOT_PERFORMED", "runtime_publisher_check": "NOT_PERFORMED",
+            "ready_count": 0, "model_calls": 0, "posts": 0, "paid_api_calls": 0, "sheets_writes": 0}
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("--account", choices=ACCOUNTS, required=True)
     p.add_argument("--target", type=int, default=24)
+    p.add_argument("--qa-only", action="store_true", help="Read existing pending drafts; no generation or writes")
     a = p.parse_args()
     try:
+        if a.qa_only:
+            result = review_existing(a.account, STATE)
+            print("SNS_LOCAL_OLLAMA_DRAFT_QA=" + json.dumps(result, sort_keys=True), flush=True)
+            return 0  # QA completion is never production acceptance.
         result = run(a.account, a.target)
         print("SNS_LOCAL_OLLAMA_DRAFT_BANK=" + json.dumps(result, sort_keys=True), flush=True)
         return 0 if result["draft_count"] >= a.target else 2
     except Exception:
-        print("SNS_LOCAL_OLLAMA_DRAFT_BANK=BLOCKED reason=UNVERIFIED_RUNTIME posts=0", flush=True)
+        prefix = "SNS_LOCAL_OLLAMA_DRAFT_QA" if a.qa_only else "SNS_LOCAL_OLLAMA_DRAFT_BANK"
+        print(prefix + "=BLOCKED reason=UNVERIFIED_RUNTIME posts=0", flush=True)
         return 1
 
 

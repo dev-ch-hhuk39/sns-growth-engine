@@ -57,15 +57,17 @@ Private, credential-free receipts reside under `/private/tmp/sns-liver-pilot-evi
 
 ## Required input / safe resumption
 
-Ask the owner for the **Threads App ID** for Liver from Meta for Developers, target application, App settings / Basic / Threads App ID. Do not request the App Secret or token in chat. Check the selected app against owner-controlled configuration; do not silently choose an app or copy a value from another account.
+The owner replied that the **Threads App ID** cannot be checked until later because no operable device is available. Keep the real refresh on hold; do not repeat the request now. When available, the owner can find the numeric ID in Meta for Developers, target application, App settings / Basic / Threads App ID. Do not request the App Secret or token in chat. Check the selected app against owner-controlled configuration; do not silently choose an app or copy a value from another account.
 
 The existing pilot authorization remains conditional on a passing preflight. The blocked run does not authorize pin changes. Once the owner confirms the correct app identity and the scoped configuration action, recheck source/state and repeat read-only preflight. Only then may the previously approved single Liver refresh attempt occur. No real refresh has consumed that one-attempt allowance yet. Any later uncertain refresh result requires the server barrier and manual reconciliation, never blind retry.
 
 ## Independent Bank audit
 
-A prepared aggregate-only Bank query was not executed. Automatic approval review rejected execution of this new query on the named VPS and access to Sheets without direct payload/destination approval. No alternate execution path was attempted, and no Bank counts are claimed from it. A separate approval question is pending; it is unrelated to the missing Threads App ID.
+After the initial automatic approval rejection, the owner explicitly approved the exact aggregate-only query on the named VPS once. It completed successfully at **2026-10-26 14:32:00 JST**. No alternate route or repeat execution was used.
 
-That local query is `/private/tmp/sns-bank-live-readonly-20261026.py`, bounded to 420 seconds / 300MB, uses existing validation functions and a dry-run Sheets client, and would return only counts. It does not authorize writing, generation, approval, or publication.
+The local wrapper is `/private/tmp/sns-bank-live-readonly-20261026.py`; the one-off sandboxed unit was bounded to 420 seconds / 300MB. It used existing runtime validation functions and a dry-run Sheets client, returning only counts: Night **12/30** (18 short), Liver **11/30** (19 short), Beauty **36 distinct / 30 slot-effective** (minimum met). Result: `INVENTORY_SHORTFALL`; writes, paid AI calls and posts all 0. The private result is `/private/tmp/sns-bank-live-readonly-result-20261026.json`. This does not authorize writing, generation, approval, or publication.
+
+The 48 local pending drafts were separately audited without editing them. Only Night 1 / Liver 0 passed the individual local public/hard/diversity/topic checks; whole-batch checks passed 0 in both accounts. All remain `PENDING_HUMAN_QA`. See `docs/SNS_BANK_LOCAL_DRAFT_QA_20261026.md`; this is not a Bank refill.
 
 ## Remaining rollout limits
 
