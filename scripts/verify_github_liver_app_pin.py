@@ -45,20 +45,66 @@ def private_metadata(path: Path, *, directory: bool = False) -> os.stat_result:
 
 
 def validated_preflight(code: int, output: str) -> dict:
-    if code != 0 or len(output.encode()) > 100_000:
+    if len(output.encode()) > 100_000:
         raise PinBlocked('APP_PIN_PREFLIGHT_BLOCKED')
     lines = [s.split('=', 1)[1] for s in output.splitlines()
              if s.startswith('SNS_LOCAL_THREADS_TOKENS=')]
     try:
         data = json.loads(lines[0]) if len(lines) == 1 else {}
-        if (data.get('status') != 'DRY_RUN' or data.get('posts') != 0
-                or data.get('accounts') not in ({'liver_manager': 'DUE'}, {'liver_manager': 'CURRENT'})
-                or type(data.get('refresh_due')) is not int
-                or data['refresh_due'] not in (0, 1)):
+        if (code != 0 or data.get('status') != 'DRY_RUN' or data.get('posts') != 0
+                or data.get('github_secrets_changed') is not False
+                or set(data.get('accounts', {})) != {'liver_manager'}):
+            raise ValueError()
+        account = data['accounts']['liver_manager']
+        if (not isinstance(account, dict) or account.get('status') != 'DRY_RUN'
+                or account.get('posts') != 0
+                or account.get('accounts') not in ({'liver_manager': 'DUE'}, {'liver_manager': 'CURRENT'})
+                or type(account.get('refresh_due')) is not int
+                or account['refresh_due'] not in (0, 1)):
             raise ValueError()
     except (ValueError, TypeError, IndexError):
         raise PinBlocked('APP_PIN_PREFLIGHT_UNVERIFIED') from None
-    return data
+    return account
+
+
+def lifecycle_diagnostic(runtime: Path, candidate: str) -> str:
+    """One bounded read using the same verified helper; return fixed codes only."""
+    current = (runtime / 'current').resolve(strict=True)
+    program = '''import importlib.util,json,sys
+from pathlib import Path
+root=Path(sys.argv[1]);bundle=Path(sys.argv[2])
+sys.path[:0]=[str(root/'src'),str(root/'scripts')]
+from publishers.threads_credentials import resolve_credentials
+spec=importlib.util.spec_from_file_location('approved_watch',bundle/'sns_local_threads_expiry_watch.py')
+watch=importlib.util.module_from_spec(spec);spec.loader.exec_module(watch)
+codes={'META_APP_ID_MISMATCH','META_ISSUED_AT_UNVERIFIED','META_ACCOUNT_ID_MISMATCH',
+       'META_BASIC_SCOPE_MISSING','META_EXPIRY_INVALID','META_TOKEN_EXPIRED',
+       'CREDENTIALS_NOT_CONFIGURED','TOKEN_SIZE_INVALID'}
+try:
+ watch.check_one('liver_manager',resolve_credentials('liver_manager'),include_lifecycle=True)
+ reason='LIFECYCLE_VERIFIED'
+except Exception as exc:
+ reason=str(exc) if str(exc) in codes else 'LIFECYCLE_UNVERIFIED'
+print(json.dumps({'reason':reason,'token_refreshes':0}))
+'''
+    command = ('set -euo pipefail; set +x; set -a; . "$1"; set +a; '
+               'export THREADS_APP_ID_LIVER_MANAGER="$CANDIDATE_LIVER_THREADS_APP_ID"; '
+               'exec "$2" -B -c "$3" "$4" "$5"')
+    result = subprocess.run(
+        ['bash', '--noprofile', '--norc', '-c', command, 'app-pin-diagnostic',
+         str(runtime / 'shared/runtime.env'), str(current / '.venv/bin/python'),
+         program, str(current), str(BUNDLE)],
+        env={**os.environ, 'CANDIDATE_LIVER_THREADS_APP_ID': candidate},
+        cwd=current, capture_output=True, text=True, timeout=60, check=False,
+    )
+    allowed = {'META_APP_ID_MISMATCH', 'META_ISSUED_AT_UNVERIFIED', 'META_ACCOUNT_ID_MISMATCH',
+               'META_BASIC_SCOPE_MISSING', 'META_EXPIRY_INVALID', 'META_TOKEN_EXPIRED',
+               'CREDENTIALS_NOT_CONFIGURED', 'TOKEN_SIZE_INVALID', 'LIFECYCLE_VERIFIED'}
+    try:
+        data = json.loads(result.stdout) if result.returncode == 0 else {}
+        return data['reason'] if data.get('reason') in allowed else 'LIFECYCLE_UNVERIFIED'
+    except (ValueError, TypeError, KeyError):
+        return 'LIFECYCLE_UNVERIFIED'
 
 
 def preflight(runtime: Path, candidate: str) -> dict:
@@ -85,6 +131,9 @@ def preflight(runtime: Path, candidate: str) -> dict:
     )
     if (runtime / 'current').resolve(strict=True) != current:
         raise PinBlocked('CANONICAL_RELEASE_CHANGED')
+    if result.returncode != 0:
+        reason = lifecycle_diagnostic(runtime, candidate)
+        raise PinBlocked('APP_PIN_PREFLIGHT_BLOCKED_' + reason)
     return validated_preflight(result.returncode, result.stdout)
 
 
