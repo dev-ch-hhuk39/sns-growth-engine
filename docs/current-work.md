@@ -4,6 +4,13 @@
 - Candidate environment creation now carries those four booleans only from the same owner-private protected source. Missing flags default false; caller/CI values cannot grant or override approval. Malformed inherited booleans block candidate creation. Live configuration and aftercare behavior are unchanged by this source edit.
 - Focused deployment lifecycle 19 and aftercare wrapper 15 tests PASS. Full Mac quality gate PASS: 1,095 regression scripts, workflow safety 619/619, fatal Ruff, compile, diff and history Gitleaks; no new exclusions. No new production approval, deployment, metrics write, posting or schedule activation is implied. Details: `docs/SNS_AFTERCARE_ENV_PRESERVATION_20261027.md`.
 
+## 2026-10-27 — verified implementation checkpoint
+
+- Protected PR #476 delivered complete review-component packaging and the explicit offline Bank generation option. Protected PR #477 delivered scoped preparation reuse; all four required checks passed before normal merges. Source `4b9e8f4` passed 1,095 regression scripts, workflow safety 619/619, compile, fatal Ruff and secret scans.
+- Profiled local generation improved Night 9.40 -> 4.44 seconds and Liver 10.78 -> 5.00 seconds with identical selected text hashes. This is local source evidence; reserve acceptance and a full production rollout are not established by it.
+- The owner's separately approved 17-row/25-cell review projection completed once with canonical readback and a separate consistency monitor PASS. Missing/drift/unverified/pending counts are zero; ten saved feedback records match. No token rotation or SNS publication occurred.
+- The implementation delivered in these PRs is complete. Overall production acceptance remains incomplete: independently correct app identity, capacity prerequisites, accepted reserves, scheduled-operation migration, approved canaries and timed observation remain open. Full operational receipts and pending approvals are preserved in the local handoff; this public checkpoint adds no host paths or connection details. Acceptance gates remain unchanged.
+
 ## 2026-10-27 — continuation
 
 The scoped catalogue performance implementation passed the complete Mac quality gate on October 26; source delivery through protected PR is the next action. Operator approval for dedicated-Runner capacity cleanup is still pending. The new continuation message does not approve the previously rejected stop/delete operation. No production repeat, token refresh or Bank write is authorized by this checkpoint.
