@@ -1,0 +1,11 @@
+[Unit]
+Description=Chadult SNS hourly due-slot auditing on VPS without GitHub Actions
+
+[Timer]
+OnCalendar=*-*-* *:13:00 Asia/Tokyo
+Persistent=true
+AccuracySec=2min
+Unit=sns-growth-local-missed-slot-audit.service
+
+[Install]
+WantedBy=timers.target

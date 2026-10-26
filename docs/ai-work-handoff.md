@@ -1,3 +1,51 @@
+## 2026-10-26 10:08 JST - R2 and review recovered; publishing still blocked
+
+R2 stale lock safely removed, backup PASS 09:52 and health PASS 09:53. Single unapproved READY night_scout row returned to WAITING_REVIEW. One-off review sync appended 40 rows and reconciled 38 cells; independent 09:59 monitor PASS (1,645 reviewable, 0 drift, 10 verified feedback). Original review-writer quarantine maintained, timer disabled. Mac nightly security PASS. VPS below 9GiB staging threshold, 13 hosted schedules active, live setuptools patch pending, first-wave signed canary 0/4 READY, Threads renewal disabled. SNS posts OFF. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-26 00:04 JST - AUTO_READY corrected; Mac nightly security auditor PASS
+
+One night_scout READY without approval log was reverted to WAITING_REVIEW (one Sheets write, 0 SNS posts); independent Sheets text-inventory verification now PASS. Private Mac 03:20 JST security audit installed: pip-audit 4 requirements PASS, full-history Gitleaks PASS after verifying one exact Git commit SHA false positive via official GitHub commit lookup. Branch CI schedule removed but protected PR checks retained; main still has old schedule until merge. VPS deployment still storage-blocked and Threads refresh unresolved. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 23:17 JST - Failed GitHub refresh workflow stopped, token watch remains active
+
+Five prior GitHub refresh runs failed at the Secrets permission check. Disabled only the hosted refresh-threads-tokens.yml workflow after verifying daily VPS read-only token-expiry watch. Token renewal is NOT implemented yet; the current three tokens were valid with ~17.71 days left. Production posting OFF. Full offline local tests 1085/1085 PASS, plus six expiry-watch offline contracts PASS. Details in docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 23:15 JST - Expiry watcher active, renewal remains disabled
+
+Official Threads expiry watch deployed to VPS and first run PASS: three accounts each have 17.71 days remaining, daily 08:05 JST checks. Zero posts/token changes. Renewal still blocked. Existing offline regression 1085/1085 PASS plus six targeted watchdog checks. Full status in docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 23:13 JST - Local QA PASS, production still gated
+
+Repository full offline regression 1,085/1,085 PASS, workflow safety 620/620 PASS, Ruff/compileall/Gitleaks PASS. Branch code 4d92d70 had not yet been merged into protected main or released to VPS. Server posting OFF; review writer quarantined with read-only monitoring PASS; Threads token renewal unresolved and 15 scheduled GitHub workflows not yet migrated. VPS 8.4GiB disk free blocks 9GiB staging floor; R2 7.51GB and 7-day protected Restic retention. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 23:12 JST - Development continuation checkpoint
+
+Review read-only monitor PASS; publishing remains OFF. Full regression retesting is ongoing (last 750/1085, zero failures), exact source branch 7636f27 with isolated test-timeout fix. Vulnerability audit detects setuptools 79.0.1 in current VPS; patched 84.1.0 is already pinned for NEXT immutable release, but VPS storage is under 9GiB staging threshold. Shared R2 7.51GB with Restic snapshot locks still blocking safe prune, no forced deletions. 15 scheduled GitHub Actions still require safe replacements. Threads token refresh unverified and disabled. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md for complete state and evidence.
+
+## 2026-10-25 22:22 JST - Read-only review monitoring restored, source fix pending deployment
+
+VPS review-board writer remains fail-closed with the unknown-write marker preserved and its failing timer disabled. New read-only consistency monitor installed and enabled (2,023 queue, 1,612 review, 1,605 eligible, 10 saved feedback all matched, zero inconsistencies/posts/writes). Source idempotency patch and dedicated regression tests pass, but live immutable release is unchanged. Earlier offline test failures now fixed individually; full re-run pending. SNS posting OFF, root disk ~81%; do not clear writer latch or bypass GitHub required checks. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 20:06 JST - Six hosted schedules replaced, 48 private drafts, token refresh unresolved
+
+VPS/Mac local jobs replaced 6 GitHub schedules. Pinned reference research launchd PASS and Mac Ollama produced 24 Night + 24 Liver PENDING_HUMAN_QA private draft ideas (never READY). Threads identity handle repair passed all three official account identity checks. Critical: 3 original tokens had ~17.9 days remaining at 18:48, local token renewal still blocked with a Night unknown-refresh marker. Posting OFF and no main merge/deploy. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 18:22 JST — Local research library health replaced hosted Actions
+
+Fifth hosted schedule migrated without GitHub Actions: the weekly OSS Library Health job now uses a sandboxed Mac venv, a pinned last30days revision, 12 exact public tool+provider checks and a Monday 03:17 JST user launchd agent. Live launchctl kickstart finished PASS 12/12, exit=0; GitHub library-health.yml was disabled only after the local replacement passed. Sixteen originally scheduled hosted workflows remain, and Mac shutdown can defer this weekly check. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 17:58 JST — Fourth hosted schedule replaced by VPS
+
+Production publication review sync moved from GitHub Actions to VPS systemd (odd JST hours at :25), with strict non-posting modes, Sheets read-after-write and quarantine-on-unknown to prevent auto-retry. First real execution PASS: 1,605 review records, 40 existing-cell updates, 0 new rows, 10 explicit decisions. GitHub publication-review-sync.yml disabled after confirmed VPS success. Total 4 scheduled hosted workflows replaced, 17 still pending. R2 now 7.50 GB with ~2.50 GB simple storage margin; shared capacity WARN with 4.9-day projection, 7-day lock protects existing objects. Liver media due-slot missed despite text READY. Full details: docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 14:40 JST - Third hosted audit replaced; READY restored without AI
+
+VPS local missed-slot audit (hourly :13) passed all 3 accounts on recheck and the GitHub content-slot-recovery.yml scheduled/manual workflow has been disabled; existing protected VPS owner-signed manual reconcilers remain. A temporary Beauty-only unverified report was observed on the first combined run; a single-account dry-run and next combined dry-run were PASS with no writes/posts. Separately, LIVE liver_manager text READY was recovered 2/3 to 3/3 by a single scoped --reuse-only bank allocation (maximum 2, no paid AI, no SNS post). Subsequent independent VPS 24h READY audit now PASS Night 3/3, Liver 3/3, Beauty 1/1. This is not proof of 30/30 bank or external Threads publication. See docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md.
+
+## 2026-10-25 — VPS no-Actions infrastructure migration checkpoint
+
+See `docs/SNS_VPS_NO_ACTIONS_MIGRATION_20261025.md` for exact live verifications, two disabled Actions workflows, 755MB reclaimed, R2 7-day lock, and remaining blocking acceptance conditions. Current real SNS posting remains OFF. The latest setuptools fixed-version pin affects future staged releases only.
+
 ## 2026-10-24 — Aftercare actual horizon corrected
 
 - The hourly `Production Autopilot Aftercare` workflow described its maintenance as **next 24h READY**, but omitted `--horizon-hours`; `maintain_text_ready_inventory.py` instead defaulted to `production_inventory.json:text_horizon_hours=72`. The 2026-10-24 run #40093543069 tested 4/9 Night Scout and 5/9 Liver Manager slots and failed as though these were next-24h results, even though separate verified 24h runs had 3/3 text slots for each account. The cause of 72h shortfalls is **not** thereby resolved.
@@ -3539,7 +3587,7 @@ Codex / Claude Code 並行開発用の引き継ぎ資料です。主要作業完
 
 - 作業開始HEAD: `b3f6188296424c0b74f22b92adeaa65619abc47d`
 - code/test commit: `97950f75e272c47f94a8bc78c7f94ef09fa2a28f`
-- workflow secret fallback commit: `3b862de49b6441ec8bd8ef6ed8820b9ab108dd55`
+- workflow fallback Git revision: `3b862de49b6441ec8bd8ef6ed8820b9ab108dd55`
 - true dry-run修正:
   - `process_threads_queue.py --dry-run`: `setup_all()`なし、read-only出力あり。
   - `refill_threads_queue.py --dry-run`: `setup_all()`なし、appendなし、planned/tone_check出力あり。
@@ -8675,3 +8723,13 @@ Direct media run `34921582346` started without publish capability. Existing Xser
 - Vision multimodal implementation is AST-identical to base. No changes to Vision schema/prompt/model, media facts/binding, relevance criteria, angles, caption quality, rights, production workflows, scheduler, queues or posting.
 - Validation: focused 87/87 PASS (new relevance tests 9, existing quota/Vision/Smoke/client/media tests 78). Workflow Safety 527/527 PASS (one run), compile and Ruff fatal checks PASS. Full repository suite: 938/938 scripts PASS, exactly one run (standard 8 external probes and 3 optional-tool probes excluded). Diff check PASS.
 - One local commit only; no push, Smoke dispatch, real API request or production data operation. Preserve `.runtime/` and the four pre-existing untracked audit Markdown files.
+
+## 2026-10-26 Codex — durable renewal/review intents; live monitoring reverified
+
+- Isolated branch `codex/sns-production-completion-20261026` at `/private/tmp/sns-growth-engine-completion-20261026`, base `41838cf`; origin/main `fc1a930`. Original worktree and all five untracked renewal files remain untouched (hash-verified).
+- Completed source for before-dispatch durable token-renewal journal, provider lifecycle/app/user/scope verification, atomic private save/readback and independent account CLI. Legacy Night unknown marker cannot be automatically cleared. Added corresponding review-worker crash protection before either Sheets subprocess; existing production quarantine stays intact.
+- Reviewed and registered one inherited fail-closed queue rollback mutation missing from the frozen inventory, fixing five regression failures without weakening assertions. Clarified a verified historical Git SHA label for Gitleaks; no new suppression.
+- Full local quality gate PASS: 1092/1092 repository scripts, 619/619 workflow safety (64 workflows), fatal Ruff, compileall, diff checks, history and working-tree Gitleaks. Targeted renewal/watch/timer/review cases PASS. Evidence: `/private/tmp/sns-20261026-final-quality.json`.
+- Live read-only reruns: 11:20 JST tokens valid ~17.21d/all accounts; review missing/drift=0, feedback 10; 11:25 JST 24h READY Night/Liver/Beauty=3/3,3/3,1/1. Posting OFF. R2 backup 09:52 and health 11:01 successful; repo 6.207GB/8GB budget. VPS free ~8.04GiB <9GiB release floor, live setuptools remains 79.0.1. Fourteen enabled hosted schedules = 13 operations + old CI schedule.
+- Direct owner approval received for the exact public branch and five-file Linux test payload. Implementation `b8764cd` pushed; PR #472 created. Existing VPS Python passed 22 offline tests (5 renewal + 12 crash/account cases + 5 watchdog) with an empty environment in `/tmp/sns-renewal-offline-Ypa6CJqu`. Latest main `fc1a930` integrated without Python/config/workflow changes; only progress-doc conflicts required combining both histories. No token refresh, old-marker clear, review writer restart, deletion, canary, paid API or deployment performed. 30-item Bank/production acceptance remain incomplete; `docs/goal-status.json` unchanged.
+- Full checkpoint, three-account acceptance table, exact evidence, blockers and safe rollout/rollback: `docs/CODEX_COMPLETION_20261026.md`. Implementation committed as `b8764cd`; delivery: https://github.com/dev-ch-hhuk39/sns-growth-engine/pull/472 . Required checks and final merge status are tracked on that protected PR. Runtime rollout remains separately gated.

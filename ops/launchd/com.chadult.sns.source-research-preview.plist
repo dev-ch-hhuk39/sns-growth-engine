@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.chadult.sns.source-research-preview</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/hayatoa/Projects/sns-growth-engine-bank-acceptance-20261024/scripts/run_local_source_research_preview.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/hayatoa/Projects/sns-growth-engine-bank-acceptance-20261024</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>4</integer>
+    <key>Minute</key><integer>27</integer>
+  </dict>
+  <key>RunAtLoad</key><false/>
+  <key>Nice</key><integer>15</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>ThrottleInterval</key><integer>600</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/hayatoa/.cache/chadult-sns-source-research/launchd.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/hayatoa/.cache/chadult-sns-source-research/launchd.stderr.log</string>
+</dict>
+</plist>

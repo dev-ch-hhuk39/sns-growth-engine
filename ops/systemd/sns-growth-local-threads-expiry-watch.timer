@@ -1,0 +1,11 @@
+[Unit]
+Description=Chadult SNS daily account-safe Threads expiry checks on VPS
+
+[Timer]
+OnCalendar=*-*-* 08:05:00 Asia/Tokyo
+Persistent=true
+AccuracySec=5min
+Unit=sns-growth-local-threads-expiry-watch.service
+
+[Install]
+WantedBy=timers.target

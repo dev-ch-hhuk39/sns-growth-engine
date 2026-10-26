@@ -1,0 +1,22 @@
+[Unit]
+Description=Chadult SNS no-post verified review-board Sheets synchronizer on VPS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+EnvironmentFile=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
+ExecStart=/usr/bin/flock -w 120 /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/locks/sheets-io.lock /opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python -B /usr/local/libexec/chadult-sns-readonly/sns_local_publication_review_job.py
+TimeoutStartSec=900
+MemoryMax=350M
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/review-board-state
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

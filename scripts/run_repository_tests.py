@@ -26,6 +26,10 @@ OPTIONAL_LOCAL_TOOL_PROBES = {
     "test_headroom_installation.py",
 }
 SENSITIVE_ENV_PARTS = ("SECRET", "TOKEN", "PASSWORD", "COOKIE", "STORAGE_STATE", "SA_JSON", "API_KEY")
+# The full catalog's deterministic, provider-free Japanese content checks
+# may exceed the default test budget under CPU contention. Scope the larger
+# ceiling to this single test, rather than relaxing all tests or skipping it.
+SLOW_OFFLINE_TEST_TIMEOUTS = {"test_offline_original_ready_reserve.py": 300}
 
 
 def sanitized_environment() -> dict[str, str]:
@@ -62,7 +66,7 @@ def main() -> int:
                 env=env,
                 text=True,
                 capture_output=True,
-                timeout=max(1, args.timeout_seconds),
+                timeout=max(1, args.timeout_seconds, SLOW_OFFLINE_TEST_TIMEOUTS.get(path.name, 0)),
                 check=False,
             )
             if run.returncode:

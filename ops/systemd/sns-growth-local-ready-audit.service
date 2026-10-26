@@ -1,0 +1,20 @@
+[Unit]
+Description=Chadult SNS no-post three-account READY coverage read-only audit
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+EnvironmentFile=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
+ExecStart=/opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python /usr/local/libexec/chadult-sns-readonly/sns_local_ready_audit.py
+TimeoutStartSec=900
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

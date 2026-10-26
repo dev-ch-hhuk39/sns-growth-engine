@@ -1,0 +1,20 @@
+[Unit]
+Description=Chadult SNS-only 14-day Chrome crash diagnostics cleanup
+After=local-fs.target
+ConditionPathIsDirectory=/var/lib/sns-growth-engine/.config/google-chrome/Crash Reports/completed
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+ExecStartPre=/usr/bin/python3 -B /opt/github-runners/sns-growth-engine/.buffered-runtime/current/scripts/cleanup_sns_chrome_crash_diagnostics.py
+ExecStart=/usr/bin/python3 -B /opt/github-runners/sns-growth-engine/.buffered-runtime/current/scripts/cleanup_sns_chrome_crash_diagnostics.py --apply
+TimeoutStartSec=240
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths="/var/lib/sns-growth-engine/.config/google-chrome/Crash Reports/completed"
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

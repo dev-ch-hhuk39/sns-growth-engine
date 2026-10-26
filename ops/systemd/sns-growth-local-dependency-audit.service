@@ -1,0 +1,21 @@
+[Unit]
+Description=Chadult SNS free VPS Python dependency vulnerability audit via OSV
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+ExecStart=/opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python /usr/local/libexec/chadult-sns-readonly/sns_local_dependency_audit.py
+TimeoutStartSec=180
+Nice=15
+MemoryMax=350M
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal

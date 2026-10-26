@@ -78,7 +78,9 @@ assert "Transactional candidate deploy, health, activation and rollback" in depl
 assert "--enable-scheduler" in deploy
 assert "CLOUDINARY_API_SECRET" in deploy and "GEMINI_API_KEY" in deploy
 assert "requirements-media-runtime.txt" in installer
-assert 'pip" install --quiet --only-binary=:all: --upgrade "pip==26.2.1"' in installer
+assert 'python" -m pip install --quiet --only-binary=:all: --upgrade "pip==26.2.1"' in installer
+assert 'python" -m pip install --quiet --only-binary=:all: --upgrade "setuptools==84.1.0"' in installer
+assert 'package_version("setuptools") == "84.1.0"' in installer
 assert 'bootstrap_sns_python311.py' in installer
 assert "15 5 * * *" in installer
 assert "run_buffered_media_preparation_host.sh" in installer

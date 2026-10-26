@@ -4,3 +4,5 @@
 docs/ai-work-handoff.md:generic-api-key:1824
 # False positive: historical natural-language test description, not a credential.
 ebb6a0fb9818864b173e7c0cea0e653351bea8da:docs/PHASE5B6K_6L_READONLY_PREFLIGHT_AND_CANARY.md:generic-api-key:128
+# Verified false positive: a Git commit SHA referenced in a historical handoff note; narrow fingerprint only.
+210c4be8b2a7c8c9cdfbcdfc81f5d4c51b37178a:docs/ai-work-handoff.md:generic-api-key:3513

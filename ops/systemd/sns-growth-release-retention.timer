@@ -2,6 +2,7 @@
 Description=Chadult SNS-only read-only release audit at 18:25 JST
 
 [Timer]
+OnCalendar=*-*-* 02:45:00 Asia/Tokyo
 OnCalendar=*-*-* 18:25:00 Asia/Tokyo
 Persistent=true
 AccuracySec=1min

@@ -1,0 +1,11 @@
+[Unit]
+Description=Chadult SNS review-board read-only monitoring after writer quarantine
+
+[Timer]
+OnCalendar=*-*-* 01,03,05,07,09,11,13,15,17,19,21,23:25:00 Asia/Tokyo
+Persistent=true
+AccuracySec=2min
+Unit=sns-growth-local-review-consistency.service
+
+[Install]
+WantedBy=timers.target

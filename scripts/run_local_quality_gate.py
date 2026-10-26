@@ -31,6 +31,10 @@ SENSITIVE_PARTS = (
     "API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENAI_API_KEY",
 )
 FOCUSED = (
+    "test_sns_local_threads_token_renewal.py",
+    "test_sns_token_renewal_crash_safety.py",
+    "test_sns_token_renewal_timer_contract.py",
+    "test_sns_local_threads_expiry_watch.py",
     "test_autonomous_text_ready_isolation.py",
     "test_autonomous_text_strict_review_integration.py",
     "test_cleanup_sns_runner_python_toolcache.py",

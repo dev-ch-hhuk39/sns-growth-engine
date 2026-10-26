@@ -60,9 +60,19 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
         "post_type": post_type(queue),
         "queue_status": text(queue.get("status")).upper(),
         "review_status": (
-            "APPROVED_PENDING_MEDIA_GATE"
-            if text(existing.get("decision_result")) == "APPROVED_PENDING_MEDIA_GATE"
-            else "PENDING_REVIEW"
+            # Preserve a completely applied post-hoc feedback state. Flipping
+            # it to PENDING_REVIEW on every sync caused repeated, non-idempotent
+            # write cycles. Material changes still set STALE below.
+            "FEEDBACK_RECORDED"
+            if (
+                text(existing.get("decision_result")).upper() == "FEEDBACK_RECORDED"
+                and text(queue.get("status")).upper() in {"READY", "POSTED"}
+            )
+            else (
+                "APPROVED_PENDING_MEDIA_GATE"
+                if text(existing.get("decision_result")) == "APPROVED_PENDING_MEDIA_GATE"
+                else "PENDING_REVIEW"
+            )
         ),
         "public_post_text": text(queue.get("public_post_text")),
         "media_asset_id": text(queue.get("media_asset_id")),
@@ -159,6 +169,17 @@ def decision_for_row(
         return "BLOCKED_STALE_REVIEW", {}
     queue_status = text(queue.get("status")).upper()
     if queue_status in {"READY", "POSTED"}:
+        # A fully persisted, unchanged reviewer feedback is already complete.
+        # No timestamp rewriting, duplicate Sheets writes or approval changes.
+        if (
+            text(review.get("review_status")).upper() == "FEEDBACK_RECORDED"
+            and text(review.get("decision_result")).upper() == "FEEDBACK_RECORDED"
+            and bool(text(review.get("decision_applied_at")))
+            and text(queue.get("human_review_status")).upper() == decision
+            and text(queue.get("human_review_note")) == text(review.get("reviewer_note"))
+            and bool(text(queue.get("reviewed_at")))
+        ):
+            return "SKIP", {}
         # Media V1 review is post-hoc feedback. It must never retract a READY
         # item or trigger/retry a publish, and UNREVIEWED never blocks it.
         return "FEEDBACK_RECORDED", {

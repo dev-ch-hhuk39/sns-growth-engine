@@ -1,0 +1,22 @@
+[Unit]
+Description=Chadult SNS read-only review-board consistency audit (no writes)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=snsrunner
+Group=snsrunner
+UMask=0077
+WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
+EnvironmentFile=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
+ExecStart=/usr/bin/flock -w 120 /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/locks/sheets-io.lock /opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python -B /usr/local/libexec/chadult-sns-readonly/sns_local_review_consistency_audit.py
+TimeoutStartSec=600
+MemoryMax=250M
+Nice=10
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
