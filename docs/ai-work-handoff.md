@@ -1,3 +1,15 @@
+## 2026-10-27 — continuation
+
+The scoped catalogue performance implementation passed the complete Mac quality gate on October 26; source delivery through protected PR is the next action. Operator approval for dedicated-Runner capacity cleanup is still pending. The new continuation message does not approve the previously rejected stop/delete operation. No production repeat, token refresh or Bank write is authorized by this checkpoint.
+
+## 2026-10-26 — scoped offline preparation cache; capacity approval pending
+
+- Active branch `codex/sns-offline-catalog-performance-20261026`, base protected main `9235e4d` / merged PR #476. PR #476 passed all 4 required checks; complete review packaging and explicit offline Bank generation source delivered, not a full runtime switch or reserve refill.
+- New production-history catalogue preview hit the explicit 300-second service limit; journal reports timeout, no OOM. No completed preview/current Bank count is claimed. Local profiling found the same static quality preparation repeated for changing used-text exclusions. A bounded ContextVar cache now reuses only these history-independent results inside one offline builder call; new exclusions, live history/ranking and all downstream gates still run. Cache is reset on success/error and does not wrap other routes.
+- Actual no-network benchmark with three candidates/account: Night 9.40 -> 4.44 seconds; Liver 10.78 -> 5.00 seconds. Exact selected text hashes/counts match before/after. These Mac timings do not prove a successful VPS retry. Focused scoped-cache 8 and real offline reserve 18 tests PASS. Full Mac validation PASS: 1,095 scripts, workflow safety 619/619, fatal Ruff, compile, diff and history Gitleaks; no new exclusions.
+- Same-host static Runner backup and actual restore verified all 9,304 files; 226,529,918-byte archive stays on VPS. All 9,400 update files/links match current software. Automatic review rejected both the proposed Mac export (not executed) and the specific idle-Runner stop/three-directory cleanup (not executed). Owner approval for the latter is pending; do not retry or infer approval from silence. Script `/private/tmp/sns-runner-capacity-recover-20261026.py`; preserve the archive and all original directories until authorized.
+- Review production timer remains restored; no additional production Sheets writes, posts, token changes, full deployment or cleanup in this batch. Existing GitHub Liver App ID is verified mismatched, not merely absent. Correct independent ID, capacity/full security rollout, accepted reserves, all 13 schedule replacements and signed canaries remain open. `docs/goal-status.json` unchanged.
+
 ## 2026-10-26 — review restored; free reserve path and complete component bundle
 
 - Active branch: `codex/sns-bank-offline-refill-20261026`, base protected main `203364e` / merged PR #475. This checkpoint supersedes earlier same-day "review disabled" / "App ID unknown" status; earlier entries remain historical evidence.

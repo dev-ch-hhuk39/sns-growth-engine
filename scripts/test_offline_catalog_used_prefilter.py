@@ -18,6 +18,51 @@ from auto_approve_queue import normalize_text  # noqa: E402
 
 
 class OfflineCatalogUsedPrefilterTests(unittest.TestCase):
+    def test_scoped_cache_reuses_static_checks_but_still_excludes_newly_used_text(self):
+        items,calls,patches=self.fixture()
+        for p in patches:p.start();self.addCleanup(p.stop)
+        @catalog.cache_offline_preparation
+        def build(*, offline_original):
+            first=catalog._prepared_candidates('night_scout')
+            # A consumer cannot poison the separate scoped preparation copy.
+            first[1]['text']='consumer changed copy'
+            second=catalog._prepared_candidates('night_scout',frozenset({normalize_text(items[0])}))
+            self.assertEqual([r['text'] for r in second],[items[1]])
+        build(offline_original=True)
+        self.assertEqual(calls['validator'],2)
+        self.assertEqual(calls['hard'],2)
+        self.assertIsNone(catalog._PREPARATION.get())
+        catalog._prepared_candidates.cache_clear()
+        build(offline_original=True)
+        self.assertEqual(calls['validator'],4)
+        self.assertEqual(calls['hard'],4)
+
+    def test_scoped_cache_keeps_account_boundaries_and_blocked_results(self):
+        items,calls,patches=self.fixture(hard_status='BLOCKED')
+        for p in patches:p.start();self.addCleanup(p.stop)
+        @catalog.cache_offline_preparation
+        def build(*, offline_original):
+            self.assertEqual(catalog._prepared_candidates('night_scout'),())
+            self.assertEqual(catalog._prepared_candidates('night_scout',frozenset({normalize_text(items[0])})),())
+            self.assertEqual(catalog._prepared_candidates('liver_manager'),())
+        build(offline_original=True)
+        self.assertEqual(calls['hard'],4)
+        self.assertEqual(calls['quality'],0)
+        self.assertIsNone(catalog._PREPARATION.get())
+
+    def test_scoped_cache_clears_on_failure_and_does_not_wrap_other_generation(self):
+        @catalog.cache_offline_preparation
+        def build(*, offline_original):
+            if offline_original:
+                self.assertIsNotNone(catalog._PREPARATION.get())
+                raise RuntimeError('synthetic builder failure')
+            self.assertIsNone(catalog._PREPARATION.get())
+            return 'unchanged'
+        with self.assertRaises(RuntimeError):
+            build(offline_original=True)
+        self.assertIsNone(catalog._PREPARATION.get())
+        self.assertEqual(build(offline_original=False),'unchanged')
+
     def tearDown(self):
         catalog._prepared_candidates.cache_clear()
 
