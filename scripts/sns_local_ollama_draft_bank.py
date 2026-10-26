@@ -58,16 +58,21 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def generate(account: str, config: dict, count: int, batch: int) -> list:
+    from public_post_quality import canonical_voice_prompt
     topic = TOPICS[account][batch % len(TOPICS[account])]
     prompt = (
         "必ずJSONオブジェクトのposts配列にhookとbodyの日本語文字列を入れて返答。"
         f"Threadsの投稿案を{count}件作る。"
         f"書き手: {config.get('persona', '')} / 文体: {config.get('tone', '')}。"
+        f"正式な口調: {canonical_voice_prompt(account)}。"
         f"テーマ: {topic}。切り口番号:{batch}。"
         "本文は2〜4文、60〜230文字。少し具体的で読者が試せる助言。"
         "実際に経験した、実績が出た、誰もが稼げる等の捏造と保証をしない。"
         "医療法律金融に関する事実の断定、広告主張、URL、PR文を避ける。"
         "同じ型を繰り返さず、各案の論点と例を変える。"
+        "各案は一つの論点に絞り、冒頭の問いに本文と結論で答える。"
+        "読者が置かれる具体的な場面、判断する理由、次に試せる行動を自然に書く。"
+        "内部ルール名や審査結果、架空の実績は本文に書かない。"
         f"禁止語: {json.dumps((config.get('forbidden_keywords') or [])[:18], ensure_ascii=False)}"
     )
     payload = {
@@ -132,7 +137,23 @@ def save(account: str, rows: list[dict], folder: Path) -> None:
             os.unlink(name)
 
 
-def run(account: str, target: int, folder: Path = STATE) -> dict:
+def local_quality(account: str, text: str, history: list[str]) -> tuple[bool, list[str]]:
+    sys.path[:0] = [str(ROOT / 'src'), str(ROOT / 'scripts')]
+    from public_post_quality import final_public_post_validator
+    from generation_quality_gates import evaluate_generation_quality
+    from generation.content_quality_v2 import hard_gate
+    public = final_public_post_validator(text, account)
+    hard = hard_gate({'account_id': account, 'target_account_id': account,
+                     'platform': 'threads', 'public_post_text': text, 'supported_claims': []},
+                     account_id=account, public_validation=public)
+    quality = evaluate_generation_quality(account, text, history, batch_compared=history)
+    codes = sorted(set(public['blocked_reasons'] + hard['hard_gate_reasons']
+                       + quality.get('diversity_blocked_reasons', [])
+                       + quality.get('topic_blocked_reasons', [])))
+    return all(r['status'] == 'PASS' for r in (public, hard, quality)), codes
+
+
+def run(account: str, target: int, folder: Path = STATE, *, require_quality: bool = False) -> dict:
     os.umask(0o077)
     if account not in ACCOUNTS or not 1 <= target <= 40:
         raise ValueError("INVALID_SCOPE")
@@ -143,6 +164,7 @@ def run(account: str, target: int, folder: Path = STATE) -> dict:
     rows, history = read_existing(account, folder)
     forbidden = cfg.get("forbidden_keywords") or []
     rejected, batches = 0, 0
+    quality_reasons: Counter[str] = Counter()
     while len(rows) < target and batches < 25:
         needed = min(4, target - len(rows))
         for post in generate(account, cfg, needed, batches):
@@ -154,6 +176,12 @@ def run(account: str, target: int, folder: Path = STATE) -> dict:
             if validate(text, history, forbidden) != "PASS":
                 rejected += 1
                 continue
+            if require_quality:
+                passed, reasons = local_quality(account, text, history)
+                if not passed:
+                    quality_reasons.update(reasons)
+                    rejected += 1
+                    continue
             key = hashlib.sha256((account + "|" + normalize(text)).encode()).hexdigest()[:24]
             rows.append({
                 "draft_id": "local_" + key, "account_id": account,
@@ -170,9 +198,15 @@ def run(account: str, target: int, folder: Path = STATE) -> dict:
         if batches % 3 == 0:
             save(account, rows, folder)
     save(account, rows, folder)
-    return {"account": account, "draft_count": len(rows), "target": target,
+    result = {"account": account, "draft_count": len(rows), "target": target,
             "rejected": rejected, "model_calls": batches, "status": "PENDING_HUMAN_QA",
             "ready_count": 0, "posts": 0, "paid_api_calls": 0, "sheets_writes": 0}
+    if require_quality:
+        result['quality_rejection_counts'] = dict(sorted(quality_reasons.items()))
+        # Recheck every saved record, including resumed files. This is local
+        # evidence only and cannot grant historical novelty or approval.
+        result['local_qa'] = review_existing(account, folder) if rows else {'draft_count': 0}
+    return result
 
 
 
@@ -273,15 +307,24 @@ def main() -> int:
     p.add_argument("--account", choices=ACCOUNTS, required=True)
     p.add_argument("--target", type=int, default=24)
     p.add_argument("--qa-only", action="store_true", help="Read existing pending drafts; no generation or writes")
+    p.add_argument("--qualified-only", action="store_true", help="Generate into a separate private reserve with unchanged local quality gates")
     a = p.parse_args()
     try:
+        if a.qa_only and a.qualified_only:
+            raise ValueError('QA_GENERATION_MODE_CONFLICT')
         if a.qa_only:
             result = review_existing(a.account, STATE)
             print("SNS_LOCAL_OLLAMA_DRAFT_QA=" + json.dumps(result, sort_keys=True), flush=True)
             return 0  # QA completion is never production acceptance.
-        result = run(a.account, a.target)
+        if a.qualified_only:
+            result = run(a.account, a.target, STATE / 'quality-reserve', require_quality=True)
+        else:
+            result = run(a.account, a.target)
         print("SNS_LOCAL_OLLAMA_DRAFT_BANK=" + json.dumps(result, sort_keys=True), flush=True)
-        return 0 if result["draft_count"] >= a.target else 2
+        complete = result["draft_count"] >= a.target
+        if a.qualified_only:
+            complete = complete and result['local_qa'].get('whole_batch_checks_pass') == result['draft_count']
+        return 0 if complete else 2
     except Exception:
         prefix = "SNS_LOCAL_OLLAMA_DRAFT_QA" if a.qa_only else "SNS_LOCAL_OLLAMA_DRAFT_BANK"
         print(prefix + "=BLOCKED reason=UNVERIFIED_RUNTIME posts=0", flush=True)

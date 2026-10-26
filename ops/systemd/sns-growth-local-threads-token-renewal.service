@@ -10,6 +10,7 @@ Group=snsrunner
 UMask=0077
 WorkingDirectory=/opt/github-runners/sns-growth-engine/.buffered-runtime/current
 EnvironmentFile=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/runtime.env
+EnvironmentFile=-/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_app_ids.env
 Environment=THREADS_TOKEN_STORE_DIR=/opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens
 ExecStart=/usr/bin/flock -x -w 120 /opt/github-runners/sns-growth-engine/.buffered-runtime/shared/threads_tokens/.threads-refresh.lock /opt/github-runners/sns-growth-engine/.buffered-runtime/current/.venv/bin/python -B /usr/local/libexec/chadult-sns-readonly/sns_local_threads_token_renewal.py --apply --confirm-token-renewal
 # 120s flock wait + 3 accounts * (4 bounded 20s reads + 30s refresh).

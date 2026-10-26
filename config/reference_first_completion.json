@@ -114,7 +114,8 @@
       "sns-once-review-concurrency-relief.yml",
       "sns-stale-actions-queue-recovery.yml",
       "source-research.yml",
-      "threads-video-reference-preparation.yml"
+      "threads-video-reference-preparation.yml",
+      "verify-liver-threads-app-pin.yml"
     ],
     "inactive_compatibility": [
       "autonomous-growth-loop.yml",

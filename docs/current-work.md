@@ -1,3 +1,19 @@
+## 2026-10-26 — GitHub App ID handoff and qualified draft generation
+
+- Owner requested the remaining work together and specifically authorized checking/reusing the existing GitHub App ID configuration if verified. Repository metadata confirms Night/Liver App-ID secrets exist, while the VPS deploy env writer omitted their names. No secret values were retrieved or printed; independent live matching is still required.
+- Added a protected-main, manual-only Liver App-ID verification/pin bridge with unchanged official lifecycle/identity gates, installed-helper hashes, refresh lock, private atomic pin creation and no refresh/post/Sheets writes. Forward account-specific numeric pins in future runtime env creation; optional pin file remains separate. Legacy refresh workflow stays disabled; Night marker is preserved.
+- Added canonical voice prompting and separate `--qualified-only` generation. Actual bounded Ollama run: Night 0 accepted / 95 rejected, Liver 1 accepted / 99 rejected, 25 model calls each; 0 paid calls. Existing canonical catalog additionally prepared Night 5 / Liver 4 passing local public/hard/topic/batch checks. All remain pending; global-history/slot/publisher checks are still required and Bank counts are unchanged. Original 48 raw drafts hash-verified unchanged. Private receipts: `/private/tmp/sns-qualified-generation-result-20261026.json` and `/private/tmp/sns-qualified-catalog-plan-20261026/summary.json`.
+- Fresh VPS metadata: 8,616,275,968 free bytes <9GiB; all 8 releases within retention; current/previous unchanged, no pending. Review/renewal writers disabled, read-only monitors active. No safe release deletion/full deployment is available yet. Hosted operational schedule migration remains incomplete.
+- Focused App-ID 9, deploy lifecycle 16, token timer 3, generation 7, existing QA 9, network/Sheets inventories and workflow safety 619/619 (65 workflows) PASS. The first full run caught 2 registrations missing for the new manual workflow. Registered that exact workflow in the canonical inventory and explicit host list; strengthened its main-only/ID-only/no-token permission guard. Both failed suites now PASS (host policy 390/390). Full rerun evidence: `/private/tmp/sns-next-completion-quality-final-20261026.json`; protected PR CI remains required.
+- Details: `docs/SNS_APP_ID_GITHUB_HANDOFF_20261026.md`. `docs/goal-status.json` unchanged; no overall production completion claimed.
+
+## 2026-10-26 — active completion batch
+
+- Branch: `codex/sns-autonomous-completion-next-20261026`, base protected main `06c159c`. Owner requested the remaining work together and explicitly asked to reuse the existing GitHub App ID configuration if verified.
+- In progress: verified GitHub-to-VPS App ID handoff, private draft quality improvement, hosted schedule equivalence audit, storage/deployment and review reconciliation prerequisites.
+- GitHub metadata confirms repository secrets `THREADS_APP_ID_LIVER_MANAGER` and `THREADS_APP_ID_NIGHT_SCOUT` exist; no App ID Variables or production-environment App ID overrides. Values have not been retrieved or printed. The deploy environment writer omits these pins.
+- Fresh host metadata: 8,616,275,968 bytes free (<9GiB), all eight releases still within retention; current `94b744f`, previous `7be8dc6`, no pending. Review and renewal writers disabled; read-only monitors active. No deletion, posting or token refresh in this batch yet.
+
 ## 2026-10-26 14:45 JST — Bank audit complete; local draft QA added
 
 - Owner-approved one-time read-only Bank audit completed: Night 12/30 (18 short), Liver 11/30 (19 short), Beauty 36 distinct / 30 slot-effective (minimum met). Overall INVENTORY_SHORTFALL; no Sheets writes, paid AI calls or posts. Receipt: `/private/tmp/sns-bank-live-readonly-result-20261026.json`.
