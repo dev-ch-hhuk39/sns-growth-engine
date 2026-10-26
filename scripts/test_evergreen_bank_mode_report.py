@@ -21,6 +21,39 @@ import maintain_text_ready_inventory as m  # noqa: E402
 
 
 class EvergreenBankModeContracts(unittest.TestCase):
+    def test_explicit_offline_bank_flag_preserves_shortfall_and_paid_route_exclusion(self):
+        client = Mock()
+        output = StringIO()
+        argv = ['bank', '--account-id','night_scout','--evergreen-bank','--bank-offline-only',
+                '--apply','--confirm-ready-maintenance','--use-sheets']
+        with patch.object(sys, 'argv', argv), patch.object(m,'SheetsClient',return_value=client), \
+                patch.object(m,'get_config',return_value={'sheet_id':'fixture','sa_dict':{}}), \
+                patch.object(m,'replenish_bank',return_value={'account_id':'night_scout',
+                    'status':'QUALITY_EXHAUSTED','usable_evergreen':12,'minimum':30}) as bank, redirect_stdout(output):
+            self.assertEqual(m.main(), 1)
+        bank.assert_called_once_with(client, 'night_scout', apply=True, offline_only=True)
+        self.assertEqual(json.loads(output.getvalue())['status'], 'FAILED')
+        slot = {'slot_id':'fixture_slot','business_date_jst':'2026-10-30'}
+        with patch.object(m,'_primary_generation_commands',side_effect=AssertionError('No paid route')):
+            commands = m._generation_commands('night_scout', slot, offline_only=True)
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0][0], 'offline_original_bank')
+        self.assertIn('--offline-original', commands[0][1])
+
+    def test_offline_bank_flag_rejects_unconfirmed_or_conflicting_modes_before_client(self):
+        cases = [
+            ['--bank-offline-only','--dry-run'],
+            ['--bank-offline-only','--apply','--use-sheets','--evergreen-bank'],
+            ['--bank-offline-only','--bank-reuse-only','--apply','--confirm-ready-maintenance','--use-sheets','--evergreen-bank'],
+            ['--bank-offline-only','--apply','--confirm-ready-maintenance','--use-sheets'],
+        ]
+        for flags in cases:
+            with self.subTest(flags=flags), patch.object(sys,'argv',['bank','--account-id','night_scout',*flags]), \
+                    patch.object(m,'get_config') as config, patch.object(m,'SheetsClient') as client, redirect_stdout(StringIO()):
+                self.assertEqual(m.main(), 1)
+            config.assert_not_called()
+            client.assert_not_called()
+
     def test_successful_applied_bank_is_pass_not_no_required_text_slots(self):
         rows = [
             {"account_id": "night_scout", "status": "READY_INVENTORY_OK",

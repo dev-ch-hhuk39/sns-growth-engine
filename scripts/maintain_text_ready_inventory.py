@@ -895,7 +895,7 @@ def evergreen_canonical_slot_health(
 
 
 def replenish_bank(client, account_id: str, *, apply: bool,
-                   reuse_only: bool = False) -> dict[str, Any]:
+                   reuse_only: bool = False, offline_only: bool = False) -> dict[str, Any]:
     from evergreen_inventory import (
         expired_unpublished_bank_allocations,
         release_expired_unpublished_bank_allocations,
@@ -1075,7 +1075,7 @@ def replenish_bank(client, account_id: str, *, apply: bool,
             target["theme"] = theme_variants[attempt_number % len(theme_variants)]
         result = replenish(
             account_id, target, apply=True,
-            required=min(3, deficits[sid]), offline_only=False,
+            required=min(3, deficits[sid]), offline_only=offline_only,
         )
         attempts.append({
             "status": result["status"], "slot_id": sid,
@@ -1132,6 +1132,9 @@ def replenish_bank(client, account_id: str, *, apply: bool,
                 prime_readonly_record_cache(snapshot, ("queue", "evergreen_bank"))
         updated, deficits, by_slot = current_bank_health()
         current = updated
+        if offline_only and result.get("failure_category") == "OFFLINE_CATALOG_EXHAUSTED":
+            # A different theme cannot replenish a finite exhausted catalog.
+            break
         # A provider failure/rate-limit must not trigger more paid attempts.
         # Editorial QUALITY_EXHAUSTED alone can try a different bounded theme.
         if hard_replenishment_blocker(result) or paid_generation_pause_required(result):
@@ -1202,6 +1205,10 @@ def main() -> int:
     parser.add_argument("--horizon-hours", type=int, default=policy()["text_horizon_hours"])
     parser.add_argument("--evergreen-bank", action="store_true")
     parser.add_argument(
+        "--bank-offline-only", action="store_true",
+        help="Confirmed evergreen-bank Apply using the existing offline catalog only; never try paid generation",
+    )
+    parser.add_argument(
         "--bank-reuse-only", action="store_true",
         help="Confirmed evergreen-bank Apply using existing approved candidates only; no AI generation",
     )
@@ -1238,6 +1245,15 @@ def main() -> int:
             "reason": "bank_reuse_only_requires_single_account_confirmed_bank_apply",
             "would_post": False,
         }))
+        return 1
+    if args.bank_offline_only and not (
+        args.apply and args.use_sheets and args.evergreen_bank
+        and args.account_id in PREPARED_ACCOUNTS
+        and not args.reuse_only and not args.bank_reuse_only
+    ):
+        print(json.dumps({"status": "BLOCKED",
+            "reason": "bank_offline_only_requires_single_account_confirmed_bank_apply",
+            "would_post": False}))
         return 1
     if not 1 <= args.horizon_hours <= 168:
         print(json.dumps({"status": "BLOCKED", "reason": "inventory_horizon_must_be_1_to_168_hours", "would_post": False}))
@@ -1293,6 +1309,8 @@ def main() -> int:
             kwargs: dict[str, Any] = {"apply": args.apply}
             if args.bank_reuse_only:
                 kwargs["reuse_only"] = True
+            if args.bank_offline_only:
+                kwargs["offline_only"] = True
             results.append(replenish_bank(
                 client if args.use_sheets else None, account_id, **kwargs,
             ))

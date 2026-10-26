@@ -21,6 +21,7 @@ STATE = Path.home() / ".cache" / "chadult-sns-local-drafts"
 URL = "http://127.0.0.1:11434/api/generate"
 ACCOUNTS = ("night_scout", "liver_manager")
 MODEL = "gemma4:e4b"
+LOCAL_MODELS = (MODEL, "gemma4:26b")
 JST = timezone(timedelta(hours=9))
 TOPICS = {
     "night_scout": ("夜職の店選び", "勤務条件の確認", "接客の負担", "生活リズム", "転職の相談"),
@@ -57,7 +58,10 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         raise ValueError("LOCAL_INFERENCE_REDIRECT_BLOCKED")
 
 
-def generate(account: str, config: dict, count: int, batch: int) -> list:
+def generate(account: str, config: dict, count: int, batch: int, *, model: str | None = None) -> list:
+    selected_model = MODEL if model is None else model
+    if selected_model not in LOCAL_MODELS:
+        raise ValueError("LOCAL_MODEL_NOT_ALLOWED")
     from public_post_quality import canonical_voice_prompt
     topic = TOPICS[account][batch % len(TOPICS[account])]
     prompt = (
@@ -76,13 +80,13 @@ def generate(account: str, config: dict, count: int, batch: int) -> list:
         f"禁止語: {json.dumps((config.get('forbidden_keywords') or [])[:18], ensure_ascii=False)}"
     )
     payload = {
-        "model": MODEL, "stream": False, "format": "json", "think": False,
+        "model": selected_model, "stream": False, "format": "json", "think": False,
         "prompt": prompt, "options": {"temperature": 0.75, "num_predict": 1400},
     }
     request = urllib.request.Request(URL, data=json.dumps(payload, ensure_ascii=False).encode(),
                                      headers={"Content-Type": "application/json"})
     try:
-        with urllib.request.build_opener(NoRedirect()).open(request, timeout=130) as response:
+        with urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({})).open(request, timeout=130) as response:
             if response.status != 200:
                 return []
             raw = response.read(2_000_001)
@@ -153,9 +157,12 @@ def local_quality(account: str, text: str, history: list[str]) -> tuple[bool, li
     return all(r['status'] == 'PASS' for r in (public, hard, quality)), codes
 
 
-def run(account: str, target: int, folder: Path = STATE, *, require_quality: bool = False) -> dict:
+def run(account: str, target: int, folder: Path = STATE, *, require_quality: bool = False,
+        model: str | None = None, max_batches: int = 25) -> dict:
     os.umask(0o077)
-    if account not in ACCOUNTS or not 1 <= target <= 40:
+    if (account not in ACCOUNTS or not 1 <= target <= 40
+            or type(max_batches) is not int or not 1 <= max_batches <= 25
+            or (model is not None and model not in LOCAL_MODELS)):
         raise ValueError("INVALID_SCOPE")
     folder.mkdir(mode=0o700, parents=True, exist_ok=True)
     if folder.is_symlink() or folder.stat().st_mode & 0o022:
@@ -165,9 +172,11 @@ def run(account: str, target: int, folder: Path = STATE, *, require_quality: boo
     forbidden = cfg.get("forbidden_keywords") or []
     rejected, batches = 0, 0
     quality_reasons: Counter[str] = Counter()
-    while len(rows) < target and batches < 25:
+    while len(rows) < target and batches < max_batches:
         needed = min(4, target - len(rows))
-        for post in generate(account, cfg, needed, batches):
+        posts = (generate(account, cfg, needed, batches) if model is None
+                 else generate(account, cfg, needed, batches, model=model))
+        for post in posts:
             if not isinstance(post, dict):
                 rejected += 1
                 continue
@@ -188,6 +197,7 @@ def run(account: str, target: int, folder: Path = STATE, *, require_quality: boo
                 "post_type": "original_text", "draft_text": text,
                 "workflow_status": "PENDING_HUMAN_QA", "canonical_bank_ready": False,
                 "source": "local_ollama_unverified",
+                "local_model": MODEL if model is None else model,
                 "requires": ["editorial_review", "factual_review", "global_duplicate_scan",
                              "slot_compatibility", "final_publisher_gate"],
             })
@@ -199,6 +209,7 @@ def run(account: str, target: int, folder: Path = STATE, *, require_quality: boo
             save(account, rows, folder)
     save(account, rows, folder)
     result = {"account": account, "draft_count": len(rows), "target": target,
+            "model": MODEL if model is None else model,
             "rejected": rejected, "model_calls": batches, "status": "PENDING_HUMAN_QA",
             "ready_count": 0, "posts": 0, "paid_api_calls": 0, "sheets_writes": 0}
     if require_quality:
@@ -308,6 +319,8 @@ def main() -> int:
     p.add_argument("--target", type=int, default=24)
     p.add_argument("--qa-only", action="store_true", help="Read existing pending drafts; no generation or writes")
     p.add_argument("--qualified-only", action="store_true", help="Generate into a separate private reserve with unchanged local quality gates")
+    p.add_argument("--model", choices=LOCAL_MODELS, default=None)
+    p.add_argument("--max-batches", type=int, default=25)
     a = p.parse_args()
     try:
         if a.qa_only and a.qualified_only:
@@ -317,9 +330,11 @@ def main() -> int:
             print("SNS_LOCAL_OLLAMA_DRAFT_QA=" + json.dumps(result, sort_keys=True), flush=True)
             return 0  # QA completion is never production acceptance.
         if a.qualified_only:
-            result = run(a.account, a.target, STATE / 'quality-reserve', require_quality=True)
+            folder = 'quality-reserve-gemma4-26b' if a.model == 'gemma4:26b' else 'quality-reserve'
+            result = run(a.account, a.target, STATE / folder, require_quality=True,
+                         model=a.model, max_batches=a.max_batches)
         else:
-            result = run(a.account, a.target)
+            result = run(a.account, a.target, model=a.model, max_batches=a.max_batches)
         print("SNS_LOCAL_OLLAMA_DRAFT_BANK=" + json.dumps(result, sort_keys=True), flush=True)
         complete = result["draft_count"] >= a.target
         if a.qualified_only:
