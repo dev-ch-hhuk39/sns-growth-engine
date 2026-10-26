@@ -66,7 +66,6 @@ def review_row(queue: Mapping[str, Any], existing: Mapping[str, Any] | None = No
             "FEEDBACK_RECORDED"
             if (
                 text(existing.get("decision_result")).upper() == "FEEDBACK_RECORDED"
-                and text(existing.get("review_status")).upper() == "FEEDBACK_RECORDED"
                 and text(queue.get("status")).upper() in {"READY", "POSTED"}
             )
             else (

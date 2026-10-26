@@ -44,6 +44,25 @@ class HumanReviewIdempotence(unittest.TestCase):
                 self.assertEqual(projected["decision_applied_at"], old["decision_applied_at"])
                 self.assertEqual(decision_for_row(projected, q, allow_media_posts=False), ("SKIP", {}))
 
+    def test_legacy_pending_status_recovers_applied_feedback(self):
+        q = queue("POSTED")
+        old = applied_review(q)
+        old["review_status"] = "PENDING_REVIEW"
+        projected = review_row(q, old)
+        self.assertEqual(projected["review_status"], "FEEDBACK_RECORDED")
+        self.assertEqual(
+            decision_for_row(projected, q, allow_media_posts=False),
+            ("SKIP", {}),
+        )
+
+    def test_legacy_pending_changed_text_stays_stale(self):
+        q = queue("POSTED")
+        old = applied_review(q)
+        old["review_status"] = "PENDING_REVIEW"
+        q["public_post_text"] = "別の文章へ変更されました。"
+        projected = review_row(q, old)
+        self.assertEqual(projected["review_status"], "STALE_REVIEW_RECHECK_REQUIRED")
+
     def test_updated_note_still_processed(self):
         q = queue()
         projected = review_row(q, applied_review(q, note="新しいコメント"))
