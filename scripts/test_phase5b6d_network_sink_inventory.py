@@ -145,7 +145,7 @@ class NetworkSinkInventoryTests(unittest.TestCase):
         source = script.read_text(encoding="utf-8")
         self.assertIn('URL = "http://127.0.0.1:11434/api/generate"', source)
         self.assertIn("class NoRedirect(urllib.request.HTTPRedirectHandler)", source)
-        self.assertIn("urllib.request.build_opener(NoRedirect())", source)
+        self.assertIn("urllib.request.build_opener(NoRedirect(), urllib.request.ProxyHandler({}))", source)
         self.assertNotIn("urllib.request.urlopen(request", source)
         self.assertNotIn("https://graph.threads.net", source)
         self.assertNotIn("https://api.openai.com", source)

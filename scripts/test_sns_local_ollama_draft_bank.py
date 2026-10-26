@@ -12,6 +12,43 @@ import sns_local_ollama_draft_bank as bank
 
 
 class OfflineDraftTests(unittest.TestCase):
+    def test_local_inference_disables_proxies_and_redirects(self):
+        from unittest.mock import MagicMock
+        response = MagicMock(status=200)
+        response.read.return_value = b'{"response":"{\\"posts\\":[]}"}'
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = response
+        with patch.object(bank.urllib.request, 'build_opener', return_value=opener) as build:
+            self.assertEqual(bank.generate('liver_manager', {}, 1, 0), [])
+        handlers = build.call_args.args
+        self.assertIsInstance(handlers[0], bank.NoRedirect)
+        self.assertIsInstance(handlers[1], bank.urllib.request.ProxyHandler)
+        self.assertEqual(handlers[1].proxies, {})
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.full_url, 'http://127.0.0.1:11434/api/generate')
+        with self.assertRaisesRegex(ValueError, 'LOCAL_INFERENCE_REDIRECT_BLOCKED'):
+            handlers[0].redirect_request(request, None, 302, '', {}, 'https://example.com')
+
+    def test_cloud_model_or_invalid_batch_budget_cannot_reach_inference(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(bank, 'generate') as model:
+            for kwargs in ({'model':'other:cloud'}, {'max_batches':0}, {'max_batches':26}, {'max_batches':True}):
+                with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                    bank.run('night_scout', 1, Path(temporary), **kwargs)
+        model.assert_not_called()
+        with patch.object(bank.urllib.request,'build_opener') as network, self.assertRaises(ValueError):
+            bank.generate('night_scout',{},1,0,model='other:cloud')
+        network.assert_not_called()
+
+    def test_installed_large_model_and_short_budget_stay_pending(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(bank,'generate',return_value=[]) as model:
+            result=bank.run('liver_manager',2,Path(temporary),model='gemma4:26b',max_batches=3)
+        self.assertEqual(model.call_count,3)
+        self.assertTrue(all(call.kwargs['model']=='gemma4:26b' for call in model.call_args_list))
+        self.assertEqual(result['model_calls'],3)
+        self.assertEqual(result['model'],'gemma4:26b')
+        self.assertEqual(result['ready_count'],0)
+        self.assertEqual(result['paid_api_calls'],0)
+
     def test_qualified_mode_uses_real_gates_and_keeps_original_file(self):
         root = Path(__file__).resolve().parents[1]
         candidates = json.loads((root/'config/offline_original_posts.json').read_text())['night_scout']
