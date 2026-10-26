@@ -14,6 +14,7 @@ KEYS = (
     'THREADS_ACCESS_TOKEN_NIGHT_SCOUT', 'THREADS_USER_ID_NIGHT_SCOUT', 'THREADS_HANDLE_NIGHT_SCOUT',
     'THREADS_ACCESS_TOKEN_LIVER_MANAGER', 'THREADS_USER_ID_LIVER_MANAGER', 'THREADS_HANDLE_LIVER_MANAGER',
     'THREADS_ACCESS_TOKEN_BEAUTY_ACCOUNT', 'THREADS_USER_ID_BEAUTY_ACCOUNT', 'THREADS_HANDLE_BEAUTY_ACCOUNT',
+    'THREADS_APP_ID_NIGHT_SCOUT', 'THREADS_APP_ID_LIVER_MANAGER', 'THREADS_APP_ID_BEAUTY_ACCOUNT',
     'BEAUTY_ACTIVATION_APPROVED', 'BUFFERED_POSTING_ENABLED', 'CLOUDINARY_CLOUD_NAME',
     'CLOUDINARY_API_KEY', 'CLOUDINARY_API_SECRET', 'GEMINI_API_KEY',
 )
@@ -72,6 +73,9 @@ def write_candidate_env(path: Path, runtime_root: Path, env: dict[str, str],
         raise ValueError('missing_required_runtime_configuration:' + ','.join(missing))
     if env.get('BUFFERED_POSTING_ENABLED', '').lower() not in {'true', 'false'}:
         raise ValueError('posting_mode_must_be_explicit_boolean')
+    for key in ('THREADS_APP_ID_NIGHT_SCOUT', 'THREADS_APP_ID_LIVER_MANAGER', 'THREADS_APP_ID_BEAUTY_ACCOUNT'):
+        if env.get(key) and not re.fullmatch(r'[0-9]{5,30}', env[key]):
+            raise ValueError('threads_app_id_must_be_numeric')
     inherited = (
         inherited_p0_env(inherit_local_p0, shared)
         if inherit_local_p0 is not None else {}

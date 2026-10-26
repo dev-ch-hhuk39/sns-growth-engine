@@ -28,6 +28,9 @@ HOST_RUNTIME_WORKFLOWS = {
     "sns-runner-toolcache-recovery.yml",
     "production-capacity-recovery.yml",
     "resolve-sns-abandoned-pending.yml",
+    # Owner-requested reuse of an existing App ID must verify against the
+    # protected VPS runtime; no tokens may be exported to a hosted runner.
+    "verify-liver-threads-app-pin.yml",
 }
 
 checks: list[tuple[str, bool]] = []
@@ -52,6 +55,18 @@ for path in WORKFLOWS:
                  == "github.ref == 'refs/heads/main'")
             and "secrets." not in raw
             and 'PUBLISH_ENABLED: "false"' in raw,
+        ))
+    if path.name == "verify-liver-threads-app-pin.yml":
+        triggers = data.get("on", data.get(True))
+        checks.append((
+            "verify-liver-threads-app-pin.yml:protected-main-id-only-dispatch",
+            set(triggers) == {"workflow_dispatch"}
+            and data["jobs"]["verify"]["if"] == "github.ref == 'refs/heads/main'"
+            and data["jobs"]["verify"]["environment"] == "production"
+            and raw.count("secrets.") == 1
+            and "secrets.THREADS_APP_ID_LIVER_MANAGER" in raw
+            and "ACCESS_TOKEN" not in raw and "APP_SECRET" not in raw
+            and data["permissions"] == {"contents": "read"},
         ))
     forbidden_triggers = ("pull_request_target:", "repository_dispatch:", "issue_comment:", "workflow_run:")
     safe_pr_ci = path.name == "ci.yml" and "pull_request:" in raw and "secrets." not in raw

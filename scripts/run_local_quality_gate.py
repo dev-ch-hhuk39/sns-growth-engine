@@ -31,6 +31,7 @@ SENSITIVE_PARTS = (
     "API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENAI_API_KEY",
 )
 FOCUSED = (
+    "test_verify_github_liver_app_pin.py",
     "test_sns_local_draft_qa.py",
     "test_sns_local_ollama_draft_bank.py",
     "test_sns_local_threads_token_renewal.py",

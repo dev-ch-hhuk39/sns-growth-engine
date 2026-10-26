@@ -1,0 +1,47 @@
+name: Verify Existing Liver Threads App ID (No Refresh or Posting)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_app_pin:
+        description: 'Enter VERIFY_LIVER_APP_ID to verify existing GitHub configuration'
+        type: string
+        required: true
+      apply_pin:
+        description: 'Save only the verified App ID in the protected VPS pin file'
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sns-growth-liver-app-pin
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Linux, X64]
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Verify existing GitHub App ID against the official live preflight
+        shell: bash
+        env:
+          CANDIDATE_LIVER_THREADS_APP_ID: ${{ secrets.THREADS_APP_ID_LIVER_MANAGER }}
+          CONFIRM_APP_PIN: ${{ inputs.confirm_app_pin }}
+          APPLY_PIN: ${{ inputs.apply_pin }}
+        run: |
+          set -euo pipefail
+          set +x
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$CONFIRM_APP_PIN" = "VERIFY_LIVER_APP_ID"
+          args=(--confirm "$CONFIRM_APP_PIN")
+          if [ "$APPLY_PIN" = "true" ]; then args+=(--apply-pin); fi
+          python3 -B scripts/verify_github_liver_app_pin.py "${args[@]}"

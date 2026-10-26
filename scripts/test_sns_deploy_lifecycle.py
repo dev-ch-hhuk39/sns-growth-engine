@@ -54,6 +54,24 @@ class DeploymentLifecycleTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             write_candidate_env(self.env_path, self.root, self.env)
 
+    def test_account_specific_app_ids_survive_candidate_environment(self):
+        ids = {'THREADS_APP_ID_NIGHT_SCOUT': '123456789',
+               'THREADS_APP_ID_LIVER_MANAGER': '234567890',
+               'THREADS_APP_ID_BEAUTY_ACCOUNT': '345678901'}
+        write_candidate_env(self.env_path, self.root, {
+            **self.env, **ids, 'THREADS_APP_SECRET_LIVER_MANAGER': 'not-for-renewal-copy'})
+        content = self.env_path.read_text()
+        for key, value in ids.items():
+            self.assertIn(key + '=' + value + '\n', content)
+        self.assertNotIn('not-for-renewal-copy', content)
+
+    def test_invalid_app_id_cannot_enter_runtime_environment(self):
+        for value in ('not-an-id', '12345\nOTHER=1', ' 123456', '1234'):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'threads_app_id'):
+                write_candidate_env(self.env_path, self.root, {
+                    **self.env, 'THREADS_APP_ID_LIVER_MANAGER': value})
+            self.assertFalse(self.env_path.exists())
+
     def test_host_hmac_remains_local_and_survives_env_candidate_rewrite(self):
         live = self.shared / 'runtime.env'
         live.write_text(
