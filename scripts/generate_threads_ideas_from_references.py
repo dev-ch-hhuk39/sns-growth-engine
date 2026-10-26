@@ -50,6 +50,7 @@ from public_post_quality import (  # noqa: E402
 )
 from accounts.managed_accounts import account_choices, managed_account_ids  # noqa: E402
 from auto_ready_draft_preflight import autonomous_text_policy_status  # noqa: E402
+from offline_original_catalog import cache_offline_preparation  # noqa: E402
 
 CLI_NAME = "generate_threads_ideas_from_references"
 ALLOWED_ACCOUNTS = set(managed_account_ids())
@@ -767,6 +768,7 @@ def buffered_original_candidate(account_id: str, *, recent: list[str], excluded_
     }
 
 
+@cache_offline_preparation
 def build_fallback_generation_rows(
     *,
     account_id: str,

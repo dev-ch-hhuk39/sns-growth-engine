@@ -2,16 +2,37 @@
 from __future__ import annotations
 
 import hashlib
+import copy
 import json
 import re
+from contextvars import ContextVar
 from difflib import SequenceMatcher
-from functools import lru_cache
+from functools import lru_cache, wraps
 from pathlib import Path
 from typing import Any, Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG_VERSION = "offline_original_v1"
 ACCOUNTS = ("night_scout", "liver_manager", "beauty_account")
+_PREPARATION: ContextVar[dict | None] = ContextVar('offline_preparation', default=None)
+
+
+def cache_offline_preparation(function):
+    """Reuse static checks only within one offline builder invocation.
+
+    Used-text exclusion and history/batch ranking still run at every selection.
+    The bounded cache is discarded on return or failure, never persisted.
+    """
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        if not kwargs.get('offline_original'):
+            return function(*args, **kwargs)
+        token = _PREPARATION.set({})
+        try:
+            return function(*args, **kwargs)
+        finally:
+            _PREPARATION.reset(token)
+    return wrapped
 
 
 def requests_offline_review(queue: Mapping[str, Any]) -> bool:
@@ -132,11 +153,21 @@ def _prepared_candidates(
             # This entry is unselectable regardless of its editorial score.
             # Keep hard checks mandatory for every remaining, new candidate.
             continue
+        cache = _PREPARATION.get()
+        cache_key = (account_id, source_text, json.dumps(repaired, sort_keys=True))
+        if cache is not None and cache_key in cache:
+            candidate = copy.deepcopy(cache[cache_key])
+            if candidate is not None:
+                prepared.append(candidate)
+                seen.add(key)
+            continue
         public = final_public_post_validator(text, account_id)
         gate = hard_gate({"account_id": account_id, "target_account_id": account_id,
                           "platform": "threads", "public_post_text": text},
                          account_id=account_id, public_validation=public)
         if gate["status"] != "PASS":
+            if cache is not None and len(cache) < 512:
+                cache[cache_key] = None
             continue
         quality = evaluate_generation_quality(account_id, text, [], batch_compared=[])
         rank = rank_candidate({
@@ -165,6 +196,8 @@ def _prepared_candidates(
             "quality": quality,
             **rank,
         })
+        if cache is not None and len(cache) < 512:
+            cache[cache_key] = copy.deepcopy(prepared[-1])
         seen.add(key)
     prepared.sort(key=lambda row: (-float(row["quality_rank"]), evidence(account_id, row["text"])["content_hash"]))
     return tuple(prepared)
