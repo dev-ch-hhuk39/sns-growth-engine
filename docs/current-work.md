@@ -2,7 +2,7 @@
 
 - Host aftercare now supports one selected managed account, including Beauty only with independently protected activation and metrics consent. Existing metrics/scheduler, manual strategy and READY-reuse approvals remain separate; deployment preserves the new boolean only from the protected host source, missing false.
 - Fixed configuration source and ownership, credential/ID/import override clearing, paid/mock/post disabling, immutable script/path pinning, continuous deployment/Sheets/account locks and private child diagnostics prevent caller state from redirecting execution or creating mock acceptance. Failure stops dependent stages without retry or fabricated rollback.
-- Focused shell integration7, host policy16 and lifecycle22 plus existing Beauty metrics contracts PASS. Combined final validation is pending. Source only: no deployment, live metrics/Sheets write, schedule replacement, token rotation or SNS publication. See `docs/SNS_AFTERCARE_HOST_ISOLATION_20261028.md`.
+- Focused shell integration7, host policy16 and lifecycle22 plus existing Beauty metrics contracts PASS. Final combined Mac quality gate PASS: 1,099/1,099 regression scripts, workflow safety 619/619, fatal Ruff, compile, diff and history secret scan; unchanged exclusions. Independent review found no new required fixes. Source only: no deployment, live metrics/Sheets write, schedule replacement, token rotation or SNS publication. See `docs/SNS_AFTERCARE_HOST_ISOLATION_20261028.md`.
 
 ## 2026-10-27 — finite owned-original host preparation
 

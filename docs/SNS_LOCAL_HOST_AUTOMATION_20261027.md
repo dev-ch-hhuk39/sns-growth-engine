@@ -1,6 +1,6 @@
 # Guarded local host automation source
 
-This batch closes specific source gaps without installing schedules or changing production consent. Existing operational Actions remain enabled until equivalent authenticated execution is independently proven. Protected PR CI remains mandatory.
+This batch closes specific source gaps without installing schedules or changing production consent. Existing operational Actions remain enabled until equivalent authenticated execution is independently proven. Host metrics isolation and explicit Beauty consent are documented in `SNS_AFTERCARE_HOST_ISOLATION_20261028.md`. Protected PR CI remains mandatory.
 
 | Component | Implemented behavior | Remaining boundary |
 |---|---|---|
@@ -15,7 +15,7 @@ This batch closes specific source gaps without installing schedules or changing 
 
 Both entrypoints default to an offline plan without loading protected configuration. Protected runtime reads reject invalid file boundaries/permissions; acquisition and READY preparation clear caller credential/import aliases before loading the fixed source. Executable venv interpreter symlinks remain supported as in the existing deployment health contract. Shell tracing is disabled before secrets are loaded, including inherited debug tracing. No runtime credentials are inspected by development tests.
 
-The environment writer preserves the existing four aftercare controls, the three READY controls, the two acquisition controls and exact acquisition scope strings only from its validated protected source. Absent booleans stay false; malformed booleans, account/scope/platform enums or release identities block candidate creation. A preserved acquisition release approval intentionally remains tied to its old SHA after deployment, so a new release is never automatically authorized.
+The environment writer preserves the five aftercare controls (including independent Beauty metrics consent), the three READY controls, the two acquisition controls and exact acquisition scope strings only from its validated protected source. Absent booleans stay false; malformed booleans, account/scope/platform enums or release identities block candidate creation. A preserved acquisition release approval intentionally remains tied to its old SHA after deployment, so a new release is never automatically authorized.
 
 Offline shell integration tests exercise real entrypoints with isolated fake runtimes, scoped child capture, symlink interpreters, credential tracing/spoofing denials, immutable-pointer races, continuous advisory locks and failure propagation. Source-only results cannot establish live inventory, source access, scheduler replacement, publication or metrics acceptance. Full regression and final validation are recorded before delivery.
 
