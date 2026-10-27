@@ -1,3 +1,9 @@
+## 2026-10-27 — source-only durable host API budget guard
+
+- Added an extra SQLite reservation barrier for strict host mode: durable per-run20, global JST day40/month1000 request ceilings across fresh processes and immutable releases, with account/release-bound run identities. Existing JSON/Sheets controls remain in place. Missing or corrupt ledgers refuse; initialization requires explicitly confirmed independently audited current-period baselines.
+- Reference drafting and semantic judging, generic Gemini text calls, hybrid text and multimodal transports reserve immediately before each HTTP attempt, including retries/fallback. Budget refusal propagates; cache/mock paths do not reserve transport attempts. Visual understanding receives the explicit source/review account as budget metadata only, with unchanged observation prompts and rights/quality boundaries.
+- Strict mode is opt-in and grants no paid authorization. No ledger initialized, provider invoked, paid host mode enabled or production setting changed. Host full-generation mode remains refused until operational prerequisites and complete rollout proof exist. Final combined Mac quality gate PASS: 1,098 regression scripts, workflow safety 619/619, fatal Ruff, compile, diff and history secret scan; additional pytest 169/169 PASS. Focused ledger28, Vision26 and transport/refresh tests PASS; existing exclusions unchanged. See `docs/SNS_HOST_AI_BUDGET_20261027.md`.
+
 ## 2026-10-27 — guarded local host automation implementation
 
 - Existing protected consent preservation is implemented for aftercare, READY reuse and scoped acquisition; caller values cannot grant approval, missing flags remain false, malformed controls block candidate creation. Acquisition approval remains bound to its original account/scope/platform/release and is not retargeted by deployment.

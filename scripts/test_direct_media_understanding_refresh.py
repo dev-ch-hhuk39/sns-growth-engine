@@ -200,6 +200,7 @@ originals = {
     )
 }
 downloaded_urls: list[str] = []
+analysis_accounts: list[str] = []
 try:
     os.environ["ALLOW_LOCAL_TRANSCRIPTION"] = "true"
     with tempfile.TemporaryDirectory() as temporary:
@@ -228,11 +229,10 @@ try:
         )
         core.magic_mime = lambda _path: "video/mp4"
         core.probe_video = lambda _path: {"duration_seconds": "20"}
-        core.analyze_local_media = lambda *_args, **_kwargs: {
-            "status": "PASS",
-            "provider": "fixture",
-            "transcript_status": "UNAVAILABLE",
-        }
+        def fake_analysis(*_args, **kwargs):
+            analysis_accounts.append(kwargs.get("account_id", ""))
+            return {"status": "PASS", "provider": "fixture", "transcript_status": "UNAVAILABLE"}
+        core.analyze_local_media = fake_analysis
         core.upsert_media_understanding = (
             lambda *_args, **_kwargs: "understanding-1"
         )
@@ -243,6 +243,7 @@ try:
         assert result["media_asset_id"] == "asset-1", result
         assert result["content_hash"] == digest, result
         assert downloaded_urls == [media_row["storage_url"]], downloaded_urls
+        assert analysis_accounts == [post_row["target_account_id"]], analysis_accounts
         assert media_row["cloudinary_status"] == "UPLOADED", media_row
         assert media_row["understanding_id"] == "understanding-1", media_row
 finally:

@@ -8,6 +8,7 @@ import re
 import json
 import os
 import socket
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -17,6 +18,11 @@ from typing import Any, Callable, Mapping
 
 from hybrid_ai_budget import reserve as local_reserve
 from gemini_quota_diagnostics import safe_quota_diagnostics, vision_retry_decision
+
+_SRC_DIR = str(Path(__file__).resolve().parents[1] / "src")
+if _SRC_DIR not in sys.path:
+    sys.path.insert(0, _SRC_DIR)
+from sns_host_ai_budget import reserve_host_ai_attempt  # noqa: E402
 
 CACHE_DIR = Path(os.environ.get("GEMINI_CACHE_DIR", ".runtime/gemini_cache"))
 DEFAULT_TIMEOUT_SECONDS = int(os.environ.get("GEMINI_TIMEOUT_SECONDS", "60"))
@@ -206,6 +212,7 @@ class GeminiHybridClient:
         history = []
         for attempt in range(1, 4):
             self.reserve_request({"operation": operation, "account_id": account_id, "model": model, "attempt": attempt})
+            reserve_host_ai_attempt(account_id, operation)
             self.actual_request_count += 1
             try:
                 response = self.transport(
@@ -296,6 +303,7 @@ class GeminiHybridClient:
                 "cache_key": cache_key,
             }
             self.reserve_request(metadata)
+            reserve_host_ai_attempt(account_id, operation)
             self.actual_request_count += 1
             try:
                 response = self.transport(url, body, self.timeout_seconds)

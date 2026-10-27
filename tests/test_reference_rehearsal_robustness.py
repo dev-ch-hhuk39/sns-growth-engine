@@ -11,6 +11,8 @@ from src.generation import reference_source_rewriter as rewriter
 from src.generation.reference_source_rewriter import ReferenceRewriteError
 
 ROOT = Path(__file__).resolve().parents[1]
+HostAIBudgetError = rewriter.HostAIBudgetError
+_REAL_HOST_RESERVE = rewriter.reserve_host_ai_attempt
 
 
 def test_threads_login_boilerplate_is_ineligible():
@@ -321,4 +323,132 @@ def test_thought_parts_are_not_returned_as_public_text(monkeypatch):
     result = rewriter._call_gemini("test", model="gemini-3.6-flash")
     assert "internal reasoning" not in result
     assert json.loads(result)["pass"] is True
+
+
+class _BudgetResponse:
+    headers = {}
+
+    def __init__(self, text="ok", status_code=200):
+        self.status_code = status_code
+        self.text = text
+
+    def json(self):
+        return {"candidates": [{"content": {"parts": [{"text": self.text}]}}]}
+
+
+@pytest.fixture
+def host_reference_transport(monkeypatch):
+    events = []
+    monkeypatch.setenv("REFERENCE_GEMINI_MIN_INTERVAL_SECONDS", "0")
+    monkeypatch.setenv("REFERENCE_GEMINI_MAX_ATTEMPTS", "2")
+    monkeypatch.setenv("REFERENCE_GEMINI_FALLBACK_MODEL", "secondary")
+    monkeypatch.setattr(rewriter, "_api_key", lambda: "fixture")
+    monkeypatch.setattr(rewriter.time, "sleep", lambda _seconds: None)
+
+    def reserve(account_id, operation):
+        events.append(("reserve", account_id, operation))
+
+    monkeypatch.setattr(rewriter, "reserve_host_ai_attempt", reserve)
+    return events
+
+
+def _budget_rewrite():
+    return rewriter.rewrite_reference_post(
+        account_id="liver_manager",
+        source={"platform": "threads", "text": "配信を始める時刻を固定すると、視聴者が予定を立てやすい。"},
+        model="primary",
+    )
+
+
+_BUDGET_DRAFT = "配信時間が毎日ずれるなら、まず開始時刻を固定してみて。視聴者が予定を立てやすくなり、次の配信にも来てもらいやすくなる。"
+
+
+def test_host_reserves_draft_and_judge_separately(monkeypatch, host_reference_transport):
+    events = host_reference_transport
+    # An available explicit caller account must survive even a foreign pin.
+    monkeypatch.setenv("SNS_HOST_AI_ACCOUNT_ID", "night_scout")
+    responses = iter([_BudgetResponse(_BUDGET_DRAFT), _BudgetResponse('{"pass":true,"reason":"ok"}')])
+
+    def post(*_args, **_kwargs):
+        events.append(("http",))
+        return next(responses)
+
+    monkeypatch.setattr(rewriter.requests, "post", post)
+    assert _budget_rewrite()["semantic_fidelity"]["pass"] is True
+    assert events == [
+        ("reserve", "liver_manager", "reference_rewrite"), ("http",),
+        ("reserve", "liver_manager", "reference_semantic_judge"), ("http",),
+    ]
+
+
+def test_host_reserves_every_retry_and_model_fallback(monkeypatch, host_reference_transport):
+    events = host_reference_transport
+    responses = iter([
+        rewriter.requests.ConnectionError("fixture"), _BudgetResponse(status_code=503),
+        _BudgetResponse(_BUDGET_DRAFT), _BudgetResponse('{"pass":true,"reason":"ok"}'),
+    ])
+
+    def post(url, **_kwargs):
+        events.append(("http", "secondary" if "/secondary:" in url else "primary"))
+        response = next(responses)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    monkeypatch.setattr(rewriter.requests, "post", post)
+    assert _budget_rewrite()["generation_failover_reason"] == "PRIMARY_PROVIDER_UNAVAILABLE"
+    assert events == [
+        ("reserve", "liver_manager", "reference_rewrite"), ("http", "primary"),
+        ("reserve", "liver_manager", "reference_rewrite"), ("http", "primary"),
+        ("reserve", "liver_manager", "reference_rewrite"), ("http", "secondary"),
+        ("reserve", "liver_manager", "reference_semantic_judge"), ("http", "secondary"),
+    ]
+
+
+@pytest.mark.parametrize("deny_at", [1, 2])
+def test_host_denial_never_retries_or_accepts_unjudged_draft(
+    monkeypatch, host_reference_transport, deny_at,
+):
+    events = host_reference_transport
+    reservations = 0
+
+    def reserve(account_id, operation):
+        nonlocal reservations
+        reservations += 1
+        events.append(("reserve", account_id, operation))
+        if reservations == deny_at:
+            raise HostAIBudgetError("execution_limit")
+
+    def post(*_args, **_kwargs):
+        events.append(("http",))
+        return _BudgetResponse(_BUDGET_DRAFT)
+
+    monkeypatch.setattr(rewriter, "reserve_host_ai_attempt", reserve)
+    monkeypatch.setattr(rewriter.requests, "post", post)
+    with pytest.raises(HostAIBudgetError, match="execution_limit"):
+        _budget_rewrite()
+    assert reservations == deny_at
+    assert events.count(("http",)) == deny_at - 1
+
+
+def test_host_explicit_foreign_account_is_rejected_before_http(monkeypatch, host_reference_transport):
+    monkeypatch.setenv("SNS_HOST_AI_BUDGET_REQUIRED", "true")
+    monkeypatch.setenv("SNS_HOST_AI_BUDGET_DIR", "/private/tmp/unused-host-budget-fixture")
+    monkeypatch.setenv("SNS_HOST_AI_RUN_ID", "a" * 32)
+    monkeypatch.setenv("SNS_HOST_AI_RELEASE", "b" * 40)
+    monkeypatch.setenv("SNS_HOST_AI_ACCOUNT_ID", "night_scout")
+    monkeypatch.setattr(rewriter, "reserve_host_ai_attempt", _REAL_HOST_RESERVE)
+    monkeypatch.setattr(rewriter.requests, "post", lambda *_args, **_kwargs: pytest.fail("HTTP after account mismatch"))
+    with pytest.raises(HostAIBudgetError) as caught:
+        _budget_rewrite()
+    assert caught.value.code == "account_mismatch"
+
+
+def test_host_legacy_request_needs_no_protected_context(monkeypatch, host_reference_transport):
+    monkeypatch.setenv("SNS_HOST_AI_BUDGET_REQUIRED", "false")
+    for name in ("SNS_HOST_AI_BUDGET_DIR", "SNS_HOST_AI_RUN_ID", "SNS_HOST_AI_RELEASE", "SNS_HOST_AI_ACCOUNT_ID"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(rewriter, "reserve_host_ai_attempt", _REAL_HOST_RESERVE)
+    monkeypatch.setattr(rewriter.requests, "post", lambda *_args, **_kwargs: _BudgetResponse())
+    assert rewriter._call_gemini("legacy") == "ok"
 

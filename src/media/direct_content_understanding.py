@@ -122,14 +122,17 @@ def transcribe_video(path: Path, *, max_seconds: int = 300) -> dict[str, Any]:
 def vision_summary(paths: list[Path], *, media_type: str,
                    source_metadata: dict[str, Any] | None = None,
                    transcript: dict[str, Any] | None = None,
-                   account_content_contract: dict[str, Any] | None = None) -> dict[str, Any]:
+                   account_content_contract: dict[str, Any] | None = None,
+                   account_id: str = "") -> dict[str, Any]:
     # Keep call compatibility, but metadata, transcripts and strategy never enter Vision.
     from media.gemini_vision import GeminiVisionProvider
-    return GeminiVisionProvider().understand(paths, media_type=media_type)
+    # Account scope is transport/budget metadata only, never visual instructions.
+    scope = {"account_id": account_id} if account_id else {}
+    return GeminiVisionProvider().understand(paths, media_type=media_type, **scope)
 
 
 def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float = 0,
-                        media_asset_id: str = "") -> dict[str, Any]:
+                        media_asset_id: str = "", account_id: str = "") -> dict[str, Any]:
     workdir = path.parent / f".understanding_{path.stem}"
     workdir.mkdir(parents=True, exist_ok=True)
     try:
@@ -143,7 +146,8 @@ def analyze_local_media(path: Path, *, media_type: str, duration_seconds: float 
             images = [image]
             transcript = {"status": "NOT_APPLICABLE", "text": "", "provider": "none"}
         ocr = ocr_images(images)
-        vision = vision_summary(images, media_type=media_type, transcript=transcript)
+        scope = {"account_id": account_id} if account_id else {}
+        vision = vision_summary(images, media_type=media_type, transcript=transcript, **scope)
         has_asr = bool(transcript.get("text"))
         has_ocr = bool(ocr)
         has_vision = (vision.get("status") == "PASS" and bool(vision.get("visual_facts")))

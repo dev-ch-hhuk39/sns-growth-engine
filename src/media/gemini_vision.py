@@ -9,6 +9,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'scripts'))
 from gemini_hybrid_client import GeminiHybridClient, GeminiHttpError, GeminiProviderUnavailableError
 from gemini_vision_response import VisionResponseError
+from sns_host_ai_budget import HostAIBudgetError
 
 TEXT_FIELDS = ('visual_summary', 'visible_text', 'visible_people_or_objects', 'visible_action', 'key_moment', 'main_topic')
 FACT_TYPES = ('visible_action', 'key_moment', 'visible_people_or_objects', 'visible_text')
@@ -42,7 +43,7 @@ class GeminiVisionProvider:
         self.client = client or GeminiHybridClient(max_attempts=1)
         self.model = os.environ.get('GEMINI_VISION_MODEL') or os.environ.get('GEMINI_GENERATOR_MODEL') or 'gemini-3.5-flash'
 
-    def understand(self, paths: list[Path], *, media_type: str) -> dict[str, Any]:
+    def understand(self, paths: list[Path], *, media_type: str, account_id: str = "") -> dict[str, Any]:
         base = {'provider': 'gemini', 'model': self.model, 'media_type': media_type,
                 'http_status': '', 'response_schema_status': 'NOT_RUN', 'provider_error_type': '',
                 'attempt_history': [], 'raw_response_type': 'NOT_RECEIVED', 'parse_stage': 'transport', 'attempt_count': 0,
@@ -54,7 +55,7 @@ class GeminiVisionProvider:
         try:
             result = self.client.generate_multimodal_json(
                 model=self.model, prompt=VISION_PROMPT, image_paths=paths[:3], schema=VISION_SCHEMA,
-                operation='media_visual_understanding', account_id='')
+                operation='media_visual_understanding', account_id=account_id)
             base.update(http_status=result['http_status'], response_schema_status='INVALID',
                         raw_response_type=result['raw_response_type'], parse_stage='visual_evidence',
                         attempt_count=result['actual_requests'], attempt_history=result.get('attempt_history', []), normalizations=result.get('normalizations', []))
@@ -72,6 +73,8 @@ class GeminiVisionProvider:
                 raise VisionResponseError('visual_evidence', base['raw_response_type'], schema_error='DUPLICATE_FACT_IDS')
             return {**base, **data, 'status': 'PASS', 'response_schema_status': 'PASS',
                     'frame_hashes': result['frame_hashes'], 'parse_stage': 'complete'}
+        except HostAIBudgetError:
+            raise
         except (GeminiHttpError, GeminiProviderUnavailableError, RuntimeError, ValueError, OSError) as exc:
             status = getattr(exc, 'status_code', '') or base['http_status']
             failure = 'invalid_response'

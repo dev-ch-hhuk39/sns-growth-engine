@@ -1204,6 +1204,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
         analysis = analyze_local_media(
             local_path,
             media_type=media_type,
+            account_id=str(post.get("target_account_id") or ""),
             duration_seconds=float(details.get("duration_seconds") or media.get("duration_seconds") or 0),
         )
         understanding_id = upsert_media_understanding(
