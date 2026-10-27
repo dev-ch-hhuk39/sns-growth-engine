@@ -6,6 +6,7 @@
 # `--plan` is fully offline and never reads runtime credentials.
 set +x
 set -euo pipefail
+umask 077
 
 account=""
 mode="plan"
@@ -18,7 +19,7 @@ bank_allocations=2
 trigger="manual"
 
 usage() {
-  echo "usage: $0 --account-id <night_scout|liver_manager> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--with-feedback-preview] [--with-strategy-apply] [--with-ready-bank-reuse] [--max-bank-allocations 0..6] [--trigger manual|xserver_cron]" >&2
+  echo "usage: $0 --account-id <night_scout|liver_manager|beauty_account> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--with-feedback-preview] [--with-strategy-apply] [--with-ready-bank-reuse] [--max-bank-allocations 0..6] [--trigger manual|xserver_cron]" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -50,10 +51,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# This is deliberately narrower than the general publisher account registry:
-# Beauty requires separate owner authorization and must not be silently added.
+# Each managed account remains isolated. Beauty requires independent protected
+# activation and metrics consent before any confirmed live invocation.
 case "$account" in
-  night_scout|liver_manager) ;;
+  night_scout|liver_manager|beauty_account) ;;
   *) usage; exit 64 ;;
 esac
 case "$trigger" in
@@ -103,7 +104,7 @@ runtime_root="${BUFFERED_RUNTIME_ROOT:-/opt/github-runners/sns-growth-engine/.bu
   exit 78
 }
 release="$runtime_root/current"
-runtime_env="${BUFFERED_RUNTIME_ENV_FILE:-$runtime_root/shared/runtime.env}"
+runtime_env="$runtime_root/shared/runtime.env"
 locks="$runtime_root/shared/locks"
 shared_deploy_lock="/run/lock/chadult-production-deploy.lock"
 
@@ -141,12 +142,22 @@ resolved="$(readlink -f "$release")"
   exit 78
 }
 release="$resolved"
-[[ -f "$runtime_env" && ! -L "$runtime_env" ]] || {
+required_scripts=(process_threads_metric_jobs.py)
+[[ "$strategy_apply" != true && "$feedback_preview" != true ]] || required_scripts+=(run_growth_attribution_cycle.py)
+[[ "$ready_bank_reuse" != true && "$feedback_preview" != true ]] || required_scripts+=(maintain_text_ready_inventory.py)
+for script in "${required_scripts[@]}"; do
+  [[ -f "$release/scripts/$script" && ! -L "$release/scripts/$script" ]] || {
+    echo "[BLOCKED] required immutable aftercare script missing or linked" >&2; exit 78;
+  }
+done
+[[ -d "$runtime_root/shared" && ! -L "$runtime_root/shared" &&
+   -f "$runtime_env" && ! -L "$runtime_env" ]] || {
   echo "[BLOCKED] protected runtime environment missing or linked" >&2
   exit 78
 }
 permissions="$(stat -c '%a' "$runtime_env" 2>/dev/null || stat -f '%Lp' "$runtime_env")"
-[[ "$permissions" == 600 ]] || {
+owner_uid="$(stat -c '%u' "$runtime_env" 2>/dev/null || stat -f '%u' "$runtime_env")"
+[[ "$permissions" == 600 && ( "$owner_uid" == "$EUID" || "$owner_uid" == 0 ) ]] || {
   echo "[BLOCKED] runtime environment must have 0600 permissions" >&2
   exit 77
 }
@@ -157,10 +168,30 @@ unset AFTERCARE_METRICS_WRITE_APPROVED
 unset AFTERCARE_ACTIONS_DISABLED_ATTESTED
 unset AFTERCARE_STRATEGY_WRITE_APPROVED
 unset AFTERCARE_READY_BANK_REUSE_APPROVED
+unset AFTERCARE_BEAUTY_METRICS_APPROVED BEAUTY_ACTIVATION_APPROVED BEAUTY_PRODUCTION_ENABLED
+unset GCP_SA_JSON_BASE64 SA_JSON_BASE64 GCP_SA_JSON GOOGLE_APPLICATION_CREDENTIALS
+unset SPREADSHEET_ID SNS_MASTER_SHEET_ID NOTE_MASTER_SHEET_ID
+unset PYTHONPATH PYTHONHOME THREADS_TOKEN_STORE_DIR THREADS_APP_ID THREADS_APP_SECRET
+for scope in NIGHT_SCOUT LIVER_MANAGER BEAUTY_ACCOUNT; do
+  unset "THREADS_ACCESS_TOKEN_$scope" "THREADS_USER_ID_$scope" "THREADS_HANDLE_$scope"
+  unset "THREADS_APP_ID_$scope" "THREADS_APP_SECRET_$scope"
+done
 set -a
 # shellcheck disable=SC1090
 source "$runtime_env"
 set +a
+[[ -n "${SA_JSON_BASE64:-}${GCP_SA_JSON_BASE64:-}${GCP_SA_JSON:-}" &&
+   -n "${SPREADSHEET_ID:-}${SNS_MASTER_SHEET_ID:-}${NOTE_MASTER_SHEET_ID:-}" ]] || {
+  echo "[BLOCKED] protected Sheets configuration missing" >&2; exit 78;
+}
+export BEAUTY_PRODUCTION_ENABLED=false
+if [[ "$account" == beauty_account ]]; then
+  [[ "${BEAUTY_ACTIVATION_APPROVED:-false}" == true &&
+     "${AFTERCARE_BEAUTY_METRICS_APPROVED:-false}" == true ]] || {
+    echo "[BLOCKED] independent protected Beauty activation and metrics approval required" >&2; exit 77;
+  }
+  export BEAUTY_PRODUCTION_ENABLED=true
+fi
 if [[ "$mode" == "apply" && "${AFTERCARE_METRICS_WRITE_APPROVED:-false}" != true ]]; then
   echo "[BLOCKED] independent metrics write approval is not enabled" >&2
   exit 77
@@ -190,9 +221,20 @@ export ALLOW_VIDEO_DOWNLOAD=false
 export ALLOW_VIDEO_CUT=false
 export ALLOW_TRANSCRIPTION_API=false
 export GEMINI_API_KEY=""
+export GOOGLE_API_KEY=""
+export OPENAI_API_KEY=""
+export ANTHROPIC_API_KEY=""
+export GITHUB_MODELS_API_KEY=""
+export GITHUB_TOKEN=""
+export GH_TOKEN=""
+export GITHUB_MODELS_TOKEN=""
+export GITHUB_MODELS_ENABLED=false
+export MOCK_LLM=false MOCK_SHEETS=false DRY_RUN=false
+export ALLOW_LOCAL_TRANSCRIPTION=false ALLOW_THREADS_CAROUSEL=false ALLOW_THREADS_MIXED_CAROUSEL=false
 export DELIVERY_ENGINE=buffered_vps
 export PRODUCTION_TRIGGER="$trigger"
 export CODE_REVISION="$revision"
+export PRODUCTION_RUNTIME_RELEASE="$release"
 
 # Reuse the posting runtime's shared Sheets and account lock directory.
 # This tool does not create or install the directory on the VPS.
@@ -222,16 +264,37 @@ flock -n -E 75 7 || {
   exit 75
 }
 
+# Child diagnostics can include unpublished IDs or provider errors. Keep them
+# in a private temporary directory; only fixed stage receipts reach public logs.
+scratch="$(mktemp -d "$runtime_root/shared/aftercare.XXXXXX")"
+cleanup() { [[ -z "$scratch" ]] || rm -rf -- "$scratch"; }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+cd "$release"
+run_stage() {
+  local stage="$1"
+  shift
+  local code
+  if timeout 35m "$release/.venv/bin/python" "$@" > "$scratch/$stage.stdout" 2> "$scratch/$stage.stderr"; then
+    echo "[OK] aftercare stage=$stage"
+  else
+    code=$?
+    echo "[BLOCKED] aftercare stage=$stage exit=$code; no automatic retry" >&2
+    return "$code"
+  fi
+}
+
 # A read-only plan touches the provider only AFTER acquiring shared locks.
 # An apply first produces a read-only plan, then performs at most one bounded
 # metric-job invocation. All IDs and results come from the trusted workbooks.
 # A non-zero plan/collector exit aborts, never auto-retries unknown writes.
-timeout 35m "$release/.venv/bin/python" \
+run_stage metrics_preview \
   "$release/scripts/process_threads_metric_jobs.py" \
   --account-id "$account" --max-jobs 20 --dry-run --use-sheets
 
 if [[ "$mode" == "apply" ]]; then
-  timeout 35m "$release/.venv/bin/python" \
+  run_stage metrics_apply \
     "$release/scripts/process_threads_metric_jobs.py" \
     --account-id "$account" --max-jobs 20 --apply --confirm-metrics --use-sheets
   echo "[OK] bounded metrics write attempt completed; no blind retry"
@@ -246,7 +309,7 @@ if [[ "$strategy_apply" == true ]]; then
     echo "[BLOCKED] attribution writer absent from pinned release" >&2
     exit 78
   }
-  timeout 35m "$release/.venv/bin/python" \
+  run_stage strategy_apply \
     "$release/scripts/run_growth_attribution_cycle.py" \
     --account-id "$account" --apply --confirm-attribution --use-sheets \
     --max-write-rows 120 || {
@@ -262,7 +325,7 @@ if [[ "$ready_bank_reuse" == true ]]; then
   }
   # This code path CANNOT call replenish()/Gemini or create new content.
   # Only previously approved evergreen candidates are eligible.
-  timeout 35m "$release/.venv/bin/python" \
+  run_stage ready_reuse \
     "$release/scripts/maintain_text_ready_inventory.py" \
     --account-id "$account" --apply --confirm-ready-maintenance \
     --use-sheets --reuse-only \
@@ -284,13 +347,13 @@ if [[ "$feedback_preview" == true ]]; then
     echo "[BLOCKED] feedback-preview scripts missing from release" >&2
     exit 78
   }
-  timeout 35m "$release/.venv/bin/python" \
+  run_stage attribution_preview \
     "$release/scripts/run_growth_attribution_cycle.py" \
     --account-id "$account" --dry-run --use-sheets || {
     echo "[BLOCKED] measured attribution preview failed; no auto retry" >&2
     exit 1
   }
-  timeout 35m "$release/.venv/bin/python" \
+  run_stage inventory_preview \
     "$release/scripts/maintain_text_ready_inventory.py" \
     --account-id "$account" --dry-run --use-sheets || {
     echo "[BLOCKED] next text-READY coverage degraded; no generation started" >&2
@@ -298,4 +361,4 @@ if [[ "$feedback_preview" == true ]]; then
   }
   echo "[OK] read-only attribution + next-text inventory previews complete"
 fi
-echo "[OK] aftercare mode=$mode account=$account; no SNS publish attempted"
+echo "[OK] aftercare mode=$mode account=$account posts=false hosted_workflow_equivalent=false"
