@@ -1,0 +1,9 @@
+# Canonical acquisition policy guard
+
+The host metadata-acquisition wrapper now validates `config/autonomous_mode.json` from the exact immutable release already pinned under the shared deployment lock. This restores the hosted acquisition workflow's kill-switch condition. Missing, linked, malformed or ambiguous policy, a non-object root, missing/nonboolean switch or `kill_switch=true` stops execution before any acquisition child connects. Only the exact JSON boolean `false` permits the next stage. The check runs locally with the trusted release interpreter and isolated standard-library imports while all existing deployment, Sheets and account locks remain held.
+
+Apply also forces `MOCK_LLM`, `MOCK_SHEETS` and `DRY_RUN` false after protected configuration loads, so neither caller nor protected mock settings can become live acceptance. Child cwd is pinned to the resolved release to keep dotenv from searching a caller-selected directory. Existing offline plan behavior, exact account/scope/platform/release consent, Beauty activation, rights/provenance checks, per-source bounds, no-paid/no-physical-media/no-post controls and failure propagation remain unchanged.
+
+The local integration suite executes the real policy validator and confirms denial without acquisition children for missing/true/nonboolean/malformed/duplicate/linked policy, successful explicit-false policy, mock disabling and pinned cwd. These tests perform no provider, VPS or production Sheets operation and do not establish scheduler migration or authenticated live acquisition success.
+
+Final combined Mac validation PASS: 1,100/1,100 regression scripts, workflow safety 619/619, fatal Ruff, compile, shell syntax, diff and history secret scan; existing exclusions unchanged. Acquisition21, media shell12 and core11 plus existing resource/runtime/lifecycle checks PASS. Working-tree secret scanning is required before publication.
