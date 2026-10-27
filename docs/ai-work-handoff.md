@@ -4,6 +4,12 @@
 - Fixed configuration source and ownership, credential/ID/import override clearing, paid/mock/post disabling, immutable script/path pinning, continuous deployment/Sheets/account locks and private child diagnostics prevent caller state from redirecting execution or creating mock acceptance. Failure stops dependent stages without retry or fabricated rollback.
 - Focused shell integration7, host policy16 and lifecycle22 plus existing Beauty metrics contracts PASS. Combined final validation is pending. Source only: no deployment, live metrics/Sheets write, schedule replacement, token rotation or SNS publication. See `docs/SNS_AFTERCARE_HOST_ISOLATION_20261028.md`.
 
+## 2026-10-27 — finite owned-original host preparation
+
+- Added explicit `--offline-original-only` through ordinary text inventory and the host AUTO_READY wrapper. Delivery and reserve generation force the existing finite owned catalogue with no paid fallback; catalogue exhaustion is an explicit failure and prevents further generation in the account run. Allocation caps and pre-existing Bank schema requirements remain.
+- Host Apply additionally requires independently protected `AUTO_READY_OFFLINE_GENERATION_APPROVED`, preserved only from the validated host source; caller values cannot grant it. Existing account/Beauty approvals, deployment/Sheets/account locks, preflight, quality/duplication/approval/slot/publisher/readback and no-post controls remain mandatory. Paid/full host mode stays refused.
+- Focused inventory22, AUTO_READY28 and environment lifecycle22 tests PASS. Final combined Mac quality gate PASS against the durable API-budget implementation: 1,098/1,098 regression scripts, workflow safety 619/619, fatal Ruff, compile, diff and history secret scan; existing exclusions unchanged. This source does not install timers, replace active Actions, refill production inventory or claim full hosted equivalence. See `docs/SNS_OFFLINE_ORIGINAL_HOST_20261027.md`.
+
 ## 2026-10-27 — source-only durable host API budget guard
 
 - Added an extra SQLite reservation barrier for strict host mode: durable per-run20, global JST day40/month1000 request ceilings across fresh processes and immutable releases, with account/release-bound run identities. Existing JSON/Sheets controls remain in place. Missing or corrupt ledgers refuse; initialization requires explicitly confirmed independently audited current-period baselines.
