@@ -53,7 +53,7 @@ class MetricsAftercareNoActionsTests(unittest.TestCase):
             shared=runtime/'shared';shared.mkdir()
             private=shared/'runtime.env'
             sentinel='protected-aftercare-fixture-value'
-            private.write_text('GEMINI_API_KEY='+sentinel+'\n')
+            private.write_text('GEMINI_API_KEY='+sentinel+'\nSA_JSON_BASE64=fixture\nSPREADSHEET_ID=fixture\n')
             private.chmod(0o600)
             lock=parent/'deploy.lock';lock.touch()
             host=parent/'host.sh'
@@ -71,7 +71,7 @@ class MetricsAftercareNoActionsTests(unittest.TestCase):
             self.assertNotIn(sentinel,result.stdout+result.stderr)
 
     def test_only_intended_accounts_have_offline_plans(self):
-        for account in ("night_scout", "liver_manager"):
+        for account in ("night_scout", "liver_manager", "beauty_account"):
             with self.subTest(account=account):
                 result = execute("--account-id", account)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -100,8 +100,8 @@ class MetricsAftercareNoActionsTests(unittest.TestCase):
         )
         self.assertEqual(json.loads(result.stdout)["status"], "PLAN_ONLY")
 
-    def test_beauty_all_and_unexpected_accounts_block(self):
-        for account in ("beauty_account", "all", "unknown", "../night_scout", ""):
+    def test_all_and_unexpected_accounts_block(self):
+        for account in ("all", "unknown", "../night_scout", ""):
             with self.subTest(account=account):
                 result = execute("--account-id", account)
                 self.assertNotEqual(result.returncode, 0)

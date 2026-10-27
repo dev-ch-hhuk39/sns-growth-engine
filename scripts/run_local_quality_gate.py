@@ -100,6 +100,7 @@ FOCUSED = (
     "test_phase5b6a_media_runtime_interlock.py",
     "test_measured_feedback_write_safety.py",
     "test_buffered_metrics_aftercare_host.py",
+    "test_buffered_aftercare_isolation.py",
     "test_metrics_aftercare_apply_preflight.py",
     "test_action_free_feedback_cli_gates.py",
     "test_feature_attribution_cycle.py",

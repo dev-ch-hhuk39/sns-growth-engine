@@ -58,7 +58,8 @@ class DeploymentLifecycleTests(unittest.TestCase):
 
     def test_existing_host_aftercare_consents_survive_deploy_without_caller_override(self):
         live = self.shared / 'runtime.env'
-        approved = dict(zip(HOST_ONLY_AFTERCARE, ('true', 'true', 'false', 'false')))
+        approved = {key: ('true' if index < 2 else 'false')
+                    for index, key in enumerate(HOST_ONLY_AFTERCARE)}
         original = ''.join(key+'='+value+'\n' for key, value in approved.items())
         live.write_text(original)
         live.chmod(0o600)
