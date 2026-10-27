@@ -16,6 +16,13 @@ import os
 import re
 import requests
 
+try:
+    from sns_host_ai_budget import HostAIBudgetError, reserve_host_ai_attempt
+except ModuleNotFoundError as exc:  # legacy imports as src.llm_client
+    if exc.name != "sns_host_ai_budget":
+        raise
+    from src.sns_host_ai_budget import HostAIBudgetError, reserve_host_ai_attempt
+
 GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-2.5-flash"
 
@@ -61,14 +68,15 @@ _MOCK_DERIVATIVE_THREADS = {
 
 def call_gemini(prompt: str, system_prompt: str | None = None,
                 temperature: float = 0.9, max_tokens: int = 8192,
-                response_mime_type: str | None = None) -> str:
+                response_mime_type: str | None = None, *,
+                account_id: str | None = None) -> str:
     """Gemini REST API を呼び出してテキストを返す。"""
     if _is_mock():
         return json.dumps(_DRY_RUN_DRAFT_JSON, ensure_ascii=False)
 
     api_key = _get_api_key()
     model = os.environ.get("GEMINI_MODEL", DEFAULT_MODEL).strip()
-    url = f"{GEMINI_API_BASE}/{model}:generateContent?key={api_key}"
+    url = f"{GEMINI_API_BASE}/{model}:generateContent"
 
     contents: list[dict] = []
     if system_prompt:
@@ -86,18 +94,28 @@ def call_gemini(prompt: str, system_prompt: str | None = None,
     if response_mime_type:
         payload["generationConfig"]["responseMimeType"] = response_mime_type
 
+    reserve_host_ai_attempt(
+        account_id if account_id is not None else os.environ.get("SNS_HOST_AI_ACCOUNT_ID", ""),
+        "llm_client_generate",
+    )
     try:
-        resp = requests.post(url, json=payload, timeout=90)
+        resp = requests.post(url, headers={"x-goog-api-key": api_key}, json=payload,
+                             timeout=90, allow_redirects=False)
         resp.raise_for_status()
     except requests.HTTPError as e:
-        raise RuntimeError(f"Gemini API エラー (HTTP {e.response.status_code})") from e
-    except requests.RequestException as e:
-        raise RuntimeError("Gemini API 接続エラー") from e
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        status = status if type(status) is int and 100 <= status <= 599 else "不明"
+        raise RuntimeError(f"Gemini API エラー (HTTP {status})") from None
+    except requests.RequestException:
+        raise RuntimeError("Gemini API 接続エラー") from None
 
     data = resp.json()
     candidates = data.get("candidates", [])
     if not candidates:
         finish = data.get("promptFeedback", {}).get("blockReason", "不明")
+        if not isinstance(finish, str) or finish not in {"SAFETY", "OTHER", "BLOCKLIST", "PROHIBITED_CONTENT", "IMAGE_SAFETY",
+                          "BLOCK_REASON_UNSPECIFIED", "MODEL_ARMOR"}:
+            finish = "不明"
         raise RuntimeError(f"Gemini API のレスポンスが空 (blockReason={finish})")
 
     text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
@@ -107,10 +125,11 @@ def call_gemini(prompt: str, system_prompt: str | None = None,
 def call_gemini_json(prompt: str, system_prompt: str | None = None,
                      temperature: float = 0.7,
                      dry_run_mock: dict | None = None,
-                     platform: str | None = None) -> dict:
+                     platform: str | None = None, *,
+                     account_id: str | None = None) -> dict:
     """Gemini API を呼び出して JSON をパースして返す。
 
-    失敗時は {"_error": ..., "_raw": ...} を返す（例外を投げない）。
+    通常の失敗時は {"_error": ..., "_raw": ...} を返す。host予算拒否は例外を伝播する。
     dry_run_mock が指定されると MOCK 時にそれを返す。
     platform を指定すると、モック応答が platform-aware になる。
     """
@@ -124,13 +143,17 @@ def call_gemini_json(prompt: str, system_prompt: str | None = None,
         return dict(_DRY_RUN_DRAFT_JSON)
 
     try:
+        account_kwargs = {"account_id": account_id} if account_id is not None else {}
         raw = call_gemini(
             prompt,
             system_prompt,
             temperature=temperature,
             response_mime_type="application/json",
+            **account_kwargs,
         )
         return extract_json(raw)
+    except HostAIBudgetError:
+        raise
     except Exception as e:
         return {"_error": str(e), "_raw": ""}
 

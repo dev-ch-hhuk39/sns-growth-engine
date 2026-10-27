@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'scripts'), str(ROOT / 'src')]
 from gemini_hybrid_client import GeminiHybridClient, GeminiHttpError, GeminiProviderUnavailableError
+from sns_host_ai_budget import HostAIBudgetError
 from media.gemini_vision import GeminiVisionProvider
 from media.direct_content_understanding import vision_summary
 from generation import content_quality_v2 as quality
@@ -30,6 +31,34 @@ def observation():
 
 
 class GeminiVisionTests(unittest.TestCase):
+    def test_account_scope_is_reserved_but_never_enters_visual_instructions(self):
+        with patch('gemini_hybrid_client.reserve_host_ai_attempt') as reserve, \
+                patch('media.gemini_vision.GeminiHybridClient',return_value=self.client):
+            result=vision_summary([self.frame],media_type='video',account_id='liver_manager',
+                                  account_content_contract={'purpose':'PRIVATE_STRATEGY_MARKER'})
+        self.assertEqual(result['status'],'PASS')
+        reserve.assert_called_once_with('liver_manager','media_visual_understanding')
+        sent=json.dumps(self.transport.call_args.args[1])
+        self.assertNotIn('liver_manager',sent)
+        self.assertNotIn('PRIVATE_STRATEGY_MARKER',sent)
+
+    def test_budget_denial_propagates_without_vision_fallback_or_transport(self):
+        with patch('gemini_hybrid_client.reserve_host_ai_attempt',side_effect=HostAIBudgetError('daily_limit')):
+            with self.assertRaises(HostAIBudgetError):
+                self.provider.understand([self.frame],media_type='video',account_id='night_scout')
+        self.transport.assert_not_called()
+        self.assertEqual(self.client.actual_request_count,0)
+
+    def test_local_analysis_forwards_explicit_target_account(self):
+        from media.direct_content_understanding import analyze_local_media
+        with patch('media.direct_content_understanding.normalized_image',return_value=self.frame), \
+                patch('media.direct_content_understanding.ocr_images',return_value=''), \
+                patch('media.direct_content_understanding.vision_summary',return_value={
+                    **observation(),'status':'PASS','provider':'fixture'}) as vision:
+            result=analyze_local_media(self.frame,media_type='image',account_id='night_scout')
+        self.assertEqual(result['status'],'PASS')
+        self.assertEqual(vision.call_args.kwargs['account_id'],'night_scout')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

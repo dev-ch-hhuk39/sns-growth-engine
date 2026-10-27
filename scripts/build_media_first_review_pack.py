@@ -86,7 +86,8 @@ def inspect_preview(row: dict[str, str], directory: Path, *, account_content_con
                     os.environ["GEMINI_VISION_MODEL"] = vision_model_override
                 vision = vision_summary([path for _, path in frames], media_type="video",
                                         source_metadata=row, transcript={"status": "UNAVAILABLE"},
-                                        account_content_contract=account_content_contract)
+                                        account_content_contract=account_content_contract,
+                                        account_id=str(row.get("account_id") or ""))
             finally:
                 if vision_model_override:
                     if previous_model is None:

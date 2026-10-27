@@ -18,6 +18,13 @@ from typing import Any
 
 import requests
 
+try:
+    from sns_host_ai_budget import HostAIBudgetError, reserve_host_ai_attempt
+except ModuleNotFoundError as exc:  # legacy imports as src.generation.*
+    if exc.name != "sns_host_ai_budget":
+        raise
+    from src.sns_host_ai_budget import HostAIBudgetError, reserve_host_ai_attempt
+
 DEFAULT_MODEL = "gemini-3.6-flash"
 MAX_PRIMARY_CHARS = 18000
 MAX_SUPPLEMENTARY_CHARS = 1200
@@ -310,6 +317,8 @@ def _call_gemini(
     temperature: float = 0.35,
     max_output_tokens: int = 2048,
     response_schema: dict[str, Any] | None = None,
+    account_id: str | None = None,
+    operation: str = "reference_rewrite",
 ) -> str:
     model_name = _clean(model or os.getenv("REFERENCE_GEMINI_MODEL") or DEFAULT_MODEL)
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
@@ -336,18 +345,24 @@ def _call_gemini(
     for attempt in range(1, max_attempts + 1):
         _pace_gemini_request()
         response: requests.Response | None = None
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": _api_key(),
+        }
+        reserve_host_ai_attempt(
+            account_id if account_id is not None else os.environ.get("SNS_HOST_AI_ACCOUNT_ID", ""),
+            operation,
+        )
         try:
             response = requests.post(
                 url,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-goog-api-key": _api_key(),
-                },
+                headers=headers,
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": generation_config,
                 },
                 timeout=60,
+                allow_redirects=False,
             )
         except requests.RequestException as exc:
             if attempt >= max_attempts:
@@ -429,6 +444,7 @@ def judge_semantic_fidelity(
     source_material: str,
     draft: str,
     model: str | None = None,
+    account_id: str | None = None,
 ) -> dict[str, Any]:
     prompt = f"""SOURCEとDRAFTの意味整合性を厳格に判定してください。
 判定基準:
@@ -464,6 +480,8 @@ DRAFT:
         temperature=0.0,
         max_output_tokens=1024,
         response_schema=response_schema,
+        account_id=account_id,
+        operation="reference_semantic_judge",
     )
     result = _parse_json_object(raw)
     passed = result.get("pass") is True
@@ -501,6 +519,8 @@ def rewrite_reference_post(
                   target_platform=target_platform, slot_theme=slot_theme)
     try:
         return _rewrite_reference_post_once(**kwargs, model=primary)
+    except HostAIBudgetError:
+        raise
     except ReferenceRewriteError as exc:
         unavailable = bool(re.search(r"Gemini API returned HTTP (429|500|502|503|504)\b", str(exc)))
         unavailable = unavailable or str(exc).startswith("Gemini request failed:")
@@ -530,13 +550,18 @@ def _rewrite_reference_post_once(
         target_platform=target_platform,
         slot_theme=slot_theme,
     )
-    draft = _clean(_call_gemini(prompt, model=model, temperature=0.35, max_output_tokens=2048))
+    draft = _clean(_call_gemini(
+        prompt, model=model, temperature=0.35, max_output_tokens=2048,
+        account_id=account_id, operation="reference_rewrite",
+    ))
     if draft == "__SKIP_SOURCE__" or "__SKIP_SOURCE__" in draft:
         raise ReferenceRewriteError("source cannot be transformed without changing its central topic")
     if len(draft) < 40:
         raise ReferenceRewriteError("generated draft is too short")
 
-    fidelity = judge_semantic_fidelity(source_material=source_material, draft=draft, model=model)
+    fidelity = judge_semantic_fidelity(
+        source_material=source_material, draft=draft, model=model, account_id=account_id,
+    )
     if not fidelity["pass"]:
         raise ReferenceRewriteError(f"semantic fidelity blocked: {fidelity['reason']}")
 
