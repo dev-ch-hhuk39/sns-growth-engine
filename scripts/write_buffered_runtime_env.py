@@ -34,9 +34,22 @@ HOST_ONLY_AFTERCARE = (
     'AFTERCARE_STRATEGY_WRITE_APPROVED',
     'AFTERCARE_READY_BANK_REUSE_APPROVED',
 )
+HOST_ONLY_PREPARATION = (
+    'AUTO_READY_WRITE_APPROVED',
+    'AUTO_READY_ACTIONS_DISABLED_ATTESTED',
+    'ACQUISITION_WRITE_APPROVED',
+    'ACQUISITION_ACTIONS_DISABLED_ATTESTED',
+)
+HOST_ONLY_ACQUISITION_SCOPE = (
+    'ACQUISITION_APPROVED_ACCOUNT',
+    'ACQUISITION_APPROVED_SCOPE',
+    'ACQUISITION_APPROVED_PLATFORM',
+    'ACQUISITION_APPROVED_RELEASE',
+)
 
 
 def inherited_p0_env(source: Path, shared: Path) -> dict[str, str]:
+    """Read whitelisted controls from the already protected host source."""
     if source.parent != shared or source.is_symlink() or not source.is_file():
         raise ValueError('untrusted_host_env_source')
     st = source.stat()
@@ -55,7 +68,8 @@ def inherited_p0_env(source: Path, shared: Path) -> dict[str, str]:
         if not re.fullmatch(r'[A-Z][A-Z0-9_]*', key) or key in seen:
             raise ValueError('host_env_key_invalid_or_duplicate')
         seen.add(key)
-        if key in HOST_ONLY_P0 or key == MODE_ONLY_P0 or key in HOST_ONLY_AFTERCARE:
+        if (key in HOST_ONLY_P0 or key == MODE_ONLY_P0 or key in HOST_ONLY_AFTERCARE
+                or key in HOST_ONLY_PREPARATION or key in HOST_ONLY_ACQUISITION_SCOPE):
             result[key] = value
     return result
 
@@ -97,6 +111,16 @@ def write_candidate_env(path: Path, runtime_root: Path, env: dict[str, str],
     aftercare = {key: inherited.get(key, 'false') for key in HOST_ONLY_AFTERCARE}
     if any(value not in {'true', 'false'} for value in aftercare.values()):
         raise ValueError('host_aftercare_approval_boolean_invalid')
+    preparation = {key: inherited.get(key, 'false') for key in HOST_ONLY_PREPARATION}
+    if any(value not in {'true', 'false'} for value in preparation.values()):
+        raise ValueError('host_preparation_approval_boolean_invalid')
+    acquisition = {key: inherited.get(key, '') for key in HOST_ONLY_ACQUISITION_SCOPE}
+    if (acquisition['ACQUISITION_APPROVED_ACCOUNT'] not in {'', 'night_scout', 'liver_manager', 'beauty_account'}
+            or acquisition['ACQUISITION_APPROVED_SCOPE'] not in {'', 'approved', 'reference-only'}
+            or acquisition['ACQUISITION_APPROVED_PLATFORM'] not in {'', 'x', 'youtube'}
+            or (acquisition['ACQUISITION_APPROVED_RELEASE']
+                and not re.fullmatch(r'[0-9a-f]{40}', acquisition['ACQUISITION_APPROVED_RELEASE']))):
+        raise ValueError('host_acquisition_scope_invalid')
     if env.get('BUFFERED_POSTING_ENABLED') == 'true':
         if (gate != 'true' or
                 not Path(inherited.get('SNS_P0_ONCE_DB_PATH') or '').is_absolute()
@@ -109,6 +133,8 @@ def write_candidate_env(path: Path, runtime_root: Path, env: dict[str, str],
                         'SNS_P0_ONCE_GATE_ENABLED' else '')) for key in HOST_ONLY_P0)
     assignments.append((MODE_ONLY_P0, autonomy_mode))
     assignments.extend(aftercare.items())
+    assignments.extend(preparation.items())
+    assignments.extend(acquisition.items())
     assignments.append(('THREADS_TOKEN_STORE_DIR', str(shared / 'threads_tokens')))
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:

@@ -2,6 +2,7 @@
 # The only host-side entrypoint allowed to publish buffered production slots.
 # GitHub recovery and the VPS cron both invoke this file.  It deliberately
 # resolves the immutable current release instead of a runner checkout.
+set +x
 set -euo pipefail
 
 # This is deliberately outside the Actions _work checkout but within the
@@ -37,10 +38,33 @@ if [[ "$MODE" == "apply" && "$CONFIRMED" != "true" ]]; then
   echo "[BLOCKED] explicit --confirm-reconcile is required" >&2
   exit 64
 fi
-if [[ ! -x "$CURRENT_RELEASE/scripts/reconcile_due_production_slots.py" && ! -f "$CURRENT_RELEASE/scripts/reconcile_due_production_slots.py" ]]; then
+# Hold the deployment lock before inspecting current or its authority. A
+# deployment may replace current and runtime.env together while we wait.
+# The global lock is provisioned and managed exclusively by VPS Ops.
+common_lock=/run/lock/chadult-production-deploy.lock
+[[ -f "$common_lock" && ! -L "$common_lock" && -w "$common_lock" ]] || {
+  echo '[BLOCKED] shared deployment lock unavailable' >&2; exit 78;
+}
+exec 8<>"$common_lock"
+flock -s -w 120 8 || { echo '[SKIPPED] deployment in progress; slot remains in READY' >&2; exit 75; }
+
+if [[ ! -L "$CURRENT_RELEASE" || ! -f "$CURRENT_RELEASE/.production-release" ||
+      -L "$CURRENT_RELEASE/.production-release" ||
+      ! -f "$CURRENT_RELEASE/scripts/reconcile_due_production_slots.py" ]]; then
   echo "[BLOCKED] immutable production release is not installed" >&2
   exit 78
 fi
+revision="$(cat "$CURRENT_RELEASE/.production-release")"
+[[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
+  echo '[BLOCKED] invalid immutable production release marker' >&2; exit 78;
+}
+resolved="$(readlink -f "$CURRENT_RELEASE")"
+[[ "$resolved" == "$RUNTIME_ROOT/releases/$revision" &&
+   -d "$resolved" && ! -L "$resolved" ]] || {
+  echo '[BLOCKED] current production release does not match its verified marker' >&2; exit 78;
+}
+# Every authority check, interpreter and child command uses this exact path.
+CURRENT_RELEASE="$resolved"
 if [[ ! -f "$RUNTIME_ENV_FILE" ]]; then
   echo "[BLOCKED] production runtime environment is not installed" >&2
   exit 78
@@ -60,7 +84,7 @@ set +a
 
 mkdir -p "$LOCK_DIR"
 export DELIVERY_ENGINE="buffered_vps"
-export CODE_REVISION="$(cat "$CURRENT_RELEASE/.production-release" 2>/dev/null || true)"
+export CODE_REVISION="$revision"
 export PRODUCTION_TRIGGER="$TRIGGER"
 export PRODUCTION_RUNTIME_RELEASE="$CURRENT_RELEASE"
 export THREADS_TOKEN_STORE_DIR="${THREADS_TOKEN_STORE_DIR:-${RUNTIME_ROOT}/shared/threads_tokens}"
@@ -103,15 +127,6 @@ if [[ "$MODE" == "apply" ]]; then
     exit 78
   }
 fi
-
-# Protect each cron/recovery read of current release from an atomic deploy.
-# The global lock is provisioned and managed exclusively by VPS Ops.
-common_lock=/run/lock/chadult-production-deploy.lock
-[[ -f "$common_lock" && ! -L "$common_lock" && -w "$common_lock" ]] || {
-  echo '[BLOCKED] shared deployment lock unavailable' >&2; exit 78;
-}
-exec 8<>"$common_lock"
-flock -s -w 120 8 || { echo '[SKIPPED] deployment in progress; slot remains in READY' >&2; exit 75; }
 
 run_account() {
   local account="$1"
