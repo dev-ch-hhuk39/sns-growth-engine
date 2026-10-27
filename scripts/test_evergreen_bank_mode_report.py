@@ -7,7 +7,7 @@ create real Sheets clients, publish posts, or invoke paid providers.
 """
 from __future__ import annotations
 
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 from io import StringIO
 import json
 from pathlib import Path
@@ -21,6 +21,69 @@ import maintain_text_ready_inventory as m  # noqa: E402
 
 
 class EvergreenBankModeContracts(unittest.TestCase):
+    def _text_offline_cli(self, initial=0, target=1, *, exhausted=False, slots=1):
+        client=Mock()
+        out=StringIO()
+        state={'filled':False}
+        slot={'slot_id':'offline-fixture','business_date_jst':'2026-10-30','post_type':'original_text'}
+        commands=[]
+        def generate(account, selected, **kwargs):
+            selected_commands=m._generation_commands(account,selected,offline_only=kwargs['offline_only'])
+            commands.extend(selected_commands)
+            state['filled']=not exhausted
+            return {'status':'QUALITY_EXHAUSTED' if exhausted else 'READY_REPLENISHED',
+                    'failure_category':'OFFLINE_CATALOG_EXHAUSTED' if exhausted else '',
+                    'queue_ids':[] if exhausted else ['offline-fixture-q'],'attempts':[]}
+        def ready(*_args):
+            count=target if state['filled'] else initial
+            return [{'queue_id':'validated-fixture-'+str(i)} for i in range(count)]
+        argv=['maintain','--account-id','night_scout','--apply','--confirm-ready-maintenance',
+              '--use-sheets','--horizon-hours','24','--max-bank-allocations','0','--offline-original-only']
+        with ExitStack() as stack:
+            for context in (
+                patch.object(sys,'argv',argv),patch.object(m,'get_config',return_value={'sheet_id':'fixture','sa_dict':{}}),
+                patch.object(m,'SheetsClient',return_value=client),patch.object(m,'read_records_safely',return_value=[]),
+                patch.object(m,'prime_readonly_record_cache'),patch.object(m,'policy',return_value={'text_horizon_hours':24,'text_candidates_per_slot':target}),
+                patch.object(m,'_required_text_slots',return_value=[{**slot,'slot_id':'offline-'+str(i)} for i in range(slots)]),
+                patch.object(m,'_publishable_ready_rows',side_effect=ready),
+                patch.object(m,'_primary_generation_commands',side_effect=AssertionError('Paid route must not be planned')),
+            ):stack.enter_context(context)
+            replenish=stack.enter_context(patch.object(m,'replenish',side_effect=generate))
+            with redirect_stdout(out):code=m.main()
+        return code,json.loads(out.getvalue()),replenish,commands,client
+
+    def test_text_cli_forces_existing_offline_router_for_delivery_and_reserve(self):
+        for initial,target in ((0,1),(1,2)):
+            with self.subTest(initial=initial,target=target):
+                code,report,replenish,commands,client=self._text_offline_cli(initial,target)
+                self.assertEqual(code,0)
+                self.assertEqual(report['status'],'PASS')
+                self.assertFalse(report['would_post'])
+                self.assertEqual(replenish.call_count,1)
+                self.assertTrue(replenish.call_args.kwargs['offline_only'])
+                self.assertEqual([route for route,_ in commands],['offline_original_bank'])
+                self.assertIn('--offline-original',commands[0][1])
+                client._ensure_tab.assert_not_called()
+
+    def test_text_catalogue_exhaustion_stays_failed_and_stops_further_generation(self):
+        code,report,replenish,commands,client=self._text_offline_cli(exhausted=True,slots=2)
+        self.assertEqual(code,1)
+        self.assertEqual(report['status'],'FAILED')
+        self.assertEqual(len(report['hard_delivery_failures']),2)
+        self.assertEqual(replenish.call_count,1)
+        self.assertEqual(len(commands),1)
+        self.assertFalse(report['would_post'])
+        client._ensure_tab.assert_not_called()
+
+    def test_text_offline_profile_requires_confirmed_single_account_non_bank_mode(self):
+        for flags in (['--dry-run'],['--apply','--use-sheets'],
+                      ['--apply','--confirm-ready-maintenance','--use-sheets','--reuse-only'],
+                      ['--apply','--confirm-ready-maintenance','--use-sheets','--evergreen-bank']):
+            with self.subTest(flags=flags),patch.object(sys,'argv',['maintain','--account-id','night_scout','--offline-original-only',*flags]), \
+                    patch.object(m,'get_config') as cfg,patch.object(m,'SheetsClient') as client,redirect_stdout(StringIO()):
+                self.assertEqual(m.main(),1)
+            cfg.assert_not_called();client.assert_not_called()
+
     def test_explicit_offline_bank_flag_preserves_shortfall_and_paid_route_exclusion(self):
         client = Mock()
         output = StringIO()
