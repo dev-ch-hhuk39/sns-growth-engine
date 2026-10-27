@@ -27,6 +27,7 @@ OFF_GATES = (
     "ALLOW_THREADS_CAROUSEL", "ALLOW_THREADS_MIXED_CAROUSEL",
     "ALLOW_VIDEO_DOWNLOAD", "ALLOW_VIDEO_CUT", "ALLOW_CLOUDINARY_UPLOAD",
     "ALLOW_TRANSCRIPTION_API", "ALLOW_LOCAL_TRANSCRIPTION",
+    "MOCK_LLM", "MOCK_SHEETS", "DRY_RUN",
 )
 AI_KEYS = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "FIRECRAWL_API_KEY")
 SHEETS_KEYS = (
@@ -67,6 +68,14 @@ print(resolved)
 
 FAKE_RUNTIME = r'''
 import fcntl, json, os, pathlib, sys
+# Execute the real standard-library policy validator from the wrapper stdin;
+# do not count this local check as an acquisition child or mock its decision.
+if sys.argv[1:3] == ["-I", "-"]:
+    # This fixture already started with -I. Execute the actual heredoc in
+    # this isolated interpreter, without an artificial second Python startup.
+    sys.argv = sys.argv[2:]
+    exec(compile(sys.stdin.read(), '<actual-wrapper-policy>', 'exec'), {'__name__': '__main__'})
+    raise SystemExit(0)
 keys = json.loads(os.environ["FAKE_ENV_KEYS"])
 locks = []
 for filename in json.loads(os.environ["FAKE_LOCK_FILES"]):
@@ -78,7 +87,7 @@ for filename in json.loads(os.environ["FAKE_LOCK_FILES"]):
         else:
             locks.append(False)
 row = {"argv": sys.argv[1:], "env": {key: os.environ.get(key) for key in keys},
-       "locks_held": locks}
+       "locks_held": locks, "cwd": os.getcwd()}
 if os.environ.get("FAKE_CONFIG_LOADER"):
     import runpy, types
     # Exercise the real loader without allowing dotenv to search local files.
@@ -124,12 +133,18 @@ class AcquisitionHostTests(unittest.TestCase):
         self.executable(self.bin / "flock", FAKE_FLOCK)
         self.executable(self.bin / "readlink", FAKE_READLINK)
         self.executable(self.bin / "timeout", "import os, sys\nos.execv(sys.argv[2], sys.argv[2:])\n")
-        self.executable(self.bin / "stat", f'''
-import os, sys
-if os.environ.get("FAKE_OWNER_UID") and "%u" in sys.argv:
-    print(os.environ["FAKE_OWNER_UID"])
+        # Use real filesystem metadata while supporting the production GNU
+        # formats directly. Re-executing BSD stat on Mac caused a needless
+        # failing GNU probe and second interpreter startup for each field.
+        self.executable(self.bin / "stat", r'''
+import os, stat, sys
+metadata = os.stat(sys.argv[-1])
+if sys.argv[1:3] == ['-c', '%u']:
+    print(os.environ.get('FAKE_OWNER_UID') or metadata.st_uid)
+elif sys.argv[1:3] == ['-c', '%a']:
+    print(format(stat.S_IMODE(metadata.st_mode), 'o'))
 else:
-    os.execv({shutil.which("stat")!r}, [{shutil.which("stat")!r}, *sys.argv[1:]])
+    raise SystemExit(2)
 ''')
         self.write_consent()
 
@@ -143,6 +158,9 @@ else:
     def make_release(self, sha: str) -> Path:
         release = self.runtime / "releases" / sha
         (release / "scripts").mkdir(parents=True)
+        (release / "config").mkdir()
+        (release / "config/autonomous_mode.json").write_text(
+            json.dumps({"kill_switch": False}), encoding="utf-8")
         (release / ".production-release").write_text(sha + "\n", encoding="utf-8")
         for name in ("acquire_approved_source_posts.py", "acquire_approved_source_posts_failsoft.py"):
             (release / "scripts" / name).write_text("# offline placeholder\n", encoding="utf-8")
@@ -271,6 +289,7 @@ else:
         self.assertEqual(calls[1]["argv"], expected + ["--apply", "--confirm-acquisition"])
         for row in calls:
             self.assertEqual(row["locks_held"], [True, True, True])
+            self.assertEqual(row["cwd"], str(self.release))
             self.assertEqual(row["env"]["CODE_REVISION"], SHA)
             self.assertEqual(row["env"]["PRODUCTION_RUNTIME_RELEASE"], str(self.release))
             self.assertEqual(row["env"]["PRODUCTION_TRIGGER"], "xserver_cron")
@@ -280,6 +299,64 @@ else:
         events = self.recorded(self.events)
         self.assertEqual(events[0], {"event": "flock", "fd": 8})
         self.assertEqual(events[1]["event"], "resolve")
+
+    def test_canonical_policy_requires_explicit_boolean_false_before_acquisition(self):
+        policy = self.release / "config/autonomous_mode.json"
+        for payload in (
+            {"kill_switch": True}, {}, {"kill_switch": "false"},
+            {"kill_switch": 0}, {"kill_switch": None}, [], None,
+        ):
+            with self.subTest(payload=payload):
+                policy.write_text(json.dumps(payload), encoding="utf-8")
+                result = self.apply()
+                self.assertEqual(result.returncode, 78, result.stderr)
+                self.assertIn("canonical acquisition policy", result.stderr)
+                self.assertEqual(self.recorded(), [])
+        policy.write_text(json.dumps({"kill_switch": False}), encoding="utf-8")
+        result = self.apply()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.recorded()), 2)
+
+    def test_missing_malformed_or_duplicate_policy_refuses_before_acquisition(self):
+        policy = self.release / "config/autonomous_mode.json"
+        policy.unlink()
+        result = self.apply()
+        self.assertEqual(result.returncode, 78, result.stderr)
+        self.assertEqual(self.recorded(), [])
+        for text in ('{', '{"kill_switch": true, "kill_switch": false}', '{"kill_switch": NaN}', '{"kill_switch": false, "other": NaN}'):
+            with self.subTest(text=text):
+                policy.write_text(text, encoding="utf-8")
+                result = self.apply()
+                self.assertEqual(result.returncode, 78, result.stderr)
+                self.assertEqual(self.recorded(), [])
+
+    def test_linked_policy_or_config_directory_refuses_before_acquisition(self):
+        policy = self.release / "config/autonomous_mode.json"
+        outside = self.base / "external-policy.json"
+        policy.rename(outside)
+        policy.symlink_to(outside)
+        result = self.apply()
+        self.assertEqual(result.returncode, 78, result.stderr)
+        self.assertEqual(self.recorded(), [])
+        policy.unlink()
+        outside.rename(policy)
+        config = self.release / "config"
+        other = self.base / "external-config"
+        config.rename(other)
+        config.symlink_to(other)
+        result = self.apply()
+        self.assertEqual(result.returncode, 78, result.stderr)
+        self.assertEqual(self.recorded(), [])
+
+    def test_caller_and_protected_mock_flags_cannot_create_live_acceptance(self):
+        # Defaults already set every mock gate true in protected configuration.
+        result = self.apply(extra_env={key: "true" for key in ("MOCK_LLM", "MOCK_SHEETS", "DRY_RUN")})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.recorded()), 2)
+        for row in self.recorded():
+            self.assertEqual(row["cwd"], str(self.release))
+            for key in ("MOCK_LLM", "MOCK_SHEETS", "DRY_RUN"):
+                self.assertEqual(row["env"][key], "false")
 
     def test_caller_credentials_and_import_hooks_cannot_replace_protected_config(self):
         caller = {key: "untrusted-caller-sentinel" for key in (*SHEETS_KEYS, *IMPORT_KEYS, *AI_KEYS)}

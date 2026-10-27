@@ -164,6 +164,8 @@ export ANTHROPIC_API_KEY=""
 export FIRECRAWL_API_KEY=""
 export DELIVERY_ENGINE=buffered_vps PRODUCTION_TRIGGER="$trigger" CODE_REVISION="$revision"
 export PRODUCTION_RUNTIME_RELEASE="$release"
+# A host Apply must never inherit mock evidence from the caller or config.
+export MOCK_LLM=false MOCK_SHEETS=false DRY_RUN=false
 
 [[ -d "$locks" && ! -L "$locks" ]] || {
   echo "[BLOCKED] shared Sheets/account lock directory is unavailable" >&2; exit 78;
@@ -181,6 +183,43 @@ exec 7>"$account_lock"
 flock -n -E 75 7 || {
   echo "[BLOCKED] account acquisition lock is busy" >&2; exit 75;
 }
+
+# Load the canonical policy only from the same pinned immutable release.
+# Validate while holding all locks and before any acquisition child can connect.
+# Pin cwd as well so dotenv cannot search the caller's working directory.
+cd "$release"
+policy_file="$release/config/autonomous_mode.json"
+[[ -d "$release/config" && ! -L "$release/config" &&
+   -f "$policy_file" && ! -L "$policy_file" ]] || {
+  echo "[BLOCKED] canonical immutable acquisition policy missing or linked" >&2; exit 78;
+}
+if ! "$release/.venv/bin/python" -I - "$policy_file" <<'PY_POLICY'
+import json
+import sys
+
+def strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate policy key")
+        result[key] = value
+    return result
+
+def invalid_constant(_value):
+    raise ValueError("nonstandard policy number")
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        policy = json.load(source, object_pairs_hook=strict_object, parse_constant=invalid_constant)
+except (OSError, ValueError, TypeError):
+    raise SystemExit(78)
+if not isinstance(policy, dict) or policy.get("kill_switch") is not False:
+    raise SystemExit(78)
+PY_POLICY
+then
+  echo "[BLOCKED] canonical acquisition policy does not explicitly disable kill switch" >&2
+  exit 78
+fi
 
 args=(--account-id "$account" --platform "$platform" --max-posts "$max_posts")
 [[ "$scope" != reference-only ]] || args+=(--reference-only)

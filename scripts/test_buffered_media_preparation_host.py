@@ -107,6 +107,25 @@ def test_runtime_configuration_and_cloudinary_fail_closed() -> None:
     assert MINIMUM_READY == 3
 
 
+def test_raw_service_account_and_legacy_workbook_alias_preserve_required_groups() -> None:
+    env = {
+        "NOTE_MASTER_SHEET_ID": "protected-legacy-workbook-fixture",
+        "GCP_SA_JSON": json.dumps({"fixture_id": "protected-raw-service-account"}),
+        "CLOUDINARY_CLOUD_NAME": "placeholder",
+        "CLOUDINARY_API_KEY": "placeholder",
+        "CLOUDINARY_API_SECRET": "placeholder",
+        "GEMINI_API_KEY": "placeholder",
+    }
+    assert validate_runtime_config(ROOT, env) == []
+    for alias, reason in (
+        ("NOTE_MASTER_SHEET_ID", "credential_missing:SPREADSHEET_ID"),
+        ("GCP_SA_JSON", "credential_missing:GCP_SA_JSON_BASE64"),
+    ):
+        missing = {key: value for key, value in env.items() if key != alias}
+        assert reason in validate_runtime_config(ROOT, missing)
+        assert reason in validate_runtime_config(ROOT, {**missing, alias: "   "})
+
+
 def test_preparation_commands_are_bounded_and_never_publish() -> None:
     base = {
         "PUBLISH_ENABLED": "true",
@@ -338,6 +357,7 @@ if __name__ == "__main__":
         test_media_slots_do_not_reduce_text_coverage,
         test_media_inventory_uses_publisher_hard_gate_and_distinct_assets,
         test_runtime_configuration_and_cloudinary_fail_closed,
+        test_raw_service_account_and_legacy_workbook_alias_preserve_required_groups,
         test_preparation_commands_are_bounded_and_never_publish,
         test_stale_cleanup_removes_only_expired_owned_workspaces,
         test_safe_log_summary_never_includes_text_or_credentials,
