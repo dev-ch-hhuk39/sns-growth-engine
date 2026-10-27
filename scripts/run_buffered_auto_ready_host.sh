@@ -2,8 +2,8 @@
 # Action-free, no-post AUTO_READY preparation. Source only; installs no jobs.
 # Full hosted generation parity is deliberately unavailable: the existing
 # generation routes do not all share one proven paid-request budget ledger.
-# The explicitly selected reuse-only profile can allocate already approved
-# inventory and run the existing strict READY writer; it cannot create content.
+# Explicit reuse or finite owned-original profiles use the existing strict
+# READY writer. Neither profile can call paid generation.
 set +x
 set -euo pipefail
 umask 077
@@ -14,13 +14,14 @@ mode_selected=false
 confirm_readonly=false
 confirm_write=false
 reuse_only=false
+offline_original_only=false
 horizon=24
 max_ready=1
 max_allocations=2
 trigger=manual
 
 usage() {
-  echo "usage: $0 --account-id <night_scout|liver_manager|beauty_account> [--plan | --dry-run --confirm-readonly | --apply --confirm-auto-ready --reuse-only] [--horizon-hours 6|24] [--max-ready 1..3] [--max-bank-allocations 0..6] [--trigger manual|xserver_cron]" >&2
+  echo "usage: $0 --account-id <night_scout|liver_manager|beauty_account> [--plan | --dry-run --confirm-readonly | --apply --confirm-auto-ready (--reuse-only|--offline-original-only)] [--horizon-hours 6|24] [--max-ready 1..3] [--max-bank-allocations 0..6] [--trigger manual|xserver_cron]" >&2
 }
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --confirm-readonly) confirm_readonly=true; shift ;;
     --confirm-auto-ready) confirm_write=true; shift ;;
     --reuse-only) reuse_only=true; shift ;;
+    --offline-original-only) offline_original_only=true; shift ;;
     *) usage; exit 64 ;;
   esac
 done
@@ -49,18 +51,25 @@ case "$trigger" in manual|xserver_cron) ;; *) usage; exit 64 ;; esac
 case "$horizon" in 6|24) ;; *) usage; exit 64 ;; esac
 [[ "$max_ready" =~ ^[1-3]$ && "$max_allocations" =~ ^[0-6]$ ]] || { usage; exit 64; }
 [[ "$trigger" != xserver_cron || "$horizon" == 24 ]] || { usage; exit 64; }
+[[ "$reuse_only" != true || "$offline_original_only" != true ]] || { usage; exit 64; }
+profile=approved_inventory_reuse
+generation_supported=false
+if [[ "$offline_original_only" == true ]]; then
+  profile=finite_owned_original_catalog
+  generation_supported=true
+fi
 case "$mode" in
   plan)
     [[ "$confirm_readonly" == false && "$confirm_write" == false ]] || { usage; exit 64; }
-    printf '{"status":"PLAN_ONLY","account_id":"%s","trigger":"%s","horizon_hours":%s,"profile":"approved_inventory_reuse","generation_supported":false,"hosted_workflow_equivalent":false,"stages":["draft_preflight","activation_guard","verify_before","reuse_text_inventory","reuse_evergreen_bank_24h_only","strict_ready_only","verify_after"],"would_connect":false,"would_write":false,"would_post":false,"github_actions_used":false}\n' "$account" "$trigger" "$horizon"
+    printf '{"status":"PLAN_ONLY","account_id":"%s","trigger":"%s","horizon_hours":%s,"profile":"%s","generation_supported":%s,"paid_generation_supported":false,"hosted_workflow_equivalent":false,"stages":["draft_preflight","activation_guard","verify_before","text_inventory","evergreen_bank_24h_only","strict_ready_only","verify_after"],"would_connect":false,"would_write":false,"would_post":false,"github_actions_used":false}\n' "$account" "$trigger" "$horizon" "$profile" "$generation_supported"
     exit 0 ;;
   dry-run)
-    [[ "$confirm_readonly" == true && "$confirm_write" == false && "$reuse_only" == false ]] || { usage; exit 64; } ;;
+    [[ "$confirm_readonly" == true && "$confirm_write" == false && "$reuse_only" == false && "$offline_original_only" == false ]] || { usage; exit 64; } ;;
   apply)
     [[ "$confirm_write" == true && "$confirm_readonly" == false ]] || { usage; exit 64; }
     # Never fall through to ordinary maintenance, which can invoke paid AI.
-    [[ "$reuse_only" == true ]] || {
-      echo '[BLOCKED] full-generation host mode unavailable; explicit --reuse-only is required and is not hosted workflow parity' >&2
+    [[ "$reuse_only" == true || "$offline_original_only" == true ]] || {
+      echo '[BLOCKED] full-generation host mode unavailable; choose --reuse-only or --offline-original-only; neither is full hosted parity' >&2
       exit 78
     } ;;
 esac
@@ -108,7 +117,7 @@ owner_uid="$(stat -c '%u' "$runtime_env" 2>/dev/null || stat -f '%u' "$runtime_e
 }
 
 # Process environment cannot supply approvals, Sheets credentials or AI keys.
-unset AUTO_READY_WRITE_APPROVED AUTO_READY_ACTIONS_DISABLED_ATTESTED BEAUTY_ACTIVATION_APPROVED
+unset AUTO_READY_WRITE_APPROVED AUTO_READY_ACTIONS_DISABLED_ATTESTED AUTO_READY_OFFLINE_GENERATION_APPROVED BEAUTY_ACTIVATION_APPROVED
 unset GCP_SA_JSON_BASE64 SA_JSON_BASE64 GCP_SA_JSON
 unset SPREADSHEET_ID SNS_MASTER_SHEET_ID NOTE_MASTER_SHEET_ID GOOGLE_APPLICATION_CREDENTIALS
 unset GEMINI_API_KEY GOOGLE_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY
@@ -123,6 +132,9 @@ if [[ "$mode" == apply ]]; then
   }
   [[ "$account" != beauty_account || "${BEAUTY_ACTIVATION_APPROVED:-false}" == true ]] || {
     echo '[BLOCKED] independent Beauty activation approval required' >&2; exit 77;
+  }
+  [[ "$offline_original_only" != true || "${AUTO_READY_OFFLINE_GENERATION_APPROVED:-false}" == true ]] || {
+    echo '[BLOCKED] independent finite-original generation approval required' >&2; exit 77;
   }
 fi
 [[ -n "${SA_JSON_BASE64:-}${GCP_SA_JSON_BASE64:-}${GCP_SA_JSON:-}" && -n "${SPREADSHEET_ID:-}${SNS_MASTER_SHEET_ID:-}${NOTE_MASTER_SHEET_ID:-}" ]] || {
@@ -198,7 +210,13 @@ if (mode.get("kill_switch") is not False
     raise SystemExit(78)
 PY
 run_stage verify_before "$release/scripts/recover_production_sheets_threads_first.py" --verify-only --text-inventory-scope --account-id "$account" --json
-if run_stage inventory_reuse "$release/scripts/maintain_text_ready_inventory.py" --account-id "$account" --apply --confirm-ready-maintenance --use-sheets --horizon-hours "$horizon" --reuse-only --max-bank-allocations "$max_allocations"; then
+inventory_profile=(--reuse-only)
+bank_profile=(--bank-reuse-only)
+if [[ "$offline_original_only" == true ]]; then
+  inventory_profile=(--offline-original-only)
+  bank_profile=(--bank-offline-only)
+fi
+if run_stage inventory_reuse "$release/scripts/maintain_text_ready_inventory.py" --account-id "$account" --apply --confirm-ready-maintenance --use-sheets --horizon-hours "$horizon" "${inventory_profile[@]}" --max-bank-allocations "$max_allocations"; then
   run_stage inventory_diagnostics "$release/scripts/ready_inventory_diagnostics.py" --account-id "$account" --report "$scratch/inventory_reuse.json" --private-stderr "$scratch/inventory_reuse.stderr"
 else
   code=$?
@@ -210,7 +228,7 @@ fi
 # delivery and readback still run, but cannot erase the reserve failure.
 bank_failed=false
 if [[ "$horizon" == 24 ]]; then
-  if ! run_stage evergreen_reuse "$release/scripts/maintain_text_ready_inventory.py" --account-id "$account" --evergreen-bank --apply --confirm-ready-maintenance --use-sheets --bank-reuse-only; then
+  if ! run_stage evergreen_reuse "$release/scripts/maintain_text_ready_inventory.py" --account-id "$account" --evergreen-bank --apply --confirm-ready-maintenance --use-sheets "${bank_profile[@]}"; then
     bank_failed=true
   fi
   if ! run_stage evergreen_diagnostics "$release/scripts/ready_evergreen_bank_summary.py" --account-id "$account" --report "$scratch/evergreen_reuse.json" --private-stderr "$scratch/evergreen_reuse.stderr"; then
@@ -226,4 +244,8 @@ if [[ "$bank_failed" == true ]]; then
   echo '[BLOCKED] AUTO_READY_EVERGREEN_RESERVE_INCOMPLETE posts=false; no automatic retry' >&2
   exit 1
 fi
-echo '[OK] AUTO_READY_REUSE_ONLY_COMPLETE generation=false posts=false hosted_workflow_equivalent=false'
+if [[ "$offline_original_only" == true ]]; then
+  echo '[OK] AUTO_READY_OFFLINE_ORIGINAL_COMPLETE generation=finite_owned_catalog paid_generation=false posts=false hosted_workflow_equivalent=false'
+else
+  echo '[OK] AUTO_READY_REUSE_ONLY_COMPLETE generation=false posts=false hosted_workflow_equivalent=false'
+fi

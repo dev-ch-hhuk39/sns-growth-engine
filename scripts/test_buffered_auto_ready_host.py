@@ -209,6 +209,57 @@ APPLY = ("--apply", "--confirm-auto-ready", "--reuse-only")
 
 
 class AutoReadyHostTests(unittest.TestCase):
+    def test_finite_original_profile_plan_is_offline_and_not_paid_or_full_equivalence(self):
+        result=self.runtime.execute('--plan','--offline-original-only')
+        self.assertEqual(result.returncode,0,result.stderr)
+        packet=json.loads(result.stdout)
+        self.assertEqual(packet['profile'],'finite_owned_original_catalog')
+        self.assertTrue(packet['generation_supported'])
+        for key in ('paid_generation_supported','hosted_workflow_equivalent','would_connect','would_write','would_post'):
+            self.assertFalse(packet[key])
+        self.assertEqual(self.runtime.records(),[])
+
+    def test_finite_original_profile_needs_its_own_protected_consent(self):
+        result=self.runtime.execute('--apply','--confirm-auto-ready','--offline-original-only',
+            AUTO_READY_OFFLINE_GENERATION_APPROVED='true')
+        self.assertEqual(result.returncode,77,result.stderr)
+        self.assertIn('finite-original generation approval',result.stderr)
+        self.assertEqual(self.runtime.children(),[])
+
+    def test_finite_original_and_reuse_profiles_cannot_be_combined(self):
+        result=self.runtime.execute(*APPLY,'--offline-original-only')
+        self.assertEqual(result.returncode,64,result.stderr)
+        self.assertEqual(self.runtime.records(),[])
+
+    def test_finite_original_profile_uses_only_offline_commands_and_no_post_ready_path(self):
+        self.runtime.write_config(AUTO_READY_OFFLINE_GENERATION_APPROVED='true')
+        for account in ACCOUNTS:
+            with self.subTest(account=account):
+                self.runtime.trace.unlink(missing_ok=True)
+                result=self.runtime.execute('--apply','--confirm-auto-ready','--offline-original-only',account=account)
+                self.assertEqual(result.returncode,0,result.stderr)
+                children=self.runtime.children()
+                inventory=next(row for row in children if row['stage']=='inventory')
+                bank=next(row for row in children if row['stage']=='bank')
+                ready=next(row for row in children if row['stage']=='ready')
+                self.assertIn('--offline-original-only',inventory['args'])
+                self.assertNotIn('--reuse-only',inventory['args'])
+                self.assertIn('--bank-offline-only',bank['args'])
+                self.assertNotIn('--bank-reuse-only',bank['args'])
+                self.assertIn('--skip-real-post',ready['args'])
+                self.assertIn('--ready-only',ready['args'])
+                for row in children:
+                    self.assertFalse(row['provider_keys_present'])
+                    self.assertEqual(row['locks_held'],[True,True,True])
+                    self.assertTrue(all(value=='false' for value in row['flags'].values()))
+                self.assertIn('AUTO_READY_OFFLINE_ORIGINAL_COMPLETE',result.stdout)
+
+    def test_finite_original_reserve_failure_cannot_claim_completion(self):
+        self.runtime.write_config(AUTO_READY_OFFLINE_GENERATION_APPROVED='true')
+        result=self.runtime.execute('--apply','--confirm-auto-ready','--offline-original-only',TEST_FAIL_STAGE='bank')
+        self.assertEqual(result.returncode,1,result.stderr)
+        self.assertNotIn('AUTO_READY_OFFLINE_ORIGINAL_COMPLETE',result.stdout)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="sns-auto-ready-offline-")
         self.addCleanup(self.temp.cleanup)

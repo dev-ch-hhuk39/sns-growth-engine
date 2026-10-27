@@ -1205,6 +1205,10 @@ def main() -> int:
     parser.add_argument("--horizon-hours", type=int, default=policy()["text_horizon_hours"])
     parser.add_argument("--evergreen-bank", action="store_true")
     parser.add_argument(
+        "--offline-original-only", action="store_true",
+        help="Confirmed text Apply using only the finite owned catalog and unchanged strict review",
+    )
+    parser.add_argument(
         "--bank-offline-only", action="store_true",
         help="Confirmed evergreen-bank Apply using the existing offline catalog only; never try paid generation",
     )
@@ -1255,6 +1259,15 @@ def main() -> int:
             "reason": "bank_offline_only_requires_single_account_confirmed_bank_apply",
             "would_post": False}))
         return 1
+    if args.offline_original_only and not (
+        args.apply and args.confirm_ready_maintenance and args.use_sheets
+        and args.account_id in PREPARED_ACCOUNTS and not args.evergreen_bank
+        and not args.reuse_only and not args.bank_reuse_only and not args.bank_offline_only
+    ):
+        print(json.dumps({"status": "BLOCKED",
+            "reason": "offline_original_only_requires_single_account_confirmed_text_apply",
+            "would_post": False}))
+        return 1
     if not 1 <= args.horizon_hours <= 168:
         print(json.dumps({"status": "BLOCKED", "reason": "inventory_horizon_must_be_1_to_168_hours", "would_post": False}))
         return 1
@@ -1295,7 +1308,7 @@ def main() -> int:
         if not args.evergreen_bank:
             queue_rows = [dict(row) for row in read_records_safely(client, "queue")]
             if args.apply:
-                if args.reuse_only:
+                if args.reuse_only or args.offline_original_only:
                     # Approval is for allocating pre-existing candidates, NOT
                     # auto-creating operational tabs or running migrations.
                     client._ws("evergreen_bank")
@@ -1319,6 +1332,7 @@ def main() -> int:
         budget_blocked = False
         sheets_quota_blocked = False
         paid_generation_paused = False
+        offline_catalog_exhausted = False
         bank_allocation_count = 0
         snapshot = copy.copy(client) if args.use_sheets else None
         if snapshot is not None:
@@ -1357,7 +1371,7 @@ def main() -> int:
                 from generate_threads_ideas_from_references import original_text_similarity_guard
                 recovered: list[str] = []
                 bank_needed = min(required, max(0, reserve_target - already_ready))
-                if args.reuse_only:
+                if args.reuse_only or args.offline_original_only:
                     bank_needed = min(
                         bank_needed, max(0, args.max_bank_allocations - bank_allocation_count),
                     )
@@ -1389,13 +1403,19 @@ def main() -> int:
                 if args.reuse_only:
                     result["delivery_generation_status"] = "SKIPPED_PAID_GENERATION_REUSE_ONLY"
                     result["delivery_generation_failure_category"] = "NO_VALIDATED_BANK_CANDIDATE"
+                elif args.offline_original_only and offline_catalog_exhausted:
+                    result["delivery_generation_status"] = "SKIPPED_OFFLINE_CATALOG_EXHAUSTED"
+                    result["delivery_generation_failure_category"] = "OFFLINE_CATALOG_EXHAUSTED"
                 else:
                     generated = replenish(
                         account_id, slot, apply=args.apply, required=1,
-                        offline_only=(budget_blocked or paid_generation_paused),
+                        offline_only=(args.offline_original_only or budget_blocked or paid_generation_paused),
                     )
                     result["delivery_generation_status"] = generated.get("status", "")
                     result["delivery_generation_failure_category"] = generated.get("failure_category", "")
+                    offline_catalog_exhausted = offline_catalog_exhausted or (
+                        args.offline_original_only and generated.get("failure_category") == "OFFLINE_CATALOG_EXHAUSTED"
+                    )
                     sheets_quota_blocked = sheets_quota_blocked or (
                         generated.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
                     )
@@ -1423,14 +1443,20 @@ def main() -> int:
                     if bank_ids:
                         result["reserve_queue_ids"] = bank_ids
                         queue_rows = refresh_queue_snapshot()
+                elif args.offline_original_only and offline_catalog_exhausted:
+                    result["reserve_generation_status"] = "SKIPPED_OFFLINE_CATALOG_EXHAUSTED"
+                    result["reserve_generation_failure_category"] = "OFFLINE_CATALOG_EXHAUSTED"
                 else:
                     reserve_result = replenish(
                         account_id, slot, apply=args.apply,
                         required=reserve_missing,
-                        offline_only=(budget_blocked or paid_generation_paused),
+                        offline_only=(args.offline_original_only or budget_blocked or paid_generation_paused),
                     )
                     result["reserve_generation_status"] = reserve_result.get("status", "")
                     result["reserve_generation_failure_category"] = reserve_result.get("failure_category", "")
+                    offline_catalog_exhausted = offline_catalog_exhausted or (
+                        args.offline_original_only and reserve_result.get("failure_category") == "OFFLINE_CATALOG_EXHAUSTED"
+                    )
                     sheets_quota_blocked = sheets_quota_blocked or (
                         reserve_result.get("failure_category") == "SHEETS_QUOTA_EXHAUSTED"
                     )
@@ -1473,10 +1499,10 @@ def main() -> int:
             )
             results.append(result)
         coverage_by_account[account_id] = {"covered_slots": account_covered, "required_slots": len(slots)}
-        if args.reuse_only:
+        if args.reuse_only or args.offline_original_only:
             results.append({
                 "account_id": account_id,
-                "stage": "bank_reuse_budget",
+                "stage": "offline_original_budget" if args.offline_original_only else "bank_reuse_budget",
                 "allocation_count": bank_allocation_count,
                 "allocation_limit": args.max_bank_allocations,
                 "paid_ai_requests_allowed": False,
