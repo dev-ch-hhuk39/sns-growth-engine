@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -35,6 +37,39 @@ def execute(*args: str, extra_env: dict[str, str] | None = None):
 
 
 class MetricsAftercareNoActionsTests(unittest.TestCase):
+    def test_shell_tracing_cannot_print_protected_runtime_credentials(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            parent=Path(temporary).resolve()
+            runtime=parent/'runtime'
+            revision='a'*40
+            release=runtime/'releases'/revision
+            (release/'scripts').mkdir(parents=True)
+            (release/'scripts/process_threads_metric_jobs.py').touch()
+            (release/'.production-release').write_text(revision+'\n')
+            (release/'.venv/bin').mkdir(parents=True)
+            interpreter=release/'.venv/bin/python'
+            interpreter.write_text('#!/bin/sh\nexit 99\n');interpreter.chmod(0o700)
+            (runtime/'current').symlink_to(release)
+            shared=runtime/'shared';shared.mkdir()
+            private=shared/'runtime.env'
+            sentinel='protected-aftercare-fixture-value'
+            private.write_text('GEMINI_API_KEY='+sentinel+'\n')
+            private.chmod(0o600)
+            lock=parent/'deploy.lock';lock.touch()
+            host=parent/'host.sh'
+            host.write_text(HOST.read_text().replace('/run/lock/chadult-production-deploy.lock',str(lock)))
+            binaries=parent/'bin';binaries.mkdir()
+            flock=binaries/'flock';flock.write_text('#!/bin/sh\nexit 0\n');flock.chmod(0o700)
+            readlink=binaries/'readlink'
+            readlink.write_text('#!'+sys.executable+'\nimport os,sys\nprint(os.path.realpath(sys.argv[-1]))\n')
+            readlink.chmod(0o700)
+            result=subprocess.run(['bash','-x',str(host),'--account-id','night_scout','--apply','--confirm-metrics'],
+                env={'PATH':str(binaries)+os.pathsep+os.environ['PATH'],
+                     'BUFFERED_RUNTIME_ROOT':str(runtime)},capture_output=True,text=True,timeout=10)
+            self.assertEqual(result.returncode,77,result.stderr)
+            self.assertIn('independent metrics write approval',result.stderr)
+            self.assertNotIn(sentinel,result.stdout+result.stderr)
+
     def test_only_intended_accounts_have_offline_plans(self):
         for account in ("night_scout", "liver_manager"):
             with self.subTest(account=account):

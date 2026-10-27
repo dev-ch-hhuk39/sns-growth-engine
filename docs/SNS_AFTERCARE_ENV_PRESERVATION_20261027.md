@@ -1,0 +1,9 @@
+# Preserve existing aftercare consents during deployment
+
+The metrics/aftercare host wrapper requires independent protected-host controls for metrics writes, attestation that competing Actions are disabled, measured-strategy writes and zero-AI Bank reuse. It discards caller-provided values before loading its protected configuration. The candidate environment writer previously preserved only local P0 controls, so a normal immutable deployment would silently drop existing aftercare consent.
+
+The writer now preserves the four existing booleans through the same owner-private, no-symlink protected-source validation. Each missing control is explicitly false. Caller/CI environment variables cannot grant or override consent. Values other than the exact lowercase true/false block the candidate before any output file is created. Existing metrics/strategy/reuse approval gates and the competing-scheduler attestation are unchanged; this does not provide or assert new consent.
+
+Tests verify preservation of mixed approved/denied flags against opposite caller values, no caller escalation when no protected source exists, rejection of malformed values before file creation, and unchanged live source bytes. Existing lifecycle/source-permission tests and real shell-wrapper contracts remain active. Focused lifecycle 19 and wrapper 15 PASS. Full Mac validation PASS: 1,095 regression scripts, workflow safety 619/619, fatal Ruff, compile, diff checks and history Gitleaks; existing exclusions unchanged. No live deployment or new aftercare operation has occurred.
+
+The same protected-source mechanism now covers the new local READY/acquisition entrypoints. It preserves only existing consent and exact acquisition scope, defaults absent approval to false, rejects malformed control values and never retargets release-bound acquisition consent. Publisher release pinning and source-only host entrypoints are documented in `SNS_LOCAL_HOST_AUTOMATION_20261027.md`.

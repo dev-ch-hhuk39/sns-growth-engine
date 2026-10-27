@@ -31,6 +31,9 @@ SENSITIVE_PARTS = (
     "API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENAI_API_KEY",
 )
 FOCUSED = (
+    "test_buffered_auto_ready_host.py",
+    "test_buffered_acquisition_host.py",
+    "test_buffered_host_posting_disabled.py",
     "test_sns_review_component_bundle.py",
     "test_evergreen_bank_mode_report.py",
     "test_verify_github_liver_app_pin.py",

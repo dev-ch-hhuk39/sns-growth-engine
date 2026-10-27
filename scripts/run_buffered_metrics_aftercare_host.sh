@@ -4,6 +4,7 @@
 # Source only: do not install cron or invoke real providers in development.
 # Operator/VPS Ops owns protected configuration and the production schedule.
 # `--plan` is fully offline and never reads runtime credentials.
+set +x
 set -euo pipefail
 
 account=""

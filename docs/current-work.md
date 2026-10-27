@@ -1,3 +1,17 @@
+## 2026-10-27 — guarded local host automation implementation
+
+- Existing protected consent preservation is implemented for aftercare, READY reuse and scoped acquisition; caller values cannot grant approval, missing flags remain false, malformed controls block candidate creation. Acquisition approval remains bound to its original account/scope/platform/release and is not retargeted by deployment.
+- Publisher now acquires the shared deployment lock before resolving authority and executes the same pinned immutable revision throughout. Protected runtime loading disables shell tracing in the publisher/aftercare/preparation entrypoints.
+- Added an offline-default AUTO_READY host entrypoint supporting explicit approved-inventory reuse and a confirmed read-only preview, with continuous deployment/Sheets/account locks and no-post checks. Full generation remains blocked because not every generation path has a verified shared paid-request budget; this is not full hosted workflow equivalence.
+- Added offline-default bounded X/YouTube metadata acquisition with protected account/scope/platform/release consent, independent competing-scheduler attestation and source permission/provenance checks. Threads/TikTok and complete Beauty acquisition parity remain deferred. No timer is installed, hosted workflow disabled, consent enabled or production operation invoked by this source batch.
+- Combined full Mac quality gate PASS: 1,097 regression scripts, workflow safety 619/619, fatal Ruff, compile, shell syntax, diff and history secret scan; no new exclusions. Focused lifecycle22, metrics16, publisher10, AUTO_READY23 and acquisition17 tests PASS. Peer-review alias and tracing findings are fixed. Source details: `docs/SNS_LOCAL_HOST_AUTOMATION_20261027.md`. The separately approved review projection remains independently verified; overall production completion is not claimed.
+
+## 2026-10-27 — preserve existing aftercare consents during deploy
+
+- Active branch `codex/sns-aftercare-env-preservation-20261027`. Found that deployment preserved protected P0 controls but dropped the existing independent aftercare approvals required by the metrics/strategy/reuse wrapper.
+- Candidate environment creation now carries those four booleans only from the same owner-private protected source. Missing flags default false; caller/CI values cannot grant or override approval. Malformed inherited booleans block candidate creation. Live configuration and aftercare behavior are unchanged by this source edit.
+- Focused deployment lifecycle 19 and aftercare wrapper 15 tests PASS. Full Mac quality gate PASS: 1,095 regression scripts, workflow safety 619/619, fatal Ruff, compile, diff and history Gitleaks; no new exclusions. No new production approval, deployment, metrics write, posting or schedule activation is implied. Details: `docs/SNS_AFTERCARE_ENV_PRESERVATION_20261027.md`.
+
 ## 2026-10-27 — verified implementation checkpoint
 
 - Protected PR #476 delivered complete review-component packaging and the explicit offline Bank generation option. Protected PR #477 delivered scoped preparation reuse; all four required checks passed before normal merges. Source `4b9e8f4` passed 1,095 regression scripts, workflow safety 619/619, compile, fatal Ruff and secret scans.

@@ -13,7 +13,9 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unittest.mock import Mock, patch
 
-from scripts.write_buffered_runtime_env import write_candidate_env
+from scripts.write_buffered_runtime_env import (
+    HOST_ONLY_AFTERCARE, HOST_ONLY_PREPARATION, HOST_ONLY_ACQUISITION_SCOPE, write_candidate_env,
+)
 from scripts.verify_buffered_runtime_health import health_probe
 from scripts.prune_obsolete_runtime_releases import candidate_state
 
@@ -53,6 +55,79 @@ class DeploymentLifecycleTests(unittest.TestCase):
         self.assertIn('SNS_P0_AUTONOMY_MODE=canary', self.env_path.read_text())
         with self.assertRaises(ValueError):
             write_candidate_env(self.env_path, self.root, self.env)
+
+    def test_existing_host_aftercare_consents_survive_deploy_without_caller_override(self):
+        live = self.shared / 'runtime.env'
+        approved = dict(zip(HOST_ONLY_AFTERCARE, ('true', 'true', 'false', 'false')))
+        original = ''.join(key+'='+value+'\n' for key, value in approved.items())
+        live.write_text(original)
+        live.chmod(0o600)
+        caller = {**self.env, **{key: 'false' if value == 'true' else 'true'
+                                for key, value in approved.items()}}
+        write_candidate_env(self.env_path, self.root, caller, inherit_local_p0=live)
+        content = self.env_path.read_text()
+        for key, value in approved.items():
+            self.assertIn(key+'='+value+'\n', content)
+            self.assertEqual(content.count(key+'='), 1)
+        self.assertEqual(live.read_text(), original)
+
+    def test_deploy_caller_cannot_grant_missing_aftercare_consents(self):
+        caller = {**self.env, **{key: 'true' for key in HOST_ONLY_AFTERCARE}}
+        write_candidate_env(self.env_path, self.root, caller)
+        for key in HOST_ONLY_AFTERCARE:
+            self.assertIn(key+'=false\n', self.env_path.read_text())
+
+    def test_preparation_scope_survives_without_retargeting_release_or_caller_escalation(self):
+        live = self.shared / 'runtime.env'
+        expected = {**{key: 'true' for key in HOST_ONLY_PREPARATION},
+                    'ACQUISITION_APPROVED_ACCOUNT': 'liver_manager',
+                    'ACQUISITION_APPROVED_SCOPE': 'reference-only',
+                    'ACQUISITION_APPROVED_PLATFORM': 'youtube',
+                    'ACQUISITION_APPROVED_RELEASE': 'c' * 40}
+        original = ''.join(key+'='+value+'\n' for key,value in expected.items())
+        live.write_text(original)
+        live.chmod(0o600)
+        caller = {**self.env, **{key:'false' for key in HOST_ONLY_PREPARATION},
+                  'ACQUISITION_APPROVED_ACCOUNT':'night_scout',
+                  'ACQUISITION_APPROVED_RELEASE':self.revision}
+        write_candidate_env(self.env_path,self.root,caller,inherit_local_p0=live)
+        content=self.env_path.read_text()
+        for key,value in expected.items():
+            self.assertIn(key+'='+value+'\n',content)
+            self.assertEqual(content.count(key+'='),1)
+        self.assertEqual(live.read_text(),original)
+
+    def test_missing_preparation_approvals_and_scopes_cannot_come_from_caller(self):
+        caller={**self.env,**{key:'true' for key in HOST_ONLY_PREPARATION},
+                **{key:'caller-supplied' for key in HOST_ONLY_ACQUISITION_SCOPE}}
+        write_candidate_env(self.env_path,self.root,caller)
+        content=self.env_path.read_text()
+        for key in HOST_ONLY_PREPARATION:
+            self.assertIn(key+'=false\n',content)
+        self.assertNotIn('caller-supplied',content)
+
+    def test_invalid_preparation_controls_block_before_candidate_creation(self):
+        live=self.shared/'runtime.env'
+        cases=[*( (key,'TRUE') for key in HOST_ONLY_PREPARATION),
+               ('ACQUISITION_APPROVED_ACCOUNT','all'),('ACQUISITION_APPROVED_SCOPE','arbitrary'),
+               ('ACQUISITION_APPROVED_PLATFORM','threads'),('ACQUISITION_APPROVED_RELEASE','main')]
+        for key,value in cases:
+            with self.subTest(key=key,value=value):
+                live.write_text(key+'='+value+'\n');live.chmod(0o600)
+                with self.assertRaises(ValueError):
+                    write_candidate_env(self.env_path,self.root,self.env,inherit_local_p0=live)
+                self.assertFalse(self.env_path.exists())
+
+    def test_invalid_host_aftercare_consent_blocks_candidate_before_creation(self):
+        live = self.shared / 'runtime.env'
+        for key in HOST_ONLY_AFTERCARE:
+            for value in ('TRUE', 'yes', '1', ''):
+                with self.subTest(key=key, value=value):
+                    live.write_text(key+'='+value+'\n')
+                    live.chmod(0o600)
+                    with self.assertRaisesRegex(ValueError, 'host_aftercare_approval_boolean_invalid'):
+                        write_candidate_env(self.env_path, self.root, self.env, inherit_local_p0=live)
+                    self.assertFalse(self.env_path.exists())
 
     def test_account_specific_app_ids_survive_candidate_environment(self):
         ids = {'THREADS_APP_ID_NIGHT_SCOUT': '123456789',
