@@ -7,6 +7,8 @@ It is intended for local dry-runs and GitHub Actions summary diagnostics.
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 import os
 import re
@@ -59,6 +61,98 @@ MEDIA_SCHEDULED_PREP_WORKFLOWS = {
     "media_prepare_liver_manager",
     "media_prepare_night_scout",
 }
+
+# These existing tabs are the core inputs/outputs of bounded metrics aftercare.
+# Optional attribution, Bank and media tabs are intentionally not prerequisites.
+STRICT_RUNTIME_HEADERS = {
+    "queue": ("queue_id", "account_id", "status"),
+    "posted_results": ("result_id", "account_id", "platform", "status"),
+    "metrics_collection_jobs": ("job_id", "result_id", "account_id", "status"),
+    "metric_snapshots": ("snapshot_id", "result_id", "account_id", "metrics_status"),
+}
+STRICT_RUNTIME_ACCOUNTS = frozenset({"night_scout", "liver_manager"})
+
+
+def build_strict_runtime_health(account_id: str) -> dict[str, Any]:
+    """Check real, existing aftercare tables; return counts, never row content.
+
+    READ_OK establishes only successful scoped reads and identity/schema checks.
+    It does not establish READY stock, metric completeness or rollout acceptance.
+    """
+    result: dict[str, Any] = {
+        "status": "BLOCKED", "strict_runtime": True,
+        "health_scope": "aftercare_required_runtime_reads",
+        "would_write": False, "would_post": False,
+        "provider_reads_attempted": False, "tabs": {},
+    }
+    if account_id not in STRICT_RUNTIME_ACCOUNTS:
+        return {**result, "reason": "strict_runtime_requires_one_supported_account"}
+    result["account_id"] = account_id
+    if os.environ.get("MOCK_SHEETS", "false").strip().lower() not in {"", "false", "0"}:
+        return {**result, "reason": "strict_runtime_mock_forbidden"}
+
+    # Dependencies may print retries or authentication diagnostics. Keep those
+    # out of this CLI's fixed JSON contract, including on initialization failure.
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        try:
+            from config_loader import get_config
+            from sheets_client import MockSheetsClient, SheetsClient
+
+            cfg = get_config()
+            if (os.environ.get("MOCK_SHEETS", "false").strip().lower() not in {"", "false", "0"}
+                    or cfg.get("mock_sheets")):
+                return {**result, "reason": "strict_runtime_mock_forbidden"}
+            if not cfg.get("sheet_id") or not isinstance(cfg.get("sa_dict"), dict) or not cfg["sa_dict"]:
+                return {**result, "reason": "strict_runtime_configuration_unavailable"}
+        except Exception:
+            return {**result, "reason": "strict_runtime_configuration_unavailable"}
+        try:
+            result["provider_reads_attempted"] = True
+            # Direct construction has no mock/fallback factory or schema setup.
+            client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=True)
+            if isinstance(client, MockSheetsClient):
+                return {**result, "reason": "strict_runtime_mock_forbidden"}
+        except Exception:
+            return {**result, "reason": "strict_runtime_read_unavailable"}
+        for logical, required in STRICT_RUNTIME_HEADERS.items():
+            try:
+                values = client._ws(logical).get_all_values()
+            except Exception:
+                return {**result, "reason": "strict_runtime_read_unavailable"}
+            if (not isinstance(values, list) or not values
+                    or not isinstance(values[0], list)
+                    or any(not isinstance(value, str) or not value for value in values[0])
+                    or len(values[0]) != len(set(values[0]))
+                    or not set(required).issubset(values[0])):
+                return {**result, "reason": "strict_runtime_schema_invalid"}
+            headers = values[0]
+            identity_key = required[0]
+            selected_ids: set[str] = set()
+            other_ids: set[str] = set()
+            count = 0
+            for cells in values[1:]:
+                if (not isinstance(cells, list) or len(cells) > len(headers)
+                        or any(not isinstance(value, str) for value in cells)):
+                    return {**result, "reason": "strict_runtime_schema_invalid"}
+                if not any(cells):
+                    continue
+                row = dict(zip(headers, cells))
+                owner = row.get("account_id", "")
+                identity = row.get(identity_key, "")
+                if not owner or owner != owner.strip():
+                    return {**result, "reason": "strict_runtime_account_unverified"}
+                if owner != account_id:
+                    if identity:
+                        other_ids.add(identity)
+                    continue
+                if not identity or identity != identity.strip() or identity in selected_ids:
+                    return {**result, "reason": "strict_runtime_identity_ambiguous"}
+                selected_ids.add(identity)
+                count += 1
+            if selected_ids & other_ids:
+                return {**result, "reason": "strict_runtime_identity_ambiguous"}
+            result["tabs"][logical] = {"status": "READ_OK", "row_count": count}
+    return {**result, "status": "READ_OK", "reason": "strict_runtime_reads_verified"}
 
 
 def _json(path: Path) -> dict[str, Any]:
@@ -393,7 +487,20 @@ def main() -> int:
     parser.add_argument("--account-id", default="all", choices=account_choices(include_all=True))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--use-sheets", action="store_true", help="read operational tab counts only; never write or initialize Sheets")
+    parser.add_argument("--strict-runtime", action="store_true", help="require real, account-scoped aftercare table reads; Night/Liver only, with --dry-run --use-sheets")
     args = parser.parse_args()
+    if args.strict_runtime:
+        if not args.dry_run or not args.use_sheets:
+            print(json.dumps({
+                "status": "BLOCKED", "strict_runtime": True,
+                "reason": "strict_runtime_requires_dry_run_and_sheets",
+                "would_write": False, "would_post": False,
+                "provider_reads_attempted": False,
+            }))
+            return 1
+        result = build_strict_runtime_health(args.account_id)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["status"] == "READ_OK" else 1
     result = build_health(args.account_id, use_sheets=args.use_sheets)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result["status"] in {"PASS", "WARN"} else 1

@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import subprocess
 import tempfile
 import unittest
 
@@ -24,7 +25,8 @@ class AftercareIsolationTests(unittest.TestCase):
         needle = 'shared_deploy_lock="/run/lock/chadult-production-deploy.lock"'
         self.assertEqual(source.count(needle), 1)
         fixture.wrapper.write_text(source.replace(needle, 'shared_deploy_lock=' + shlex.quote(str(fixture.deploy_lock))))
-        for name in ('process_threads_metric_jobs.py', 'run_growth_attribution_cycle.py'):
+        for name in ('process_threads_metric_jobs.py', 'run_growth_attribution_cycle.py',
+                     'check_autonomous_health.py'):
             (fixture.release / 'scripts' / name).write_text('# offline child placeholder\n')
         fixture.write_config(
             AFTERCARE_METRICS_WRITE_APPROVED='true',
@@ -145,6 +147,77 @@ class AftercareIsolationTests(unittest.TestCase):
             self.assertEqual(len(fixture.children()), 2)
             self.assertTrue(all(row['path'].startswith(str(fixture.release)+'/') for row in fixture.children()))
             self.assertTrue(all(row['locks_held'] == [True,True,True] for row in fixture.children()))
+
+    def test_health_plan_is_offline_and_scoped(self):
+        for account in ('night_scout', 'liver_manager'):
+            result = subprocess.run(['bash', str(HOST), '--account-id', account,
+                '--plan', '--with-health-check'], capture_output=True, text=True,
+                env={'PATH': os.environ['PATH'], 'BUFFERED_RUNTIME_ROOT': '/nonexistent/health-plan'},
+                timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            plan = json.loads(result.stdout)
+            self.assertTrue(plan['health_check'])
+            self.assertEqual(plan['account_id'], account)
+            self.assertFalse(plan['would_connect'])
+            self.assertFalse(plan['would_write'])
+            self.assertFalse(plan['would_post'])
+
+    def test_health_is_readonly_after_other_stages_under_all_locks(self):
+        for account in ('night_scout', 'liver_manager'):
+            for mode in (APPLY, ('--dry-run', '--confirm-readonly')):
+                with self.subTest(account=account, mode=mode), tempfile.TemporaryDirectory() as temporary:
+                    fixture = self.runtime(temporary)
+                    other = fixture.root/'releases'/('b'*40)
+                    other.mkdir()
+                    result = fixture.execute(*mode, '--with-feedback-preview', '--with-health-check',
+                        account=account, TEST_MOVE_CURRENT=str(other))
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    child = fixture.children()[-1]
+                    self.assertEqual(child['script'], 'check_autonomous_health.py')
+                    self.assertEqual(child['args'], ['--account-id', account, '--dry-run',
+                        '--use-sheets', '--strict-runtime'])
+                    self.assertEqual(child['locks_held'], [True, True, True])
+                    self.assertEqual(child['cwd'], str(fixture.release))
+                    self.assertEqual(child['path'], str(fixture.release/'scripts/check_autonomous_health.py'))
+                    self.assertFalse(child['provider_keys_present'])
+                    self.assertTrue(all(value == 'false' for value in child['flags'].values()))
+                    self.assertIn('[OK] aftercare stage=runtime_health', result.stdout)
+                    self.assertNotIn('PRIVATE_UNPUBLISHED', result.stdout + result.stderr)
+
+    def test_health_failure_is_nonzero_without_success_receipt_or_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            fixture = self.runtime(temporary)
+            result = fixture.execute(*APPLY, '--with-health-check',
+                TEST_FAIL_STAGE='check_autonomous_health.py')
+            self.assertEqual(result.returncode, 23, result.stderr)
+            self.assertEqual([row['script'] for row in fixture.children()], [
+                'process_threads_metric_jobs.py', 'process_threads_metric_jobs.py',
+                'check_autonomous_health.py'])
+            self.assertIn('stage=runtime_health exit=23; no automatic retry', result.stderr)
+            self.assertNotIn('[OK] aftercare mode=', result.stdout)
+            self.assertNotIn('PRIVATE_UNPUBLISHED', result.stdout + result.stderr)
+            self.assertEqual(list(fixture.shared.glob('aftercare.*')), [])
+
+    def test_health_script_missing_or_linked_blocks_before_any_child(self):
+        for linked in (False, True):
+            with self.subTest(linked=linked), tempfile.TemporaryDirectory() as temporary:
+                fixture = self.runtime(temporary)
+                script = fixture.release/'scripts/check_autonomous_health.py'
+                script.unlink()
+                if linked:
+                    script.symlink_to(fixture.release/'scripts/process_threads_metric_jobs.py')
+                result = fixture.execute(*APPLY, '--with-health-check')
+                self.assertEqual(result.returncode, 78, result.stderr)
+                self.assertEqual(fixture.children(), [])
+
+    def test_health_rejects_beauty_before_runtime_access(self):
+        for mode in (('--plan',), APPLY, ('--dry-run', '--confirm-readonly')):
+            result = subprocess.run(['bash', str(HOST), '--account-id', 'beauty_account',
+                *mode, '--with-health-check'], capture_output=True, text=True,
+                env={'PATH': os.environ['PATH'], 'BUFFERED_RUNTIME_ROOT': '/nonexistent/health-plan'},
+                timeout=10)
+            self.assertEqual(result.returncode, 64, result.stderr)
+            self.assertNotIn('[OK]', result.stdout)
 
 
 if __name__ == '__main__':
