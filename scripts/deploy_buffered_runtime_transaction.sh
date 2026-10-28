@@ -5,12 +5,21 @@ umask 077
 runtime_root="${BUFFERED_RUNTIME_ROOT:-/opt/github-runners/sns-growth-engine/.buffered-runtime}"
 source_root=""
 revision=""
+expected_current_revision=""
+expected_current_provided=false
 confirmed=false
 schedule=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --source-root) source_root="${2:-}"; shift 2 ;;
     --revision) revision="${2:-}"; shift 2 ;;
+    --expected-current-revision)
+      if [[ "$expected_current_provided" == true || $# -lt 2 ||
+            ! "${2:-}" =~ ^[0-9a-f]{40}$ ]]; then
+        echo '[BLOCKED] expected current revision requires one exact SHA' >&2
+        exit 64
+      fi
+      expected_current_revision="$2"; expected_current_provided=true; shift 2 ;;
     --confirm-deploy) confirmed=true; shift ;;
     --enable-scheduler) schedule=true; shift ;;
     *) echo '[BLOCKED] unsupported deploy transaction argument' >&2; exit 64 ;;
@@ -29,6 +38,24 @@ common_lock=/run/lock/chadult-production-deploy.lock
 }
 exec 9<>"$common_lock"
 flock -x -w 600 9 || { echo '[BLOCKED] global deployment lock is busy' >&2; exit 75; }
+# A caller may bind approval to the current revision it actually inspected.
+# Validate only after taking the global lock: a different deployment may
+# replace current while this transaction is waiting for that lock.
+if [[ "$expected_current_provided" == true ]]; then
+  expected_release="$runtime_root/releases/$expected_current_revision"
+  # Compare bytes directly: shell command substitution would discard NULs
+  # and trailing newlines. Only the SHA with one LF or a bare SHA is valid.
+  if ! [[ -L "$runtime_root/current" && -d "$expected_release" &&
+          ! -L "$expected_release" &&
+          "$(readlink -f "$runtime_root/current")" == "$expected_release" &&
+          -f "$expected_release/.production-release" &&
+          ! -L "$expected_release/.production-release" ]] ||
+     ! { cmp -s "$expected_release/.production-release" <(printf '%s\n' "$expected_current_revision") ||
+         cmp -s "$expected_release/.production-release" <(printf '%s' "$expected_current_revision"); }; then
+    echo '[BLOCKED] expected current release changed or is unverified' >&2
+    exit 78
+  fi
+fi
 "$source_root/scripts/check_chadult_vps_deploy_preflight.sh" --min-free-gib 9
 current="$runtime_root/current"
 [[ -L "$current" ]] || { echo '[BLOCKED] existing current release pointer required' >&2; exit 78; }
