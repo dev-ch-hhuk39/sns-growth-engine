@@ -13,13 +13,14 @@ mode="plan"
 confirmed_readonly="false"
 confirmed_metrics="false"
 feedback_preview="false"
+health_check="false"
 strategy_apply="false"
 ready_bank_reuse="false"
 bank_allocations=2
 trigger="manual"
 
 usage() {
-  echo "usage: $0 --account-id <night_scout|liver_manager|beauty_account> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--with-feedback-preview] [--with-strategy-apply] [--with-ready-bank-reuse] [--max-bank-allocations 0..6] [--trigger manual|xserver_cron]" >&2
+  echo "usage: $0 --account-id <night_scout|liver_manager|beauty_account> [--plan | --dry-run --confirm-readonly | --apply --confirm-metrics] [--with-feedback-preview] [--with-health-check] [--with-strategy-apply] [--with-ready-bank-reuse] [--max-bank-allocations 0..6] [--trigger manual|xserver_cron]" >&2
 }
 
 while [[ $# -gt 0 ]]; do
@@ -39,6 +40,7 @@ while [[ $# -gt 0 ]]; do
     --confirm-readonly) confirmed_readonly=true; shift ;;
     --confirm-metrics) confirmed_metrics=true; shift ;;
     --with-feedback-preview) feedback_preview=true; shift ;;
+    --with-health-check) health_check=true; shift ;;
     --with-strategy-apply) strategy_apply=true; shift ;;
     --with-ready-bank-reuse) ready_bank_reuse=true; shift ;;
     --max-bank-allocations)
@@ -61,6 +63,10 @@ case "$trigger" in
   manual|xserver_cron) ;;
   *) usage; exit 64 ;;
 esac
+if [[ "$health_check" == true && "$account" != night_scout && "$account" != liver_manager ]]; then
+  echo "[BLOCKED] strict runtime health is limited to Night and Liver" >&2
+  exit 64
+fi
 [[ "$bank_allocations" =~ ^[0-6]$ ]] || {
   echo "[BLOCKED] bank reuse limit must be 0..6" >&2
   exit 64
@@ -80,7 +86,7 @@ if [[ "$mode" == "plan" ]]; then
     echo "[BLOCKED] confirmations require an explicit execution mode" >&2
     exit 64
   }
-  printf '{"status":"PLAN_ONLY","account_id":"%s","trigger":"%s","stage":"metrics_24_72_168","feedback_preview":%s,"feedback_stages":["measured_attribution","next_text_ready_coverage"],"would_connect":false,"would_write":false,"would_post":false,"github_actions_used":false}\n' "$account" "$trigger" "$feedback_preview"
+  printf '{"status":"PLAN_ONLY","account_id":"%s","trigger":"%s","stage":"metrics_24_72_168","feedback_preview":%s,"health_check":%s,"feedback_stages":["measured_attribution","next_text_ready_coverage"],"would_connect":false,"would_write":false,"would_post":false,"github_actions_used":false}\n' "$account" "$trigger" "$feedback_preview" "$health_check"
   exit 0
 fi
 
@@ -143,6 +149,7 @@ resolved="$(readlink -f "$release")"
 }
 release="$resolved"
 required_scripts=(process_threads_metric_jobs.py)
+[[ "$health_check" != true ]] || required_scripts+=(check_autonomous_health.py)
 [[ "$strategy_apply" != true && "$feedback_preview" != true ]] || required_scripts+=(run_growth_attribution_cycle.py)
 [[ "$ready_bank_reuse" != true && "$feedback_preview" != true ]] || required_scripts+=(maintain_text_ready_inventory.py)
 for script in "${required_scripts[@]}"; do
@@ -360,5 +367,12 @@ if [[ "$feedback_preview" == true ]]; then
     exit 1
   }
   echo "[OK] read-only attribution + next-text inventory previews complete"
+fi
+if [[ "$health_check" == true ]]; then
+  # Readability and account binding are checked separately from the legacy
+  # advisory health report. A failed read cannot become a successful stage.
+  run_stage runtime_health \
+    "$release/scripts/check_autonomous_health.py" \
+    --account-id "$account" --dry-run --use-sheets --strict-runtime
 fi
 echo "[OK] aftercare mode=$mode account=$account posts=false hosted_workflow_equivalent=false"
