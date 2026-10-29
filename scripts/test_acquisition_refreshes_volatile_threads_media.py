@@ -54,7 +54,7 @@ class Client:
 post_url = "https://www.threads.com/@approved/post/ABC123"
 post_id = "sp_src_threads_ABC123"
 media_id = f"spm_{post_id}_0"
-post_headers = ["source_post_id", "canonical_post_url"]
+post_headers = ["source_post_id", "canonical_post_url", "source_id", "target_account_id"]
 media_headers = [
     "source_post_media_id",
     "source_post_id",
@@ -74,7 +74,8 @@ client = Client(
     {
         "source_posts": Worksheet(
             post_headers,
-            [{"source_post_id": post_id, "canonical_post_url": post_url}],
+            [{"source_post_id": post_id, "canonical_post_url": post_url,
+              "source_id": "src_threads", "target_account_id": "night_scout"}],
         ),
         "source_post_media": Worksheet(
             media_headers,

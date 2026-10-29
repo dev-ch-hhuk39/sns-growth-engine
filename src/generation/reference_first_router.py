@@ -7,6 +7,7 @@ generation, but use the same source-understanding and route-safety contract.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,15 @@ REFERENCE_FIRST_ROUTES = (
     "approved_source_clip",
 )
 CLIP_ROUTE = "approved_source_clip"
+
+
+def _explicit_true(value: Any) -> bool:
+    """Recognize confirmed flags, including numericised Sheets ``1`` cells."""
+    return (
+        value is True
+        or (type(value) is int and value == 1)
+        or (isinstance(value, str) and value.strip().lower() in {"true", "1", "yes"})
+    )
 
 
 def load_operational_mix(account_id: str, *, config: dict[str, Any] | None = None) -> dict[str, int]:
@@ -52,15 +62,15 @@ def clip_eligibility(content_understanding: dict[str, Any] | None) -> tuple[bool
         reasons.append("content_understanding_not_passed")
     if str(item.get("transcript_status", "")).upper() not in {"PASS", "AVAILABLE"}:
         reasons.append("transcript_not_available")
-    if not bool(item.get("standalone_segment_confirmed")):
+    if not _explicit_true(item.get("standalone_segment_confirmed")):
         reasons.append("standalone_segment_not_confirmed")
     try:
         score = float(item.get("standalone_story_score", 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         score = 0
-    if score < 85:
+    if not math.isfinite(score) or score < 85:
         reasons.append("standalone_story_score_below_threshold")
-    if not bool(item.get("clip_worthy")):
+    if not _explicit_true(item.get("clip_worthy")):
         reasons.append("clip_worthiness_not_confirmed")
     return not reasons, reasons
 

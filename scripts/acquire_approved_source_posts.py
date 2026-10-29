@@ -716,6 +716,17 @@ def persist(
     media_ws, media_headers, existing_media = _headers(client, "source_post_media")
     canonical_seen = {str(row.get("canonical_post_url", "")) for row in existing_posts}
     post_seen = {str(row.get("source_post_id", "")) for row in existing_posts}
+    parent_bindings: dict[str, set[tuple[str, str, str]]] = {}
+    canonical_parents: dict[str, set[str]] = {}
+    for row in existing_posts:
+        parent_id = str(row.get("source_post_id") or "")
+        canonical = str(row.get("canonical_post_url") or "")
+        parent_bindings.setdefault(parent_id, set()).add((
+            canonical,
+            str(row.get("source_id") or ""),
+            str(row.get("target_account_id") or ""),
+        ))
+        canonical_parents.setdefault(canonical, set()).add(parent_id)
     media_seen = {str(row.get("source_post_media_id", "")) for row in existing_media}
     media_by_id = {
         str(row.get("source_post_media_id", "")): (row_number, row)
@@ -728,6 +739,16 @@ def persist(
     media_rows: list[dict[str, Any]] = []
     for post in posts:
         if validate_source_post(post):
+            invalid += 1
+            continue
+        binding = (post.canonical_post_url, post.source_id, post.target_account_id)
+        known_bindings = parent_bindings.get(post.source_post_id, set())
+        known_parents = canonical_parents.get(post.canonical_post_url, set())
+        # A duplicate may add/refresh children only for the exact stored
+        # parent and owner. Never skip a conflicting parent and then append
+        # orphaned children, or reparent media across sources/accounts.
+        if ((known_bindings and known_bindings != {binding})
+                or (known_parents and known_parents != {post.source_post_id})):
             invalid += 1
             continue
         duplicate = post.source_post_id in post_seen or post.canonical_post_url in canonical_seen
@@ -744,6 +765,8 @@ def persist(
             saved_posts += 1
             post_seen.add(post.source_post_id)
             canonical_seen.add(post.canonical_post_url)
+            parent_bindings.setdefault(post.source_post_id, set()).add(binding)
+            canonical_parents.setdefault(post.canonical_post_url, set()).add(post.source_post_id)
         for item in post.media_items:
             if item.source_post_media_id in media_seen:
                 if item.source_post_media_id not in media_by_id:

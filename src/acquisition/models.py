@@ -249,13 +249,34 @@ def validate_source_post(post: NormalizedSourcePost) -> list[str]:
         errors.append("canonical_post_url_required")
     if not post.external_post_id:
         errors.append("external_post_id_required")
-    seen: set[str] = set()
+    seen_indices: set[int] = set()
+    seen_media_ids: set[str] = set()
+    previous_index: int | None = None
     for item in post.media_items:
         if item.source_post_id != post.source_post_id:
             errors.append("cross_post_media_link")
-        if item.media_index < 0 or item.media_index in seen:
+        if item.canonical_post_url != post.canonical_post_url:
+            errors.append("cross_post_media_url")
+        media_id = item.source_post_media_id
+        if not isinstance(media_id, str) or not media_id.strip():
+            errors.append("source_post_media_id_required")
+        elif media_id in seen_media_ids:
+            errors.append("duplicate_source_post_media_id")
+        else:
+            seen_media_ids.add(media_id)
+        index = item.media_index
+        # bool is an int subclass; neither it nor a coerced string/float is
+        # source ordering evidence. Preserve original gaps from adapters that
+        # exclude an invalid media URL, without sorting or renumbering items.
+        if type(index) is not int or index < 0:
             errors.append("invalid_or_duplicate_media_index")
-        seen.add(item.media_index)
+        else:
+            if index in seen_indices:
+                errors.append("invalid_or_duplicate_media_index")
+            if previous_index is not None and index <= previous_index:
+                errors.append("media_order_not_strictly_increasing")
+            seen_indices.add(index)
+            previous_index = index
         if item.media_type not in {"image", "video"}:
             errors.append("unsupported_media_type")
         if not item.original_media_url.startswith("https://"):
