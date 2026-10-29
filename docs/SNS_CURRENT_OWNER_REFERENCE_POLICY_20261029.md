@@ -40,9 +40,13 @@ assert that cooldown expiry cannot reopen a deferred platform. The generic
 Hybrid-blocked candidate fixture now uses an eligible YouTube source so it
 continues testing candidate failover. Focused owner-policy21 and direct-media48
 regressions pass. Full Mac validation passes 1,102/1,102 repository scripts,
-619/619 workflow safety checks, fatal Ruff, compile, diff and secret scans.
+619/619 workflow safety checks, 173/173 isolated pytest cases, fatal Ruff,
+compile, diff and secret scans.
 Existing eight external and three optional exclusions remain unchanged.
 Inventory-aware clip rotation is verified with eligible YouTube sources.
+Pytest retains legacy HTTP/author/CDN behavior and additionally verifies both
+current accounts refuse deferred platforms before cache/network access even
+with valid permission; revoked permission still denies independently.
 Validation is recorded in the handoff.
 
 No production acquisition, generation, upload, write, timer change or publication
