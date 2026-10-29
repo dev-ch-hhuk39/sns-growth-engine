@@ -53,3 +53,27 @@ No production acquisition, generation, upload, write, timer change or publicatio
 was invoked by this source batch. The policy has not yet been deployed. Actual
 rights, X/YouTube Golden evidence, human review/READY reserves and production
 acceptance remain independent requirements.
+
+## Delivery and VPS rollout state — 2026-10-30
+
+PR #489 passed all four protected checks and was normally merged as
+`b6991d89e743660bfcee1aabe831d6382deefd76`, with the same tree as tested head
+`190bfff531dcb518108ee5d031152d28ef2b9949`. Validation includes the full
+1,102-script regression, isolated pytest 173/173, workflow safety 619/619,
+compile, fatal Ruff, diff and working/history secret scans. Existing exclusions
+remain unchanged.
+
+The new policy has not been rolled out to the VPS. Its existing administrator
+resource preflight refused the stage; the read-only retention audit found no
+eligible old releases. The previously verified runtime remains current with
+posting disabled. Recovery releases, minimum ages, resource thresholds, caches
+and other services were preserved. No deployment or cleanup attempt was made
+for this new source batch, and no media operation, timer change, production
+mutation or publication was invoked.
+
+The natural complete encrypted backup and independent health check succeeded;
+they do not override the resource refusal. Capacity must be resolved before an
+exact-revision deployment with fresh prerequisites. Code delivery does not
+establish rights, real Golden, human review/READY reserves, remaining schedule
+integration, publishing or observation acceptance. Formal goal status was not
+edited.
