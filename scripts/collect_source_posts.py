@@ -27,6 +27,7 @@ SOURCES_FILE = ROOT / "config/source_accounts/default_sources.json"
 PUBLIC_TIMEOUT_SECONDS = 15
 
 from media.rights_policy import THIRD_PARTY_REFERENCE_ONLY  # noqa: E402
+from generation.media_platform_policy import order_reference_sources  # noqa: E402
 
 
 def now_iso() -> str:
@@ -252,7 +253,7 @@ def select_sources(sources: list[dict[str, Any]], *, account_id: str, platform: 
             skipped.append({"source_id": src.get("source_id", ""), "url": src.get("url") or src.get("source_url", ""), "reason": reason})
         else:
             selected.append(src)
-    return selected, skipped
+    return order_reference_sources(selected, account_id=account_id), skipped
 
 
 def normalize_source(src: dict[str, Any], fetched: dict[str, Any] | None = None) -> dict[str, Any]:

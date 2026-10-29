@@ -160,7 +160,13 @@ try:
         permissions=[permission()],
     )
 
-    assert selected == "media-threads", selected
+    assert selected == "", selected  # Current owner platform deferral takes precedence.
+    legacy_client = FakeClient(
+        [{**post, "target_account_id": "beauty_account"}], [base_media],
+    )
+    assert reliable.select_pending_media_id(
+        legacy_client, "beauty_account", permissions=[permission()],
+    ) == "media-threads"
 
     current_failure = FakeClient(
         [post],

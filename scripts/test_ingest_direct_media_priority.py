@@ -205,7 +205,15 @@ try:
         permissions=permissions,
     )
 
-    assert selected == "media-tiktok"
+    assert selected == ""  # Neither deferred platform can replace unavailable YouTube.
+    pending_youtube = [
+        {**row, "download_status": "PENDING"}
+        if row["source_post_media_id"] == "media-youtube" else row
+        for row in without_threads.tabs["source_post_media"].rows
+    ]
+    assert module.select_pending_media_id(
+        FakeClient(posts, pending_youtube), "night_scout", permissions=permissions,
+    ) == "media-youtube"
 
     recoverable_threads = FakeClient(
         posts,
@@ -237,7 +245,12 @@ try:
         permissions=permissions,
     )
 
-    assert selected == "media-threads"
+    assert selected == ""  # Recoverable legacy state does not override owner deferral.
+    legacy_posts = [{**post, "target_account_id": "beauty_account"} for post in posts]
+    assert module.select_pending_media_id(
+        FakeClient(legacy_posts, recoverable_threads.tabs["source_post_media"].rows),
+        "beauty_account", permissions=permissions,
+    ) == "media-threads"
 
 finally:
     module.core.safe_https_url = (

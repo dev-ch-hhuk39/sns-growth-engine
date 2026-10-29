@@ -12,7 +12,7 @@ import run_direct_reference_media_pipeline as pipeline  # noqa: E402
 
 
 def source(source_id: str) -> dict[str, str]:
-    return {"source_id": source_id, "platform": "tiktok", "priority": "1"}
+    return {"source_id": source_id, "platform": "youtube", "priority": "1"}
 
 
 def permission(source_id: str) -> dict[str, str]:
@@ -38,8 +38,8 @@ def post(post_id: str, source_id: str) -> dict[str, str]:
         "source_post_id": post_id,
         "source_id": source_id,
         "target_account_id": "liver_manager",
-        "platform": "tiktok",
-        "canonical_post_url": f"https://www.tiktok.com/@owner/video/{post_id}",
+        "platform": "youtube",
+        "canonical_post_url": f"https://www.youtube.com/watch?v={post_id}",
         "original_post_text": "配信で初見コメントを増やすには、質問と挨拶を置く。",
         "published_at": "2026-08-25T00:00:00+00:00",
     }

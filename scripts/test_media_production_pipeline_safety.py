@@ -46,11 +46,17 @@ clips = [
     {"clip_candidate_id": "clip_yt_1", "source_video_id": "sv_yt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "transcript_excerpt": good_text, "start_seconds": "1", "end_seconds": "30", "clip_score": 90, "transcript_grounded": "true", "alignment_status": "PASS"},
     {"clip_candidate_id": "clip_yt_2", "source_video_id": "sv_yt", "clip_status": "AUTO_APPROVED", "public_post_text": good_text, "transcript_excerpt": good_text, "start_seconds": "1", "end_seconds": "30", "clip_score": 89, "transcript_grounded": "true", "alignment_status": "PASS"},
 ]
-selected, selected_video, _ = select_candidate(clips, source_videos, [])
+selected, selected_video, source_reasons = select_candidate(clips, source_videos, [])
 checks.extend([
-    selected["clip_candidate_id"] == "clip_tt",
-    selected_video["source_video_id"] == "sv_tt",
+    selected["clip_candidate_id"] == "clip_yt_1",
+    selected_video["source_video_id"] == "sv_yt",
+    any("clip_tt:physical_media_platform_deferred:tiktok" == reason for reason in source_reasons),
     is_real_discovered_video({"discovery_status": "PLANNED_ONLY", "platform": "youtube", "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk"}) is False,
+])
+deferred_only, _, deferred_reasons = select_candidate(clips[:1], source_videos[:1], [])
+checks.extend([
+    deferred_only is None,
+    "clip_tt:physical_media_platform_deferred:tiktok" in deferred_reasons,
 ])
 next_selected, _, _ = select_candidate(clips, source_videos, [{"account_id": "liver_manager", "status": "POSTED",
                                                                 "clip_candidate_id": "clip_tt"}])

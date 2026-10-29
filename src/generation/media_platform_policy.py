@@ -4,10 +4,13 @@ from __future__ import annotations
 from urllib.parse import urlparse
 from typing import Any
 
-REFERENCE_PLATFORMS = ("threads", "tiktok", "x", "youtube")
+REFERENCE_PLATFORMS = ("tiktok", "threads", "x", "youtube")
 DEFERRED_REFERENCE_PLATFORMS: tuple[str, ...] = ()
 KNOWN_REFERENCE_PLATFORMS = REFERENCE_PLATFORMS + DEFERRED_REFERENCE_PLATFORMS
-REFERENCE_PLATFORM_PRIORITY = {"threads": 0, "tiktok": 1, "x": 2, "youtube": 3}
+REFERENCE_PLATFORM_PRIORITY = {platform: rank for rank, platform in enumerate(REFERENCE_PLATFORMS)}
+OWNER_REFERENCE_ACCOUNTS = ("night_scout", "liver_manager")
+PHYSICAL_MEDIA_PLATFORMS_BY_ACCOUNT = {account: ("x", "youtube") for account in OWNER_REFERENCE_ACCOUNTS}
+DEFERRED_PHYSICAL_MEDIA_PLATFORMS_BY_ACCOUNT = {account: ("tiktok", "threads") for account in OWNER_REFERENCE_ACCOUNTS}
 DEFERRED_REFERENCE_STATUS = "DEFERRED_OSS_CANDIDATE"
 DEFERRED_REFERENCE_REASON = (
     "NO_APPROVED_BACKEND_ONLY_GITHUB_OSS_ROUTE_CURRENTLY_PROVEN"
@@ -48,12 +51,48 @@ def normalize_platform(value: Any = "", url: str = "") -> str:
     return ""
 
 
-def can_attempt_physical_media(platform: Any = "", url: str = "") -> bool:
-    return normalize_platform(platform, url) in PHYSICAL_MEDIA_PLATFORMS
+def can_attempt_physical_media(platform: Any = "", url: str = "", *, account_id: str = "") -> bool:
+    # Retain the legacy capability API; active account entrypoints must supply
+    # their verified account so permission alone cannot activate deferred media.
+    allowed = PHYSICAL_MEDIA_PLATFORMS_BY_ACCOUNT.get(account_id, PHYSICAL_MEDIA_PLATFORMS)
+    normalized = normalize_platform(platform, url)
+    inferred = normalize_platform("", url)
+    if account_id in OWNER_REFERENCE_ACCOUNTS and inferred and inferred != normalized:
+        return False
+    return normalized in allowed
 
 
-def physical_media_provider(platform: Any = "", url: str = "") -> str:
+def physical_media_provider(platform: Any = "", url: str = "", *, account_id: str = "") -> str:
+    if not can_attempt_physical_media(platform, url, account_id=account_id):
+        return ""
     return PHYSICAL_MEDIA_PROVIDER.get(normalize_platform(platform, url), "")
+
+
+def order_reference_sources(sources: list[dict[str, Any]], *, account_id: str) -> list[dict[str, Any]]:
+    """Apply owner discovery order before bounds, retaining other account slots."""
+    def priority(source: dict[str, Any]) -> int:
+        platform = normalize_platform(
+            source.get("source_platform") or source.get("platform"),
+            _text(source.get("source_url") or source.get("url") or source.get("canonical_url")),
+        )
+        return REFERENCE_PLATFORM_PRIORITY.get(platform, len(REFERENCE_PLATFORMS))
+
+    if account_id in OWNER_REFERENCE_ACCOUNTS:
+        return sorted(sources, key=priority)
+    ordered = list(sources)
+    if account_id == "all":
+        for owner in OWNER_REFERENCE_ACCOUNTS:
+            positions = []
+            for index, source in enumerate(sources):
+                targets = source.get("target_account_ids")
+                target = targets[0] if isinstance(targets, list) and targets else (
+                    source.get("target_account_id") or source.get("account_id")
+                )
+                if target == owner:
+                    positions.append(index)
+            for index, source in zip(positions, sorted((sources[i] for i in positions), key=priority)):
+                ordered[index] = source
+    return ordered
 
 
 def reference_priority_score(platform: Any = "", url: str = "") -> float:

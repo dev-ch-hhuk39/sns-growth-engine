@@ -31,6 +31,7 @@ SENSITIVE_PARTS = (
     "API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "OPENAI_API_KEY",
 )
 FOCUSED = (
+    "test_owner_reference_policy.py",
     "test_collect_source_posts_threads_router.py",
     "test_normalized_source_post_invariants.py",
     "test_reference_first_content_router.py",

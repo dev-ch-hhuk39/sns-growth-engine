@@ -22,7 +22,7 @@ from acquisition.models import canonical_url  # noqa: E402
 from acquisition.threads_cli import ThreadsCliPublicAdapter, ThreadsLoggedOutGraphQLAdapter  # noqa: E402
 from acquisition.threads_official import canonical_threads_post_url, threads_handle  # noqa: E402
 from acquisition.threads_public import ThreadsPublicScreenAdapter  # noqa: E402
-from generation.media_platform_policy import can_attempt_physical_media, normalize_platform  # noqa: E402
+from generation.media_platform_policy import OWNER_REFERENCE_ACCOUNTS, can_attempt_physical_media, normalize_platform  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from media.permission_ledger import evaluate_permission  # noqa: E402
 from media.direct_content_understanding import analyze_local_media  # noqa: E402
@@ -383,10 +383,15 @@ def download_source_media(
     post: dict[str, Any] | None = None,
     media: dict[str, Any] | None = None,
     resolution: dict[str, str] | None = None,
+    account_id: str = "",
 ) -> str:
     """Acquire one proven physical-media object without changing geometry."""
     resolved_platform = normalize_platform(platform, canonical_post_url or media_url)
-    if not can_attempt_physical_media(resolved_platform, canonical_post_url or media_url):
+    post_owner = str((post or {}).get("target_account_id") or (post or {}).get("account_id") or "")
+    if account_id and post_owner and account_id != post_owner:
+        raise PermissionError("physical_media_account_mismatch")
+    owner = post_owner or account_id
+    if not can_attempt_physical_media(resolved_platform, canonical_post_url or media_url, account_id=owner):
         raise RuntimeError(f"physical_media_platform_deferred:{resolved_platform or 'unknown'}")
     if resolved_platform == "tiktok":
         if "/video/" not in canonical_post_url:
@@ -902,7 +907,7 @@ def select_pending_media_id(
             continue
         url = str(media.get("original_media_url") or media.get("canonical_post_url") or "")
         platform = str(post.get("platform", "")).lower()
-        if not can_attempt_physical_media(platform, url):
+        if not can_attempt_physical_media(platform, str(media.get("canonical_post_url") or post.get("canonical_post_url") or url), account_id=account_id):
             continue
         if platform == "youtube" and not ("/watch" in url or "/shorts/" in url):
             continue
@@ -958,6 +963,12 @@ def source_post_media_bundle(client: SheetsClient, source_post_id: str) -> list[
 
 def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]) -> dict[str, Any]:
     source_post_media_id = str(media.get("source_post_media_id", ""))
+    owner = str(post.get("target_account_id") or post.get("account_id") or "")
+    canonical_url = str(media.get("canonical_post_url") or post.get("canonical_post_url") or media.get("original_media_url") or "")
+    platform = normalize_platform(post.get("platform") or post.get("source_platform"), canonical_url)
+    if owner in OWNER_REFERENCE_ACCOUNTS and not can_attempt_physical_media(platform, canonical_url, account_id=owner):
+        return {"status": "BLOCKED", "source_post_media_id": source_post_media_id,
+                "reason": f"physical_media_platform_deferred:{platform or 'unknown'}"}
     existing_understanding = record(client, "source_media_understanding", "source_post_media_id", source_post_media_id)
     already_uploaded = str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and bool(str(media.get("storage_url", "")))
     refresh_understanding = media_understanding_needs_refresh(
@@ -1162,6 +1173,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
                 post=post,
                 media=media,
                 resolution=resolution,
+                account_id=owner,
             )
         if resolution:
             update_media_row(

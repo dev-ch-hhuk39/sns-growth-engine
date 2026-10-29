@@ -447,7 +447,8 @@ def select_pending_media_id(
 
         if not core.can_attempt_physical_media(
             platform,
-            str(media.get("original_media_url") or media.get("canonical_post_url") or ""),
+            str(media.get("canonical_post_url") or post.get("canonical_post_url") or media.get("original_media_url") or ""),
+            account_id=account_id,
         ):
             continue
 

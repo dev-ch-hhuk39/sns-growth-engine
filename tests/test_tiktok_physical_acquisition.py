@@ -11,9 +11,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from generation import video_source_acquirer as acquirer  # noqa: E402
 
 
-def _permission():
+def _permission(account="beauty_account"):
     return {
-        "source_id": "src_lm_tt_user_001",
+        "source_id": "legacy_tiktok_fixture",
         "source_handle": "@allowed",
         "permission_status": "approved",
         "rights_status": "approved_creator_clip",
@@ -22,7 +22,7 @@ def _permission():
         "evidence_reference": "owner decision",
         "approved_by": "owner",
         "approved_at": "2026-08-11T00:00:00+00:00",
-        "allowed_accounts": "liver_manager",
+        "allowed_accounts": account,
         "allow_download": "true",
         "allow_cut": "true",
     }
@@ -30,7 +30,7 @@ def _permission():
 
 def _candidate(handle="allowed"):
     return {
-        "source_id": "src_lm_tt_user_001",
+        "source_id": "legacy_tiktok_fixture",
         "platform": "tiktok",
         "rights_status": "approved_creator_clip",
         "permission_status": "approved",
@@ -65,9 +65,9 @@ def test_tiktok_direct_physical_download_requires_permission_and_same_author(tmp
     monkeypatch.setattr(acquirer, "_has_video_stream", lambda path: path.read_bytes() == b"video-data")
     path = acquirer.acquire_authorized_public_source(
         _candidate(),
-        {"source_id": "src_lm_tt_user_001", "platform": "tiktok", "source_url": "https://www.tiktok.com/@allowed"},
+        {"source_id": "legacy_tiktok_fixture", "platform": "tiktok", "source_url": "https://www.tiktok.com/@allowed"},
         cache_root=tmp_path,
-        account_id="liver_manager",
+        account_id="beauty_account",
         source_video_id="sv_tiktok_1",
         permission_rows=[_permission()],
         registered_source={"source_handle": "@allowed", "source_url": "https://www.tiktok.com/@allowed"},
@@ -82,9 +82,9 @@ def test_tiktok_direct_physical_download_blocks_cross_author(tmp_path):
     with pytest.raises(PermissionError, match="author_does_not_match"):
         acquirer.acquire_authorized_public_source(
             candidate,
-            {"source_id": "src_lm_tt_user_001", "platform": "tiktok", "source_url": "https://www.tiktok.com/@allowed"},
+            {"source_id": "legacy_tiktok_fixture", "platform": "tiktok", "source_url": "https://www.tiktok.com/@allowed"},
             cache_root=tmp_path,
-            account_id="liver_manager",
+            account_id="beauty_account",
             source_video_id="sv_tiktok_2",
             permission_rows=[_permission()],
             registered_source={"source_handle": "@allowed", "source_url": "https://www.tiktok.com/@allowed"},
@@ -95,3 +95,30 @@ def test_tiktok_direct_media_rejects_non_tiktok_cdn():
     candidate = _candidate()
     candidate["original_media_url"] = "https://untrusted.example/video.mp4"
     assert acquirer._tiktok_direct_media_url(candidate, {}) == ""
+
+
+@pytest.mark.parametrize("account", ["night_scout", "liver_manager"])
+def test_current_owner_defers_tiktok_before_cache_and_network(tmp_path, monkeypatch, account):
+    # Keep real permission evaluation separate from temporary route availability.
+    candidate = _candidate()
+    permission = _permission(account)
+    assert acquirer.is_download_authorized(candidate, [permission], account_id=account)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("deferred owner route cannot access cache or network")
+
+    monkeypatch.setattr(acquirer, "find_cached_source", forbidden)
+    monkeypatch.setattr(acquirer, "urlopen", forbidden)
+    with pytest.raises(RuntimeError, match="physical_media_platform_deferred:tiktok"):
+        acquirer.acquire_authorized_public_source(
+            candidate, {"platform": "tiktok"}, cache_root=tmp_path,
+            account_id=account, source_video_id="current-owner-deferred",
+            permission_rows=[permission],
+        )
+    with pytest.raises(PermissionError, match="not explicitly authorized"):
+        acquirer.acquire_authorized_public_source(
+            candidate, {"platform": "tiktok"}, cache_root=tmp_path,
+            account_id=account, source_video_id="current-owner-revoked",
+            permission_rows=[{**permission, "revoked": True}],
+        )
+    assert list(tmp_path.iterdir()) == []

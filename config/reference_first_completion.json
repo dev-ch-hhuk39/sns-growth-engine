@@ -21,8 +21,8 @@
     "tiktok"
   ],
   "reference_priority": [
-    "threads",
     "tiktok",
+    "threads",
     "x",
     "youtube"
   ],
@@ -221,6 +221,26 @@
       "src/media/permission_ledger.py",
       "src/acquisition/x_gallerydl.py",
       "src/generation/video_source_acquirer.py"
+    ]
+  },
+  "active_owner_scope": {
+    "managed_accounts": [
+      "night_scout",
+      "liver_manager"
+    ],
+    "reference_priority": [
+      "tiktok",
+      "threads",
+      "x",
+      "youtube"
+    ],
+    "physical_media_providers": {
+      "x": "yt_dlp",
+      "youtube": "yt_dlp"
+    },
+    "deferred_physical_media_platforms": [
+      "tiktok",
+      "threads"
     ]
   }
 }
