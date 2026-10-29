@@ -156,6 +156,7 @@ def fetch_threads_account_posts(src: dict[str, Any], *, limit: int) -> dict[str,
                 "post_url": post.canonical_post_url,
                 "external_post_id": post.external_post_id,
                 "text": post.original_post_text,
+                "author_handle": post.author_handle,
                 "published_at": post.published_at,
                 "media_urls": [item.original_media_url for item in post.media_items],
                 "media_order": [item.media_index for item in post.media_items],
@@ -268,7 +269,9 @@ def normalize_source(src: dict[str, Any], fetched: dict[str, Any] | None = None)
         "source_id": src.get("source_id", ""),
         "account_id": ",".join(src.get("target_account_ids") or [src.get("target_account_id", "")]),
         "source_platform": src.get("source_platform", ""),
-        "source_handle": fetched.get("author_handle") or src.get("handle", ""),
+        # An explicitly empty provider identity is missing evidence, not
+        # permission to substitute the registered profile's author.
+        "source_handle": fetched.get("author_handle", src.get("handle", "")),
         "post_text": fetched.get("text", ""),
         "media_urls": json.dumps(media_urls, ensure_ascii=False),
         "likes": "",

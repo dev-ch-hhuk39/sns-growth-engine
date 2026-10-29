@@ -1630,14 +1630,16 @@ def select_candidate(
                 # Legacy READY rows were approved before the explicit
                 # standalone fields existed. Preserve that reviewed evidence,
                 # but never promote a new WAITING_REVIEW row from the generic
-                # soft ranking score alone.
+                # soft ranking score alone. Explicit zero/false scores are
+                # evidence, so only missing values can use the legacy score.
                 "standalone_story_score": (
                     clip.get("standalone_story_score")
-                    or (
+                    if clip.get("standalone_story_score") not in (None, "")
+                    else (
                         (
                             clip.get("confidence_score")
-                            or clip.get("clip_score")
-                            or 0
+                            if clip.get("confidence_score") not in (None, "")
+                            else clip.get("clip_score", 0)
                         )
                         if status in ready_statuses
                         else 0
