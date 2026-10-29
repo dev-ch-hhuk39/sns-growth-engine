@@ -50,3 +50,23 @@ passes 1,101/1,101 repository scripts, 619/619 workflow safety checks, fatal Ruf
 compile, diff and secret scans. Existing eight external and three optional
 exclusions remain unchanged. Validation is recorded in the handoff. These tests are not production Golden evidence or
 media-reuse authorization.
+
+## Verified runtime rollout
+
+PR #486 passed all four protected checks before normal merge as
+`1d4b2070cf0f61812bdf75a15ec8d44f54799723`. Its tree exactly equals tested
+source `a26a6f11c6a910ab512db8c49802230e9f1b585d`. Actual observation confirms
+that revision is now current, with the previous release retained, no pending
+candidate and no rollback. Both real read-only Sheets health checks succeeded;
+Python 3.11.17, setuptools 84.1.0 and installed `pip check` are verified. Posting
+remains disabled, existing token-file/marker metadata is preserved and free
+space exceeds the unchanged resource floors. A fresh complete encrypted backup
+and separate health check succeeded before deployment.
+
+No account generation, Beauty operation, scheduler activation, manual Sheets
+mutation, token refresh, media acquisition/upload or publication was invoked by
+this rollout. The shared runtime is common to its readers. This evidence does
+not replace source-specific rights, either account's real reference/media
+Golden, human review/READY reserves, remaining schedule integration, separately
+approved publishing canaries or timed observations. Formal acceptance was not
+edited.
