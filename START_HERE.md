@@ -1,3 +1,9 @@
+## 2026-10-29 — verified Night/Liver strict runtime reads
+
+- Ran the installed strict health CLI once for each of Night and Liver against immutable runtime `1d4b2070cf0f61812bdf75a15ec8d44f54799723`, with the deployment, shared Sheets and selected-account locks held. Both actual invocations returned `READ_OK` / `strict_runtime_reads_verified` and exit0.
+- All four existing core tables passed real provider reads, required-column checks and scoped account/identity consistency checks. Output was restricted to fixed reasons and counts; unpublished rows and authentication material were not returned. Each invocation had bounded time and memory.
+- No Sheets mutation, SNS publication, Threads token update, generation, media operation or timer change was invoked. This directly verifies the installed strict CLI, not the complete aftercare wrapper, metrics writes, feedback/PDCA, inventory readiness or hosted-workflow equivalence. Rights, real reference/media Golden, human review/READY reserves, schedule integration and publishing acceptance remain separate. Formal goal status is unchanged. See `docs/SNS_AFTERCARE_STRICT_RUNTIME_HEALTH_20261029.md`.
+
 ## 2026-10-29 — verified Reference-first integrity runtime rollout
 
 - PR #486 passed all four protected checks and was normally merged as `1d4b2070cf0f61812bdf75a15ec8d44f54799723`. Its tree exactly matches locally tested source `a26a6f11c6a910ab512db8c49802230e9f1b585d`. The source is now running in the shared immutable runtime; the previous `121a169a9465b8ad4591c8e7bbe8858531ce0396` release is retained.
