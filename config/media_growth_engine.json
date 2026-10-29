@@ -173,5 +173,25 @@
     "youtube": "yt_dlp",
     "tiktok": "public_embed_direct_http"
   },
-  "physical_media_policy": "registered_source_provenance_and_permission_only"
+  "physical_media_policy": "registered_source_provenance_and_permission_only",
+  "physical_media_source_platforms_by_account": {
+    "night_scout": [
+      "x",
+      "youtube"
+    ],
+    "liver_manager": [
+      "x",
+      "youtube"
+    ]
+  },
+  "deferred_physical_media_source_platforms_by_account": {
+    "night_scout": [
+      "tiktok",
+      "threads"
+    ],
+    "liver_manager": [
+      "tiktok",
+      "threads"
+    ]
+  }
 }

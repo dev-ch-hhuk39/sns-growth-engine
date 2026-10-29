@@ -23,6 +23,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from config_loader import get_config  # noqa: E402
 from generation.reference_first_router import choose_reference_first_route  # noqa: E402
+from generation.media_platform_policy import OWNER_REFERENCE_ACCOUNTS, can_attempt_physical_media, normalize_platform  # noqa: E402
 from generation.content_quality_v2 import (  # noqa: E402
     generate_media_first_caption,
     build_post_package as build_v2_post_package,
@@ -1543,6 +1544,10 @@ def select_candidate(
         if rights not in APPROVED_RIGHTS or permission != "approved":
             reasons.append(f"{clip_id}:rights_or_permission_blocked")
             continue
+        physical_platform = normalize_platform(source_video.get("platform") or source_video.get("source_platform"), url)
+        if account_id in OWNER_REFERENCE_ACCOUNTS and not can_attempt_physical_media(physical_platform, url, account_id=account_id):
+            reasons.append(f"{clip_id}:physical_media_platform_deferred:{physical_platform or 'unknown'}")
+            continue
         ready_statuses = {
             "READY",
             "AUTO_APPROVED",
@@ -1783,6 +1788,12 @@ def select_saved_media_candidate(
             or "pillow+ffmpeg" in synthetic_identity
         ):
             reasons.append(f"{media_id}:synthetic_media_forbidden")
+            continue
+
+        canonical_url = str(source_video.get("canonical_video_url") or source_video.get("canonical_post_url") or "")
+        physical_platform = normalize_platform(source_video.get("platform") or source_video.get("source_platform"), canonical_url)
+        if account_id in OWNER_REFERENCE_ACCOUNTS and not can_attempt_physical_media(physical_platform, canonical_url, account_id=account_id):
+            reasons.append(f"{media_id}:physical_media_platform_deferred:{physical_platform or 'unknown'}")
             continue
 
         candidate_warnings: list[str] = []

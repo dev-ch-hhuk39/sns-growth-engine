@@ -21,6 +21,7 @@ from acquisition.models import (  # noqa: E402
 from acquisition.x_exact_status import validate_exact_status_provenance  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from generation.reference_first_router import choose_reference_first_route  # noqa: E402
+from generation.media_platform_policy import OWNER_REFERENCE_ACCOUNTS, can_attempt_physical_media, normalize_platform  # noqa: E402
 from generation.video_clip_materializer import probe_media_streams  # noqa: E402
 from media.permission_ledger import evaluate_permission  # noqa: E402
 from process_threads_queue import ELIGIBLE_STATUSES  # noqa: E402
@@ -75,6 +76,15 @@ def verify_item(
     account_id = str(item["account_id"])
     source_id = str(item["source_id"])
     url = str(item["url"])
+    platform = normalize_platform(item.get("platform", ""), url)
+    if account_id in OWNER_REFERENCE_ACCOUNTS and not can_attempt_physical_media(platform, url, account_id=account_id):
+        return {
+            "source_id": source_id, "account_id": account_id, "platform": platform,
+            "canonical_url": url, "actual_video_bytes": 0,
+            "effective_permission": "NOT_CHECKED", "source_validation": "NOT_CHECKED",
+            "queue_status": "BLOCKED", "publisher_eligible": False, "preserve_source": True,
+            "reason": f"physical_media_platform_deferred:{platform or 'unknown'}",
+        }
     source_text = str(metadata.get("description") or item.get("source_text") or "")
     permission = evaluate_permission(
         permissions,

@@ -719,7 +719,13 @@ def select_direct_candidates(
             or source.get("source_platform") or source.get("platform"),
             str(post.get("canonical_post_url") or post.get("post_url") or source.get("source_url") or ""),
         )
-        if not can_attempt_physical_media(source_platform):
+        canonical_url = str(post.get("canonical_post_url") or post.get("post_url") or source.get("source_url") or "")
+        registered_platform = normalize_platform(
+            source.get("source_platform") or source.get("platform"),
+            str(source.get("canonical_url") or source.get("source_url") or ""),
+        )
+        if (not can_attempt_physical_media(source_platform, canonical_url, account_id=account_id)
+                or (registered_platform and not can_attempt_physical_media(registered_platform, account_id=account_id))):
             reasons.append(f"{post_id}:physical_media_platform_deferred:{source_platform or 'unknown'}")
             continue
         permission = permissions.get(str(post.get("source_id", "")), {})

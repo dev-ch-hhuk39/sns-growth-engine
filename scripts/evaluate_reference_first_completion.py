@@ -120,7 +120,7 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
             issues.append(f"active_shadow_not_allowed:{capability}")
     if "playwright_processes" in routing.get("limits", {}):
         issues.append("stale_playwright_process_limit")
-    if list(contract["reference_priority"]) != ["threads", "tiktok", "x", "youtube"]:
+    if list(contract["reference_priority"]) != ["tiktok", "threads", "x", "youtube"]:
         issues.append("completion_contract_reference_priority_mismatch")
     if contract.get("deferred_reference_acquisition"):
         issues.append("unexpected_deferred_reference_platform")
@@ -143,6 +143,27 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
         issues.append("deferred_physical_platform_mismatch")
     if media.get("aspect_ratio_policy") != contract["aspect_ratio_policy"]:
         issues.append("aspect_ratio_policy_mismatch")
+    from generation.media_platform_policy import (
+        OWNER_REFERENCE_ACCOUNTS, REFERENCE_PLATFORMS,
+        PHYSICAL_MEDIA_PLATFORMS_BY_ACCOUNT,
+        DEFERRED_PHYSICAL_MEDIA_PLATFORMS_BY_ACCOUNT,
+    )
+    owner_scope = contract.get("active_owner_scope", {})
+    if owner_scope != {
+        "managed_accounts": list(OWNER_REFERENCE_ACCOUNTS),
+        "reference_priority": list(REFERENCE_PLATFORMS),
+        "physical_media_providers": {"x": "yt_dlp", "youtube": "yt_dlp"},
+        "deferred_physical_media_platforms": ["tiktok", "threads"],
+    }:
+        issues.append("active_owner_scope_mismatch")
+    if media.get("physical_media_source_platforms_by_account") != {
+        account: list(platforms) for account, platforms in PHYSICAL_MEDIA_PLATFORMS_BY_ACCOUNT.items()
+    }:
+        issues.append("active_owner_physical_platform_mismatch")
+    if media.get("deferred_physical_media_source_platforms_by_account") != {
+        account: list(platforms) for account, platforms in DEFERRED_PHYSICAL_MEDIA_PLATFORMS_BY_ACCOUNT.items()
+    }:
+        issues.append("active_owner_deferred_platform_mismatch")
     workflows = _workflow_inventory(contract)
     entrypoints = _entrypoint_inventory(contract)
     if not workflows["ok"]:
@@ -152,6 +173,7 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
     return _state(
         not issues,
         reasons=issues,
+        active_owner_scope=owner_scope,
         workflow_inventory=workflows,
         entrypoint_inventory=entrypoints,
     )

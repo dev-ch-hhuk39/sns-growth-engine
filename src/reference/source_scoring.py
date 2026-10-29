@@ -93,7 +93,7 @@ def active_recently_score(src: dict[str, Any]) -> float:
 
 
 def platform_priority_score(src: dict[str, Any]) -> float:
-    """Active platform優先度。TikTok > X > YouTube。Deferredは0。"""
+    """Canonical discovery preference: TikTok, Threads, X, YouTube."""
     platform = str(src.get("source_platform") or src.get("platform") or "")
     canonical = reference_priority_score(
         platform,

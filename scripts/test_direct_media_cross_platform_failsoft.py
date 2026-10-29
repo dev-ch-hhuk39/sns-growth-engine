@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Provider-blocked YouTube cannot starve a pending Threads Direct candidate."""
+"""Owner deferral outranks cooldown recovery; legacy recovery remains available."""
 
 from __future__ import annotations
 
@@ -122,7 +122,12 @@ try:
         permissions=permissions,
     )
 
-    assert selected == "media-threads", selected
+    # A healthy legacy Threads asset does not activate a deferred owner route.
+    assert selected == "", selected
+    legacy_posts = [{**post, "target_account_id": "beauty_account"} for post in posts]
+    assert module.select_pending_media_id(
+        FakeClient(legacy_posts, media), "beauty_account", permissions=permissions,
+    ) == "media-threads"
 
     assert module.external_unavailable_cooldown_active(
         media[0],
@@ -205,11 +210,13 @@ try:
         permissions=permissions,
     )
 
-    # Threads has higher physical-candidate priority than YouTube, so after
-    # the cooldown expires it must return to the bounded candidate pool.
-    assert selected_after_cooldown == "media-threads", (
-        selected_after_cooldown
-    )
+    # Cooldown expiry cannot reopen a temporarily deferred owner platform.
+    assert selected_after_cooldown == "media-youtube", selected_after_cooldown
+    # Preserve the same cooldown recovery contract for the legacy path.
+    assert module.select_pending_media_id(
+        FakeClient(legacy_posts, [pending_youtube, expired_threads]),
+        "beauty_account", permissions=permissions,
+    ) == "media-threads"
 
 finally:
     module.core.safe_https_url = original_safe_url

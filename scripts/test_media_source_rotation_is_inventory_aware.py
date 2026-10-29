@@ -23,17 +23,17 @@ ordered = order_sources_for_discovery(sources, [
 good = "配信を始める時は、初見がコメントしやすい入口を用意すると会話が続きやすい。\n\n今の話題を短く伝え、答えやすい質問を一つ置く。\n\n大きな企画より、参加しやすい空気を丁寧に作ることが大事。"
 videos = [
     {"source_video_id": "sv_yt", "source_id": "src_a", "platform": "youtube", "account_id": "liver_manager", "canonical_video_url": "https://www.youtube.com/watch?v=abcdefghijk", "rights_status": "approved_creator_clip", "permission_status": "approved"},
-    {"source_video_id": "sv_tt", "source_id": "src_b", "platform": "tiktok", "account_id": "liver_manager", "canonical_video_url": "https://www.tiktok.com/@creator/video/7123456789012345678", "rights_status": "approved_creator_clip", "permission_status": "approved"},
+    {"source_video_id": "sv_yt_b", "source_id": "src_b", "platform": "youtube", "account_id": "liver_manager", "canonical_video_url": "https://www.youtube.com/watch?v=lmnopqrstuv", "rights_status": "approved_creator_clip", "permission_status": "approved"},
 ]
 clips = [
     {"clip_candidate_id": "clip_yt", "clip_id": "clip_yt", "source_video_id": "sv_yt", "account_id": "liver_manager", "clip_status": "READY", "transcript_grounded": "true", "content_understanding_status": "PASS", "transcript_status": "PASS", "standalone_segment_confirmed": True, "standalone_story_score": 99, "clip_worthy": True, "alignment_status": "PASS", "public_post_text": good, "transcript_excerpt": good, "start_seconds": "1", "end_seconds": "30", "clip_score": 99, "rights_status": "approved_creator_clip", "permission_status": "approved"},
-    {"clip_candidate_id": "clip_tt", "clip_id": "clip_tt", "source_video_id": "sv_tt", "account_id": "liver_manager", "clip_status": "READY", "transcript_grounded": "true", "content_understanding_status": "PASS", "transcript_status": "PASS", "standalone_segment_confirmed": True, "standalone_story_score": 90, "clip_worthy": True, "alignment_status": "PASS", "public_post_text": good, "transcript_excerpt": good, "start_seconds": "1", "end_seconds": "30", "clip_score": 80, "rights_status": "approved_creator_clip", "permission_status": "approved"},
+    {"clip_candidate_id": "clip_yt_b", "clip_id": "clip_yt_b", "source_video_id": "sv_yt_b", "account_id": "liver_manager", "clip_status": "READY", "transcript_grounded": "true", "content_understanding_status": "PASS", "transcript_status": "PASS", "standalone_segment_confirmed": True, "standalone_story_score": 90, "clip_worthy": True, "alignment_status": "PASS", "public_post_text": good, "transcript_excerpt": good, "start_seconds": "1", "end_seconds": "30", "clip_score": 80, "rights_status": "approved_creator_clip", "permission_status": "approved"},
 ]
 posted = [{"account_id": "liver_manager", "status": "POSTED", "source_video_id": "sv_yt", "clip_candidate_id": "old"}]
 selected, video, _reasons = select_candidate(clips, videos, posted, "liver_manager")
 checks = {
     "source with less inventory discovered first": ordered[0]["source_id"] == "src_b",
-    "less-used platform/source beats fixed YouTube priority": selected and selected["clip_candidate_id"] == "clip_tt",
+    "less-used eligible source beats score-only ranking": selected and selected["clip_candidate_id"] == "clip_yt_b",
     "selected source retained": video and video["source_id"] == "src_b",
 }
 for label, ok in checks.items():

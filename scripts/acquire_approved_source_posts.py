@@ -28,6 +28,9 @@ from generation.media_platform_policy import (  # noqa: E402
     DEFERRED_REFERENCE_REASON,
     DEFERRED_REFERENCE_STATUS,
     is_retired_source,
+    OWNER_REFERENCE_ACCOUNTS,
+    can_attempt_physical_media,
+    order_reference_sources,
 )
 from media_source_policy import media_usage_mode  # noqa: E402
 from media.permission_ledger import evaluate_permission  # noqa: E402
@@ -115,6 +118,14 @@ def selected_sources(
             continue
         if not truthy(source.get("active")) and not is_beauty_voice_source:
             continue
+        if (not reference_only and account in OWNER_REFERENCE_ACCOUNTS
+                and not can_attempt_physical_media(
+                    platform, str(source.get("canonical_url") or source.get("source_url") or ""),
+                    account_id=account,
+                )):
+            blocked.append({"source_id": str(source.get("source_id", "")),
+                            "reason": f"physical_media_platform_deferred:{platform or 'unknown'}"})
+            continue
         if platform in DEFERRED_REFERENCE_PLATFORMS:
             blocked.append(
                 {
@@ -167,7 +178,7 @@ def selected_sources(
             )
             continue
         selected.append(source)
-    return selected, blocked
+    return order_reference_sources(selected, account_id=account_id), blocked
 
 
 def post_matches_registered_author(post: NormalizedSourcePost, source: dict[str, Any]) -> bool:

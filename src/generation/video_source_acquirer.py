@@ -14,7 +14,11 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from generation.video_clip_materializer import probe_media_streams
-from generation.media_platform_policy import can_attempt_physical_media, normalize_platform
+from generation.media_platform_policy import (
+    OWNER_REFERENCE_ACCOUNTS,
+    can_attempt_physical_media,
+    normalize_platform,
+)
 from media.permission_ledger import evaluate_permission
 
 AUTHORIZED_RIGHTS = {
@@ -335,6 +339,23 @@ def acquire_authorized_public_source(
 ) -> Path:
     if not is_download_authorized(candidate, permission_rows, account_id=account_id):
         raise PermissionError("candidate is not explicitly authorized for source acquisition")
+    if account_id in OWNER_REFERENCE_ACCOUNTS:
+        registered = registered_source or {}
+        registered_platform = normalize_platform(
+            registered.get("source_platform") or registered.get("platform"),
+            _text(registered.get("canonical_url") or registered.get("source_url")),
+        )
+        if registered_platform and not can_attempt_physical_media(registered_platform, account_id=account_id):
+            raise RuntimeError(f"physical_media_platform_deferred:{registered_platform}")
+        scoped_url = resolve_source_url(candidate, source)
+        scoped_platform = normalize_platform(
+            candidate.get("source_platform") or candidate.get("platform")
+            or source.get("source_platform") or source.get("platform"), scoped_url,
+        )
+        if not can_attempt_physical_media(scoped_platform, scoped_url, account_id=account_id):
+            raise RuntimeError(f"physical_media_platform_deferred:{scoped_platform or 'unknown'}")
+        if scoped_platform == "x" and not x_registered_author_matches(scoped_url, registered_source or {}):
+            raise PermissionError("x_status_author_does_not_match_registered_source")
     cached = find_cached_source(cache_root, account_id, source_video_id, require_video=True)
     if cached is not None:
         return cached
@@ -346,7 +367,7 @@ def acquire_authorized_public_source(
         or source.get("source_platform") or source.get("platform"),
         url,
     )
-    if not can_attempt_physical_media(platform, url):
+    if not can_attempt_physical_media(platform, url, account_id=account_id):
         raise RuntimeError(f"physical_media_platform_deferred:{platform or 'unknown'}")
     if platform == "x" and not x_registered_author_matches(url, registered_source or {}):
         raise PermissionError("x_status_author_does_not_match_registered_source")

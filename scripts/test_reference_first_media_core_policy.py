@@ -19,9 +19,9 @@ from generation.media_platform_policy import (  # noqa: E402
     reference_priority_score,
 )
 from generation.reference_first_router import load_operational_mix  # noqa: E402
-assert REFERENCE_PLATFORMS == ("threads", "tiktok", "x", "youtube")
+assert REFERENCE_PLATFORMS == ("tiktok", "threads", "x", "youtube")
 assert DEFERRED_REFERENCE_PLATFORMS == ()
-assert REFERENCE_PLATFORM_PRIORITY == {"threads": 0, "tiktok": 1, "x": 2, "youtube": 3}
+assert REFERENCE_PLATFORM_PRIORITY == {"tiktok": 0, "threads": 1, "x": 2, "youtube": 3}
 assert set(PHYSICAL_MEDIA_PLATFORMS) == {"threads", "x", "youtube", "tiktok"}
 assert set(DEFERRED_PHYSICAL_MEDIA_PLATFORMS) == set()
 assert can_attempt_physical_media("x")
@@ -32,7 +32,7 @@ assert physical_media_provider("x") == "yt_dlp"
 assert physical_media_provider("youtube") == "yt_dlp"
 assert physical_media_provider("tiktok") == "public_embed_direct_http"
 assert physical_media_provider("threads") == "public_og_direct_http"
-assert reference_priority_score("threads") > reference_priority_score("tiktok") > reference_priority_score("x") > reference_priority_score("youtube")
+assert reference_priority_score("tiktok") > reference_priority_score("threads") > reference_priority_score("x") > reference_priority_score("youtube")
 
 for account_id in ("night_scout", "liver_manager"):
     mix = load_operational_mix(account_id)
