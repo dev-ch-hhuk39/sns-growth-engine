@@ -42,3 +42,23 @@ boundary, partial read failure, invalid headers/rows and identity ambiguity.
 These tests are source evidence only. No live health check, Sheets write,
 provider generation, timer change, token update or publication is performed by
 this source change. Final full Mac quality gate passed 1,101/1,101 repository scripts and 619/619 workflow safety checks, fatal Ruff, compile, diff and history secret scan. The existing eight external and three optional exclusions are unchanged. Focused strict health15, shell integration12 and host policy16 tests passed, with independent review finding no required fixes.
+
+## Subsequent real read-only verification
+
+The installed CLI was subsequently invoked once per account on immutable runtime
+`1d4b2070cf0f61812bdf75a15ec8d44f54799723`, with deployment, shared Sheets and
+selected-account locks held for each invocation. Night and Liver both returned
+`READ_OK`, `strict_runtime_reads_verified` and exit0. All four existing core
+tables passed actual provider reads, required-header validation and scoped
+account/identity consistency checks.
+
+Only fixed metadata and counts were returned; no row text or authentication
+material was disclosed. Time and memory were bounded. These invocations made no
+Sheets mutation, SNS post, Threads token update, generation, media operation or
+timer change. They exercised the installed strict CLI directly, without running
+the metrics preview/apply or feedback stages of the complete aftercare wrapper.
+
+This is real read-contract evidence, not READY stock, metric completion,
+feedback/PDCA success, rights, real reference/media Golden, schedule migration,
+hosted-workflow equivalence or overall production acceptance. Detailed receipts
+remain private. The formal goal status was not edited.
