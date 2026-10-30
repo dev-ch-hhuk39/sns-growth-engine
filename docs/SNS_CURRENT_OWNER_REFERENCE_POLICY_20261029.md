@@ -77,3 +77,19 @@ exact-revision deployment with fresh prerequisites. Code delivery does not
 establish rights, real Golden, human review/READY reserves, remaining schedule
 integration, publishing or observation acceptance. Formal goal status was not
 edited.
+
+## Resumed rollout completed — 2026-10-30
+
+After the owner resumed work, the resource preflight and fresh backup/health
+checks passed. Exact main f1a8d98195da8cfe72901b478bbfac273310ff62 was promoted
+with posting OFF. The transaction completed with two actual read-only Sheets
+health receipts, dependency consistency and preserved token/marker metadata;
+the previous runtime was retained. A later independent read-only inspection
+confirmed the same current revision, posting OFF and completed transaction.
+No repeat deployment, scheduler activation, token refresh, production Sheets
+write or SNS publication was performed.
+
+The subsequent resource preflight holds further deployments. This does not undo
+the completed policy rollout. Capacity cleanup remains separate owner work, and
+resource floors/retention were preserved. Real Golden and overall acceptance
+remain open; see docs/SNS_PHYSICAL_GOLDEN_EVIDENCE_20261030.md.

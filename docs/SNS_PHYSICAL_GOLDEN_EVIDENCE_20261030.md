@@ -68,3 +68,18 @@ TikTok manifest entries and therefore cannot certify those physical artifacts.
 Threads/TikTok metadata discovery remains available under the current owner
 policy; new physical media remains deferred. Actual Golden acceptance still
 requires real artifacts and current rights, not the synthetic regression fixtures.
+
+## Validation and delivery
+
+The reconstructed implementation is carried by PR #491. Full local regression
+passed 1,104/1,104 repository scripts, isolated pytest 173/173 and workflow safety
+619/619. New helper/integration tests total 47 and include actual local composer
+success and quality rejection. Independent review, compile, fatal Ruff, diff and
+working/history secret scans passed. Existing external/optional exclusions remain
+unchanged. Synthetic fixture success is not actual Golden evidence.
+
+The already tested owner policy was separately deployed as f1a8d98 with posting
+OFF and two actual read-only Sheets health receipts. This verifier update has not
+been deployed. The administrator resource preflight holds the next rollout.
+Capacity management remains with the owner's separate work; retention and
+resource floors were not changed.
