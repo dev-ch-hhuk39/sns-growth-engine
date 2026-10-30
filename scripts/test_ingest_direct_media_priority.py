@@ -40,6 +40,9 @@ class FakeClient:
 def permission(source_id):
     return {
         "source_id": source_id,
+        "source_handle": {"source-x": "approved", "source-youtube": "youtube_owner", "source-tiktok": "sample", "source-threads": "approved"}[source_id],
+        "account_id": "night_scout",
+        "allowed_accounts": ["night_scout"],
         "updated_at": "2026-08-01T00:00:00+00:00",
         "permission_status": "approved",
         "rights_status": "approved_creator_clip",
@@ -60,6 +63,7 @@ posts = [
         "source_post_id": "post-x",
         "source_id": "source-x",
         "target_account_id": "night_scout",
+        "author_handle": "approved",
         "platform": "x",
         "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
@@ -67,6 +71,7 @@ posts = [
         "source_post_id": "post-youtube",
         "source_id": "source-youtube",
         "target_account_id": "night_scout",
+        "author_handle": "youtube_owner",
         "platform": "youtube",
         "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
@@ -74,6 +79,7 @@ posts = [
         "source_post_id": "post-tiktok",
         "source_id": "source-tiktok",
         "target_account_id": "night_scout",
+        "author_handle": "sample",
         "platform": "tiktok",
         "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
@@ -81,6 +87,7 @@ posts = [
         "source_post_id": "post-threads",
         "source_id": "source-threads",
         "target_account_id": "night_scout",
+        "author_handle": "approved",
         "platform": "threads",
         "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
@@ -88,6 +95,7 @@ posts = [
         "source_post_id": "post-profile",
         "source_id": "source-threads",
         "target_account_id": "night_scout",
+        "author_handle": "approved",
         "platform": "threads",
         "original_post_text": "夜職の店選びでは、時給やノルマだけでなく担当へ相談できる環境も確認することが大事です。",
     },
@@ -247,9 +255,11 @@ try:
 
     assert selected == ""  # Recoverable legacy state does not override owner deferral.
     legacy_posts = [{**post, "target_account_id": "beauty_account"} for post in posts]
+    legacy_permissions = [{**row, "account_id": "beauty_account", "allowed_accounts": ["beauty_account"]}
+                          for row in permissions]
     assert module.select_pending_media_id(
         FakeClient(legacy_posts, recoverable_threads.tabs["source_post_media"].rows),
-        "beauty_account", permissions=permissions,
+        "beauty_account", permissions=legacy_permissions,
     ) == "media-threads"
 
 finally:

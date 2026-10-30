@@ -45,6 +45,22 @@ def latest_permission(rows: Iterable[dict[str, Any]], source_id: str) -> dict[st
     )[1]
 
 
+def account_source_permission_reasons(row: dict[str, Any], *, account_id: str,
+                                      source_handle: str = "") -> list[str]:
+    """Require explicit account and author binding in addition to rights flags."""
+    reasons = []
+    if (str(row.get("account_id") or "").strip() != account_id
+            or account_id not in _targets(row.get("allowed_accounts") or row.get("account_id"))):
+        reasons.append("permission_explicit_account_binding_required")
+    ledger_handle = str(row.get("source_handle") or "").strip().lstrip("@").lower()
+    expected = str(source_handle or "").strip().lstrip("@").lower()
+    if not ledger_handle:
+        reasons.append("permission_source_handle_missing")
+    elif expected and ledger_handle != expected:
+        reasons.append("permission_source_handle_mismatch")
+    return reasons
+
+
 def evaluate_permission(
     rows: Iterable[dict[str, Any]],
     source_id: str,

@@ -24,7 +24,7 @@ class Client:
         self.rows = {
             "source_posts": [
                 {"source_post_id": "unpermitted", "source_id": "reference_only", "target_account_id": "night_scout", "platform": "threads"},
-                {"source_post_id": "permitted", "source_id": "approved", "target_account_id": "night_scout", "platform": "youtube"},
+                {"source_post_id": "permitted", "source_id": "approved", "target_account_id": "night_scout", "platform": "youtube", "author_handle": "approved_owner"},
             ],
             "source_post_media": [
                 {"source_post_media_id": "old_unpermitted", "source_post_id": "unpermitted", "original_media_url": "https://www.threads.com/@ref/post/one", "created_at": "2026-07-01T00:00:00+00:00"},
@@ -32,7 +32,7 @@ class Client:
             ],
             "media_permissions": [
                 {"source_id": "reference_only", "permission_status": "", "rights_status": "reference_only", "updated_at": "2026-07-01T00:00:00+00:00"},
-                {"source_id": "approved", "permission_status": "approved", "rights_status": "approved_creator_clip", "updated_at": "2026-07-02T00:00:00+00:00", "evidence_type": "contract", "evidence_reference": "fixture", "approved_by": "owner", "approved_at": "2026-07-02T00:00:00+00:00", "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true", "allow_new_caption": "true", "revoked": "false"},
+                {"source_id": "approved", "account_id": "night_scout", "allowed_accounts": "night_scout", "source_handle": "approved_owner", "permission_status": "approved", "rights_status": "approved_creator_clip", "updated_at": "2026-07-02T00:00:00+00:00", "evidence_type": "contract", "evidence_reference": "fixture", "approved_by": "owner", "approved_at": "2026-07-02T00:00:00+00:00", "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true", "allow_new_caption": "true", "revoked": "false"},
             ],
         }
 

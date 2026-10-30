@@ -140,9 +140,13 @@ def permission_ok_from_rows(
     rows: list[dict[str, Any]],
     source_id: str,
     account_id: str = "",
+    source_handle: str = "",
+    *,
+    require_analysis: bool = False,
 ) -> bool:
     """Use the same strict ledger decision as the core ingestion path."""
-    return _CORE_PERMISSION_OK_FROM_ROWS(rows, source_id, account_id)
+    return _CORE_PERMISSION_OK_FROM_ROWS(rows, source_id, account_id, source_handle,
+                                        require_analysis=require_analysis)
 
 
 def _looks_like_threads_placeholder(url: str) -> bool:
@@ -342,6 +346,7 @@ def select_pending_media_id(
                 )
             ),
             account_id,
+            str(post.get("author_handle") or ""),
         ):
             continue
 

@@ -17,6 +17,7 @@ import run_direct_reference_media_pipeline as pipeline
 def source(source_id: str, priority: str) -> dict:
     return {
         "source_id": source_id,
+        "source_handle": "owner",
         "priority": priority,
         "media_usage_mode": "direct_media_reuse",
     }
@@ -25,6 +26,9 @@ def source(source_id: str, priority: str) -> dict:
 def permission(source_id: str) -> dict:
     return {
         "source_id": source_id,
+        "source_handle": "owner",
+        "account_id": "night_scout",
+        "allowed_accounts": ["night_scout"],
         "rights_status": "approved_creator_clip",
         "permission_status": "approved",
         "usage_mode": "direct_media_reuse",
@@ -48,6 +52,7 @@ def post(
         "source_post_id": post_id,
         "source_id": source_id,
         "target_account_id": "night_scout",
+        "author_handle": "owner",
         "platform": "x",
         "original_post_text": (
             "店選びでは条件だけでなく"

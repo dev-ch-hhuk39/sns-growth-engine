@@ -24,8 +24,11 @@ from acquisition.threads_official import canonical_threads_post_url, threads_han
 from acquisition.threads_public import ThreadsPublicScreenAdapter  # noqa: E402
 from generation.media_platform_policy import OWNER_REFERENCE_ACCOUNTS, can_attempt_physical_media, normalize_platform  # noqa: E402
 from config_loader import get_config  # noqa: E402
-from media.permission_ledger import evaluate_permission  # noqa: E402
+from media.permission_ledger import account_source_permission_reasons, evaluate_permission  # noqa: E402
 from media.direct_content_understanding import analyze_local_media  # noqa: E402
+from media.understanding_evidence_store import (  # noqa: E402
+    load_understanding_evidence, prepare_understanding_evidence_root, save_understanding_evidence,
+)
 from sheets_client import TAB_DEFINITIONS, SheetsClient  # noqa: E402
 
 
@@ -45,6 +48,9 @@ _SAFE_INGEST_ERROR_CODES = {
     "source_media_understanding_read_after_write_failed",
     "magic_bytes_or_mime_mismatch",
     "media_content_understanding_blocked",
+    "media_understanding_evidence_blocked",
+    "current_direct_media_permission_unverified",
+    "current_media_analysis_permission_unverified",
     "cloudinary_secure_url_missing",
     "source_post_media_read_after_write_failed",
     "physical_media_platform_deferred",
@@ -174,23 +180,36 @@ def permission_rows(client: SheetsClient) -> list[dict[str, Any]]:
     ]
 
 
+def _current_permission_rows(client: SheetsClient) -> list[dict[str, Any]]:
+    """Read the current ledger without a cached snapshot or schema setup."""
+    return [dict(row) for row in client._call_with_rate_limit_retry(
+        "get_all_records:media_permissions", lambda: client._ws("media_permissions").get_all_records())]
+
+
 def permission_ok_from_rows(
     rows: list[dict[str, Any]],
     source_id: str,
     account_id: str = "",
+    source_handle: str = "",
+    *,
+    require_analysis: bool = False,
 ) -> bool:
     decision = evaluate_permission(
         rows,
         source_id,
         account_id=account_id,
+        source_handle=source_handle,
         required_flags=(
             "allow_download",
             "allow_cloudinary_storage",
             "allow_original_repost",
             "allow_new_caption",
-        ),
+        ) + (("allow_analysis",) if require_analysis else ()),
     )
-    return bool(decision["allowed"])
+    if account_id in OWNER_REFERENCE_ACCOUNTS:
+        decision["reasons"].extend(account_source_permission_reasons(
+            decision["row"], account_id=account_id, source_handle=source_handle))
+    return bool(decision["allowed"] and not decision["reasons"])
 
 
 def permission_ok(client: SheetsClient, source_id: str, account_id: str = "") -> bool:
@@ -887,7 +906,8 @@ def select_pending_media_id(
         post = posts.get(str(media.get("source_post_id", "")))
         if not post or str(post.get("target_account_id", "")) != account_id:
             continue
-        if not permission_ok_from_rows(permissions, str(post.get("source_id", "")), account_id):
+        if not permission_ok_from_rows(permissions, str(post.get("source_id", "")), account_id,
+                                       str(post.get("author_handle") or "")):
             continue
         media_id = str(media.get("source_post_media_id", ""))
         refresh_understanding = media_understanding_needs_refresh(
@@ -961,7 +981,8 @@ def source_post_media_bundle(client: SheetsClient, source_post_id: str) -> list[
     )
 
 
-def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]) -> dict[str, Any]:
+def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any], *,
+               force_visual_refresh: bool = False) -> dict[str, Any]:
     source_post_media_id = str(media.get("source_post_media_id", ""))
     owner = str(post.get("target_account_id") or post.get("account_id") or "")
     canonical_url = str(media.get("canonical_post_url") or post.get("canonical_post_url") or media.get("original_media_url") or "")
@@ -971,10 +992,27 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
                 "reason": f"physical_media_platform_deferred:{platform or 'unknown'}"}
     existing_understanding = record(client, "source_media_understanding", "source_post_media_id", source_post_media_id)
     already_uploaded = str(media.get("cloudinary_status", "")).upper() == "UPLOADED" and bool(str(media.get("storage_url", "")))
+    if force_visual_refresh and (
+        owner not in OWNER_REFERENCE_ACCOUNTS or platform not in {"x", "youtube"}
+        or not str(post.get("author_handle") or "").strip()
+        or str(media.get("media_type") or "").lower() != "video"
+        or not already_uploaded or not str(os.environ.get("BUFFERED_RUNTIME_ROOT") or "").strip()
+    ):
+        return {"status": "BLOCKED", "source_post_media_id": source_post_media_id,
+                "reason": "visual_refresh_requires_managed_stored_video_and_explicit_runtime"}
+    if force_visual_refresh:
+        retained = load_understanding_evidence(os.environ.get("BUFFERED_RUNTIME_ROOT"), post, media,
+            content_hash=str(media.get("content_hash") or ""))
+        if retained["status"] == "PASS":
+            return {"status": "ALREADY_INGESTED", "source_post_media_id": source_post_media_id,
+                    "media_asset_id": str(media.get("media_asset_id") or ""), "visual_evidence_retained": True}
+        if prepare_understanding_evidence_root(os.environ.get("BUFFERED_RUNTIME_ROOT"))["status"] != "PASS":
+            return {"status": "BLOCKED", "source_post_media_id": source_post_media_id,
+                    "reason": "private_understanding_storage_unverified"}
     refresh_understanding = media_understanding_needs_refresh(
         media,
         existing_understanding,
-    )
+    ) or force_visual_refresh
     if (
         already_uploaded
         and str((existing_understanding or {}).get("status", "")).upper() == "PASS"
@@ -1003,6 +1041,7 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
     target_dir.mkdir(parents=True, exist_ok=True)
     suffix = ".mp4" if media_type == "video" else ".jpg"
     local_path = target_dir / f"{source_post_media_id}{suffix}"
+    owner_video = owner in OWNER_REFERENCE_ACCOUNTS and platform in {"x", "youtube"} and media_type == "video"
     try:
         reusable_asset = (
             find_reusable_identical_asset(
@@ -1154,6 +1193,17 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
                 ),
             }
 
+        if owner_video:
+            try:
+                permitted = bool(str(post.get("author_handle") or "").strip()) and permission_ok_from_rows(
+                    _current_permission_rows(client), str(post.get("source_id") or ""), owner,
+                    str(post.get("author_handle") or ""),
+                )
+            except Exception:
+                permitted = False
+            if not permitted:
+                raise RuntimeError("current_direct_media_permission_unverified")
+
         platform = str(post.get("platform", "")).lower()
         resolution: dict[str, str] = {}
         if already_uploaded and refresh_understanding:
@@ -1209,16 +1259,50 @@ def ingest_one(client: SheetsClient, post: dict[str, Any], media: dict[str, Any]
             for chunk in iter(lambda: handle.read(1024 * 1024), b""):
                 digest.update(chunk)
         digest_text = digest.hexdigest()
+        # A stored-asset refresh must not overwrite understanding for different bytes.
+        # Verify every available file hash before analysis, proof retention or Sheets writes.
+        if already_uploaded:
+            expected_hashes = {
+                _normalized_content_hash(row.get("content_hash"))
+                for row in (media, existing_understanding or {})
+                if str(row.get("content_hash") or "").strip()
+            }
+            if expected_hashes and expected_hashes != {digest_text}:
+                raise RuntimeError("direct_media_refresh_content_hash_mismatch")
         mime = magic_mime(local_path)
         if not mime or not mime.startswith(media_type + "/"):
             raise RuntimeError("magic_bytes_or_mime_mismatch")
         details = probe_video(local_path) if media_type == "video" else {}
+        analysis_asset_id = str(media.get("media_asset_id") or "") if already_uploaded else f"ma_{digest_text[:24]}"
+        if already_uploaded and not analysis_asset_id:
+            raise RuntimeError("media_asset_read_after_write_failed")
+        if owner_video:
+            try:
+                permitted = permission_ok_from_rows(
+                    _current_permission_rows(client), str(post.get("source_id") or ""), owner,
+                    str(post.get("author_handle") or ""), require_analysis=True,
+                )
+            except Exception:
+                permitted = False
+            if not permitted:
+                raise RuntimeError("current_media_analysis_permission_unverified")
         analysis = analyze_local_media(
             local_path,
             media_type=media_type,
             account_id=str(post.get("target_account_id") or ""),
             duration_seconds=float(details.get("duration_seconds") or media.get("duration_seconds") or 0),
+            media_asset_id=analysis_asset_id,
         )
+        # Keep complete existing visual proof outside the temporary media workspace.
+        # The store uses only an explicit runtime root and cannot invoke a provider.
+        retained = save_understanding_evidence(
+            os.environ.get("BUFFERED_RUNTIME_ROOT"), post,
+            {**media, "media_asset_id": analysis_asset_id, "content_hash": digest_text},
+            analysis, content_hash=digest_text,
+        )
+        requires_retained_proof = force_visual_refresh or bool(os.environ.get("BUFFERED_RUNTIME_ROOT")) and owner_video
+        if retained["status"] == "BLOCKED" or (requires_retained_proof and retained["status"] != "PASS"):
+            raise RuntimeError("media_understanding_evidence_blocked")
         understanding_id = upsert_media_understanding(
             client,
             post,
@@ -1405,7 +1489,14 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--confirm-ingest", action="store_true")
+    parser.add_argument("--refresh-visual-evidence", action="store_true",
+                        help="explicitly refresh one stored owner video; never selected automatically")
     args = parser.parse_args()
+    if args.refresh_visual_evidence and (
+        not args.source_post_media_id or args.source_post_id or args.account_id not in OWNER_REFERENCE_ACCOUNTS
+    ):
+        print(json.dumps({"status": "BLOCKED", "reason": "visual_refresh_requires_one_media_id_and_managed_account"}))
+        return 1
     if args.apply and not args.confirm_ingest:
         print(json.dumps({"status": "BLOCKED", "reason": "--apply requires --confirm-ingest"}))
         return 1
@@ -1416,7 +1507,7 @@ def main() -> int:
     # Dry-run is deliberately offline: a real source-post lookup is an apply
     # precondition and must not authenticate to Sheets or touch a provider.
     if not args.apply:
-        print(json.dumps({"status": "PLAN_ONLY", "source_post_media_id": args.source_post_media_id, "would_lookup_sheets": True, "would_download": True, "would_upload": True, "network_fetch": False}, ensure_ascii=False, indent=2))
+        print(json.dumps({"status": "PLAN_ONLY", "source_post_media_id": args.source_post_media_id, "would_lookup_sheets": True, "would_download": True, "would_upload": not args.refresh_visual_evidence, "would_refresh_visual_evidence": args.refresh_visual_evidence, "network_fetch": False}, ensure_ascii=False, indent=2))
         return 0
     cfg = get_config()
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
@@ -1448,7 +1539,11 @@ def main() -> int:
         print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_not_found"}))
         return 1
     post = record(client, "source_posts", "source_post_id", str(media.get("source_post_id", "")))
-    if not post or not permission_ok_from_rows(permissions, str(post.get("source_id", "")), args.account_id):
+    if args.refresh_visual_evidence and (not post or str(post.get("target_account_id") or "") != args.account_id):
+        print(json.dumps({"status": "BLOCKED", "reason": "visual_refresh_account_mismatch"}))
+        return 1
+    if not post or not permission_ok_from_rows(permissions, str(post.get("source_id", "")),
+            args.account_id or str(post.get("target_account_id") or ""), str(post.get("author_handle") or "")):
         print(json.dumps({"status": "BLOCKED", "reason": "active_direct_media_permission_missing"}))
         return 1
     bundle = [media] if args.source_post_media_id else source_post_media_bundle(client, str(post["source_post_id"]))
@@ -1458,8 +1553,9 @@ def main() -> int:
     if args.max_assets < 1 or len(bundle) > args.max_assets:
         print(json.dumps({"status": "BLOCKED", "reason": "source_post_media_bundle_exceeds_cap", "asset_count": len(bundle), "max_assets": args.max_assets}))
         return 1
-    results = [ingest_one(client, post, item) for item in bundle]
-    failures = [row for row in results if row.get("status") == "FAILED"]
+    results = [ingest_one(client, post, item, force_visual_refresh=True) if args.refresh_visual_evidence
+               else ingest_one(client, post, item) for item in bundle]
+    failures = [row for row in results if row.get("status") in {"FAILED", "BLOCKED"}]
     skipped = [row for row in results if row.get("status") == "SKIPPED_EXTERNAL_UNAVAILABLE"]
     unsuccessful = failures + skipped
     status = (

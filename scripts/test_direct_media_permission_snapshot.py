@@ -23,12 +23,12 @@ class Client:
     def __init__(self):
         self.permission_reads = 0
         self.rows = {
-            "source_posts": [{"source_post_id": "post", "source_id": "approved", "target_account_id": "night_scout", "platform": "youtube"}],
+            "source_posts": [{"source_post_id": "post", "source_id": "approved", "target_account_id": "night_scout", "platform": "youtube", "author_handle": "approved_owner"}],
             "source_post_media": [
                 {"source_post_media_id": "one", "source_post_id": "post", "original_media_url": "https://www.youtube.com/watch?v=one", "created_at": "2026-07-01T00:00:00+00:00"},
                 {"source_post_media_id": "two", "source_post_id": "post", "original_media_url": "https://www.youtube.com/watch?v=two", "created_at": "2026-07-02T00:00:00+00:00"},
             ],
-            "media_permissions": [{"source_id": "approved", "permission_status": "approved", "rights_status": "approved_creator_clip", "updated_at": "2026-07-02T00:00:00+00:00", "evidence_type": "contract", "evidence_reference": "fixture", "approved_by": "owner", "approved_at": "2026-07-02T00:00:00+00:00", "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true", "allow_new_caption": "true", "revoked": "false"}],
+            "media_permissions": [{"source_id": "approved", "account_id": "night_scout", "allowed_accounts": "night_scout", "source_handle": "approved_owner", "permission_status": "approved", "rights_status": "approved_creator_clip", "updated_at": "2026-07-02T00:00:00+00:00", "evidence_type": "contract", "evidence_reference": "fixture", "approved_by": "owner", "approved_at": "2026-07-02T00:00:00+00:00", "allow_download": "true", "allow_cloudinary_storage": "true", "allow_original_repost": "true", "allow_new_caption": "true", "revoked": "false"}],
         }
 
     def _ensure_tab(self, *_args):

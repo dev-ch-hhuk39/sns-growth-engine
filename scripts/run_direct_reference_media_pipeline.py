@@ -21,8 +21,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "src"))
 
-from generation.media_platform_policy import can_attempt_physical_media, normalize_platform  # noqa: E402
-from media.permission_ledger import evaluate_permission  # noqa: E402
+from generation.media_platform_policy import OWNER_REFERENCE_ACCOUNTS, can_attempt_physical_media, normalize_platform  # noqa: E402
+from media.permission_ledger import account_source_permission_reasons, evaluate_permission  # noqa: E402
+from media.understanding_evidence_store import load_understanding_evidence  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from content_schedule import slot_by_id  # noqa: E402
 from content_slot_runs import business_date, build_slot_run, claim_slot_run, existing_slot_status, upsert_slot_run  # noqa: E402
@@ -482,6 +483,9 @@ def _permission_map(client: SheetsClient, account_id: str) -> tuple[dict[str, di
                 "allow_new_caption",
             ),
         )
+        if account_id in OWNER_REFERENCE_ACCOUNTS:
+            decision_row["reasons"].extend(account_source_permission_reasons(decision_row["row"], account_id=account_id))
+            decision_row["allowed"] = decision_row["allowed"] and not decision_row["reasons"]
         if not decision_row["allowed"]:
             blocked[source_id] = list(decision_row["reasons"])
             continue
@@ -734,6 +738,16 @@ def select_direct_candidates(
                 f"{post_id}:permission_ledger_blocked:"
                 + ",".join(blocked_permissions[str(post.get("source_id", ""))])
             )
+            continue
+        if not permission and account_id in OWNER_REFERENCE_ACCOUNTS:
+            reasons.append(f"{post_id}:permission_ledger_missing")
+            continue
+        expected_handle = str(source.get("source_handle") or post.get("author_handle") or "")
+        if account_id in OWNER_REFERENCE_ACCOUNTS and (
+            not expected_handle or account_source_permission_reasons(permission, account_id=account_id, source_handle=expected_handle)
+        ):
+            reasons.append(f"{post_id}:permission_source_binding_unverified")
+            continue
         policy_fields = {key: post.get(key) or source.get(key, "") for key in ("rights_status", "permission_status", "permission_scope")}
         # The ledger has precedence and must explicitly allow every action.
         if permission:
@@ -750,8 +764,44 @@ def select_direct_candidates(
         incomplete = False
         for media in sorted(media_rows, key=lambda row: int(str(row.get("media_index", "0") or "0"))):
             asset = next((row for row in assets_by_post.get(post_id, []) if str(row.get("original_media_url", "")) == str(media.get("original_media_url", ""))), {})
-            merged = {**media, **{key: value for key, value in asset.items() if str(value or "").strip()}}
             understanding = understanding_by_media.get(str(media.get("source_post_media_id", "")), {})
+            # Independent rows may not rewrite a child's stored identity. A
+            # conflict must be reconciled rather than hidden by dict merging.
+            hashes = {str(row.get("content_hash") or "").strip().lower()
+                      for row in (media, asset, understanding) if str(row.get("content_hash") or "").strip()}
+            storage_urls = {str(row.get("storage_url") or "").strip()
+                            for row in (media, asset) if str(row.get("storage_url") or "").strip()}
+            asset_ids = {str(value).strip() for value in (media.get("media_asset_id"), asset.get("media_id")) if str(value or "").strip()}
+            if len(hashes) > 1 or len(storage_urls) > 1 or len(asset_ids) > 1:
+                incomplete = True
+                reasons.append(f"{post_id}:media_asset_binding_conflict")
+                break
+            merged = {**media, **{key: value for key, value in asset.items() if str(value or "").strip()}}
+            for key in ("source_post_media_id", "source_post_id", "source_id", "media_index", "media_type",
+                        "account_id", "target_account_id", "canonical_post_url", "original_media_url",
+                        "media_asset_id", "content_hash"):
+                if key in media:
+                    merged[key] = media[key]
+            retained = load_understanding_evidence(
+                os.environ.get("BUFFERED_RUNTIME_ROOT"), post, merged,
+                content_hash=str(merged.get("content_hash") or ""),
+            )
+            requires_retained_proof = (bool(os.environ.get("BUFFERED_RUNTIME_ROOT"))
+                and account_id in OWNER_REFERENCE_ACCOUNTS and source_platform in {"x", "youtube"}
+                and str(media.get("media_type") or "").lower() == "video")
+            if retained["status"] == "BLOCKED" or (requires_retained_proof and retained["status"] != "PASS"):
+                incomplete = True
+                reasons.append(f"{post_id}:media_visual_evidence_unverified")
+                break
+            if retained["status"] == "PASS":
+                # The stored summary alone cannot establish VISUAL_VERIFIED.
+                # Preserve the legacy row ID while restoring only a validated raw analysis.
+                if (understanding.get("content_hash")
+                        and str(understanding["content_hash"]) != str(merged.get("content_hash") or "")):
+                    incomplete = True
+                    reasons.append(f"{post_id}:media_understanding_hash_mismatch")
+                    break
+                understanding = {**understanding, **retained["analysis"]}
             if (
                 is_quarantined(media)
                 and not _materialized_direct_media_quarantine_recoverable(
@@ -1068,13 +1118,27 @@ def build_plan(
     )
     attempted: list[dict[str, Any]] = []
     ranked_ready: list[dict[str, Any]] = []
-    permission_map, _blocked_permissions = _permission_map(client, account_id)
     for post, media, source in candidates:
         candidate_soft_warnings: list[str] = []
+        # Selection caches table snapshots. Rights must be read again for each
+        # candidate before invoking any caption provider, including after a skip.
+        records_cache = getattr(client, "_direct_media_records_cache", None)
+        if isinstance(records_cache, dict):
+            records_cache.pop("media_permissions", None)
+        permission_map, _blocked_permissions = _permission_map(client, account_id)
         permission = permission_map.get(
             str(post.get("source_id", "")),
             {},
         )
+        source_id = str(post.get("source_id") or "")
+        expected_handle = str(source.get("source_handle") or post.get("author_handle") or "")
+        if source_id in _blocked_permissions or (account_id in OWNER_REFERENCE_ACCOUNTS and (
+            not permission or not expected_handle
+            or account_source_permission_reasons(permission, account_id=account_id, source_handle=expected_handle)
+        )):
+            attempted.append({"source_post_id": post.get("source_post_id", ""),
+                              "blocked_reasons": ["current_media_permission_unverified"], "MEDIA_SUCCESS": False})
+            continue
         caption_mode = direct_caption_mode(
             post=post,
             source=source,
