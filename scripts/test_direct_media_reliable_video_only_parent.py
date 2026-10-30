@@ -28,6 +28,7 @@ class Client:
                     "source_post_id": post_id,
                     "source_id": f"source_{post_id}",
                     "target_account_id": "night_scout",
+                    "author_handle": "owner",
                     "platform": "x",
                     "original_post_text": (
                         "夜職の店選びでは、時給と同じくらい客層や"
@@ -64,6 +65,9 @@ def media(post_id: str, index: int, media_type: str) -> dict[str, str]:
 permissions = [
     {
         "source_id": f"source_{post_id}",
+        "source_handle": "owner",
+        "account_id": "night_scout",
+        "allowed_accounts": ["night_scout"],
         "permission_status": "approved",
         "rights_status": "approved_creator_clip",
         "allow_download": "true",

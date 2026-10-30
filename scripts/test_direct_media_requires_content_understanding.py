@@ -4,6 +4,7 @@ import run_direct_reference_media_pipeline as pipeline
 
 source = {
     "source_id": "src_1",
+    "source_handle": "@fixture_owner",
     "target_account_id": "night_scout",
     "rights_status": "approved_creator_clip",
     "permission_status": "approved",
@@ -11,6 +12,7 @@ source = {
 }
 post = {
     "source_post_id": "post_1",
+    "author_handle": "fixture_owner",
     "source_id": "src_1",
     "target_account_id": "night_scout",
     "platform": "x",
@@ -36,6 +38,9 @@ asset = {
 }
 permission = {
     "source_id": "src_1",
+    "account_id": "night_scout",
+    "allowed_accounts": ["night_scout"],
+    "source_handle": "fixture_owner",
     "rights_status": "approved_creator_clip",
     "permission_status": "approved",
     "allow_download": "true",

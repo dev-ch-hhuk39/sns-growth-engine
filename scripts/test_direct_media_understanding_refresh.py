@@ -31,6 +31,7 @@ class Client:
                 "source_post_id": "post-1",
                 "source_id": "source-1",
                 "target_account_id": "night_scout",
+                "author_handle": "owner",
                 "platform": "youtube",
                 "original_post_text": (
                     "夜職の店選びでは時給だけでなく、ノルマや客層、"
@@ -63,10 +64,16 @@ class Client:
     def _ws(self, name: str) -> Worksheet:
         return Worksheet(self.rows[name])
 
+    @staticmethod
+    def _call_with_rate_limit_retry(_label, callback):
+        return callback()
+
 
 PERMISSIONS = [{
     "source_id": "source-1",
+    "source_handle": "owner",
     "account_id": "night_scout",
+    "allowed_accounts": ["night_scout"],
     "permission_status": "approved",
     "rights_status": "approved_creator_clip",
     "allow_download": "true",
@@ -238,7 +245,11 @@ try:
         )
         core.update_media_row = fake_update
 
-        result = core.ingest_one(object(), post_row, media_row)
+        refresh_client = Client("")
+        refresh_client.rows["media_permissions"] = [
+            {**PERMISSIONS[0], "allow_analysis": True},
+        ]
+        result = core.ingest_one(refresh_client, post_row, media_row)
         assert result["status"] == "UNDERSTANDING_REFRESHED", result
         assert result["media_asset_id"] == "asset-1", result
         assert result["content_hash"] == digest, result

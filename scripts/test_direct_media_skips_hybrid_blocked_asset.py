@@ -12,12 +12,15 @@ import run_direct_reference_media_pipeline as pipeline  # noqa: E402
 
 
 def source(source_id: str) -> dict[str, str]:
-    return {"source_id": source_id, "platform": "youtube", "priority": "1"}
+    return {"source_id": source_id, "source_handle": f"@{source_id}", "platform": "youtube", "priority": "1"}
 
 
 def permission(source_id: str) -> dict[str, str]:
     return {
         "source_id": source_id,
+        "account_id": "liver_manager",
+        "allowed_accounts": "liver_manager",
+        "source_handle": source_id,
         "rights_status": "approved_creator_clip",
         "permission_status": "approved",
         "usage_mode": "direct_media_reuse",
@@ -36,6 +39,7 @@ def permission(source_id: str) -> dict[str, str]:
 def post(post_id: str, source_id: str) -> dict[str, str]:
     return {
         "source_post_id": post_id,
+        "author_handle": source_id,
         "source_id": source_id,
         "target_account_id": "liver_manager",
         "platform": "youtube",

@@ -34,9 +34,12 @@ class FakeClient:
         return self.tabs[logical]
 
 
-def permission(source_id):
+def permission(source_id, account_id="night_scout"):
     return {
         "source_id": source_id,
+        "source_handle": "approved",
+        "account_id": account_id,
+        "allowed_accounts": [account_id],
         "updated_at": "2026-08-01T00:00:00+00:00",
         "permission_status": "approved",
         "rights_status": "approved_creator_clip",
@@ -57,6 +60,7 @@ posts = [
         "source_post_id": "post-youtube",
         "source_id": "source-youtube",
         "target_account_id": "night_scout",
+        "author_handle": "approved",
         "platform": "youtube",
         "original_post_text": (
             "夜職の店選びでは時給だけでなく、ノルマや客層、"
@@ -67,6 +71,7 @@ posts = [
         "source_post_id": "post-threads",
         "source_id": "source-threads",
         "target_account_id": "night_scout",
+        "author_handle": "approved",
         "platform": "threads",
         "canonical_post_url": "https://www.threads.com/@approved/post/ABC123",
         "original_post_text": (
@@ -106,6 +111,10 @@ permissions = [
     permission("source-youtube"),
     permission("source-threads"),
 ]
+legacy_permissions = [
+    permission("source-youtube", "beauty_account"),
+    permission("source-threads", "beauty_account"),
+]
 
 original_safe_url = module.core.safe_https_url
 original_understanding = module.core.media_understanding_needs_refresh
@@ -126,7 +135,7 @@ try:
     assert selected == "", selected
     legacy_posts = [{**post, "target_account_id": "beauty_account"} for post in posts]
     assert module.select_pending_media_id(
-        FakeClient(legacy_posts, media), "beauty_account", permissions=permissions,
+        FakeClient(legacy_posts, media), "beauty_account", permissions=legacy_permissions,
     ) == "media-threads"
 
     assert module.external_unavailable_cooldown_active(
@@ -215,7 +224,7 @@ try:
     # Preserve the same cooldown recovery contract for the legacy path.
     assert module.select_pending_media_id(
         FakeClient(legacy_posts, [pending_youtube, expired_threads]),
-        "beauty_account", permissions=permissions,
+        "beauty_account", permissions=legacy_permissions,
     ) == "media-threads"
 
 finally:

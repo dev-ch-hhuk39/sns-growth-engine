@@ -24,6 +24,7 @@ def post(post_id: str) -> dict:
     return {
         "source_post_id": post_id,
         "source_id": "src_test",
+        "author_handle": "approved",
         "target_account_id": "night_scout",
         "platform": "threads",
         "profile_url": "https://www.threads.com/@approved",
@@ -93,10 +94,19 @@ class CaptionService:
         }
 
 
+PERMISSION = {
+    "source_id": "src_test", "account_id": "night_scout", "allowed_accounts": ["night_scout"],
+    "source_handle": "approved", "rights_status": "approved_creator_clip", "permission_status": "approved",
+    "usage_mode": "direct_media_reuse", "evidence_type": "owner_attestation", "evidence_reference": "fixture",
+    "approved_by": "owner", "approved_at": "2026-08-25T00:00:00+00:00", "revoked": "false",
+    "allow_download": "true", "allow_cloudinary_storage": "true",
+    "allow_original_repost": "true", "allow_new_caption": "true",
+}
+
 original_records = pipeline._records
 original_candidates = pipeline.select_direct_candidates
 try:
-    pipeline._records = lambda _client, logical: []
+    pipeline._records = lambda _client, logical: [dict(PERMISSION)] if logical == "media_permissions" else []
     pipeline.select_direct_candidates = lambda _client, _account: ([
         (post("bad"), {**media("bad"), "carousel_media": [media("bad")]}, {}),
         (post("good"), {**media("good"), "carousel_media": [media("good")]}, {}),

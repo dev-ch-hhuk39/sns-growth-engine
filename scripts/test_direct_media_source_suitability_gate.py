@@ -15,6 +15,7 @@ def _post(post_id: str, text: str) -> dict:
     return {
         "source_post_id": post_id,
         "source_id": "src_test",
+        "author_handle": "approved",
         "target_account_id": "night_scout",
         "platform": "threads",
         "canonical_post_url": f"https://www.threads.com/@approved/post/{post_id}",
@@ -60,10 +61,19 @@ class SoftWarningCaptionService:
         }
 
 
+PERMISSION = {
+    "source_id": "src_test", "account_id": "night_scout", "allowed_accounts": ["night_scout"],
+    "source_handle": "approved", "rights_status": "approved_creator_clip", "permission_status": "approved",
+    "usage_mode": "direct_media_reuse", "evidence_type": "owner_attestation", "evidence_reference": "fixture",
+    "approved_by": "owner", "approved_at": "2026-08-25T00:00:00+00:00", "revoked": "false",
+    "allow_download": "true", "allow_cloudinary_storage": "true",
+    "allow_original_repost": "true", "allow_new_caption": "true",
+}
+
 original_records = pipeline._records
 original_candidates = pipeline.select_direct_candidates
 try:
-    pipeline._records = lambda _client, _logical: []
+    pipeline._records = lambda _client, logical: [dict(PERMISSION)] if logical == "media_permissions" else []
     pipeline.select_direct_candidates = lambda _client, _account: ([
         (
             _post("off_topic", "ベッカン担当キャストにコスメ情報を聞いたよ"),
