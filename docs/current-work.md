@@ -1,3 +1,11 @@
+## 2026-10-30 — resume delivery and bind physical Golden evidence
+
+- Resumed at the owner's request. The previously tested owner policy was deployed as exact main `f1a8d98195da8cfe72901b478bbfac273310ff62`, with posting OFF. The completed transaction recorded two actual read-only Sheets health checks, dependency consistency, the previous release, and preservation of token/marker metadata. The running revision was independently rechecked after resumption; no deployment was repeated.
+- Current source work closes Golden false positives: unique registered source and exact extracted author/post identity, one same-basename local video/metadata pair, actual file SHA256 bound to complete existing Gemini visual evidence, explicit latest-ledger account scope, and both generation and media/text quality gates. Technical A/V validity alone cannot establish understanding. Complete checks can produce only WAITING_REVIEW, with publisher eligibility false.
+- Temporary development files were unavailable after resumption. This batch was reconstructed from reviewed interfaces on an isolated worktree from current main; the original dirty worktree was preserved. Reconstructed code requires fresh verification before publication. No current test result is being inferred from the missing temporary reports.
+- Verification and delivery are in progress. No new media acquisition, model call, Cloudinary upload, production Sheets write, token refresh, scheduler change or SNS publication was performed by this source batch. Actual rights, both-account X/YouTube Golden artifacts, human review/READY reserves, schedule integration and real publishing/observation acceptance remain open. Formal goal status is unchanged.
+- Details: `docs/SNS_PHYSICAL_GOLDEN_EVIDENCE_20261030.md`.
+
 ## 2026-10-30 — owner policy delivered; VPS rollout held by resource gate
 
 - PR #489 passed all four protected checks and was normally merged as `b6991d89e743660bfcee1aabe831d6382deefd76`. Its tree exactly equals tested head `190bfff531dcb518108ee5d031152d28ef2b9949`. The repository now enforces the current Night/Liver discovery and physical-acquisition policy; this is source delivery, not a completed VPS cutover.

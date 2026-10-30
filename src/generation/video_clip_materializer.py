@@ -78,12 +78,14 @@ def build_ffmpeg_command(
     ]
 
 
-def probe_media_streams(path: str | Path, *, ffprobe_bin: str = "ffprobe") -> dict[str, Any]:
+def probe_media_streams(path: str | Path, *, ffprobe_bin: str = "ffprobe",
+                        timeout_seconds: float | None = None) -> dict[str, Any]:
     proc = subprocess.run(
         [ffprobe_bin, "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
         check=True,
         capture_output=True,
         text=True,
+        **({"timeout": timeout_seconds} if timeout_seconds is not None else {}),
     )
     payload = json.loads(proc.stdout or "{}")
     streams = list(payload.get("streams") or [])

@@ -131,7 +131,7 @@ def _apply_registered_owner_scope(sources: list[dict[str, Any]]) -> list[dict[st
     return result
 
 
-def load_registry(registry_path: str | None = None) -> list[dict[str, Any]]:
+def load_registry(registry_path: str | None = None, *, preserve_duplicates: bool = False) -> list[dict[str, Any]]:
     """source registryをJSONから読み込む。"""
     path = registry_path or _DEFAULT_REGISTRY_PATH
     if not os.path.isfile(path):
@@ -151,6 +151,8 @@ def load_registry(registry_path: str | None = None) -> list[dict[str, Any]]:
                 extra_path = os.path.join(_V2_ROOT, extra)
                 with open(extra_path, encoding="utf-8") as extra_file:
                     sources.extend(json.load(extra_file).get("sources", []))
+    if preserve_duplicates:
+        return _apply_registered_owner_scope(sources)
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
     for source in sources:
