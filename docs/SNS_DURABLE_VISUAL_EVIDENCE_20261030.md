@@ -68,6 +68,14 @@ thresholds; historical regression fixtures now explicitly supply valid account
 and author grants while retaining their original assertions.
 
 Focused verification passed 62 new tests (store 28, operation permissions 12,
-pipeline 17, CLI 5) and all 65 Direct scripts. Full repository regression and
-isolated pytest results are pending. No live operation or formal acceptance is
+pipeline 17, CLI 5) and all 65 Direct scripts. Full repository regression 1,108/1,108, isolated pytest 173/173 and workflow
+safety 619/619 also passed. Existing eight external and three optional exclusions
+remain unchanged. Compile, fatal Ruff, diff and working/history secret scans passed. No live operation or formal acceptance is
 implied by these synthetic fixtures.
+
+The source implementation is ec217b2; the validation follow-up changes only
+documentation. Source/config/scripts remain exactly equal to that tested commit.
+The administrator disk preflight subsequently passed after separate owner
+capacity work. Runtime promotion remains a separate exact-revision transaction
+requiring fresh backup and health evidence, posting OFF and unchanged-current
+guards. This does not satisfy the heavier real-media resource/rights/review gates.
