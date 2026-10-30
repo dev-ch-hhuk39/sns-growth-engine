@@ -78,8 +78,21 @@ success and quality rejection. Independent review, compile, fatal Ruff, diff and
 working/history secret scans passed. Existing external/optional exclusions remain
 unchanged. Synthetic fixture success is not actual Golden evidence.
 
-The already tested owner policy was separately deployed as f1a8d98 with posting
-OFF and two actual read-only Sheets health receipts. This verifier update has not
-been deployed. The administrator resource preflight holds the next rollout.
+PR #491 passed all four required checks and was merged as
+`97f31b8cb580f6a098387a03602e27954b35c928`. The verifier was subsequently deployed
+together with PR #492 as exact main `1bf36eb61c34c1c331d087900e75069616763678`,
+after fresh complete encrypted-backup and independent health success. Actual
+observation confirms a completed transaction, two read-only Sheets health
+receipts, posting OFF, no pending candidate or rollback, preserved token-file/
+marker metadata and dependency consistency. The prior f1a8d98 release is retained.
+
+All 25 pure Golden tests and 28 durable-store tests also passed once under the
+installed Linux runtime, with temporary synthetic fixtures and no protected
+settings loaded. This is runtime verification, not actual Golden acceptance.
+The latest read-only resource check still shows about 2GiB total host memory,
+below the existing 4GiB total / 1.5GiB available media-preparation floors.
 Capacity management remains with the owner's separate work; retention and
-resource floors were not changed.
+resource floors were not changed. Actual approved source artifacts, human
+review/READY reserves, schedule integration and publishing/observation acceptance
+remain open. No real media acquisition, generation, upload, production Sheets
+mutation or SNS publication was invoked by this rollout.

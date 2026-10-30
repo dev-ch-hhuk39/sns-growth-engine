@@ -76,6 +76,27 @@ implied by these synthetic fixtures.
 The source implementation is ec217b2; the validation follow-up changes only
 documentation. Source/config/scripts remain exactly equal to that tested commit.
 The administrator disk preflight subsequently passed after separate owner
-capacity work. Runtime promotion remains a separate exact-revision transaction
-requiring fresh backup and health evidence, posting OFF and unchanged-current
-guards. This does not satisfy the heavier real-media resource/rights/review gates.
+capacity work. Protected PR #492 passed all four required checks and was merged
+as `1bf36eb61c34c1c331d087900e75069616763678`. The exact revision, including the
+previously merged PR #491, was promoted once after a fresh complete encrypted
+backup and a later independent health check. Subsequent actual observation
+confirms the successful transaction, two read-only Sheets health checks, posting
+OFF, retained previous release, no pending candidate or rollback, unchanged
+token-file/marker metadata, Python3.11.17/setuptools84.1.0 and `pip check` PASS.
+Existing disk floors remain satisfied.
+
+A one-time check against the installed release passed 28 store and 25 pure
+Golden tests under the runtime user, with no protected runtime settings loaded,
+an empty connection environment, temporary synthetic fixtures and bounded
+resources. These 53 tests verify Linux execution and private-file behavior;
+they do not prove actual media understanding, permission or human approval.
+No production evidence receipt, model call, media acquisition/upload, production
+Sheets mutation, token refresh, timer change or SNS publication was performed.
+
+Actual source-specific rights, both accounts' X/YouTube Golden bundles, human
+review/READY reserves, remaining schedule integration, approved publishing
+canaries and timed observation remain open. A fresh metadata-only read shows
+about 2GiB total host memory, below the unchanged 4GiB total / 1.5GiB available
+media-preparation floors. Capacity management remains with the owner's separate
+chat. The installed source does not satisfy these heavier resource/rights/review
+gates, and formal goal status remains unchanged.
