@@ -1,68 +1,104 @@
 # Reference-first Completion Contract
 
-Updated: 2026-08-11
+The current owner scope is `night_scout` and `liver_manager`. Discovery remains
+TikTok, Threads, X, YouTube; current physical media is X and YouTube. New
+Threads/TikTok physical media is deferred. Historical account capabilities and
+acceptance criteria remain retained; they do not grant current owner rights.
 
-`scripts/evaluate_reference_first_completion.py` is the mechanical completion
-gate. It separates three claims that must never be collapsed into one:
+`scripts/evaluate_reference_first_completion.py` separates software/integration
+contracts from real production evidence. A successful software-only exit with
+`SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY` does not mean the whole product is
+complete and does not authorize a production operation.
 
-- `SOFTWARE_COMPLETE`: architecture, regression suite, acquisition plans,
-  dual-account integration contracts, publisher, permission/provenance,
-  metrics and PDCA code are green.
-- `INTEGRATION_COMPLETE`: both managed accounts traverse source identity,
-  parent/media attachment, understanding, route selection, persona generation,
-  public validation, review eligibility, geometry and permission checks with no
-  external calls or production writes.
-- `PRODUCTION_EVIDENCE_COMPLETE`: live capability evidence, current
-  implementation-bound production approval and required source permissions
-  exist. Code alone can never make this true.
+- `SOFTWARE_COMPLETE` requires the existing architecture, regression,
+  discovery, publisher, permission/provenance and metrics/PDCA code contracts.
+- `INTEGRATION_COMPLETE` covers both accounts' synthetic no-write source,
+  parent/media, understanding, routing, generation, validation and review flow.
+- `ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE` additionally requires current local
+  X/YouTube artifacts for both accounts, full bound visual proof, every existing
+  quality gate and two uncached reads of the live permission ledger.
+- `PRODUCTION_EVIDENCE_COMPLETE` additionally requires all production
+  capability evidence, a valid unchanged implementation revision and its
+  explicit approval, successful permission state, software and integration.
+  It does not execute publication. Actual publishing has separate authority.
 
-The v23 report also exposes `ACTIVE_SCOPE_SOFTWARE_COMPLETE`,
-`ACTIVE_SCOPE_LIVE_EVIDENCE_COMPLETE`, `DEFERRED_PLATFORM_COUNT`,
-`DEFERRED_PLATFORMS` and `PRODUCTION_PUBLISH_EVIDENCE_COMPLETE`. As of
-2026-08-17, reference acquisition has no globally deferred platform; individual
-Threads sources may still return `DEFERRED` after all bounded fallbacks fail. Active
-acquisition is X, YouTube and TikTok. Threads is a non-blocking
-`DEFERRED_OSS_CANDIDATE`, not an authentication blocker.
+## Default offline evaluation
 
-Run after the repository harness:
+After the repository harness:
 
 ```bash
 python3 scripts/evaluate_reference_first_completion.py \
-  --repository-tests-json /tmp/reference-first-repository-tests.json \
-  --output /tmp/reference-first-completion.json
+  --repository-tests-json /absolute/repository-tests.json \
+  --output /absolute/reference-first-completion.json
 ```
 
-The evaluator checks executable publisher markers for text/image/video/
-carousel support, READY-only selection, final validation, idempotency,
-read-after-write and metric scheduling. It also checks 24h/72h/7d scheduling,
-the six metrics collection outcomes, MEASURED-only PDCA, and non-auto-applied
-review suggestions.
+The default does not connect to Sheets or open physical artifact directories.
+The current physical check is `NOT_RUN`, and live/production completion stays
+false. Historical `PASS_AV` declarations remain visible as historical data;
+they cannot substitute for actual files or make current verification pass.
+Existing regression minimums, capability criteria and production approval
+requirements are retained. When physical verification is explicitly requested,
+a blocked result makes the command fail even if software-only checks pass.
 
-The evaluator is repository-contained. Recorded physical Golden evidence is
-declared in `config/reference_first_completion.json`; it never depends on the
-local-only `.codex-owner-context` directory at runtime.
+## Explicit existing-artifact verification
 
-Expected state while live production evidence remains incomplete is
-`SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY`: software and no-write integration
-are complete while production evidence is false. This is a successful
-completion-gate result, not permission to write production systems.
+Only after approval to read the existing protected Sheets configuration and
+current permission ledger, on the trusted environment containing the artifacts:
 
-## External Blockers
+```bash
+python3 scripts/evaluate_reference_first_completion.py \
+  --repository-tests-json /absolute/repository-tests.json \
+  --verify-existing-owner-goldens \
+  --x-dir /absolute/existing-x-artifacts \
+  --youtube-dir /absolute/existing-youtube-artifacts \
+  --output /absolute/reference-first-completion.json
+```
 
-- X permission: the 24 explicitly authorized X/Threads/TikTok identities were
-  written source/account/handle-specifically and verified read-after-write on
-  2026-08-11. Third-party repost inheritance remains disabled.
-- X physical Golden: four exact status URLs have recorded A/V evidence across
-  Night Scout and Liver Manager. `twscrape` remains optional-auth and does not
-  block the proven gallery-dl plus yt-dlp route.
-- Threads reference acquisition: active bounded public route using pinned
-  threads-cli, logged-out persisted GraphQL, then cookie-free Playwright.
-  A source that exhausts all three is reported as `DEFERRED`; Meta credentials
-  are not required.
-- Production mutation: Sheets, Cloudinary, download/cut and Threads publishing
-  require separate explicit approval and credentials.
-- Public reachability: a Threads source returning no posts after all bounded
-  fallbacks is recorded as `DEFERRED`, never as successful acquisition.
+Both existing absolute directories must be owned by the executing user with
+mode 0700 and no linked path components. Media, metadata and proof files must
+be owned regular single-link files without group/world write permission.
+Their identities and mutable metadata are rechecked after verification.
+The exact registered manifest must cover both accounts on both physical
+platforms. Missing, duplicate, foreign, deferred or misbound candidates fail
+before any ledger read. All selected manifest artifacts remain required; no
+candidate is silently dropped to obtain a passing result.
 
-The applied owner decision and remaining X Golden sequence are in
-`docs/x-reusable-media-permission-decision-package.json`.
+Existing file SHA256, extracted author/native-post identity, complete Gemini
+proof, A/V, geometry, persona/public-text and generation/media-text quality
+checks remain mandatory. The actual media provider is not called. After local
+verification, a second uncached live-ledger read invalidates prior success if
+permission was revoked or account/author scope no longer matches. Mock/dry-run
+clients, failed reads and missing proof block success. Output contains fixed
+status/identity fields, never unpublished generated captions or raw provider
+errors. No schema setup, Sheets mutation, download, cut, upload, paid inference,
+READY promotion or SNS publication is performed.
+
+Current owner verification covers X/YouTube only. Historical TikTok physical
+records are not required or opened, and no Threads/TikTok physical route is
+reactivated. Those platforms' non-browser metadata discovery remains separate.
+
+## Implementation-bound approval
+
+A normal checkout requires its own Git root, a valid 40-hex HEAD and successful
+clean status. An immutable deployed release uses its exact owner-controlled,
+regular, single-link, non-writable-by-others `.production-release` marker,
+matching its release directory. Linked, replaced, malformed or missing markers
+cannot fall back to an ancestor checkout. Empty identities never approve empty
+approval values. The implementation revision must remain unchanged through the
+evaluation; a change invalidates production completion.
+
+A valid bound approval does not replace current files, latest rights, actual
+capability evidence, human review, accepted reserves, schedule integration,
+explicitly approved publishing canaries or timed observation. Synthetic tests
+are not live evidence. Formal goal status is updated only by the established
+collector/evaluator process, never manually to reflect these tests.
+
+## Source validation — 2026-10-31
+
+Final implementation 72efd03 passes 35 new adversarial/CLI/identity tests,
+22 existing artifact integration tests, Golden25 and owner-policy21, plus
+repository 1,109/1,109, isolated pytest 173/173 and workflow safety 619/619.
+Compile, fatal Ruff, diff and working/history secret checks pass. Existing eight
+external and three optional exclusions remain unchanged. The validation follow-up
+changes documentation only. No live physical verification or production
+operation was executed, and formal goal status remains unchanged.
