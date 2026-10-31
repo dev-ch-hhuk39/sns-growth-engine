@@ -1430,7 +1430,7 @@
       "target_account_ids": ["liver_manager"],
       "collection_method": "threads_cli_public",
       "collection_mode": "reference_source",
-      "fallback": ["threads_logged_out_graphql", "threads_public_screen", "browser_export", "manual_json"],
+      "fallback": ["threads_logged_out_graphql", "threads_public_http", "browser_export", "manual_json"],
       "candidate_status": "candidate", "active": true, "fetch_enabled": true, "allow_network_fetch": true, "manual_only": false,
       "allow_download": false, "allow_cut": false, "allow_upload": false,
       "rights_policy": "reference_only", "reuse_policy": "reference_only", "media_policy": "do_not_download", "can_reuse_media": false, "media_pipeline_eligible": false,
@@ -1522,7 +1522,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],
@@ -1606,7 +1606,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],
@@ -1684,7 +1684,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],
@@ -1773,7 +1773,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],
@@ -5771,7 +5771,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],
@@ -5859,7 +5859,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],
@@ -5947,7 +5947,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],
@@ -6035,7 +6035,7 @@
       "collection_mode": "reference_source",
       "fallback": [
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
         "browser_export",
         "manual_json"
       ],

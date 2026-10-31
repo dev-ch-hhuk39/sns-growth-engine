@@ -53,11 +53,12 @@ def test_threads_three_stage_route_is_active_without_auth() -> None:
     assert route.primary == "threads_cli_public"
     assert route.fallbacks == (
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
     )
     for backend_id in route.primary, *route.fallbacks:
         backend = registry.get(backend_id)
         assert not backend.requires_auth
+        assert not backend.requires_browser
         assert backend.read_only
 
 

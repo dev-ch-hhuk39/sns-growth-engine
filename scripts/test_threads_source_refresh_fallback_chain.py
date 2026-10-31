@@ -26,23 +26,23 @@ class Backend404:
         calls.append("404")
         raise BackendFailure("threads_post_application_404")
 
-class ExactScreen:
+class ExactHttp:
     def acquire_post(self, _source, url):
-        calls.append("screen")
+        calls.append("http")
         assert url == parent
         return resolved_post
 
 old = (ingest.ThreadsCliPublicAdapter, ingest.ThreadsLoggedOutGraphQLAdapter,
-       ingest.ThreadsPublicScreenAdapter, ingest.safe_https_url)
+       ingest.ThreadsPublicHttpAdapter, ingest.safe_https_url)
 try:
     ingest.ThreadsCliPublicAdapter = Backend404
     ingest.ThreadsLoggedOutGraphQLAdapter = Backend404
-    ingest.ThreadsPublicScreenAdapter = ExactScreen
+    ingest.ThreadsPublicHttpAdapter = ExactHttp
     ingest.safe_https_url = lambda *_args, **_kwargs: True
     refreshed, backend = ingest.refresh_threads_media_url(post, media)
     assert refreshed == "https://cdninstagram.com/fresh.mp4"
     assert backend == "threads_public_http"
-    assert calls == ["404", "404", "screen"]
+    assert calls == ["404", "404", "http"]
 
     calls.clear()
     class IdentityMismatch:
@@ -59,7 +59,7 @@ try:
     assert calls == ["mismatch"]
 finally:
     (ingest.ThreadsCliPublicAdapter, ingest.ThreadsLoggedOutGraphQLAdapter,
-     ingest.ThreadsPublicScreenAdapter, ingest.safe_https_url) = old
+     ingest.ThreadsPublicHttpAdapter, ingest.safe_https_url) = old
 
 video = _raw_graph_post({"pk": "123", "code": "ABC123", "media_type": 2,
                          "video_versions": [{"url": "https://cdn.test/video.mp4"}],

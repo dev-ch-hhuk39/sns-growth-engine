@@ -15,7 +15,7 @@ from acquisition.threads_public import ThreadsBrowserSessionAdapter  # noqa: E40
 SOURCE = {
     "source_id": "src_ns_threads_test",
     "source_url": "https://www.threads.com/@target",
-    "target_account_ids": ["night_scout"],
+    "target_account_ids": ["legacy_fixture"],
 }
 
 
@@ -46,7 +46,7 @@ checks = {
     "legacy adapter retains ordered media": [item.media_type for item in post.media_items] == ["video", "image"],
     "threads public route is active": routing["routes"]["threads.profile_posts"]["primary"] == "threads_cli_public",
     "threads browser session is inactive": "threads_browser_session" not in active_names,
-    "public screen is final fallback": routing["routes"]["threads.profile_posts"]["fallbacks"][-1] == "threads_public_screen",
+    "non-browser HTTP is final fallback": routing["routes"]["threads.profile_posts"]["fallbacks"][-1] == "threads_public_http",
     "factory may retain legacy session adapter": "threads_browser_session" in router.adapters,
 }
 for name, passed in checks.items():

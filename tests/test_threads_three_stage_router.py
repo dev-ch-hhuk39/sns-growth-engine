@@ -100,7 +100,7 @@ def test_threads_route_order_and_circuit_policy() -> None:
     assert route.primary == "threads_cli_public"
     assert route.fallbacks == (
         "threads_logged_out_graphql",
-        "threads_public_screen",
+        "threads_public_http",
     )
     assert route.circuit_failure_threshold == 3
     assert route.cooldown_seconds == 900

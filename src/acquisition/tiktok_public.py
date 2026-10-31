@@ -13,6 +13,7 @@ import re
 from typing import Any, Callable
 
 from .contracts import ProviderResult
+from .browser_policy import require_legacy_browser_scope
 from .models import (
     NormalizedMediaItem,
     NormalizedSourcePost,
@@ -89,6 +90,7 @@ class TikTokPublicProfileAdapter:
         *,
         limit: int,
     ) -> list[NormalizedSourcePost]:
+        require_legacy_browser_scope(source)
         platform = str(source.get("source_platform") or source.get("platform") or "").lower()
 
         if platform != "tiktok":

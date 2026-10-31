@@ -17,6 +17,7 @@ from typing import Any, Callable
 from urllib.parse import urljoin
 
 from .contracts import ProviderResult
+from .browser_policy import require_legacy_browser_scope
 from .models import (
     NormalizedMediaItem,
     NormalizedSourcePost,
@@ -379,6 +380,7 @@ def parse_public_post_html(
 class ThreadsPublicProfileAdapter:
     backend_name = "threads_public_playwright"
     backend_version = "public-html-v1"
+    requires_browser = True
 
     def __init__(self, html_loader: Callable[[str], str] | None = None):
         self._html_loader = html_loader
@@ -410,6 +412,8 @@ class ThreadsPublicProfileAdapter:
         post_url: str,
     ) -> NormalizedSourcePost:
         """Resolve one exact public post without traversing another profile."""
+        if self.requires_browser:
+            require_legacy_browser_scope(source)
         canonical_post = canonical_url(post_url)
         expected_handle = _profile_handle(str(source.get("source_url") or ""))
         if "/post/" not in canonical_post:
@@ -436,6 +440,8 @@ class ThreadsPublicProfileAdapter:
         *,
         limit: int,
     ) -> list[NormalizedSourcePost]:
+        if self.requires_browser:
+            require_legacy_browser_scope(source)
         profile_url = canonical_url(str(source.get("source_url") or ""))
 
         if not profile_url.startswith("https://www.threads.com/@"):
@@ -508,10 +514,11 @@ class ThreadsPublicProfileAdapter:
 
 
 class ThreadsPublicHttpAdapter(ThreadsPublicProfileAdapter):
-    """Lightweight fallback for public pages when Chromium is unavailable."""
+    """Non-browser public-page fallback for current owner discovery."""
 
     backend_name = "threads_public_http"
     backend_version = "public-http-v1"
+    requires_browser = False
 
     def _load(self, url: str) -> str:
         if self._html_loader:
@@ -595,6 +602,7 @@ class ThreadsPublicScreenAdapter(ThreadsPublicProfileAdapter):
     def acquire(
         self, source: dict[str, Any], *, limit: int
     ) -> list[NormalizedSourcePost]:
+        require_legacy_browser_scope(source)
         profile_url = canonical_url(str(source.get("source_url") or ""))
         if not profile_url.startswith("https://www.threads.com/@"):
             raise BackendFailure("threads_profile_url_required")
@@ -718,6 +726,7 @@ class ThreadsBrowserSessionAdapter:
         return dict(payload or {})
 
     def _render(self, source: dict[str, Any], limit: int) -> list[dict[str, Any]]:
+        require_legacy_browser_scope(source)
         if self._render_loader:
             return self._render_loader(source, limit)
         try:
@@ -784,6 +793,7 @@ class ThreadsBrowserSessionAdapter:
     def acquire(
         self, source: dict[str, Any], *, limit: int
     ) -> list[NormalizedSourcePost]:
+        require_legacy_browser_scope(source)
         rendered = self._render(source, max(1, int(limit)))
         posts: list[NormalizedSourcePost] = []
         for item in rendered:

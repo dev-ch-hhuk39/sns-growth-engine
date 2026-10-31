@@ -30,7 +30,7 @@ def html_loader(url: str) -> str:
 
 adapter = ThreadsPublicScreenAdapter(html_loader=html_loader, href_loader=href_loader)
 posts = adapter.acquire(
-    {"source_id": "src", "source_url": PROFILE, "target_account_ids": ["night_scout"]},
+    {"source_id": "src", "source_url": PROFILE, "target_account_ids": ["legacy_fixture"]},
     limit=2,
 )
 
@@ -38,7 +38,7 @@ backfill = adapter.acquire(
     {
         "source_id": "src",
         "source_url": PROFILE,
-        "target_account_ids": ["night_scout"],
+        "target_account_ids": ["legacy_fixture"],
         "_discovery_start_position": 2,
     },
     limit=1,
