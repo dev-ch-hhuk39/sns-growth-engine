@@ -92,3 +92,13 @@ capability evidence, human review, accepted reserves, schedule integration,
 explicitly approved publishing canaries or timed observation. Synthetic tests
 are not live evidence. Formal goal status is updated only by the established
 collector/evaluator process, never manually to reflect these tests.
+
+## Source validation — 2026-10-31
+
+Final implementation 72efd03 passes 35 new adversarial/CLI/identity tests,
+22 existing artifact integration tests, Golden25 and owner-policy21, plus
+repository 1,109/1,109, isolated pytest 173/173 and workflow safety 619/619.
+Compile, fatal Ruff, diff and working/history secret checks pass. Existing eight
+external and three optional exclusions remain unchanged. The validation follow-up
+changes documentation only. No live physical verification or production
+operation was executed, and formal goal status remains unchanged.
