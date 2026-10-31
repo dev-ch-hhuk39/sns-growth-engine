@@ -37,7 +37,8 @@ The current physical check is `NOT_RUN`, and live/production completion stays
 false. Historical `PASS_AV` declarations remain visible as historical data;
 they cannot substitute for actual files or make current verification pass.
 Existing regression minimums, capability criteria and production approval
-requirements are retained.
+requirements are retained. When physical verification is explicitly requested,
+a blocked result makes the command fail even if software-only checks pass.
 
 ## Explicit existing-artifact verification
 
@@ -53,7 +54,10 @@ python3 scripts/evaluate_reference_first_completion.py \
   --output /absolute/reference-first-completion.json
 ```
 
-Both existing absolute directories are required, with no linked path components.
+Both existing absolute directories must be owned by the executing user with
+mode 0700 and no linked path components. Media, metadata and proof files must
+be owned regular single-link files without group/world write permission.
+Their identities and mutable metadata are rechecked after verification.
 The exact registered manifest must cover both accounts on both physical
 platforms. Missing, duplicate, foreign, deferred or misbound candidates fail
 before any ledger read. All selected manifest artifacts remain required; no

@@ -133,6 +133,20 @@ def _permission_rows(use_sheets: bool) -> list[dict[str, Any]]:
     return [dict(row) for row in read_records_safely(client, "media_permissions", preserve_strings=True)]
 
 
+def _owner_artifact_state(path: Path, *, directory: bool = False) -> tuple[int, ...]:
+    """Require protected input ownership and snapshot changes without atime."""
+    info = path.lstat()
+    if info.st_uid != os.geteuid():
+        raise ValueError("artifact_owner_unverified")
+    if directory:
+        if not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o700:
+            raise ValueError("private_artifact_directory_required")
+    elif (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_mode & 0o022):
+        raise ValueError("protected_regular_artifact_required")
+    return (info.st_dev, info.st_ino, info.st_mode, info.st_uid, info.st_gid, info.st_nlink,
+            info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
 def verify_owner_goldens(directories: dict[str, Path] | None = None) -> dict[str, Any]:
     """Explicit current X/YouTube verification; absent directories stay offline.
 
@@ -155,6 +169,7 @@ def verify_owner_goldens(directories: dict[str, Path] | None = None) -> dict[str
         if any(not path.is_absolute() or not path.is_dir() or path.resolve(strict=True) != path
                for path in paths.values()):
             return result
+        snapshots = {path: _owner_artifact_state(path, directory=True) for path in paths.values()}
         manifest = json.loads((ROOT / "config/physical_media_goldens.json").read_text(encoding="utf-8"))
         items = [(platform, dict(item)) for platform, key in (
             ("x", "x_exact_statuses"), ("youtube", "youtube_goldens")) for item in manifest[key]]
@@ -175,8 +190,11 @@ def verify_owner_goldens(directories: dict[str, Path] | None = None) -> dict[str
             seen.add(identity)
             coverage.add((account, platform))
             bindings.append(binding)
-            if select_artifact(binding, [paths[platform]])["status"] != "PASS":
+            artifact = select_artifact(binding, [paths[platform]])
+            if artifact["status"] != "PASS":
                 return result
+            for path in (artifact["path"], artifact["metadata_path"], artifact["path"].with_suffix(".understanding.json")):
+                snapshots[path] = _owner_artifact_state(path)
         if coverage != {(account, platform) for account in OWNER_REFERENCE_ACCOUNTS for platform in paths}:
             raise ValueError("manifest_coverage")
     except (OSError, ValueError, TypeError, KeyError):
@@ -189,6 +207,10 @@ def verify_owner_goldens(directories: dict[str, Path] | None = None) -> dict[str
         # Re-read without invocation caches after all bounded local byte/probe
         # work. A later revoke/read failure must invalidate the earlier result.
         current_permissions = _permission_rows(True)
+        if any(_owner_artifact_state(path, directory=path in paths.values()) != before
+               for path, before in snapshots.items()):
+            result["reasons"] = ["current_owner_artifacts_changed"]
+            return result
         checks = []
         for (platform, item), binding, row in zip(items, bindings, rows):
             permission = evaluate_permission(current_permissions, item["source_id"],

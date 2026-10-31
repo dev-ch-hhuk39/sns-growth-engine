@@ -35,7 +35,7 @@ class OwnerArtifactVerificationTests(unittest.TestCase):
         (self.root / "config").mkdir()
         self.directories = {platform: self.root / platform for platform in ("x", "youtube")}
         for directory in self.directories.values():
-            directory.mkdir()
+            directory.mkdir(mode=0o700)
         self.manifest = {"x_exact_statuses": [], "youtube_goldens": [], "tiktok_goldens": []}
         self.registry, self.permissions = [], []
         for platform in self.directories:
@@ -137,7 +137,34 @@ class OwnerArtifactVerificationTests(unittest.TestCase):
         next(self.directories["x"].glob("*.understanding.json")).unlink()
         result, reads = self.verify()
         self.assertEqual(result["status"], "BLOCKED")
-        self.assertEqual(reads, 2)
+        self.assertEqual(reads, 0)
+
+    def test_public_directory_cannot_supply_completion_evidence(self):
+        self.directories["x"].chmod(0o777)
+        result, reads = self.verify()
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(reads, 0)
+
+    def test_group_writable_evidence_cannot_supply_completion_evidence(self):
+        next(self.directories["x"].glob("*.understanding.json")).chmod(0o660)
+        result, reads = self.verify()
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(reads, 0)
+
+    def test_bytes_changed_after_one_item_passes_cannot_keep_prior_success(self):
+        verify_item = golden.verify_item
+        changed = False
+        path = next(self.directories["x"].glob("*.mp4"))
+        def change_after_verification(*args, **kwargs):
+            nonlocal changed
+            row = verify_item(*args, **kwargs)
+            if not changed:
+                path.write_bytes(b"changed after successful item verification")
+                changed = True
+            return row
+        with patch.object(golden, "verify_item", side_effect=change_after_verification):
+            result, _ = self.verify()
+        self.assertEqual(result["status"], "BLOCKED")
 
     def test_permission_revocation_during_local_verification_is_rechecked(self):
         revoked = deepcopy(self.permissions)
@@ -260,6 +287,18 @@ class CompletionBindingTests(unittest.TestCase):
         with patch.object(golden, "verify_owner_goldens", side_effect=AssertionError("no physical access")):
             result = completion.evaluate(repository_tests_result={"status": "PASS", "test_count": 1108, "failed_count": 0})
         self.assertEqual(result["current_owner_physical_verification"]["status"], "NOT_RUN")
+
+    def test_explicit_physical_failure_is_a_failed_result_even_when_software_passes(self):
+        with patch.object(completion, "_current_owner_physical_evidence", return_value={"status": "BLOCKED", "checks": []}):
+            result = completion.evaluate(repository_tests_result={"status": "PASS", "test_count": 1108, "failed_count": 0},
+                physical_golden_directories={"x": self.root, "youtube": self.root})
+        self.assertTrue(result["software_complete"])
+        self.assertEqual(result["status"], "FAIL")
+
+    def test_cli_reports_failed_requested_verification_as_nonzero(self):
+        args = ["evaluator", "--verify-existing-owner-goldens", "--x-dir", "/private/tmp/x", "--youtube-dir", "/private/tmp/y"]
+        with patch.object(sys, "argv", args), patch.object(completion, "evaluate", return_value={"status": "FAIL", "completion_status": "synthetic"}), redirect_stdout(io.StringIO()):
+            self.assertEqual(completion.main(), 1)
 
     def test_cli_requires_explicit_verification_and_both_directories(self):
         for flags in (["--x-dir", "/private/tmp"], ["--verify-existing-owner-goldens"],

@@ -496,7 +496,8 @@ def evaluate(
     )
     deferred_platforms = sorted(contract.get("deferred_reference_acquisition", {}))
     return {
-        "status": "PASS" if status in {"SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY", "COMPLETE"} else "FAIL",
+        "status": "PASS" if (status in {"SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY", "COMPLETE"}
+                             and (physical_golden_directories is None or active_scope_live_evidence_complete)) else "FAIL",
         "completion_status": status,
         "implementation_revision": implementation_revision,
         "implementation_revision_stable": implementation_stable,
