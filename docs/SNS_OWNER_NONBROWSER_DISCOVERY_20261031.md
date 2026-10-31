@@ -32,3 +32,15 @@ workflow safety, fatal lint, compile, diff and secret checks precede delivery.
 No workflow, timer, token, production Sheets or publisher setting is changed. The
 installed runtime remains separately verified with posting OFF until a guarded
 rollout. Formal goal status is not edited by this source change.
+
+## Prepared review material
+
+The existing original-copy catalog was revalidated locally for Night/Liver only.
+All 30 examined candidates per account pass individual public, v2 hard and
+generation-quality checks. A private 60-item Markdown review document and
+hash-bound JSON receipt were saved outside Git. This is original text from the
+existing catalog, not new Ollama output or source-derived media copy. The bounded
+free local-model attempt added zero qualified drafts; its failed proposals were
+not admitted. Actual production history/global duplicates, batch-slot allocation
+and human approval remain unchecked. Neither local evidence nor the document
+creates a production queue, READY approval or counted Bank inventory.

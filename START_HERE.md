@@ -1,3 +1,10 @@
+## 2026-10-31 — enforce non-browser owner discovery
+
+- Current owner scope remains Night/Liver. Threads discovery and exact-post refresh now use CLI -> logged-out GraphQL -> public HTTP; registered owner source fallback declarations and capability roles match. TikTok keeps its existing embed/gallery-dl path. The rendered-screen adapter is inactive; no browser path is enabled for current owner discovery.
+- Retained Threads/TikTok browser adapters reject every current owner target, conflicting scope alias, missing/malformed scope and all-account scope before invoking any loader or session access. Explicit non-owner legacy fixtures retain parent, ordered-media and discovery-offset coverage; no legacy implementation is deleted. HTTP parent/author validation and all media permissions, quality, review and publisher gates remain unchanged.
+- Focused new tests6, Threads regression72, acquisition regression16, owner policy21 and completion evaluator PASS; full source validation and protected delivery are pending. Existing runtime remains posting-OFF 1bf36eb. No live discovery, new download, paid inference, upload, production Sheets mutation, timer change or publication is performed by this policy fix. Mac RAW capture evidence is recorded separately and is not complete visual understanding or overall completion. Formal goal status remains unchanged.
+- Review preparation reused the existing original-copy catalog after bounded local model generation yielded no additional qualified drafts. Actual local revalidation passes 30/30 individual candidates per owner account; a private 60-item human-review document and hash-bound receipt were created outside Git. This has no production-history/global-duplicate, batch-slot, human-approval or READY evidence and adds zero Bank inventory.
+
 ## 2026-10-31 — Mac raw media capture without exporting production credentials
 
 - Owner explicitly confirmed no VPS RAM upgrade: separate capacity work covers disk cleanup only. The existing 4GiB total / 1.5GiB available VPS media floor remains unchanged. Read-only hardware checks confirm the authorized Mac has 32GiB RAM and sufficient available memory; the Mac check includes reclaimable inactive pages using the established OS X available-memory formula.
@@ -852,9 +859,3 @@ Updated: 2026-09-27
 - Never publish from preparation; never post to X or Beauty outside existing account gates.
 - Never weaken rights/provenance, persona/quality, account isolation, duplicate/idempotency, read-after-write, or kill-switch checks.
 - Do not remove production data, assets, queues, evidence, logs, credentials, current release, or `.runtime/`.
-
-## 2026-10-31 — enforce non-browser owner discovery
-
-- Current owner scope remains Night/Liver. Threads discovery and exact-post refresh now use CLI -> logged-out GraphQL -> public HTTP; registered owner source fallback declarations and capability roles match. TikTok keeps its existing embed/gallery-dl path. The rendered-screen adapter is inactive; no browser path is enabled for current owner discovery.
-- Retained Threads/TikTok browser adapters reject every current owner target, conflicting scope alias, missing/malformed scope and all-account scope before invoking any loader or session access. Explicit non-owner legacy fixtures retain parent, ordered-media and discovery-offset coverage; no legacy implementation is deleted. HTTP parent/author validation and all media permissions, quality, review and publisher gates remain unchanged.
-- Focused new tests6 and related adapter contracts PASS; full source validation and protected delivery are pending. Existing runtime remains posting-OFF 1bf36eb. No live discovery, new download, paid inference, upload, production Sheets mutation, timer change or publication is performed by this policy fix. Mac RAW capture evidence is recorded separately and is not complete visual understanding or overall completion. Formal goal status remains unchanged.
