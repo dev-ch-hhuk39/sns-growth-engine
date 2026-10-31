@@ -21,7 +21,7 @@ from acquisition.ytdlp_runtime import physical_download_option_attempts  # noqa:
 from acquisition.models import canonical_url  # noqa: E402
 from acquisition.threads_cli import ThreadsCliPublicAdapter, ThreadsLoggedOutGraphQLAdapter  # noqa: E402
 from acquisition.threads_official import canonical_threads_post_url, threads_handle  # noqa: E402
-from acquisition.threads_public import ThreadsPublicScreenAdapter  # noqa: E402
+from acquisition.threads_public import ThreadsPublicHttpAdapter  # noqa: E402
 from generation.media_platform_policy import OWNER_REFERENCE_ACCOUNTS, can_attempt_physical_media, normalize_platform  # noqa: E402
 from config_loader import get_config  # noqa: E402
 from media.permission_ledger import account_source_permission_reasons, evaluate_permission  # noqa: E402
@@ -475,7 +475,7 @@ def refresh_threads_media_url(
         "target_account_ids": [str(post.get("target_account_id") or "")],
     }
     adapters = [adapter] if adapter is not None else [
-        ThreadsCliPublicAdapter(), ThreadsLoggedOutGraphQLAdapter(), ThreadsPublicScreenAdapter(),
+        ThreadsCliPublicAdapter(), ThreadsLoggedOutGraphQLAdapter(), ThreadsPublicHttpAdapter(),
     ]
     for candidate in adapters:
         try:

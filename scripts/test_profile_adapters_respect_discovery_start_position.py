@@ -51,7 +51,7 @@ threads_posts = threads.acquire(
     {
         "source_id": "src_threads",
         "source_url": ("https://www.threads.com/" "@sample"),
-        "target_account_ids": ["night_scout"],
+        "target_account_ids": ["legacy_fixture"],
         "_discovery_start_position": 3,
     },
     limit=2,
@@ -85,7 +85,7 @@ tiktok_posts = tiktok.acquire(
         "source_id": "src_tiktok",
         "source_platform": "tiktok",
         "source_url": ("https://www.tiktok.com/" "@sample"),
-        "target_account_ids": ["liver_manager"],
+        "target_account_ids": ["legacy_fixture"],
         "_discovery_start_position": 3,
     },
     limit=2,

@@ -46,7 +46,7 @@ assert media_cfg["target_aspect_ratio"] == "preserve_source"
 
 routing = json.loads((ROOT / "config/source_backend_routing.json").read_text(encoding="utf-8"))
 assert routing["routes"]["threads.profile_posts"]["primary"] == "threads_cli_public"
-assert routing["routes"]["threads.profile_posts"]["fallbacks"] == ["threads_logged_out_graphql", "threads_public_screen"]
+assert routing["routes"]["threads.profile_posts"]["fallbacks"] == ["threads_logged_out_graphql", "threads_public_http"]
 assert routing["routes"]["tiktok.profile_posts"]["fallbacks"] == ["tiktok_gallery_dl"]
 
 workflow = (ROOT / ".github/workflows/direct-media-preparation.yml").read_text(encoding="utf-8")

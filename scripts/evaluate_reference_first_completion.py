@@ -166,7 +166,7 @@ def _architecture(contract: dict[str, Any]) -> dict[str, Any]:
     media = _load(MEDIA_PATH)
     issues: list[str] = []
     expected_routes = {
-        "threads.profile_posts": ("threads_cli_public", ["threads_logged_out_graphql", "threads_public_screen"]),
+        "threads.profile_posts": ("threads_cli_public", ["threads_logged_out_graphql", "threads_public_http"]),
         "tiktok.profile_posts": ("tiktok_public_embed", ["tiktok_gallery_dl"]),
         "x.profile_posts": ("x_gallery_dl", []),
         "youtube.channel_videos": ("yt_dlp", []),

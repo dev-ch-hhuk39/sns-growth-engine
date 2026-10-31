@@ -135,10 +135,10 @@
       "license": "project_license",
       "install_method": "repository",
       "capabilities": ["threads_post_detail_fallback", "public_metadata"],
-      "adapter": "src/acquisition/providers.py",
+      "adapter": "src/acquisition/threads_public.py",
       "github_actions_compatibility": "PASS_WITH_LIVE_CANARY_REQUIRED",
-      "production_status": "INACTIVE_COMPATIBILITY",
-      "constraints": ["not selectable by active routing", "public content only", "retained for historical evidence only"]
+      "production_status": "INTEGRATED_GATED",
+      "constraints": ["non-browser fallback after CLI/GraphQL", "public content only", "live canary required"]
     },
     {
       "id": "threads_public_screen",

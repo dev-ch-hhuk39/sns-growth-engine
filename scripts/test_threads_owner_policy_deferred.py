@@ -27,7 +27,7 @@ route = routing["routes"]["threads.profile_posts"]
 checks = {
     "three-stage route": route["primary"] == "threads_cli_public"
     and route["fallbacks"]
-    == ["threads_logged_out_graphql", "threads_public_screen"],
+    == ["threads_logged_out_graphql", "threads_public_http"],
     "router registers route": "threads.profile_posts" in router.routes,
     "no auth in three stages": all(
         not registry.get(name).requires_auth

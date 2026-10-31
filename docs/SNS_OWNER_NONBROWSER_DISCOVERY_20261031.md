@@ -1,0 +1,34 @@
+# Owner non-browser reference discovery
+
+Night Scout and Liver Manager use non-browser Threads/TikTok discovery. Threads
+now falls through the existing CLI, logged-out persisted GraphQL and public HTTP
+adapters, with unchanged bounded counts and circuit-breaker behavior. Exact-post
+CDN refresh uses the same chain. Nine registered owner source fallback lists and
+the capability registry agree with the actual route. This is read-only discovery,
+not permission to download or republish any media.
+
+The retained rendered-screen, public Playwright and browser-session adapters are
+not active owner routes. Direct calls also reject current owner targets before
+calling an HTML/render loader, Playwright or session access. The check inspects
+all scalar/list account aliases, including mixed targets; absent, malformed and
+all-account scope cannot bypass the policy. Explicit non-owner legacy fixtures
+still test extraction, parent identity, ordered children and discovery offsets.
+No legacy code is deleted while both-account X/YouTube Goldens remain incomplete.
+
+HTTP continues to validate the exact post author and parent. Metadata-only results
+without real child payloads do not acquire fabricated media. Existing physical
+platform policy, latest-ledger permissions, A/V and semantic quality, human review
+and READY-only publishing remain mandatory. An unavailable public HTTP endpoint
+reports ordinary acquisition failure; it does not enable browser fallback.
+
+Six new focused tests cover actual configured non-browser capability flags, all
+owner source lists, direct and route-overridden browser rejection before loaders,
+both-account HTTP extraction and identity rejection, and the complete fallback
+chain. These are mocked transport tests, not current live discovery or full Golden
+proof. Related legacy adapter assertions are retained under explicit compatibility
+scope; current owner route assertions now require HTTP. Full regression, pytest,
+workflow safety, fatal lint, compile, diff and secret checks precede delivery.
+
+No workflow, timer, token, production Sheets or publisher setting is changed. The
+installed runtime remains separately verified with posting OFF until a guarded
+rollout. Formal goal status is not edited by this source change.

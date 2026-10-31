@@ -845,3 +845,9 @@ Updated: 2026-09-27
 - Never publish from preparation; never post to X or Beauty outside existing account gates.
 - Never weaken rights/provenance, persona/quality, account isolation, duplicate/idempotency, read-after-write, or kill-switch checks.
 - Do not remove production data, assets, queues, evidence, logs, credentials, current release, or `.runtime/`.
+
+## 2026-10-31 — enforce non-browser owner discovery
+
+- Current owner scope remains Night/Liver. Threads discovery and exact-post refresh now use CLI -> logged-out GraphQL -> public HTTP; registered owner source fallback declarations and capability roles match. TikTok keeps its existing embed/gallery-dl path. The rendered-screen adapter is inactive; no browser path is enabled for current owner discovery.
+- Retained Threads/TikTok browser adapters reject every current owner target, conflicting scope alias, missing/malformed scope and all-account scope before invoking any loader or session access. Explicit non-owner legacy fixtures retain parent, ordered-media and discovery-offset coverage; no legacy implementation is deleted. HTTP parent/author validation and all media permissions, quality, review and publisher gates remain unchanged.
+- Focused new tests6 and related adapter contracts PASS; full source validation and protected delivery are pending. Existing runtime remains posting-OFF 1bf36eb. No live discovery, new download, paid inference, upload, production Sheets mutation, timer change or publication is performed by this policy fix. Mac RAW capture evidence is recorded separately and is not complete visual understanding or overall completion. Formal goal status remains unchanged.

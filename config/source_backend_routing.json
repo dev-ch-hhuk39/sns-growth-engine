@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
-  "notes": "Active reference discovery is Threads/TikTok/X/YouTube. Threads uses pinned threads-cli crawler reads, logged-out persisted GraphQL, then public Playwright with a circuit breaker. Physical media reuse is governed separately by permission and media_platform_policy.",
+  "notes": "Active reference discovery priority is TikTok/Threads/X/YouTube. Threads uses pinned threads-cli crawler reads, logged-out persisted GraphQL, then public HTTP with a circuit breaker; current owner discovery never uses a browser. Physical media reuse is governed separately by permission and media_platform_policy.",
   "routes": {
     "threads.profile_posts": {
       "primary": "threads_cli_public",
       "fallbacks": [
         "threads_logged_out_graphql",
-        "threads_public_screen"
+        "threads_public_http"
       ],
       "shadow": [],
       "cooldown_seconds": 900,
@@ -93,8 +93,8 @@
     "threads_public_playwright": "DEPRECATED_INACTIVE",
     "threads_cli_public": "PRIMARY_ANONYMOUS_CRAWLER_SSR",
     "threads_logged_out_graphql": "FALLBACK_LOGGED_OUT_PERSISTED_QUERY",
-    "threads_public_screen": "FINAL_PUBLIC_PLAYWRIGHT_FALLBACK",
-    "threads_public_http": "PRIMARY",
+    "threads_public_screen": "DEPRECATED_INACTIVE",
+    "threads_public_http": "FALLBACK_PUBLIC_HTTP",
     "threads_oembed_detail": "PRIMARY_TOKENLESS_INDIVIDUAL_POST_DETAIL",
     "threads_search_index": "FALLBACK_CANDIDATE_DISCOVERY_REVALIDATED",
     "threads_graph_public_discovery": "OPTIONAL_AUTH_OFFICIAL_PUBLIC_DISCOVERY",
