@@ -148,7 +148,7 @@ class AuthorityBoundaryTests(unittest.TestCase):
     def test_connection_parser_never_executes_shell_or_reads_credential_paths(self):
         encoded = base64.b64encode(json.dumps({"type": "service_account", "project_id": "fixture"}).encode()).decode()
         path = self.runtime / "shared/runtime.env"
-        path.write_text("SNS_MASTER_SHEET_ID='fixture-sheet'\nSA_JSON_BASE64='" + encoded + "'\nIGNORED_PROVIDER_SETTING='fixture'\n")
+        path.write_text("SNS_MASTER_SHEET_ID='fixture-sheet'\nSPREADSHEET_ID=\nGCP_SA_JSON_BASE64=''\nSA_JSON_BASE64='" + encoded + "'\nIGNORED_PROVIDER_SETTING='fixture'\n")
         path.chmod(0o600)
         with patch.object(authority, "RUNTIME_ROOT", self.runtime):
             sheet, credential = authority._sheet_configuration(os.geteuid())

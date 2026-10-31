@@ -70,10 +70,10 @@ def _sheet_configuration(uid: int) -> tuple[str, dict]:
             continue
         if key in values:
             raise ValueError("ambiguous_connection_key")
-        parsed = shlex.split(raw, comments=False)
-        if len(parsed) != 1:
+        parsed = shlex.split(raw, comments=True)
+        if len(parsed) > 1:
             raise ValueError("invalid_connection_value")
-        values[key] = parsed[0]
+        values[key] = parsed[0] if parsed else ""
     sheet = next((values[key] for key in ("SNS_MASTER_SHEET_ID", "NOTE_MASTER_SHEET_ID", "SPREADSHEET_ID") if values.get(key)), "")
     encoded = next((values[key] for key in ("SA_JSON_BASE64", "GCP_SA_JSON_BASE64", "GCP_SA_JSON") if values.get(key)), "")
     if not sheet or not encoded:
