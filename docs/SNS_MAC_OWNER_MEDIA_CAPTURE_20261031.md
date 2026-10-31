@@ -1,0 +1,124 @@
+# Mac owner media capture
+
+The owner will keep the VPS at its current memory size and handle disk cleanup
+in another chat. Heavy media work can use the authorized 32GiB Mac. Existing
+VPS media resource floors remain enforced; this source does not start that
+heavy VPS entrypoint, install schedules or disable hosted fallbacks.
+
+## Connected stages
+
+`capture_owner_media_on_mac.py` binds one exact registered source, account and
+native X/YouTube post. Default execution is an offline plan. An explicitly
+confirmed run uses the existing owner-approved SSH alias to execute the tested
+read-only authority program from a pinned Git object on the VPS. The helper
+uses the exact existing immutable runtime, shared deployment/Sheets locks and
+its protected connection configuration. Only the source-specific download
+verdict and fixed binding fields return to the Mac. No Sheets/API/publishing
+credentials are copied to the Mac, and no credential files are auto-discovered.
+
+Before downloading, the actual extracted author/native-post metadata must
+match the registered source. The authority reads the latest ledger immediately
+before the download and again after capture. Revocation, scope mismatch,
+unknown identity, unavailable reads or release drift prevent acceptance.
+Retweets, quotes and third-party author mismatches retain existing denials.
+Threads/TikTok new physical capture remains deferred.
+
+The Mac requires at least 4GiB total and 1.5GiB available memory, pinned yt-dlp
+2026.7.4 and installed FFmpeg/ffprobe. Available memory counts free plus inactive
+pages, consistent with the primary psutil OS X implementation:
+[psutil OS X memory implementation](https://github.com/giampaolo/psutil/blob/master/psutil/arch/osx/mem.c). This is a
+memory-statistic correction, not a change to the existing thresholds.
+
+The download worker receives only minimal execution/SSH-agent locator state;
+provider and publishing credentials are scrubbed. Browser/cookie/PO-token
+plugins are disabled. A separate process group has a 15-minute deadline and
+is terminated on timeout. No platform-authentication workaround is added.
+
+## Operation
+
+Offline plan, with an already registered exact source:
+
+```bash
+python3 scripts/capture_owner_media_on_mac.py \
+  --account-id liver_manager \
+  --source-id src_lm_x_cand_001 \
+  --url https://x.com/meg_lsm/status/1738178096464064991
+```
+
+Only after the specific download is authorized, using tested clean source and
+the independently inspected current runtime revision:
+
+```bash
+python3 scripts/capture_owner_media_on_mac.py \
+  --account-id liver_manager \
+  --source-id src_lm_x_cand_001 \
+  --url https://x.com/meg_lsm/status/1738178096464064991 \
+  --apply --confirm-download \
+  --authority-host '<existing-approved-SSH-alias>' \
+  --expected-local-revision '<verified-40hex-local-revision>' \
+  --expected-runtime-revision '<inspected-40hex-current-runtime>' \
+  --workspace /absolute/existing-private-capture-workspace
+```
+
+Use the existing isolated Mac tooling interpreter that reports the pinned
+version under `-I`; a user-site package visible to normal Python is not proof
+that the isolated worker resolves that version. The actual pilot reused the
+existing tooling venv without installing or changing dependencies.
+
+The workspace must already be owned by the executing user, mode 0700, without
+linked components. Existing attempts are never overwritten or automatically
+retried. A shared private lock serializes capture. Quota counts existing files;
+300MiB per completed media, a 3GiB workspace bound, 512 entries and 2GiB free
+disk admission prevent unbounded accumulation. No retention deletion is added.
+Failures preserve unknown attempts for explicit inspection. The process needs
+the Mac awake; this is not a verified 24/7 scheduled-workflow replacement.
+
+## Evidence and remaining acceptance
+
+Accepted RAW bytes, a same-basename extracted `.info.json` and private request/
+result records are stored under `workspace/x` or `workspace/youtube`. Every file
+is private and actual byte hashes are checked through stable file identities.
+These flat directories fit the current physical verifier's input layout.
+
+`LOCAL_RAW_ARTIFACT_CAPTURED` never asserts complete content understanding,
+current full media reuse rights, human approval, READY or overall acceptance.
+There is no synthetic `.understanding.json`, provider call, Cloudinary upload,
+production Sheets mutation, timer change or SNS publication. Real full Gemini
+proof, normalized parent/asset identity, current operation-specific rights,
+human review/READY reserves, remaining schedules and approved publishing plus
+measured observation still require their existing gates. The explicit full
+physical verifier remains blocked until those actual inputs exist.
+
+Focused source verification currently passes 28 synthetic boundary/adapter/
+download/process tests. They include real private files with mocked provider
+transports and probes and do not prove live media or permission. Full source
+regression is recorded before delivery. Formal goal status is untouched.
+
+## Live permission preflight
+
+The first read-only pilot stopped BLOCKED and did not start capture. Its initial
+transport used the server system interpreter; corrected transport explicitly
+executes the pinned immutable runtime venv and refuses another interpreter.
+Safe fixed failure stages identify infrastructure/read failures without exposing
+provider errors, connection values or unpublished content. The old pilot record
+is retained; no media operation is retried automatically.
+
+## Actual RAW pilot (2026-10-31)
+
+Source revision `061785a5d8f69e91c9036c2642d423e168de8feb` successfully
+captured the registered Liver X example against inspected runtime
+`1bf36eb61c34c1c331d087900e75069616763678`. A separate readback verified
+26,428,491 bytes, actual SHA256
+`e2cacbc7e2a7773b94b06c2ed7dc03f968c1b80f4de42610eba3ac544474072c`,
+1080x1920 video with audio, duration 60.608 seconds, registered binding and
+extracted author/native-post provenance. The actual private artifact and
+request/result receipts remain outside Git. No automatic recapture is needed.
+
+The first isolated downloader invocation correctly refused an older version
+before any capture attempt. The subsequent successful invocation used the
+already-installed pinned tooling venv. The prior blocked authority pilot was
+corrected to use the immutable runtime venv, with empty optional aliases parsed
+without shell execution. Final focused verification passes 28 tests. Final source verification passes repository 1,110/1,110, isolated pytest
+173/173, workflow safety 619/619, compile, fatal Ruff, diff and history
+secret checks. The eight external and three optional exclusions are unchanged. Actual full visual understanding remains NOT_RUN; this
+receipt does not replace the full Golden verifier or human approval.
