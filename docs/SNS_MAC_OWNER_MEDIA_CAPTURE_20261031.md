@@ -60,6 +60,11 @@ python3 scripts/capture_owner_media_on_mac.py \
   --workspace /absolute/existing-private-capture-workspace
 ```
 
+Use the existing isolated Mac tooling interpreter that reports the pinned
+version under `-I`; a user-site package visible to normal Python is not proof
+that the isolated worker resolves that version. The actual pilot reused the
+existing tooling venv without installing or changing dependencies.
+
 The workspace must already be owned by the executing user, mode 0700, without
 linked components. Existing attempts are never overwritten or automatically
 retried. A shared private lock serializes capture. Quota counts existing files;
@@ -97,3 +102,23 @@ executes the pinned immutable runtime venv and refuses another interpreter.
 Safe fixed failure stages identify infrastructure/read failures without exposing
 provider errors, connection values or unpublished content. The old pilot record
 is retained; no media operation is retried automatically.
+
+## Actual RAW pilot (2026-10-31)
+
+Source revision `061785a5d8f69e91c9036c2642d423e168de8feb` successfully
+captured the registered Liver X example against inspected runtime
+`1bf36eb61c34c1c331d087900e75069616763678`. A separate readback verified
+26,428,491 bytes, actual SHA256
+`e2cacbc7e2a7773b94b06c2ed7dc03f968c1b80f4de42610eba3ac544474072c`,
+1080x1920 video with audio, duration 60.608 seconds, registered binding and
+extracted author/native-post provenance. The actual private artifact and
+request/result receipts remain outside Git. No automatic recapture is needed.
+
+The first isolated downloader invocation correctly refused an older version
+before any capture attempt. The subsequent successful invocation used the
+already-installed pinned tooling venv. The prior blocked authority pilot was
+corrected to use the immutable runtime venv, with empty optional aliases parsed
+without shell execution. Final focused verification passes 28 tests. Final source verification passes repository 1,110/1,110, isolated pytest
+173/173, workflow safety 619/619, compile, fatal Ruff, diff and history
+secret checks. The eight external and three optional exclusions are unchanged. Actual full visual understanding remains NOT_RUN; this
+receipt does not replace the full Golden verifier or human approval.
