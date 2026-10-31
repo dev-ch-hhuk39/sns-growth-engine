@@ -54,7 +54,7 @@ class AuthorityBoundaryTests(unittest.TestCase):
         self.runtime = self.root / "runtime"
         self.release = self.runtime / "releases" / REVISION
         for path in (self.runtime, self.runtime / "releases", self.runtime / "shared", self.runtime / "shared/locks",
-                     self.release, self.release / "src", self.release / "scripts"):
+                     self.release, self.release / "src", self.release / "scripts", self.release / ".venv"):
             path.mkdir(mode=0o700)
         (self.runtime / "current").symlink_to(self.release, target_is_directory=True)
         (self.release / ".production-release").write_text(REVISION + "\n")
@@ -67,6 +67,7 @@ class AuthorityBoundaryTests(unittest.TestCase):
         verdict = callback or (lambda *_args: (BINDING, [] if reasons is None else reasons))
         with patch.object(authority, "RUNTIME_ROOT", self.runtime), patch.object(authority, "DEPLOY_LOCK", self.deploy), \
                 patch.object(authority.sys, "platform", "linux"), \
+                patch.object(authority.sys, "prefix", str(self.release / ".venv")), \
                 patch.object(authority.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=os.geteuid())), \
                 patch.object(authority, "_permission_verdict", side_effect=verdict) as operation:
             value = authority.read_current_permission(REQUEST)
@@ -98,6 +99,16 @@ class AuthorityBoundaryTests(unittest.TestCase):
         self.assertEqual(value["status"], "DENY")
         self.assertFalse(value["allowed"])
         self.assertEqual(calls, 1)
+
+    def test_wrong_runtime_interpreter_is_blocked_before_provider_import(self):
+        with patch.object(authority, "RUNTIME_ROOT", self.runtime), patch.object(authority, "DEPLOY_LOCK", self.deploy), \
+                patch.object(authority.sys, "platform", "linux"), patch.object(authority.sys, "prefix", str(self.root)), \
+                patch.object(authority.pwd, "getpwnam", return_value=SimpleNamespace(pw_uid=os.geteuid())), \
+                patch.object(authority, "_permission_verdict") as provider:
+            result = authority.read_current_permission(REQUEST)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["reasons"], ["permission_authority_runtime_interpreter_unverified"])
+        provider.assert_not_called()
 
     def test_wrong_release_and_linked_marker_stop_before_credentials(self):
         marker = self.release / ".production-release"
@@ -310,6 +321,16 @@ class MacCaptureTests(unittest.TestCase):
             outputs = [subprocess.CompletedProcess([], 0, "# synthetic pinned source", ""), subprocess.CompletedProcess([], 0, json.dumps(value), "")]
             with patch.object(mac, "local_revision", return_value=LOCAL_REVISION), patch.object(mac.subprocess, "run", side_effect=outputs), self.assertRaises(ValueError):
                 mac.authority_request(mac.AUTHORITY_HOST, REQUEST, expected_local_revision=LOCAL_REVISION)
+
+    def test_authority_uses_exact_immutable_venv_instead_of_system_python(self):
+        outputs = [subprocess.CompletedProcess([], 0, "# synthetic pinned source", ""),
+                   subprocess.CompletedProcess([], 0, json.dumps(response()), "")]
+        with patch.object(mac, "local_revision", return_value=LOCAL_REVISION), \
+                patch.object(mac.subprocess, "run", side_effect=outputs) as run:
+            self.assertTrue(mac.authority_request(mac.AUTHORITY_HOST, REQUEST, expected_local_revision=LOCAL_REVISION)["allowed"])
+        command = run.call_args.args[0][-1]
+        self.assertIn("/releases/" + REVISION + "/.venv/bin/python", command)
+        self.assertNotIn("/usr/bin/python3", command)
 
     def test_isolated_worker_receives_no_provider_or_publishing_credentials(self):
         result = {"status": "LOCAL_RAW_ARTIFACT_CAPTURED", "production_writes": False, "publish_authorized": False,

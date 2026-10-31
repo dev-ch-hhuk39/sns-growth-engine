@@ -84,7 +84,16 @@ human review/READY reserves, remaining schedules and approved publishing plus
 measured observation still require their existing gates. The explicit full
 physical verifier remains blocked until those actual inputs exist.
 
-Focused source verification currently passes 26 synthetic boundary/adapter/
+Focused source verification currently passes 28 synthetic boundary/adapter/
 download/process tests. They include real private files with mocked provider
 transports and probes and do not prove live media or permission. Full source
 regression is recorded before delivery. Formal goal status is untouched.
+
+## Live permission preflight
+
+The first read-only pilot stopped BLOCKED and did not start capture. Its initial
+transport used the server system interpreter; corrected transport explicitly
+executes the pinned immutable runtime venv and refuses another interpreter.
+Safe fixed failure stages identify infrastructure/read failures without exposing
+provider errors, connection values or unpublished content. The old pilot record
+is retained; no media operation is retried automatically.

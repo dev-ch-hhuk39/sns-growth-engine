@@ -85,7 +85,11 @@ def _sheet_configuration(uid: int) -> tuple[str, dict]:
     return sheet, credential
 
 
-def _permission_verdict(release: Path, request: dict, uid: int) -> tuple[dict, list[str]]:
+def _permission_verdict(release: Path, request: dict, uid: int, diagnostics: dict | None = None) -> tuple[dict, list[str]]:
+    def stage(name):
+        if diagnostics is not None:
+            diagnostics["stage"] = name
+    stage("module_import")
     sys.path[:0] = [str(release / "src"), str(release / "scripts")]
     from media.golden_evidence import validate_registered_binding
     from media.permission_ledger import account_source_permission_reasons, evaluate_permission
@@ -93,6 +97,7 @@ def _permission_verdict(release: Path, request: dict, uid: int) -> tuple[dict, l
     from sheets_client import SheetsClient
     from sheets_record_reader import read_records_safely
 
+    stage("source_binding")
     decision = validate_registered_binding({"account_id": request["account_id"], "source_id": request["source_id"],
         "source_handle": request["source_handle"], "url": request["canonical_url"]}, load_registry(preserve_duplicates=True))
     if decision["status"] != "PASS" or decision["binding"]["platform"] not in {"x", "youtube"}:
@@ -100,11 +105,15 @@ def _permission_verdict(release: Path, request: dict, uid: int) -> tuple[dict, l
     binding = decision["binding"]
     if binding["canonical_url"] != request["canonical_url"]:
         raise ValueError("exact_canonical_request_required")
+    stage("protected_connection")
     sheet, credential = _sheet_configuration(uid)
+    stage("provider_connect")
     client = SheetsClient(sheet, credential, dry_run=False)
     if type(client) is not SheetsClient or client.dry_run is not False:
         raise ValueError("real_client_required")
+    stage("provider_read")
     rows = read_records_safely(client, "media_permissions", preserve_strings=True)
+    stage("permission_evaluation")
     permission = evaluate_permission(rows, request["source_id"], account_id=request["account_id"],
         source_handle=binding["source_handle"], required_flags=("allow_download",))
     reasons = [*permission["reasons"], *account_source_permission_reasons(permission["row"],
@@ -120,6 +129,7 @@ def read_current_permission(request: dict) -> dict:
               "request_sha256": request_hash(request), "reasons": ["permission_authority_unverified"],
               "credentials_exported": False, "production_writes": False, "publish_authorized": False}
     descriptors = []
+    diagnostics = {"stage": "runtime_identity"}
     try:
         if sys.platform != "linux":
             return result
@@ -130,6 +140,7 @@ def read_current_permission(request: dict) -> dict:
             info = directory.lstat()
             if not stat.S_ISDIR(info.st_mode) or info.st_uid != uid or info.st_mode & 0o022:
                 return result
+        diagnostics["stage"] = "shared_locks"
         for path in (DEPLOY_LOCK, RUNTIME_ROOT / "shared/locks/sheets-io.lock"):
             descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
             descriptors.append(descriptor)
@@ -137,6 +148,7 @@ def read_current_permission(request: dict) -> dict:
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid not in (0, uid):
                 return result
             fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        diagnostics["stage"] = "release_identity"
         release = RUNTIME_ROOT / "releases" / request["revision"]
         if (RUNTIME_ROOT / "current").resolve(strict=True) != release or release.resolve(strict=True) != release:
             return result
@@ -147,16 +159,26 @@ def read_current_permission(request: dict) -> dict:
         marker = _protected_text(release / ".production-release", uid, maximum=41)
         if marker not in (request["revision"], request["revision"] + "\n"):
             return result
+        diagnostics["stage"] = "runtime_interpreter"
+        if Path(sys.prefix).resolve(strict=True) != (release / ".venv").resolve(strict=True):
+            return result
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            binding, reasons = _permission_verdict(release, request, uid)
+            binding, reasons = _permission_verdict(release, request, uid, diagnostics)
+        diagnostics["stage"] = "release_recheck"
         if (RUNTIME_ROOT / "current").resolve(strict=True) != release:
             return result
         result.update(status="ALLOW" if not reasons else "DENY", allowed=not reasons, reasons=reasons,
                       binding={key: binding[key] for key in ("account_id", "source_id", "canonical_url", "external_post_id", "platform", "source_handle")},
                       revision=request["revision"], verified_at=datetime.now(timezone.utc).isoformat())
-    except Exception:
-        pass  # No provider details or protected connection values cross SSH.
+    except Exception as error:
+        safe_types = {"PermissionError", "FileNotFoundError", "ModuleNotFoundError", "ImportError", "MemoryError",
+                      "ValueError", "RuntimeError", "KeyError", "RefreshError", "APIError", "JSONDecodeError"}
+        name = type(error).__name__
+        result["failure_type"] = name if name in safe_types else "UNVERIFIED"
+        # No exception messages or protected connection values cross SSH.
     finally:
+        if result["status"] == "BLOCKED":
+            result["reasons"] = ["permission_authority_" + diagnostics["stage"] + "_unverified"]
         for descriptor in reversed(descriptors):
             os.close(descriptor)
     return result

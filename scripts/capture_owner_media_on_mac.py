@@ -80,7 +80,8 @@ def authority_request(host: str, request: dict, *, expected_local_revision: str)
     program = blob.stdout
     if not 1 <= len(program.encode()) <= 32768:
         raise ValueError("authority_program_unverified")
-    command = "sudo -n -u snsrunner /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 /usr/bin/python3 -I -B -c "
+    interpreter = "/opt/github-runners/sns-growth-engine/.buffered-runtime/releases/" + request["revision"] + "/.venv/bin/python"
+    command = "sudo -n -u snsrunner /usr/bin/env -i PATH=/usr/bin:/bin LANG=C.UTF-8 " + shlex.quote(interpreter) + " -I -B -c "
     command += " ".join(shlex.quote(value) for value in (program, "--read-current", "--request-json", json.dumps(request)))
     result = subprocess.run(["ssh", "-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", host, command],
                             capture_output=True, text=True, timeout=180)
