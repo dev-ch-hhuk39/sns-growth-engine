@@ -44,3 +44,25 @@ free local-model attempt added zero qualified drafts; its failed proposals were
 not admitted. Actual production history/global duplicates, batch-slot allocation
 and human approval remain unchecked. Neither local evidence nor the document
 creates a production queue, READY approval or counted Bank inventory.
+
+## Final validation and actual live read
+
+The combined Mac/route source passes repository 1,111/1,111, isolated pytest
+173/173, workflow safety619/619, compile, fatal Ruff, diff and history secret
+checks. The eight external and three optional exclusions remain unchanged.
+Pytest now requires the HTTP fallback and explicitly forbids browser capability
+on the active route; no threshold or negative assertion was removed.
+
+A subsequent protected read-only production audit excludes all 60 locally
+qualified catalog candidates because they already exist in the account's
+production history. The prior local review export must not be used as new
+inventory. The query returned only candidate hashes, counts and fixed statuses;
+no production text or credentials left the VPS, and no Sheets writes occurred.
+The same fresh ledger check confirms download+analysis permission for the
+existing Liver X RAW pilot; it does not perform model inference or grant other
+operations.
+
+The current runtime remains 1bf36eb. A fresh administrator deployment preflight
+refused the available 8.97GiB against the unchanged 9GiB disk floor. No rollout,
+cleanup, timer or posting change followed. The owner's separate disk work is
+independent of the Mac resource path; no VPS RAM upgrade is assumed.
