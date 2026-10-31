@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -32,8 +35,64 @@ def _load(path: Path) -> dict[str, Any]:
 
 def _git(*args: str) -> str:
     return subprocess.run(
-        ["git", *args], cwd=ROOT, text=True, capture_output=True, check=False
+        ["git", "-c", "core.fsmonitor=false", *args], cwd=ROOT, text=True, capture_output=True, check=False
     ).stdout.strip()
+
+
+def _implementation_revision() -> str:
+    """Bind to this checkout or its exact immutable release, never a parent repo."""
+    marker = ROOT / ".production-release"
+    if marker.exists() or marker.is_symlink() or ROOT.parent.name == "releases":
+        try:
+            before = marker.lstat()
+            if (ROOT.resolve(strict=True) != ROOT or ROOT.parent.name != "releases"
+                    or not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_uid != os.geteuid() or before.st_mode & 0o022
+                    or before.st_size not in (40, 41)):
+                return ""
+            fd = os.open(marker, os.O_RDONLY | os.O_NOFOLLOW)
+            with os.fdopen(fd, "rb") as stream:
+                if os.fstat(stream.fileno()) != before:
+                    return ""
+                encoded = stream.read(42)
+            # Reading may change atime; compare identity and mutable data fields.
+            after = marker.lstat()
+            if any(getattr(before, key) != getattr(after, key) for key in (
+                "st_dev", "st_ino", "st_mode", "st_uid", "st_nlink", "st_size", "st_mtime_ns", "st_ctime_ns")):
+                return ""
+            revision = ROOT.name
+            return revision if re.fullmatch(r"[0-9a-f]{40}", revision) and encoded in (
+                revision.encode("ascii"), revision.encode("ascii") + b"\n") else ""
+        except (OSError, ValueError):
+            return ""
+    if _git("rev-parse", "--show-toplevel") != str(ROOT):
+        return ""
+    revision = _git("rev-parse", "HEAD")
+    try:
+        state = subprocess.run(
+            ["git", "-c", "core.fsmonitor=false", "status", "--porcelain", "--untracked-files=all"],
+            cwd=ROOT, text=True, capture_output=True, check=False, timeout=15,
+        )
+        if state.returncode or state.stdout.strip():
+            return ""
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return revision if re.fullmatch(r"[0-9a-f]{40}", revision) else ""
+
+
+def _current_owner_physical_evidence(directories: dict[str, Path] | None) -> dict[str, Any]:
+    if directories is None:
+        return {"status": "NOT_RUN", "checks": [],
+                "reasons": ["current_owner_physical_verification_not_requested"]}
+    from verify_physical_media_goldens import verify_owner_goldens
+    return verify_owner_goldens(directories)
+
+
+def _platform_evidence_ready(verification: dict[str, Any], platform: str) -> bool:
+    from generation.media_platform_policy import OWNER_REFERENCE_ACCOUNTS
+    rows = [row for row in verification.get("checks", []) if row.get("platform") == platform]
+    return (bool(rows) and {row.get("account_id") for row in rows} == set(OWNER_REFERENCE_ACCOUNTS)
+            and all(row.get("status") == "PASS" for row in rows))
 
 
 def _state(ok: bool, *, reasons: list[str] | None = None, **evidence: Any) -> dict[str, Any]:
@@ -316,7 +375,9 @@ def evaluate(
     repository_tests_path: Path | None = None,
     repository_tests_result: dict[str, Any] | None = None,
     production_approval_path: Path | None = None,
+    physical_golden_directories: dict[str, Path] | None = None,
 ) -> dict[str, Any]:
+    implementation_revision = _implementation_revision()
     contract = _load(CONTRACT_PATH)
     routing = _load(ROUTING_PATH)
     architecture = _architecture(contract)
@@ -386,23 +447,12 @@ def evaluate(
     permission_code = _code_paths(code["permission_provenance"])
     x_permission = _x_permission_state()
     physical_evidence = contract.get("physical_media_evidence", {})
-    youtube_evidence = physical_evidence.get("youtube", {})
     youtube_code_ready = (
         contract["physical_media_providers"].get("youtube") == "yt_dlp"
         and permission_code["status"] == "PASS"
     )
-    evidence_accounts = contract.get(
-        "production_accounts", contract["managed_accounts"]
-    )
-    youtube_golden_ready = (
-        youtube_code_ready
-        and all(
-            youtube_evidence.get(account_id) == "PASS_AV"
-            for account_id in evidence_accounts
-        )
-        and youtube_evidence.get("evidence_class")
-        == "recorded_dual_account_physical_golden"
-    )
+    current_physical = _current_owner_physical_evidence(physical_golden_directories)
+    youtube_golden_ready = youtube_code_ready and _platform_evidence_ready(current_physical, "youtube")
     x_code_ready = (
         contract["physical_media_providers"].get("x") == "yt_dlp"
         and permission_code["status"] == "PASS"
@@ -410,35 +460,32 @@ def evaluate(
         and not x_permission["duplicate_candidate_handles"]
     )
     x_evidence = physical_evidence.get("x", {})
-    x_golden_ready = all(
-        x_evidence.get(account_id) == "PASS_AV"
-        for account_id in evidence_accounts
-    ) and x_evidence.get("evidence_class") == "recorded_dual_account_physical_golden"
-    tiktok_evidence = physical_evidence.get("tiktok", {})
-    tiktok_golden_ready = (
-        tiktok_evidence.get("liver_manager") == "PASS_AV"
-        and tiktok_evidence.get("evidence_class")
-        == "recorded_owner_approved_physical_golden"
-    )
+    x_golden_ready = x_code_ready and _platform_evidence_ready(current_physical, "x")
     approval = _load(production_approval_path) if production_approval_path and production_approval_path.is_file() else {}
     approval_granted = (
         approval.get("production_write_approval") is True
         and approval.get("status") == "APPROVED"
-        and str(approval.get("implementation_head", "")) == _git("rev-parse", "HEAD")
+        and re.fullmatch(r"[0-9a-f]{40}", implementation_revision) is not None
+        and approval.get("implementation_head") == implementation_revision
     )
     capabilities = evaluate_capabilities()
+    implementation_stable = (bool(implementation_revision)
+                             and _implementation_revision() == implementation_revision)
+    approval_granted = approval_granted and implementation_stable
     software_complete = all(
         item["status"] == "PASS"
         for item in (architecture, repository, reference, publisher, metrics_pdca, permission_code)
     ) and x_code_ready and youtube_code_ready and capabilities["code_complete"] == capabilities["code_required"]
     integration_complete = integration["status"] == "PASS"
     active_scope_live_evidence_complete = bool(
-        x_golden_ready and youtube_golden_ready and tiktok_golden_ready
+        current_physical.get("status") == "PASS" and x_golden_ready and youtube_golden_ready
     )
     production_complete = (
         capabilities["status"] == "PASS"
         and approval_granted
-        and not x_permission["blocker"]
+        and x_permission["status"] == "PASS"
+        and active_scope_live_evidence_complete
+        and software_complete and integration_complete
     )
     status = (
         "SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY"
@@ -451,6 +498,8 @@ def evaluate(
     return {
         "status": "PASS" if status in {"SOFTWARE_COMPLETE_EXTERNAL_BLOCKERS_ONLY", "COMPLETE"} else "FAIL",
         "completion_status": status,
+        "implementation_revision": implementation_revision,
+        "implementation_revision_stable": implementation_stable,
         "software_complete": software_complete,
         "active_scope_software_complete": software_complete and integration_complete,
         "active_scope_live_evidence_complete": active_scope_live_evidence_complete,
@@ -464,12 +513,14 @@ def evaluate(
         "production_evidence_complete": production_complete,
         "production_publish_evidence_complete": production_complete,
         "PRODUCTION_PUBLISH_EVIDENCE_COMPLETE": production_complete,
+        "current_owner_physical_verification": current_physical,
+        "historical_physical_media_declarations": physical_evidence,
         "architecture_consistent": architecture,
         "repository_regression_pass": repository,
         "reference_discovery_ready": reference,
         "x_physical_media_ready": {
             "status": (
-                "PASS_AV_RECORDED"
+                "PASS_CURRENT_ARTIFACT_VERIFICATION"
                 if x_code_ready and x_golden_ready
                 else "BLOCKED_EXTERNAL_PERMISSION"
                 if x_code_ready and x_permission["blocker"]
@@ -484,7 +535,7 @@ def evaluate(
         },
         "youtube_physical_media_ready": {
             "status": (
-                "PASS_AV_RECORDED"
+                "PASS_CURRENT_ARTIFACT_VERIFICATION"
                 if youtube_golden_ready
                 else "UNVERIFIED_PRODUCTION_EVIDENCE"
                 if youtube_code_ready
@@ -515,12 +566,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository-tests-json", type=Path)
     parser.add_argument("--production-approval-json", type=Path)
+    parser.add_argument("--verify-existing-owner-goldens", action="store_true",
+                        help="explicitly verify existing X/YouTube files and read current Sheets permissions")
+    parser.add_argument("--x-dir", type=Path)
+    parser.add_argument("--youtube-dir", type=Path)
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.verify_existing_owner_goldens:
+        if args.x_dir is None or args.youtube_dir is None:
+            parser.error("owner Golden verification requires --x-dir and --youtube-dir")
+        directories = {"x": args.x_dir, "youtube": args.youtube_dir}
+    else:
+        if args.x_dir is not None or args.youtube_dir is not None:
+            parser.error("artifact directories require --verify-existing-owner-goldens")
+        directories = None
     result = evaluate(
         repository_tests_path=args.repository_tests_json,
         production_approval_path=args.production_approval_json,
+        physical_golden_directories=directories,
     )
     text = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:

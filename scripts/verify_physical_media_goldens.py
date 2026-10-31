@@ -31,7 +31,9 @@ from generation_quality_gates import evaluate_generation_quality  # noqa: E402
 from media.golden_evidence import (  # noqa: E402
     validate_metadata_provenance, validate_registered_binding, validate_semantic_evidence,
 )
-from media.permission_ledger import _targets, evaluate_permission  # noqa: E402
+from media.permission_ledger import (  # noqa: E402
+    _targets, account_source_permission_reasons, evaluate_permission,
+)
 from public_post_quality import final_public_post_validator, generate_production_post  # noqa: E402
 from reference.source_registry import load_registry  # noqa: E402
 from sheets_client import SheetsClient  # noqa: E402
@@ -123,8 +125,96 @@ def _permission_rows(use_sheets: bool) -> list[dict[str, Any]]:
     if not use_sheets:
         return []
     cfg = get_config()
+    if cfg.get("dry_run") or str(os.environ.get("MOCK_SHEETS", "")).strip().lower() in {"1", "true", "yes"}:
+        raise ValueError("real_permission_client_required")
     client = SheetsClient(cfg["sheet_id"], cfg["sa_dict"], dry_run=False)
-    return [dict(row) for row in read_records_safely(client, "media_permissions")]
+    if type(client) is not SheetsClient or client.dry_run is not False:
+        raise ValueError("real_permission_client_required")
+    return [dict(row) for row in read_records_safely(client, "media_permissions", preserve_strings=True)]
+
+
+def verify_owner_goldens(directories: dict[str, Path] | None = None) -> dict[str, Any]:
+    """Explicit current X/YouTube verification; absent directories stay offline.
+
+    This reads existing artifacts and the live ledger only. It never downloads,
+    analyzes with a provider, writes Sheets, uploads or authorizes publishing.
+    Historical A/V declarations and caller-supplied reports are not inputs.
+    """
+    result: dict[str, Any] = {
+        "status": "NOT_RUN", "reasons": ["current_owner_physical_verification_not_requested"],
+        "checks": [], "provider_calls": 0, "production_writes": False,
+        "publish_authorized": False, "overall_goal_acceptance": False,
+    }
+    if directories is None:
+        return result
+    result.update(status="BLOCKED", reasons=["physical_artifact_directories_unverified"])
+    if set(directories) != {"x", "youtube"}:
+        return result
+    try:
+        paths = {platform: Path(value) for platform, value in directories.items()}
+        if any(not path.is_absolute() or not path.is_dir() or path.resolve(strict=True) != path
+               for path in paths.values()):
+            return result
+        manifest = json.loads((ROOT / "config/physical_media_goldens.json").read_text(encoding="utf-8"))
+        items = [(platform, dict(item)) for platform, key in (
+            ("x", "x_exact_statuses"), ("youtube", "youtube_goldens")) for item in manifest[key]]
+        if not 4 <= len(items) <= 20:
+            raise ValueError("manifest_bound")
+        registry = load_registry(preserve_duplicates=True)
+        coverage, seen, bindings = set(), set(), []
+        for platform, item in items:
+            account = item.get("account_id")
+            decision = validate_registered_binding(item, registry)
+            if (account not in OWNER_REFERENCE_ACCOUNTS or decision["status"] != "PASS"
+                    or decision["binding"]["platform"] != platform):
+                raise ValueError("manifest_binding")
+            binding = decision["binding"]
+            identity = (account, binding["canonical_url"])
+            if identity in seen:
+                raise ValueError("manifest_duplicate")
+            seen.add(identity)
+            coverage.add((account, platform))
+            bindings.append(binding)
+            if select_artifact(binding, [paths[platform]])["status"] != "PASS":
+                return result
+        if coverage != {(account, platform) for account in OWNER_REFERENCE_ACCOUNTS for platform in paths}:
+            raise ValueError("manifest_coverage")
+    except (OSError, ValueError, TypeError, KeyError):
+        result["reasons"] = ["current_owner_manifest_or_artifacts_unverified"]
+        return result
+    try:
+        permissions = _permission_rows(True)
+        rows = [verify_item(item, None, {}, permissions, registry_rows=registry,
+                            directories=[paths[platform]]) for platform, item in items]
+        # Re-read without invocation caches after all bounded local byte/probe
+        # work. A later revoke/read failure must invalidate the earlier result.
+        current_permissions = _permission_rows(True)
+        checks = []
+        for (platform, item), binding, row in zip(items, bindings, rows):
+            permission = evaluate_permission(current_permissions, item["source_id"],
+                account_id=item["account_id"], source_handle=binding["source_handle"],
+                required_flags=("allow_download", "allow_cloudinary_storage", "allow_original_repost", "allow_new_caption"))
+            scope_reasons = account_source_permission_reasons(permission["row"],
+                account_id=item["account_id"], source_handle=binding["source_handle"])
+            passed = (row.get("queue_status") == "WAITING_REVIEW"
+                      and row.get("publisher_eligible") is False
+                      and row.get("preserve_source") is True
+                      and all(row.get(key) == "PASS" for key in (
+                          "registered_source", "artifact_binding", "technical_bytes", "content_understanding",
+                          "effective_permission", "source_validation", "persona_generation", "generation_quality",
+                          "media_text_quality", "public_validation"))
+                      and permission["allowed"] and not scope_reasons)
+            checks.append({"account_id": item["account_id"], "platform": platform,
+                           "source_id": item["source_id"], "status": "PASS" if passed else "BLOCKED"})
+        passed = all(row["status"] == "PASS" for row in checks)
+        result.update(status="PASS" if passed else "BLOCKED", checks=checks,
+                      reasons=[] if passed else ["current_owner_physical_evidence_incomplete"],
+                      verified_at=datetime.now(timezone.utc).isoformat(),
+                      permission_authority="live_media_permissions_two_uncached_reads")
+    except Exception:
+        # Provider exception text and unpublished previews are private.
+        result.update(status="BLOCKED", reasons=["current_owner_physical_verification_unavailable"])
+    return result
 
 
 def verify_item(item: dict[str, Any], path: Path | None, metadata: dict[str, Any],
